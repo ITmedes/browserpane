@@ -1,0 +1,18 @@
+{
+  "ExtensionInstallForcelist": [
+    "gighmmpiobklfepjocnamgkkbiglidom;https://clients2.google.com/service/update2/crx"
+  ],
+  "3rdparty": {
+    "extensions": {
+      "gighmmpiobklfepjocnamgkkbiglidom": {
+        "suppress_first_run_page": true,
+        "suppress_update_page": true,
+        "suppress_surveys": true,
+        "suppress_premium_cta": true,
+        "additional_subscriptions": [
+          "https://easylist-downloads.adblockplus.org/easyprivacy.txt"
+        ]
+      }
+    }
+  }
+}

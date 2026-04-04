@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BrowserPane Test Embed</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 16px;
+      overflow: hidden;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    h1 { font-size: 18px; font-weight: 500; }
+    .status {
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status.disconnected { background: #4a1c1c; color: #ff6b6b; }
+    .status.connecting { background: #4a3c1c; color: #ffd93d; }
+    .status.connected { background: #1c4a1c; color: #6bff6b; }
+    .status.error { background: #4a1c1c; color: #ff6b6b; }
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+    button {
+      padding: 6px 16px;
+      border: 1px solid #444;
+      border-radius: 6px;
+      background: #2a2a4e;
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover { background: #3a3a6e; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    #desktop-container {
+      flex: 1;
+      border: 1px solid #333;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+      position: relative;
+      min-height: 200px;
+    }
+    #desktop-container canvas {
+      display: block;
+      cursor: none;
+    }
+    .info-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 14px;
+      padding: 8px 0;
+      font-size: 12px;
+      color: #888;
+      height: 30px;
+      flex: 0 0 30px;
+      white-space: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: thin;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    .info-bar > span {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+    .overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: #666;
+    }
+    .overlay h2 { font-size: 24px; margin-bottom: 8px; }
+    .overlay p { font-size: 14px; margin-bottom: 4px; }
+    .log-panel {
+      margin-top: 8px;
+      max-height: 120px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 11px;
+      background: #0d0d1a;
+      border: 1px solid #222;
+      border-radius: 6px;
+      padding: 8px;
+    }
+    .log-panel .log-line { margin-bottom: 2px; }
+    .log-panel .log-info { color: #6b9bff; }
+    .log-panel .log-error { color: #ff6b6b; }
+    .log-panel .log-warn { color: #ffd93d; }
+    .log-panel .log-ok { color: #6bff6b; }
+    .token-display {
+      font-family: monospace;
+      font-size: 11px;
+      color: #888;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>BrowserPane Test</h1>
+    <span id="status" class="status disconnected">Disconnected</span>
+    <span id="token-display" class="token-display"></span>
+    <div class="controls">
+      <button id="btn-connect">Connect</button>
+      <button id="btn-disconnect" disabled>Disconnect</button>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
+        <input type="checkbox" id="hidpi-toggle" checked>
+        HiDPI (use devicePixelRatio)
+      </label>
+      <button id="btn-camera" disabled>Cam Off</button>
+      <button id="btn-mic" disabled>Mic Off</button>
+      <button id="btn-upload" disabled>Upload File</button>
+      <button id="btn-logs">Show Logs</button>
+    </div>
+  </header>
+
+  <div id="desktop-container">
+    <div class="overlay" id="overlay">
+      <h2>BrowserPane Remote Desktop</h2>
+      <p>Click "Connect" to start a session</p>
+      <p style="font-size:12px; margin-top:12px; color:#555;">
+        Served by Docker Compose &mdash; gateway on port 4433
+      </p>
+    </div>
+  </div>
+
+  <div class="info-bar">
+    <span id="resolution">Resolution: --</span>
+    <span id="frames">Frames: --</span>
+    <span id="latency">RTT: --</span>
+    <span id="tile-stats">Tiles: --</span>
+    <span id="tile-types">Tile Types: --</span>
+    <span id="scroll-comp-stats">Scroll Compose: --</span>
+    <span id="scroll-health-stats">Scroll Health: --</span>
+    <span id="transfer-stats">Transfer: --</span>
+    <span id="transfer-rate">Rate: --</span>
+  </div>
+
+  <div class="log-panel" id="log-panel" style="display:none;"></div>
+
+  <script type="module">
+    // Import the BpaneSession SDK from the built bundle.
+    // When served via Docker/nginx: /dist/bpane.js
+    // For local file:// dev: adjust path as needed, or run a local server.
+    const SDK_PATH = location.protocol === 'file:'
+      ? '../code/web/bpane-client/dist/bpane.js'
+      : '/dist/bpane.js';
+    const { BpaneSession } = await import(SDK_PATH);
+
+    // ── Config ──────────────────────────────────────────────────────
+    const GATEWAY_HOST = location.hostname || 'localhost';
+    const GATEWAY_PORT = 4433;
+    const GATEWAY_URL = `https://${GATEWAY_HOST}:${GATEWAY_PORT}`;
+
+    // ── DOM refs ────────────────────────────────────────────────────
+    const container = document.getElementById('desktop-container');
+    const statusEl = document.getElementById('status');
+    const resolutionEl = document.getElementById('resolution');
+    const framesEl = document.getElementById('frames');
+    const latencyEl = document.getElementById('latency');
+    const tileStatsEl = document.getElementById('tile-stats');
+    const tileTypesEl = document.getElementById('tile-types');
+    const scrollCompStatsEl = document.getElementById('scroll-comp-stats');
+    const scrollHealthStatsEl = document.getElementById('scroll-health-stats');
+    const transferStatsEl = document.getElementById('transfer-stats');
+    const transferRateEl = document.getElementById('transfer-rate');
+    const connectBtn = document.getElementById('btn-connect');
+    const disconnectBtn = document.getElementById('btn-disconnect');
+    const hidpiToggle = document.getElementById('hidpi-toggle');
+    const logsBtn = document.getElementById('btn-logs');
+    const cameraBtn = document.getElementById('btn-camera');
+    const micBtn = document.getElementById('btn-mic');
+    const uploadBtn = document.getElementById('btn-upload');
+    const overlay = document.getElementById('overlay');
+    const logPanel = document.getElementById('log-panel');
+    const tokenDisplay = document.getElementById('token-display');
+    let logsVisible = false;
+
+    // ── Logging ─────────────────────────────────────────────────────
+    function log(msg, level = 'info') {
+      const line = document.createElement('div');
+      line.className = `log-line log-${level}`;
+      const ts = new Date().toISOString().slice(11, 23);
+      line.textContent = `[${ts}] ${msg}`;
+      logPanel.appendChild(line);
+      logPanel.scrollTop = logPanel.scrollHeight;
+      console.log(`[bpane:${level}] ${msg}`);
+    }
+
+    function setStatus(text, cls) {
+      statusEl.textContent = text;
+      statusEl.className = `status ${cls}`;
+    }
+
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let value = bytes;
+      let i = 0;
+      while (value >= 1024 && i < units.length - 1) {
+        value /= 1024;
+        i++;
+      }
+      const decimals = i === 0 ? 0 : 1;
+      return `${value.toFixed(decimals)} ${units[i]}`;
+    }
+
+    function formatDuration(ms) {
+      if (!Number.isFinite(ms) || ms <= 0) return '0s';
+      const totalSec = Math.floor(ms / 1000);
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      if (h > 0) return `${h}h ${m}m ${s}s`;
+      if (m > 0) return `${m}m ${s}s`;
+      return `${s}s`;
+    }
+
+    function topChannelRates(curr, prev, dtSec) {
+      if (!curr || !prev || !Number.isFinite(dtSec) || dtSec <= 0) return '--';
+      const names = new Set([
+        ...Object.keys(curr),
+        ...Object.keys(prev),
+      ]);
+      const deltas = [];
+      for (const name of names) {
+        const nowBytes = curr[name]?.bytes ?? 0;
+        const prevBytes = prev[name]?.bytes ?? 0;
+        const delta = nowBytes - prevBytes;
+        if (delta > 0) {
+          deltas.push({ name, deltaPerSec: delta / dtSec });
+        }
+      }
+      if (deltas.length === 0) return '--';
+      deltas.sort((a, b) => b.deltaPerSec - a.deltaPerSec);
+      return deltas
+        .slice(0, 3)
+        .map((d) => `${d.name}=${formatBytes(d.deltaPerSec)}/s`)
+        .join(' ');
+    }
+
+    // ── Token fetch ─────────────────────────────────────────────────
+    async function fetchToken() {
+      try {
+        const resp = await fetch('/token');
+        if (resp.ok) {
+          const token = (await resp.text()).trim();
+          if (token.length > 10) {
+            log(`Token loaded from server (${token.length} chars)`, 'ok');
+            tokenDisplay.textContent = `Token: ${token.slice(0, 20)}...`;
+            return token;
+          }
+        }
+      } catch (e) { /* not available */ }
+
+      log('No server token found, prompting user', 'warn');
+      const token = prompt(
+        'Enter the gateway dev token.\n' +
+        'Find it in the gateway logs:\n' +
+        '  docker compose -f deploy/compose.yml logs gateway | grep "dev token"'
+      );
+      if (token) tokenDisplay.textContent = `Token: ${token.slice(0, 20)}...`;
+      return token;
+    }
+
+    // ── Session state ───────────────────────────────────────────────
+    let session = null;
+
+    async function connect() {
+      setStatus('Fetching token...', 'connecting');
+      const token = await fetchToken();
+      if (!token) {
+        setStatus('No token', 'error');
+        log('Connection cancelled: no token provided', 'error');
+        return;
+      }
+
+      if (overlay) overlay.style.display = 'none';
+      setStatus('Connecting...', 'connecting');
+      log(`Connecting to ${GATEWAY_URL}...`);
+
+      try {
+        session = await BpaneSession.connect({
+          container,
+          gatewayUrl: `${GATEWAY_URL}/session`,
+          token,
+          hiDpi: hidpiToggle.checked,
+          clipboard: true,
+          audio: true,
+          camera: true,
+          fileTransfer: true,
+          certHashUrl: '/cert-hash',
+          onConnect: () => {
+            log('Connected', 'ok');
+            setStatus('Connected', 'connected');
+            connectBtn.disabled = true;
+            disconnectBtn.disabled = false;
+            cameraBtn.disabled = true;
+            micBtn.disabled = false;
+            uploadBtn.disabled = false;
+            log('File transfer ready: drag/drop files onto the session or use Upload File.', 'info');
+            // Poll frame counter + compute FPS
+            window._lastFrameCount = 0;
+            window._lastFpsTime = performance.now();
+            window._currentFps = 0;
+            window._lastTransferSample = null;
+            if (window._frameCountInterval) clearInterval(window._frameCountInterval);
+            window._frameCountInterval = setInterval(() => {
+              if (!session) return;
+              const now = performance.now();
+              const count = session.getFrameCount();
+              const dt = (now - window._lastFpsTime) / 1000;
+              if (dt >= 1.0) {
+                window._currentFps = ((count - window._lastFrameCount) / dt).toFixed(1);
+                window._lastFrameCount = count;
+                window._lastFpsTime = now;
+              }
+              framesEl.textContent = `Frames: ${count}  (${window._currentFps} fps)`;
+              // Tile cache stats
+              const ts = session.getTileCacheStats();
+              tileStatsEl.textContent =
+                `Tiles: ${ts.fills}f ${ts.qoiDecodes}q ${ts.hits}h ${ts.cacheMisses}m ${ts.scrollCopies}s ` +
+                `(hit=${ts.hitRate.toFixed(1)}% cache=${ts.size} reQoi=${ts.qoiRedundant} ${formatBytes(ts.qoiRedundantBytes)})`;
+              const ss = session.getSessionStats();
+              const tc = ss.tiles.commands;
+              tileTypesEl.textContent =
+                `Tile Types: image=${ss.tiles.imageCommands} video=${ss.tiles.videoCommands} draw=${ss.tiles.drawCommands} ` +
+                `(fill=${tc.fill} qoi=${tc.qoi} hit=${tc.cacheHit} scroll=${tc.scrollCopy} offset=${tc.gridOffset} cfg=${tc.gridConfig} end=${tc.batchEnd})`;
+              const sc = ss.tiles.scrollComposition;
+              scrollCompStatsEl.textContent =
+                `Scroll Compose: batches=${sc.scrollBatches} subTile=${sc.subTileScrollBatches} ` +
+                `updates=${sc.subTileScrollUpdateCommands}/${sc.subTileScrollPotentialTiles} ` +
+                `saved=${sc.subTileScrollSavedTiles} (${sc.subTileScrollReuseRate.toFixed(1)}%) ` +
+                `qoi=${sc.subTileScrollQoiCommands} hit=${sc.scrollCacheHitCommands} fill=${sc.scrollFillCommands} ` +
+                `qoiBytes=${formatBytes(sc.subTileScrollQoiBytes)} ` +
+                `qoiShare=${sc.subTileComposeCandidateRate.toFixed(1)}%`;
+              const sh = ss.tiles.scrollHealth;
+              if (sh.hostScrollBatchesTotal > 0) {
+                scrollHealthStatsEl.textContent =
+                  `Scroll Health: fallback=${sh.hostFallbackRate.toFixed(1)}% ` +
+                  `r20=${sh.hostFallbackRateRecent20.toFixed(1)}%/${sh.hostFallbackRateRecent20Batches} ` +
+                  `r50=${sh.hostFallbackRateRecent50.toFixed(1)}%/${sh.hostFallbackRateRecent50Batches} ` +
+                  `(${sh.hostScrollFallbacksTotal}/${sh.hostScrollBatchesTotal}) ` +
+                  `saved=${sh.hostScrollSavedRate.toFixed(1)}%`;
+              } else {
+                scrollHealthStatsEl.textContent = 'Scroll Health: waiting for scroll telemetry';
+              }
+              transferStatsEl.textContent =
+                `Transfer: down=${formatBytes(ss.transfer.rxBytes)} up=${formatBytes(ss.transfer.txBytes)} ` +
+                `(tiles=${formatBytes(ss.tiles.commandBytes)}, video=${formatBytes(ss.video.datagramBytes)}; session=${formatDuration(ss.elapsedMs)})`;
+
+              const sampleNow = {
+                t: now,
+                rx: ss.transfer.rxBytes,
+                tx: ss.transfer.txBytes,
+                rxByChannel: ss.transfer.rxByChannel,
+                txByChannel: ss.transfer.txByChannel,
+              };
+              const prevSample = window._lastTransferSample;
+              if (prevSample) {
+                const dt = (sampleNow.t - prevSample.t) / 1000;
+                const rxRate = Math.max(0, sampleNow.rx - prevSample.rx) / Math.max(dt, 0.001);
+                const txRate = Math.max(0, sampleNow.tx - prevSample.tx) / Math.max(dt, 0.001);
+                const rxTop = topChannelRates(sampleNow.rxByChannel, prevSample.rxByChannel, dt);
+                const txTop = topChannelRates(sampleNow.txByChannel, prevSample.txByChannel, dt);
+                transferRateEl.textContent =
+                  `Rate: down=${formatBytes(rxRate)}/s up=${formatBytes(txRate)}/s ` +
+                  `(rx: ${rxTop}; tx: ${txTop})`;
+              } else {
+                transferRateEl.textContent = 'Rate: collecting...';
+              }
+              window._lastTransferSample = sampleNow;
+            }, 200);
+          },
+          onDisconnect: (reason) => {
+            log(`Disconnected: ${reason}`, 'warn');
+            // Don't call session.disconnect() here — it's already disconnecting.
+            // Just update the UI state.
+            if (window._frameCountInterval) { clearInterval(window._frameCountInterval); window._frameCountInterval = null; }
+            session = null;
+            if (overlay) overlay.style.display = '';
+            setStatus('Disconnected', 'disconnected');
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            cameraBtn.disabled = true;
+            micBtn.disabled = true;
+            uploadBtn.disabled = true;
+            cameraActive = false;
+            cameraBtn.textContent = 'Cam Off';
+            cameraBtn.style.background = '';
+            micBtn.textContent = 'Mic Off';
+            micBtn.style.background = '';
+            resolutionEl.textContent = 'Resolution: --';
+            framesEl.textContent = 'Frames: --';
+            latencyEl.textContent = 'RTT: --';
+            tileStatsEl.textContent = 'Tiles: --';
+            tileTypesEl.textContent = 'Tile Types: --';
+            scrollCompStatsEl.textContent = 'Scroll Compose: --';
+            scrollHealthStatsEl.textContent = 'Scroll Health: --';
+            transferStatsEl.textContent = 'Transfer: --';
+            transferRateEl.textContent = 'Rate: --';
+          },
+          onError: (error) => {
+            log(`Error: ${error.message}`, 'error');
+          },
+          onCapabilitiesChange: (capabilities) => {
+            cameraBtn.disabled = !capabilities.camera;
+            if (capabilities.camera) {
+              log('Camera relay ready.', 'info');
+            } else {
+              cameraActive = false;
+              cameraBtn.textContent = 'Cam Off';
+              cameraBtn.style.background = '';
+              log('Camera unavailable: host did not advertise a video device.', 'warn');
+            }
+          },
+          onResolutionChange: (w, h) => {
+            resolutionEl.textContent = `Resolution: ${w}x${h}`;
+            log(`Resolution: ${w}x${h}`, 'ok');
+          },
+        });
+      } catch (e) {
+        log(`Connection failed: ${e.message}`, 'error');
+        setStatus('Connection failed', 'error');
+        log('Hint: Chrome requires trusted TLS for WebTransport.', 'warn');
+        log(`Launch Chrome with: --origin-to-force-quic-on=${GATEWAY_HOST}:${GATEWAY_PORT}`, 'warn');
+        if (overlay) overlay.style.display = '';
+      }
+    }
+
+    function doDisconnect() {
+      if (window._frameCountInterval) { clearInterval(window._frameCountInterval); window._frameCountInterval = null; }
+      if (session) {
+        session.disconnect();
+        session = null;
+      }
+      if (overlay) overlay.style.display = '';
+      setStatus('Disconnected', 'disconnected');
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
+      cameraBtn.disabled = true;
+      micBtn.disabled = true;
+      uploadBtn.disabled = true;
+      cameraActive = false;
+      cameraBtn.textContent = 'Cam Off';
+      cameraBtn.style.background = '';
+      micBtn.textContent = 'Mic Off';
+      micBtn.style.background = '';
+      resolutionEl.textContent = 'Resolution: --';
+      framesEl.textContent = 'Frames: --';
+      latencyEl.textContent = 'RTT: --';
+      tileStatsEl.textContent = 'Tiles: --';
+      tileTypesEl.textContent = 'Tile Types: --';
+      scrollCompStatsEl.textContent = 'Scroll Compose: --';
+      scrollHealthStatsEl.textContent = 'Scroll Health: --';
+      transferStatsEl.textContent = 'Transfer: --';
+      transferRateEl.textContent = 'Rate: --';
+      window._lastTransferSample = null;
+    }
+
+    // ── Camera toggle ───────────────────────────────────────────────
+    let cameraActive = false;
+    async function toggleCamera() {
+      if (!session) return;
+      try {
+        if (cameraActive) {
+          session.stopCamera();
+          cameraActive = false;
+          cameraBtn.textContent = 'Cam Off';
+          cameraBtn.style.background = '';
+          log('Camera stopped', 'info');
+        } else {
+          await session.startCamera();
+          cameraActive = true;
+          cameraBtn.textContent = 'Cam On';
+          cameraBtn.style.background = '#1c4a1c';
+          log('Camera started', 'ok');
+        }
+      } catch (e) {
+        log(`Camera failed: ${e.message}`, 'error');
+      }
+    }
+
+    // ── Microphone toggle ───────────────────────────────────────────
+    let micActive = false;
+    async function toggleMic() {
+      if (!session) return;
+      if (micActive) {
+        session.stopMicrophone();
+        micActive = false;
+        micBtn.textContent = 'Mic Off';
+        micBtn.style.background = '';
+        log('Microphone stopped', 'info');
+      } else {
+        await session.startMicrophone();
+        micActive = true;
+        micBtn.textContent = 'Mic On';
+        micBtn.style.background = '#1c4a1c';
+        log('Microphone started', 'ok');
+      }
+    }
+
+    // ── Button handlers ─────────────────────────────────────────────
+    connectBtn.addEventListener('click', connect);
+    disconnectBtn.addEventListener('click', () => doDisconnect());
+    cameraBtn.addEventListener('click', () => void toggleCamera());
+    micBtn.addEventListener('click', toggleMic);
+    uploadBtn.addEventListener('click', () => {
+      if (!session) return;
+      session.promptFileUpload();
+    });
+    logsBtn.addEventListener('click', () => {
+      logsVisible = !logsVisible;
+      logPanel.style.display = logsVisible ? 'block' : 'none';
+      logsBtn.textContent = logsVisible ? 'Hide Logs' : 'Show Logs';
+    });
+    hidpiToggle.addEventListener('change', () => {
+      log(`HiDPI ${hidpiToggle.checked ? 'enabled' : 'disabled'}`, 'info');
+      // HiDPI changes take effect on next connect
+    });
+
+    // ── Startup ─────────────────────────────────────────────────────
+    log(`Gateway target: ${GATEWAY_URL}`);
+    log('Ready. Click "Connect" to start.');
+  </script>
+</body>
+</html>

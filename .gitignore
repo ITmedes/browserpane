@@ -1,0 +1,24 @@
+/target/
+**/*.rs.bk
+*.swp
+*.swo
+.DS_Store
+deploy/ansible
+.claude
+test-results
+code/tests/e2e
+# TLS certificates (generated)
+*.pem
+*.key
+!dev/gen-cert.sh
+
+# WASM build output
+/code/web/bpane-client/pkg/
+
+# Node modules (if Vite is set up)
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/

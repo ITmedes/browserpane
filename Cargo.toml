@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    "code/shared/bpane-protocol",
+    "code/apps/bpane-host",
+    "code/apps/bpane-gateway",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+bpane-protocol = { path = "code/shared/bpane-protocol" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+thiserror = "2"

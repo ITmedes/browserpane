@@ -1,0 +1,35 @@
+# BrowserPane E2E Test Image
+# Builds all crates and runs the full test suite in a Linux environment.
+#
+# Usage: docker build -f deploy/Dockerfile.test -t bpane-test ..
+#        docker run --rm bpane-test
+
+FROM ubuntu:24.04
+
+# Install build dependencies + test tools
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    cmake \
+    libdrm-dev \
+    libevdev-dev \
+    libx11-dev \
+    libxdamage-dev \
+    libxfixes-dev \
+    libxrandr-dev \
+    libavcodec-dev \
+    libavutil-dev \
+    libva-dev \
+    libpipewire-0.3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /build
+COPY . .
+
+# Run all tests
+CMD ["cargo", "test", "--workspace", "--", "--test-threads=4"]

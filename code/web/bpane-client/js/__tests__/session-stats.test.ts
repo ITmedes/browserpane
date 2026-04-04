@@ -1,0 +1,99 @@
+import { describe, expect, it } from 'vitest';
+import { SessionStats } from '../session-stats.js';
+import { CH_VIDEO_IN } from '../protocol.js';
+
+const tileCacheRuntime = {
+  hits: 0,
+  misses: 0,
+  hitRate: 0,
+  size: 0,
+  qoiRedundant: 0,
+  qoiRedundantBytes: 0,
+  zstdRedundant: 0,
+  zstdRedundantBytes: 0,
+};
+
+describe('SessionStats host scroll health', () => {
+  it('reports rolling host fallback windows from cumulative totals', () => {
+    const stats = new SessionStats();
+
+    stats.recordHostScrollStats(0, 0, 0, 0);
+    stats.recordHostScrollStats(10, 2, 100, 80);
+    stats.recordHostScrollStats(30, 8, 300, 210);
+
+    const snapshot = stats.getSessionStats(tileCacheRuntime);
+    const health = snapshot.tiles.scrollHealth;
+
+    expect(health.hostFallbackRate).toBeCloseTo((8 / 30) * 100, 5);
+    expect(health.hostFallbackRateRecent20Batches).toBe(20);
+    expect(health.hostFallbackRateRecent20).toBeCloseTo(30, 5);
+    expect(health.hostFallbackRateRecent50Batches).toBe(30);
+    expect(health.hostFallbackRateRecent50).toBeCloseTo((8 / 30) * 100, 5);
+  });
+
+  it('clears rolling history when host counters reset', () => {
+    const stats = new SessionStats();
+
+    stats.recordHostScrollStats(0, 0, 0, 0);
+    stats.recordHostScrollStats(12, 3, 120, 90);
+    stats.recordHostScrollStats(1, 0, 10, 10);
+
+    const snapshot = stats.getSessionStats(tileCacheRuntime);
+    const health = snapshot.tiles.scrollHealth;
+
+    expect(health.hostScrollBatchesTotal).toBe(1);
+    expect(health.hostScrollFallbacksTotal).toBe(0);
+    expect(health.hostFallbackRateRecent20Batches).toBe(0);
+    expect(health.hostFallbackRateRecent20).toBe(0);
+    expect(health.hostFallbackRateRecent50Batches).toBe(0);
+    expect(health.hostFallbackRateRecent50).toBe(0);
+  });
+
+  it('includes camera telemetry alongside transport counters', () => {
+    const stats = new SessionStats();
+    stats.recordTx(CH_VIDEO_IN, 2048);
+    stats.recordTx(CH_VIDEO_IN, 1024);
+
+    const snapshot = stats.getSessionStats(tileCacheRuntime, {
+      supported: true,
+      active: true,
+      profile: {
+        name: 'hd720p',
+        width: 1280,
+        height: 720,
+        fps: 30,
+        bitrate: 1_600_000,
+        smooth: true,
+        powerEfficient: false,
+      },
+      qualityLimitationReason: 'bandwidth',
+      framesCaptured: 42,
+      framesEncoded: 40,
+      keyframesEncoded: 2,
+      encodedBytes: 3000,
+      transportFramesQueued: 6,
+      transportFramesReplaced: 4,
+      encoderQueueDrops: 1,
+      averageEncodeTimeMs: 5.5,
+      maxEncodeTimeMs: 11,
+      profileUpgrades: 0,
+      profileDowngrades: 1,
+      reconfigurations: 1,
+    });
+
+    expect(snapshot.transfer.txByChannel.videoIn).toEqual({
+      bytes: 3072,
+      frames: 2,
+    });
+    expect(snapshot.camera).toMatchObject({
+      supported: true,
+      active: true,
+      qualityLimitationReason: 'bandwidth',
+      transportBytesSent: 3072,
+      transportFramesSent: 2,
+      transportFramesQueued: 6,
+      transportFramesReplaced: 4,
+      profileDowngrades: 1,
+    });
+  });
+});
