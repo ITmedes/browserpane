@@ -353,7 +353,3 @@ session.disconnect();
 - **NAL fragmentation** — Video datagrams exceeding the QUIC MTU (~1200 bytes) are fragmented with sequence numbers and reassembled on the client.
 - **Shared sessions** — Browser sessions are collaborative by default. Optional exclusive-owner mode enables one interactive browser client plus up to 10 read-only viewers, and MCP agents can claim ownership and lock resolution for automation while humans observe.
 - **Graceful degradation** — Audio, microphone, camera, and file transfer degrade cleanly if the host lacks PipeWire, v4l2loopback, or other optional dependencies.
-
-## License
-
-MIT
