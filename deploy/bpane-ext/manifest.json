@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "BrowserPane Scroll Override",
+  "version": "1.0",
+  "description": "Forces scroll-behavior: auto on all pages for deterministic tile rendering",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "css": ["override.css"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+# BrowserPane MCP Bridge — SSE proxy for @playwright/mcp over CDP
+FROM node:22-slim
+
+# Playwright system dependencies (Chromium not needed — we connect via CDP)
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY code/integrations/mcp-bridge/package.json code/integrations/mcp-bridge/package-lock.json ./
+RUN npm ci
+
+COPY code/integrations/mcp-bridge/tsconfig.json ./
+COPY code/integrations/mcp-bridge/src ./src
+
+EXPOSE 8931
+
+CMD ["npx", "tsx", "src/index.ts"]

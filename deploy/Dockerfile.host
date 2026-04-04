@@ -1,0 +1,102 @@
+# BrowserPane Host Agent - Ubuntu 24.04 LTS
+FROM ubuntu:24.04 AS builder
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    libdrm-dev \
+    libevdev-dev \
+    libx11-dev \
+    libxcb1-dev \
+    libxdamage-dev \
+    libxfixes-dev \
+    libxrandr-dev \
+    libavcodec-dev \
+    libavutil-dev \
+    libva-dev \
+    libpipewire-0.3-dev \
+    libopus-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /build
+COPY Cargo.toml Cargo.toml
+COPY code/shared/bpane-protocol code/shared/bpane-protocol
+COPY code/apps/bpane-host code/apps/bpane-host
+RUN mkdir -p code/apps/bpane-gateway/src
+COPY code/apps/bpane-gateway/Cargo.toml code/apps/bpane-gateway/Cargo.toml
+RUN echo 'fn main() {}' > code/apps/bpane-gateway/src/main.rs
+
+RUN cargo build --release -p bpane-host
+
+# Runtime image
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y \
+    # Xorg with dummy video driver — supports runtime xrandr mode switching
+    xserver-xorg-core \
+    xserver-xorg-video-dummy \
+    x11-xserver-utils \
+    x11-apps \
+    # FFmpeg for X11 capture + H.264 encode
+    ffmpeg \
+    # PipeWire + PulseAudio compat for desktop audio capture
+    pipewire \
+    pipewire-pulse \
+    wireplumber \
+    libspa-0.2-libcamera \
+    # D-Bus session bus (required by PipeWire/WirePlumber)
+    dbus-x11 \
+    # PulseAudio CLI tools (pactl for audio detection)
+    pulseaudio-utils \
+    # xclip for clipboard sync
+    xclip \
+    # socat for proxying CDP from loopback to all interfaces
+    socat \
+    # Shared libraries
+    libdrm2 \
+    libevdev2 \
+    libx11-6 \
+    libxcb1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libavcodec60 \
+    libavutil58 \
+    libva2 \
+    libpipewire-0.3-0 \
+    libopus0 \
+    # Chromium GPU probe requires libpci
+    libpci3 \
+    # Window manager
+    openbox \
+    # Fonts
+    fonts-liberation \
+    fonts-dejavu-core \
+    # Chromium from xtradeb PPA (real .deb package, no snap runtime)
+    software-properties-common \
+    && add-apt-repository -y ppa:xtradeb/apps \
+    && apt-get update && apt-get install -y chromium \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -f input && \
+    useradd -m -s /bin/bash bpane && \
+    usermod -aG input,video,audio bpane
+
+RUN mkdir -p /run/bpane /home/bpane/bpane-downloads /home/bpane/bpane-uploads && \
+    chown -R bpane:bpane /run/bpane /home/bpane
+
+COPY --from=builder /build/target/release/bpane-host /usr/local/bin/bpane-host
+COPY deploy/xorg-dummy.conf /etc/X11/xorg-dummy.conf
+COPY deploy/chromium-policies/managed /etc/chromium/policies/managed
+COPY deploy/start-host.sh /usr/local/bin/start-host.sh
+COPY deploy/bpane-ext /home/bpane/bpane-ext
+RUN chmod +x /usr/local/bin/start-host.sh
+
+USER bpane
+WORKDIR /home/bpane
+
+CMD ["/usr/local/bin/start-host.sh"]

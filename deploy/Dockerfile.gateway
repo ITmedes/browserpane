@@ -1,0 +1,37 @@
+# BrowserPane Gateway Server
+FROM ubuntu:24.04 AS builder
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /build
+COPY Cargo.toml Cargo.toml
+COPY code/shared/bpane-protocol code/shared/bpane-protocol
+COPY code/apps/bpane-gateway code/apps/bpane-gateway
+# Stub other crate
+RUN mkdir -p code/apps/bpane-host/src
+COPY code/apps/bpane-host/Cargo.toml code/apps/bpane-host/Cargo.toml
+RUN echo 'fn main() {}' > code/apps/bpane-host/src/main.rs
+
+RUN cargo build --release -p bpane-gateway
+
+# Runtime image
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/bpane-gateway /usr/local/bin/bpane-gateway
+
+EXPOSE 4433/udp
+
+CMD ["/usr/local/bin/bpane-gateway"]
