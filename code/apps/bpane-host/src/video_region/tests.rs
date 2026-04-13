@@ -191,3 +191,23 @@ fn region_committer_reset_clears_state() {
     rc.reset();
     assert!(rc.active.is_none());
 }
+
+#[test]
+fn region_committer_apply_reconfig_updates_state() {
+    let mut rc = RegionCommitter::new();
+    let r = region(100, 200, 640, 360);
+    let now = Instant::now();
+    rc.apply_reconfig(Some(r), now);
+    assert_eq!(rc.active, Some(r));
+    assert_eq!(rc.last_reconfig_at, now);
+}
+
+#[test]
+fn region_committer_apply_reconfig_to_none() {
+    let mut rc = RegionCommitter::new();
+    rc.active = Some(region(10, 10, 100, 100));
+    let now = Instant::now();
+    rc.apply_reconfig(None, now);
+    assert!(rc.active.is_none());
+    assert_eq!(rc.last_reconfig_at, now);
+}

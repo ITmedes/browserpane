@@ -323,3 +323,47 @@ fn detect_column_scroll_returns_none_for_tiny_frames() {
     let result = detect_column_scroll(&frame, &frame, 8 * 4, 8, 8, 4);
     assert!(result.is_none(), "frames too small for column sampling");
 }
+
+// ── offset_tile_rect_for_emit tests ─────────────────────────────────
+
+#[test]
+fn offset_tile_rect_no_offset() {
+    let grid = tiles::TileGrid::new(128, 128, 64);
+    let rect = offset_tile_rect_for_emit(tiles::TileCoord::new(0, 0), &grid, 0);
+    assert_eq!(rect.x, 0);
+    assert_eq!(rect.y, 0);
+    assert_eq!(rect.w, 64);
+    assert_eq!(rect.h, 64);
+}
+
+#[test]
+fn offset_tile_rect_second_tile() {
+    let grid = tiles::TileGrid::new(128, 128, 64);
+    let rect = offset_tile_rect_for_emit(tiles::TileCoord::new(1, 1), &grid, 0);
+    assert_eq!(rect.x, 64);
+    assert_eq!(rect.y, 64);
+    assert_eq!(rect.w, 64);
+    assert_eq!(rect.h, 64);
+}
+
+#[test]
+fn offset_tile_rect_with_offset() {
+    let grid = tiles::TileGrid::new(128, 128, 64);
+    // offset_y=10 means row 0 tiles start at y=-10 in framebuffer
+    let rect = offset_tile_rect_for_emit(tiles::TileCoord::new(0, 0), &grid, 10);
+    assert_eq!(rect.x, 0);
+    assert_eq!(rect.y, 0); // clamped to 0
+    assert_eq!(rect.w, 64);
+    assert_eq!(rect.h, 54); // 64 - 10 = 54
+}
+
+#[test]
+fn offset_tile_rect_clamps_to_screen() {
+    let grid = tiles::TileGrid::new(100, 100, 64);
+    // Tile (1,1) at x=64,y=64 with screen 100x100 → w=36, h=36
+    let rect = offset_tile_rect_for_emit(tiles::TileCoord::new(1, 1), &grid, 0);
+    assert_eq!(rect.x, 64);
+    assert_eq!(rect.y, 64);
+    assert_eq!(rect.w, 36);
+    assert_eq!(rect.h, 36);
+}
