@@ -15,6 +15,7 @@ mod resize;
 mod scroll;
 pub mod tiles;
 mod video_classify;
+mod video_region;
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -469,9 +470,7 @@ async fn run_ffmpeg_session(
         let mut grid = tiles::TileGrid::new(screen_w, screen_h, tile_size);
         let mut emitter = tiles::emitter::TileEmitter::with_codec(grid.cols, grid.rows, tile_codec);
         let mut h264_enabled = h264_mode_for_tile.starts_enabled();
-        let mut ffmpeg_capture_region: Option<capture::ffmpeg::CaptureRegion> = None;
-        let mut pending_capture_region: Option<capture::ffmpeg::CaptureRegion> = None;
-        let mut pending_capture_region_streak: u8 = 0;
+        let mut region_committer = video_region::RegionCommitter::new();
 
         // Per-tile tracking for robust video classification.
         // Uses multi-signal scoring + hysteresis to avoid flip/flop.
@@ -535,11 +534,8 @@ async fn run_ffmpeg_session(
         let mut stable_bbox_frames: u8 = 0;
         let mut scroll_cooldown_frames: u8 = 0;
         let mut last_left_click: Option<(u16, u16, std::time::Instant)> = None;
-        let mut click_latched_video: bool = false;
-        let mut cdp_hint_absent_streak: u8 = 0;
-        let mut last_key_input_at: Option<std::time::Instant> = None;
-        let mut last_editable_hint: Option<capture::ffmpeg::CaptureRegion> = None;
-        let mut last_editable_hint_at: Option<std::time::Instant> = None;
+        let mut click_armed = video_region::ClickArmedState::new();
+        let mut editable_hint = video_region::EditableHintState::new();
         // Scroll residual telemetry (host-side cumulative counters).
         let mut scroll_residual_batches_total: u64 = 0;
         let mut scroll_residual_fallback_full_total: u64 = 0;
@@ -585,8 +581,6 @@ async fn run_ffmpeg_session(
 
         let mut last_capture = std::time::Instant::now();
         let mut last_resize_check = std::time::Instant::now() - std::time::Duration::from_secs(1);
-        let mut last_region_reconfig_at =
-            std::time::Instant::now() - std::time::Duration::from_secs(10);
         let mut last_h264_toggle_at = std::time::Instant::now();
 
         loop {
@@ -668,11 +662,10 @@ async fn run_ffmpeg_session(
                 prev_frame = None;
                 content_origin_y = 0;
                 grid_offset_y = 0;
-                pending_capture_region = None;
-                pending_capture_region_streak = 0;
-                last_region_reconfig_at = std::time::Instant::now();
+                let had_region = region_committer.active.is_some();
+                region_committer.reset();
                 last_h264_toggle_at = std::time::Instant::now();
-                if ffmpeg_capture_region.take().is_some() {
+                if had_region {
                     let _ = cmd_tx_for_tile.send(capture::ffmpeg::PipelineCmd::SetRegion(None));
                 }
                 {
@@ -720,7 +713,7 @@ async fn run_ffmpeg_session(
                 last_left_click = Some((x, y, ts));
             }
             while let Ok(ts) = text_input_rx.try_recv() {
-                last_key_input_at = Some(ts);
+                editable_hint.on_key_input(ts);
             }
 
             let prev_for_analysis = prev_frame.as_deref();
@@ -758,38 +751,14 @@ async fn run_ffmpeg_session(
                 } else {
                     None
                 };
-            if let Some(region) = cdp_editable_region_hint {
-                last_editable_hint = Some(region);
-                last_editable_hint_at = Some(now);
-            } else if last_editable_hint_at
-                .map(|ts| {
-                    now.duration_since(ts) > std::time::Duration::from_millis(EDITABLE_HINT_HOLD_MS)
-                })
-                .unwrap_or(false)
-            {
-                last_editable_hint = None;
-                last_editable_hint_at = None;
-            }
-            let key_input_qoi_boost = last_key_input_at
-                .map(|ts| {
-                    now.duration_since(ts)
-                        <= std::time::Duration::from_millis(KEY_INPUT_QOI_BOOST_MS)
-                })
-                .unwrap_or(false);
-            let editable_qoi_region = cdp_editable_region_hint.or_else(|| {
-                if key_input_qoi_boost
-                    && last_editable_hint_at
-                        .map(|ts| {
-                            now.duration_since(ts)
-                                <= std::time::Duration::from_millis(EDITABLE_HINT_HOLD_MS)
-                        })
-                        .unwrap_or(false)
-                {
-                    last_editable_hint
-                } else {
-                    None
-                }
-            });
+            editable_hint.update(cdp_editable_region_hint, now, EDITABLE_HINT_HOLD_MS);
+            let key_input_qoi_boost = editable_hint.key_input_qoi_boost(now, KEY_INPUT_QOI_BOOST_MS);
+            let editable_qoi_region = editable_hint.qoi_region(
+                cdp_editable_region_hint,
+                now,
+                EDITABLE_HINT_HOLD_MS,
+                KEY_INPUT_QOI_BOOST_MS,
+            );
             let editable_qoi_tile_bounds = editable_qoi_region.map(|region| {
                 expand_tile_bounds(
                     capture_region_tile_bounds(region, tile_size, grid.cols, grid.rows),
@@ -1160,25 +1129,13 @@ async fn run_ffmpeg_session(
             } else {
                 None
             };
-            let click_matches_region = cdp_video_region_hint_candidate
-                .zip(last_left_click)
-                .map(|(region, (x, y, ts))| {
-                    now.duration_since(ts) <= std::time::Duration::from_millis(video_click_arm_ms)
-                        && point_in_capture_region(x, y, region)
-                })
-                .unwrap_or(false);
-            if click_matches_region {
-                click_latched_video = true;
-            }
-            if cdp_video_region_hint_candidate.is_some() {
-                cdp_hint_absent_streak = 0;
-            } else {
-                cdp_hint_absent_streak = cdp_hint_absent_streak.saturating_add(1);
-                if cdp_hint_absent_streak >= CLICK_LATCH_RESET_FRAMES {
-                    click_latched_video = false;
-                }
-            }
-            let cdp_click_armed = click_latched_video;
+            let cdp_click_armed = click_armed.update(
+                cdp_video_region_hint_candidate,
+                last_left_click,
+                now,
+                video_click_arm_ms,
+                CLICK_LATCH_RESET_FRAMES,
+            );
             let cdp_video_region_hint = if cdp_click_armed {
                 cdp_video_region_hint_candidate
             } else {
@@ -1938,50 +1895,26 @@ async fn run_ffmpeg_session(
             } else {
                 None
             };
-            if next_capture_region == pending_capture_region {
-                pending_capture_region_streak = pending_capture_region_streak.saturating_add(1);
-            } else {
-                pending_capture_region = next_capture_region;
-                pending_capture_region_streak = 1;
-            }
-            let committed_capture_region = if ffmpeg_capture_region.is_none()
-                || pending_capture_region_streak >= REGION_RECONFIG_STABLE_FRAMES
-            {
-                pending_capture_region
-            } else {
-                ffmpeg_capture_region
-            };
+            let committed_capture_region =
+                region_committer.commit(next_capture_region, REGION_RECONFIG_STABLE_FRAMES);
 
-            if desired_h264 && committed_capture_region != ffmpeg_capture_region {
-                // Preload region before enabling H.264 so FFmpeg starts directly
-                // on the ROI instead of a transient full-frame capture.
-                let mut allow_reconfig = true;
-                if let (Some(old), Some(new)) = (ffmpeg_capture_region, committed_capture_region) {
-                    let small_jitter = old.x.abs_diff(new.x) <= 64
-                        && old.y.abs_diff(new.y) <= 64
-                        && old.w.abs_diff(new.w) <= 128
-                        && old.h.abs_diff(new.h) <= 128;
-                    let too_soon = now.duration_since(last_region_reconfig_at)
-                        < std::time::Duration::from_millis(REGION_RECONFIG_MIN_INTERVAL_MS);
-                    if small_jitter && too_soon {
-                        allow_reconfig = false;
-                    }
-                }
-                if allow_reconfig {
-                    ffmpeg_capture_region = committed_capture_region;
-                    last_region_reconfig_at = now;
+            if desired_h264 && committed_capture_region != region_committer.active {
+                if region_committer.should_reconfig(
+                    committed_capture_region,
+                    now,
+                    REGION_RECONFIG_MIN_INTERVAL_MS,
+                ) {
+                    region_committer.apply_reconfig(committed_capture_region, now);
                     let _ = cmd_tx_for_tile.send(capture::ffmpeg::PipelineCmd::SetRegion(
                         committed_capture_region,
                     ));
                 }
             } else if !desired_h264 {
-                // Skip SetRegion while H.264 is disabled to avoid a pointless
-                // restart when transitioning from video->no-video.
-                ffmpeg_capture_region = committed_capture_region;
+                region_committer.active = committed_capture_region;
             }
 
             let next_tile_info = if matches!(h264_mode_for_tile, H264Mode::VideoTiles) {
-                ffmpeg_capture_region.map(|region| VideoTileInfo {
+                region_committer.active.map(|region| VideoTileInfo {
                     tile_x: region.x as u16,
                     tile_y: region.y as u16,
                     tile_w: region.w as u16,
@@ -2017,7 +1950,7 @@ async fn run_ffmpeg_session(
             let tiles_cover_screen = if matches!(h264_mode_for_tile, H264Mode::Off) {
                 true
             } else {
-                !effective_h264 || ffmpeg_capture_region.is_none()
+                !effective_h264 || region_committer.active.is_none()
             };
             tiles_active_for_tile.store(tiles_cover_screen, std::sync::atomic::Ordering::Relaxed);
 
