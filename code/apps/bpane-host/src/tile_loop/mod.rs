@@ -4,6 +4,9 @@
 //! The `TileCaptureThread` struct replaces the 1500-line spawn_blocking
 //! closure with structured state and delegated per-frame processing.
 
+pub(crate) mod frame_types;
+mod h264_region;
+mod resize;
 mod run;
 
 #[cfg(test)]

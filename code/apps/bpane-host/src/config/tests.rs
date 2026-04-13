@@ -126,3 +126,53 @@ fn tile_capture_config_off_disables_classification() {
     assert!(!cfg.video_classification_enabled);
     std::env::remove_var("BPANE_H264_MODE");
 }
+
+#[test]
+fn tile_codec_defaults_to_qoi() {
+    std::env::remove_var("BPANE_TILE_CODEC");
+    assert_eq!(tile_codec_from_env(), TileCodec::Qoi);
+}
+
+#[test]
+fn tile_codec_parses_zstd() {
+    std::env::set_var("BPANE_TILE_CODEC", "zstd");
+    assert_eq!(tile_codec_from_env(), TileCodec::Zstd);
+    std::env::remove_var("BPANE_TILE_CODEC");
+}
+
+#[test]
+fn tile_codec_unknown_falls_back_to_qoi() {
+    std::env::set_var("BPANE_TILE_CODEC", "jpeg");
+    assert_eq!(tile_codec_from_env(), TileCodec::Qoi);
+    std::env::remove_var("BPANE_TILE_CODEC");
+}
+
+#[test]
+fn env_u32_clamped_respects_bounds() {
+    std::env::set_var("_TEST_U32", "99999");
+    assert_eq!(env_u32_clamped("_TEST_U32", 500, 100, 1000), 1000);
+    std::env::set_var("_TEST_U32", "50");
+    assert_eq!(env_u32_clamped("_TEST_U32", 500, 100, 1000), 100);
+    std::env::set_var("_TEST_U32", "750");
+    assert_eq!(env_u32_clamped("_TEST_U32", 500, 100, 1000), 750);
+    std::env::remove_var("_TEST_U32");
+}
+
+#[test]
+fn env_u32_clamped_returns_default_when_unset() {
+    std::env::remove_var("_TEST_U32_UNSET");
+    assert_eq!(env_u32_clamped("_TEST_U32_UNSET", 500, 100, 1000), 500);
+}
+
+#[test]
+fn env_u32_clamped_returns_default_on_invalid() {
+    std::env::set_var("_TEST_U32_BAD", "not_a_number");
+    assert_eq!(env_u32_clamped("_TEST_U32_BAD", 500, 100, 1000), 500);
+    std::env::remove_var("_TEST_U32_BAD");
+}
+
+#[test]
+fn preflight_checks_does_not_panic() {
+    // Just verify it doesn't crash — it only logs warnings.
+    preflight_checks();
+}
