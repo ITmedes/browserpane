@@ -1,7 +1,21 @@
 //! Per-frame data types that flow between processing phases.
 
 use crate::capture::ffmpeg::CaptureRegion;
+use crate::cdp_video;
 use crate::tiles;
+
+/// Snapshot of CDP hints after draining input events: video/editable
+/// region hints, editable QOI tile bounds, and pending scroll counts.
+#[derive(Debug)]
+pub struct CdpHintSnapshot {
+    pub cdp_hint_snapshot: cdp_video::PageHintState,
+    pub cdp_video_region_hint_sized: Option<CaptureRegion>,
+    pub cdp_editable_region_hint: Option<CaptureRegion>,
+    pub editable_qoi_tile_bounds: Option<(u16, u16, u16, u16)>,
+    pub key_input_qoi_boost: bool,
+    pub pending_scrolls: i32,
+    pub pending_scroll_dy_sum: i32,
+}
 
 /// Output of CDP hint + scroll detection phase.
 #[derive(Debug)]
