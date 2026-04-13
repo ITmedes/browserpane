@@ -3,14 +3,17 @@ mod camera;
 mod capture;
 mod cdp_video;
 mod clipboard;
+mod config;
 mod cursor;
 mod display;
 mod encode;
 mod filetransfer;
 mod input;
 mod ipc;
+mod region;
 mod resize;
 pub mod tiles;
+mod video_classify;
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -34,8 +37,7 @@ const SCROLL_RESIDUAL_FULL_REPAINT_RATIO_DEFAULT: f32 = 0.70;
 const SCROLL_DEFER_REPAIR_MAX_INTERIOR_RATIO: f32 = 0.82;
 const SCROLL_DEFER_REPAIR_MIN_SAVED_RATIO: f32 = 0.20;
 const SCROLL_DEFER_REPAIR_MAX_ROW_SHIFT: i32 = 2;
-const MIN_EDITABLE_HINT_WIDTH_PX: u32 = 2;
-const MIN_EDITABLE_HINT_HEIGHT_PX: u32 = 2;
+// MIN_EDITABLE_HINT_*_PX moved to region module.
 
 #[derive(Parser, Debug)]
 #[command(name = "bpane-host", about = "BrowserPane host agent daemon")]
@@ -57,38 +59,20 @@ struct Args {
     fps: u32,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum H264Mode {
-    /// Current behavior: keep the encoder process running continuously.
-    Always,
-    /// Start encoder only while tile emitter reports a video region.
-    VideoTiles,
-    /// Keep H.264 encoder disabled.
-    Off,
-}
-
-impl H264Mode {
-    fn from_env() -> Self {
-        let raw = std::env::var("BPANE_H264_MODE").unwrap_or_else(|_| "video_tiles".to_string());
-        match raw.trim().to_ascii_lowercase().as_str() {
-            "always" => Self::Always,
-            "" => Self::VideoTiles,
-            "video_tiles" | "video-tiles" | "tiles" | "on_demand" | "ondemand" => Self::VideoTiles,
-            "off" | "disabled" | "false" | "0" => Self::Off,
-            _ => {
-                warn!(
-                    value = %raw,
-                    "invalid BPANE_H264_MODE, defaulting to `always`"
-                );
-                Self::Always
-            }
-        }
-    }
-
-    fn starts_enabled(self) -> bool {
-        matches!(self, Self::Always)
-    }
-}
+use config::{
+    env_bool, env_f32_clamped, env_u16_clamped, env_u32_clamped, preflight_checks,
+    tile_codec_from_env, tile_size_from_env, H264Mode,
+};
+use region::{
+    capture_region_tile_bounds, cdp_insert_text_payload, clamp_region_to_screen,
+    expand_tile_bounds, extend_dirty_with_tile_bounds, hash_tile_region,
+    point_in_capture_region, region_meets_editable_minimum, region_meets_video_minimum,
+    scale_css_px_to_screen_px,
+};
+use video_classify::{
+    bbox_center_shift, bbox_iou, compute_tile_motion_features, is_photo_like_tile,
+    TileMotionFeatures,
+};
 
 // Keep H.264 datagram payloads comfortably below the effective QUIC path MTU.
 // Larger payloads can get dropped before they ever reach JS, which wipes out
@@ -113,14 +97,7 @@ fn unix_time_ms_now() -> u64 {
         .unwrap_or(0)
 }
 
-fn cdp_insert_text_payload(modifiers: u8, key_char: u32) -> Option<String> {
-    if key_char < 0x80 || input::keyboard::should_use_physical(modifiers, key_char) {
-        return None;
-    }
-    char::from_u32(key_char)
-        .filter(|ch| !ch.is_control())
-        .map(|ch| ch.to_string())
-}
+// cdp_insert_text_payload moved to region module.
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -2429,425 +2406,12 @@ async fn handle_control_test(
     }
 }
 
-fn tile_codec_from_env() -> tiles::emitter::TileCodec {
-    match std::env::var("BPANE_TILE_CODEC") {
-        Ok(raw) => {
-            let codec = tiles::emitter::TileCodec::from_str_lossy(&raw);
-            info!(value = %raw, ?codec, "BPANE_TILE_CODEC");
-            codec
-        }
-        Err(_) => tiles::emitter::TileCodec::Qoi,
-    }
-}
+// env_*, tile_*_from_env, H264Mode moved to config module.
 
-fn tile_size_from_env() -> u16 {
-    const DEFAULT_TILE_SIZE: u16 = 64;
-    const MIN_TILE_SIZE: u16 = 32;
-    const MAX_TILE_SIZE: u16 = 256;
-    match std::env::var("BPANE_TILE_SIZE") {
-        Ok(raw) => match raw.trim().parse::<u16>() {
-            Ok(parsed) => {
-                let bounded = parsed.clamp(MIN_TILE_SIZE, MAX_TILE_SIZE);
-                let aligned = bounded & !0x0f;
-                if aligned < MIN_TILE_SIZE {
-                    MIN_TILE_SIZE
-                } else {
-                    if parsed != aligned {
-                        warn!(
-                            value = %raw,
-                            effective = aligned,
-                            "BPANE_TILE_SIZE rounded down to 16-pixel alignment"
-                        );
-                    }
-                    aligned
-                }
-            }
-            Err(_) => {
-                warn!(value = %raw, "invalid BPANE_TILE_SIZE, using default");
-                DEFAULT_TILE_SIZE
-            }
-        },
-        Err(_) => DEFAULT_TILE_SIZE,
-    }
-}
+// Geometry helpers moved to region module.
 
-fn env_u16_clamped(name: &str, default: u16, min: u16, max: u16) -> u16 {
-    match std::env::var(name) {
-        Ok(raw) => match raw.trim().parse::<u16>() {
-            Ok(parsed) => parsed.clamp(min, max),
-            Err(_) => {
-                warn!(value = %raw, var = name, "invalid u16 env var, using default");
-                default.clamp(min, max)
-            }
-        },
-        Err(_) => default.clamp(min, max),
-    }
-}
-
-fn env_u32_clamped(name: &str, default: u32, min: u32, max: u32) -> u32 {
-    match std::env::var(name) {
-        Ok(raw) => match raw.trim().parse::<u32>() {
-            Ok(parsed) => parsed.clamp(min, max),
-            Err(_) => {
-                warn!(value = %raw, var = name, "invalid u32 env var, using default");
-                default.clamp(min, max)
-            }
-        },
-        Err(_) => default.clamp(min, max),
-    }
-}
-
-fn env_bool(name: &str, default: bool) -> bool {
-    match std::env::var(name) {
-        Ok(raw) => match raw.trim().to_ascii_lowercase().as_str() {
-            "1" | "true" | "yes" | "on" => true,
-            "0" | "false" | "no" | "off" => false,
-            _ => {
-                warn!(value = %raw, var = name, "invalid bool env var, using default");
-                default
-            }
-        },
-        Err(_) => default,
-    }
-}
-
-fn env_f32_clamped(name: &str, default: f32, min: f32, max: f32) -> f32 {
-    match std::env::var(name) {
-        Ok(raw) => match raw.trim().parse::<f32>() {
-            Ok(parsed) if parsed.is_finite() => parsed.clamp(min, max),
-            _ => {
-                warn!(value = %raw, var = name, "invalid f32 env var, using default");
-                default.clamp(min, max)
-            }
-        },
-        Err(_) => default.clamp(min, max),
-    }
-}
-
-fn scale_css_px_to_screen_px(css_px: i64, scale_milli: u16) -> i64 {
-    let scale = i64::from(scale_milli.max(1));
-    let scaled = css_px.saturating_mul(scale);
-    if scaled >= 0 {
-        scaled.saturating_add(500) / 1000
-    } else {
-        scaled.saturating_sub(500) / 1000
-    }
-}
-
-fn region_meets_video_minimum(
-    w: u32,
-    h: u32,
-    screen_w: u32,
-    screen_h: u32,
-    min_w: u32,
-    min_h: u32,
-    min_area_ratio: f32,
-) -> bool {
-    if w < min_w || h < min_h || screen_w == 0 || screen_h == 0 {
-        return false;
-    }
-    let area = (w as u64).saturating_mul(h as u64);
-    let screen_area = (screen_w as u64).saturating_mul(screen_h as u64).max(1);
-    let ratio = area as f32 / screen_area as f32;
-    ratio >= min_area_ratio
-}
-
-fn region_meets_editable_minimum(w: u32, h: u32) -> bool {
-    w >= MIN_EDITABLE_HINT_WIDTH_PX && h >= MIN_EDITABLE_HINT_HEIGHT_PX
-}
-
-fn expand_tile_bounds(
-    bounds: (u16, u16, u16, u16),
-    margin: u16,
-    cols: u16,
-    rows: u16,
-) -> (u16, u16, u16, u16) {
-    if cols == 0 || rows == 0 {
-        return (0, 0, 0, 0);
-    }
-    let (min_col, min_row, max_col, max_row) = bounds;
-    let max_grid_col = cols.saturating_sub(1);
-    let max_grid_row = rows.saturating_sub(1);
-    (
-        min_col.saturating_sub(margin),
-        min_row.saturating_sub(margin),
-        max_col.saturating_add(margin).min(max_grid_col),
-        max_row.saturating_add(margin).min(max_grid_row),
-    )
-}
-
-fn extend_dirty_with_tile_bounds(dirty: &mut Vec<tiles::TileCoord>, bounds: (u16, u16, u16, u16)) {
-    let (min_col, min_row, max_col, max_row) = bounds;
-    for row in min_row..=max_row {
-        for col in min_col..=max_col {
-            let coord = tiles::TileCoord::new(col, row);
-            if !dirty.contains(&coord) {
-                dirty.push(coord);
-            }
-        }
-    }
-}
-
-fn point_in_capture_region(x: u16, y: u16, region: capture::ffmpeg::CaptureRegion) -> bool {
-    let px = x as u32;
-    let py = y as u32;
-    let x1 = region.x.saturating_add(region.w);
-    let y1 = region.y.saturating_add(region.h);
-    px >= region.x && px < x1 && py >= region.y && py < y1
-}
-
-fn clamp_region_to_screen(
-    region: capture::ffmpeg::CaptureRegion,
-    screen_w: u32,
-    screen_h: u32,
-) -> Option<capture::ffmpeg::CaptureRegion> {
-    if screen_w < 2 || screen_h < 2 {
-        return None;
-    }
-    let x0 = region.x.min(screen_w.saturating_sub(1));
-    let y0 = region.y.min(screen_h.saturating_sub(1));
-    let x1 = region.x.saturating_add(region.w).min(screen_w);
-    let y1 = region.y.saturating_add(region.h).min(screen_h);
-    if x1 <= x0 || y1 <= y0 {
-        return None;
-    }
-
-    let mut w = x1 - x0;
-    let mut h = y1 - y0;
-    if w & 1 == 1 {
-        w = w.saturating_sub(1);
-    }
-    if h & 1 == 1 {
-        h = h.saturating_sub(1);
-    }
-    if w < 2 || h < 2 {
-        return None;
-    }
-    Some(capture::ffmpeg::CaptureRegion { x: x0, y: y0, w, h })
-}
-
-fn capture_region_tile_bounds(
-    region: capture::ffmpeg::CaptureRegion,
-    tile_size: u16,
-    cols: u16,
-    rows: u16,
-) -> (u16, u16, u16, u16) {
-    if tile_size == 0 || cols == 0 || rows == 0 || region.w == 0 || region.h == 0 {
-        return (0, 0, 0, 0);
-    }
-    let ts = tile_size as u32;
-    let max_col = cols.saturating_sub(1) as u32;
-    let max_row = rows.saturating_sub(1) as u32;
-    let x1 = region.x.saturating_add(region.w.saturating_sub(1));
-    let y1 = region.y.saturating_add(region.h.saturating_sub(1));
-
-    let min_col = (region.x / ts).min(max_col) as u16;
-    let min_row = (region.y / ts).min(max_row) as u16;
-    let max_col = (x1 / ts).min(max_col) as u16;
-    let max_row = (y1 / ts).min(max_row) as u16;
-    (min_col, min_row, max_col, max_row)
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct TileMotionFeatures {
-    change_ratio: f32,
-    motion_magnitude: f32,
-    edge_density: f32,
-    entropy_hint: f32,
-}
-
-/// Compute lightweight motion/content features for one tile.
-fn compute_tile_motion_features(
-    current: &[u8],
-    previous: Option<&[u8]>,
-    stride: usize,
-    x: usize,
-    y: usize,
-    w: usize,
-    h: usize,
-) -> TileMotionFeatures {
-    if w == 0 || h == 0 {
-        return TileMotionFeatures::default();
-    }
-
-    let pixel_count = w * h;
-    let sample_step = if pixel_count > 2048 {
-        4
-    } else if pixel_count > 1024 {
-        2
-    } else {
-        1
-    };
-    let row_step = if h > 32 { 2 } else { 1 };
-
-    let mut sampled = 0u32;
-    let mut changed = 0u32;
-    let mut sad_sum = 0u64;
-    let mut edge_total = 0u32;
-    let mut edge_hits = 0u32;
-    let mut lum_seen = [0u64; 4];
-    let mut lum_bins = 0u32;
-
-    for row in (0..h).step_by(row_step) {
-        let row_start = (y + row) * stride + x * 4;
-        let row_end = row_start + w * 4;
-        if row_end > current.len() {
-            continue;
-        }
-
-        let mut prev_sample_off: Option<usize> = None;
-        for col in (0..w).step_by(sample_step) {
-            let off = row_start + col * 4;
-            if off + 2 >= current.len() {
-                break;
-            }
-            sampled += 1;
-
-            let cr = current[off] as i32;
-            let cg = current[off + 1] as i32;
-            let cb = current[off + 2] as i32;
-
-            if let Some(prev_buf) = previous {
-                if off + 2 < prev_buf.len() {
-                    let pr = prev_buf[off] as i32;
-                    let pg = prev_buf[off + 1] as i32;
-                    let pb = prev_buf[off + 2] as i32;
-                    let dr = (cr - pr).unsigned_abs();
-                    let dg = (cg - pg).unsigned_abs();
-                    let db = (cb - pb).unsigned_abs();
-                    if dr > 6 || dg > 6 || db > 6 {
-                        changed += 1;
-                    }
-                    sad_sum += (dr + dg + db) as u64;
-                } else {
-                    changed += 1;
-                    sad_sum += 765;
-                }
-            } else {
-                changed += 1;
-                sad_sum += 765;
-            }
-
-            let lum = ((cr as u16 + (2 * cg as u16) + cb as u16) >> 2) as u8;
-            let word = (lum >> 6) as usize;
-            let bit = 1u64 << (lum & 63);
-            if lum_seen[word] & bit == 0 {
-                lum_seen[word] |= bit;
-                lum_bins += 1;
-            }
-
-            if let Some(prev_off) = prev_sample_off {
-                edge_total += 1;
-                let lr = current[prev_off] as i32;
-                let lg = current[prev_off + 1] as i32;
-                let lb = current[prev_off + 2] as i32;
-                let gradient =
-                    (cr - lr).unsigned_abs() + (cg - lg).unsigned_abs() + (cb - lb).unsigned_abs();
-                if gradient > 42 {
-                    edge_hits += 1;
-                }
-            }
-            prev_sample_off = Some(off);
-        }
-    }
-
-    if sampled == 0 {
-        return TileMotionFeatures::default();
-    }
-
-    let change_ratio = changed as f32 / sampled as f32;
-    let motion_magnitude = (sad_sum as f32 / (sampled as f32 * 765.0)).min(1.0);
-    let edge_density = if edge_total == 0 {
-        0.0
-    } else {
-        (edge_hits as f32 / edge_total as f32).min(1.0)
-    };
-    let entropy_hint = (lum_bins as f32 / 64.0).min(1.0);
-
-    TileMotionFeatures {
-        change_ratio,
-        motion_magnitude,
-        edge_density,
-        entropy_hint,
-    }
-}
-
-/// IoU for tile-space bounding boxes encoded as (min_col, min_row, max_col, max_row).
-fn bbox_iou(a: (u16, u16, u16, u16), b: (u16, u16, u16, u16)) -> f32 {
-    let (a_min_c, a_min_r, a_max_c, a_max_r) = a;
-    let (b_min_c, b_min_r, b_max_c, b_max_r) = b;
-
-    let ic_min = a_min_c.max(b_min_c);
-    let ic_max = a_max_c.min(b_max_c);
-    let ir_min = a_min_r.max(b_min_r);
-    let ir_max = a_max_r.min(b_max_r);
-    if ic_min > ic_max || ir_min > ir_max {
-        return 0.0;
-    }
-
-    let inter = (ic_max - ic_min + 1) as f32 * (ir_max - ir_min + 1) as f32;
-    let a_area = (a_max_c - a_min_c + 1) as f32 * (a_max_r - a_min_r + 1) as f32;
-    let b_area = (b_max_c - b_min_c + 1) as f32 * (b_max_r - b_min_r + 1) as f32;
-    let union = a_area + b_area - inter;
-    if union <= 0.0 {
-        0.0
-    } else {
-        inter / union
-    }
-}
-
-/// Max-axis center displacement between two tile-space bounding boxes.
-fn bbox_center_shift(a: (u16, u16, u16, u16), b: (u16, u16, u16, u16)) -> f32 {
-    let acx = (a.0 as f32 + a.2 as f32) * 0.5;
-    let acy = (a.1 as f32 + a.3 as f32) * 0.5;
-    let bcx = (b.0 as f32 + b.2 as f32) * 0.5;
-    let bcy = (b.1 as f32 + b.3 as f32) * 0.5;
-    (acx - bcx).abs().max((acy - bcy).abs())
-}
-
-/// Check if a tile contains photographic/video content vs text/UI.
-///
-/// Uses unique luminance count: text/UI tiles have very few distinct
-/// luminance levels (typically <10: text color + background + antialiasing).
-/// Video content — even black-and-white or dark — has smooth gradients
-/// producing many distinct luminance levels (30+).
-///
-/// Uses a stack-allocated 256-bit bitset (4 × u64 = 32 bytes) — no heap
-/// allocation, O(pixels) scan with early exit.
-fn is_photo_like_tile(
-    frame: &[u8],
-    stride: usize,
-    x: usize,
-    y: usize,
-    w: usize,
-    h: usize,
-    threshold: usize,
-) -> bool {
-    // 256-bit bitset for luminance values 0–255
-    let mut seen = [0u64; 4];
-    let mut count = 0usize;
-    for row in 0..h {
-        let start = (y + row) * stride + x * 4;
-        let end = start + w * 4;
-        if end <= frame.len() {
-            for pixel in frame[start..end].chunks_exact(4) {
-                // Fast luminance approximation: (R + 2*G + B) >> 2
-                let lum = ((pixel[0] as u16) + 2 * (pixel[1] as u16) + (pixel[2] as u16)) >> 2;
-                let lum = lum as u8;
-                let word = (lum >> 6) as usize; // 0..3
-                let bit = 1u64 << (lum & 63);
-                if seen[word] & bit == 0 {
-                    seen[word] |= bit;
-                    count += 1;
-                    if count > threshold {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    false
-}
+// TileMotionFeatures, compute_tile_motion_features, bbox_iou,
+// bbox_center_shift, is_photo_like_tile moved to video_classify module.
 
 /// Compute the same tile extraction rect used by the tile emitter when a
 /// vertical grid offset is active.
@@ -3112,35 +2676,7 @@ fn is_content_tile_in_scroll_region(
         && tile_left.saturating_add(tile_size) <= region_right
 }
 
-/// Hash a tile region directly from the frame buffer without allocating.
-/// Uses xxHash3 via `tiles::fnv_hash` for consistency with tile emitter hashes.
-fn hash_tile_region(frame: &[u8], stride: usize, x: usize, y: usize, w: usize, h: usize) -> u64 {
-    // For contiguous rows we could hash in one shot, but rows may be
-    // non-contiguous in the frame buffer (stride > w*4), so we
-    // concatenate row hashes with a simple combine.
-    use xxhash_rust::xxh3::xxh3_64;
-    let row_bytes = w * 4;
-    // If the tile spans the full stride width, the bytes are contiguous.
-    if w * 4 == stride {
-        let start = y * stride + x * 4;
-        let end = start + h * stride;
-        if end <= frame.len() {
-            return xxh3_64(&frame[start..end]);
-        }
-    }
-    // Non-contiguous rows: hash each row's slice and combine.
-    // We accumulate into a buffer to produce the same hash as if the
-    // tile pixels were extracted contiguously (matching emitter behavior).
-    let mut buf = Vec::with_capacity(row_bytes * h);
-    for row in 0..h {
-        let start = (y + row) * stride + x * 4;
-        let end = start + row_bytes;
-        if end <= frame.len() {
-            buf.extend_from_slice(&frame[start..end]);
-        }
-    }
-    xxh3_64(&buf)
-}
+// hash_tile_region moved to region module.
 
 /// Detect vertical scroll displacement by comparing pixel columns between frames.
 ///
@@ -3239,23 +2775,7 @@ fn detect_column_scroll(
     }
 }
 
-fn preflight_checks() {
-    #[cfg(target_os = "linux")]
-    {
-        // Check ffmpeg availability
-        if std::process::Command::new("ffmpeg")
-            .arg("-version")
-            .output()
-            .is_err()
-        {
-            warn!("ffmpeg not found — H.264 capture will not work");
-        }
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        info!("running on non-Linux platform - using test backends");
-    }
-}
+// preflight_checks moved to config module.
 
 #[cfg(test)]
 mod tests {
@@ -3312,55 +2832,8 @@ mod tests {
         assert!(encoded[0].encode().len() <= SAFE_VIDEO_DATAGRAM_PAYLOAD);
     }
 
-    #[test]
-    fn editable_hint_minimum_accepts_tiny_regions() {
-        assert!(region_meets_editable_minimum(2, 2));
-        assert!(!region_meets_editable_minimum(1, 2));
-        assert!(!region_meets_editable_minimum(2, 1));
-    }
-
-    #[test]
-    fn expand_tile_bounds_adds_margin_and_clamps() {
-        assert_eq!(expand_tile_bounds((2, 3, 2, 3), 1, 6, 8), (1, 2, 3, 4));
-        assert_eq!(expand_tile_bounds((0, 0, 0, 0), 2, 4, 4), (0, 0, 2, 2));
-    }
-
-    #[test]
-    fn cdp_insert_text_payload_accepts_non_ascii_printable_chars() {
-        assert_eq!(
-            cdp_insert_text_payload(0, 'é' as u32),
-            Some("é".to_string())
-        );
-        assert_eq!(
-            cdp_insert_text_payload(0, 'È' as u32),
-            Some("È".to_string())
-        );
-    }
-
-    #[test]
-    fn cdp_insert_text_payload_rejects_ascii_and_shortcuts() {
-        assert_eq!(cdp_insert_text_payload(0, 'e' as u32), None);
-        assert_eq!(
-            cdp_insert_text_payload(bpane_protocol::Modifiers::CTRL, 'é' as u32),
-            None
-        );
-    }
-
-    #[test]
-    fn extend_dirty_with_tile_bounds_adds_each_coord_once() {
-        let mut dirty = vec![tiles::TileCoord::new(1, 1)];
-        extend_dirty_with_tile_bounds(&mut dirty, (1, 1, 2, 2));
-        dirty.sort_by_key(|coord| (coord.row, coord.col));
-        assert_eq!(
-            dirty,
-            vec![
-                tiles::TileCoord::new(1, 1),
-                tiles::TileCoord::new(2, 1),
-                tiles::TileCoord::new(1, 2),
-                tiles::TileCoord::new(2, 2),
-            ]
-        );
-    }
+    // editable_hint, expand_tile_bounds, cdp_insert_text, extend_dirty tests
+    // moved to region::tests.
 
     #[tokio::test]
     async fn handle_control_test_ping_pong() {
@@ -3563,60 +3036,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn bbox_iou_identical_is_one() {
-        let a = (2, 3, 7, 8);
-        assert!((bbox_iou(a, a) - 1.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn bbox_iou_disjoint_is_zero() {
-        let a = (0, 0, 2, 2);
-        let b = (5, 5, 7, 7);
-        assert_eq!(bbox_iou(a, b), 0.0);
-    }
-
-    #[test]
-    fn tile_motion_features_detect_static_tile() {
-        let width = 16usize;
-        let height = 16usize;
-        let stride = width * 4;
-        let mut frame = vec![0u8; stride * height];
-        for px in frame.chunks_exact_mut(4) {
-            px[0] = 40;
-            px[1] = 80;
-            px[2] = 120;
-            px[3] = 255;
-        }
-        let f = compute_tile_motion_features(&frame, Some(&frame), stride, 0, 0, width, height);
-        assert!(f.change_ratio < 0.01);
-        assert!(f.motion_magnitude < 0.01);
-    }
-
-    #[test]
-    fn tile_motion_features_detect_dynamic_tile() {
-        let width = 32usize;
-        let height = 32usize;
-        let stride = width * 4;
-        let mut prev = vec![0u8; stride * height];
-        for px in prev.chunks_exact_mut(4) {
-            px[3] = 255;
-        }
-        let mut curr = vec![0u8; stride * height];
-        for y in 0..height {
-            for x in 0..width {
-                let off = y * stride + x * 4;
-                curr[off] = ((x * 13 + y * 7) & 0xFF) as u8;
-                curr[off + 1] = ((x * 3 + y * 17) & 0xFF) as u8;
-                curr[off + 2] = ((x * 19 + y * 5) & 0xFF) as u8;
-                curr[off + 3] = 255;
-            }
-        }
-        let f = compute_tile_motion_features(&curr, Some(&prev), stride, 0, 0, width, height);
-        assert!(f.change_ratio > 0.7);
-        assert!(f.motion_magnitude > 0.1);
-        assert!(f.entropy_hint > 0.2);
-    }
+    // bbox_iou, tile_motion_features tests moved to video_classify::tests.
 
     #[test]
     fn tile_matches_shifted_prev_detects_exposed_edge() {
@@ -3832,11 +3252,5 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn css_pixels_scale_to_framebuffer_pixels() {
-        assert_eq!(scale_css_px_to_screen_px(64, 1000), 64);
-        assert_eq!(scale_css_px_to_screen_px(64, 2000), 128);
-        assert_eq!(scale_css_px_to_screen_px(-64, 2000), -128);
-        assert_eq!(scale_css_px_to_screen_px(33, 1500), 50);
-    }
+    // css_pixels_scale_to_framebuffer_pixels moved to region::tests.
 }
