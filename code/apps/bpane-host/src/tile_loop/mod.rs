@@ -4,14 +4,22 @@
 //! The `TileCaptureThread` struct replaces the 1500-line spawn_blocking
 //! closure with structured state and delegated per-frame processing.
 
+mod cdp_hints;
 mod cdp_scroll;
+mod cdp_scroll_track;
 mod classify;
+mod dirty_set;
 mod emit;
 pub(crate) mod frame_types;
 mod h264_region;
 mod resize;
 mod run;
 mod scroll_emit;
+mod scroll_partition;
+mod scroll_residual;
+mod scroll_resolve;
+mod scroll_send;
+mod scroll_trust;
 
 #[cfg(test)]
 mod tests;
