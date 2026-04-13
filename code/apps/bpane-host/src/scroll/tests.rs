@@ -220,3 +220,106 @@ fn wheel_scroll_rejects_cdp_when_input_direction_mismatches() {
     let selected = select_wheel_trusted_scroll(128, -1, None);
     assert_eq!(selected, None);
 }
+
+// ── detect_column_scroll tests ──────────────────────────────────────
+
+/// Build a synthetic BGRA frame where each row has a unique pattern
+/// based on its y-coordinate.
+fn make_patterned_frame(width: usize, height: usize) -> Vec<u8> {
+    let stride = width * 4;
+    let mut frame = vec![0u8; stride * height];
+    for y in 0..height {
+        for x in 0..width {
+            let off = y * stride + x * 4;
+            let val = ((y * 7 + x * 3) % 256) as u8;
+            frame[off] = val;
+            frame[off + 1] = val.wrapping_add(50);
+            frame[off + 2] = val.wrapping_add(100);
+            frame[off + 3] = 255;
+        }
+    }
+    frame
+}
+
+#[test]
+fn detect_column_scroll_finds_upward_shift() {
+    let width = 128;
+    let height = 128;
+    let stride = width * 4;
+    let prev = make_patterned_frame(width, height);
+
+    // Shift content up by 8 pixels: curr[y] = prev[y+8]
+    let dy = 8;
+    let mut curr = vec![0u8; stride * height];
+    for y in 0..(height - dy) {
+        let dst = y * stride;
+        let src = (y + dy) * stride;
+        curr[dst..dst + stride].copy_from_slice(&prev[src..src + stride]);
+    }
+    // Fill exposed bottom strip with unique data
+    for y in (height - dy)..height {
+        for x in 0..width {
+            let off = y * stride + x * 4;
+            curr[off] = 0xAA;
+            curr[off + 1] = 0xBB;
+            curr[off + 2] = 0xCC;
+            curr[off + 3] = 255;
+        }
+    }
+
+    let result = detect_column_scroll(&curr, &prev, stride, width, height, 64);
+    assert!(result.is_some(), "should detect scroll");
+    let (detected_dy, confidence) = result.unwrap();
+    assert_eq!(detected_dy, dy as i32, "should detect upward shift of {dy}");
+    assert!(confidence > 0.7, "confidence {confidence} should be > 0.7");
+}
+
+#[test]
+fn detect_column_scroll_finds_downward_shift() {
+    let width = 128;
+    let height = 128;
+    let stride = width * 4;
+    let prev = make_patterned_frame(width, height);
+
+    // Shift content down by 12 pixels: curr[y+12] = prev[y]
+    let dy = 12;
+    let mut curr = vec![0u8; stride * height];
+    for y in 0..(height - dy) {
+        let dst = (y + dy) * stride;
+        let src = y * stride;
+        curr[dst..dst + stride].copy_from_slice(&prev[src..src + stride]);
+    }
+    // Fill exposed top strip
+    for y in 0..dy {
+        for x in 0..width {
+            let off = y * stride + x * 4;
+            curr[off] = 0xDD;
+            curr[off + 1] = 0xEE;
+            curr[off + 2] = 0xFF;
+            curr[off + 3] = 255;
+        }
+    }
+
+    let result = detect_column_scroll(&curr, &prev, stride, width, height, 64);
+    assert!(result.is_some(), "should detect scroll");
+    let (detected_dy, confidence) = result.unwrap();
+    assert_eq!(detected_dy, -(dy as i32), "should detect downward shift of {dy}");
+    assert!(confidence > 0.7, "confidence {confidence} should be > 0.7");
+}
+
+#[test]
+fn detect_column_scroll_returns_none_for_identical_frames() {
+    let width = 64;
+    let height = 64;
+    let stride = width * 4;
+    let frame = make_patterned_frame(width, height);
+    let result = detect_column_scroll(&frame, &frame, stride, width, height, 32);
+    assert!(result.is_none(), "identical frames should not detect scroll");
+}
+
+#[test]
+fn detect_column_scroll_returns_none_for_tiny_frames() {
+    let frame = vec![0u8; 8 * 8 * 4];
+    let result = detect_column_scroll(&frame, &frame, 8 * 4, 8, 8, 4);
+    assert!(result.is_none(), "frames too small for column sampling");
+}

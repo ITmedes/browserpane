@@ -113,62 +113,7 @@ impl super::TileCaptureThread {
         }
         self.last_capture = now;
 
-        // Check if screen resolution changed (xrandr resize by FFmpeg pipeline).
-        // Only issue the X11 GetGeometry round-trip every ~500ms to avoid
-        // per-frame latency on the hot path. Cached values are used otherwise.
-        let (cur_w, cur_h) =
-            if now.duration_since(self.last_resize_check) >= std::time::Duration::from_millis(500) {
-                self.last_resize_check = now;
-                self.cap.refresh_screen_size()
-            } else {
-                self.cap.query_screen_size()
-            };
-        if cur_w as u16 != self.screen_w || cur_h as u16 != self.screen_h {
-            self.screen_w = cur_w as u16;
-            self.screen_h = cur_h as u16;
-            self.grid = tiles::TileGrid::new(self.screen_w, self.screen_h, self.tile_size);
-            self.emitter = tiles::emitter::TileEmitter::with_codec(self.grid.cols, self.grid.rows, self.tile_codec);
-            let new_total = self.grid.cols as usize * self.grid.rows as usize;
-            self.prev_hashes = vec![0; new_total];
-            self.video_scores = vec![0; new_total];
-            self.non_candidate_streaks = vec![0; new_total];
-            self.video_hold_frames = vec![0; new_total];
-            self.video_latched = vec![false; new_total];
-            self.candidate_mask = vec![false; new_total];
-            self.changed_mask = vec![false; new_total];
-            self.text_like_mask = vec![false; new_total];
-            self.prev_video_bbox = None;
-            self.stable_bbox_frames = 0;
-            self.scroll_cooldown_frames = 0;
-            self.scroll_thin_mode_active = false;
-            self.scroll_residual_was_active = false;
-            self.scroll_quiet_frames = 0;
-            self.last_cdp_hint_seq = 0;
-            self.last_cdp_scroll_y = None;
-            self.cdp_scroll_anchor = None;
-            self.prev_frame = None;
-            self.content_origin_y = 0;
-            self.grid_offset_y = 0;
-            let had_region = self.region_committer.active.is_some();
-            self.region_committer.reset();
-            self.last_h264_toggle_at = std::time::Instant::now();
-            if had_region {
-                let _ = self.cmd_tx.send(crate::capture::ffmpeg::PipelineCmd::SetRegion(None));
-            }
-            {
-                let mut guard = match self.video_tile_info.lock() {
-                    Ok(g) => g,
-                    Err(poisoned) => poisoned.into_inner(),
-                };
-                *guard = None;
-            }
-            debug!("tile capture: resized to {}x{}", self.screen_w, self.screen_h);
-
-            // Send new self.grid config
-            let grid_frame = self.emitter.emit_grid_config(&self.grid);
-            if self.tile_tx.blocking_send(grid_frame).is_err() {
-                return;
-            }
+        if self.handle_resize(now) {
             continue;
         }
 
@@ -1365,81 +1310,18 @@ impl super::TileCaptureThread {
             );
         }
 
-        // When there are video tiles, let H.264 through for the video
-        // region. Otherwise tiles handle the full screen.
+        // H.264 region management
         let cdp_has_video = cdp_video_region_hint.is_some() && self.scroll_cooldown_frames == 0;
-        let _cdp_has_motion =
-            cdp_has_video && cdp_motion_tiles >= MIN_CHANGED_VIDEO_TILES_FOR_H264;
-        let has_video = cdp_has_video;
-        let desired_h264 = match self.h264_mode {
-            H264Mode::Always => true,
-            H264Mode::VideoTiles => has_video,
-            H264Mode::Off => false,
-        };
-
-        let next_capture_region = if matches!(self.h264_mode, H264Mode::VideoTiles) {
-            cdp_has_video.then_some(cdp_video_region_hint).flatten()
-        } else {
-            None
-        };
-        let committed_capture_region =
-            self.region_committer.commit(next_capture_region, REGION_RECONFIG_STABLE_FRAMES);
-
-        if desired_h264 && committed_capture_region != self.region_committer.active {
-            if self.region_committer.should_reconfig(
-                committed_capture_region,
-                now,
-                REGION_RECONFIG_MIN_INTERVAL_MS,
-            ) {
-                self.region_committer.apply_reconfig(committed_capture_region, now);
-                let _ = self.cmd_tx.send(crate::capture::ffmpeg::PipelineCmd::SetRegion(
-                    committed_capture_region,
-                ));
-            }
-        } else if !desired_h264 {
-            self.region_committer.active = committed_capture_region;
-        }
-
-        let next_tile_info = if matches!(self.h264_mode, H264Mode::VideoTiles) {
-            self.region_committer.active.map(|region| VideoTileInfo {
-                tile_x: region.x as u16,
-                tile_y: region.y as u16,
-                tile_w: region.w as u16,
-                tile_h: region.h as u16,
-                screen_w: self.screen_w,
-                screen_h: self.screen_h,
-            })
-        } else {
-            None
-        };
-        {
-            let mut guard = match self.video_tile_info.lock() {
-                Ok(g) => g,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            *guard = next_tile_info;
-        }
-
-        let mut effective_h264 = desired_h264;
-        if self.h264_enabled
-            && !desired_h264
-            && now.duration_since(self.last_h264_toggle_at)
-                < std::time::Duration::from_millis(H264_MIN_ON_DURATION_MS)
-        {
-            effective_h264 = true;
-        }
-        if effective_h264 != self.h264_enabled {
-            self.h264_enabled = effective_h264;
-            self.last_h264_toggle_at = now;
-            let _ =
-                self.cmd_tx.send(crate::capture::ffmpeg::PipelineCmd::SetEnabled(effective_h264));
-        }
-        let tiles_cover_screen = if matches!(self.h264_mode, H264Mode::Off) {
-            true
-        } else {
-            !effective_h264 || self.region_committer.active.is_none()
-        };
-        self.tiles_active.store(tiles_cover_screen, std::sync::atomic::Ordering::Relaxed);
+        let _h264_update = self.update_h264_region(
+            cdp_video_region_hint,
+            cdp_has_video,
+            cdp_motion_tiles,
+            now,
+            REGION_RECONFIG_STABLE_FRAMES,
+            REGION_RECONFIG_MIN_INTERVAL_MS,
+            MIN_CHANGED_VIDEO_TILES_FOR_H264,
+            H264_MIN_ON_DURATION_MS,
+        );
 
         // Send all tile data (content + static) BEFORE BatchEnd so the
         // client processes everything in a single batch.  Previously,
