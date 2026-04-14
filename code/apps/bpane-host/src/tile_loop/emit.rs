@@ -1,6 +1,6 @@
 //! Tile emission: static/content split, tile encoding, and frame send.
 
-use tracing::trace;
+use tokio::sync::mpsc;
 
 use crate::capture::ffmpeg::CaptureRegion;
 use crate::region::extend_dirty_with_tile_bounds;
@@ -8,6 +8,30 @@ use crate::scroll::{has_scroll_region_split, is_content_tile_in_scroll_region};
 use crate::tiles;
 
 use super::frame_types::DetectedScrollFrame;
+
+fn send_tile_batch(
+    tile_tx: &mpsc::Sender<bpane_protocol::frame::Frame>,
+    mut content_frames: Vec<bpane_protocol::frame::Frame>,
+    static_frames: Vec<bpane_protocol::frame::Frame>,
+) -> bool {
+    let batch_end_frame = content_frames.pop();
+    for frame in content_frames {
+        if tile_tx.blocking_send(frame).is_err() {
+            return false;
+        }
+    }
+    for frame in static_frames {
+        if tile_tx.blocking_send(frame).is_err() {
+            return false;
+        }
+    }
+    if let Some(frame) = batch_end_frame {
+        if tile_tx.blocking_send(frame).is_err() {
+            return false;
+        }
+    }
+    true
+}
 
 impl super::TileCaptureThread {
     /// Split dirty tiles into content/static, emit tile frames, and send.
@@ -187,7 +211,39 @@ impl super::TileCaptureThread {
             );
         }
 
+        // Send all tile data (content + static) before BatchEnd so the client
+        // applies the entire frame in a single batch.
+        send_tile_batch(&self.tile_tx, result.tile_frames, static_frames)
+    }
+}
 
-        true // channel still open
+#[cfg(test)]
+mod tests {
+    use bpane_protocol::channel::ChannelId;
+    use bpane_protocol::frame::Frame;
+    use tokio::sync::mpsc;
+
+    use super::send_tile_batch;
+
+    #[test]
+    fn send_tile_batch_keeps_batch_end_last() {
+        let (tx, mut rx) = mpsc::channel(8);
+        let content_frames = vec![
+            Frame::new(ChannelId::Tiles, vec![1]),
+            Frame::new(ChannelId::Tiles, vec![2]),
+            Frame::new(ChannelId::Tiles, vec![3]), // BatchEnd
+        ];
+        let static_frames = vec![
+            Frame::new(ChannelId::Tiles, vec![4]),
+            Frame::new(ChannelId::Tiles, vec![5]),
+        ];
+
+        assert!(send_tile_batch(&tx, content_frames, static_frames));
+
+        let mut payloads = Vec::new();
+        while let Ok(frame) = rx.try_recv() {
+            payloads.push(frame.payload);
+        }
+        assert_eq!(payloads, vec![vec![1], vec![2], vec![4], vec![5], vec![3]]);
     }
 }
