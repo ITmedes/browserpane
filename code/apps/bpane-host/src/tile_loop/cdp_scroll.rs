@@ -18,7 +18,6 @@ impl super::TileCaptureThread {
         rgba: &[u8],
         stride: usize,
         now: std::time::Instant,
-        force_refresh: bool,
         editable_hint_hold_ms: u64,
         key_input_qoi_boost_ms: u64,
         editable_qoi_tile_margin: u16,
@@ -29,7 +28,6 @@ impl super::TileCaptureThread {
         input_scroll_min_confidence: f32,
         no_input_scroll_min_confidence: f32,
         scroll_suppress_video_frames: u8,
-        scroll_copy_quantum_px: u16,
     ) -> CdpScrollResult {
         // Phase 1: Drain events, snapshot CDP hints
         let hints = self.snapshot_cdp_hints(
@@ -40,10 +38,8 @@ impl super::TileCaptureThread {
         );
 
         // Phase 2: Track CDP scroll displacement
-        let cdp_scroll_dy_px = self.track_cdp_scroll(
-            &hints.cdp_hint_snapshot,
-            max_cdp_scroll_dy_px,
-        );
+        let cdp_scroll_dy_px =
+            self.track_cdp_scroll(&hints.cdp_hint_snapshot, max_cdp_scroll_dy_px);
 
         // Phase 3: Resolve scroll from CDP + content sources
         let mut result = self.resolve_scroll(

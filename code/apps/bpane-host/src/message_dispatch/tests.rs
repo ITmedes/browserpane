@@ -1,6 +1,6 @@
 use tokio::sync::mpsc;
 
-use bpane_protocol::frame::{Frame, Message};
+use bpane_protocol::frame::Message;
 use bpane_protocol::{ClipboardMessage, ControlMessage, SessionFlags};
 
 use crate::capture;
@@ -84,8 +84,7 @@ fn has_audio_flag_extraction() {
     );
     assert!(with_audio.has(SessionFlags::AUDIO));
 
-    let without_audio =
-        SessionFlags::new(SessionFlags::CLIPBOARD | SessionFlags::KEYBOARD_LAYOUT);
+    let without_audio = SessionFlags::new(SessionFlags::CLIPBOARD | SessionFlags::KEYBOARD_LAYOUT);
     assert!(!without_audio.has(SessionFlags::AUDIO));
 }
 

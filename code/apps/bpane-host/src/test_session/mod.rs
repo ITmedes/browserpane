@@ -6,7 +6,6 @@ mod tests;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
-use tracing::info;
 
 use bpane_protocol::channel::ChannelId;
 use bpane_protocol::frame::{Frame, Message};

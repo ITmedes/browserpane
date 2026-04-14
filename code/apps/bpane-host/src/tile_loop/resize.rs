@@ -2,9 +2,7 @@
 
 use tracing::debug;
 
-use crate::capture::CaptureBackend;
 use crate::tiles;
-use crate::video_region;
 
 impl super::TileCaptureThread {
     /// Check for screen resolution changes and rebuild the grid if needed.
@@ -73,7 +71,10 @@ impl super::TileCaptureThread {
             *guard = None;
         }
 
-        debug!("tile capture: resized to {}x{}", self.screen_w, self.screen_h);
+        debug!(
+            "tile capture: resized to {}x{}",
+            self.screen_w, self.screen_h
+        );
 
         let grid_frame = self.emitter.emit_grid_config(&self.grid);
         if self.tile_tx.blocking_send(grid_frame).is_err() {

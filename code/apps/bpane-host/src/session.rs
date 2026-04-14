@@ -14,12 +14,8 @@ use crate::audio;
 use crate::capture;
 use crate::cdp_video;
 use crate::clipboard;
-use crate::config::{
-    env_bool, env_f32_clamped, env_u16_clamped, env_u32_clamped, tile_codec_from_env,
-    tile_size_from_env, H264Mode,
-};
+use crate::config::{H264Mode, TileCaptureConfig};
 use crate::cursor;
-use crate::filetransfer;
 use crate::input::{self, InputBackend, TestInputBackend};
 use crate::message_dispatch;
 use crate::tile_loop;
@@ -60,15 +56,10 @@ pub async fn run_ffmpeg_session(
 
     let clipboard_task = clipboard::spawn_clipboard_task(display.to_string(), to_gateway.clone());
 
-    let h264_mode = H264Mode::from_env();
+    let tile_config = TileCaptureConfig::from_env();
+    let h264_mode = tile_config.h264_mode;
     info!(?h264_mode, "h264 mode");
-    let chromium_wheel_step_px = env_u16_clamped("BPANE_CHROMIUM_WHEEL_STEP_PX", 64, 0, 512);
-    let scroll_copy_quantum_px = env_u16_clamped(
-        "BPANE_SCROLL_COPY_QUANTUM_PX",
-        chromium_wheel_step_px,
-        0,
-        512,
-    );
+    let chromium_wheel_step_px = tile_config.chromium_wheel_step_px;
 
     // Spawn FFmpeg pipeline
     let (cmd_tx, nal_rx) = capture::ffmpeg::spawn_pipeline(
@@ -101,8 +92,7 @@ pub async fn run_ffmpeg_session(
     let tiles_active = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let video_tile_info = Arc::new(std::sync::Mutex::new(None::<VideoTileInfo>));
     let input_activity_ms = Arc::new(std::sync::atomic::AtomicU64::new(0));
-    let browser_video_hint =
-        Arc::new(std::sync::Mutex::new(cdp_video::PageHintState::default()));
+    let browser_video_hint = Arc::new(std::sync::Mutex::new(cdp_video::PageHintState::default()));
     let browser_video_hint_task =
         if matches!(h264_mode, H264Mode::VideoTiles) || chromium_wheel_step_px > 0 {
             Some(cdp_video::spawn_video_hint_task(browser_video_hint.clone()))
@@ -133,8 +123,7 @@ pub async fn run_ffmpeg_session(
         }
         let mut bridge_encoder_disabled = false;
         while let Ok(encoded) = nal_rx.recv() {
-            let tiles_on =
-                tiles_active_for_bridge.load(std::sync::atomic::Ordering::Relaxed);
+            let tiles_on = tiles_active_for_bridge.load(std::sync::atomic::Ordering::Relaxed);
             if tiles_on && !bridge_encoder_disabled {
                 bridge_encoder_disabled = true;
                 let _ = cmd_tx_for_bridge.send(capture::ffmpeg::PipelineCmd::SetEnabled(false));
@@ -145,7 +134,9 @@ pub async fn run_ffmpeg_session(
                 trace!("bridge: re-enabled encoder (tiles inactive)");
             }
             if tiles_on {
-                if let Some(dt) = damage.as_mut() { dt.reset(); }
+                if let Some(dt) = damage.as_mut() {
+                    dt.reset();
+                }
                 continue;
             }
             let tile_info = {
@@ -156,7 +147,10 @@ pub async fn run_ffmpeg_session(
                 *guard
             };
             if !encoded.is_keyframe && super::should_gate_video_delta_on_damage(tile_info) {
-                let has_damage = match damage.as_mut() { Some(dt) => dt.poll(), None => true };
+                let has_damage = match damage.as_mut() {
+                    Some(dt) => dt.poll(),
+                    None => true,
+                };
                 if !has_damage {
                     std::thread::sleep(std::time::Duration::from_millis(50));
                     continue;
@@ -164,15 +158,24 @@ pub async fn run_ffmpeg_session(
             }
             nal_id = nal_id.wrapping_add(1);
             let fragments = VideoDatagram::fragment_with_tile(
-                nal_id, encoded.is_keyframe, encoded.pts_us, &encoded.data,
-                super::video_datagram_max_fragment_size(tile_info), tile_info,
+                nal_id,
+                encoded.is_keyframe,
+                encoded.pts_us,
+                &encoded.data,
+                super::video_datagram_max_fragment_size(tile_info),
+                tile_info,
             );
             for frag in &fragments {
-                if video_tx.blocking_send(Frame::new(ChannelId::Video, frag.encode())).is_err() {
+                if video_tx
+                    .blocking_send(Frame::new(ChannelId::Video, frag.encode()))
+                    .is_err()
+                {
                     return;
                 }
             }
-            if let Some(dt) = damage.as_mut() { dt.reset(); }
+            if let Some(dt) = damage.as_mut() {
+                dt.reset();
+            }
         }
         debug!("bridge: NAL receive channel closed");
     });
@@ -181,7 +184,9 @@ pub async fn run_ffmpeg_session(
     let video_gateway = to_gateway.clone();
     let video_fwd = tokio::spawn(async move {
         while let Some(frame) = video_rx.recv().await {
-            if video_gateway.send(frame).await.is_err() { break; }
+            if video_gateway.send(frame).await.is_err() {
+                break;
+            }
         }
     });
 
@@ -200,23 +205,22 @@ pub async fn run_ffmpeg_session(
     let video_tile_info_for_tiles = video_tile_info.clone();
     let browser_video_hint_for_tiles = browser_video_hint.clone();
     let input_activity_for_tiles = input_activity_ms.clone();
+    let tile_config_for_tiles = tile_config.clone();
     let tile_thread = tokio::task::spawn_blocking(move || {
         if let Some(thread) = tile_loop::TileCaptureThread::new(
-            &display_for_tiles, width, height, h264_mode,
-            tile_size_from_env(), tile_codec_from_env(), scroll_copy_quantum_px,
-            std::time::Duration::from_millis(100),
-            std::time::Duration::from_millis(
-                env_u32_clamped("BPANE_SCROLL_ACTIVE_FRAME_INTERVAL_MS", 33, 16, 100) as u64,
-            ),
-            env_u32_clamped("BPANE_SCROLL_ACTIVE_CAPTURE_FRAMES", 8, 0, 32) as u8,
-            env_u32_clamped("BPANE_CDP_MIN_VIDEO_WIDTH", 320, 2, 4096) & !1,
-            env_u32_clamped("BPANE_CDP_MIN_VIDEO_HEIGHT", 180, 2, 4096) & !1,
-            env_f32_clamped("BPANE_CDP_MIN_VIDEO_AREA_RATIO", 0.08, 0.01, 0.95),
-            env_u32_clamped("BPANE_VIDEO_CLICK_ARM_MS", 8_000, 250, 60_000) as u64,
-            env_bool("BPANE_SCROLL_THIN_MODE", false),
-            tile_tx, cmd_tx_for_tiles, tiles_active_for_tiles,
-            video_tile_info_for_tiles, browser_video_hint_for_tiles,
-            input_activity_for_tiles, scroll_rx, video_click_rx, text_input_rx,
+            &display_for_tiles,
+            width,
+            height,
+            tile_config_for_tiles,
+            tile_tx,
+            cmd_tx_for_tiles,
+            tiles_active_for_tiles,
+            video_tile_info_for_tiles,
+            browser_video_hint_for_tiles,
+            input_activity_for_tiles,
+            scroll_rx,
+            video_click_rx,
+            text_input_rx,
             cache_miss_rx,
         ) {
             thread.run();
@@ -227,7 +231,9 @@ pub async fn run_ffmpeg_session(
     let tile_gateway = to_gateway.clone();
     let tile_fwd = tokio::spawn(async move {
         while let Some(frame) = tile_rx.recv().await {
-            if tile_gateway.send(frame).await.is_err() { break; }
+            if tile_gateway.send(frame).await.is_err() {
+                break;
+            }
         }
     });
 

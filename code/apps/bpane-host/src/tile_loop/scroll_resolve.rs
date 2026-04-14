@@ -7,8 +7,7 @@ use tracing::trace;
 use crate::capture::ffmpeg::CaptureRegion;
 use crate::region::{capture_region_tile_bounds, scale_css_px_to_screen_px};
 use crate::scroll::{
-    content_scroll_search_limit_px, detect_column_scroll,
-    next_scroll_active_capture_frames,
+    content_scroll_search_limit_px, detect_column_scroll, next_scroll_active_capture_frames,
 };
 
 use super::frame_types::{CdpScrollResult, DetectedScrollFrame};
@@ -58,8 +57,11 @@ impl super::TileCaptureThread {
         let content_scroll_search_px = content_scroll_search_limit_px(cdp_scroll_dy_px);
         if let Some(prev) = prev_for_analysis {
             if let Some((detected_dy, confidence)) = detect_column_scroll(
-                &rgba, prev, stride,
-                self.screen_w as usize, self.screen_h as usize,
+                &rgba,
+                prev,
+                stride,
+                self.screen_w as usize,
+                self.screen_h as usize,
                 content_scroll_search_px,
             ) {
                 let detected_scroll_dir = detected_dy.signum();
@@ -71,19 +73,25 @@ impl super::TileCaptureThread {
                 } else {
                     no_input_scroll_min_confidence
                 };
-                let trusted =
-                    detected_dy.abs() >= min_scroll_dy_px && confidence >= min_confidence;
+                let trusted = detected_dy.abs() >= min_scroll_dy_px && confidence >= min_confidence;
                 if trusted {
                     content_scroll = Some((
-                        detected_dy as i16, confidence, direction_matches, Some(min_confidence),
+                        detected_dy as i16,
+                        confidence,
+                        direction_matches,
+                        Some(min_confidence),
                     ));
                 } else {
                     trace!(
-                        source = "content", dy = detected_dy,
+                        source = "content",
+                        dy = detected_dy,
                         confidence = format!("{:.2}", confidence),
-                        scrolls = pending_scrolls, input_dy_sum = pending_scroll_dy_sum,
-                        input_dir = input_scroll_dir, cdp_dir = cdp_scroll_dir,
-                        dir_match = direction_matches, min_scroll_dy_px,
+                        scrolls = pending_scrolls,
+                        input_dy_sum = pending_scroll_dy_sum,
+                        input_dir = input_scroll_dir,
+                        cdp_dir = cdp_scroll_dir,
+                        dir_match = direction_matches,
+                        min_scroll_dy_px,
                         min_confidence = format!("{:.2}", min_confidence),
                         "ignored tiny scroll displacement"
                     );
@@ -93,10 +101,14 @@ impl super::TileCaptureThread {
 
         // Trust arbitration between CDP and content sources.
         let trusted_scroll = arbitrate_scroll_trust(
-            cdp_scroll_dy_px, content_scroll,
-            pending_scrolls, pending_scroll_dy_sum,
-            input_scroll_dir, cdp_scroll_dir,
-            min_scroll_dy_px, cdp_content_dy_divergence_log_px,
+            cdp_scroll_dy_px,
+            content_scroll,
+            pending_scrolls,
+            pending_scroll_dy_sum,
+            input_scroll_dir,
+            cdp_scroll_dir,
+            min_scroll_dy_px,
+            cdp_content_dy_divergence_log_px,
         );
 
         let cdp_scale_milli = cdp_hint_snapshot.device_scale_factor_milli.max(1);
@@ -127,7 +139,11 @@ impl super::TileCaptureThread {
                     (0, self.screen_h, self.screen_w)
                 };
             detected_scroll_frame = Some(DetectedScrollFrame {
-                dy: detected_dy, confidence, source, direction_matches, min_confidence,
+                dy: detected_dy,
+                confidence,
+                source,
+                direction_matches,
+                min_confidence,
                 row_shift,
                 region_top: scroll_region_top,
                 region_bottom: scroll_region_bottom,
@@ -143,7 +159,10 @@ impl super::TileCaptureThread {
                     let drift = self.content_origin_y - expected_origin;
                     if drift != 0 {
                         tracing::trace!(
-                            drift, self.content_origin_y, expected_origin, cdp_scroll_y,
+                            drift,
+                            self.content_origin_y,
+                            expected_origin,
+                            cdp_scroll_y,
                             "correcting self.content_origin_y drift from CDP"
                         );
                         self.content_origin_y = expected_origin;
@@ -158,7 +177,9 @@ impl super::TileCaptureThread {
         self.scroll_active_capture_frames_remaining = next_scroll_active_capture_frames(
             self.scroll_active_capture_frames_remaining,
             self.scroll_active_capture_frames,
-            pending_scrolls, strong_scroll_observed, cdp_scroll_observed,
+            pending_scrolls,
+            strong_scroll_observed,
+            cdp_scroll_observed,
         );
         if pending_scrolls > 0 || strong_scroll_observed || cdp_scroll_observed {
             self.scroll_cooldown_frames = scroll_suppress_video_frames;
@@ -177,23 +198,31 @@ impl super::TileCaptureThread {
             None
         };
         let cdp_click_armed = self.click_armed.update(
-            cdp_video_region_hint_candidate, self.last_left_click,
-            now, self.video_click_arm_ms, CLICK_LATCH_RESET_FRAMES,
+            cdp_video_region_hint_candidate,
+            self.last_left_click,
+            now,
+            self.video_click_arm_ms,
+            CLICK_LATCH_RESET_FRAMES,
         );
         let cdp_video_region_hint = if cdp_click_armed {
             cdp_video_region_hint_candidate
         } else {
             None
         };
-        let cdp_hint_tile_bounds = cdp_video_region_hint
-            .map(|region| capture_region_tile_bounds(region, self.tile_size, self.grid.cols, self.grid.rows));
+        let cdp_hint_tile_bounds = cdp_video_region_hint.map(|region| {
+            capture_region_tile_bounds(region, self.tile_size, self.grid.cols, self.grid.rows)
+        });
 
         CdpScrollResult {
-            cdp_video_region_hint, cdp_hint_tile_bounds,
+            cdp_video_region_hint,
+            cdp_hint_tile_bounds,
             editable_qoi_tile_bounds: None,
             key_input_qoi_boost: false,
-            pending_scrolls, pending_scroll_dy_sum, input_scroll_dir,
-            cdp_scroll_dy_px, strong_scroll_observed, detected_scroll_frame,
+            pending_scrolls,
+            pending_scroll_dy_sum,
+            input_scroll_dir,
+            cdp_scroll_dy_px,
+            detected_scroll_frame,
         }
     }
 }

@@ -34,7 +34,6 @@ fn cdp_scroll_result_no_scroll() {
         pending_scroll_dy_sum: 0,
         input_scroll_dir: 0,
         cdp_scroll_dy_px: None,
-        strong_scroll_observed: false,
         detected_scroll_frame: None,
     };
     assert!(result.detected_scroll_frame.is_none());
@@ -89,14 +88,14 @@ fn h264_update_struct_accessible() {
 #[test]
 fn trust_prefers_content_when_cdp_and_content_agree() {
     let result = super::scroll_trust::arbitrate_scroll_trust(
-        Some(64),                            // cdp_scroll_dy_px
-        Some((60, 0.90, true, Some(0.80))),  // content_scroll
-        1,                                    // pending_scrolls (wheel active)
-        -64,                                  // pending_scroll_dy_sum
-        1,                                    // input_scroll_dir
-        1,                                    // cdp_scroll_dir
-        2,                                    // min_scroll_dy_px
-        3,                                    // cdp_content_dy_divergence_log_px
+        Some(64),                           // cdp_scroll_dy_px
+        Some((60, 0.90, true, Some(0.80))), // content_scroll
+        1,                                  // pending_scrolls (wheel active)
+        -64,                                // pending_scroll_dy_sum
+        1,                                  // input_scroll_dir
+        1,                                  // cdp_scroll_dir
+        2,                                  // min_scroll_dy_px
+        3,                                  // cdp_content_dy_divergence_log_px
     );
     let (dy, _, source, _, _) = result.unwrap();
     assert_eq!(source, "content");
@@ -107,7 +106,7 @@ fn trust_prefers_content_when_cdp_and_content_agree() {
 fn trust_falls_back_to_cdp_when_content_disagrees_direction() {
     let result = super::scroll_trust::arbitrate_scroll_trust(
         Some(64),
-        Some((-30, 0.92, false, Some(0.86))),  // direction_matches=false
+        Some((-30, 0.92, false, Some(0.86))), // direction_matches=false
         1,
         -64,
         1,
@@ -123,13 +122,13 @@ fn trust_falls_back_to_cdp_when_content_disagrees_direction() {
 #[test]
 fn trust_returns_none_when_cdp_too_small() {
     let result = super::scroll_trust::arbitrate_scroll_trust(
-        Some(1),   // below min_scroll_dy_px=2
+        Some(1), // below min_scroll_dy_px=2
         None,
         0,
         0,
         0,
         0,
-        2,         // min_scroll_dy_px
+        2, // min_scroll_dy_px
         3,
     );
     assert!(result.is_none());
@@ -138,8 +137,8 @@ fn trust_returns_none_when_cdp_too_small() {
 #[test]
 fn trust_uses_content_when_no_cdp() {
     let result = super::scroll_trust::arbitrate_scroll_trust(
-        None,                                  // no CDP
-        Some((32, 0.88, true, Some(0.80))),    // content available
+        None,                               // no CDP
+        Some((32, 0.88, true, Some(0.80))), // content available
         0,
         0,
         0,
@@ -154,9 +153,7 @@ fn trust_uses_content_when_no_cdp() {
 
 #[test]
 fn trust_returns_none_when_nothing_detected() {
-    let result = super::scroll_trust::arbitrate_scroll_trust(
-        None, None, 0, 0, 0, 0, 2, 3,
-    );
+    let result = super::scroll_trust::arbitrate_scroll_trust(None, None, 0, 0, 0, 0, 2, 3);
     assert!(result.is_none());
 }
 
@@ -164,12 +161,12 @@ fn trust_returns_none_when_nothing_detected() {
 fn trust_passive_cdp_prefers_content_when_directions_agree() {
     // No pending_scrolls, but CDP + content both present with same direction
     let result = super::scroll_trust::arbitrate_scroll_trust(
-        Some(64),                              // cdp
-        Some((60, 0.90, true, Some(0.80))),    // content, same direction
-        0,                                      // no pending_scrolls
+        Some(64),                           // cdp
+        Some((60, 0.90, true, Some(0.80))), // content, same direction
+        0,                                  // no pending_scrolls
         0,
         0,
-        1,                                      // cdp_scroll_dir
+        1, // cdp_scroll_dir
         2,
         3,
     );
@@ -183,8 +180,8 @@ fn trust_passive_cdp_skipped_when_content_absent() {
     // CDP present but no content confirmation → skip (mid-render)
     let result = super::scroll_trust::arbitrate_scroll_trust(
         Some(64),
-        None,   // no content
-        0,      // no pending_scrolls
+        None, // no content
+        0,    // no pending_scrolls
         0,
         0,
         1,
@@ -211,23 +208,39 @@ fn partition_splits_content_and_chrome() {
         direction_matches: true,
         min_confidence: Some(0.80),
         row_shift: 1,
-        region_top: 64,     // chrome header = top 64px (row 0)
+        region_top: 64, // chrome header = top 64px (row 0)
         region_bottom: 128,
         region_right: 128,
     };
 
     let result = super::scroll_partition::partition_and_compare(
-        &frame, &frame, stride, &grid, 0, 64, 64, 64,
-        &emit_coords, &dsf, 0, 128, 128, 128,
+        &frame,
+        &frame,
+        stride,
+        &grid,
+        0,
+        64,
+        64,
+        64,
+        &emit_coords,
+        &dsf,
+        0,
+        128,
+        128,
+        128,
     );
 
     // Row 0 is chrome (top 64px), row 1 is content
     assert!(
-        result.chrome_emit_coords.contains(&tiles::TileCoord::new(0, 0)),
+        result
+            .chrome_emit_coords
+            .contains(&tiles::TileCoord::new(0, 0)),
         "row 0 should be chrome"
     );
     assert!(
-        result.content_emit_coords.contains(&tiles::TileCoord::new(0, 1)),
+        result
+            .content_emit_coords
+            .contains(&tiles::TileCoord::new(0, 1)),
         "row 1 should be content"
     );
 }
@@ -253,8 +266,20 @@ fn partition_no_split_full_viewport() {
     };
 
     let result = super::scroll_partition::partition_and_compare(
-        &frame, &frame, stride, &grid, 0, 64, 64, 64,
-        &emit_coords, &dsf, 0, 128, 128, 128,
+        &frame,
+        &frame,
+        stride,
+        &grid,
+        0,
+        64,
+        64,
+        64,
+        &emit_coords,
+        &dsf,
+        0,
+        128,
+        128,
+        128,
     );
 
     // Full viewport → no chrome
@@ -283,8 +308,20 @@ fn partition_identical_frames_have_zero_residual() {
     };
 
     let result = super::scroll_partition::partition_and_compare(
-        &frame, &frame, stride, &grid, 0, 64, 64, 0,
-        &emit_coords, &dsf, 0, 128, 128, 128,
+        &frame,
+        &frame,
+        stride,
+        &grid,
+        0,
+        64,
+        64,
+        0,
+        &emit_coords,
+        &dsf,
+        0,
+        128,
+        128,
+        128,
     );
 
     // dy=0 → residual == full set (no scroll optimization)

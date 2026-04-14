@@ -10,7 +10,6 @@
 
 use tracing::warn;
 
-use crate::capture::CaptureBackend;
 use crate::scroll::select_capture_frame_interval;
 
 impl super::TileCaptureThread {
@@ -44,7 +43,6 @@ impl super::TileCaptureThread {
         const EDITABLE_QOI_TILE_MARGIN: u16 = 2;
         const EDITABLE_HINT_HOLD_MS: u64 = 450;
         const KEY_INPUT_QOI_BOOST_MS: u64 = 800;
-        const MIN_CHANGED_VIDEO_TILES_FOR_H264: u32 = 8;
         const H264_MIN_ON_DURATION_MS: u64 = 900;
 
         // Send initial grid config
@@ -74,7 +72,13 @@ impl super::TileCaptureThread {
             while let Ok((frame_seq, col, row, hash)) = self.cache_miss_rx.try_recv() {
                 self.emitter.handle_cache_miss(col, row, hash);
                 force_refresh = true;
-                tracing::trace!(frame_seq, col, row, hash, "tile cache miss reported by client");
+                tracing::trace!(
+                    frame_seq,
+                    col,
+                    row,
+                    hash,
+                    "tile cache miss reported by client"
+                );
             }
 
             // ── Damage gating ────────────────────────────────────
@@ -98,7 +102,10 @@ impl super::TileCaptureThread {
             }
 
             // ── Capture ──────────────────────────────────────────
-            let raw = match self.cap.capture_region_raw(0, 0, self.screen_w, self.screen_h) {
+            let raw = match self
+                .cap
+                .capture_region_raw(0, 0, self.screen_w, self.screen_h)
+            {
                 Ok(data) => data,
                 Err(e) => {
                     warn!("tile capture: GetImage failed: {e}");
@@ -114,7 +121,6 @@ impl super::TileCaptureThread {
                 &rgba,
                 stride,
                 now,
-                force_refresh,
                 EDITABLE_HINT_HOLD_MS,
                 KEY_INPUT_QOI_BOOST_MS,
                 EDITABLE_QOI_TILE_MARGIN,
@@ -125,7 +131,6 @@ impl super::TileCaptureThread {
                 INPUT_SCROLL_MIN_CONFIDENCE,
                 NO_INPUT_SCROLL_MIN_CONFIDENCE,
                 SCROLL_SUPPRESS_VIDEO_FRAMES,
-                self.scroll_copy_quantum_px,
             );
 
             // ── Phase 2: Video classification ────────────────────
@@ -150,14 +155,12 @@ impl super::TileCaptureThread {
             let scroll = self.compute_scroll_and_dirty(
                 &rgba,
                 stride,
-                now,
                 force_refresh,
                 cdp.detected_scroll_frame,
                 cdp.pending_scrolls,
                 cdp.pending_scroll_dy_sum,
                 cdp.input_scroll_dir,
                 cdp.cdp_scroll_dy_px,
-                cdp.strong_scroll_observed,
                 SCROLL_RESIDUAL_FULL_REPAINT_RATIO,
                 SCROLL_THIN_MODE_RESIDUAL_RATIO,
                 SCROLL_THIN_REPAIR_QUIET_FRAMES,
@@ -183,7 +186,6 @@ impl super::TileCaptureThread {
                 scroll.scroll_emit_ratio_frame,
                 scroll.scroll_thin_mode_frame,
                 scroll.scroll_thin_repair_frame,
-                MIN_CHANGED_VIDEO_TILES_FOR_H264,
             ) {
                 return; // channel closed
             }
@@ -194,11 +196,9 @@ impl super::TileCaptureThread {
             let _h264 = self.update_h264_region(
                 cdp.cdp_video_region_hint,
                 cdp_has_video,
-                classify.cdp_motion_tiles,
                 now,
                 REGION_RECONFIG_STABLE_FRAMES,
                 REGION_RECONFIG_MIN_INTERVAL_MS,
-                MIN_CHANGED_VIDEO_TILES_FOR_H264,
                 H264_MIN_ON_DURATION_MS,
             );
 
