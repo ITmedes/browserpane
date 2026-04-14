@@ -1,6 +1,8 @@
 //! Scroll residual analysis: apply partition results, manage fallback,
 //! thin mode, and repair scheduling.
 
+use std::collections::HashSet;
+
 use tracing::trace;
 
 use crate::scroll::{build_scroll_exposed_strip_emit_coords, offset_tile_rect_for_emit};
@@ -52,24 +54,37 @@ impl super::TileCaptureThread {
         if let (Some(_scroll_dy), Some(prev)) = (detected_scroll_dy_px, prev_for_analysis) {
             let dsf = detected_scroll_frame.as_ref().unwrap();
             let p = partition_and_compare(
-                rgba, prev, stride, &self.grid, self.grid_offset_y,
-                self.tile_size, self.scroll_copy_quantum_px,
-                dsf.dy, full_emit_coords, dsf,
-                self.last_scroll_region_top, self.screen_h,
-                self.last_scroll_region_right, self.screen_w,
+                rgba,
+                prev,
+                stride,
+                &self.grid,
+                self.grid_offset_y,
+                self.tile_size,
+                self.scroll_copy_quantum_px,
+                dsf.dy,
+                full_emit_coords,
+                dsf,
+                self.last_scroll_region_top,
+                self.screen_h,
+                self.last_scroll_region_right,
+                self.screen_w,
             );
-            self.scroll_residual_batches_total = self.scroll_residual_batches_total.saturating_add(1);
-            self.scroll_potential_tiles_total =
-                self.scroll_potential_tiles_total.saturating_add(p.potential_tiles as u64);
-            self.scroll_residual_tiles_total =
-                self.scroll_residual_tiles_total.saturating_add(p.residual_tiles as u64);
+            self.scroll_residual_batches_total =
+                self.scroll_residual_batches_total.saturating_add(1);
+            self.scroll_potential_tiles_total = self
+                .scroll_potential_tiles_total
+                .saturating_add(p.potential_tiles as u64);
+            self.scroll_residual_tiles_total = self
+                .scroll_residual_tiles_total
+                .saturating_add(p.residual_tiles as u64);
             scroll_residual_tiles_frame = Some(p.residual_tiles);
             scroll_potential_tiles_frame = Some(p.potential_tiles);
             scroll_residual_ratio = Some(p.residual_ratio);
 
             if !p.quantized_scroll_copy {
                 trace!(
-                    dy = p.scroll_dy, scroll_copy_quantum_px = self.scroll_copy_quantum_px,
+                    dy = p.scroll_dy,
+                    scroll_copy_quantum_px = self.scroll_copy_quantum_px,
                     "scroll copy suppressed for non-quantized delta"
                 );
                 scroll_residual_fallback_full = true;
@@ -85,9 +100,11 @@ impl super::TileCaptureThread {
                 && !p.defer_scroll_repair
             {
                 trace!(
-                    dy = p.scroll_dy, row_shift = p.scroll_row_shift,
+                    dy = p.scroll_dy,
+                    row_shift = p.scroll_row_shift,
                     interior_ratio = format!("{:.2}", p.interior_ratio),
-                    saved_tiles = p.saved_tiles, potential_tiles = p.potential_tiles,
+                    saved_tiles = p.saved_tiles,
+                    potential_tiles = p.potential_tiles,
                     "scroll copy suppressed by residual full repaint threshold"
                 );
                 scroll_residual_fallback_full = true;
@@ -104,6 +121,7 @@ impl super::TileCaptureThread {
                 all_dirty.extend(p.chrome_emit_coords.iter().copied());
                 // Force content tiles overlapping the exposed strip into dirty set.
                 {
+                    let mut dirty_coords: HashSet<_> = all_dirty.iter().copied().collect();
                     let (exp_start, exp_end) = if p.scroll_dy > 0 {
                         let start = (p.srb_for_split as i32 - p.scroll_dy as i32)
                             .max(p.srt_for_split as i32);
@@ -114,18 +132,24 @@ impl super::TileCaptureThread {
                         (p.srt_for_split as i32, end)
                     };
                     for &coord in &p.content_emit_coords {
-                        if all_dirty.contains(&coord) { continue; }
+                        if dirty_coords.contains(&coord) {
+                            continue;
+                        }
                         let rect = offset_tile_rect_for_emit(coord, &self.grid, self.grid_offset_y);
-                        if rect.w == 0 || rect.h == 0 { continue; }
+                        if rect.w == 0 || rect.h == 0 {
+                            continue;
+                        }
                         let tile_top = rect.y as i32;
                         let tile_bot = tile_top + rect.h as i32;
                         if tile_bot > exp_start && tile_top < exp_end {
+                            dirty_coords.insert(coord);
                             all_dirty.push(coord);
                         }
                     }
                 }
-                self.scroll_saved_tiles_total =
-                    self.scroll_saved_tiles_total.saturating_add(p.saved_tiles as u64);
+                self.scroll_saved_tiles_total = self
+                    .scroll_saved_tiles_total
+                    .saturating_add(p.saved_tiles as u64);
                 scroll_saved_tiles_frame = Some(p.saved_tiles);
                 if p.potential_tiles > 0 {
                     scroll_saved_ratio_frame =
@@ -139,9 +163,11 @@ impl super::TileCaptureThread {
                 self.scroll_residual_was_active = p.saved_tiles > 0;
                 if p.defer_scroll_repair {
                     trace!(
-                        dy = p.scroll_dy, row_shift = p.scroll_row_shift,
+                        dy = p.scroll_dy,
+                        row_shift = p.scroll_row_shift,
                         interior_ratio = format!("{:.2}", p.interior_ratio),
-                        saved_tiles = p.saved_tiles, potential_tiles = p.potential_tiles,
+                        saved_tiles = p.saved_tiles,
+                        potential_tiles = p.potential_tiles,
                         "scroll copy accepted with deferred repair"
                     );
                 }
@@ -154,7 +180,10 @@ impl super::TileCaptureThread {
                 if sub_tile_scroll && residual_large_for_sub_tile {
                     let residual_coords = &p.content_emit_coords;
                     let strip_dirty = build_scroll_exposed_strip_emit_coords(
-                        &self.grid, self.grid_offset_y, p.scroll_dy, residual_coords,
+                        &self.grid,
+                        self.grid_offset_y,
+                        p.scroll_dy,
+                        residual_coords,
                     );
                     if self.scroll_thin_mode_enabled && !strip_dirty.is_empty() {
                         all_dirty = strip_dirty;
@@ -181,10 +210,16 @@ impl super::TileCaptureThread {
         }
 
         ScrollResidualResult {
-            all_dirty, scroll_residual_ratio, scroll_residual_fallback_full,
-            scroll_residual_tiles_frame, scroll_potential_tiles_frame,
-            scroll_saved_tiles_frame, scroll_saved_ratio_frame,
-            scroll_emit_ratio_frame, scroll_thin_mode_frame, scroll_thin_repair_frame,
+            all_dirty,
+            scroll_residual_ratio,
+            scroll_residual_fallback_full,
+            scroll_residual_tiles_frame,
+            scroll_potential_tiles_frame,
+            scroll_saved_tiles_frame,
+            scroll_saved_ratio_frame,
+            scroll_emit_ratio_frame,
+            scroll_thin_mode_frame,
+            scroll_thin_repair_frame,
         }
     }
 }

@@ -28,7 +28,6 @@ pub struct CdpScrollResult {
     pub pending_scroll_dy_sum: i32,
     pub input_scroll_dir: i32,
     pub cdp_scroll_dy_px: Option<i16>,
-    pub strong_scroll_observed: bool,
     pub detected_scroll_frame: Option<DetectedScrollFrame>,
 }
 

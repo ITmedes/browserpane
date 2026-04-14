@@ -19,11 +19,9 @@ impl super::TileCaptureThread {
         &mut self,
         cdp_video_region_hint: Option<CaptureRegion>,
         cdp_has_video: bool,
-        cdp_motion_tiles: u32,
         now: std::time::Instant,
         region_reconfig_stable_frames: u8,
         region_reconfig_min_interval_ms: u64,
-        min_changed_video_tiles_for_h264: u32,
         h264_min_on_duration_ms: u64,
     ) -> H264Update {
         let desired_h264 = match self.h264_mode {
@@ -33,15 +31,13 @@ impl super::TileCaptureThread {
         };
 
         let next_capture_region = if matches!(self.h264_mode, H264Mode::VideoTiles) {
-            cdp_has_video
-                .then_some(cdp_video_region_hint)
-                .flatten()
+            cdp_has_video.then_some(cdp_video_region_hint).flatten()
         } else {
             None
         };
-        let committed =
-            self.region_committer
-                .commit(next_capture_region, region_reconfig_stable_frames);
+        let committed = self
+            .region_committer
+            .commit(next_capture_region, region_reconfig_stable_frames);
 
         if desired_h264 && committed != self.region_committer.active {
             if self.region_committer.should_reconfig(
@@ -93,7 +89,9 @@ impl super::TileCaptureThread {
             self.last_h264_toggle_at = now;
             let _ = self
                 .cmd_tx
-                .send(crate::capture::ffmpeg::PipelineCmd::SetEnabled(effective_h264));
+                .send(crate::capture::ffmpeg::PipelineCmd::SetEnabled(
+                    effective_h264,
+                ));
         }
 
         let tiles_cover_screen = if matches!(self.h264_mode, H264Mode::Off) {
@@ -104,8 +102,6 @@ impl super::TileCaptureThread {
         self.tiles_active
             .store(tiles_cover_screen, Ordering::Relaxed);
 
-        H264Update {
-            tiles_cover_screen,
-        }
+        H264Update { tiles_cover_screen }
     }
 }

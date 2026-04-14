@@ -36,7 +36,7 @@ use bpane_protocol::VideoTileInfo;
 use crate::capture;
 use crate::capture::CaptureBackend;
 use crate::cdp_video;
-use crate::config::{self, H264Mode};
+use crate::config::{H264Mode, TileCaptureConfig};
 use crate::tiles;
 use crate::video_region;
 
@@ -136,18 +136,7 @@ impl TileCaptureThread {
         display: &str,
         width: u32,
         height: u32,
-        h264_mode: H264Mode,
-        tile_size: u16,
-        tile_codec: tiles::emitter::TileCodec,
-        scroll_copy_quantum_px: u16,
-        base_frame_interval: std::time::Duration,
-        scroll_active_frame_interval: std::time::Duration,
-        scroll_active_capture_frames: u8,
-        min_cdp_video_width_px: u32,
-        min_cdp_video_height_px: u32,
-        min_cdp_video_area_ratio: f32,
-        video_click_arm_ms: u64,
-        scroll_thin_mode_enabled: bool,
+        config: TileCaptureConfig,
         tile_tx: tokio_mpsc::Sender<Frame>,
         cmd_tx: std::sync::mpsc::Sender<capture::ffmpeg::PipelineCmd>,
         tiles_active: Arc<AtomicBool>,
@@ -159,7 +148,24 @@ impl TileCaptureThread {
         text_input_rx: std::sync::mpsc::Receiver<std::time::Instant>,
         cache_miss_rx: std::sync::mpsc::Receiver<(u32, u16, u16, u64)>,
     ) -> Option<Self> {
-        let mut cap = match capture::x11::X11CaptureBackend::new(display, width, height) {
+        let TileCaptureConfig {
+            h264_mode,
+            tile_size,
+            tile_codec,
+            scroll_copy_quantum_px,
+            base_frame_interval,
+            scroll_active_frame_interval,
+            scroll_active_capture_frames,
+            min_cdp_video_width_px,
+            min_cdp_video_height_px,
+            min_cdp_video_area_ratio,
+            video_click_arm_ms,
+            scroll_thin_mode_enabled,
+            video_classification_enabled,
+            ..
+        } = config;
+
+        let cap = match capture::x11::X11CaptureBackend::new(display, width, height) {
             Ok(c) => c,
             Err(e) => {
                 warn!("tile capture: X11 backend init failed: {e}");
@@ -196,7 +202,7 @@ impl TileCaptureThread {
             h264_mode,
             tile_size,
             tile_codec,
-            video_classification_enabled: !matches!(h264_mode, H264Mode::Off),
+            video_classification_enabled,
             scroll_copy_quantum_px,
             base_frame_interval,
             scroll_active_frame_interval,

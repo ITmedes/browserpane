@@ -2,7 +2,7 @@
 //! bounding-box stability, and hysteresis scoring.
 
 use crate::capture::ffmpeg::CaptureRegion;
-use crate::region::{capture_region_tile_bounds, hash_tile_region};
+use crate::region::hash_tile_region;
 use crate::tiles;
 use crate::video_classify::{
     bbox_center_shift, bbox_iou, compute_tile_motion_features, is_photo_like_tile,
@@ -141,7 +141,9 @@ impl super::TileCaptureThread {
         let (bbox_w_tiles, bbox_h_tiles) = current_bbox
             .map(|(min_c, min_r, max_c, max_r)| (max_c - min_c + 1, max_r - min_r + 1))
             .unwrap_or((0, 0));
-        let total_tile_area = (self.grid.cols as u32).saturating_mul(self.grid.rows as u32).max(1);
+        let total_tile_area = (self.grid.cols as u32)
+            .saturating_mul(self.grid.rows as u32)
+            .max(1);
         let bbox_area_ratio = bbox_tile_area as f32 / total_tile_area as f32;
         let large_stable_region = bbox_w_tiles >= min_video_bbox_width_tiles
             && bbox_h_tiles >= min_video_bbox_height_tiles
@@ -185,10 +187,12 @@ impl super::TileCaptureThread {
                     }
                 } else if self.changed_mask[idx] {
                     self.video_scores[idx] = (self.video_scores[idx] - 1).max(-video_max_score);
-                    self.non_candidate_streaks[idx] = self.non_candidate_streaks[idx].saturating_add(1);
+                    self.non_candidate_streaks[idx] =
+                        self.non_candidate_streaks[idx].saturating_add(1);
                 } else {
                     self.video_scores[idx] = (self.video_scores[idx] - 1).max(-video_max_score);
-                    self.non_candidate_streaks[idx] = self.non_candidate_streaks[idx].saturating_add(1);
+                    self.non_candidate_streaks[idx] =
+                        self.non_candidate_streaks[idx].saturating_add(1);
                 }
 
                 if !(region_stable && self.candidate_mask[idx] || cdp_motion_candidate)

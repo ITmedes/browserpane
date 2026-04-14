@@ -1,6 +1,8 @@
 //! Scroll tile partitioning and residual comparison: split tiles into
 //! content/chrome regions and compute residual dirty set.
 
+use std::collections::HashSet;
+
 use crate::scroll::{
     build_scroll_exposed_strip_emit_coords, build_scroll_residual_emit_coords,
     can_emit_scroll_copy, has_scroll_region_split, is_content_tile_in_scroll_region,
@@ -25,7 +27,6 @@ pub(crate) struct PartitionResult {
     pub scroll_row_shift: i32,
     pub srt_for_split: u16,
     pub srb_for_split: u16,
-    pub srr_for_split: u16,
     pub scroll_dy: i16,
 }
 
@@ -43,9 +44,9 @@ pub(crate) fn partition_and_compare(
     scroll_dy: i16,
     full_emit_coords: &[tiles::TileCoord],
     detected_scroll_frame: &DetectedScrollFrame,
-    last_scroll_region_top: u16,
+    _last_scroll_region_top: u16,
     screen_h: u16,
-    last_scroll_region_right: u16,
+    _last_scroll_region_right: u16,
     screen_w: u16,
 ) -> PartitionResult {
     let scroll_row_shift = detected_scroll_frame.row_shift;
@@ -55,25 +56,38 @@ pub(crate) fn partition_and_compare(
     let ts = tile_size;
 
     let have_split = has_scroll_region_split(
-        srt_for_split, srb_for_split, srr_for_split, screen_h, screen_w,
+        srt_for_split,
+        srb_for_split,
+        srr_for_split,
+        screen_h,
+        screen_w,
     );
-    let (content_emit_coords, chrome_emit_coords): (
-        Vec<tiles::TileCoord>,
-        Vec<tiles::TileCoord>,
-    ) = if have_split {
-        full_emit_coords.iter().partition(|coord| {
-            is_content_tile_in_scroll_region(**coord, ts, srt_for_split, srb_for_split, srr_for_split)
-        })
-    } else {
-        (full_emit_coords.to_vec(), Vec::new())
-    };
+    let (content_emit_coords, chrome_emit_coords): (Vec<tiles::TileCoord>, Vec<tiles::TileCoord>) =
+        if have_split {
+            full_emit_coords.iter().partition(|coord| {
+                is_content_tile_in_scroll_region(
+                    **coord,
+                    ts,
+                    srt_for_split,
+                    srb_for_split,
+                    srr_for_split,
+                )
+            })
+        } else {
+            (full_emit_coords.to_vec(), Vec::new())
+        };
 
-    let residual_coords = content_emit_coords.clone();
     let residual = build_scroll_residual_emit_coords(
-        rgba, prev, stride, grid, grid_offset_y, scroll_dy, &residual_coords,
+        rgba,
+        prev,
+        stride,
+        grid,
+        grid_offset_y,
+        scroll_dy,
+        &content_emit_coords,
     );
 
-    let potential_tiles = residual_coords.len();
+    let potential_tiles = content_emit_coords.len();
     let residual_tiles = residual.len();
     let residual_ratio = if potential_tiles == 0 {
         1.0
@@ -81,10 +95,18 @@ pub(crate) fn partition_and_compare(
         residual_tiles as f32 / potential_tiles as f32
     };
 
-    let exposed_tiles = build_scroll_exposed_strip_emit_coords(
-        grid, grid_offset_y, scroll_dy, &residual_coords,
-    );
-    let interior_residual = residual.iter().filter(|c| !exposed_tiles.contains(c)).count();
+    let exposed_tiles: HashSet<_> = build_scroll_exposed_strip_emit_coords(
+        grid,
+        grid_offset_y,
+        scroll_dy,
+        &content_emit_coords,
+    )
+    .into_iter()
+    .collect();
+    let interior_residual = residual
+        .iter()
+        .filter(|c| !exposed_tiles.contains(c))
+        .count();
     let interior_total = potential_tiles.saturating_sub(exposed_tiles.len());
     let interior_ratio = if interior_total == 0 {
         0.0
@@ -94,14 +116,27 @@ pub(crate) fn partition_and_compare(
     let quantized_scroll_copy = can_emit_scroll_copy(scroll_dy, scroll_copy_quantum_px, tile_size);
     let saved_tiles = potential_tiles.saturating_sub(residual_tiles);
     let defer_scroll_repair = should_defer_scroll_repair(
-        quantized_scroll_copy, interior_ratio, saved_tiles, potential_tiles, scroll_row_shift,
+        quantized_scroll_copy,
+        interior_ratio,
+        saved_tiles,
+        potential_tiles,
+        scroll_row_shift,
     );
 
     PartitionResult {
-        content_emit_coords, chrome_emit_coords, residual,
-        potential_tiles, residual_tiles, residual_ratio,
-        interior_ratio, quantized_scroll_copy, saved_tiles,
-        defer_scroll_repair, scroll_row_shift,
-        srt_for_split, srb_for_split, srr_for_split, scroll_dy,
+        content_emit_coords,
+        chrome_emit_coords,
+        residual,
+        potential_tiles,
+        residual_tiles,
+        residual_ratio,
+        interior_ratio,
+        quantized_scroll_copy,
+        saved_tiles,
+        defer_scroll_repair,
+        scroll_row_shift,
+        srt_for_split,
+        srb_for_split,
+        scroll_dy,
     }
 }

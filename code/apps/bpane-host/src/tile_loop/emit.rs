@@ -58,7 +58,6 @@ impl super::TileCaptureThread {
         scroll_emit_ratio_frame: Option<f32>,
         scroll_thin_mode_frame: bool,
         scroll_thin_repair_frame: bool,
-        min_changed_video_tiles_for_h264: u32,
     ) -> bool {
         // Split dirty tiles into static (browser chrome) and content (scrolling
         // viewport). Static tiles are emitted at raw framebuffer positions
@@ -162,10 +161,11 @@ impl super::TileCaptureThread {
         let static_bytes: usize = static_frames.iter().map(|f| f.payload.len()).sum();
 
         let s = &result.stats;
-        if s.fills > 0 || s.qoi_tiles > 0 || s.cache_hits > 0 || scroll_residual_ratio.is_some()
-        {
+        if s.fills > 0 || s.qoi_tiles > 0 || s.cache_hits > 0 || scroll_residual_ratio.is_some() {
             let scroll_saved_rate_total = if self.scroll_potential_tiles_total > 0 {
-                Some(self.scroll_saved_tiles_total as f32 / self.scroll_potential_tiles_total as f32)
+                Some(
+                    self.scroll_saved_tiles_total as f32 / self.scroll_potential_tiles_total as f32,
+                )
             } else {
                 None
             };
