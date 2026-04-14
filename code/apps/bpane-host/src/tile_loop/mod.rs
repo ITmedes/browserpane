@@ -55,7 +55,7 @@ pub struct TileCaptureThread {
     pub(crate) min_cdp_video_width_px: u32,
     pub(crate) min_cdp_video_height_px: u32,
     pub(crate) min_cdp_video_area_ratio: f32,
-    pub(crate) video_click_arm_ms: u64,
+    pub(crate) cdp_video_tile_margin: u16,
     pub(crate) scroll_thin_mode_enabled: bool,
 
     // ── Capture ──────────────────────────────────────────────────────
@@ -102,8 +102,6 @@ pub struct TileCaptureThread {
     pub(crate) text_like_mask: Vec<bool>,
     pub(crate) prev_video_bbox: Option<(u16, u16, u16, u16)>,
     pub(crate) stable_bbox_frames: u8,
-    pub(crate) last_left_click: Option<(u16, u16, std::time::Instant)>,
-    pub(crate) click_armed: video_region::ClickArmedState,
     pub(crate) editable_hint: video_region::EditableHintState,
 
     // ── H264 / region management ─────────────────────────────────────
@@ -119,7 +117,6 @@ pub struct TileCaptureThread {
     pub(crate) browser_video_hint: Arc<Mutex<cdp_video::PageHintState>>,
     pub(crate) input_activity: Arc<AtomicU64>,
     pub(crate) scroll_rx: std::sync::mpsc::Receiver<(i16, i16)>,
-    pub(crate) video_click_rx: std::sync::mpsc::Receiver<(u16, u16, std::time::Instant)>,
     pub(crate) text_input_rx: std::sync::mpsc::Receiver<std::time::Instant>,
     pub(crate) cache_miss_rx: std::sync::mpsc::Receiver<(u32, u16, u16, u64)>,
 
@@ -144,7 +141,6 @@ impl TileCaptureThread {
         browser_video_hint: Arc<Mutex<cdp_video::PageHintState>>,
         input_activity: Arc<AtomicU64>,
         scroll_rx: std::sync::mpsc::Receiver<(i16, i16)>,
-        video_click_rx: std::sync::mpsc::Receiver<(u16, u16, std::time::Instant)>,
         text_input_rx: std::sync::mpsc::Receiver<std::time::Instant>,
         cache_miss_rx: std::sync::mpsc::Receiver<(u32, u16, u16, u64)>,
     ) -> Option<Self> {
@@ -159,7 +155,7 @@ impl TileCaptureThread {
             min_cdp_video_width_px,
             min_cdp_video_height_px,
             min_cdp_video_area_ratio,
-            video_click_arm_ms,
+            cdp_video_tile_margin,
             scroll_thin_mode_enabled,
             video_classification_enabled,
             ..
@@ -210,7 +206,7 @@ impl TileCaptureThread {
             min_cdp_video_width_px,
             min_cdp_video_height_px,
             min_cdp_video_area_ratio,
-            video_click_arm_ms,
+            cdp_video_tile_margin,
             scroll_thin_mode_enabled,
             cap,
             damage,
@@ -249,8 +245,6 @@ impl TileCaptureThread {
             text_like_mask: vec![false; total_tiles],
             prev_video_bbox: None,
             stable_bbox_frames: 0,
-            last_left_click: None,
-            click_armed: video_region::ClickArmedState::new(),
             editable_hint: video_region::EditableHintState::new(),
             h264_enabled: h264_mode.starts_enabled(),
             region_committer: video_region::RegionCommitter::new(),
@@ -262,7 +256,6 @@ impl TileCaptureThread {
             browser_video_hint,
             input_activity,
             scroll_rx,
-            video_click_rx,
             text_input_rx,
             cache_miss_rx,
             last_capture: now,

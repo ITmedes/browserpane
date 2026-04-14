@@ -1,6 +1,6 @@
 //! Scroll resolution: content-based scroll detection, trust arbitration
 //! between CDP and content sources, drift correction, cooldown management,
-//! and click-armed video state update.
+//! and active video hint resolution.
 
 use tracing::trace;
 
@@ -16,13 +16,13 @@ use super::scroll_trust::arbitrate_scroll_trust;
 impl super::TileCaptureThread {
     /// Content-based scroll detection, trust arbitration between CDP and
     /// content sources, drift correction, cooldown management, and
-    /// click-armed video state update.
+    /// active video hint resolution.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve_scroll(
         &mut self,
         rgba: &[u8],
         stride: usize,
-        now: std::time::Instant,
+        _now: std::time::Instant,
         cdp_hint_snapshot: &crate::cdp_video::PageHintState,
         cdp_video_region_hint_sized: Option<CaptureRegion>,
         pending_scrolls: i32,
@@ -35,8 +35,6 @@ impl super::TileCaptureThread {
         no_input_scroll_min_confidence: f32,
         scroll_suppress_video_frames: u8,
     ) -> CdpScrollResult {
-        const CLICK_LATCH_RESET_FRAMES: u8 = 20;
-
         let prev_for_analysis = self.prev_frame.as_deref();
 
         // Content-based scroll detection via vertical column matching.
@@ -192,20 +190,8 @@ impl super::TileCaptureThread {
         } else {
             self.scroll_quiet_frames = self.scroll_quiet_frames.saturating_add(1);
         }
-        let cdp_video_region_hint_candidate = if self.scroll_cooldown_frames == 0 {
+        let cdp_video_region_hint = if self.scroll_cooldown_frames == 0 {
             cdp_video_region_hint_sized
-        } else {
-            None
-        };
-        let cdp_click_armed = self.click_armed.update(
-            cdp_video_region_hint_candidate,
-            self.last_left_click,
-            now,
-            self.video_click_arm_ms,
-            CLICK_LATCH_RESET_FRAMES,
-        );
-        let cdp_video_region_hint = if cdp_click_armed {
-            cdp_video_region_hint_candidate
         } else {
             None
         };

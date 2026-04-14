@@ -55,7 +55,10 @@ fn motion_features_zero_size_returns_default() {
 fn bbox_iou_identical_is_one() {
     let b = (1, 1, 5, 5);
     let iou = bbox_iou(b, b);
-    assert!((iou - 1.0).abs() < 1e-6, "identical bbox iou should be 1.0: {iou}");
+    assert!(
+        (iou - 1.0).abs() < 1e-6,
+        "identical bbox iou should be 1.0: {iou}"
+    );
 }
 
 #[test]

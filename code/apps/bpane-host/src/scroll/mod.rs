@@ -13,7 +13,9 @@ pub mod residual;
 mod tests;
 
 // Re-export the most commonly used items.
-pub use detect::{content_scroll_search_limit_px, detect_column_scroll, select_wheel_trusted_scroll};
+pub use detect::{
+    content_scroll_search_limit_px, detect_column_scroll, select_wheel_trusted_scroll,
+};
 pub use policy::{
     can_emit_scroll_copy, has_scroll_region_split, is_content_tile_in_scroll_region,
     is_scroll_delta_quantized, next_scroll_active_capture_frames, select_capture_frame_interval,

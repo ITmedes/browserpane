@@ -46,7 +46,7 @@ const MAX_SENT_HASHES: usize = 8192;
 pub struct EmitResult {
     /// Frames to send on the Tiles channel.
     pub tile_frames: Vec<Frame>,
-    /// Video region bounding box (if any video tiles exist).
+    /// Active video region sideband, if any.
     /// The caller sends H.264 NALs on the Video channel for this region.
     pub video_region: Option<Rect>,
     /// Stats for this frame.
@@ -86,9 +86,9 @@ pub struct TileEmitter {
     /// IndexSet provides O(1) lookup, O(1) insert, and preserves insertion
     /// order for bounded eviction (oldest = index 0).
     sent_hashes: IndexSet<u64>,
-    /// Whether the previous frame had a video region.
-    /// Used to send a clearing VideoRegion(0,0,0,0) when video ends.
-    had_video_region: bool,
+    /// Last video region sideband sent to the client.
+    /// Used to send updates and a clearing VideoRegion(0,0,0,0) on exit.
+    last_video_region: Option<Rect>,
     /// Reused scratch buffer for tile pixel extraction to reduce per-tile allocations.
     tile_scratch: Vec<u8>,
     /// Which lossless codec to use for non-solid tiles.
@@ -109,7 +109,7 @@ impl TileEmitter {
             static_last_hashes: vec![0; count],
             cols,
             sent_hashes: IndexSet::with_capacity(MAX_SENT_HASHES),
-            had_video_region: false,
+            last_video_region: None,
             tile_scratch: Vec::new(),
             codec,
         }
@@ -122,7 +122,12 @@ impl TileEmitter {
         self.static_last_hashes = vec![0; count];
         self.cols = cols;
         self.sent_hashes.clear();
+        self.last_video_region = None;
         self.tile_scratch.clear();
+    }
+
+    pub fn current_video_region(&self) -> Option<Rect> {
+        self.last_video_region
     }
 
     /// Shift per-position hashes by `row_shift` rows after a scroll.
@@ -348,6 +353,7 @@ impl TileEmitter {
         grid: &TileGrid,
         offset_y: u16,
         force_qoi_bounds: Option<(u16, u16, u16, u16)>,
+        active_video_region: Option<Rect>,
     ) -> EmitResult {
         self.frame_seq = self.frame_seq.wrapping_add(1);
         let mut frames = Vec::new();
@@ -368,6 +374,14 @@ impl TileEmitter {
             };
             let rect = Self::offset_tile_rect(coord, grid, offset_y);
             if rect.w == 0 || rect.h == 0 {
+                continue;
+            }
+
+            let video_owned = matches!(tile_state.classification, TileClass::VideoMotion)
+                || active_video_region.is_some_and(|region| region.overlaps(&rect));
+            if video_owned {
+                video_tiles.push(coord);
+                stats.video_tiles += 1;
                 continue;
             }
 
@@ -413,87 +427,60 @@ impl TileEmitter {
             }
 
             // Level 3: new content - encode.
-            match tile_state.classification {
-                TileClass::VideoMotion => {
-                    video_tiles.push(coord);
-                    stats.video_tiles += 1;
-                }
-                _ => {
-                    if let Some(rgba) = solid_rgba {
-                        frames.push(
-                            TileMessage::Fill {
-                                col: coord.col,
-                                row: coord.row,
-                                rgba,
-                            }
-                            .to_frame(),
-                        );
-                        stats.fills += 1;
-                    } else {
-                        // Convert BGRA tile pixels to RGBA for encoding.
-                        // Only changed, non-solid tiles reach here - a small
-                        // subset of total pixels, so this is much cheaper than
-                        // the former full-frame swap.
-                        bgra_to_rgba_inplace(&mut self.tile_scratch);
-                        let codec = if force_qoi {
-                            TileCodec::Qoi
-                        } else {
-                            self.codec
-                        };
-                        if let Some(msg) = encode_tile(
-                            codec,
-                            &self.tile_scratch,
-                            rect.w as u32,
-                            rect.h as u32,
-                            coord.col,
-                            coord.row,
-                            hash,
-                        ) {
-                            let frame = msg.to_frame();
-                            stats.qoi_bytes += frame.payload.len();
-                            frames.push(frame);
-                            stats.qoi_tiles += 1;
-                            self.track_sent_hash(hash);
-                        }
+            if let Some(rgba) = solid_rgba {
+                frames.push(
+                    TileMessage::Fill {
+                        col: coord.col,
+                        row: coord.row,
+                        rgba,
                     }
+                    .to_frame(),
+                );
+                stats.fills += 1;
+            } else {
+                // Convert BGRA tile pixels to RGBA for encoding.
+                // Only changed, non-solid tiles reach here - a small
+                // subset of total pixels, so this is much cheaper than
+                // the former full-frame swap.
+                bgra_to_rgba_inplace(&mut self.tile_scratch);
+                let codec = if force_qoi {
+                    TileCodec::Qoi
+                } else {
+                    self.codec
+                };
+                if let Some(msg) = encode_tile(
+                    codec,
+                    &self.tile_scratch,
+                    rect.w as u32,
+                    rect.h as u32,
+                    coord.col,
+                    coord.row,
+                    hash,
+                ) {
+                    let frame = msg.to_frame();
+                    stats.qoi_bytes += frame.payload.len();
+                    frames.push(frame);
+                    stats.qoi_tiles += 1;
+                    self.track_sent_hash(hash);
                 }
             }
         }
 
-        // Compute video region bounding box
-        let video_region = if !video_tiles.is_empty() {
-            if let Some(bbox) = grid.tiles_bounding_rect(&video_tiles) {
-                frames.push(
-                    TileMessage::VideoRegion {
-                        x: bbox.x,
-                        y: bbox.y,
-                        w: bbox.w,
-                        h: bbox.h,
-                    }
-                    .to_frame(),
-                );
-                self.had_video_region = true;
-                Some(bbox)
-            } else {
-                None
-            }
-        } else {
-            // If we had a video region last frame but not this one,
-            // send a clearing VideoRegion so the client stops cropping H.264.
-            if self.had_video_region {
-                frames.push(
-                    TileMessage::VideoRegion {
-                        x: 0,
-                        y: 0,
-                        w: 0,
-                        h: 0,
-                    }
-                    .to_frame(),
-                );
-                self.had_video_region = false;
-            }
-            None
-        };
+        let next_video_region =
+            active_video_region.or_else(|| grid.tiles_bounding_rect(&video_tiles));
+        if next_video_region != self.last_video_region {
+            let region = next_video_region.unwrap_or(Rect::new(0, 0, 0, 0));
+            frames.push(
+                TileMessage::VideoRegion {
+                    x: region.x,
+                    y: region.y,
+                    w: region.w,
+                    h: region.h,
+                }
+                .to_frame(),
+            );
+            self.last_video_region = next_video_region;
+        }
 
         // BatchEnd
         frames.push(
@@ -505,7 +492,7 @@ impl TileEmitter {
 
         EmitResult {
             tile_frames: frames,
-            video_region,
+            video_region: next_video_region,
             stats,
         }
     }
@@ -532,12 +519,16 @@ impl TileEmitter {
         boundary_top_row: Option<u16>,
         boundary_bottom_row: Option<u16>,
         force_qoi_bounds: Option<(u16, u16, u16, u16)>,
+        active_video_region: Option<Rect>,
     ) -> Vec<Frame> {
         let mut frames = Vec::new();
         for &coord in coords {
             let force_qoi = coord_in_tile_bounds(coord, force_qoi_bounds);
             let rect = Self::offset_tile_rect(coord, grid, 0); // no offset
             if rect.w == 0 || rect.h == 0 {
+                continue;
+            }
+            if active_video_region.is_some_and(|region| region.overlaps(&rect)) {
                 continue;
             }
 
@@ -823,6 +814,7 @@ mod tests {
             &grid,
             0,
             Some((0, 0, 0, 0)),
+            None,
         );
         let tile_msg = result
             .tile_frames
@@ -856,6 +848,7 @@ mod tests {
             None,
             None,
             Some((0, 0, 0, 0)),
+            None,
         );
         let tile_msg = frames
             .iter()
@@ -894,6 +887,7 @@ mod tests {
             &grid,
             0,
             Some((0, 0, 0, 0)),
+            None,
         );
         assert_eq!(first.stats.qoi_tiles, 1);
 
@@ -904,6 +898,7 @@ mod tests {
             &grid,
             0,
             Some((0, 0, 0, 0)),
+            None,
         );
         assert_eq!(second.stats.skipped, 0);
         assert_eq!(second.stats.cache_hits, 0);
@@ -927,6 +922,7 @@ mod tests {
             &grid,
             0,
             Some((1, 0, 1, 0)),
+            None,
         );
         assert_eq!(third.stats.cache_hits, 0);
         assert_eq!(third.stats.qoi_tiles, 1);
@@ -965,6 +961,7 @@ mod tests {
             None,
             None,
             Some((0, 0, 0, 0)),
+            None,
         );
         assert!(!first.is_empty());
 
@@ -977,6 +974,7 @@ mod tests {
             None,
             None,
             Some((0, 0, 0, 0)),
+            None,
         );
         assert!(!second.is_empty());
         assert!(second.iter().all(|frame| {
@@ -1006,6 +1004,7 @@ mod tests {
             None,
             None,
             Some((1, 0, 1, 0)),
+            None,
         );
         assert!(!third.is_empty());
         assert!(third.iter().all(|frame| {
@@ -1031,12 +1030,12 @@ mod tests {
         let mut emitter = TileEmitter::new(grid.cols, grid.rows);
 
         // First emit: should produce a Fill (solid color)
-        let result1 = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None);
+        let result1 = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None, None);
         assert_eq!(result1.stats.fills, 1);
         assert_eq!(result1.stats.skipped, 0);
 
         // Second emit with same data: should skip entirely (not even CacheHit)
-        let result2 = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None);
+        let result2 = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None, None);
         assert_eq!(result2.stats.skipped, 1);
         assert_eq!(result2.stats.fills, 0);
         assert_eq!(result2.stats.cache_hits, 0);
@@ -1068,8 +1067,15 @@ mod tests {
         let mut emitter = TileEmitter::new(grid.cols, grid.rows);
 
         // First frame: emit tile 0 -> QOI (non-solid content)
-        let result1 =
-            emitter.emit_frame(&frame_data, stride, &[TileCoord::new(0, 0)], &grid, 0, None);
+        let result1 = emitter.emit_frame(
+            &frame_data,
+            stride,
+            &[TileCoord::new(0, 0)],
+            &grid,
+            0,
+            None,
+            None,
+        );
         assert_eq!(result1.stats.qoi_tiles, 1);
 
         // Now copy tile 0's content to tile 1's position in the frame buffer
@@ -1085,8 +1091,15 @@ mod tests {
         }
 
         // Second frame: emit tile 1 - should be CacheHit (same content, different position)
-        let result2 =
-            emitter.emit_frame(&frame_data, stride, &[TileCoord::new(1, 0)], &grid, 0, None);
+        let result2 = emitter.emit_frame(
+            &frame_data,
+            stride,
+            &[TileCoord::new(1, 0)],
+            &grid,
+            0,
+            None,
+            None,
+        );
         assert_eq!(result2.stats.cache_hits, 1);
         assert_eq!(result2.stats.qoi_tiles, 0);
     }
@@ -1116,7 +1129,15 @@ mod tests {
         let mut emitter = TileEmitter::new(grid.cols, grid.rows);
 
         // Seed sender-side known hash map with QOI tile from tile 0.
-        let _ = emitter.emit_frame(&frame_data, stride, &[TileCoord::new(0, 0)], &grid, 0, None);
+        let _ = emitter.emit_frame(
+            &frame_data,
+            stride,
+            &[TileCoord::new(0, 0)],
+            &grid,
+            0,
+            None,
+            None,
+        );
 
         // Copy tile 0's content to tile 1 so second emit uses CacheHit.
         for y in 0..64 {
@@ -1129,8 +1150,15 @@ mod tests {
                 frame_data[dst + 3] = frame_data[src + 3];
             }
         }
-        let second =
-            emitter.emit_frame(&frame_data, stride, &[TileCoord::new(1, 0)], &grid, 0, None);
+        let second = emitter.emit_frame(
+            &frame_data,
+            stride,
+            &[TileCoord::new(1, 0)],
+            &grid,
+            0,
+            None,
+            None,
+        );
         assert_eq!(second.stats.cache_hits, 1);
         let miss_hash = second
             .tile_frames
@@ -1145,8 +1173,15 @@ mod tests {
         emitter.handle_cache_miss(1, 0, miss_hash);
 
         // Next emit for same tile must re-encode (QOI), not skip/cache-hit.
-        let third =
-            emitter.emit_frame(&frame_data, stride, &[TileCoord::new(1, 0)], &grid, 0, None);
+        let third = emitter.emit_frame(
+            &frame_data,
+            stride,
+            &[TileCoord::new(1, 0)],
+            &grid,
+            0,
+            None,
+            None,
+        );
         assert_eq!(third.stats.cache_hits, 0);
         assert_eq!(third.stats.skipped, 0);
         assert_eq!(third.stats.qoi_tiles, 1);
@@ -1170,12 +1205,30 @@ mod tests {
         let mut emitter = TileEmitter::new(grid.cols, grid.rows);
         let coords = [TileCoord::new(0, 0)];
 
-        let first =
-            emitter.emit_static_tiles(&frame_data, stride, &coords, &grid, None, None, None, None);
+        let first = emitter.emit_static_tiles(
+            &frame_data,
+            stride,
+            &coords,
+            &grid,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         assert!(!first.is_empty());
 
-        let second =
-            emitter.emit_static_tiles(&frame_data, stride, &coords, &grid, None, None, None, None);
+        let second = emitter.emit_static_tiles(
+            &frame_data,
+            stride,
+            &coords,
+            &grid,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         assert!(second.is_empty());
 
         let miss_hash = first
@@ -1189,8 +1242,17 @@ mod tests {
 
         emitter.handle_cache_miss(0, 0, miss_hash);
 
-        let third =
-            emitter.emit_static_tiles(&frame_data, stride, &coords, &grid, None, None, None, None);
+        let third = emitter.emit_static_tiles(
+            &frame_data,
+            stride,
+            &coords,
+            &grid,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         assert!(!third.is_empty());
     }
 
@@ -1211,6 +1273,7 @@ mod tests {
             Some(1),
             None,
             None,
+            None,
         );
         assert!(!first.is_empty());
 
@@ -1221,6 +1284,7 @@ mod tests {
             &grid,
             None,
             Some(1),
+            None,
             None,
             None,
         );
@@ -1256,7 +1320,7 @@ mod tests {
         ];
 
         let mut emitter = TileEmitter::new(grid.cols, grid.rows);
-        let result = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None);
+        let result = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None, None);
         assert_eq!(result.stats.video_tiles, 4);
         assert!(result.video_region.is_some());
         let region = result.video_region.unwrap();
@@ -1264,6 +1328,148 @@ mod tests {
         assert_eq!(region.y, 0);
         assert_eq!(region.w, 128);
         assert_eq!(region.h, 128);
+    }
+
+    #[test]
+    fn emitter_active_video_region_suppresses_static_tiles() {
+        let mut grid = TileGrid::new(128, 64, 64);
+        if let Some(tile) = grid.get_mut(TileCoord::new(0, 0)) {
+            tile.classification = TileClass::Static;
+        }
+
+        let frame_data = vec![0xFF; 128 * 64 * 4];
+        let stride = 128 * 4;
+        let dirty = vec![TileCoord::new(0, 0)];
+        let active_video_region = Some(Rect::new(0, 0, 64, 64));
+
+        let mut emitter = TileEmitter::new(grid.cols, grid.rows);
+        let result = emitter.emit_frame(
+            &frame_data,
+            stride,
+            &dirty,
+            &grid,
+            0,
+            None,
+            active_video_region,
+        );
+
+        assert_eq!(result.stats.video_tiles, 1);
+        assert_eq!(result.stats.fills, 0);
+        assert_eq!(result.stats.qoi_tiles, 0);
+        assert_eq!(result.video_region, active_video_region);
+        assert_eq!(result.tile_frames.len(), 2);
+
+        let first = TileMessage::decode(&result.tile_frames[0].payload).unwrap();
+        assert!(matches!(
+            first,
+            TileMessage::VideoRegion {
+                x: 0,
+                y: 0,
+                w: 64,
+                h: 64
+            }
+        ));
+    }
+
+    #[test]
+    fn emitter_video_owned_tiles_do_not_update_skip_hashes() {
+        let mut grid = TileGrid::new(64, 64, 64);
+        if let Some(tile) = grid.get_mut(TileCoord::new(0, 0)) {
+            tile.classification = TileClass::Static;
+        }
+
+        let frame_data = vec![0xFF; 64 * 64 * 4];
+        let stride = 64 * 4;
+        let dirty = vec![TileCoord::new(0, 0)];
+
+        let mut emitter = TileEmitter::new(grid.cols, grid.rows);
+        let suppressed = emitter.emit_frame(
+            &frame_data,
+            stride,
+            &dirty,
+            &grid,
+            0,
+            None,
+            Some(Rect::new(0, 0, 64, 64)),
+        );
+        assert_eq!(suppressed.stats.video_tiles, 1);
+
+        let repaired = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None, None);
+        assert_eq!(repaired.stats.skipped, 0);
+        assert_eq!(repaired.stats.fills, 1);
+        assert!(repaired.tile_frames.iter().any(|frame| {
+            matches!(
+                TileMessage::decode(&frame.payload).ok(),
+                Some(TileMessage::VideoRegion {
+                    x: 0,
+                    y: 0,
+                    w: 0,
+                    h: 0
+                })
+            )
+        }));
+    }
+
+    #[test]
+    fn emitter_static_tiles_respect_active_video_region() {
+        let grid = TileGrid::new(128, 64, 64);
+        let frame_data = vec![0xFF; 128 * 64 * 4];
+        let stride = 128 * 4;
+        let coords = [TileCoord::new(0, 0)];
+
+        let mut emitter = TileEmitter::new(grid.cols, grid.rows);
+        let frames = emitter.emit_static_tiles(
+            &frame_data,
+            stride,
+            &coords,
+            &grid,
+            None,
+            None,
+            None,
+            None,
+            Some(Rect::new(0, 0, 64, 64)),
+        );
+
+        assert!(frames.is_empty());
+    }
+
+    #[test]
+    fn emitter_static_video_owned_tiles_do_not_update_skip_hashes() {
+        let grid = TileGrid::new(64, 64, 64);
+        let frame_data = vec![0xFF; 64 * 64 * 4];
+        let stride = 64 * 4;
+        let coords = [TileCoord::new(0, 0)];
+
+        let mut emitter = TileEmitter::new(grid.cols, grid.rows);
+        let suppressed = emitter.emit_static_tiles(
+            &frame_data,
+            stride,
+            &coords,
+            &grid,
+            None,
+            None,
+            None,
+            None,
+            Some(Rect::new(0, 0, 64, 64)),
+        );
+        assert!(suppressed.is_empty());
+
+        let repaired = emitter.emit_static_tiles(
+            &frame_data,
+            stride,
+            &coords,
+            &grid,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(repaired.len(), 1);
+        assert!(matches!(
+            TileMessage::decode(&repaired[0].payload).ok(),
+            Some(TileMessage::Fill { .. }) | Some(TileMessage::Qoi { .. })
+        ));
     }
 
     #[test]
@@ -1300,7 +1506,7 @@ mod tests {
         let stride = 128 * 4;
 
         let mut emitter = TileEmitter::new(grid.cols, grid.rows);
-        let result = emitter.emit_frame(&frame_data, stride, &[], &grid, 0, None);
+        let result = emitter.emit_frame(&frame_data, stride, &[], &grid, 0, None, None);
 
         // Even with no dirty tiles, BatchEnd should be emitted
         assert!(!result.tile_frames.is_empty());
@@ -1323,13 +1529,13 @@ mod tests {
         let mut emitter = TileEmitter::new(grid.cols, grid.rows);
 
         // First emit
-        emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None);
+        emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None, None);
 
         // Resize
         emitter.resize(grid.cols, grid.rows);
 
         // After resize, same data should NOT be a cache hit
-        let result = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None);
+        let result = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None, None);
         assert_eq!(result.stats.cache_hits, 0);
         assert_eq!(result.stats.fills, 1);
     }
@@ -1366,7 +1572,7 @@ mod tests {
         ];
 
         let mut emitter = TileEmitter::new(grid.cols, grid.rows);
-        let result = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None);
+        let result = emitter.emit_frame(&frame_data, stride, &dirty, &grid, 0, None, None);
 
         assert_eq!(result.stats.fills, 1); // tile 0
         assert_eq!(result.stats.qoi_tiles, 1); // tile 1

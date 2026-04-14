@@ -254,7 +254,12 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
     const focused = typeof document.hasFocus === "function" ? !!document.hasFocus() : false;
     let ctl = globalThis[ctlKey];
     if (!ctl) {
-      ctl = { lastScrollTs: 0, lastScrollY: readScrollY(), pendingScrollDy: 0 };
+      ctl = {
+        lastScrollTs: 0,
+        lastScrollY: readScrollY(),
+        pendingScrollDy: 0,
+        videoStates: new WeakMap(),
+      };
       try {
         Object.defineProperty(globalThis, ctlKey, {
           value: ctl,
@@ -278,6 +283,9 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
 
     if (typeof ctl.lastScrollY !== "number") ctl.lastScrollY = readScrollY();
     if (typeof ctl.pendingScrollDy !== "number") ctl.pendingScrollDy = 0;
+    if (!ctl.videoStates || typeof ctl.videoStates.get !== "function") {
+      ctl.videoStates = new WeakMap();
+    }
     const currentScrollY = readScrollY();
     const drift = currentScrollY - ctl.lastScrollY;
     if (drift !== 0) {
@@ -332,6 +340,12 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
       w: Math.round(rect.width * dpr),
       h: Math.round(rect.height * dpr),
     });
+    const rectContains = (outer, inner) => (
+      outer.left <= inner.left + 1
+      && outer.top <= inner.top + 1
+      && (outer.left + outer.width) >= (inner.left + inner.width) - 1
+      && (outer.top + outer.height) >= (inner.top + inner.height) - 1
+    );
     const editableInputTypes = new Set([__EDITABLE_INPUT_TYPES__]);
     const editableRoles = new Set(['textbox', 'searchbox', 'combobox']);
     const nextComposedParent = (el) => {
@@ -385,6 +399,160 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
         height: rect.height + (padY * 2),
       };
     };
+    const resolvePlayerRect = (videoEl, videoRect) => {
+      let best = videoRect;
+      let bestArea = videoRect.width * videoRect.height;
+      const maxArea = Math.max(bestArea * 1.65, bestArea + 120000);
+      const maxWidthDelta = Math.max(96, videoRect.width * 0.20);
+      const maxHeightDelta = Math.max(160, videoRect.height * 0.40);
+      const consider = (el) => {
+        if (!el || !el.isConnected || !isElementVisible(el)) return;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < videoRect.width || rect.height < videoRect.height) return;
+        if (!rectContains(rect, videoRect)) return;
+        if ((rect.width - videoRect.width) > maxWidthDelta) return;
+        if ((rect.height - videoRect.height) > maxHeightDelta) return;
+        const area = rect.width * rect.height;
+        if (area > maxArea || area <= bestArea) return;
+        best = rect;
+        bestArea = area;
+      };
+      if (typeof videoEl.closest === 'function') {
+        consider(videoEl.closest('.html5-video-player, [class*="video-player"], [class*="player-container"], [class*="player"], [id*="player"]'));
+      }
+      let current = nextComposedParent(videoEl);
+      let depth = 0;
+      while (current && current.isConnected && depth < 6) {
+        consider(current);
+        current = nextComposedParent(current);
+        depth += 1;
+      }
+      return best;
+    };
+    const expandVideoRectForControls = (videoRect, playerRect) => {
+      const heightDelta = Math.max(0, playerRect.height - videoRect.height);
+      const widthDelta = Math.max(0, playerRect.width - videoRect.width);
+      const padBottom = Math.max(48, Math.min(96, videoRect.height * 0.12));
+      const padX = Math.max(8, Math.min(24, videoRect.width * 0.02));
+      const needsFallbackPad = heightDelta < 24 && widthDelta < 24;
+      const left = Math.max(0, playerRect.left - (needsFallbackPad ? padX : 0));
+      const top = Math.max(0, playerRect.top);
+      const right = Math.min(
+        window.innerWidth,
+        playerRect.left + playerRect.width + (needsFallbackPad ? padX : 0),
+      );
+      const bottom = Math.min(
+        window.innerHeight,
+        playerRect.top + playerRect.height + (needsFallbackPad ? padBottom : 0),
+      );
+      return {
+        left,
+        top,
+        width: Math.max(0, right - left),
+        height: Math.max(0, bottom - top),
+      };
+    };
+    const videoStates = ctl.videoStates;
+    const FRAME_ACTIVITY_GRACE_MS = 1400;
+    const PLAY_EVENT_GRACE_MS = 1600;
+    const readPresentedFrameCount = (videoEl) => {
+      if (!videoEl || !videoEl.isConnected) return null;
+      if (typeof videoEl.getVideoPlaybackQuality === 'function') {
+        try {
+          const quality = videoEl.getVideoPlaybackQuality();
+          const totalFrames = Number(quality && quality.totalVideoFrames);
+          if (Number.isFinite(totalFrames) && totalFrames >= 0) return totalFrames;
+        } catch (_e) {}
+      }
+      const decodedFrames = Number(videoEl.webkitDecodedFrameCount || 0);
+      return Number.isFinite(decodedFrames) && decodedFrames >= 0 ? decodedFrames : null;
+    };
+    const schedulePresentedFrame = (videoEl, state) => {
+      if (
+        state.rvfcPending
+        || !videoEl
+        || !videoEl.isConnected
+        || typeof videoEl.requestVideoFrameCallback !== 'function'
+      ) {
+        return;
+      }
+      state.rvfcPending = true;
+      try {
+        videoEl.requestVideoFrameCallback((_ts, metadata) => {
+          state.rvfcPending = false;
+          state.lastPresentedTs = Date.now();
+          const presentedFrames = Number(metadata && metadata.presentedFrames);
+          if (Number.isFinite(presentedFrames) && presentedFrames >= 0) {
+            state.lastFrameCount = presentedFrames;
+          }
+          const currentTime = Number(videoEl.currentTime || state.lastObservedTime || 0);
+          if (Number.isFinite(currentTime)) {
+            state.lastObservedTime = currentTime;
+            state.lastProgressTs = Date.now();
+          }
+          if (videoEl.isConnected && !videoEl.paused && !videoEl.ended) {
+            schedulePresentedFrame(videoEl, state);
+          }
+        });
+      } catch (_e) {
+        state.rvfcPending = false;
+      }
+    };
+    const ensureVideoState = (videoEl) => {
+      let state = videoStates.get(videoEl);
+      if (!state) {
+        state = {
+          listenersAttached: false,
+          rvfcPending: false,
+          lastPlayingTs: 0,
+          lastPauseTs: 0,
+          lastEndedTs: 0,
+          lastEmptiedTs: 0,
+          lastSeekedTs: 0,
+          lastProgressTs: 0,
+          lastPresentedTs: 0,
+          lastObservedTime: Number(videoEl.currentTime || 0),
+          lastFrameCount: null,
+        };
+        videoStates.set(videoEl, state);
+      }
+      if (!state.listenersAttached) {
+        const markPlaying = () => {
+          state.lastPlayingTs = Date.now();
+          schedulePresentedFrame(videoEl, state);
+        };
+        const markProgress = () => {
+          state.lastProgressTs = Date.now();
+          const currentTime = Number(videoEl.currentTime || state.lastObservedTime || 0);
+          if (Number.isFinite(currentTime)) {
+            state.lastObservedTime = currentTime;
+          }
+        };
+        videoEl.addEventListener('play', markPlaying, { passive: true });
+        videoEl.addEventListener('playing', markPlaying, { passive: true });
+        videoEl.addEventListener('timeupdate', markProgress, { passive: true });
+        videoEl.addEventListener('seeked', () => {
+          state.lastSeekedTs = Date.now();
+          markProgress();
+          schedulePresentedFrame(videoEl, state);
+        }, { passive: true });
+        videoEl.addEventListener('pause', () => {
+          state.lastPauseTs = Date.now();
+          state.lastPresentedTs = 0;
+        }, { passive: true });
+        videoEl.addEventListener('ended', () => {
+          state.lastEndedTs = Date.now();
+          state.lastPresentedTs = 0;
+        }, { passive: true });
+        videoEl.addEventListener('emptied', () => {
+          state.lastEmptiedTs = Date.now();
+          state.lastPresentedTs = 0;
+        }, { passive: true });
+        videoEl.addEventListener('loadeddata', markProgress, { passive: true });
+        state.listenersAttached = true;
+      }
+      return state;
+    };
 
     const activeEditable = resolveFocusedEditable(resolveDeepActiveElement());
     if (activeEditable && isElementVisible(activeEditable)) {
@@ -413,14 +581,43 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
     for (const v of document.querySelectorAll('video')) {
       if (!isElementVisible(v)) continue;
       if (!v.isConnected) continue;
-      const rect = v.getBoundingClientRect();
-      if (rect.width < 140 || rect.height < 100) continue;
-      const area = rect.width * rect.height;
+      const state = ensureVideoState(v);
+      const videoRect = v.getBoundingClientRect();
+      if (videoRect.width < 140 || videoRect.height < 100) continue;
       const ready = (v.readyState || 0) >= 3;
       const playing = !v.paused && !v.ended && !v.seeking;
-      const hasProgress = (v.currentTime || 0) > 0 || (v.playbackRate || 1) !== 0;
-      if (!(ready && playing && hasProgress)) continue;
-      const score = 10 + (area / 15000);
+      const currentTime = Number(v.currentTime || 0);
+      if (Number.isFinite(currentTime)) {
+        if (Math.abs(currentTime - (state.lastObservedTime || 0)) > 0.001) {
+          state.lastProgressTs = now;
+        }
+        state.lastObservedTime = currentTime;
+      }
+      const frameCount = readPresentedFrameCount(v);
+      if (frameCount !== null) {
+        if (state.lastFrameCount === null || frameCount > state.lastFrameCount) {
+          state.lastPresentedTs = now;
+        }
+        state.lastFrameCount = frameCount;
+      }
+      if (playing) {
+        schedulePresentedFrame(v, state);
+      }
+      const recentFrame = (now - (state.lastPresentedTs || 0)) <= FRAME_ACTIVITY_GRACE_MS;
+      const recentProgress = (now - (state.lastProgressTs || 0)) <= FRAME_ACTIVITY_GRACE_MS;
+      const recentPlaying = (now - (state.lastPlayingTs || 0)) <= PLAY_EVENT_GRACE_MS;
+      const recentSeeked = (now - (state.lastSeekedTs || 0)) <= PLAY_EVENT_GRACE_MS;
+      if (!(ready && playing && (recentFrame || recentProgress || recentPlaying || recentSeeked))) {
+        continue;
+      }
+      const playerRect = resolvePlayerRect(v, videoRect);
+      const rect = expandVideoRectForControls(videoRect, playerRect);
+      const area = rect.width * rect.height;
+      const score = 10
+        + (area / 15000)
+        + (recentFrame ? 40 : 0)
+        + (recentProgress ? 16 : 0)
+        + (recentPlaying ? 8 : 0);
       if (!best || score > best.score) {
         best = {
           ...toScreenRegion(rect),
@@ -769,6 +966,24 @@ fn score_target(target: &DevToolsTarget) -> i32 {
     score
 }
 
+fn is_ignored_target(target: &DevToolsTarget) -> bool {
+    let url = target
+        .url
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if url.starts_with("devtools://") {
+        return true;
+    }
+
+    let title = target
+        .title
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    title == "devtools" || title.starts_with("devtools -")
+}
+
 fn ordered_target_candidates<'a>(
     targets: &'a [DevToolsTarget],
     current_ws_url: Option<&str>,
@@ -776,7 +991,9 @@ fn ordered_target_candidates<'a>(
     let mut candidates: Vec<(usize, &DevToolsTarget)> = targets
         .iter()
         .enumerate()
-        .filter(|(_, target)| target.web_socket_debugger_url.is_some())
+        .filter(|(_, target)| {
+            target.web_socket_debugger_url.is_some() && !is_ignored_target(target)
+        })
         .collect();
 
     candidates.sort_by(|(left_idx, left), (right_idx, right)| {
@@ -1998,5 +2215,80 @@ mod tests {
     fn build_video_probe_js_allows_tiny_focused_editables() {
         let js = build_video_probe_js(false, DEFAULT_SCROLL_PAUSE_WINDOW_MS, 0);
         assert!(js.contains("rect.width >= 2 && rect.height >= 2"));
+    }
+
+    #[test]
+    fn build_video_probe_js_expands_video_to_player_container() {
+        let js = build_video_probe_js(false, DEFAULT_SCROLL_PAUSE_WINDOW_MS, 0);
+        assert!(js.contains("const resolvePlayerRect = (videoEl, videoRect) =>"));
+        assert!(js.contains("const expandVideoRectForControls = (videoRect, playerRect) =>"));
+        assert!(js.contains(".html5-video-player"));
+        assert!(js.contains("rectContains(rect, videoRect)"));
+        assert!(js.contains("const playerRect = resolvePlayerRect(v, videoRect);"));
+        assert!(js.contains("const rect = expandVideoRectForControls(videoRect, playerRect);"));
+    }
+
+    #[test]
+    fn build_video_probe_js_tracks_native_video_events() {
+        let js = build_video_probe_js(false, DEFAULT_SCROLL_PAUSE_WINDOW_MS, 0);
+        assert!(js.contains("videoEl.addEventListener('play'"));
+        assert!(js.contains("videoEl.addEventListener('playing'"));
+        assert!(js.contains("videoEl.addEventListener('pause'"));
+        assert!(js.contains("videoEl.addEventListener('ended'"));
+        assert!(js.contains("videoEl.addEventListener('seeked'"));
+    }
+
+    #[test]
+    fn build_video_probe_js_uses_presented_frame_signals() {
+        let js = build_video_probe_js(false, DEFAULT_SCROLL_PAUSE_WINDOW_MS, 0);
+        assert!(js.contains("requestVideoFrameCallback"));
+        assert!(js.contains("getVideoPlaybackQuality"));
+        assert!(js.contains("FRAME_ACTIVITY_GRACE_MS"));
+        assert!(js.contains("recentFrame || recentProgress || recentPlaying || recentSeeked"));
+    }
+
+    #[test]
+    fn ordered_target_candidates_skip_devtools_pages() {
+        let targets = vec![DevToolsTarget {
+            target_type: "page".to_string(),
+            url: Some("devtools://devtools/bundled/devtools_app.html".to_string()),
+            title: Some("DevTools".to_string()),
+            web_socket_debugger_url: Some("ws://127.0.0.1:9222/devtools/page/devtools".to_string()),
+        }];
+
+        let ordered = ordered_target_candidates(&targets, None);
+        assert!(ordered.is_empty());
+    }
+
+    #[test]
+    fn ordered_target_candidates_do_not_stick_to_current_devtools_target() {
+        let targets = vec![
+            DevToolsTarget {
+                target_type: "page".to_string(),
+                url: Some(
+                    "devtools://devtools/bundled/devtools_app.html?targetType=tab".to_string(),
+                ),
+                title: Some("DevTools - Example Video".to_string()),
+                web_socket_debugger_url: Some(
+                    "ws://127.0.0.1:9222/devtools/page/devtools".to_string(),
+                ),
+            },
+            DevToolsTarget {
+                target_type: "page".to_string(),
+                url: Some("https://www.youtube.com/watch?v=abc123".to_string()),
+                title: Some("Example Video - YouTube".to_string()),
+                web_socket_debugger_url: Some(
+                    "ws://127.0.0.1:9222/devtools/page/youtube".to_string(),
+                ),
+            },
+        ];
+
+        let ordered =
+            ordered_target_candidates(&targets, Some("ws://127.0.0.1:9222/devtools/page/devtools"));
+        assert_eq!(ordered.len(), 1);
+        assert_eq!(
+            ordered[0].web_socket_debugger_url.as_deref(),
+            Some("ws://127.0.0.1:9222/devtools/page/youtube")
+        );
     }
 }

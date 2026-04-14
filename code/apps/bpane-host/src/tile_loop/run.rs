@@ -10,7 +10,20 @@
 
 use tracing::warn;
 
+use crate::capture::ffmpeg::CaptureRegion;
+use crate::cdp_video::{HintRegionKind, PageHintState};
 use crate::scroll::select_capture_frame_interval;
+
+pub(super) fn should_force_refresh_for_video_hint_drop(
+    active_region: Option<CaptureRegion>,
+    hint: &PageHintState,
+) -> bool {
+    active_region.is_some()
+        && (!hint.visible
+            || !hint.focused
+            || hint.region_kind != HintRegionKind::Video
+            || hint.video_region.is_none())
+}
 
 impl super::TileCaptureThread {
     /// Run the tile capture loop. Blocks the current thread until the
@@ -79,6 +92,18 @@ impl super::TileCaptureThread {
                     hash,
                     "tile cache miss reported by client"
                 );
+            }
+            if !force_refresh {
+                let hint = {
+                    let guard = match self.browser_video_hint.lock() {
+                        Ok(g) => g,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    *guard
+                };
+                if should_force_refresh_for_video_hint_drop(self.region_committer.active, &hint) {
+                    force_refresh = true;
+                }
             }
 
             // ── Damage gating ────────────────────────────────────
