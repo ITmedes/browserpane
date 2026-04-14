@@ -103,21 +103,15 @@ fn arb_clipboard_message() -> impl Strategy<Value = ClipboardMessage> {
 
 fn arb_file_message() -> impl Strategy<Value = FileMessage> {
     prop_oneof![
-        (any::<u32>(), any::<u64>()).prop_map(|(id, size)| {
-            FileMessage::FileHeader {
-                id,
-                filename: [0u8; 256],
-                size,
-                mime: [0u8; 64],
-            }
-        }),
+        (any::<u32>(), any::<u64>())
+            .prop_map(|(id, size)| { FileMessage::header(id, [0u8; 256], size, [0u8; 64]) }),
         (
             any::<u32>(),
             any::<u32>(),
             proptest::collection::vec(any::<u8>(), 0..4096)
         )
-            .prop_map(|(id, seq, data)| FileMessage::FileChunk { id, seq, data }),
-        any::<u32>().prop_map(|id| FileMessage::FileComplete { id }),
+            .prop_map(|(id, seq, data)| FileMessage::chunk(id, seq, data)),
+        any::<u32>().prop_map(FileMessage::complete),
     ]
 }
 
