@@ -11,6 +11,7 @@ use super::{
 const VIDEO_FLAG_TILE: u8 = 0x01;
 
 impl VideoDatagram {
+    /// Encode a video datagram payload.
     pub fn encode(&self) -> Vec<u8> {
         let tile_size = if self.tile_info.is_some() { 13 } else { 1 };
         let mut w = Writer::with_capacity(21 + self.data.len() + tile_size);
@@ -36,6 +37,15 @@ impl VideoDatagram {
         w.finish()
     }
 
+    /// Decode a video datagram payload.
+    ///
+    /// This decoder is forward-tolerant for trailing extension bytes after the
+    /// known optional fields.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] if the fixed header or declared payload bytes are
+    /// truncated.
     pub fn decode(buf: &[u8]) -> Result<Self, FrameError> {
         let mut r = Reader::new(buf);
         let nal_id = r.read_u32()?;
@@ -73,6 +83,12 @@ impl VideoDatagram {
         })
     }
 
+    /// Fragment a NAL unit into datagrams that fit within `max_fragment_size`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `max_fragment_size == 0` or if the number of fragments would
+    /// exceed `u16::MAX`.
     pub fn fragment(
         nal_id: u32,
         is_keyframe: bool,
@@ -90,6 +106,11 @@ impl VideoDatagram {
         )
     }
 
+    /// Fragment a NAL unit and attach optional tile metadata to each fragment.
+    ///
+    /// # Panics
+    ///
+    /// Panics under the same conditions as [`Self::fragment`].
     pub fn fragment_with_tile(
         nal_id: u32,
         is_keyframe: bool,
@@ -135,6 +156,10 @@ impl VideoDatagram {
             .collect()
     }
 
+    /// Reassemble a fully ordered fragment set into a complete payload.
+    ///
+    /// Returns `None` if the set is empty, incomplete, or not ordered by
+    /// `fragment_seq`.
     pub fn reassemble(fragments: &[Self]) -> Option<Vec<u8>> {
         if fragments.is_empty() {
             return None;

@@ -1,3 +1,8 @@
+//! Frame envelope handling plus per-channel codecs.
+//!
+//! Most callers will use [`Frame`] for transport boundaries and
+//! [`Message::from_frame`] to decode typed channels.
+
 mod audio;
 mod clipboard;
 mod control;

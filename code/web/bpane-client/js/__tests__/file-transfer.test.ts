@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CH_FILE_UP } from '../protocol.js';
+import { CH_FILE_DOWN, CH_FILE_UP, encodeFrame } from '../protocol.js';
 import {
   FileTransferController,
   decodeFileMessage,
@@ -8,6 +8,7 @@ import {
   encodeFileComplete,
   encodeFileHeader,
 } from '../file-transfer.js';
+import { wireFixture } from './wire-fixtures.js';
 
 describe('FileTransferController', () => {
   afterEach(() => {
@@ -102,5 +103,49 @@ describe('FileTransferController', () => {
     expect(await capturedBlob!.text()).toBe('hello world');
 
     controller.destroy();
+  });
+
+  it('matches the shared file fixtures for encode and decode', () => {
+    const headerFrame = encodeFrame(CH_FILE_UP, encodeFileHeader({
+      id: 42,
+      filename: 'invoice.pdf',
+      size: 123456789,
+      mime: 'application/pdf',
+    }));
+    expect(headerFrame).toEqual(wireFixture('file_header_upload'));
+
+    const chunkFrame = encodeFrame(CH_FILE_DOWN, encodeFileChunk({
+      id: 42,
+      seq: 3,
+      data: new Uint8Array([0x00, 0xFF, 0x10, 0x20]),
+    }));
+    expect(chunkFrame).toEqual(wireFixture('file_chunk_download'));
+
+    const completeFrame = encodeFrame(CH_FILE_DOWN, encodeFileComplete(42));
+    expect(completeFrame).toEqual(wireFixture('file_complete_download'));
+
+    expect(decodeFileMessage(headerFrame.subarray(5))).toMatchObject({
+      type: 'header',
+      id: 42,
+      filename: 'invoice.pdf',
+      size: 123456789,
+      mime: 'application/pdf',
+    });
+    expect(decodeFileMessage(chunkFrame.subarray(5))).toMatchObject({
+      type: 'chunk',
+      id: 42,
+      seq: 3,
+      data: new Uint8Array([0x00, 0xFF, 0x10, 0x20]),
+    });
+    expect(decodeFileMessage(completeFrame.subarray(5))).toMatchObject({
+      type: 'complete',
+      id: 42,
+    });
+  });
+
+  it('rejects the shared truncated file chunk fixture', () => {
+    expect(() => decodeFileMessage(wireFixture('invalid_file_chunk_truncated').subarray(5))).toThrow(
+      'file chunk truncated',
+    );
   });
 });

@@ -332,6 +332,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "proptest",
+ "serde_json",
 ]
 
 [[package]]

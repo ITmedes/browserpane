@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { InputController } from '../input-controller.js';
-import { CH_CLIPBOARD, CH_INPUT } from '../protocol.js';
+import { CH_CLIPBOARD, CH_INPUT, encodeFrame } from '../protocol.js';
+import { wireFixture } from './wire-fixtures.js';
 
 interface SentFrame {
   channelId: number;
@@ -861,5 +862,34 @@ describe('InputController Windows paste handling', () => {
       { keycode: 47, down: false, modifiers: 1, keyChar: 0 },
       { keycode: 29, down: false, modifiers: 0, keyChar: 0 },
     ]);
+  });
+});
+
+describe('InputController shared wire fixtures', () => {
+  it('emits the shared key-event-ex fixture for a simple printable keydown', () => {
+    setPlatform('Linux x86_64', 'Linux');
+    const { keyboardTarget, controller, sentFrames } = createController();
+
+    dispatchKey(keyboardTarget, 'keydown', { code: 'KeyA', key: 'a' });
+
+    controller.destroy();
+
+    expect(sentFrames).toHaveLength(1);
+    expect(encodeFrame(sentFrames[0].channelId, sentFrames[0].payload)).toEqual(
+      wireFixture('input_key_event_ex'),
+    );
+  });
+
+  it('emits the shared clipboard fixture', () => {
+    setPlatform('Linux x86_64', 'Linux');
+    const { controller, sentFrames } = createController({ clipboardEnabled: true });
+
+    controller.sendClipboardText('hello clipboard');
+    controller.destroy();
+
+    expect(sentFrames).toHaveLength(1);
+    expect(encodeFrame(sentFrames[0].channelId, sentFrames[0].payload)).toEqual(
+      wireFixture('clipboard_text'),
+    );
   });
 });

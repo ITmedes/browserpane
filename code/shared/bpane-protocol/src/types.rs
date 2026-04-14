@@ -13,14 +13,17 @@ impl SessionFlags {
     pub const CAMERA: u8 = 0x10;
     pub const KEYBOARD_LAYOUT: u8 = 0x20;
 
+    /// Construct session flags from raw wire bits.
     pub fn new(flags: u8) -> Self {
         Self(flags)
     }
 
+    /// Return whether a specific flag bit is set.
     pub fn has(self, flag: u8) -> bool {
         self.0 & flag != 0
     }
 
+    /// Return all currently defined session capability flags.
     pub fn all() -> Self {
         Self(
             Self::AUDIO
@@ -57,6 +60,7 @@ pub enum MouseButton {
 }
 
 impl MouseButton {
+    /// Convert a raw wire value into a mouse button.
     pub fn from_u8(val: u8) -> Option<Self> {
         match val {
             0 => Some(Self::Left),
@@ -176,6 +180,7 @@ pub enum FileMessage {
 }
 
 impl FileMessage {
+    /// Construct a file header message without exposing the internal boxed layout.
     pub fn header(id: u32, filename: [u8; 256], size: u64, mime: [u8; 64]) -> Self {
         Self::FileHeader {
             id,
@@ -185,10 +190,12 @@ impl FileMessage {
         }
     }
 
+    /// Construct a file chunk message.
     pub fn chunk(id: u32, seq: u32, data: Vec<u8>) -> Self {
         Self::FileChunk { id, seq, data }
     }
 
+    /// Construct a file completion message.
     pub fn complete(id: u32) -> Self {
         Self::FileComplete { id }
     }

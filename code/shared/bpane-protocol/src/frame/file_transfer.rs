@@ -14,6 +14,7 @@ const FILE_CHUNK: u8 = 0x02;
 const FILE_COMPLETE: u8 = 0x03;
 
 impl FileMessage {
+    /// Encode a file-transfer message payload.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = Writer::new();
         match self {
@@ -43,6 +44,15 @@ impl FileMessage {
         w.finish()
     }
 
+    /// Decode a file-transfer payload for either file channel.
+    ///
+    /// Prefer [`super::message::Message::from_frame`] when the surrounding frame
+    /// is available and channel-specific error reporting is useful.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] if the payload is truncated, has an unknown tag,
+    /// or contains trailing bytes.
     pub fn decode(buf: &[u8]) -> Result<Self, FrameError> {
         Self::decode_for_channel(buf, ChannelId::FileDown)
     }
@@ -68,6 +78,7 @@ impl FileMessage {
         })
     }
 
+    /// Wrap this payload in a frame on the chosen file channel.
     pub fn to_frame(&self, channel: ChannelId) -> Frame {
         Frame::new(channel, self.encode())
     }
