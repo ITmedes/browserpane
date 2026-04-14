@@ -36,7 +36,6 @@ pub async fn run(
     browser_video_hint_task: &Option<cdp_video::BrowserCdpHandle>,
     chromium_wheel_step_px: u16,
     scroll_tx: &std::sync::mpsc::Sender<(i16, i16)>,
-    video_click_tx: &std::sync::mpsc::Sender<(u16, u16, std::time::Instant)>,
     text_input_tx: &std::sync::mpsc::Sender<std::time::Instant>,
     cache_miss_tx: &std::sync::mpsc::Sender<(u32, u16, u16, u64)>,
 ) -> anyhow::Result<()> {
@@ -81,11 +80,8 @@ pub async fn run(
                                     bpane_protocol::InputMessage::MouseMove { x, y } => {
                                         last_mouse_pos = Some((*x, *y));
                                     }
-                                    bpane_protocol::InputMessage::MouseButton { button, down, x, y } => {
+                                    bpane_protocol::InputMessage::MouseButton { x, y, .. } => {
                                         last_mouse_pos = Some((*x, *y));
-                                        if *down && *button == 0 {
-                                            let _ = video_click_tx.send((*x, *y, std::time::Instant::now()));
-                                        }
                                     }
                                     bpane_protocol::InputMessage::MouseScroll { dx, dy } => {
                                         let _ = scroll_tx.send((*dx, *dy));

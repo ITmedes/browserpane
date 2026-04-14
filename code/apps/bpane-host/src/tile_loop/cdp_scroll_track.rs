@@ -35,12 +35,9 @@ impl super::TileCaptureThread {
             && cdp_hint_snapshot.update_seq != self.last_cdp_hint_seq
             && cdp_hint_snapshot.scroll_delta_y != 0
         {
-            let clamped = scale_css_px_to_screen_px(
-                cdp_hint_snapshot.scroll_delta_y as i64,
-                cdp_scale_milli,
-            )
-            .clamp(-max_cdp_scroll_dy_px, max_cdp_scroll_dy_px)
-                as i16;
+            let clamped =
+                scale_css_px_to_screen_px(cdp_hint_snapshot.scroll_delta_y as i64, cdp_scale_milli)
+                    .clamp(-max_cdp_scroll_dy_px, max_cdp_scroll_dy_px) as i16;
             if clamped != 0 {
                 cdp_scroll_dy_px = Some(clamped);
             }

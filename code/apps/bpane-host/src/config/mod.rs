@@ -182,7 +182,7 @@ pub struct TileCaptureConfig {
     pub min_cdp_video_width_px: u32,
     pub min_cdp_video_height_px: u32,
     pub min_cdp_video_area_ratio: f32,
-    pub video_click_arm_ms: u64,
+    pub cdp_video_tile_margin: u16,
     pub scroll_thin_mode_enabled: bool,
     pub video_classification_enabled: bool,
 }
@@ -205,17 +205,19 @@ impl TileCaptureConfig {
             chromium_wheel_step_px,
             scroll_copy_quantum_px,
             base_frame_interval: Duration::from_millis(100),
-            scroll_active_frame_interval: Duration::from_millis(
-                env_u32_clamped("BPANE_SCROLL_ACTIVE_FRAME_INTERVAL_MS", 33, 16, 100) as u64,
-            ),
+            scroll_active_frame_interval: Duration::from_millis(env_u32_clamped(
+                "BPANE_SCROLL_ACTIVE_FRAME_INTERVAL_MS",
+                33,
+                16,
+                100,
+            ) as u64),
             scroll_active_capture_frames: env_u32_clamped(
                 "BPANE_SCROLL_ACTIVE_CAPTURE_FRAMES",
                 8,
                 0,
                 32,
             ) as u8,
-            min_cdp_video_width_px: env_u32_clamped("BPANE_CDP_MIN_VIDEO_WIDTH", 320, 2, 4096)
-                & !1,
+            min_cdp_video_width_px: env_u32_clamped("BPANE_CDP_MIN_VIDEO_WIDTH", 320, 2, 4096) & !1,
             min_cdp_video_height_px: env_u32_clamped("BPANE_CDP_MIN_VIDEO_HEIGHT", 180, 2, 4096)
                 & !1,
             min_cdp_video_area_ratio: env_f32_clamped(
@@ -224,8 +226,7 @@ impl TileCaptureConfig {
                 0.01,
                 0.95,
             ),
-            video_click_arm_ms: env_u32_clamped("BPANE_VIDEO_CLICK_ARM_MS", 8_000, 250, 60_000)
-                as u64,
+            cdp_video_tile_margin: env_u16_clamped("BPANE_CDP_VIDEO_TILE_MARGIN", 1, 0, 3),
             scroll_thin_mode_enabled: env_bool("BPANE_SCROLL_THIN_MODE", false),
             video_classification_enabled: !matches!(h264_mode, H264Mode::Off),
         }

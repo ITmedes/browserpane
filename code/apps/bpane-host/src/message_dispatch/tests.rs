@@ -25,42 +25,37 @@ async fn handle_control_ffmpeg_bitrate_hint() {
 
 #[tokio::test]
 async fn session_ready_includes_keyboard_layout_flag() {
-    let flags = SessionFlags::new(
-        SessionFlags::CLIPBOARD | SessionFlags::FILE_TRANSFER | SessionFlags::KEYBOARD_LAYOUT,
-    );
-    assert!(flags.has(SessionFlags::KEYBOARD_LAYOUT));
-    assert!(flags.has(SessionFlags::CLIPBOARD));
-    assert!(!flags.has(SessionFlags::AUDIO));
+    let flags =
+        SessionFlags::CLIPBOARD | SessionFlags::FILE_TRANSFER | SessionFlags::KEYBOARD_LAYOUT;
+    assert!(flags.contains(SessionFlags::KEYBOARD_LAYOUT));
+    assert!(flags.contains(SessionFlags::CLIPBOARD));
+    assert!(!flags.contains(SessionFlags::AUDIO));
 }
 
 #[tokio::test]
 async fn session_flags_with_audio() {
-    let mut flags = SessionFlags::new(
-        SessionFlags::CLIPBOARD | SessionFlags::FILE_TRANSFER | SessionFlags::KEYBOARD_LAYOUT,
-    );
-    flags = SessionFlags::new(flags.0 | SessionFlags::AUDIO | SessionFlags::MICROPHONE);
-    assert!(flags.has(SessionFlags::AUDIO));
-    assert!(flags.has(SessionFlags::MICROPHONE));
-    assert!(flags.has(SessionFlags::CLIPBOARD));
+    let mut flags =
+        SessionFlags::CLIPBOARD | SessionFlags::FILE_TRANSFER | SessionFlags::KEYBOARD_LAYOUT;
+    flags.insert(SessionFlags::AUDIO | SessionFlags::MICROPHONE);
+    assert!(flags.contains(SessionFlags::AUDIO));
+    assert!(flags.contains(SessionFlags::MICROPHONE));
+    assert!(flags.contains(SessionFlags::CLIPBOARD));
 }
 
 #[tokio::test]
 async fn session_flags_without_audio() {
-    let flags = SessionFlags::new(
-        SessionFlags::CLIPBOARD | SessionFlags::FILE_TRANSFER | SessionFlags::KEYBOARD_LAYOUT,
-    );
-    assert!(!flags.has(SessionFlags::AUDIO));
-    assert!(!flags.has(SessionFlags::MICROPHONE));
+    let flags =
+        SessionFlags::CLIPBOARD | SessionFlags::FILE_TRANSFER | SessionFlags::KEYBOARD_LAYOUT;
+    assert!(!flags.contains(SessionFlags::AUDIO));
+    assert!(!flags.contains(SessionFlags::MICROPHONE));
 }
 
 #[tokio::test]
 async fn session_ready_audio_flag_encodes_in_wire() {
-    let flags = SessionFlags::new(
-        SessionFlags::AUDIO
-            | SessionFlags::CLIPBOARD
-            | SessionFlags::FILE_TRANSFER
-            | SessionFlags::KEYBOARD_LAYOUT,
-    );
+    let flags = SessionFlags::AUDIO
+        | SessionFlags::CLIPBOARD
+        | SessionFlags::FILE_TRANSFER
+        | SessionFlags::KEYBOARD_LAYOUT;
     let ready = ControlMessage::SessionReady { version: 2, flags };
     let frame = ready.to_frame();
     let decoded = ControlMessage::decode(&frame.payload).unwrap();
@@ -70,8 +65,8 @@ async fn session_ready_audio_flag_encodes_in_wire() {
             flags: decoded_flags,
         } => {
             assert_eq!(version, 2);
-            assert!(decoded_flags.has(SessionFlags::AUDIO));
-            assert!(decoded_flags.has(SessionFlags::CLIPBOARD));
+            assert!(decoded_flags.contains(SessionFlags::AUDIO));
+            assert!(decoded_flags.contains(SessionFlags::CLIPBOARD));
         }
         _ => panic!("expected SessionReady"),
     }
@@ -79,13 +74,11 @@ async fn session_ready_audio_flag_encodes_in_wire() {
 
 #[test]
 fn has_audio_flag_extraction() {
-    let with_audio = SessionFlags::new(
-        SessionFlags::AUDIO | SessionFlags::CLIPBOARD | SessionFlags::KEYBOARD_LAYOUT,
-    );
-    assert!(with_audio.has(SessionFlags::AUDIO));
+    let with_audio = SessionFlags::AUDIO | SessionFlags::CLIPBOARD | SessionFlags::KEYBOARD_LAYOUT;
+    assert!(with_audio.contains(SessionFlags::AUDIO));
 
-    let without_audio = SessionFlags::new(SessionFlags::CLIPBOARD | SessionFlags::KEYBOARD_LAYOUT);
-    assert!(!without_audio.has(SessionFlags::AUDIO));
+    let without_audio = SessionFlags::CLIPBOARD | SessionFlags::KEYBOARD_LAYOUT;
+    assert!(!without_audio.contains(SessionFlags::AUDIO));
 }
 
 #[test]

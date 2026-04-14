@@ -5,6 +5,7 @@ mod tests;
 
 use crate::capture::ffmpeg::CaptureRegion;
 use crate::tiles;
+use bpane_protocol::Modifiers;
 
 pub const MIN_EDITABLE_HINT_WIDTH_PX: u32 = 2;
 pub const MIN_EDITABLE_HINT_HEIGHT_PX: u32 = 2;
@@ -107,6 +108,70 @@ pub fn capture_region_tile_bounds(
     (min_col, min_row, max_col, max_row)
 }
 
+pub fn tile_bounds_capture_region(
+    bounds: (u16, u16, u16, u16),
+    tile_size: u16,
+    screen_w: u32,
+    screen_h: u32,
+) -> Option<CaptureRegion> {
+    if tile_size == 0 || screen_w == 0 || screen_h == 0 {
+        return None;
+    }
+    let ts = u32::from(tile_size);
+    let (min_col, min_row, max_col, max_row) = bounds;
+    let x = u32::from(min_col).saturating_mul(ts);
+    let y = u32::from(min_row).saturating_mul(ts);
+    let x1 = u32::from(max_col.saturating_add(1))
+        .saturating_mul(ts)
+        .min(screen_w);
+    let y1 = u32::from(max_row.saturating_add(1))
+        .saturating_mul(ts)
+        .min(screen_h);
+    if x1 <= x || y1 <= y {
+        return None;
+    }
+    clamp_region_to_screen(
+        CaptureRegion {
+            x,
+            y,
+            w: x1 - x,
+            h: y1 - y,
+        },
+        screen_w,
+        screen_h,
+    )
+}
+
+pub fn align_capture_region_to_tiles(
+    region: CaptureRegion,
+    tile_size: u16,
+    cols: u16,
+    rows: u16,
+    screen_w: u32,
+    screen_h: u32,
+) -> Option<CaptureRegion> {
+    tile_bounds_capture_region(
+        capture_region_tile_bounds(region, tile_size, cols, rows),
+        tile_size,
+        screen_w,
+        screen_h,
+    )
+}
+
+pub fn align_capture_region_to_tiles_with_margin(
+    region: CaptureRegion,
+    tile_size: u16,
+    cols: u16,
+    rows: u16,
+    screen_w: u32,
+    screen_h: u32,
+    margin: u16,
+) -> Option<CaptureRegion> {
+    let bounds = capture_region_tile_bounds(region, tile_size, cols, rows);
+    let expanded = expand_tile_bounds(bounds, margin, cols, rows);
+    tile_bounds_capture_region(expanded, tile_size, screen_w, screen_h)
+}
+
 pub fn expand_tile_bounds(
     bounds: (u16, u16, u16, u16),
     margin: u16,
@@ -145,7 +210,14 @@ pub fn extend_dirty_with_tile_bounds(
 // ── Hashing ─────────────────────────────────────────────────────────
 
 /// Hash a tile region directly from the frame buffer without allocating.
-pub fn hash_tile_region(frame: &[u8], stride: usize, x: usize, y: usize, w: usize, h: usize) -> u64 {
+pub fn hash_tile_region(
+    frame: &[u8],
+    stride: usize,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+) -> u64 {
     use xxhash_rust::xxh3::xxh3_64;
     let row_bytes = w * 4;
     if w * 4 == stride {
@@ -170,7 +242,7 @@ pub fn hash_tile_region(frame: &[u8], stride: usize, x: usize, y: usize, w: usiz
 
 /// Build a CDP `Input.insertText` payload for non-ASCII printable chars
 /// that bypass the keyboard layout entirely.
-pub fn cdp_insert_text_payload(modifiers: u8, key_char: u32) -> Option<String> {
+pub fn cdp_insert_text_payload(modifiers: Modifiers, key_char: u32) -> Option<String> {
     if key_char < 0x80 || crate::input::keyboard::should_use_physical(modifiers, key_char) {
         return None;
     }

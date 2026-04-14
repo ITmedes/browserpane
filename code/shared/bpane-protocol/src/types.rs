@@ -1,47 +1,199 @@
+use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
 
 /// Session capability flags.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SessionFlags(pub u8);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SessionFlags(u8);
 
 impl SessionFlags {
-    pub const AUDIO: u8 = 0x01;
-    pub const CLIPBOARD: u8 = 0x02;
-    pub const FILE_TRANSFER: u8 = 0x04;
-    pub const MICROPHONE: u8 = 0x08;
-    pub const CAMERA: u8 = 0x10;
-    pub const KEYBOARD_LAYOUT: u8 = 0x20;
+    pub const AUDIO: Self = Self(0x01);
+    pub const CLIPBOARD: Self = Self(0x02);
+    pub const FILE_TRANSFER: Self = Self(0x04);
+    pub const MICROPHONE: Self = Self(0x08);
+    pub const CAMERA: Self = Self(0x10);
+    pub const KEYBOARD_LAYOUT: Self = Self(0x20);
 
-    pub fn new(flags: u8) -> Self {
+    /// Construct session flags from raw wire bits.
+    pub const fn new(flags: u8) -> Self {
         Self(flags)
     }
 
-    pub fn has(self, flag: u8) -> bool {
-        self.0 & flag != 0
+    /// Construct an empty flag set.
+    pub const fn empty() -> Self {
+        Self(0)
     }
 
-    pub fn all() -> Self {
+    /// Return the raw wire bits.
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+
+    /// Return whether no flags are set.
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Return whether all bits in `other` are present.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Return whether any bit in `other` is present.
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+
+    /// Return whether a specific flag bit is set.
+    pub const fn has(self, flag: Self) -> bool {
+        self.contains(flag)
+    }
+
+    /// Insert the given flags.
+    pub fn insert(&mut self, other: Self) {
+        self.0 |= other.0;
+    }
+
+    /// Remove the given flags.
+    pub fn remove(&mut self, other: Self) {
+        self.0 &= !other.0;
+    }
+
+    /// Return all currently defined session capability flags.
+    pub const fn all() -> Self {
         Self(
-            Self::AUDIO
-                | Self::CLIPBOARD
-                | Self::FILE_TRANSFER
-                | Self::MICROPHONE
-                | Self::CAMERA
-                | Self::KEYBOARD_LAYOUT,
+            Self::AUDIO.0
+                | Self::CLIPBOARD.0
+                | Self::FILE_TRANSFER.0
+                | Self::MICROPHONE.0
+                | Self::CAMERA.0
+                | Self::KEYBOARD_LAYOUT.0,
         )
     }
 }
 
+impl From<u8> for SessionFlags {
+    fn from(value: u8) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<SessionFlags> for u8 {
+    fn from(flags: SessionFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl BitOr for SessionFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for SessionFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for SessionFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for SessionFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
 /// Modifier key bitmask for keyboard events.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Modifiers(pub u8);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Modifiers(u8);
 
 impl Modifiers {
-    pub const CTRL: u8 = 0x01;
-    pub const ALT: u8 = 0x02;
-    pub const SHIFT: u8 = 0x04;
-    pub const META: u8 = 0x08;
-    pub const ALTGR: u8 = 0x10;
+    pub const CTRL: Self = Self(0x01);
+    pub const ALT: Self = Self(0x02);
+    pub const SHIFT: Self = Self(0x04);
+    pub const META: Self = Self(0x08);
+    pub const ALTGR: Self = Self(0x10);
+
+    pub const fn new(bits: u8) -> Self {
+        Self(bits)
+    }
+
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+
+    pub fn insert(&mut self, other: Self) {
+        self.0 |= other.0;
+    }
+
+    pub fn remove(&mut self, other: Self) {
+        self.0 &= !other.0;
+    }
+}
+
+impl From<u8> for Modifiers {
+    fn from(value: u8) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<Modifiers> for u8 {
+    fn from(modifiers: Modifiers) -> Self {
+        modifiers.bits()
+    }
+}
+
+impl BitOr for Modifiers {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for Modifiers {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for Modifiers {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for Modifiers {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
 }
 
 /// Mouse button identifiers.
@@ -55,16 +207,36 @@ pub enum MouseButton {
     Forward = 4,
 }
 
-impl MouseButton {
-    pub fn from_u8(val: u8) -> Option<Self> {
+impl TryFrom<u8> for MouseButton {
+    type Error = u8;
+
+    fn try_from(val: u8) -> Result<Self, Self::Error> {
         match val {
-            0 => Some(Self::Left),
-            1 => Some(Self::Middle),
-            2 => Some(Self::Right),
-            3 => Some(Self::Back),
-            4 => Some(Self::Forward),
-            _ => None,
+            0 => Ok(Self::Left),
+            1 => Ok(Self::Middle),
+            2 => Ok(Self::Right),
+            3 => Ok(Self::Back),
+            4 => Ok(Self::Forward),
+            _ => Err(val),
         }
+    }
+}
+
+impl From<MouseButton> for u8 {
+    fn from(button: MouseButton) -> Self {
+        button as u8
+    }
+}
+
+impl MouseButton {
+    /// Convert a raw wire value into a mouse button.
+    pub fn from_u8(val: u8) -> Option<Self> {
+        Self::try_from(val).ok()
+    }
+
+    /// Return the raw wire value for this mouse button.
+    pub fn as_u8(self) -> u8 {
+        self.into()
     }
 }
 
@@ -103,7 +275,7 @@ pub enum InputMessage {
         y: u16,
     },
     MouseButton {
-        button: u8,
+        button: MouseButton,
         down: bool,
         x: u16,
         y: u16,
@@ -115,13 +287,13 @@ pub enum InputMessage {
     KeyEvent {
         keycode: u32,
         down: bool,
-        modifiers: u8,
+        modifiers: Modifiers,
     },
     /// Extended key event with character annotation for keyboard layout passthrough.
     KeyEventEx {
         keycode: u32,
         down: bool,
-        modifiers: u8,
+        modifiers: Modifiers,
         /// Unicode codepoint from KeyboardEvent.key, or 0 if non-printable.
         key_char: u32,
     },
@@ -160,9 +332,9 @@ pub enum ClipboardMessage {
 pub enum FileMessage {
     FileHeader {
         id: u32,
-        filename: [u8; 256],
+        filename: Box<[u8; 256]>,
         size: u64,
-        mime: [u8; 64],
+        mime: Box<[u8; 64]>,
     },
     FileChunk {
         id: u32,
@@ -172,6 +344,28 @@ pub enum FileMessage {
     FileComplete {
         id: u32,
     },
+}
+
+impl FileMessage {
+    /// Construct a file header message without exposing the internal boxed layout.
+    pub fn header(id: u32, filename: [u8; 256], size: u64, mime: [u8; 64]) -> Self {
+        Self::FileHeader {
+            id,
+            filename: Box::new(filename),
+            size,
+            mime: Box::new(mime),
+        }
+    }
+
+    /// Construct a file chunk message.
+    pub fn chunk(id: u32, seq: u32, data: Vec<u8>) -> Self {
+        Self::FileChunk { id, seq, data }
+    }
+
+    /// Construct a file completion message.
+    pub fn complete(id: u32) -> Self {
+        Self::FileComplete { id }
+    }
 }
 
 // ── Tile Channel Messages ──────────────────────────────────────────
@@ -311,4 +505,45 @@ pub struct AudioFrame {
     pub timestamp_us: u64,
     /// Encoded audio payload bytes.
     pub data: Vec<u8>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_flags_support_bitmask_operations() {
+        let mut flags = SessionFlags::CLIPBOARD | SessionFlags::FILE_TRANSFER;
+        assert!(flags.contains(SessionFlags::CLIPBOARD));
+        assert!(!flags.contains(SessionFlags::AUDIO));
+
+        flags.insert(SessionFlags::AUDIO | SessionFlags::MICROPHONE);
+        assert!(flags.contains(SessionFlags::AUDIO));
+        assert!(flags.intersects(SessionFlags::MICROPHONE | SessionFlags::CAMERA));
+
+        flags.remove(SessionFlags::FILE_TRANSFER);
+        assert!(!flags.contains(SessionFlags::FILE_TRANSFER));
+        assert_eq!(u8::from(flags), flags.bits());
+    }
+
+    #[test]
+    fn modifiers_support_bitmask_operations() {
+        let mut modifiers = Modifiers::CTRL | Modifiers::SHIFT;
+        assert!(modifiers.contains(Modifiers::CTRL));
+        assert!(modifiers.intersects(Modifiers::SHIFT | Modifiers::ALT));
+
+        modifiers.insert(Modifiers::ALTGR);
+        assert!(modifiers.contains(Modifiers::ALTGR));
+
+        modifiers.remove(Modifiers::SHIFT);
+        assert!(!modifiers.contains(Modifiers::SHIFT));
+        assert_eq!(Modifiers::from(modifiers.bits()), modifiers);
+    }
+
+    #[test]
+    fn mouse_button_try_from_rejects_invalid_values() {
+        assert_eq!(MouseButton::try_from(0), Ok(MouseButton::Left));
+        assert_eq!(MouseButton::try_from(4), Ok(MouseButton::Forward));
+        assert_eq!(MouseButton::try_from(5), Err(5));
+    }
 }

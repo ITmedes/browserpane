@@ -45,11 +45,7 @@ pub fn detect_column_scroll(
                 let mut col_matches = 0usize;
 
                 for y in 0..overlap {
-                    let (curr_y, prev_y) = if sign > 0 {
-                        (y, y + dy)
-                    } else {
-                        (y + dy, y)
-                    };
+                    let (curr_y, prev_y) = if sign > 0 { (y, y + dy) } else { (y + dy, y) };
 
                     let curr_off = curr_y * stride + byte_offset;
                     let prev_off = prev_y * stride + byte_offset;
@@ -106,8 +102,12 @@ pub fn select_wheel_trusted_scroll(
         return None;
     }
 
-    if let Some((content_dy, content_confidence, content_direction_matches, content_min_confidence)) =
-        content_scroll
+    if let Some((
+        content_dy,
+        content_confidence,
+        content_direction_matches,
+        content_min_confidence,
+    )) = content_scroll
     {
         let content_dir = (content_dy as i32).signum();
         let directions_compatible = content_direction_matches

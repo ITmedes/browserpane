@@ -143,7 +143,11 @@ pub fn bbox_iou(a: (u16, u16, u16, u16), b: (u16, u16, u16, u16)) -> f32 {
     let a_area = (a_max_c - a_min_c + 1) as f32 * (a_max_r - a_min_r + 1) as f32;
     let b_area = (b_max_c - b_min_c + 1) as f32 * (b_max_r - b_min_r + 1) as f32;
     let union = a_area + b_area - inter;
-    if union <= 0.0 { 0.0 } else { inter / union }
+    if union <= 0.0 {
+        0.0
+    } else {
+        inter / union
+    }
 }
 
 /// Max-axis center displacement between two tile-space bounding boxes.

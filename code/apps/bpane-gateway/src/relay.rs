@@ -1,12 +1,8 @@
-use bpane_protocol::frame::{Frame, FRAME_HEADER_SIZE};
-use bytes::BytesMut;
+use bpane_protocol::frame::{Frame, FrameDecoder};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
-
-/// Maximum single frame payload size the relay will accept (16 MiB, matching protocol).
-const MAX_FRAME_PAYLOAD: usize = 16 * 1024 * 1024;
 
 /// Bidirectional relay between a WebTransport session and a host agent Unix socket.
 ///
@@ -63,7 +59,7 @@ impl Relay {
         tx: mpsc::Sender<Frame>,
     ) -> anyhow::Result<()> {
         let mut buf = vec![0u8; 64 * 1024];
-        let mut pending = BytesMut::new();
+        let mut decoder = FrameDecoder::new();
 
         loop {
             let n = reader.read(&mut buf).await?;
@@ -72,32 +68,16 @@ impl Relay {
                 return Ok(());
             }
 
-            pending.extend_from_slice(&buf[..n]);
+            decoder.push(&buf[..n])?;
 
             loop {
-                if pending.len() < FRAME_HEADER_SIZE {
-                    break;
-                }
-                // Pre-check: reject frames whose declared payload exceeds the limit
-                // before allocating. The length field is at bytes 1..5 (LE u32).
-                let declared_len =
-                    u32::from_le_bytes([pending[1], pending[2], pending[3], pending[4]]) as usize;
-                if declared_len > MAX_FRAME_PAYLOAD {
-                    error!("agent sent frame with payload {declared_len} bytes, exceeds limit");
-                    return Err(anyhow::anyhow!("oversized frame from agent"));
-                }
-                let total_size = FRAME_HEADER_SIZE + declared_len;
-                if pending.len() < total_size {
-                    break;
-                }
-                // Zero-copy: split off the frame bytes, freeze, then decode
-                let frame_bytes = pending.split_to(total_size).freeze();
-                match Frame::decode_bytes(frame_bytes) {
-                    Ok((frame, _consumed)) => {
+                match decoder.next_frame() {
+                    Ok(Some(frame)) => {
                         if tx.send(frame).await.is_err() {
                             return Ok(());
                         }
                     }
+                    Ok(None) => break,
                     Err(e) => {
                         error!("frame decode error from agent: {e}");
                         return Err(e.into());
@@ -138,21 +118,20 @@ mod tests {
         let _agent_handle = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut buf = vec![0u8; 64 * 1024];
-            let mut pending = Vec::new();
+            let mut decoder = FrameDecoder::new();
             loop {
                 let n = match stream.read(&mut buf).await {
                     Ok(0) => break,
                     Ok(n) => n,
                     Err(_) => break,
                 };
-                pending.extend_from_slice(&buf[..n]);
-                while pending.len() >= FRAME_HEADER_SIZE {
-                    match Frame::decode(&pending) {
-                        Ok((frame, consumed)) => {
+                decoder.push(&buf[..n]).unwrap();
+                loop {
+                    match decoder.next_frame() {
+                        Ok(Some(frame)) => {
                             stream.write_all(&frame.encode()).await.unwrap();
-                            pending.drain(..consumed);
                         }
-                        Err(bpane_protocol::FrameError::BufferTooShort { .. }) => break,
+                        Ok(None) => break,
                         Err(e) => panic!("decode error: {e}"),
                     }
                 }
@@ -235,24 +214,23 @@ mod tests {
         let _agent_handle = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut buf = vec![0u8; 4096];
-            let mut pending = Vec::new();
+            let mut decoder = FrameDecoder::new();
             loop {
                 let n = stream.read(&mut buf).await.unwrap();
                 if n == 0 {
                     break;
                 }
-                pending.extend_from_slice(&buf[..n]);
-                while pending.len() >= FRAME_HEADER_SIZE {
-                    match Frame::decode(&pending) {
-                        Ok((frame, consumed)) => {
+                decoder.push(&buf[..n]).unwrap();
+                loop {
+                    match decoder.next_frame() {
+                        Ok(Some(frame)) => {
                             // Echo back with modified payload
-                            let mut new_payload = BytesMut::from(&frame.payload[..]);
+                            let mut new_payload = bytes::BytesMut::from(&frame.payload[..]);
                             new_payload.put_u8(0xFF);
                             let response = Frame::new(frame.channel, new_payload.freeze());
                             stream.write_all(&response.encode()).await.unwrap();
-                            pending.drain(..consumed);
                         }
-                        Err(bpane_protocol::FrameError::BufferTooShort { .. }) => break,
+                        Ok(None) => break,
                         Err(e) => panic!("decode error: {e}"),
                     }
                 }
@@ -274,5 +252,34 @@ mod tests {
 
         drop(to_agent);
         drop(from_agent);
+    }
+
+    #[tokio::test]
+    async fn relay_reassembles_agent_frames_split_across_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock_path = dir.path().join("split.sock");
+        let sock_path_str = sock_path.to_str().unwrap().to_string();
+
+        let listener = UnixListener::bind(&sock_path).unwrap();
+        let response = Frame::new(ChannelId::Control, vec![0xAA, 0xBB, 0xCC]).encode();
+
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            stream.write_all(&response[..2]).await.unwrap();
+            stream.flush().await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            stream.write_all(&response[2..]).await.unwrap();
+            stream.flush().await.unwrap();
+        });
+
+        let relay = Relay::new(sock_path_str);
+        let (mut from_agent, _to_agent, _handle) = relay.connect().await.unwrap();
+
+        let frame = tokio::time::timeout(std::time::Duration::from_secs(2), from_agent.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(frame.channel, ChannelId::Control);
+        assert_eq!(&frame.payload[..], &[0xAA, 0xBB, 0xCC]);
     }
 }

@@ -55,15 +55,13 @@ fn scroll_residual_emit_marks_exposed_rows() {
         .flat_map(|r| (0..grid.cols).map(move |c| tiles::TileCoord::new(c, r)))
         .collect();
 
-    let down =
-        build_scroll_residual_emit_coords(&curr, &prev, stride, &grid, 0, 1, &emit_coords);
+    let down = build_scroll_residual_emit_coords(&curr, &prev, stride, &grid, 0, 1, &emit_coords);
     assert!(down.contains(&tiles::TileCoord::new(0, 1)));
     assert!(down.contains(&tiles::TileCoord::new(1, 1)));
     assert!(!down.contains(&tiles::TileCoord::new(0, 0)));
     assert!(!down.contains(&tiles::TileCoord::new(1, 0)));
 
-    let up =
-        build_scroll_residual_emit_coords(&curr, &prev, stride, &grid, 0, -1, &emit_coords);
+    let up = build_scroll_residual_emit_coords(&curr, &prev, stride, &grid, 0, -1, &emit_coords);
     assert!(up.contains(&tiles::TileCoord::new(0, 0)));
     assert!(up.contains(&tiles::TileCoord::new(1, 0)));
     assert!(!up.contains(&tiles::TileCoord::new(0, 1)));
@@ -303,7 +301,11 @@ fn detect_column_scroll_finds_downward_shift() {
     let result = detect_column_scroll(&curr, &prev, stride, width, height, 64);
     assert!(result.is_some(), "should detect scroll");
     let (detected_dy, confidence) = result.unwrap();
-    assert_eq!(detected_dy, -(dy as i32), "should detect downward shift of {dy}");
+    assert_eq!(
+        detected_dy,
+        -(dy as i32),
+        "should detect downward shift of {dy}"
+    );
     assert!(confidence > 0.7, "confidence {confidence} should be > 0.7");
 }
 
@@ -314,7 +316,10 @@ fn detect_column_scroll_returns_none_for_identical_frames() {
     let stride = width * 4;
     let frame = make_patterned_frame(width, height);
     let result = detect_column_scroll(&frame, &frame, stride, width, height, 32);
-    assert!(result.is_none(), "identical frames should not detect scroll");
+    assert!(
+        result.is_none(),
+        "identical frames should not detect scroll"
+    );
 }
 
 #[test]

@@ -19,8 +19,10 @@ impl super::TileCaptureThread {
         cdp_scroll_dy_px: Option<i16>,
         residual: ScrollResidualResult,
     ) -> ScrollEmitResult {
-        let emit_scroll_copy =
-            should_emit_scroll_copy(residual.scroll_residual_fallback_full, residual.scroll_saved_tiles_frame);
+        let emit_scroll_copy = should_emit_scroll_copy(
+            residual.scroll_residual_fallback_full,
+            residual.scroll_saved_tiles_frame,
+        );
         if let Some(ref dsf) = detected_scroll_frame {
             if emit_scroll_copy {
                 if dsf.row_shift != 0 {

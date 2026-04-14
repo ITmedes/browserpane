@@ -43,6 +43,7 @@ impl<M: InputBackend, K: InputBackend> InputBackend for CombinedInjector<M, K> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bpane_protocol::{Modifiers, MouseButton};
 
     #[test]
     fn test_input_backend_records_events() {
@@ -63,12 +64,12 @@ mod tests {
             .inject(&InputMessage::KeyEvent {
                 keycode: 30,
                 down: true,
-                modifiers: 0,
+                modifiers: Modifiers::empty(),
             })
             .unwrap();
         backend
             .inject(&InputMessage::MouseButton {
-                button: 0,
+                button: MouseButton::Left,
                 down: true,
                 x: 10,
                 y: 20,
@@ -83,7 +84,7 @@ mod tests {
         let msg = InputMessage::KeyEventEx {
             keycode: 16,
             down: true,
-            modifiers: 0,
+            modifiers: Modifiers::empty(),
             key_char: 0x61, // 'a'
         };
         backend.inject(&msg).unwrap();
@@ -101,7 +102,7 @@ mod tests {
         let key_ex = InputMessage::KeyEventEx {
             keycode: 16,
             down: true,
-            modifiers: 0,
+            modifiers: Modifiers::empty(),
             key_char: 0x61,
         };
         combined.inject(&key_ex).unwrap();
@@ -121,7 +122,7 @@ mod tests {
         let key = InputMessage::KeyEvent {
             keycode: 30,
             down: true,
-            modifiers: 0,
+            modifiers: Modifiers::empty(),
         };
         combined.inject(&key).unwrap();
 
@@ -144,14 +145,14 @@ mod tests {
             .inject(&InputMessage::KeyEvent {
                 keycode: 30,
                 down: true,
-                modifiers: 0,
+                modifiers: Modifiers::empty(),
             })
             .unwrap();
         combined
             .inject(&InputMessage::KeyEventEx {
                 keycode: 16,
                 down: true,
-                modifiers: 0,
+                modifiers: Modifiers::empty(),
                 key_char: 0x61,
             })
             .unwrap();
