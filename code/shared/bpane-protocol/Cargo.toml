@@ -3,6 +3,11 @@ name = "bpane-protocol"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Shared BrowserPane wire protocol types and frame codecs"
+repository = "https://github.com/ITmedes/browserpane"
+readme = "../../../README.md"
+keywords = ["browserpane", "protocol", "webtransport", "remote-browser"]
+categories = ["network-programming", "encoding"]
 
 [dependencies]
 bytes = { version = "1", default-features = false }
@@ -13,3 +18,4 @@ std = []
 
 [dev-dependencies]
 proptest = "1"
+serde_json = "1"

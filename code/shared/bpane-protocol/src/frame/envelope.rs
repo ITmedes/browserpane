@@ -57,6 +57,7 @@ impl FrameHeader {
 }
 
 impl Frame {
+    /// Create a frame from a channel and payload.
     pub fn new(channel: ChannelId, payload: impl Into<Bytes>) -> Self {
         Self {
             channel,
@@ -82,21 +83,39 @@ impl Frame {
         buf.freeze()
     }
 
-    /// Decode a frame from wire format bytes (copies payload from slice).
+    /// Decode a frame from wire format bytes, copying the payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] if the header is truncated, the channel is
+    /// unknown, the declared payload exceeds the protocol limit, or the
+    /// declared payload is not fully present in `buf`.
     pub fn decode(buf: &[u8]) -> Result<(Self, usize), FrameError> {
         let header = FrameHeader::parse(buf)?;
         let payload = Bytes::copy_from_slice(&buf[FRAME_HEADER_SIZE..header.total_size]);
         Ok((Frame::new(header.channel, payload), header.total_size))
     }
 
-    /// Decode a frame from a `Bytes` buffer with zero-copy payload slicing.
+    /// Decode a frame from a [`Bytes`] buffer with zero-copy payload slicing.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same errors as [`Self::decode`].
     pub fn decode_bytes(buf: Bytes) -> Result<(Self, usize), FrameError> {
         let header = FrameHeader::parse(&buf)?;
         let payload = buf.slice(FRAME_HEADER_SIZE..header.total_size);
         Ok((Frame::new(header.channel, payload), header.total_size))
     }
 
-    /// Try to decode multiple frames from a buffer.
+    /// Decode as many complete frames as possible from a buffer.
+    ///
+    /// Incomplete trailing data is left unconsumed and reported via the
+    /// returned byte count.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] for malformed complete frames. Incomplete trailing
+    /// bytes do not produce an error.
     pub fn decode_all(buf: &[u8]) -> Result<(Vec<Frame>, usize), FrameError> {
         let mut frames = Vec::new();
         let mut offset = 0;

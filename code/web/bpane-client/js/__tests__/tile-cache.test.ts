@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { parseFrames } from '../protocol.js';
 import { TileCache, parseTileMessage, CH_TILES } from '../tile-cache.js';
 import type { TileCommand, TileGridConfig } from '../tile-cache.js';
+import { wireFixture } from './wire-fixtures.js';
 
 // ── Helper: build a wire-format tile message ────────────────────────
 
@@ -513,6 +515,46 @@ describe('parseTileMessage', () => {
     if (msg!.type === 'cache-hit') {
       expect(msg!.hash).toBe(maxHash);
     }
+  });
+
+  it('parses the shared tile fixtures', () => {
+    const [gridFrames] = parseFrames(wireFixture('tile_grid_config'));
+    const grid = parseTileMessage(gridFrames[0].payload);
+    expect(grid).toEqual({
+      type: 'grid-config',
+      config: {
+        tileSize: 256,
+        cols: 12,
+        rows: 8,
+        screenW: 1920,
+        screenH: 1080,
+      },
+    });
+
+    const [statsFrames] = parseFrames(wireFixture('tile_scroll_stats'));
+    const stats = parseTileMessage(statsFrames[0].payload);
+    expect(stats).toEqual({
+      type: 'scroll-stats',
+      scrollBatchesTotal: 11,
+      scrollFullFallbacksTotal: 2,
+      scrollPotentialTilesTotal: 1000,
+      scrollSavedTilesTotal: 730,
+    });
+
+    const [zstdFrames] = parseFrames(wireFixture('tile_zstd'));
+    const zstd = parseTileMessage(zstdFrames[0].payload);
+    expect(zstd).toEqual({
+      type: 'zstd',
+      col: 2,
+      row: 5,
+      hash: 0x1122334455667788n,
+      data: new Uint8Array([1, 2, 3, 4, 5]),
+    });
+  });
+
+  it('returns null for the shared unknown tile tag fixture', () => {
+    const [frames] = parseFrames(wireFixture('invalid_tile_unknown_tag'));
+    expect(parseTileMessage(frames[0].payload)).toBeNull();
   });
 });
 

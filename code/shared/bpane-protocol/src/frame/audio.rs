@@ -9,6 +9,7 @@ use super::{
 };
 
 impl AudioFrame {
+    /// Encode an audio frame payload.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = Writer::with_capacity(16 + self.data.len());
         w.write_u32(self.seq);
@@ -17,6 +18,12 @@ impl AudioFrame {
         w.finish()
     }
 
+    /// Decode an audio frame payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] if the header is truncated, the declared payload
+    /// is incomplete, or trailing bytes remain.
     pub fn decode(buf: &[u8]) -> Result<Self, FrameError> {
         let mut r = Reader::new(buf);
         let frame = Self {
@@ -27,10 +34,12 @@ impl AudioFrame {
         r.finish(frame)
     }
 
+    /// Wrap this payload in a frame on the `AudioOut` channel.
     pub fn to_frame_out(&self) -> Frame {
         Frame::new(ChannelId::AudioOut, self.encode())
     }
 
+    /// Wrap this payload in a frame on the `AudioIn` channel.
     pub fn to_frame_in(&self) -> Frame {
         Frame::new(ChannelId::AudioIn, self.encode())
     }

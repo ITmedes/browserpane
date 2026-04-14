@@ -27,9 +27,14 @@ Passing now:
 1. Done: Restore library quality gates.
    - `FileMessage` no longer fails strict Clippy due to a large inline header variant.
    - Wire format is unchanged.
-2. Next: Add crate docs and compatibility policy.
-3. Next: Add exact wire fixtures and cross-language protocol tests.
-4. Later: Centralize incremental framing.
+2. Done: Add crate docs and compatibility policy.
+   - crate-level rustdoc now documents feature flags, channel model, and wire/API compatibility expectations
+   - public-facing crate metadata now exists in `Cargo.toml`
+3. Done: Add exact wire fixtures and cross-language protocol tests.
+   - shared fixture bytes now live in `tests/fixtures/wire-fixtures.json`
+   - Rust exact-byte tests validate representative messages plus malformed cases
+   - browser-client tests validate the same fixture bytes for frame parsing, file transfer, tiles, input, clipboard, and video NAL handling
+4. Next: Centralize incremental framing.
 5. Later: Broader type-safety and API ergonomics cleanup.
 
 ## Decision Gate

@@ -21,6 +21,15 @@ pub enum Message {
 }
 
 impl Message {
+    /// Decode a frame payload according to its channel.
+    ///
+    /// Typed channels are parsed into their corresponding message enums. Raw
+    /// media channels are returned as payload bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] if a typed payload is malformed for the frame's
+    /// channel.
     pub fn from_frame(frame: &Frame) -> Result<Self, FrameError> {
         match frame.channel {
             ChannelId::Control => Ok(Self::Control(ControlMessage::decode(&frame.payload)?)),
