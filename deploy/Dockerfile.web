@@ -3,7 +3,7 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY code/web/bpane-client/package.json code/web/bpane-client/package-lock.json* ./
-RUN npm ci --ignore-scripts
+RUN npm ci
 COPY code/web/bpane-client/ ./
 RUN npm run build
 
