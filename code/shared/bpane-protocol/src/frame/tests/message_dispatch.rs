@@ -17,7 +17,7 @@ fn message_dispatch_all_typed_channels() {
     let input_key_ex = InputMessage::KeyEventEx {
         keycode: 16,
         down: true,
-        modifiers: 0,
+        modifiers: Modifiers::empty(),
         key_char: 0x61,
     };
     let layout_info = ControlMessage::KeyboardLayoutInfo {

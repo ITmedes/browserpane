@@ -391,13 +391,13 @@ fn unicode_to_keysym(codepoint: u32) -> u32 {
 /// (Ctrl+C, Meta+V, etc.) where the character produced is a control code.
 /// When AltGr is active, always use character injection since AltGr produces
 /// printable characters (e.g., @, €, {, }) that need keysym lookup.
-pub(crate) fn should_use_physical(modifiers: u8, key_char: u32) -> bool {
-    let has_altgr = modifiers & Modifiers::ALTGR != 0;
+pub(crate) fn should_use_physical(modifiers: Modifiers, key_char: u32) -> bool {
+    let has_altgr = modifiers.contains(Modifiers::ALTGR);
     if has_altgr {
         return false;
     }
-    let has_ctrl = modifiers & Modifiers::CTRL != 0;
-    let has_meta = modifiers & Modifiers::META != 0;
+    let has_ctrl = modifiers.contains(Modifiers::CTRL);
+    let has_meta = modifiers.contains(Modifiers::META);
     // Control characters (< 0x20) or modifier combos with Ctrl/Meta
     key_char < 0x20 || has_ctrl || has_meta
 }
@@ -495,7 +495,7 @@ mod tests {
     #[test]
     fn should_use_physical_regular_chars() {
         // Normal printable character, no modifier
-        assert!(!should_use_physical(0, b'a' as u32));
+        assert!(!should_use_physical(Modifiers::empty(), b'a' as u32));
         // Shift is fine for character injection
         assert!(!should_use_physical(Modifiers::SHIFT, b'A' as u32));
         // Alt is fine (AltGr)
@@ -528,10 +528,10 @@ mod tests {
     #[test]
     fn should_use_physical_german_special_chars() {
         // ö, ä, ü: direct key presses with no modifiers — character injection
-        assert!(!should_use_physical(0, 0x00F6)); // ö
-        assert!(!should_use_physical(0, 0x00E4)); // ä
-        assert!(!should_use_physical(0, 0x00FC)); // ü
-                                                  // ° with Shift — still character injection
+        assert!(!should_use_physical(Modifiers::empty(), 0x00F6)); // ö
+        assert!(!should_use_physical(Modifiers::empty(), 0x00E4)); // ä
+        assert!(!should_use_physical(Modifiers::empty(), 0x00FC)); // ü
+                                                                   // ° with Shift — still character injection
         assert!(!should_use_physical(Modifiers::SHIFT, 0x00B0)); // °
                                                                  // " with Shift — character injection (Shift+2 on DE = '"')
         assert!(!should_use_physical(Modifiers::SHIFT, b'"' as u32));

@@ -1,6 +1,9 @@
 use alloc::vec::Vec;
 
-use crate::{channel::ChannelId, types::InputMessage};
+use crate::{
+    channel::ChannelId,
+    types::{InputMessage, Modifiers, MouseButton},
+};
 
 use super::{
     envelope::Frame,
@@ -26,7 +29,7 @@ impl InputMessage {
             }
             Self::MouseButton { button, down, x, y } => {
                 w.write_u8(MOUSE_BUTTON);
-                w.write_u8(*button);
+                w.write_u8(button.as_u8());
                 w.write_bool(*down);
                 w.write_u16(*x);
                 w.write_u16(*y);
@@ -44,7 +47,7 @@ impl InputMessage {
                 w.write_u8(KEY_EVENT);
                 w.write_u32(*keycode);
                 w.write_bool(*down);
-                w.write_u8(*modifiers);
+                w.write_u8(modifiers.bits());
             }
             Self::KeyEventEx {
                 keycode,
@@ -55,7 +58,7 @@ impl InputMessage {
                 w.write_u8(KEY_EVENT_EX);
                 w.write_u32(*keycode);
                 w.write_bool(*down);
-                w.write_u8(*modifiers);
+                w.write_u8(modifiers.bits());
                 w.write_u32(*key_char);
             }
         }
@@ -75,7 +78,12 @@ impl InputMessage {
                 y: r.read_u16()?,
             }),
             MOUSE_BUTTON => Ok(Self::MouseButton {
-                button: r.read_u8()?,
+                button: MouseButton::try_from(r.read_u8()?).map_err(|value| {
+                    FrameError::InvalidFieldValue {
+                        field: "mouse button",
+                        value: u64::from(value),
+                    }
+                })?,
                 down: r.read_bool()?,
                 x: r.read_u16()?,
                 y: r.read_u16()?,
@@ -87,12 +95,12 @@ impl InputMessage {
             KEY_EVENT => Ok(Self::KeyEvent {
                 keycode: r.read_u32()?,
                 down: r.read_bool()?,
-                modifiers: r.read_u8()?,
+                modifiers: Modifiers::from(r.read_u8()?),
             }),
             KEY_EVENT_EX => Ok(Self::KeyEventEx {
                 keycode: r.read_u32()?,
                 down: r.read_bool()?,
-                modifiers: r.read_u8()?,
+                modifiers: Modifiers::from(r.read_u8()?),
                 key_char: r.read_u32()?,
             }),
             _ => Err(FrameError::UnknownMessageType {

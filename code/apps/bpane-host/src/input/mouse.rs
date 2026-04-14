@@ -56,7 +56,7 @@ impl InputBackend for MouseInjector {
                         0,
                     )?
                     .check()?;
-                let detail = (*button as u8) + 1; // DOM 0/1/2 -> X11 1/2/3
+                let detail = button.as_u8() + 1; // DOM 0/1/2 -> X11 1/2/3
                 let evtype = if *down {
                     xproto::BUTTON_PRESS_EVENT
                 } else {

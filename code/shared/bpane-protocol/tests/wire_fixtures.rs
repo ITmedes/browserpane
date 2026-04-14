@@ -4,7 +4,7 @@ use bpane_protocol::{
     channel::ChannelId,
     frame::{Frame, FrameError, Message},
     AudioFrame, ClipboardMessage, ControlMessage, CursorMessage, FileMessage, InputMessage,
-    SessionFlags, TileMessage, VideoDatagram, VideoTileInfo,
+    Modifiers, SessionFlags, TileMessage, VideoDatagram, VideoTileInfo,
 };
 
 fn fixtures() -> &'static BTreeMap<String, String> {
@@ -52,7 +52,7 @@ fn valid_wire_fixtures_match_exact_rust_encoders() {
         InputMessage::KeyEventEx {
             keycode: 30,
             down: true,
-            modifiers: 0,
+            modifiers: Modifiers::empty(),
             key_char: u32::from(b'a'),
         }
         .to_frame()
@@ -196,7 +196,7 @@ fn valid_wire_fixtures_decode_to_expected_messages() {
         Message::Input(InputMessage::KeyEventEx {
             keycode: 30,
             down: true,
-            modifiers: 0,
+            modifiers: Modifiers::empty(),
             key_char: u32::from(b'a'),
         })
     );
@@ -232,7 +232,8 @@ fn invalid_wire_fixtures_reject_as_expected() {
 
     let (file, _) = Frame::decode(&wire("invalid_file_chunk_truncated")).expect("file frame");
     assert_eq!(
-        FileMessage::decode(&file.payload).expect_err("truncated file chunk"),
+        FileMessage::decode_on_channel(&file.payload, file.channel)
+            .expect_err("truncated file chunk"),
         FrameError::BufferTooShort {
             expected: 17,
             available: 15,

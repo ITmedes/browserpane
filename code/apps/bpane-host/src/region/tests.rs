@@ -1,5 +1,6 @@
 use super::*;
 use crate::capture::ffmpeg::CaptureRegion;
+use bpane_protocol::Modifiers;
 
 #[test]
 fn css_pixels_scale_to_framebuffer_pixels() {
@@ -30,17 +31,17 @@ fn expand_tile_bounds_adds_margin_and_clamps() {
 #[test]
 fn cdp_insert_text_payload_accepts_non_ascii_printable_chars() {
     // German umlaut ä (U+00E4) with no modifiers → Some
-    assert!(cdp_insert_text_payload(0, 0x00E4).is_some());
+    assert!(cdp_insert_text_payload(Modifiers::empty(), 0x00E4).is_some());
     // Japanese hiragana あ (U+3042)
-    assert!(cdp_insert_text_payload(0, 0x3042).is_some());
+    assert!(cdp_insert_text_payload(Modifiers::empty(), 0x3042).is_some());
 }
 
 #[test]
 fn cdp_insert_text_payload_rejects_ascii_and_shortcuts() {
     // ASCII 'a' → None (handled by keyboard)
-    assert!(cdp_insert_text_payload(0, 0x61).is_none());
+    assert!(cdp_insert_text_payload(Modifiers::empty(), 0x61).is_none());
     // Control char → None
-    assert!(cdp_insert_text_payload(0, 0x0A).is_none());
+    assert!(cdp_insert_text_payload(Modifiers::empty(), 0x0A).is_none());
 }
 
 #[test]

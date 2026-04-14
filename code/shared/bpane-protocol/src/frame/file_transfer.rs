@@ -54,11 +54,18 @@ impl FileMessage {
     /// Returns [`FrameError`] if the payload is truncated, has an unknown tag,
     /// or contains trailing bytes.
     pub fn decode(buf: &[u8]) -> Result<Self, FrameError> {
-        Self::decode_for_channel(buf, ChannelId::FileDown)
+        Self::decode_on_channel(buf, ChannelId::FileDown)
     }
 
     /// Decode a file-transfer payload for a specific file channel.
-    pub(crate) fn decode_for_channel(buf: &[u8], channel: ChannelId) -> Result<Self, FrameError> {
+    pub fn decode_on_channel(buf: &[u8], channel: ChannelId) -> Result<Self, FrameError> {
+        if !matches!(channel, ChannelId::FileUp | ChannelId::FileDown) {
+            return Err(FrameError::InvalidFieldValue {
+                field: "file channel",
+                value: u64::from(channel.as_u8()),
+            });
+        }
+
         decode_tagged(buf, |tag, r| match tag {
             FILE_HEADER => Ok(Self::FileHeader {
                 id: r.read_u32()?,
