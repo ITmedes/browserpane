@@ -35,23 +35,27 @@ impl super::TileCaptureThread {
         } else {
             None
         };
-        let committed = self
-            .region_committer
-            .commit(next_capture_region, region_reconfig_stable_frames);
-
-        if desired_h264 && committed != self.region_committer.active {
-            if self.region_committer.should_reconfig(
-                committed,
-                now,
-                region_reconfig_min_interval_ms,
-            ) {
+        if desired_h264 {
+            let committed = self
+                .region_committer
+                .commit(next_capture_region, region_reconfig_stable_frames);
+            if committed != self.region_committer.active
+                && self.region_committer.should_reconfig(
+                    committed,
+                    now,
+                    region_reconfig_min_interval_ms,
+                )
+            {
                 self.region_committer.apply_reconfig(committed, now);
                 let _ = self
                     .cmd_tx
                     .send(crate::capture::ffmpeg::PipelineCmd::SetRegion(committed));
             }
-        } else if !desired_h264 {
-            self.region_committer.active = committed;
+        } else if self.region_committer.active.is_some() {
+            self.region_committer.clear(now);
+            let _ = self
+                .cmd_tx
+                .send(crate::capture::ffmpeg::PipelineCmd::SetRegion(None));
         }
 
         // Update shared video tile info

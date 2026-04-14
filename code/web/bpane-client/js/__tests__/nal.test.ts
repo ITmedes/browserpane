@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { NalReassembler, parseTileInfo, getNalType } from '../nal.js';
+import { wireFixture } from './wire-fixtures.js';
 
 /**
  * Build a VideoDatagram wire payload.
@@ -170,6 +171,22 @@ describe('NalReassembler', () => {
     const r1 = nal.push(n1f1);
     expect(r1).not.toBeNull();
     expect(r1!.data).toEqual(new Uint8Array([0xAA, 0xBB]));
+  });
+
+  it('reassembles the shared video fixture with tile metadata intact', () => {
+    const nal = new NalReassembler();
+    const result = nal.push(wireFixture('video_single_fragment_tile'));
+    expect(result).not.toBeNull();
+    expect(result!.data).toEqual(new Uint8Array([0x00, 0x00, 0x01, 0x65, 0xAA, 0xBB]));
+    expect(result!.isKeyframe).toBe(true);
+    expect(result!.tileInfo).toEqual({
+      tileX: 100,
+      tileY: 200,
+      tileW: 320,
+      tileH: 180,
+      screenW: 1920,
+      screenH: 1080,
+    });
   });
 });
 

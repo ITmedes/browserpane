@@ -6,6 +6,7 @@ import {
   CH_INPUT, CH_CURSOR, CH_CLIPBOARD, CH_FILE_UP, CH_FILE_DOWN, CH_CONTROL,
   AUDIO_FRAME_HEADER_SIZE,
 } from '../protocol.js';
+import { wireFixture } from './wire-fixtures.js';
 
 describe('protocol constants', () => {
   it('has correct channel IDs', () => {
@@ -198,5 +199,19 @@ describe('parseFrames', () => {
     expect(frames.length).toBe(1);
     expect(frames[0].payload.length).toBe(len);
     expect(remaining.length).toBe(0);
+  });
+
+  it('parses the shared control fixture byte-for-byte', () => {
+    const [frames, remaining] = parseFrames(wireFixture('control_session_ready'));
+    expect(frames).toHaveLength(1);
+    expect(frames[0].channelId).toBe(CH_CONTROL);
+    expect(frames[0].payload).toEqual(new Uint8Array([0x03, 0x01, 0x35]));
+    expect(remaining).toEqual(new Uint8Array(0));
+  });
+
+  it('rejects the shared oversized frame fixture', () => {
+    expect(() => parseFrames(wireFixture('invalid_frame_oversized_length'))).toThrow(
+      'frame payload too large',
+    );
   });
 });

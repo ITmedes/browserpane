@@ -1,5 +1,6 @@
 use super::*;
 use crate::capture::ffmpeg::CaptureRegion;
+use bpane_protocol::Modifiers;
 
 #[test]
 fn css_pixels_scale_to_framebuffer_pixels() {
@@ -30,17 +31,17 @@ fn expand_tile_bounds_adds_margin_and_clamps() {
 #[test]
 fn cdp_insert_text_payload_accepts_non_ascii_printable_chars() {
     // German umlaut ä (U+00E4) with no modifiers → Some
-    assert!(cdp_insert_text_payload(0, 0x00E4).is_some());
+    assert!(cdp_insert_text_payload(Modifiers::empty(), 0x00E4).is_some());
     // Japanese hiragana あ (U+3042)
-    assert!(cdp_insert_text_payload(0, 0x3042).is_some());
+    assert!(cdp_insert_text_payload(Modifiers::empty(), 0x3042).is_some());
 }
 
 #[test]
 fn cdp_insert_text_payload_rejects_ascii_and_shortcuts() {
     // ASCII 'a' → None (handled by keyboard)
-    assert!(cdp_insert_text_payload(0, 0x61).is_none());
+    assert!(cdp_insert_text_payload(Modifiers::empty(), 0x61).is_none());
     // Control char → None
-    assert!(cdp_insert_text_payload(0, 0x0A).is_none());
+    assert!(cdp_insert_text_payload(Modifiers::empty(), 0x0A).is_none());
 }
 
 #[test]
@@ -104,6 +105,103 @@ fn capture_region_tile_bounds_maps_correctly() {
 }
 
 #[test]
+fn tile_bounds_capture_region_maps_back_to_pixel_rect() {
+    let region = tile_bounds_capture_region((1, 2, 3, 2), 64, 1280, 720).unwrap();
+    assert_eq!(
+        region,
+        CaptureRegion {
+            x: 64,
+            y: 128,
+            w: 192,
+            h: 64,
+        }
+    );
+}
+
+#[test]
+fn align_capture_region_to_tiles_expands_to_cover_overlapping_tiles() {
+    let aligned = align_capture_region_to_tiles(
+        CaptureRegion {
+            x: 70,
+            y: 130,
+            w: 120,
+            h: 80,
+        },
+        64,
+        20,
+        20,
+        1280,
+        720,
+    )
+    .unwrap();
+    assert_eq!(
+        aligned,
+        CaptureRegion {
+            x: 64,
+            y: 128,
+            w: 128,
+            h: 128,
+        }
+    );
+}
+
+#[test]
+fn align_capture_region_to_tiles_with_margin_expands_tile_cluster() {
+    let aligned = align_capture_region_to_tiles_with_margin(
+        CaptureRegion {
+            x: 70,
+            y: 130,
+            w: 120,
+            h: 80,
+        },
+        64,
+        20,
+        20,
+        1280,
+        720,
+        1,
+    )
+    .unwrap();
+    assert_eq!(
+        aligned,
+        CaptureRegion {
+            x: 0,
+            y: 64,
+            w: 256,
+            h: 256,
+        }
+    );
+}
+
+#[test]
+fn align_capture_region_to_tiles_with_margin_clamps_to_screen_edges() {
+    let aligned = align_capture_region_to_tiles_with_margin(
+        CaptureRegion {
+            x: 1180,
+            y: 640,
+            w: 80,
+            h: 70,
+        },
+        64,
+        20,
+        12,
+        1280,
+        720,
+        1,
+    )
+    .unwrap();
+    assert_eq!(
+        aligned,
+        CaptureRegion {
+            x: 1088,
+            y: 576,
+            w: 192,
+            h: 144,
+        }
+    );
+}
+
+#[test]
 fn hash_tile_region_deterministic() {
     let frame = vec![42u8; 64 * 64 * 4];
     let stride = 64 * 4;
@@ -125,11 +223,19 @@ fn hash_tile_region_differs_for_different_content() {
 #[test]
 fn region_meets_video_minimum_checks_all_constraints() {
     // Too narrow
-    assert!(!region_meets_video_minimum(100, 200, 1920, 1080, 320, 180, 0.08));
+    assert!(!region_meets_video_minimum(
+        100, 200, 1920, 1080, 320, 180, 0.08
+    ));
     // Too short
-    assert!(!region_meets_video_minimum(400, 100, 1920, 1080, 320, 180, 0.08));
+    assert!(!region_meets_video_minimum(
+        400, 100, 1920, 1080, 320, 180, 0.08
+    ));
     // Area too small
-    assert!(!region_meets_video_minimum(320, 180, 1920, 1080, 320, 180, 0.50));
+    assert!(!region_meets_video_minimum(
+        320, 180, 1920, 1080, 320, 180, 0.50
+    ));
     // Meets all criteria
-    assert!(region_meets_video_minimum(960, 540, 1920, 1080, 320, 180, 0.08));
+    assert!(region_meets_video_minimum(
+        960, 540, 1920, 1080, 320, 180, 0.08
+    ));
 }

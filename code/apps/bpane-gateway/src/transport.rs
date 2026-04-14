@@ -10,7 +10,7 @@ use wtransport::{Endpoint, Identity, ServerConfig};
 const MAX_CONCURRENT_SESSIONS: u64 = 100;
 
 use bpane_protocol::channel::ChannelId;
-use bpane_protocol::frame::Frame;
+use bpane_protocol::frame::{Frame, FrameDecoder};
 use bpane_protocol::{ControlMessage, SessionFlags};
 
 use crate::auth::TokenValidator;
@@ -154,11 +154,12 @@ fn adapt_frame_for_client(frame: &Frame, is_owner: bool) -> Frame {
     }
 
     let mut payload = frame.payload.to_vec();
-    payload[2] &= !(SessionFlags::CLIPBOARD
+    let restricted = SessionFlags::CLIPBOARD
         | SessionFlags::FILE_TRANSFER
         | SessionFlags::MICROPHONE
         | SessionFlags::CAMERA
-        | SessionFlags::KEYBOARD_LAYOUT);
+        | SessionFlags::KEYBOARD_LAYOUT;
+    payload[2] &= !restricted.bits();
     Frame::new(frame.channel, payload)
 }
 
@@ -357,8 +358,7 @@ async fn handle_session(
     let send_stream_resize = send_stream.clone();
     let browser_to_agent = tokio::spawn(async move {
         let mut buf = vec![0u8; 64 * 1024];
-        let mut pending = Vec::new();
-        const MAX_PENDING: usize = 4 * 1024 * 1024; // 4 MiB
+        let mut decoder = FrameDecoder::new();
         loop {
             if !session_b2a.is_active() {
                 break;
@@ -367,17 +367,13 @@ async fn handle_session(
                 Ok(Some(n)) => {
                     session_b2a.update_heartbeat().await;
 
-                    pending.extend_from_slice(&buf[..n]);
-                    if pending.len() > MAX_PENDING {
-                        error!("browser pending buffer exceeds {MAX_PENDING} bytes, disconnecting");
+                    if let Err(e) = decoder.push(&buf[..n]) {
+                        error!("frame decode error from browser: {e}");
                         break;
                     }
                     loop {
-                        if pending.len() < bpane_protocol::frame::FRAME_HEADER_SIZE {
-                            break;
-                        }
-                        match Frame::decode(&pending) {
-                            Ok((frame, consumed)) => {
+                        match decoder.next_frame() {
+                            Ok(Some(frame)) => {
                                 let is_owner = hub_for_resize.is_browser_owner(client_id);
                                 // Intercept ResolutionRequest from non-owner clients
                                 if !is_owner
@@ -410,7 +406,6 @@ async fn handle_session(
                                             }
                                         }
                                     }
-                                    pending.drain(..consumed);
                                     continue;
                                 }
 
@@ -428,12 +423,10 @@ async fn handle_session(
                                     let _ = hub_for_resize
                                         .request_resize(client_id, req_w, req_h)
                                         .await;
-                                    pending.drain(..consumed);
                                     continue;
                                 }
 
                                 if !is_owner && !viewer_can_forward_frame(&frame) {
-                                    pending.drain(..consumed);
                                     continue;
                                 }
 
@@ -441,9 +434,8 @@ async fn handle_session(
                                 if to_host.send(frame).await.is_err() {
                                     return;
                                 }
-                                pending.drain(..consumed);
                             }
-                            Err(bpane_protocol::FrameError::BufferTooShort { .. }) => break,
+                            Ok(None) => break,
                             Err(e) => {
                                 error!("frame decode error from browser: {e}");
                                 return;
@@ -701,33 +693,31 @@ mod tests {
     fn adapt_frame_for_client_strips_viewer_only_capabilities() {
         let frame = ControlMessage::SessionReady {
             version: 1,
-            flags: SessionFlags::new(
-                SessionFlags::AUDIO
-                    | SessionFlags::CLIPBOARD
-                    | SessionFlags::FILE_TRANSFER
-                    | SessionFlags::MICROPHONE
-                    | SessionFlags::CAMERA
-                    | SessionFlags::KEYBOARD_LAYOUT,
-            ),
+            flags: SessionFlags::AUDIO
+                | SessionFlags::CLIPBOARD
+                | SessionFlags::FILE_TRANSFER
+                | SessionFlags::MICROPHONE
+                | SessionFlags::CAMERA
+                | SessionFlags::KEYBOARD_LAYOUT,
         }
         .to_frame();
 
         let adapted = adapt_frame_for_client(&frame, false);
 
         assert_eq!(adapted.payload[0], 0x03);
-        assert_ne!(adapted.payload[2] & SessionFlags::AUDIO, 0);
-        assert_eq!(adapted.payload[2] & SessionFlags::CLIPBOARD, 0);
-        assert_eq!(adapted.payload[2] & SessionFlags::FILE_TRANSFER, 0);
-        assert_eq!(adapted.payload[2] & SessionFlags::MICROPHONE, 0);
-        assert_eq!(adapted.payload[2] & SessionFlags::CAMERA, 0);
-        assert_eq!(adapted.payload[2] & SessionFlags::KEYBOARD_LAYOUT, 0);
+        assert_ne!(adapted.payload[2] & SessionFlags::AUDIO.bits(), 0);
+        assert_eq!(adapted.payload[2] & SessionFlags::CLIPBOARD.bits(), 0);
+        assert_eq!(adapted.payload[2] & SessionFlags::FILE_TRANSFER.bits(), 0);
+        assert_eq!(adapted.payload[2] & SessionFlags::MICROPHONE.bits(), 0);
+        assert_eq!(adapted.payload[2] & SessionFlags::CAMERA.bits(), 0);
+        assert_eq!(adapted.payload[2] & SessionFlags::KEYBOARD_LAYOUT.bits(), 0);
     }
 
     #[test]
     fn adapt_frame_for_client_leaves_owner_flags_unchanged() {
         let frame = ControlMessage::SessionReady {
             version: 1,
-            flags: SessionFlags::new(SessionFlags::FILE_TRANSFER | SessionFlags::CAMERA),
+            flags: SessionFlags::FILE_TRANSFER | SessionFlags::CAMERA,
         }
         .to_frame();
 

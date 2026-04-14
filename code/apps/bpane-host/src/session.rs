@@ -192,8 +192,6 @@ pub async fn run_ffmpeg_session(
 
     // Event channels to tile thread
     let (scroll_tx, scroll_rx) = std::sync::mpsc::channel::<(i16, i16)>();
-    let (video_click_tx, video_click_rx) =
-        std::sync::mpsc::channel::<(u16, u16, std::time::Instant)>();
     let (text_input_tx, text_input_rx) = std::sync::mpsc::channel::<std::time::Instant>();
     let (cache_miss_tx, cache_miss_rx) = std::sync::mpsc::channel::<(u32, u16, u16, u64)>();
 
@@ -219,7 +217,6 @@ pub async fn run_ffmpeg_session(
             browser_video_hint_for_tiles,
             input_activity_for_tiles,
             scroll_rx,
-            video_click_rx,
             text_input_rx,
             cache_miss_rx,
         ) {
@@ -248,7 +245,6 @@ pub async fn run_ffmpeg_session(
         &browser_video_hint_task,
         chromium_wheel_step_px,
         &scroll_tx,
-        &video_click_tx,
         &text_input_tx,
         &cache_miss_tx,
     )

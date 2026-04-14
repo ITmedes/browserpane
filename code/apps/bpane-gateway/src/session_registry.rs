@@ -188,7 +188,7 @@ mod tests {
             let (mut stream, _) = listener.accept().await.unwrap();
             let ready = ControlMessage::SessionReady {
                 version: 1,
-                flags: bpane_protocol::SessionFlags::new(0),
+                flags: bpane_protocol::SessionFlags::empty(),
             };
             stream.write_all(&ready.to_frame().encode()).await.unwrap();
             // Keep connection alive

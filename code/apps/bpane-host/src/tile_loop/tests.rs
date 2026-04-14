@@ -1,4 +1,6 @@
 use super::frame_types::*;
+use crate::capture::ffmpeg::CaptureRegion;
+use crate::cdp_video::{HintRegionKind, PageHintState};
 use crate::tiles;
 
 // ── DetectedScrollFrame ─────────────────────────────────────────────
@@ -81,6 +83,53 @@ fn h264_update_struct_accessible() {
         tiles_cover_screen: true,
     };
     assert!(update.tiles_cover_screen);
+}
+
+// ── should_force_refresh_for_video_hint_drop ───────────────────────
+
+#[test]
+fn force_refresh_when_active_video_hint_disappears() {
+    let hint = PageHintState {
+        visible: true,
+        focused: true,
+        region_kind: HintRegionKind::Video,
+        video_region: None,
+        ..PageHintState::default()
+    };
+    assert!(super::run::should_force_refresh_for_video_hint_drop(
+        Some(CaptureRegion {
+            x: 0,
+            y: 0,
+            w: 640,
+            h: 360,
+        }),
+        &hint,
+    ));
+}
+
+#[test]
+fn no_force_refresh_while_video_hint_still_present() {
+    let hint = PageHintState {
+        visible: true,
+        focused: true,
+        region_kind: HintRegionKind::Video,
+        video_region: Some(CaptureRegion {
+            x: 0,
+            y: 0,
+            w: 640,
+            h: 360,
+        }),
+        ..PageHintState::default()
+    };
+    assert!(!super::run::should_force_refresh_for_video_hint_drop(
+        Some(CaptureRegion {
+            x: 0,
+            y: 0,
+            w: 640,
+            h: 360,
+        }),
+        &hint,
+    ));
 }
 
 // ── arbitrate_scroll_trust ──────────────────────────────────────────

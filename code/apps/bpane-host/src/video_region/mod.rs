@@ -9,7 +9,6 @@ mod tests;
 use std::time::Instant;
 
 use crate::capture::ffmpeg::CaptureRegion;
-use crate::region::point_in_capture_region;
 
 // ── Editable hint state ─────────────────────────────────────────────
 
@@ -80,61 +79,6 @@ impl EditableHintState {
     }
 }
 
-// ── Click-armed video state ─────────────────────────────────────────
-
-/// Tracks click-armed video detection state. A left-click inside a CDP
-/// video region hint "arms" video classification for a short window.
-pub struct ClickArmedState {
-    pub latched: bool,
-    absent_streak: u8,
-}
-
-impl ClickArmedState {
-    pub fn new() -> Self {
-        Self {
-            latched: false,
-            absent_streak: 0,
-        }
-    }
-
-    /// Update the click-armed state for this frame.
-    /// Returns whether video is currently click-armed.
-    pub fn update(
-        &mut self,
-        candidate: Option<CaptureRegion>,
-        last_left_click: Option<(u16, u16, Instant)>,
-        now: Instant,
-        click_arm_ms: u64,
-        reset_frames: u8,
-    ) -> bool {
-        let click_matches = candidate
-            .zip(last_left_click)
-            .map(|(region, (x, y, ts))| {
-                now.duration_since(ts) <= std::time::Duration::from_millis(click_arm_ms)
-                    && point_in_capture_region(x, y, region)
-            })
-            .unwrap_or(false);
-
-        if click_matches {
-            self.latched = true;
-        }
-        if candidate.is_some() {
-            self.absent_streak = 0;
-        } else {
-            self.absent_streak = self.absent_streak.saturating_add(1);
-            if self.absent_streak >= reset_frames {
-                self.latched = false;
-            }
-        }
-        self.latched
-    }
-
-    pub fn reset(&mut self) {
-        self.latched = false;
-        self.absent_streak = 0;
-    }
-}
-
 // ── Region commit / jitter filter ───────────────────────────────────
 
 /// Manages the FFmpeg capture region with jitter filtering and
@@ -201,6 +145,13 @@ impl RegionCommitter {
     /// Apply a reconfig — update active region and timestamp.
     pub fn apply_reconfig(&mut self, region: Option<CaptureRegion>, now: Instant) {
         self.active = region;
+        self.last_reconfig_at = now;
+    }
+
+    pub fn clear(&mut self, now: Instant) {
+        self.active = None;
+        self.pending = None;
+        self.streak = 0;
         self.last_reconfig_at = now;
     }
 

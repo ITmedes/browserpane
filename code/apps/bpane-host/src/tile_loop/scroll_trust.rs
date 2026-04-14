@@ -33,11 +33,8 @@ pub(super) fn arbitrate_scroll_trust(
                     source,
                     direction_matches,
                     min_confidence,
-                )) = select_wheel_trusted_scroll(
-                    detected_dy,
-                    input_scroll_dir,
-                    content_scroll,
-                ) {
+                )) = select_wheel_trusted_scroll(detected_dy, input_scroll_dir, content_scroll)
+                {
                     if source == "content" {
                         let dy_gap = ((selected_dy as i32) - (detected_dy as i32)).abs();
                         if dy_gap >= cdp_content_dy_divergence_log_px {
@@ -139,8 +136,7 @@ pub(super) fn arbitrate_scroll_trust(
 
     if trusted_scroll.is_none() {
         if let Some((dy, confidence, direction_matches, min_confidence)) = content_scroll {
-            trusted_scroll =
-                Some((dy, confidence, "content", direction_matches, min_confidence));
+            trusted_scroll = Some((dy, confidence, "content", direction_matches, min_confidence));
         }
     }
 
