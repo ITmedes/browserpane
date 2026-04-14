@@ -3,8 +3,8 @@
 
 use crate::cdp_video;
 use crate::region::{
-    capture_region_tile_bounds, clamp_region_to_screen, expand_tile_bounds,
-    region_meets_editable_minimum, region_meets_video_minimum,
+    align_capture_region_to_tiles_with_margin, capture_region_tile_bounds, clamp_region_to_screen,
+    expand_tile_bounds, region_meets_editable_minimum, region_meets_video_minimum,
 };
 
 use super::frame_types::CdpHintSnapshot;
@@ -26,9 +26,6 @@ impl super::TileCaptureThread {
             pending_scrolls += 1;
             pending_scroll_dy_sum += dy as i32;
         }
-        while let Ok((x, y, ts)) = self.video_click_rx.try_recv() {
-            self.last_left_click = Some((x, y, ts));
-        }
         while let Ok(ts) = self.text_input_rx.try_recv() {
             self.editable_hint.on_key_input(ts);
         }
@@ -46,17 +43,29 @@ impl super::TileCaptureThread {
         });
         let cdp_video_region_hint_sized =
             if matches!(cdp_hint_region_kind, cdp_video::HintRegionKind::Video) {
-                cdp_hint_region_raw.filter(|region| {
-                    region_meets_video_minimum(
-                        region.w,
-                        region.h,
-                        self.screen_w as u32,
-                        self.screen_h as u32,
-                        self.min_cdp_video_width_px,
-                        self.min_cdp_video_height_px,
-                        self.min_cdp_video_area_ratio,
-                    )
-                })
+                cdp_hint_region_raw
+                    .filter(|region| {
+                        region_meets_video_minimum(
+                            region.w,
+                            region.h,
+                            self.screen_w as u32,
+                            self.screen_h as u32,
+                            self.min_cdp_video_width_px,
+                            self.min_cdp_video_height_px,
+                            self.min_cdp_video_area_ratio,
+                        )
+                    })
+                    .and_then(|region| {
+                        align_capture_region_to_tiles_with_margin(
+                            region,
+                            self.tile_size,
+                            self.grid.cols,
+                            self.grid.rows,
+                            self.screen_w as u32,
+                            self.screen_h as u32,
+                            self.cdp_video_tile_margin,
+                        )
+                    })
             } else {
                 None
             };
@@ -67,8 +76,11 @@ impl super::TileCaptureThread {
             } else {
                 None
             };
-        self.editable_hint.update(cdp_editable_region_hint, now, editable_hint_hold_ms);
-        let key_input_qoi_boost = self.editable_hint.key_input_qoi_boost(now, key_input_qoi_boost_ms);
+        self.editable_hint
+            .update(cdp_editable_region_hint, now, editable_hint_hold_ms);
+        let key_input_qoi_boost = self
+            .editable_hint
+            .key_input_qoi_boost(now, key_input_qoi_boost_ms);
         let editable_qoi_region = self.editable_hint.qoi_region(
             cdp_editable_region_hint,
             now,

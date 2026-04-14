@@ -102,7 +102,7 @@ fn tile_capture_config_has_sane_defaults() {
         "BPANE_CDP_MIN_VIDEO_WIDTH",
         "BPANE_CDP_MIN_VIDEO_HEIGHT",
         "BPANE_CDP_MIN_VIDEO_AREA_RATIO",
-        "BPANE_VIDEO_CLICK_ARM_MS",
+        "BPANE_CDP_VIDEO_TILE_MARGIN",
         "BPANE_SCROLL_THIN_MODE",
     ] {
         std::env::remove_var(var);
@@ -116,6 +116,7 @@ fn tile_capture_config_has_sane_defaults() {
     assert!(!cfg.scroll_thin_mode_enabled);
     assert!(cfg.min_cdp_video_width_px % 2 == 0, "width must be even");
     assert!(cfg.min_cdp_video_height_px % 2 == 0, "height must be even");
+    assert_eq!(cfg.cdp_video_tile_margin, 1);
 }
 
 #[test]
@@ -145,6 +146,14 @@ fn tile_codec_unknown_falls_back_to_qoi() {
     std::env::set_var("BPANE_TILE_CODEC", "jpeg");
     assert_eq!(tile_codec_from_env(), TileCodec::Qoi);
     std::env::remove_var("BPANE_TILE_CODEC");
+}
+
+#[test]
+fn video_tile_margin_clamps_to_supported_range() {
+    std::env::set_var("BPANE_CDP_VIDEO_TILE_MARGIN", "9");
+    let cfg = TileCaptureConfig::from_env();
+    assert_eq!(cfg.cdp_video_tile_margin, 3);
+    std::env::remove_var("BPANE_CDP_VIDEO_TILE_MARGIN");
 }
 
 #[test]
