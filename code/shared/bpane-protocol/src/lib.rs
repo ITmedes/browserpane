@@ -24,6 +24,12 @@
 //! - `std` (default): enables [`std::error::Error`] for [`FrameError`].
 //! - without `std`: supports `no_std` with `alloc`.
 //!
+//! # MSRV
+//!
+//! This crate inherits the workspace `rust-version` and currently targets
+//! Rust 1.93 or newer. That version is treated as the minimum supported Rust
+//! version until it is explicitly raised.
+//!
 //! # Channel model
 //!
 //! Some channels carry typed messages decoded by
@@ -62,5 +68,5 @@ pub mod frame;
 pub mod types;
 
 pub use channel::ChannelId;
-pub use frame::{Frame, FrameError};
+pub use frame::{Frame, FrameDecoder, FrameDecoderError, FrameError};
 pub use types::*;

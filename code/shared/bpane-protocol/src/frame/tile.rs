@@ -20,6 +20,7 @@ const TILE_DRAW_MODE: u8 = 0x0B;
 const ZSTD: u8 = 0x0C;
 
 impl TileMessage {
+    /// Encode a tile command payload.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = Writer::new();
         match self {
@@ -138,10 +139,17 @@ impl TileMessage {
         w.finish()
     }
 
+    /// Decode a tile command payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] if the payload is truncated, has an unknown tile
+    /// tag, or contains trailing bytes.
     pub fn decode(buf: &[u8]) -> Result<Self, FrameError> {
         decode::decode(buf)
     }
 
+    /// Wrap this message in a frame on the tiles channel.
     pub fn to_frame(&self) -> Frame {
         Frame::new(ChannelId::Tiles, self.encode())
     }

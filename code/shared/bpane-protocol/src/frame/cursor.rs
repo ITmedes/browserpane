@@ -12,6 +12,7 @@ const CURSOR_MOVE: u8 = 0x01;
 const CURSOR_SHAPE: u8 = 0x02;
 
 impl CursorMessage {
+    /// Encode a cursor message payload.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = Writer::new();
         match self {
@@ -38,6 +39,12 @@ impl CursorMessage {
         w.finish()
     }
 
+    /// Decode a cursor message payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] if the payload is truncated, has an unknown
+    /// cursor tag, or contains trailing bytes.
     pub fn decode(buf: &[u8]) -> Result<Self, FrameError> {
         decode_tagged(buf, |tag, r| match tag {
             CURSOR_MOVE => Ok(Self::CursorMove {
@@ -58,6 +65,7 @@ impl CursorMessage {
         })
     }
 
+    /// Wrap this message in a frame on the cursor channel.
     pub fn to_frame(&self) -> Frame {
         Frame::new(ChannelId::Cursor, self.encode())
     }

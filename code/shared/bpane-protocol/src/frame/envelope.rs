@@ -19,18 +19,15 @@ pub struct Frame {
     pub payload: Bytes,
 }
 
-struct FrameHeader {
-    channel: ChannelId,
-    total_size: usize,
+pub(crate) struct FrameHeader {
+    pub(crate) channel: ChannelId,
+    pub(crate) total_size: usize,
 }
 
 impl FrameHeader {
-    fn parse(buf: &[u8]) -> Result<Self, FrameError> {
+    pub(crate) fn parse_prefix(buf: &[u8]) -> Result<Option<Self>, FrameError> {
         if buf.len() < FRAME_HEADER_SIZE {
-            return Err(FrameError::BufferTooShort {
-                expected: FRAME_HEADER_SIZE,
-                available: buf.len(),
-            });
+            return Ok(None);
         }
 
         let channel_byte = buf[0];
@@ -42,17 +39,21 @@ impl FrameHeader {
         }
 
         let total_size = FRAME_HEADER_SIZE + length as usize;
-        if buf.len() < total_size {
+        Ok(Some(Self {
+            channel,
+            total_size,
+        }))
+    }
+
+    pub(crate) fn require_complete(self, available: usize) -> Result<Self, FrameError> {
+        if available < self.total_size {
             return Err(FrameError::BufferTooShort {
-                expected: total_size,
-                available: buf.len(),
+                expected: self.total_size,
+                available,
             });
         }
 
-        Ok(Self {
-            channel,
-            total_size,
-        })
+        Ok(self)
     }
 }
 
@@ -91,7 +92,12 @@ impl Frame {
     /// unknown, the declared payload exceeds the protocol limit, or the
     /// declared payload is not fully present in `buf`.
     pub fn decode(buf: &[u8]) -> Result<(Self, usize), FrameError> {
-        let header = FrameHeader::parse(buf)?;
+        let header = FrameHeader::parse_prefix(buf)?
+            .ok_or(FrameError::BufferTooShort {
+                expected: FRAME_HEADER_SIZE,
+                available: buf.len(),
+            })?
+            .require_complete(buf.len())?;
         let payload = Bytes::copy_from_slice(&buf[FRAME_HEADER_SIZE..header.total_size]);
         Ok((Frame::new(header.channel, payload), header.total_size))
     }
@@ -102,7 +108,12 @@ impl Frame {
     ///
     /// Returns the same errors as [`Self::decode`].
     pub fn decode_bytes(buf: Bytes) -> Result<(Self, usize), FrameError> {
-        let header = FrameHeader::parse(&buf)?;
+        let header = FrameHeader::parse_prefix(&buf)?
+            .ok_or(FrameError::BufferTooShort {
+                expected: FRAME_HEADER_SIZE,
+                available: buf.len(),
+            })?
+            .require_complete(buf.len())?;
         let payload = buf.slice(FRAME_HEADER_SIZE..header.total_size);
         Ok((Frame::new(header.channel, payload), header.total_size))
     }

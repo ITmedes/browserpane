@@ -11,6 +11,7 @@ use super::{
 const TEXT: u8 = 0x01;
 
 impl ClipboardMessage {
+    /// Encode a clipboard message payload.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = Writer::new();
         match self {
@@ -22,6 +23,12 @@ impl ClipboardMessage {
         w.finish()
     }
 
+    /// Decode a clipboard message payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] if the payload is truncated, has an unknown
+    /// clipboard tag, or contains trailing bytes.
     pub fn decode(buf: &[u8]) -> Result<Self, FrameError> {
         decode_tagged(buf, |tag, r| match tag {
             TEXT => Ok(Self::Text {
@@ -34,6 +41,7 @@ impl ClipboardMessage {
         })
     }
 
+    /// Wrap this message in a frame on the clipboard channel.
     pub fn to_frame(&self) -> Frame {
         Frame::new(ChannelId::Clipboard, self.encode())
     }

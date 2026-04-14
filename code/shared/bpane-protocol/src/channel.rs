@@ -29,6 +29,8 @@ pub enum ChannelId {
 
 impl ChannelId {
     /// Convert a raw wire value into a channel identifier.
+    ///
+    /// Returns `None` for unknown or reserved channel IDs.
     pub fn from_u8(val: u8) -> Option<Self> {
         match val {
             0x01 => Some(Self::Video),

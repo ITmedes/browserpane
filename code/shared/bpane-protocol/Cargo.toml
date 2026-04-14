@@ -3,6 +3,7 @@ name = "bpane-protocol"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 description = "Shared BrowserPane wire protocol types and frame codecs"
 repository = "https://github.com/ITmedes/browserpane"
 readme = "../../../README.md"
