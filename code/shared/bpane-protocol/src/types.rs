@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 /// Session capability flags.
@@ -160,9 +161,9 @@ pub enum ClipboardMessage {
 pub enum FileMessage {
     FileHeader {
         id: u32,
-        filename: [u8; 256],
+        filename: Box<[u8; 256]>,
         size: u64,
-        mime: [u8; 64],
+        mime: Box<[u8; 64]>,
     },
     FileChunk {
         id: u32,
@@ -172,6 +173,25 @@ pub enum FileMessage {
     FileComplete {
         id: u32,
     },
+}
+
+impl FileMessage {
+    pub fn header(id: u32, filename: [u8; 256], size: u64, mime: [u8; 64]) -> Self {
+        Self::FileHeader {
+            id,
+            filename: Box::new(filename),
+            size,
+            mime: Box::new(mime),
+        }
+    }
+
+    pub fn chunk(id: u32, seq: u32, data: Vec<u8>) -> Self {
+        Self::FileChunk { id, seq, data }
+    }
+
+    pub fn complete(id: u32) -> Self {
+        Self::FileComplete { id }
+    }
 }
 
 // ── Tile Channel Messages ──────────────────────────────────────────

@@ -288,26 +288,17 @@ fn file_transfer_pipeline() {
     let mut wire_data = Vec::new();
 
     // File header
-    let header = FileMessage::FileHeader {
-        id: 42,
-        filename,
-        size: file_data.len() as u64,
-        mime,
-    };
+    let header = FileMessage::header(42, filename, file_data.len() as u64, mime);
     wire_data.extend_from_slice(&header.to_frame(ChannelId::FileDown).encode());
 
     // File chunks
     for (seq, chunk) in file_data.chunks(chunk_size).enumerate() {
-        let msg = FileMessage::FileChunk {
-            id: 42,
-            seq: seq as u32,
-            data: chunk.to_vec(),
-        };
+        let msg = FileMessage::chunk(42, seq as u32, chunk.to_vec());
         wire_data.extend_from_slice(&msg.to_frame(ChannelId::FileDown).encode());
     }
 
     // File complete
-    let complete = FileMessage::FileComplete { id: 42 };
+    let complete = FileMessage::complete(42);
     wire_data.extend_from_slice(&complete.to_frame(ChannelId::FileDown).encode());
 
     // Decode all
@@ -809,10 +800,8 @@ fn interleaved_fragment_reassembly() {
             if let Some(f) = i1.next() {
                 all_frags.push(f.clone());
             }
-        } else {
-            if let Some(f) = i2.next() {
-                all_frags.push(f.clone());
-            }
+        } else if let Some(f) = i2.next() {
+            all_frags.push(f.clone());
         }
         toggle = !toggle;
         if i1.peek().is_none() && i2.peek().is_none() {
@@ -969,24 +958,15 @@ fn file_upload_pipeline() {
 
     let mut wire_data = Vec::new();
 
-    let header = FileMessage::FileHeader {
-        id: 1,
-        filename,
-        size: file_data.len() as u64,
-        mime,
-    };
+    let header = FileMessage::header(1, filename, file_data.len() as u64, mime);
     wire_data.extend_from_slice(&header.to_frame(ChannelId::FileUp).encode());
 
     for (seq, chunk) in file_data.chunks(chunk_size).enumerate() {
-        let msg = FileMessage::FileChunk {
-            id: 1,
-            seq: seq as u32,
-            data: chunk.to_vec(),
-        };
+        let msg = FileMessage::chunk(1, seq as u32, chunk.to_vec());
         wire_data.extend_from_slice(&msg.to_frame(ChannelId::FileUp).encode());
     }
 
-    let complete = FileMessage::FileComplete { id: 1 };
+    let complete = FileMessage::complete(1);
     wire_data.extend_from_slice(&complete.to_frame(ChannelId::FileUp).encode());
 
     let (frames, consumed) = Frame::decode_all(&wire_data).unwrap();

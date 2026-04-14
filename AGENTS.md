@@ -2,6 +2,10 @@
 
 This file is the shared project memory for BrowserPane. Keep it short, code-aligned, and current.
 
+Project-wide Rust coding standards live in `RUST_STANDARDS.md`.
+- Apply them to all Rust crates in this repo.
+- Update that file instead of expanding this one with detailed Rust style rules.
+
 When docs disagree, prefer:
 1. The code
 2. Runtime manifests and package scripts
@@ -112,6 +116,7 @@ Run these where applicable:
 ## Guardrails for contributors and agents
 
 - Trust code and runtime manifests over stale prose. `README.md` may lag behind implementation.
+- For Rust work, follow `RUST_STANDARDS.md` in addition to this file.
 - Do not edit generated or vendored output:
   - `code/web/bpane-client/dist/`
   - `node_modules/`

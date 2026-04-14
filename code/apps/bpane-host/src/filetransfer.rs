@@ -82,7 +82,7 @@ impl FileTransferState {
         match message {
             FileMessage::FileHeader {
                 id, filename, size, ..
-            } => self.handle_upload_header(id, &filename, size).await,
+            } => self.handle_upload_header(id, filename.as_ref(), size).await,
             FileMessage::FileChunk { id, seq, data } => {
                 self.handle_upload_chunk(id, seq, &data).await
             }
@@ -332,12 +332,12 @@ async fn stream_download_file(
 
     to_gateway
         .send(
-            FileMessage::FileHeader {
+            FileMessage::header(
                 id,
-                filename: encode_fixed_string::<256>(&filename),
+                encode_fixed_string::<256>(&filename),
                 size,
-                mime: encode_fixed_string::<64>(&mime),
-            }
+                encode_fixed_string::<64>(&mime),
+            )
             .to_frame(ChannelId::FileDown),
         )
         .await
@@ -360,12 +360,7 @@ async fn stream_download_file(
 
         to_gateway
             .send(
-                FileMessage::FileChunk {
-                    id,
-                    seq,
-                    data: buffer[..read].to_vec(),
-                }
-                .to_frame(ChannelId::FileDown),
+                FileMessage::chunk(id, seq, buffer[..read].to_vec()).to_frame(ChannelId::FileDown),
             )
             .await
             .with_context(|| format!("send download chunk for {}", path.display()))?;
@@ -373,7 +368,7 @@ async fn stream_download_file(
     }
 
     to_gateway
-        .send(FileMessage::FileComplete { id }.to_frame(ChannelId::FileDown))
+        .send(FileMessage::complete(id).to_frame(ChannelId::FileDown))
         .await
         .context("send download completion")?;
 
@@ -561,32 +556,24 @@ mod tests {
         };
 
         state
-            .handle_upload_message(FileMessage::FileHeader {
-                id: 7,
-                filename: encode_fixed_string::<256>("report.txt"),
-                size: 11,
-                mime: encode_fixed_string::<64>("text/plain"),
-            })
+            .handle_upload_message(FileMessage::header(
+                7,
+                encode_fixed_string::<256>("report.txt"),
+                11,
+                encode_fixed_string::<64>("text/plain"),
+            ))
             .await
             .unwrap();
         state
-            .handle_upload_message(FileMessage::FileChunk {
-                id: 7,
-                seq: 0,
-                data: b"hello ".to_vec(),
-            })
+            .handle_upload_message(FileMessage::chunk(7, 0, b"hello ".to_vec()))
             .await
             .unwrap();
         state
-            .handle_upload_message(FileMessage::FileChunk {
-                id: 7,
-                seq: 1,
-                data: b"world".to_vec(),
-            })
+            .handle_upload_message(FileMessage::chunk(7, 1, b"world".to_vec()))
             .await
             .unwrap();
         state
-            .handle_upload_message(FileMessage::FileComplete { id: 7 })
+            .handle_upload_message(FileMessage::complete(7))
             .await
             .unwrap();
 
