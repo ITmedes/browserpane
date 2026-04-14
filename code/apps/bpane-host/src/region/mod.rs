@@ -5,6 +5,7 @@ mod tests;
 
 use crate::capture::ffmpeg::CaptureRegion;
 use crate::tiles;
+use bpane_protocol::Modifiers;
 
 pub const MIN_EDITABLE_HINT_WIDTH_PX: u32 = 2;
 pub const MIN_EDITABLE_HINT_HEIGHT_PX: u32 = 2;
@@ -241,7 +242,7 @@ pub fn hash_tile_region(
 
 /// Build a CDP `Input.insertText` payload for non-ASCII printable chars
 /// that bypass the keyboard layout entirely.
-pub fn cdp_insert_text_payload(modifiers: u8, key_char: u32) -> Option<String> {
+pub fn cdp_insert_text_payload(modifiers: Modifiers, key_char: u32) -> Option<String> {
     if key_char < 0x80 || crate::input::keyboard::should_use_physical(modifiers, key_char) {
         return None;
     }

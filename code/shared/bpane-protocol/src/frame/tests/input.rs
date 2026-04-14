@@ -1,4 +1,4 @@
-use crate::{InputMessage, Modifiers};
+use crate::{InputMessage, Modifiers, MouseButton};
 
 use super::super::FrameError;
 
@@ -11,7 +11,7 @@ fn input_mouse_move_round_trip() {
 #[test]
 fn input_mouse_button_round_trip() {
     let msg = InputMessage::MouseButton {
-        button: 0,
+        button: MouseButton::Left,
         down: true,
         x: 50,
         y: 75,
@@ -49,7 +49,7 @@ fn input_key_event_ex_round_trip() {
     let msg = InputMessage::KeyEventEx {
         keycode: 30,
         down: true,
-        modifiers: 0,
+        modifiers: Modifiers::empty(),
         key_char: 0x61,
     };
     let encoded = msg.encode();
@@ -62,7 +62,7 @@ fn input_key_event_ex_unicode_round_trip() {
     let msg = InputMessage::KeyEventEx {
         keycode: 3,
         down: true,
-        modifiers: 0,
+        modifiers: Modifiers::empty(),
         key_char: 0xE9,
     };
     assert_eq!(msg, InputMessage::decode(&msg.encode()).unwrap());
@@ -73,7 +73,7 @@ fn input_key_event_ex_non_printable_round_trip() {
     let msg = InputMessage::KeyEventEx {
         keycode: 1,
         down: true,
-        modifiers: 0,
+        modifiers: Modifiers::empty(),
         key_char: 0,
     };
     assert_eq!(msg, InputMessage::decode(&msg.encode()).unwrap());
@@ -96,4 +96,15 @@ fn input_unknown_tag() {
         InputMessage::decode(&[0xFF]),
         Err(FrameError::UnknownMessageType { .. })
     ));
+}
+
+#[test]
+fn input_invalid_mouse_button_value() {
+    assert_eq!(
+        InputMessage::decode(&[0x02, 0xFF, 0x01, 0x00, 0x00, 0x00, 0x00]),
+        Err(FrameError::InvalidFieldValue {
+            field: "mouse button",
+            value: 0xFF,
+        })
+    );
 }

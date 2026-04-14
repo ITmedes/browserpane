@@ -47,11 +47,11 @@ impl Message {
             ChannelId::Input => Ok(Self::Input(InputMessage::decode(&frame.payload)?)),
             ChannelId::Cursor => Ok(Self::Cursor(CursorMessage::decode(&frame.payload)?)),
             ChannelId::Clipboard => Ok(Self::Clipboard(ClipboardMessage::decode(&frame.payload)?)),
-            ChannelId::FileUp => Ok(Self::FileUp(FileMessage::decode_for_channel(
+            ChannelId::FileUp => Ok(Self::FileUp(FileMessage::decode_on_channel(
                 &frame.payload,
                 ChannelId::FileUp,
             )?)),
-            ChannelId::FileDown => Ok(Self::FileDown(FileMessage::decode_for_channel(
+            ChannelId::FileDown => Ok(Self::FileDown(FileMessage::decode_on_channel(
                 &frame.payload,
                 ChannelId::FileDown,
             )?)),

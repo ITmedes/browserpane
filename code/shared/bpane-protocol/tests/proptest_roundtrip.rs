@@ -53,25 +53,37 @@ fn arb_control_message() -> impl Strategy<Value = ControlMessage> {
 fn arb_input_message() -> impl Strategy<Value = InputMessage> {
     prop_oneof![
         (any::<u16>(), any::<u16>()).prop_map(|(x, y)| InputMessage::MouseMove { x, y }),
-        (0..5u8, any::<bool>(), any::<u16>(), any::<u16>()).prop_map(|(b, d, x, y)| {
-            InputMessage::MouseButton {
-                button: b,
-                down: d,
-                x,
-                y,
-            }
-        }),
+        (
+            prop_oneof![
+                Just(MouseButton::Left),
+                Just(MouseButton::Middle),
+                Just(MouseButton::Right),
+                Just(MouseButton::Back),
+                Just(MouseButton::Forward),
+            ],
+            any::<bool>(),
+            any::<u16>(),
+            any::<u16>()
+        )
+            .prop_map(|(b, d, x, y)| {
+                InputMessage::MouseButton {
+                    button: b,
+                    down: d,
+                    x,
+                    y,
+                }
+            }),
         (any::<i16>(), any::<i16>()).prop_map(|(dx, dy)| InputMessage::MouseScroll { dx, dy }),
         (any::<u32>(), any::<bool>(), any::<u8>()).prop_map(|(k, d, m)| InputMessage::KeyEvent {
             keycode: k,
             down: d,
-            modifiers: m,
+            modifiers: Modifiers::from(m),
         }),
         (any::<u32>(), any::<bool>(), any::<u8>(), any::<u32>()).prop_map(|(k, d, m, c)| {
             InputMessage::KeyEventEx {
                 keycode: k,
                 down: d,
-                modifiers: m,
+                modifiers: Modifiers::from(m),
                 key_char: c,
             }
         },),
@@ -314,7 +326,7 @@ proptest! {
     #[test]
     fn file_message_round_trip(msg in arb_file_message()) {
         let encoded = msg.encode();
-        let decoded = FileMessage::decode(&encoded).unwrap();
+        let decoded = FileMessage::decode_on_channel(&encoded, ChannelId::FileDown).unwrap();
         prop_assert_eq!(&msg, &decoded);
     }
 

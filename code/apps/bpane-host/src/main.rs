@@ -16,8 +16,8 @@ mod resize;
 mod scroll;
 mod session;
 mod test_session;
-pub mod tiles;
 mod tile_loop;
+pub mod tiles;
 mod video_classify;
 mod video_region;
 
@@ -103,14 +103,13 @@ async fn main() -> anyhow::Result<()> {
         camera::CameraState::Unavailable(reason) => warn!("camera: unavailable ({reason})"),
     }
 
-    let mut flags = SessionFlags::new(
-        SessionFlags::CLIPBOARD | SessionFlags::FILE_TRANSFER | SessionFlags::KEYBOARD_LAYOUT,
-    );
+    let mut flags =
+        SessionFlags::CLIPBOARD | SessionFlags::FILE_TRANSFER | SessionFlags::KEYBOARD_LAYOUT;
     if has_audio {
-        flags = SessionFlags::new(flags.0 | SessionFlags::AUDIO | SessionFlags::MICROPHONE);
+        flags.insert(SessionFlags::AUDIO | SessionFlags::MICROPHONE);
     }
     if has_camera {
-        flags = SessionFlags::new(flags.0 | SessionFlags::CAMERA);
+        flags.insert(SessionFlags::CAMERA);
     }
 
     let ipc_server = ipc::IpcServer::bind(&args.socket)?;
@@ -146,7 +145,7 @@ async fn run_session(
     };
 
     let use_display = !display_str.is_empty() && cfg!(target_os = "linux");
-    let has_audio = flags.has(SessionFlags::AUDIO);
+    let has_audio = flags.contains(SessionFlags::AUDIO);
 
     if use_display {
         info!("using FFmpeg x11grab pipeline");

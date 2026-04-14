@@ -154,11 +154,12 @@ fn adapt_frame_for_client(frame: &Frame, is_owner: bool) -> Frame {
     }
 
     let mut payload = frame.payload.to_vec();
-    payload[2] &= !(SessionFlags::CLIPBOARD
+    let restricted = SessionFlags::CLIPBOARD
         | SessionFlags::FILE_TRANSFER
         | SessionFlags::MICROPHONE
         | SessionFlags::CAMERA
-        | SessionFlags::KEYBOARD_LAYOUT);
+        | SessionFlags::KEYBOARD_LAYOUT;
+    payload[2] &= !restricted.bits();
     Frame::new(frame.channel, payload)
 }
 
@@ -692,33 +693,31 @@ mod tests {
     fn adapt_frame_for_client_strips_viewer_only_capabilities() {
         let frame = ControlMessage::SessionReady {
             version: 1,
-            flags: SessionFlags::new(
-                SessionFlags::AUDIO
-                    | SessionFlags::CLIPBOARD
-                    | SessionFlags::FILE_TRANSFER
-                    | SessionFlags::MICROPHONE
-                    | SessionFlags::CAMERA
-                    | SessionFlags::KEYBOARD_LAYOUT,
-            ),
+            flags: SessionFlags::AUDIO
+                | SessionFlags::CLIPBOARD
+                | SessionFlags::FILE_TRANSFER
+                | SessionFlags::MICROPHONE
+                | SessionFlags::CAMERA
+                | SessionFlags::KEYBOARD_LAYOUT,
         }
         .to_frame();
 
         let adapted = adapt_frame_for_client(&frame, false);
 
         assert_eq!(adapted.payload[0], 0x03);
-        assert_ne!(adapted.payload[2] & SessionFlags::AUDIO, 0);
-        assert_eq!(adapted.payload[2] & SessionFlags::CLIPBOARD, 0);
-        assert_eq!(adapted.payload[2] & SessionFlags::FILE_TRANSFER, 0);
-        assert_eq!(adapted.payload[2] & SessionFlags::MICROPHONE, 0);
-        assert_eq!(adapted.payload[2] & SessionFlags::CAMERA, 0);
-        assert_eq!(adapted.payload[2] & SessionFlags::KEYBOARD_LAYOUT, 0);
+        assert_ne!(adapted.payload[2] & SessionFlags::AUDIO.bits(), 0);
+        assert_eq!(adapted.payload[2] & SessionFlags::CLIPBOARD.bits(), 0);
+        assert_eq!(adapted.payload[2] & SessionFlags::FILE_TRANSFER.bits(), 0);
+        assert_eq!(adapted.payload[2] & SessionFlags::MICROPHONE.bits(), 0);
+        assert_eq!(adapted.payload[2] & SessionFlags::CAMERA.bits(), 0);
+        assert_eq!(adapted.payload[2] & SessionFlags::KEYBOARD_LAYOUT.bits(), 0);
     }
 
     #[test]
     fn adapt_frame_for_client_leaves_owner_flags_unchanged() {
         let frame = ControlMessage::SessionReady {
             version: 1,
-            flags: SessionFlags::new(SessionFlags::FILE_TRANSFER | SessionFlags::CAMERA),
+            flags: SessionFlags::FILE_TRANSFER | SessionFlags::CAMERA,
         }
         .to_frame();
 

@@ -9,6 +9,8 @@ pub enum FrameError {
     UnknownChannel(u8),
     /// Unknown message type tag within a channel.
     UnknownMessageType { channel: u8, tag: u8 },
+    /// Field contained an invalid enum value or unsupported discriminator.
+    InvalidFieldValue { field: &'static str, value: u64 },
     /// Payload exceeds maximum allowed size.
     PayloadTooLarge(u32),
     /// Data remaining after parsing.
@@ -28,6 +30,9 @@ impl fmt::Display for FrameError {
                     f,
                     "unknown message type 0x{tag:02x} on channel 0x{channel:02x}"
                 )
+            }
+            Self::InvalidFieldValue { field, value } => {
+                write!(f, "invalid {field}: {value}")
             }
             Self::PayloadTooLarge(size) => write!(f, "payload too large: {size} bytes"),
             Self::TrailingData(n) => write!(f, "{n} trailing bytes after message"),

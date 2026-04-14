@@ -31,8 +31,7 @@ impl FrameHeader {
         }
 
         let channel_byte = buf[0];
-        let channel =
-            ChannelId::from_u8(channel_byte).ok_or(FrameError::UnknownChannel(channel_byte))?;
+        let channel = ChannelId::try_from(channel_byte).map_err(FrameError::UnknownChannel)?;
         let length = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
         if length > MAX_PAYLOAD_SIZE {
             return Err(FrameError::PayloadTooLarge(length));

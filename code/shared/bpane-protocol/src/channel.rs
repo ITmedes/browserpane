@@ -27,30 +27,44 @@ pub enum ChannelId {
     Tiles = 0x0B,
 }
 
+impl TryFrom<u8> for ChannelId {
+    type Error = u8;
+
+    fn try_from(val: u8) -> Result<Self, Self::Error> {
+        match val {
+            0x01 => Ok(Self::Video),
+            0x02 => Ok(Self::AudioOut),
+            0x03 => Ok(Self::AudioIn),
+            0x04 => Ok(Self::VideoIn),
+            0x05 => Ok(Self::Input),
+            0x06 => Ok(Self::Cursor),
+            0x07 => Ok(Self::Clipboard),
+            0x08 => Ok(Self::FileUp),
+            0x09 => Ok(Self::FileDown),
+            0x0A => Ok(Self::Control),
+            0x0B => Ok(Self::Tiles),
+            _ => Err(val),
+        }
+    }
+}
+
+impl From<ChannelId> for u8 {
+    fn from(channel: ChannelId) -> Self {
+        channel as u8
+    }
+}
+
 impl ChannelId {
     /// Convert a raw wire value into a channel identifier.
     ///
     /// Returns `None` for unknown or reserved channel IDs.
     pub fn from_u8(val: u8) -> Option<Self> {
-        match val {
-            0x01 => Some(Self::Video),
-            0x02 => Some(Self::AudioOut),
-            0x03 => Some(Self::AudioIn),
-            0x04 => Some(Self::VideoIn),
-            0x05 => Some(Self::Input),
-            0x06 => Some(Self::Cursor),
-            0x07 => Some(Self::Clipboard),
-            0x08 => Some(Self::FileUp),
-            0x09 => Some(Self::FileDown),
-            0x0A => Some(Self::Control),
-            0x0B => Some(Self::Tiles),
-            _ => None,
-        }
+        Self::try_from(val).ok()
     }
 
     /// Return the raw wire value for this channel.
     pub fn as_u8(self) -> u8 {
-        self as u8
+        self.into()
     }
 
     /// Whether this channel uses datagrams (loss-tolerant) vs reliable streams.
@@ -90,6 +104,12 @@ mod tests {
         assert!(ChannelId::from_u8(0x00).is_none());
         assert!(ChannelId::from_u8(0x0C).is_none());
         assert!(ChannelId::from_u8(0xFF).is_none());
+    }
+
+    #[test]
+    fn try_from_invalid_channel_returns_original_value() {
+        assert_eq!(ChannelId::try_from(0x00), Err(0x00));
+        assert_eq!(ChannelId::try_from(0xFF), Err(0xFF));
     }
 
     #[test]

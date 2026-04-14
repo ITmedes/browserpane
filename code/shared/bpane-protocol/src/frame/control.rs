@@ -38,7 +38,7 @@ impl ControlMessage {
             Self::SessionReady { version, flags } => {
                 w.write_u8(SESSION_READY);
                 w.write_u8(*version);
-                w.write_u8(flags.0);
+                w.write_u8(flags.bits());
             }
             Self::Ping { seq, timestamp_ms } | Self::Pong { seq, timestamp_ms } => {
                 w.write_u8(if matches!(self, Self::Ping { .. }) {
@@ -84,7 +84,7 @@ impl ControlMessage {
             }),
             SESSION_READY => Ok(Self::SessionReady {
                 version: r.read_u8()?,
-                flags: SessionFlags(r.read_u8()?),
+                flags: SessionFlags::from(r.read_u8()?),
             }),
             PING => Ok(Self::Ping {
                 seq: r.read_u32()?,

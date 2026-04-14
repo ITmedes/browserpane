@@ -573,7 +573,7 @@ mod tests {
             // Send a SessionReady immediately
             let ready = ControlMessage::SessionReady {
                 version: 1,
-                flags: bpane_protocol::SessionFlags::new(0x20),
+                flags: bpane_protocol::SessionFlags::KEYBOARD_LAYOUT,
             };
             stream.write_all(&ready.to_frame().encode()).await.unwrap();
 

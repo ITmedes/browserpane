@@ -42,7 +42,14 @@ Passing now:
    - crate rustdoc now documents MSRV alongside compatibility and feature policy
    - public fallible/panicking frame APIs now state their error and panic contracts
    - workspace and crate metadata now declare an explicit `rust-version`
-6. Next: Broader type-safety and API ergonomics cleanup.
+6. Done: Broader type-safety and API ergonomics cleanup.
+   - `ChannelId` and `MouseButton` now expose idiomatic conversion traits
+   - `SessionFlags` and `Modifiers` now use typed bitmask helpers instead of raw-bit call sites
+   - `InputMessage` now carries typed `MouseButton` and `Modifiers` fields while preserving wire bytes
+   - invalid enum discriminators now fail explicitly via `FrameError::InvalidFieldValue`
+   - file-transfer decode now has an explicit `decode_on_channel(...)` API for clearer channel contracts
+   - protocol, gateway, and host tests now cover the stronger typed surface
+7. Next: Optional production enhancements if we still want to harden beyond the current core plan.
 
 ## Decision Gate
 
@@ -55,6 +62,10 @@ This is the main sequencing dependency.
 
 - If internal-only: optimize for maintainability and correctness first.
 - If reusable/stable: treat public enums/fields as long-term API commitments and harden for semver now.
+
+Current working assumption for the completed steps:
+
+- `bpane-protocol` is workspace-shared and wire-stable, but its Rust API can still evolve pre-`1.0` when that materially improves correctness and maintainability.
 
 ## Priority 0: Restore Library Quality Gates
 
