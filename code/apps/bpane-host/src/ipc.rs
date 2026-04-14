@@ -1,5 +1,4 @@
-use bpane_protocol::frame::{Frame, FRAME_HEADER_SIZE};
-use bytes::BytesMut;
+use bpane_protocol::frame::{Frame, FrameDecoder};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
 use tokio::sync::mpsc;
@@ -33,8 +32,7 @@ impl IpcServer {
         tokio::spawn(async move {
             let mut reader = read_half;
             let mut buf = vec![0u8; 64 * 1024];
-            let mut pending = BytesMut::new();
-            const MAX_PENDING: usize = 4 * 1024 * 1024; // 4 MiB
+            let mut decoder = FrameDecoder::new();
 
             loop {
                 let n = match reader.read(&mut buf).await {
@@ -49,34 +47,19 @@ impl IpcServer {
                     }
                 };
 
-                pending.extend_from_slice(&buf[..n]);
-                if pending.len() > MAX_PENDING {
-                    error!(
-                        "IPC pending buffer exceeds {} bytes, disconnecting",
-                        MAX_PENDING
-                    );
+                if let Err(e) = decoder.push(&buf[..n]) {
+                    error!("IPC frame decode error: {e}");
                     break;
                 }
 
                 loop {
-                    if pending.len() < FRAME_HEADER_SIZE {
-                        break;
-                    }
-                    let declared_len =
-                        u32::from_le_bytes([pending[1], pending[2], pending[3], pending[4]])
-                            as usize;
-                    let total_size = FRAME_HEADER_SIZE + declared_len;
-                    if pending.len() < total_size {
-                        break;
-                    }
-                    // Zero-copy: split off the frame bytes, freeze, then decode
-                    let frame_bytes = pending.split_to(total_size).freeze();
-                    match Frame::decode_bytes(frame_bytes) {
-                        Ok((frame, _consumed)) => {
+                    match decoder.next_frame() {
+                        Ok(Some(frame)) => {
                             if from_gateway_tx.send(frame).await.is_err() {
                                 return;
                             }
                         }
+                        Ok(None) => break,
                         Err(e) => {
                             error!("IPC frame decode error: {e}");
                             return;
@@ -246,5 +229,33 @@ mod tests {
         let client_response = connect_task.await.unwrap();
         assert_eq!(client_response.channel, ChannelId::Control);
         assert_eq!(&client_response.payload[..], &[0x03, 0x04]);
+    }
+
+    #[tokio::test]
+    async fn ipc_reassembles_frames_split_across_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock_path = dir.path().join("split.sock");
+        let sock_path_str = sock_path.to_str().unwrap();
+
+        let server = IpcServer::bind(sock_path_str).unwrap();
+
+        let path = sock_path_str.to_string();
+        tokio::spawn(async move {
+            let mut stream = UnixStream::connect(&path).await.unwrap();
+            let wire = Frame::new(ChannelId::Control, vec![0x10, 0x20, 0x30]).encode();
+            stream.write_all(&wire[..3]).await.unwrap();
+            stream.flush().await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            stream.write_all(&wire[3..]).await.unwrap();
+            stream.flush().await.unwrap();
+        });
+
+        let (mut from_gateway, _to_gateway) = server.accept().await.unwrap();
+        let frame = tokio::time::timeout(std::time::Duration::from_secs(2), from_gateway.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(frame.channel, ChannelId::Control);
+        assert_eq!(&frame.payload[..], &[0x10, 0x20, 0x30]);
     }
 }

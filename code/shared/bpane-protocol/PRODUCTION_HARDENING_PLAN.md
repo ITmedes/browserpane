@@ -34,8 +34,15 @@ Passing now:
    - shared fixture bytes now live in `tests/fixtures/wire-fixtures.json`
    - Rust exact-byte tests validate representative messages plus malformed cases
    - browser-client tests validate the same fixture bytes for frame parsing, file transfer, tiles, input, clipboard, and video NAL handling
-4. Next: Centralize incremental framing.
-5. Later: Broader type-safety and API ergonomics cleanup.
+4. Done: Centralize incremental framing.
+   - `bpane-protocol` now provides a reusable `FrameDecoder` for partial reliable-stream parsing
+   - host IPC, gateway relay, and browser reliable-stream ingress use the shared decoder instead of open-coded pending-buffer loops
+   - unit coverage now includes protocol-level partial/incomplete cases plus split-read adapter tests in host and gateway
+5. Done: Improve documentation and discoverability.
+   - crate rustdoc now documents MSRV alongside compatibility and feature policy
+   - public fallible/panicking frame APIs now state their error and panic contracts
+   - workspace and crate metadata now declare an explicit `rust-version`
+6. Next: Broader type-safety and API ergonomics cleanup.
 
 ## Decision Gate
 

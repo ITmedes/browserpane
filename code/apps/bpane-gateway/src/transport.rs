@@ -10,7 +10,7 @@ use wtransport::{Endpoint, Identity, ServerConfig};
 const MAX_CONCURRENT_SESSIONS: u64 = 100;
 
 use bpane_protocol::channel::ChannelId;
-use bpane_protocol::frame::Frame;
+use bpane_protocol::frame::{Frame, FrameDecoder};
 use bpane_protocol::{ControlMessage, SessionFlags};
 
 use crate::auth::TokenValidator;
@@ -357,8 +357,7 @@ async fn handle_session(
     let send_stream_resize = send_stream.clone();
     let browser_to_agent = tokio::spawn(async move {
         let mut buf = vec![0u8; 64 * 1024];
-        let mut pending = Vec::new();
-        const MAX_PENDING: usize = 4 * 1024 * 1024; // 4 MiB
+        let mut decoder = FrameDecoder::new();
         loop {
             if !session_b2a.is_active() {
                 break;
@@ -367,17 +366,13 @@ async fn handle_session(
                 Ok(Some(n)) => {
                     session_b2a.update_heartbeat().await;
 
-                    pending.extend_from_slice(&buf[..n]);
-                    if pending.len() > MAX_PENDING {
-                        error!("browser pending buffer exceeds {MAX_PENDING} bytes, disconnecting");
+                    if let Err(e) = decoder.push(&buf[..n]) {
+                        error!("frame decode error from browser: {e}");
                         break;
                     }
                     loop {
-                        if pending.len() < bpane_protocol::frame::FRAME_HEADER_SIZE {
-                            break;
-                        }
-                        match Frame::decode(&pending) {
-                            Ok((frame, consumed)) => {
+                        match decoder.next_frame() {
+                            Ok(Some(frame)) => {
                                 let is_owner = hub_for_resize.is_browser_owner(client_id);
                                 // Intercept ResolutionRequest from non-owner clients
                                 if !is_owner
@@ -410,7 +405,6 @@ async fn handle_session(
                                             }
                                         }
                                     }
-                                    pending.drain(..consumed);
                                     continue;
                                 }
 
@@ -428,12 +422,10 @@ async fn handle_session(
                                     let _ = hub_for_resize
                                         .request_resize(client_id, req_w, req_h)
                                         .await;
-                                    pending.drain(..consumed);
                                     continue;
                                 }
 
                                 if !is_owner && !viewer_can_forward_frame(&frame) {
-                                    pending.drain(..consumed);
                                     continue;
                                 }
 
@@ -441,9 +433,8 @@ async fn handle_session(
                                 if to_host.send(frame).await.is_err() {
                                     return;
                                 }
-                                pending.drain(..consumed);
                             }
-                            Err(bpane_protocol::FrameError::BufferTooShort { .. }) => break,
+                            Ok(None) => break,
                             Err(e) => {
                                 error!("frame decode error from browser: {e}");
                                 return;

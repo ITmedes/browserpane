@@ -15,6 +15,7 @@ const KEY_EVENT: u8 = 0x04;
 const KEY_EVENT_EX: u8 = 0x05;
 
 impl InputMessage {
+    /// Encode an input message payload.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = Writer::new();
         match self {
@@ -61,6 +62,12 @@ impl InputMessage {
         w.finish()
     }
 
+    /// Decode an input message payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] if the payload is truncated, has an unknown
+    /// input tag, or contains trailing bytes.
     pub fn decode(buf: &[u8]) -> Result<Self, FrameError> {
         decode_tagged(buf, |tag, r| match tag {
             MOUSE_MOVE => Ok(Self::MouseMove {
@@ -95,6 +102,7 @@ impl InputMessage {
         })
     }
 
+    /// Wrap this message in a frame on the input channel.
     pub fn to_frame(&self) -> Frame {
         Frame::new(ChannelId::Input, self.encode())
     }

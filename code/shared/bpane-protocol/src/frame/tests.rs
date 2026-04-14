@@ -1,6 +1,7 @@
 mod audio;
 mod control;
 mod cursor_clipboard_file;
+mod decoder;
 mod envelope;
 mod input;
 mod message_dispatch;

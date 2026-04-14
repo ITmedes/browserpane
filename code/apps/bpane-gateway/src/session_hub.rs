@@ -557,7 +557,7 @@ pub enum ResizeResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bpane_protocol::frame::FRAME_HEADER_SIZE;
+    use bpane_protocol::frame::FrameDecoder;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::UnixListener;
 
@@ -568,7 +568,7 @@ mod tests {
         tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut buf = vec![0u8; 64 * 1024];
-            let mut pending = Vec::new();
+            let mut decoder = FrameDecoder::new();
 
             // Send a SessionReady immediately
             let ready = ControlMessage::SessionReady {
@@ -583,10 +583,10 @@ mod tests {
                     Ok(n) => n,
                     Err(_) => break,
                 };
-                pending.extend_from_slice(&buf[..n]);
-                while pending.len() >= FRAME_HEADER_SIZE {
-                    match Frame::decode(&pending) {
-                        Ok((frame, consumed)) => {
+                decoder.push(&buf[..n]).unwrap();
+                loop {
+                    match decoder.next_frame() {
+                        Ok(Some(frame)) => {
                             // If it's a ResolutionRequest, respond with ResolutionAck
                             if frame.channel == ChannelId::Control
                                 && !frame.payload.is_empty()
@@ -602,9 +602,8 @@ mod tests {
                                 };
                                 stream.write_all(&ack.to_frame().encode()).await.unwrap();
                             }
-                            pending.drain(..consumed);
                         }
-                        Err(bpane_protocol::FrameError::BufferTooShort { .. }) => break,
+                        Ok(None) => break,
                         Err(e) => panic!("decode error: {e}"),
                     }
                 }

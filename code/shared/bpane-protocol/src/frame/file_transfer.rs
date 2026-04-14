@@ -57,6 +57,7 @@ impl FileMessage {
         Self::decode_for_channel(buf, ChannelId::FileDown)
     }
 
+    /// Decode a file-transfer payload for a specific file channel.
     pub(crate) fn decode_for_channel(buf: &[u8], channel: ChannelId) -> Result<Self, FrameError> {
         decode_tagged(buf, |tag, r| match tag {
             FILE_HEADER => Ok(Self::FileHeader {
@@ -79,6 +80,10 @@ impl FileMessage {
     }
 
     /// Wrap this payload in a frame on the chosen file channel.
+    ///
+    /// This method does not validate that `channel` is one of the two file
+    /// channels; callers should pass either [`ChannelId::FileUp`] or
+    /// [`ChannelId::FileDown`].
     pub fn to_frame(&self, channel: ChannelId) -> Frame {
         Frame::new(channel, self.encode())
     }

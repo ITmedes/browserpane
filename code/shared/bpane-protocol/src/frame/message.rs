@@ -7,16 +7,27 @@ use super::{envelope::Frame, error::FrameError};
 /// Decoded message from any channel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Message {
+    /// Typed control message on [`ChannelId::Control`].
     Control(ControlMessage),
+    /// Typed input message on [`ChannelId::Input`].
     Input(InputMessage),
+    /// Typed cursor message on [`ChannelId::Cursor`].
     Cursor(CursorMessage),
+    /// Typed clipboard message on [`ChannelId::Clipboard`].
     Clipboard(ClipboardMessage),
+    /// Typed file-transfer message on [`ChannelId::FileUp`].
     FileUp(FileMessage),
+    /// Typed file-transfer message on [`ChannelId::FileDown`].
     FileDown(FileMessage),
+    /// Typed tile-rendering message on [`ChannelId::Tiles`].
     Tiles(TileMessage),
+    /// Raw payload bytes from [`ChannelId::Video`].
     Video(Bytes),
+    /// Raw payload bytes from [`ChannelId::AudioOut`].
     AudioOut(Bytes),
+    /// Raw payload bytes from [`ChannelId::AudioIn`].
     AudioIn(Bytes),
+    /// Raw payload bytes from [`ChannelId::VideoIn`].
     VideoIn(Bytes),
 }
 

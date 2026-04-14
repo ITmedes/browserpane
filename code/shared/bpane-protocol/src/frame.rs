@@ -7,6 +7,7 @@ mod audio;
 mod clipboard;
 mod control;
 mod cursor;
+mod decoder;
 mod envelope;
 mod error;
 mod file_transfer;
@@ -16,6 +17,7 @@ mod message;
 mod tile;
 mod video;
 
+pub use self::decoder::{FrameDecoder, FrameDecoderError};
 pub use self::envelope::{Frame, FRAME_HEADER_SIZE};
 pub use self::error::FrameError;
 pub use self::message::Message;

@@ -21,6 +21,7 @@ const BITRATE_HINT: u8 = 0x07;
 const RESOLUTION_LOCKED: u8 = 0x08;
 
 impl ControlMessage {
+    /// Encode a control message payload.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = Writer::new();
         match self {
@@ -65,6 +66,12 @@ impl ControlMessage {
         w.finish()
     }
 
+    /// Decode a control message payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] if the payload is truncated, has an unknown
+    /// control tag, or contains trailing bytes.
     pub fn decode(buf: &[u8]) -> Result<Self, FrameError> {
         decode_tagged(buf, |tag, r| match tag {
             RESOLUTION_REQUEST => Ok(Self::ResolutionRequest {
@@ -104,6 +111,7 @@ impl ControlMessage {
         })
     }
 
+    /// Wrap this message in a frame on the control channel.
     pub fn to_frame(&self) -> Frame {
         Frame::new(ChannelId::Control, self.encode())
     }
