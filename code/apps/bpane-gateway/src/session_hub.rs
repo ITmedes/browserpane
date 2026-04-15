@@ -5,12 +5,12 @@ use std::time::Instant;
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tracing::{debug, info, warn};
 
-use bpane_protocol::channel::ChannelId;
 use bpane_protocol::frame::Frame;
 use bpane_protocol::ControlMessage;
 
 use crate::relay::Relay;
 
+mod pump;
 mod refresh;
 mod telemetry;
 
@@ -107,15 +107,17 @@ impl SessionHub {
         let cached_grid_config: Arc<Mutex<Option<Arc<Frame>>>> = Arc::new(Mutex::new(None));
         let active = Arc::new(AtomicBool::new(true));
 
-        let pump_handle = tokio::spawn(Self::pump_loop(
+        let pump_handle = pump::spawn(
             from_agent_rx,
             broadcast_tx.clone(),
-            current_resolution.clone(),
-            cached_session_ready.clone(),
-            cached_keyframe.clone(),
-            cached_grid_config.clone(),
-            active.clone(),
-        ));
+            pump::PumpState {
+                active: active.clone(),
+                cached_grid_config: cached_grid_config.clone(),
+                cached_keyframe: cached_keyframe.clone(),
+                cached_session_ready: cached_session_ready.clone(),
+                current_resolution: current_resolution.clone(),
+            },
+        );
 
         Ok(Self {
             broadcast_tx,
@@ -145,61 +147,6 @@ impl SessionHub {
             _relay_handle: relay_handle,
             _pump_handle: pump_handle,
         })
-    }
-
-    /// Reads frames from the agent relay and broadcasts to all subscribers.
-    /// Also caches SessionReady, ResolutionAck, GridConfig, and keyframes for late-joining clients.
-    async fn pump_loop(
-        mut from_agent: mpsc::Receiver<Frame>,
-        broadcast_tx: broadcast::Sender<Arc<Frame>>,
-        resolution: Arc<Mutex<(u16, u16)>>,
-        cached_session_ready: Arc<Mutex<Option<Arc<Frame>>>>,
-        cached_keyframe: Arc<Mutex<Option<Arc<Frame>>>>,
-        cached_grid_config: Arc<Mutex<Option<Arc<Frame>>>>,
-        active: Arc<AtomicBool>,
-    ) {
-        while let Some(frame) = from_agent.recv().await {
-            // Cache important frames for late-joining clients
-            if frame.channel == ChannelId::Control && !frame.payload.is_empty() {
-                match frame.payload[0] {
-                    0x02 if frame.payload.len() >= 5 => {
-                        // ResolutionAck — update current resolution
-                        let w = u16::from_le_bytes([frame.payload[1], frame.payload[2]]);
-                        let h = u16::from_le_bytes([frame.payload[3], frame.payload[4]]);
-                        *resolution.lock().await = (w, h);
-                    }
-                    0x03 => {
-                        // SessionReady — cache for late joiners
-                        *cached_session_ready.lock().await = Some(Arc::new(frame.clone()));
-                    }
-                    _ => {}
-                }
-            }
-
-            // Cache GridConfig (Tiles channel, tag 0x01) for late joiners.
-            // Without this, the tile compositor never initializes → black screen.
-            if frame.channel == ChannelId::Tiles
-                && !frame.payload.is_empty()
-                && frame.payload[0] == 0x01
-            {
-                *cached_grid_config.lock().await = Some(Arc::new(frame.clone()));
-            }
-
-            // Cache keyframes for late joiners (is_keyframe at byte offset 8)
-            if frame.channel == ChannelId::Video && frame.payload.len() > 8 {
-                let is_keyframe = frame.payload[8] != 0;
-                if is_keyframe {
-                    *cached_keyframe.lock().await = Some(Arc::new(frame.clone()));
-                }
-            }
-
-            let arc_frame = Arc::new(frame);
-            // broadcast::send returns Err only if there are no receivers — that's OK.
-            let _ = broadcast_tx.send(arc_frame);
-        }
-
-        active.store(false, Ordering::Relaxed);
-        info!("session hub pump ended (agent disconnected)");
     }
 
     /// Subscribe a new client to the hub.
