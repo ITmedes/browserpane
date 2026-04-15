@@ -1,8 +1,8 @@
 use super::bitrate::{compute_adapted_bitrate, DatagramStats};
-use super::policy::viewer_can_forward_frame;
+use super::policy::{adapt_frame_for_client, viewer_can_forward_frame, viewer_can_receive_frame};
 use super::request::{extract_token, validate_request_path, RequestValidationError};
-use super::*;
 use crate::auth::{AuthError, TokenValidator};
+use bpane_protocol::channel::ChannelId;
 use bpane_protocol::frame::Frame;
 use bpane_protocol::{ControlMessage, SessionFlags};
 

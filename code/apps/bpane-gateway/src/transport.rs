@@ -8,6 +8,7 @@ use wtransport::{Endpoint, Identity, ServerConfig};
 
 mod bitrate;
 mod bootstrap;
+mod egress;
 mod ingress;
 mod policy;
 mod request;
@@ -16,12 +17,10 @@ mod tasks;
 /// Maximum number of concurrent WebTransport sessions.
 const MAX_CONCURRENT_SESSIONS: u64 = 100;
 
-use bpane_protocol::channel::ChannelId;
-
 use self::bitrate::DatagramStats;
 use self::bootstrap::send_initial_frames;
+use self::egress::{spawn_agent_to_browser_task, EgressTaskContext};
 use self::ingress::spawn_browser_to_agent_task;
-use self::policy::{adapt_frame_for_client, viewer_can_receive_frame};
 use self::request::{validate_request_path, RequestValidationError};
 use self::tasks::{spawn_bitrate_hint_task, spawn_gateway_pinger};
 use crate::auth::TokenValidator;
@@ -154,7 +153,7 @@ async fn handle_session(
     let client_id = client_handle.client_id;
     let joined_as_owner = client_handle.is_owner;
     let locked_resolution = client_handle.locked_resolution;
-    let mut from_host = client_handle.from_host;
+    let from_host = client_handle.from_host;
     let to_host = client_handle.to_host;
     let initial_frames = client_handle.initial_frames;
 
@@ -187,60 +186,18 @@ async fn handle_session(
     )
     .await?;
 
-    // Relay: hub broadcast -> browser
-    let session_a2b = session.clone();
-    let send_stream_clone = send_stream.clone();
-    let conn_for_dgram = connection.clone();
     let dgram_stats = Arc::new(DatagramStats::new());
-    let dgram_stats_relay = dgram_stats.clone();
-    let hub_for_agent_frames = hub.clone();
-    let agent_to_browser = tokio::spawn(async move {
-        while session_a2b.is_active() {
-            match from_host.recv().await {
-                Ok(frame) => {
-                    let is_owner = hub_for_agent_frames.is_browser_owner(client_id);
-                    if !is_owner && !viewer_can_receive_frame(&frame) {
-                        continue;
-                    }
-                    if frame.channel == ChannelId::Video {
-                        let payload = &frame.payload;
-
-                        // Check if this is a keyframe by inspecting the
-                        // VideoDatagram header: byte 8 is the is_keyframe flag.
-                        let is_keyframe = payload.len() > 8 && payload[8] != 0;
-
-                        if is_keyframe {
-                            // Keyframes go on the reliable stream — they must
-                            // arrive for the decoder to initialize / recover.
-                            let encoded = frame.encode();
-                            let mut stream = send_stream_clone.lock().await;
-                            if stream.write_all(&encoded).await.is_err() {
-                                break;
-                            }
-                        } else {
-                            // Delta frames go as best-effort datagrams only —
-                            // avoids doubling bandwidth and HOL blocking.
-                            match conn_for_dgram.send_datagram(payload) {
-                                Ok(()) => dgram_stats_relay.record_success(),
-                                Err(_) => dgram_stats_relay.record_failure(),
-                            };
-                        }
-                    } else {
-                        let encoded = adapt_frame_for_client(&frame, is_owner).encode();
-                        let mut stream = send_stream_clone.lock().await;
-                        if stream.write_all(&encoded).await.is_err() {
-                            break;
-                        }
-                    }
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    warn!(session_id, client_id, n, "client lagged, skipping frames");
-                    continue;
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            }
-        }
-    });
+    let agent_to_browser = spawn_agent_to_browser_task(EgressTaskContext {
+        session: session.clone(),
+        hub: hub.clone(),
+        session_id,
+        client_id,
+        send_stream: send_stream.clone(),
+        connection: connection.clone(),
+        dgram_stats: dgram_stats.clone(),
+    },
+        from_host,
+    );
 
     let bitrate_hint_task = spawn_bitrate_hint_task(
         session_id,
