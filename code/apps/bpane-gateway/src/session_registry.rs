@@ -164,8 +164,12 @@ impl SessionRegistry {
 
     /// Called when a client disconnects.
     pub async fn leave(&self, agent_socket_path: &str, client_id: u64) {
-        let hubs = self.hubs.lock().await;
-        if let Some(hub) = hubs.get(agent_socket_path) {
+        let hub = {
+            let hubs = self.hubs.lock().await;
+            hubs.get(agent_socket_path).cloned()
+        };
+
+        if let Some(hub) = hub {
             hub.unsubscribe(client_id).await;
             let remaining = hub.client_count();
             debug!(client_id, remaining, "client left session");
