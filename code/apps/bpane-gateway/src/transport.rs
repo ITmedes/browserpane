@@ -7,15 +7,17 @@ use tracing::{debug, error, info, warn};
 use wtransport::{Endpoint, Identity, ServerConfig};
 
 mod bitrate;
+mod policy;
 
 /// Maximum number of concurrent WebTransport sessions.
 const MAX_CONCURRENT_SESSIONS: u64 = 100;
 
 use bpane_protocol::channel::ChannelId;
-use bpane_protocol::frame::{Frame, FrameDecoder};
-use bpane_protocol::{ControlMessage, SessionFlags};
+use bpane_protocol::frame::FrameDecoder;
+use bpane_protocol::ControlMessage;
 
 use self::bitrate::{compute_adapted_bitrate, DatagramStats};
+use self::policy::{adapt_frame_for_client, viewer_can_forward_frame, viewer_can_receive_frame};
 use crate::auth::TokenValidator;
 use crate::session::Session;
 use crate::session_hub::ResizeResult;
@@ -145,41 +147,6 @@ fn extract_token(path: &str) -> Option<String> {
         }
     }
     None
-}
-
-fn adapt_frame_for_client(frame: &Frame, is_owner: bool) -> Frame {
-    if is_owner
-        || frame.channel != ChannelId::Control
-        || frame.payload.len() < 3
-        || frame.payload[0] != 0x03
-    {
-        return frame.clone();
-    }
-
-    let mut payload = frame.payload.to_vec();
-    let restricted = SessionFlags::CLIPBOARD
-        | SessionFlags::FILE_TRANSFER
-        | SessionFlags::MICROPHONE
-        | SessionFlags::CAMERA
-        | SessionFlags::KEYBOARD_LAYOUT;
-    payload[2] &= !restricted.bits();
-    Frame::new(frame.channel, payload)
-}
-
-fn viewer_can_receive_frame(frame: &Frame) -> bool {
-    !matches!(frame.channel, ChannelId::Clipboard | ChannelId::FileDown)
-}
-
-fn viewer_can_forward_frame(frame: &Frame) -> bool {
-    match frame.channel {
-        ChannelId::Input
-        | ChannelId::Clipboard
-        | ChannelId::AudioIn
-        | ChannelId::VideoIn
-        | ChannelId::FileUp => false,
-        ChannelId::Control if !frame.payload.is_empty() && frame.payload[0] == 0x06 => false,
-        _ => true,
-    }
 }
 
 async fn handle_session(
