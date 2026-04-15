@@ -57,7 +57,10 @@ pub(super) fn spawn_agent_to_browser_task(
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
-                    warn!(ctx.session_id, ctx.client_id, n, "client lagged, skipping frames");
+                    warn!(
+                        ctx.session_id,
+                        ctx.client_id, n, "client lagged, skipping frames"
+                    );
                     continue;
                 }
                 Err(broadcast::error::RecvError::Closed) => break,
