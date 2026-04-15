@@ -8,6 +8,7 @@ use wtransport::{Endpoint, Identity, ServerConfig};
 
 mod bitrate;
 mod policy;
+mod request;
 mod tasks;
 
 /// Maximum number of concurrent WebTransport sessions.
@@ -19,6 +20,7 @@ use bpane_protocol::ControlMessage;
 
 use self::bitrate::DatagramStats;
 use self::policy::{adapt_frame_for_client, viewer_can_forward_frame, viewer_can_receive_frame};
+use self::request::{validate_request_path, RequestValidationError};
 use self::tasks::{spawn_bitrate_hint_task, spawn_gateway_pinger};
 use crate::auth::TokenValidator;
 use crate::session::Session;
@@ -83,20 +85,19 @@ impl TransportServer {
                 continue;
             }
 
-            // Extract token from the URL path query
             let path = session_request.path().to_string();
-            let token = extract_token(&path);
-
-            if let Some(token) = token {
-                if let Err(e) = self.token_validator.validate_token(&token) {
+            match validate_request_path(&path, &self.token_validator) {
+                Ok(()) => {}
+                Err(RequestValidationError::InvalidToken(e)) => {
                     warn!("token validation failed: {e}");
                     session_request.not_found().await;
                     continue;
                 }
-            } else {
-                warn!("no token in request path: {path}");
-                session_request.not_found().await;
-                continue;
+                Err(RequestValidationError::MissingToken) => {
+                    warn!("no token in request path: {path}");
+                    session_request.not_found().await;
+                    continue;
+                }
             }
 
             let connection = match session_request.accept().await {
@@ -138,17 +139,6 @@ impl TransportServer {
             });
         }
     }
-}
-
-fn extract_token(path: &str) -> Option<String> {
-    // URL format: /session?token=xxx or /?token=xxx
-    let query = path.split('?').nth(1)?;
-    for param in query.split('&') {
-        if let Some(value) = param.strip_prefix("token=") {
-            return Some(value.to_string());
-        }
-    }
-    None
 }
 
 async fn handle_session(
