@@ -329,7 +329,7 @@ async fn handle_session(
                 true
             } else {
                 let ratio = adapted as f64 / last_sent_bps as f64;
-                ratio < 0.9 || ratio > 1.1
+                !(0.9..=1.1).contains(&ratio)
             };
 
             if should_send {
