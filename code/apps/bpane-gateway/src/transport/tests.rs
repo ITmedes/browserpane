@@ -1,9 +1,10 @@
 use super::bitrate::{compute_adapted_bitrate, DatagramStats};
+use super::policy::viewer_can_forward_frame;
 use super::request::{extract_token, validate_request_path, RequestValidationError};
 use super::*;
 use crate::auth::{AuthError, TokenValidator};
 use bpane_protocol::frame::Frame;
-use bpane_protocol::SessionFlags;
+use bpane_protocol::{ControlMessage, SessionFlags};
 
 #[test]
 fn extract_token_from_path() {

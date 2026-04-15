@@ -8,6 +8,7 @@ use wtransport::{Endpoint, Identity, ServerConfig};
 
 mod bitrate;
 mod bootstrap;
+mod ingress;
 mod policy;
 mod request;
 mod tasks;
@@ -16,17 +17,15 @@ mod tasks;
 const MAX_CONCURRENT_SESSIONS: u64 = 100;
 
 use bpane_protocol::channel::ChannelId;
-use bpane_protocol::frame::FrameDecoder;
-use bpane_protocol::ControlMessage;
 
 use self::bitrate::DatagramStats;
 use self::bootstrap::send_initial_frames;
-use self::policy::{adapt_frame_for_client, viewer_can_forward_frame, viewer_can_receive_frame};
+use self::ingress::spawn_browser_to_agent_task;
+use self::policy::{adapt_frame_for_client, viewer_can_receive_frame};
 use self::request::{validate_request_path, RequestValidationError};
 use self::tasks::{spawn_bitrate_hint_task, spawn_gateway_pinger};
 use crate::auth::TokenValidator;
 use crate::session::Session;
-use crate::session_hub::ResizeResult;
 use crate::session_registry::SessionRegistry;
 
 pub struct TransportServer {
@@ -175,7 +174,7 @@ async fn handle_session(
     });
 
     // Open a bidirectional stream for control
-    let (send_stream, mut recv_stream) = connection.open_bi().await?.await?;
+    let (send_stream, recv_stream) = connection.open_bi().await?.await?;
     let send_stream = Arc::new(tokio::sync::Mutex::new(send_stream));
 
     send_initial_frames(
@@ -251,105 +250,14 @@ async fn handle_session(
         send_stream.clone(),
     );
 
-    // Relay: browser -> hub (with resize interception for non-owner clients)
-    let session_b2a = session.clone();
-    let hub_for_resize = hub.clone();
-    let send_stream_resize = send_stream.clone();
-    let browser_to_agent = tokio::spawn(async move {
-        let mut buf = vec![0u8; 64 * 1024];
-        let mut decoder = FrameDecoder::new();
-        loop {
-            if !session_b2a.is_active() {
-                break;
-            }
-            match recv_stream.read(&mut buf).await {
-                Ok(Some(n)) => {
-                    session_b2a.update_heartbeat().await;
-
-                    if let Err(e) = decoder.push(&buf[..n]) {
-                        error!("frame decode error from browser: {e}");
-                        break;
-                    }
-                    loop {
-                        match decoder.next_frame() {
-                            Ok(Some(frame)) => {
-                                let is_owner = hub_for_resize.is_browser_owner(client_id);
-                                // Intercept ResolutionRequest from non-owner clients
-                                if !is_owner
-                                    && frame.channel == ChannelId::Control
-                                    && !frame.payload.is_empty()
-                                    && frame.payload[0] == 0x01
-                                    && frame.payload.len() >= 5
-                                {
-                                    let req_w =
-                                        u16::from_le_bytes([frame.payload[1], frame.payload[2]]);
-                                    let req_h =
-                                        u16::from_le_bytes([frame.payload[3], frame.payload[4]]);
-
-                                    match hub_for_resize
-                                        .request_resize(client_id, req_w, req_h)
-                                        .await
-                                    {
-                                        ResizeResult::Applied => {
-                                            // Should not happen for non-owner
-                                        }
-                                        ResizeResult::Locked(w, h) => {
-                                            if w > 0 && h > 0 {
-                                                let locked = ControlMessage::ResolutionLocked {
-                                                    width: w,
-                                                    height: h,
-                                                };
-                                                let encoded = locked.to_frame().encode();
-                                                let mut stream = send_stream_resize.lock().await;
-                                                let _ = stream.write_all(&encoded).await;
-                                            }
-                                        }
-                                    }
-                                    continue;
-                                }
-
-                                // Owner's ResolutionRequest goes through the hub
-                                if is_owner
-                                    && frame.channel == ChannelId::Control
-                                    && !frame.payload.is_empty()
-                                    && frame.payload[0] == 0x01
-                                    && frame.payload.len() >= 5
-                                {
-                                    let req_w =
-                                        u16::from_le_bytes([frame.payload[1], frame.payload[2]]);
-                                    let req_h =
-                                        u16::from_le_bytes([frame.payload[3], frame.payload[4]]);
-                                    let _ = hub_for_resize
-                                        .request_resize(client_id, req_w, req_h)
-                                        .await;
-                                    continue;
-                                }
-
-                                if !is_owner && !viewer_can_forward_frame(&frame) {
-                                    continue;
-                                }
-
-                                // All other frames: forward to host
-                                if to_host.send(frame).await.is_err() {
-                                    return;
-                                }
-                            }
-                            Ok(None) => break,
-                            Err(e) => {
-                                error!("frame decode error from browser: {e}");
-                                return;
-                            }
-                        }
-                    }
-                }
-                Ok(None) => break,
-                Err(e) => {
-                    warn!("browser read error: {e}");
-                    break;
-                }
-            }
-        }
-    });
+    let browser_to_agent = spawn_browser_to_agent_task(
+        session.clone(),
+        hub.clone(),
+        client_id,
+        recv_stream,
+        send_stream.clone(),
+        to_host,
+    );
 
     let gateway_pinger = spawn_gateway_pinger(session.clone(), send_stream.clone());
 
