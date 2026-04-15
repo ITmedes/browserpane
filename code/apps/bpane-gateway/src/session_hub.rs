@@ -11,6 +11,10 @@ use bpane_protocol::{ControlMessage, TileMessage};
 
 use crate::relay::Relay;
 
+mod telemetry;
+
+pub use self::telemetry::SessionTelemetrySnapshot;
+
 /// Broadcast channel capacity. At 30fps, 1024 frames is ~34 seconds of buffer.
 const BROADCAST_CAPACITY: usize = 1024;
 
@@ -30,26 +34,6 @@ impl std::fmt::Display for SubscribeError {
 }
 
 impl std::error::Error for SubscribeError {}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SessionTelemetrySnapshot {
-    pub browser_clients: u32,
-    pub viewer_clients: u32,
-    pub max_viewers: u32,
-    pub viewer_slots_remaining: u32,
-    pub exclusive_browser_owner: bool,
-    pub mcp_owner: bool,
-    pub resolution: (u16, u16),
-    pub joins_accepted: u64,
-    pub joins_rejected_viewer_cap: u64,
-    pub last_join_latency_ms: u64,
-    pub average_join_latency_ms: f64,
-    pub max_join_latency_ms: u64,
-    pub full_refresh_requests: u64,
-    pub full_refresh_tiles_requested: u64,
-    pub last_full_refresh_tiles: u64,
-    pub max_full_refresh_tiles: u64,
-}
 
 /// Handle returned to each connecting client.
 #[derive(Debug)]
@@ -489,60 +473,15 @@ impl SessionHub {
 
     pub async fn telemetry_snapshot(&self) -> SessionTelemetrySnapshot {
         let resolution = self.current_resolution().await;
-        let browser_clients = self.client_count();
-        let viewer_clients = self.viewer_count();
-        let joins_accepted = self.joins_accepted.load(Ordering::Relaxed);
-        let total_join_latency_ms = self.total_join_latency_ms.load(Ordering::Relaxed);
-
-        SessionTelemetrySnapshot {
-            browser_clients,
-            viewer_clients,
-            max_viewers: self.max_viewers,
-            viewer_slots_remaining: self.max_viewers.saturating_sub(viewer_clients),
-            exclusive_browser_owner: self.exclusive_browser_owner,
-            mcp_owner: self.mcp_is_owner(),
-            resolution,
-            joins_accepted,
-            joins_rejected_viewer_cap: self.joins_rejected_viewer_cap.load(Ordering::Relaxed),
-            last_join_latency_ms: self.last_join_latency_ms.load(Ordering::Relaxed),
-            average_join_latency_ms: if joins_accepted == 0 {
-                0.0
-            } else {
-                total_join_latency_ms as f64 / joins_accepted as f64
-            },
-            max_join_latency_ms: self.max_join_latency_ms.load(Ordering::Relaxed),
-            full_refresh_requests: self.full_refresh_requests.load(Ordering::Relaxed),
-            full_refresh_tiles_requested: self.full_refresh_tiles_requested.load(Ordering::Relaxed),
-            last_full_refresh_tiles: self.last_full_refresh_tiles.load(Ordering::Relaxed),
-            max_full_refresh_tiles: self.max_full_refresh_tiles.load(Ordering::Relaxed),
-        }
+        telemetry::snapshot(self, resolution)
     }
 
     fn record_join_latency(&self, elapsed: std::time::Duration) {
-        let join_ms = elapsed.as_millis().min(u128::from(u64::MAX)) as u64;
-        self.total_join_latency_ms
-            .fetch_add(join_ms, Ordering::Relaxed);
-        self.last_join_latency_ms.store(join_ms, Ordering::Relaxed);
-        update_max(&self.max_join_latency_ms, join_ms);
+        telemetry::record_join_latency(self, elapsed);
     }
 
     fn record_refresh_burst(&self, tiles_requested: u64) {
-        self.full_refresh_requests.fetch_add(1, Ordering::Relaxed);
-        self.full_refresh_tiles_requested
-            .fetch_add(tiles_requested, Ordering::Relaxed);
-        self.last_full_refresh_tiles
-            .store(tiles_requested, Ordering::Relaxed);
-        update_max(&self.max_full_refresh_tiles, tiles_requested);
-    }
-}
-
-fn update_max(target: &AtomicU64, value: u64) {
-    let mut current = target.load(Ordering::Relaxed);
-    while value > current {
-        match target.compare_exchange(current, value, Ordering::Relaxed, Ordering::Relaxed) {
-            Ok(_) => break,
-            Err(next) => current = next,
-        }
+        telemetry::record_refresh_burst(self, tiles_requested);
     }
 }
 
