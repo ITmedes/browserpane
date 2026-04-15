@@ -1,4 +1,6 @@
 use super::*;
+use bpane_protocol::frame::Frame;
+use bpane_protocol::SessionFlags;
 
 #[test]
 fn extract_token_from_path() {
