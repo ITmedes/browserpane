@@ -25,6 +25,65 @@ impl SessionRegistry {
         }
     }
 
+    fn prune_inactive_hubs(hubs: &mut HashMap<String, Arc<SessionHub>>) {
+        hubs.retain(|path, hub| {
+            if !hub.is_active() {
+                debug!("removing inactive hub for {path}");
+                false
+            } else {
+                true
+            }
+        });
+    }
+
+    async fn lookup_live_hub(&self, agent_socket_path: &str) -> Option<Arc<SessionHub>> {
+        let mut hubs = self.hubs.lock().await;
+        Self::prune_inactive_hubs(&mut hubs);
+        hubs.get(agent_socket_path).cloned()
+    }
+
+    async fn insert_or_get_live_hub(
+        &self,
+        agent_socket_path: &str,
+        new_hub: Arc<SessionHub>,
+    ) -> (Arc<SessionHub>, bool) {
+        let mut hubs = self.hubs.lock().await;
+        Self::prune_inactive_hubs(&mut hubs);
+
+        if let Some(existing) = hubs.get(agent_socket_path) {
+            debug!(
+                path = agent_socket_path,
+                "concurrent session hub creation won race, using existing"
+            );
+            return (existing.clone(), false);
+        }
+
+        hubs.insert(agent_socket_path.to_string(), new_hub.clone());
+        (new_hub, true)
+    }
+
+    async fn get_or_create_hub(
+        &self,
+        agent_socket_path: &str,
+    ) -> anyhow::Result<(Arc<SessionHub>, bool)> {
+        if let Some(hub) = self.lookup_live_hub(agent_socket_path).await {
+            return Ok((hub, false));
+        }
+
+        let new_hub = Arc::new(
+            SessionHub::new(
+                agent_socket_path,
+                self.max_viewers,
+                self.exclusive_browser_owner,
+            )
+            .await?,
+        );
+
+        Ok(self
+            .insert_or_get_live_hub(agent_socket_path, new_hub)
+            .await)
+    }
+
     /// Join an existing session or create a new one.
     /// Returns a ClientHandle for the browser client.
     ///
@@ -37,73 +96,23 @@ impl SessionRegistry {
         &self,
         agent_socket_path: &str,
     ) -> anyhow::Result<(ClientHandle, Arc<SessionHub>)> {
-        // Phase 1: look up an existing live hub under the lock.
-        // The lock is dropped at the end of this block.
-        let existing_hub: Option<Arc<SessionHub>> = {
-            let mut hubs = self.hubs.lock().await;
+        let (hub, created) = self.get_or_create_hub(agent_socket_path).await?;
+        let handle = hub.subscribe().await.map_err(anyhow::Error::from)?;
 
-            // Clean up dead hubs (relay disconnected or no longer active).
-            hubs.retain(|path, hub| {
-                if !hub.is_active() {
-                    debug!("removing inactive hub for {path}");
-                    false
-                } else {
-                    true
-                }
-            });
-
-            hubs.get(agent_socket_path)
-                .filter(|h| h.is_active())
-                .cloned()
-        }; // mutex released here
-
-        // Fast path: subscribe to the existing hub outside the lock.
-        if let Some(hub) = existing_hub {
-            let handle = hub.subscribe().await.map_err(anyhow::Error::from)?;
+        if created {
+            debug!(
+                client_id = handle.client_id,
+                "created new session hub, client is owner"
+            );
+        } else {
             debug!(
                 client_id = handle.client_id,
                 is_owner = handle.is_owner,
                 clients = hub.client_count(),
                 "client joined existing session"
             );
-            return Ok((handle, hub));
         }
 
-        // Slow path: no live hub exists. Connect to the agent outside the lock
-        // (this is the expensive I/O step that must not hold the mutex).
-        let new_hub = Arc::new(
-            SessionHub::new(
-                agent_socket_path,
-                self.max_viewers,
-                self.exclusive_browser_owner,
-            )
-            .await?,
-        );
-
-        // Phase 2: re-acquire the lock to insert the new hub, but only if
-        // another concurrent caller has not already inserted one (TOCTOU guard).
-        let hub: Arc<SessionHub> = {
-            let mut hubs = self.hubs.lock().await;
-
-            // Re-check: a concurrent join() may have beaten us here.
-            if let Some(existing) = hubs.get(agent_socket_path).filter(|h| h.is_active()) {
-                // Another task won the race — discard our hub and use theirs.
-                debug!("concurrent join won race for new hub, using existing");
-                existing.clone()
-            } else {
-                // We won — insert ours.
-                hubs.remove(agent_socket_path); // evict any stale/inactive entry
-                hubs.insert(agent_socket_path.to_string(), new_hub.clone());
-                new_hub
-            }
-        }; // mutex released here
-
-        // Subscribe outside the lock.
-        let handle = hub.subscribe().await.map_err(anyhow::Error::from)?;
-        debug!(
-            client_id = handle.client_id,
-            "created new session hub, client is owner"
-        );
         Ok((handle, hub))
     }
 
@@ -113,52 +122,7 @@ impl SessionRegistry {
     /// Like `join()`, the mutex is held only for the HashMap operation;
     /// `SessionHub::new()` runs outside the critical section.
     pub async fn ensure_hub(&self, agent_socket_path: &str) -> anyhow::Result<Arc<SessionHub>> {
-        // Phase 1: look up an existing live hub under the lock.
-        let existing_hub: Option<Arc<SessionHub>> = {
-            let mut hubs = self.hubs.lock().await;
-
-            hubs.retain(|path, hub| {
-                if !hub.is_active() {
-                    debug!("removing inactive hub for {path}");
-                    false
-                } else {
-                    true
-                }
-            });
-
-            hubs.get(agent_socket_path)
-                .filter(|h| h.is_active())
-                .cloned()
-        }; // mutex released here
-
-        if let Some(hub) = existing_hub {
-            return Ok(hub);
-        }
-
-        // Slow path: create outside the lock.
-        let new_hub = Arc::new(
-            SessionHub::new(
-                agent_socket_path,
-                self.max_viewers,
-                self.exclusive_browser_owner,
-            )
-            .await?,
-        );
-
-        // Phase 2: re-acquire to insert, with TOCTOU guard.
-        let hub: Arc<SessionHub> = {
-            let mut hubs = self.hubs.lock().await;
-
-            if let Some(existing) = hubs.get(agent_socket_path).filter(|h| h.is_active()) {
-                debug!("concurrent ensure_hub won race for new hub, using existing");
-                existing.clone()
-            } else {
-                hubs.remove(agent_socket_path);
-                hubs.insert(agent_socket_path.to_string(), new_hub.clone());
-                new_hub
-            }
-        }; // mutex released here
-
+        let (hub, _) = self.get_or_create_hub(agent_socket_path).await?;
         Ok(hub)
     }
 
@@ -187,16 +151,29 @@ mod tests {
     use tokio::net::UnixListener;
 
     async fn mock_agent(sock_path: &str) -> tokio::task::JoinHandle<()> {
+        mock_agent_with_connections(sock_path, 1).await
+    }
+
+    async fn mock_agent_with_connections(
+        sock_path: &str,
+        expected_connections: usize,
+    ) -> tokio::task::JoinHandle<()> {
         let listener = UnixListener::bind(sock_path).unwrap();
         tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
             let ready = ControlMessage::SessionReady {
                 version: 1,
                 flags: bpane_protocol::SessionFlags::empty(),
             };
-            stream.write_all(&ready.to_frame().encode()).await.unwrap();
+            let encoded = ready.to_frame().encode();
+            let mut streams = Vec::with_capacity(expected_connections);
+            for _ in 0..expected_connections {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                stream.write_all(&encoded).await.unwrap();
+                streams.push(stream);
+            }
             // Keep connection alive
             tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            drop(streams);
         })
     }
 
@@ -277,6 +254,29 @@ mod tests {
         let hub1 = registry.ensure_hub(sock_str).await.unwrap();
         let hub2 = registry.ensure_hub(sock_str).await.unwrap();
         assert!(Arc::ptr_eq(&hub1, &hub2));
+    }
+
+    #[tokio::test]
+    async fn concurrent_ensure_hub_shares_same_hub() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("test.sock");
+        let sock_str = sock.to_str().unwrap();
+
+        let _agent = mock_agent_with_connections(sock_str, 2).await;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let registry = Arc::new(SessionRegistry::new(10, false));
+        let registry2 = Arc::clone(&registry);
+
+        let (hub1, hub2) = tokio::join!(
+            registry.ensure_hub(sock_str),
+            registry2.ensure_hub(sock_str)
+        );
+        let hub1 = hub1.unwrap();
+        let hub2 = hub2.unwrap();
+
+        assert!(Arc::ptr_eq(&hub1, &hub2));
+        assert_eq!(hub1.client_count(), 0);
     }
 
     #[tokio::test]
