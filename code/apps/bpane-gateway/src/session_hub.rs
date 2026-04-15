@@ -7,10 +7,11 @@ use tracing::{debug, info, warn};
 
 use bpane_protocol::channel::ChannelId;
 use bpane_protocol::frame::Frame;
-use bpane_protocol::{ControlMessage, TileMessage};
+use bpane_protocol::ControlMessage;
 
 use crate::relay::Relay;
 
+mod refresh;
 mod telemetry;
 
 pub use self::telemetry::SessionTelemetrySnapshot;
@@ -381,38 +382,7 @@ impl SessionHub {
     /// Send CacheMiss for every tile in the grid to trigger a full refresh.
     /// The host will resend all tiles, which get broadcast to all subscribers.
     async fn request_full_refresh(&self) -> u64 {
-        let gc = self.cached_grid_config.lock().await;
-        let Some(gc_frame) = gc.as_ref() else {
-            warn!("no cached GridConfig — cannot request full refresh");
-            return 0;
-        };
-
-        // GridConfig payload: tag(1) + tile_size(2) + cols(2) + rows(2) + screen_w(2) + screen_h(2) = 11 bytes
-        if gc_frame.payload.len() < 7 {
-            warn!("cached GridConfig too short");
-            return 0;
-        }
-        let cols = u16::from_le_bytes([gc_frame.payload[3], gc_frame.payload[4]]);
-        let rows = u16::from_le_bytes([gc_frame.payload[5], gc_frame.payload[6]]);
-        drop(gc); // release lock before sending
-
-        debug!(cols, rows, "requesting full tile refresh for late joiner");
-
-        for row in 0..rows {
-            for col in 0..cols {
-                let msg = TileMessage::CacheMiss {
-                    frame_seq: 0,
-                    col,
-                    row,
-                    hash: 0,
-                };
-                if self.to_agent.send(msg.to_frame()).await.is_err() {
-                    warn!("failed to send CacheMiss to agent");
-                    return u64::from(row) * u64::from(cols) + u64::from(col);
-                }
-            }
-        }
-        u64::from(cols) * u64::from(rows)
+        refresh::request_full_refresh(&self.cached_grid_config, &self.to_agent).await
     }
 
     /// Register the MCP agent as session owner with the given resolution.
