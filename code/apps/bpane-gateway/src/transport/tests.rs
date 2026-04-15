@@ -1,4 +1,5 @@
 use super::*;
+use super::bitrate::{compute_adapted_bitrate, DatagramStats};
 use bpane_protocol::frame::Frame;
 use bpane_protocol::SessionFlags;
 
