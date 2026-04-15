@@ -187,15 +187,16 @@ async fn handle_session(
     .await?;
 
     let dgram_stats = Arc::new(DatagramStats::new());
-    let agent_to_browser = spawn_agent_to_browser_task(EgressTaskContext {
-        session: session.clone(),
-        hub: hub.clone(),
-        session_id,
-        client_id,
-        send_stream: send_stream.clone(),
-        connection: connection.clone(),
-        dgram_stats: dgram_stats.clone(),
-    },
+    let agent_to_browser = spawn_agent_to_browser_task(
+        EgressTaskContext {
+            session: session.clone(),
+            hub: hub.clone(),
+            session_id,
+            client_id,
+            send_stream: send_stream.clone(),
+            connection: connection.clone(),
+            dgram_stats: dgram_stats.clone(),
+        },
         from_host,
     );
 
