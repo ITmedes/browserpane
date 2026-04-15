@@ -8,6 +8,7 @@ use wtransport::{Endpoint, Identity, ServerConfig};
 
 mod bitrate;
 mod policy;
+mod tasks;
 
 /// Maximum number of concurrent WebTransport sessions.
 const MAX_CONCURRENT_SESSIONS: u64 = 100;
@@ -16,8 +17,9 @@ use bpane_protocol::channel::ChannelId;
 use bpane_protocol::frame::FrameDecoder;
 use bpane_protocol::ControlMessage;
 
-use self::bitrate::{compute_adapted_bitrate, DatagramStats};
+use self::bitrate::DatagramStats;
 use self::policy::{adapt_frame_for_client, viewer_can_forward_frame, viewer_can_receive_frame};
+use self::tasks::{spawn_bitrate_hint_task, spawn_gateway_pinger};
 use crate::auth::TokenValidator;
 use crate::session::Session;
 use crate::session_hub::ResizeResult;
@@ -268,59 +270,13 @@ async fn handle_session(
         }
     });
 
-    // Bitrate hint task: sample datagram stats every 2 s and send a
-    // BitrateHint control message to the browser whenever the adapted
-    // bitrate diverges from the last-sent value by more than 10%.
-    let session_bh = session.clone();
-    let dgram_stats_bh = dgram_stats.clone();
-    let send_stream_bh = send_stream.clone();
-    let bitrate_hint_task = tokio::spawn(async move {
-        // Starting bitrate: 2 Mbps (same default as the host encoder).
-        let mut current_bps: u32 = 2_000_000;
-        let mut last_sent_bps: u32 = 0; // 0 means no hint sent yet
-        loop {
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            if !session_bh.is_active() {
-                break;
-            }
-            let (successes, failures) = dgram_stats_bh.take_counts();
-            if failures > 0 {
-                debug!(
-                    session_id,
-                    client_id, successes, failures, "datagram send failures in last sample window"
-                );
-            }
-            let adapted = compute_adapted_bitrate(current_bps, successes, failures);
-            current_bps = adapted;
-
-            // Only send a hint when the new value differs by >10% from the
-            // last value we actually sent to the browser.
-            let should_send = if last_sent_bps == 0 {
-                true
-            } else {
-                let ratio = adapted as f64 / last_sent_bps as f64;
-                !(0.9..=1.1).contains(&ratio)
-            };
-
-            if should_send {
-                let hint = ControlMessage::BitrateHint {
-                    target_bps: adapted,
-                };
-                let encoded = hint.to_frame().encode();
-                let mut stream = send_stream_bh.lock().await;
-                if stream.write_all(&encoded).await.is_err() {
-                    break;
-                }
-                last_sent_bps = adapted;
-                tracing::debug!(
-                    session_id,
-                    client_id,
-                    target_bps = adapted,
-                    "sent BitrateHint"
-                );
-            }
-        }
-    });
+    let bitrate_hint_task = spawn_bitrate_hint_task(
+        session_id,
+        client_id,
+        session.clone(),
+        dgram_stats.clone(),
+        send_stream.clone(),
+    );
 
     // Relay: browser -> hub (with resize interception for non-owner clients)
     let session_b2a = session.clone();
@@ -422,33 +378,7 @@ async fn handle_session(
         }
     });
 
-    // Gateway-originated periodic pings toward browser
-    let session_ping = session.clone();
-    let send_stream_ping = send_stream.clone();
-    let gateway_pinger = tokio::spawn(async move {
-        let mut seq: u32 = 0;
-        let mut interval = tokio::time::interval(Duration::from_secs(5));
-        loop {
-            interval.tick().await;
-            if !session_ping.is_active() {
-                break;
-            }
-            seq += 1;
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64;
-            let ping = ControlMessage::Ping {
-                seq,
-                timestamp_ms: now,
-            };
-            let encoded = ping.to_frame().encode();
-            let mut stream = send_stream_ping.lock().await;
-            if stream.write_all(&encoded).await.is_err() {
-                break;
-            }
-        }
-    });
+    let gateway_pinger = spawn_gateway_pinger(session.clone(), send_stream.clone());
 
     tokio::select! {
         _ = agent_to_browser => {}
