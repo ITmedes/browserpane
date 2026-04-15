@@ -3,13 +3,13 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use tokio::sync::{broadcast, mpsc, Mutex};
-use tracing::{debug, info, warn};
+use tracing::debug;
 
 use bpane_protocol::frame::Frame;
-use bpane_protocol::ControlMessage;
 
 use crate::relay::Relay;
 
+mod policy;
 mod pump;
 mod refresh;
 mod telemetry;
@@ -275,50 +275,14 @@ impl SessionHub {
     }
 
     pub fn is_browser_owner(&self, client_id: u64) -> bool {
-        if self.mcp_is_owner() {
-            return false;
-        }
-        if !self.exclusive_browser_owner {
-            return true;
-        }
-        let owner_id = self.owner_id.load(Ordering::Relaxed);
-        owner_id == 0 || owner_id == client_id
+        policy::is_browser_owner(self, client_id)
     }
 
     /// Handle a resize request from a client.
     /// Only the owner's requests are forwarded to the host.
     /// Non-owner requests are denied and the current resolution is returned.
     pub async fn request_resize(&self, client_id: u64, width: u16, height: u16) -> ResizeResult {
-        // When MCP owns the session, deny all browser resize requests.
-        if self.mcp_is_owner.load(Ordering::Relaxed) {
-            if let Some((w, h)) = *self.mcp_resolution.lock().await {
-                return ResizeResult::Locked(w, h);
-            }
-        }
-
-        if !self.exclusive_browser_owner {
-            let msg = ControlMessage::ResolutionRequest { width, height };
-            if self.to_agent.send(msg.to_frame()).await.is_err() {
-                warn!("failed to forward collaborative resize to agent");
-            }
-            return ResizeResult::Applied;
-        }
-
-        let owner = self.owner_id.load(Ordering::Relaxed);
-        if client_id == owner {
-            let msg = ControlMessage::ResolutionRequest { width, height };
-            if self.to_agent.send(msg.to_frame()).await.is_err() {
-                warn!("failed to forward resize to agent");
-            }
-            ResizeResult::Applied
-        } else {
-            let (cur_w, cur_h) = *self.current_resolution.lock().await;
-            if cur_w > 0 && cur_h > 0 {
-                ResizeResult::Locked(cur_w, cur_h)
-            } else {
-                ResizeResult::Locked(0, 0)
-            }
-        }
+        policy::request_resize(self, client_id, width, height).await
     }
 
     /// Get the current session resolution.
@@ -336,27 +300,12 @@ impl SessionHub {
     /// Sends a ResolutionRequest to the host agent.
     /// All browser clients will be treated as viewers with locked resolution.
     pub async fn set_mcp_owner(&self, width: u16, height: u16) {
-        *self.mcp_resolution.lock().await = Some((width, height));
-        self.mcp_is_owner.store(true, Ordering::Relaxed);
-
-        // Send resolution request to the host agent
-        let msg = ControlMessage::ResolutionRequest { width, height };
-        if self.to_agent.send(msg.to_frame()).await.is_err() {
-            warn!("failed to send MCP resolution request to agent");
-        }
-
-        // Broadcast ResolutionLocked to all currently connected browser clients
-        let locked = ControlMessage::ResolutionLocked { width, height };
-        let _ = self.broadcast_tx.send(Arc::new(locked.to_frame()));
-
-        info!(width, height, "MCP agent registered as session owner");
+        policy::set_mcp_owner(self, width, height).await;
     }
 
     /// Remove MCP agent ownership. Next browser client to subscribe becomes owner.
     pub async fn clear_mcp_owner(&self) {
-        self.mcp_is_owner.store(false, Ordering::Relaxed);
-        *self.mcp_resolution.lock().await = None;
-        info!("MCP agent ownership cleared");
+        policy::clear_mcp_owner(self).await;
     }
 
     /// Whether the MCP agent currently owns the session.
@@ -373,19 +322,7 @@ impl SessionHub {
     }
 
     pub fn viewer_count(&self) -> u32 {
-        let clients = self.client_count();
-        if self.mcp_is_owner() {
-            clients
-        } else if self.exclusive_browser_owner
-            && self.owner_id.load(Ordering::Relaxed) != 0
-            && clients > 0
-        {
-            clients.saturating_sub(1)
-        } else if self.exclusive_browser_owner {
-            clients
-        } else {
-            0
-        }
+        policy::viewer_count(self)
     }
 
     pub async fn telemetry_snapshot(&self) -> SessionTelemetrySnapshot {
