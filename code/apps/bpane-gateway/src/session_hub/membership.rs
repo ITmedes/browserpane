@@ -1,0 +1,137 @@
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::time::Instant;
+
+use bpane_protocol::frame::Frame;
+use tracing::debug;
+
+use super::{ClientHandle, SessionHub, SubscribeError};
+
+pub(super) async fn subscribe(hub: &SessionHub) -> Result<ClientHandle, SubscribeError> {
+    let join_started = Instant::now();
+    let client_id = hub.client_counter.fetch_add(1, Ordering::Relaxed) + 1;
+    let mcp_is_owner = hub.mcp_is_owner.load(Ordering::Relaxed);
+    let mut connected_clients = hub.connected_clients.lock().await;
+    let prev_count = connected_clients.len() as u32;
+    let current_owner_id = hub.owner_id.load(Ordering::Relaxed);
+    let exclusive_browser_owner = hub.exclusive_browser_owner;
+
+    let is_owner = if mcp_is_owner {
+        false
+    } else if !exclusive_browser_owner {
+        true
+    } else {
+        current_owner_id == 0
+    };
+
+    if !is_owner {
+        let owner_connected = !mcp_is_owner && current_owner_id != 0 && prev_count > 0;
+        let current_viewers = if owner_connected {
+            prev_count.saturating_sub(1)
+        } else {
+            prev_count
+        };
+        if current_viewers >= hub.max_viewers {
+            hub.joins_rejected_viewer_cap
+                .fetch_add(1, Ordering::Relaxed);
+            return Err(SubscribeError::ViewerLimitReached {
+                max_viewers: hub.max_viewers,
+            });
+        }
+    }
+
+    connected_clients.push(client_id);
+    if is_owner {
+        hub.owner_id.store(client_id, Ordering::Relaxed);
+    }
+    hub.client_count
+        .store(connected_clients.len() as u32, Ordering::Relaxed);
+    drop(connected_clients);
+
+    let initial_frames = gather_initial_frames(hub).await;
+    let locked_resolution =
+        locked_resolution(hub, is_owner, mcp_is_owner, exclusive_browser_owner).await;
+
+    if prev_count > 0 {
+        let tiles_requested = hub.request_full_refresh().await;
+        if tiles_requested > 0 {
+            hub.record_refresh_burst(tiles_requested);
+        }
+    }
+
+    hub.record_join_latency(join_started.elapsed());
+    hub.joins_accepted.fetch_add(1, Ordering::Relaxed);
+
+    Ok(ClientHandle {
+        from_host: hub.broadcast_tx.subscribe(),
+        to_host: hub.to_agent.clone(),
+        client_id,
+        is_owner,
+        initial_frames,
+        locked_resolution,
+    })
+}
+
+pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
+    let mut connected_clients = hub.connected_clients.lock().await;
+    connected_clients.retain(|id| *id != client_id);
+    hub.client_count
+        .store(connected_clients.len() as u32, Ordering::Relaxed);
+
+    if hub.owner_id.load(Ordering::Relaxed) == client_id {
+        let next_owner = if hub.mcp_is_owner.load(Ordering::Relaxed) {
+            0
+        } else {
+            connected_clients.first().copied().unwrap_or(0)
+        };
+        hub.owner_id.store(next_owner, Ordering::Relaxed);
+        if next_owner != 0 {
+            debug!(
+                client_id,
+                next_owner, "promoted existing viewer to session owner"
+            );
+        }
+    } else if hub.owner_id.load(Ordering::Relaxed) == 0 && !hub.mcp_is_owner.load(Ordering::Relaxed)
+    {
+        if let Some(next_owner) = connected_clients.first().copied() {
+            hub.owner_id.store(next_owner, Ordering::Relaxed);
+            debug!(client_id, next_owner, "restored missing session owner");
+        }
+    }
+}
+
+async fn gather_initial_frames(hub: &SessionHub) -> Vec<Arc<Frame>> {
+    let mut initial_frames = Vec::new();
+    if let Some(sr) = hub.cached_session_ready.lock().await.as_ref() {
+        initial_frames.push(sr.clone());
+    }
+    if let Some(gc) = hub.cached_grid_config.lock().await.as_ref() {
+        initial_frames.push(gc.clone());
+    }
+    if let Some(kf) = hub.cached_keyframe.lock().await.as_ref() {
+        initial_frames.push(kf.clone());
+    }
+    initial_frames
+}
+
+async fn locked_resolution(
+    hub: &SessionHub,
+    is_owner: bool,
+    mcp_is_owner: bool,
+    exclusive_browser_owner: bool,
+) -> Option<(u16, u16)> {
+    if is_owner {
+        None
+    } else if mcp_is_owner {
+        *hub.mcp_resolution.lock().await
+    } else if exclusive_browser_owner {
+        let (w, h) = *hub.current_resolution.lock().await;
+        if w > 0 && h > 0 {
+            Some((w, h))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
