@@ -7,6 +7,7 @@ use tracing::{debug, error, info, warn};
 use wtransport::{Endpoint, Identity, ServerConfig};
 
 mod bitrate;
+mod bootstrap;
 mod policy;
 mod request;
 mod tasks;
@@ -19,6 +20,7 @@ use bpane_protocol::frame::FrameDecoder;
 use bpane_protocol::ControlMessage;
 
 use self::bitrate::DatagramStats;
+use self::bootstrap::send_initial_frames;
 use self::policy::{adapt_frame_for_client, viewer_can_forward_frame, viewer_can_receive_frame};
 use self::request::{validate_request_path, RequestValidationError};
 use self::tasks::{spawn_bitrate_hint_task, spawn_gateway_pinger};
@@ -176,34 +178,15 @@ async fn handle_session(
     let (send_stream, mut recv_stream) = connection.open_bi().await?.await?;
     let send_stream = Arc::new(tokio::sync::Mutex::new(send_stream));
 
-    // Send initial frames to late-joining clients (cached SessionReady + keyframe)
-    {
-        let mut stream = send_stream.lock().await;
-        for frame in &initial_frames {
-            let encoded = adapt_frame_for_client(frame, joined_as_owner).encode();
-            if stream.write_all(&encoded).await.is_err() {
-                anyhow::bail!("failed to send initial frames");
-            }
-        }
-
-        // If non-owner, send ResolutionLocked immediately
-        if !joined_as_owner {
-            if let Some((w, h)) = locked_resolution {
-                let locked = ControlMessage::ResolutionLocked {
-                    width: w,
-                    height: h,
-                };
-                let encoded = locked.to_frame().encode();
-                if stream.write_all(&encoded).await.is_err() {
-                    anyhow::bail!("failed to send ResolutionLocked");
-                }
-                debug!(
-                    session_id,
-                    client_id, w, h, "sent ResolutionLocked to non-owner client"
-                );
-            }
-        }
-    }
+    send_initial_frames(
+        &send_stream,
+        &initial_frames,
+        joined_as_owner,
+        locked_resolution,
+        session_id,
+        client_id,
+    )
+    .await?;
 
     // Relay: hub broadcast -> browser
     let session_a2b = session.clone();
