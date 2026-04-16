@@ -15,7 +15,7 @@ import { CacheHitTileRenderer } from './render/cache-hit-tile-renderer.js';
 import { CanvasScrollCopyRenderer } from './render/canvas-scroll-copy-renderer.js';
 import { QoiTileRenderer } from './render/qoi-tile-renderer.js';
 import { resolveTileRect } from './render/tile-rect-resolver.js';
-import { decompress } from 'fzstd';
+import { ZstdTileRenderer } from './render/zstd-tile-renderer.js';
 import type { WebGLTileRenderer } from './webgl-compositor.js';
 
 export interface CompositorStats {
@@ -55,6 +55,7 @@ export class TileCompositor {
   private onCacheMiss: ((event: CacheMissEvent) => void) | null = null;
   private readonly cacheHitTileRenderer: CacheHitTileRenderer;
   private readonly qoiTileRenderer: QoiTileRenderer;
+  private readonly zstdTileRenderer: ZstdTileRenderer;
   private readonly canvasScrollCopyRenderer: CanvasScrollCopyRenderer;
 
   stats: CompositorStats = {
@@ -75,11 +76,13 @@ export class TileCompositor {
     cache?: TileCache,
     cacheHitTileRenderer: CacheHitTileRenderer = new CacheHitTileRenderer(),
     qoiTileRenderer: QoiTileRenderer = new QoiTileRenderer(),
+    zstdTileRenderer: ZstdTileRenderer = new ZstdTileRenderer(),
     canvasScrollCopyRenderer: CanvasScrollCopyRenderer = new CanvasScrollCopyRenderer(),
   ) {
     this.cache = cache ?? new TileCache();
     this.cacheHitTileRenderer = cacheHitTileRenderer;
     this.qoiTileRenderer = qoiTileRenderer;
+    this.zstdTileRenderer = zstdTileRenderer;
     this.canvasScrollCopyRenderer = canvasScrollCopyRenderer;
   }
 
@@ -347,11 +350,12 @@ export class TileCompositor {
       shouldDraw: () => epoch === this.epoch,
     });
 
-    if (result.kind === 'drawn') {
+    if (result.kind === 'drawn' || result.kind === 'cached') {
       if (result.redundant) {
         this.stats.qoiRedundant++;
         this.stats.qoiRedundantBytes += result.decodedBytes;
       }
+      if (result.kind === 'cached') return;
       this.stats.qoiDecodes++;
       return;
     }
@@ -361,34 +365,27 @@ export class TileCompositor {
     }
   }
   private drawZstd(col: number, row: number, hash: bigint, data: Uint8Array, epoch: number): void {
-    if (!this.ctx && !this.glRenderer) return;
-    const wasCachedBefore = this.cache.has(hash);
-    if (wasCachedBefore) {
-      this.stats.zstdRedundant++;
-      this.stats.zstdRedundantBytes += data.byteLength;
+    const result = this.zstdTileRenderer.draw({
+      cache: this.cache,
+      hash,
+      data,
+      rect: this.tileRect(col, row),
+      ctx: this.ctx,
+      glRenderer: this.glRenderer,
+      shouldDraw: () => epoch === this.epoch,
+    });
+
+    if (result.kind === 'drawn' || result.kind === 'cached') {
+      if (result.redundant) {
+        this.stats.zstdRedundant++;
+        this.stats.zstdRedundantBytes += result.encodedBytes;
+      }
+      if (result.kind === 'cached') return;
+      this.stats.zstdDecodes++;
+      return;
     }
 
-    try {
-      const decompressed = decompress(data);
-      const rect = this.tileRect(col, row);
-      if (!rect) return;
-
-      const expectedBytes = rect.w * rect.h * 4;
-      if (decompressed.length !== expectedBytes) {
-        this.stats.cacheMisses++;
-        return;
-      }
-
-      const imageData = new ImageData(new Uint8ClampedArray(decompressed), rect.w, rect.h);
-      this.cache.set(hash, imageData);
-      if (epoch !== this.epoch) return;
-      if (this.glRenderer) {
-        this.glRenderer.drawTileImageData(rect.x, rect.y, rect.w, rect.h, imageData);
-      } else if (this.ctx) {
-        this.ctx.putImageData(imageData, rect.x, rect.y);
-      }
-      this.stats.zstdDecodes++;
-    } catch {
+    if (result.kind === 'miss') {
       this.stats.cacheMisses++;
     }
   }
