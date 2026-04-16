@@ -11,88 +11,23 @@
  * - preserveDrawingBuffer: true — tiles are drawn incrementally, not redrawn every frame.
  */
 
-export type RenderBackend = 'webgl2' | 'canvas2d';
-export type RenderSelectionReason =
-  | 'hardware-accelerated'
-  | 'unsupported'
-  | 'major-performance-caveat'
-  | 'software-renderer'
-  | 'initialization-failed';
+import {
+  detectContextInfo,
+  selectWebGLContext,
+  type WebGLContextInfo,
+  type WebGLRendererDiagnostics,
+} from './render/webgl-context-selection.js';
 
-export interface WebGLContextInfo {
-  renderer: string | null;
-  vendor: string | null;
-  software: boolean;
-}
-
-export interface WebGLRendererDiagnostics extends WebGLContextInfo {
-  backend: RenderBackend;
-  reason: RenderSelectionReason;
-}
+export type {
+  RenderBackend,
+  RenderSelectionReason,
+  WebGLContextInfo,
+  WebGLRendererDiagnostics,
+} from './render/webgl-context-selection.js';
 
 export interface WebGLRendererCreationResult {
   renderer: WebGLTileRenderer | null;
   diagnostics: WebGLRendererDiagnostics;
-}
-
-const SOFTWARE_RENDERER_PATTERNS = [
-  /swiftshader/i,
-  /\bllvmpipe\b/i,
-  /\blavapipe\b/i,
-  /\bsoftpipe\b/i,
-  /software rasterizer/i,
-  /software renderer/i,
-];
-
-function isSoftwareRenderer(renderer: string | null, vendor: string | null): boolean {
-  if (renderer && SOFTWARE_RENDERER_PATTERNS.some((pattern) => pattern.test(renderer))) {
-    return true;
-  }
-  return vendor !== null && /swiftshader/i.test(vendor);
-}
-
-function detectContextInfo(gl: WebGL2RenderingContext): WebGLContextInfo {
-  let renderer: string | null = null;
-  let vendor: string | null = null;
-
-  const maskedRenderer = gl.getParameter(gl.RENDERER);
-  if (typeof maskedRenderer === 'string' && maskedRenderer.length > 0) {
-    renderer = maskedRenderer;
-  }
-
-  const maskedVendor = gl.getParameter(gl.VENDOR);
-  if (typeof maskedVendor === 'string' && maskedVendor.length > 0) {
-    vendor = maskedVendor;
-  }
-
-  const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-  if (debugInfo) {
-    const unmaskedRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-    if (typeof unmaskedRenderer === 'string' && unmaskedRenderer.length > 0) {
-      renderer = unmaskedRenderer;
-    }
-
-    const unmaskedVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
-    if (typeof unmaskedVendor === 'string' && unmaskedVendor.length > 0) {
-      vendor = unmaskedVendor;
-    }
-  }
-
-  return {
-    renderer,
-    vendor,
-    software: isSoftwareRenderer(renderer, vendor),
-  };
-}
-
-function loseContext(gl: WebGL2RenderingContext): void {
-  const ext = gl.getExtension('WEBGL_lose_context');
-  ext?.loseContext();
-}
-
-function probeCanvas(source: HTMLCanvasElement): HTMLCanvasElement | null {
-  const doc = source.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
-  return doc ? doc.createElement('canvas') : null;
 }
 
 // ── Shader sources ──────────────────────────────────────────────────
@@ -265,86 +200,22 @@ export class WebGLTileRenderer {
    * Rejects software-backed contexts and reports why selection fell back.
    */
   static tryCreate(canvas: HTMLCanvasElement): WebGLRendererCreationResult {
-    const baseAttrs: WebGLContextAttributes = {
-      alpha: false,
-      antialias: false,
-      preserveDrawingBuffer: true,
-      desynchronized: true, // lower latency compositing hint
-      powerPreference: 'high-performance',
-    };
-
-    try {
-      const gl = canvas.getContext('webgl2', {
-        ...baseAttrs,
-        failIfMajorPerformanceCaveat: true,
-      });
-      if (!gl) {
-        const probe = probeCanvas(canvas);
-        const probeGl = probe?.getContext('webgl2', baseAttrs) ?? null;
-        if (!probeGl) {
-          return {
-            renderer: null,
-            diagnostics: {
-              backend: 'canvas2d',
-              renderer: null,
-              vendor: null,
-              software: false,
-              reason: 'unsupported',
-            },
-          };
-        }
-
-        const probeInfo = detectContextInfo(probeGl);
-        loseContext(probeGl);
-        return {
-          renderer: null,
-          diagnostics: {
-            backend: 'canvas2d',
-            renderer: probeInfo.renderer,
-            vendor: probeInfo.vendor,
-            software: probeInfo.software,
-            reason: probeInfo.software ? 'software-renderer' : 'major-performance-caveat',
-          },
-        };
-      }
-
-      const info = detectContextInfo(gl);
-      if (info.software) {
-        loseContext(gl);
-        return {
-          renderer: null,
-          diagnostics: {
-            backend: 'canvas2d',
-            renderer: info.renderer,
-            vendor: info.vendor,
-            software: true,
-            reason: 'software-renderer',
-          },
-        };
-      }
-
-      return {
-        renderer: new WebGLTileRenderer(gl, info),
-        diagnostics: {
-          backend: 'webgl2',
-          renderer: info.renderer,
-          vendor: info.vendor,
-          software: false,
-          reason: 'hardware-accelerated',
-        },
-      };
-    } catch {
+    const selection = selectWebGLContext(canvas);
+    if (!selection.gl) {
       return {
         renderer: null,
-        diagnostics: {
-          backend: 'canvas2d',
-          renderer: null,
-          vendor: null,
-          software: false,
-          reason: 'initialization-failed',
-        },
+        diagnostics: selection.diagnostics,
       };
     }
+
+    return {
+      renderer: new WebGLTileRenderer(selection.gl, {
+        renderer: selection.diagnostics.renderer,
+        vendor: selection.diagnostics.vendor,
+        software: selection.diagnostics.software,
+      }),
+      diagnostics: selection.diagnostics,
+    };
   }
 
   /** Update viewport and resolution uniform after canvas resize. */
