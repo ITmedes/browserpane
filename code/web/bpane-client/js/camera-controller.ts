@@ -1,16 +1,16 @@
+import {
+  CameraProfileCatalog,
+  type CameraProfile,
+} from './camera/camera-profile-catalog.js';
+
 type CameraSendResult = 'sent' | 'queued' | 'replaced';
 type SendCameraFrameFn = (payload: Uint8Array) => CameraSendResult;
 type QualityLimitationReason = 'none' | 'bandwidth' | 'cpu';
 
-export interface CameraTelemetryProfile {
-  name: string;
-  width: number;
-  height: number;
-  fps: number;
-  bitrate: number;
-  smooth: boolean | null;
-  powerEfficient: boolean | null;
-}
+export interface CameraTelemetryProfile extends Pick<
+  CameraProfile,
+  'name' | 'width' | 'height' | 'fps' | 'bitrate' | 'smooth' | 'powerEfficient'
+> {}
 
 export interface CameraTelemetrySnapshot {
   supported: boolean;
@@ -31,58 +31,11 @@ export interface CameraTelemetrySnapshot {
   reconfigurations: number;
 }
 
-interface CameraProfile extends CameraTelemetryProfile {
-  codec: string;
-  keyframeInterval: number;
-}
-
-const CAMERA_WEBRTC_CONTENT_TYPE = 'video/H264;level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f';
-const CAMERA_CAPTURE_WIDTH = 1280;
-const CAMERA_CAPTURE_HEIGHT = 720;
-const CAMERA_CAPTURE_FRAMERATE = 30;
 const CAMERA_ADAPT_INTERVAL_MS = 2000;
 const CAMERA_STABLE_WINDOWS_FOR_UPGRADE = 3;
 const CAMERA_ENCODER_QUEUE_LIMIT = 2;
 
-const CAMERA_PROFILES: CameraProfile[] = [
-  {
-    name: 'hd720p',
-    width: 1280,
-    height: 720,
-    fps: 30,
-    bitrate: 1_600_000,
-    keyframeInterval: 30,
-    codec: 'avc1.42001f',
-    smooth: null,
-    powerEfficient: null,
-  },
-  {
-    name: 'qhd540p',
-    width: 960,
-    height: 540,
-    fps: 24,
-    bitrate: 950_000,
-    keyframeInterval: 24,
-    codec: 'avc1.42001f',
-    smooth: null,
-    powerEfficient: null,
-  },
-  {
-    name: 'nhd360p',
-    width: 640,
-    height: 360,
-    fps: 18,
-    bitrate: 450_000,
-    keyframeInterval: 18,
-    codec: 'avc1.42001e',
-    smooth: null,
-    powerEfficient: null,
-  },
-];
-
 export class CameraController {
-  private static supportCache: Promise<CameraProfile[]> | null = null;
-
   private sendFrame: SendCameraFrameFn;
   private stream: MediaStream | null = null;
   private videoEl: HTMLVideoElement | null = null;
@@ -125,34 +78,24 @@ export class CameraController {
   }
 
   static async isSupported(): Promise<boolean> {
-    const supported = await CameraController.getSupportedProfiles();
+    const supported = await CameraProfileCatalog.getSupportedProfiles();
     return supported.length > 0;
   }
 
   static async getSupportedProfiles(): Promise<CameraProfile[]> {
-    if (!CameraController.supportCache) {
-      CameraController.supportCache = CameraController.probeSupportedProfiles();
-    }
-    return CameraController.supportCache;
+    return CameraProfileCatalog.getSupportedProfiles();
   }
 
   async startCamera(): Promise<void> {
     if (this.active) return;
     try {
-      this.supportedProfiles = await CameraController.getSupportedProfiles();
+      this.supportedProfiles = await CameraProfileCatalog.getSupportedProfiles();
       const initialProfile = this.supportedProfiles[0];
       if (!initialProfile) {
         throw new Error('camera video encoding is not supported in this browser');
       }
 
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: CAMERA_CAPTURE_WIDTH },
-          height: { ideal: CAMERA_CAPTURE_HEIGHT },
-          frameRate: { ideal: CAMERA_CAPTURE_FRAMERATE, max: CAMERA_CAPTURE_FRAMERATE + 5 },
-        },
-        audio: false,
-      });
+      this.stream = await navigator.mediaDevices.getUserMedia(CameraProfileCatalog.getCaptureConstraints());
 
       this.videoEl = document.createElement('video');
       this.videoEl.muted = true;
@@ -242,66 +185,6 @@ export class CameraController {
     };
   }
 
-  private static async probeSupportedProfiles(): Promise<CameraProfile[]> {
-    if (
-      typeof navigator === 'undefined'
-      || !navigator.mediaDevices?.getUserMedia
-      || typeof VideoEncoder === 'undefined'
-      || typeof VideoFrame === 'undefined'
-    ) {
-      return [];
-    }
-
-    const supported: CameraProfile[] = [];
-    for (const profile of CAMERA_PROFILES) {
-      const config = cameraEncoderConfig(profile);
-      try {
-        const encoderSupport = await VideoEncoder.isConfigSupported(config);
-        if (!encoderSupport.supported) {
-          continue;
-        }
-        const runtimeProfile = { ...profile };
-        const mediaCapabilities = (navigator as Navigator & {
-          mediaCapabilities?: {
-            encodingInfo?: (configuration: unknown) => Promise<{
-              supported: boolean;
-              smooth?: boolean;
-              powerEfficient?: boolean;
-            }>;
-          };
-        }).mediaCapabilities;
-        if (mediaCapabilities?.encodingInfo) {
-          try {
-            const info = await mediaCapabilities.encodingInfo({
-              type: 'webrtc',
-              video: {
-                contentType: CAMERA_WEBRTC_CONTENT_TYPE,
-                width: profile.width,
-                height: profile.height,
-                bitrate: profile.bitrate,
-                framerate: profile.fps,
-              },
-            });
-            if (!info.supported) {
-              continue;
-            }
-            runtimeProfile.smooth = typeof info.smooth === 'boolean' ? info.smooth : null;
-            runtimeProfile.powerEfficient = typeof info.powerEfficient === 'boolean' ? info.powerEfficient : null;
-          } catch {
-            // Ignore media-capabilities probe failures and rely on VideoEncoder support.
-          }
-        }
-        supported.push(runtimeProfile);
-      } catch {
-        // Ignore this rung and try the next one down.
-      }
-    }
-
-    const smoothFirst = supported.filter((profile) => profile.smooth !== false);
-    return (smoothFirst.length > 0 ? smoothFirst : supported)
-      .concat(supported.filter((profile) => profile.smooth === false && !smoothFirst.includes(profile)));
-  }
-
   private resetTelemetry(): void {
     this.qualityLimitationReason = 'none';
     this.stableWindows = 0;
@@ -365,7 +248,7 @@ export class CameraController {
         this.stopCamera();
       },
     });
-    this.encoder.configure(cameraEncoderConfig(profile));
+    this.encoder.configure(CameraProfileCatalog.toEncoderConfig(profile));
     this.restartCaptureTimer();
   }
 
@@ -488,20 +371,4 @@ export class CameraController {
       this.capturePending = false;
     }
   }
-}
-
-function cameraEncoderConfig(profile: CameraProfile): VideoEncoderConfig {
-  return {
-    codec: profile.codec,
-    width: profile.width,
-    height: profile.height,
-    displayWidth: profile.width,
-    displayHeight: profile.height,
-    bitrate: profile.bitrate,
-    framerate: profile.fps,
-    latencyMode: 'realtime',
-    avc: {
-      format: 'annexb',
-    },
-  };
 }
