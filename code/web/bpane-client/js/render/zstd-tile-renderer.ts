@@ -1,14 +1,15 @@
-import { decodeQoi } from '../qoi.js';
+import { decompress } from 'fzstd';
+
 import type { TileCache } from '../tile-cache.js';
 import type { WebGLTileRenderer } from '../webgl-compositor.js';
 
-export type QoiTileDrawResult =
-  | { kind: 'drawn'; redundant: boolean; decodedBytes: number }
-  | { kind: 'cached'; redundant: boolean; decodedBytes: number }
+export type ZstdTileDrawResult =
+  | { kind: 'drawn'; redundant: boolean; encodedBytes: number }
+  | { kind: 'cached'; redundant: boolean; encodedBytes: number }
   | { kind: 'miss'; reason: 'decode-failed' | 'size-mismatch' }
   | { kind: 'skipped'; reason: 'offscreen' | 'no-output' };
 
-export class QoiTileRenderer {
+export class ZstdTileRenderer {
   draw(args: {
     cache: TileCache;
     hash: bigint;
@@ -17,7 +18,7 @@ export class QoiTileRenderer {
     ctx: CanvasRenderingContext2D | null;
     glRenderer: WebGLTileRenderer | null;
     shouldDraw?: () => boolean;
-  }): QoiTileDrawResult {
+  }): ZstdTileDrawResult {
     const { cache, hash, data, rect, ctx, glRenderer, shouldDraw } = args;
     if (!ctx && !glRenderer) {
       return { kind: 'skipped', reason: 'no-output' };
@@ -26,15 +27,19 @@ export class QoiTileRenderer {
       return { kind: 'skipped', reason: 'offscreen' };
     }
 
-    const decoded = decodeQoi(data);
-    if (!decoded) {
+    let decompressed: Uint8Array;
+    try {
+      decompressed = decompress(data);
+    } catch {
       return { kind: 'miss', reason: 'decode-failed' };
     }
-    if (decoded.width !== rect.w || decoded.height !== rect.h) {
+
+    const expectedBytes = rect.w * rect.h * 4;
+    if (decompressed.length !== expectedBytes) {
       return { kind: 'miss', reason: 'size-mismatch' };
     }
 
-    const imageData = new ImageData(decoded.pixels, decoded.width, decoded.height);
+    const imageData = new ImageData(new Uint8ClampedArray(decompressed), rect.w, rect.h);
     const redundant = cache.has(hash);
     cache.set(hash, imageData);
 
@@ -42,7 +47,7 @@ export class QoiTileRenderer {
       return {
         kind: 'cached',
         redundant,
-        decodedBytes: data.byteLength,
+        encodedBytes: data.byteLength,
       };
     }
 
@@ -55,7 +60,7 @@ export class QoiTileRenderer {
     return {
       kind: 'drawn',
       redundant,
-      decodedBytes: data.byteLength,
+      encodedBytes: data.byteLength,
     };
   }
 }
