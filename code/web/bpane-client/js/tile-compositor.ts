@@ -15,6 +15,7 @@ import { CacheHitTileRenderer } from './render/cache-hit-tile-renderer.js';
 import { CanvasScrollCopyRenderer } from './render/canvas-scroll-copy-renderer.js';
 import { FillTileRenderer } from './render/fill-tile-renderer.js';
 import { QoiTileRenderer } from './render/qoi-tile-renderer.js';
+import { TileBatchCommandApplier } from './render/tile-batch-command-applier.js';
 import { resolveTileRect } from './render/tile-rect-resolver.js';
 import { ZstdTileRenderer } from './render/zstd-tile-renderer.js';
 import type { WebGLTileRenderer } from './webgl-compositor.js';
@@ -59,6 +60,7 @@ export class TileCompositor {
   private readonly qoiTileRenderer: QoiTileRenderer;
   private readonly zstdTileRenderer: ZstdTileRenderer;
   private readonly canvasScrollCopyRenderer: CanvasScrollCopyRenderer;
+  private readonly tileBatchCommandApplier: TileBatchCommandApplier;
 
   stats: CompositorStats = {
     fills: 0,
@@ -88,6 +90,33 @@ export class TileCompositor {
     this.qoiTileRenderer = qoiTileRenderer;
     this.zstdTileRenderer = zstdTileRenderer;
     this.canvasScrollCopyRenderer = canvasScrollCopyRenderer;
+    this.tileBatchCommandApplier = new TileBatchCommandApplier({
+      applyScrollCopy: (dx, dy, regionTop, regionBottom, regionRight) => {
+        this.applyScrollCopy(dx, dy, regionTop, regionBottom, regionRight);
+      },
+      setGridOffset: (offsetX, offsetY) => {
+        this.gridOffsetX = offsetX;
+        this.gridOffsetY = offsetY;
+      },
+      setApplyOffsetMode: (applyOffset) => {
+        this.applyOffsetMode = applyOffset;
+      },
+      setVideoRegion: (region) => {
+        this.videoRegion = region;
+      },
+      drawFill: (col, row, rgba) => {
+        this.drawFill(col, row, rgba);
+      },
+      drawCacheHit: (col, row, hash, frameSeq) => {
+        this.drawCacheHit(col, row, hash, frameSeq);
+      },
+      drawQoi: (col, row, hash, data, epoch) => {
+        this.drawQoi(col, row, hash, data, epoch);
+      },
+      drawZstd: (col, row, hash, data, epoch) => {
+        this.drawZstd(col, row, hash, data, epoch);
+      },
+    });
   }
 
   /** Bind to a canvas rendering context for drawing (Canvas2D fallback). */
@@ -238,52 +267,14 @@ export class TileCompositor {
     if (epoch !== this.epoch) return;
     if (!this.isNewerFrameSeq(frameSeq)) return;
     this.activeBatchFrameSeq = frameSeq;
-    for (const cmd of commands) {
-      if (epoch !== this.epoch) return;
-
-      switch (cmd.type) {
-        case 'scroll-copy':
-          this.applyScrollCopy(cmd.dx, cmd.dy, cmd.regionTop, cmd.regionBottom, cmd.regionRight);
-          break;
-
-        case 'grid-offset':
-          this.gridOffsetX = cmd.offsetX;
-          this.gridOffsetY = cmd.offsetY;
-          break;
-
-        case 'tile-draw-mode':
-          this.applyOffsetMode = cmd.applyOffset;
-          break;
-
-        case 'fill':
-          this.drawFill(cmd.col, cmd.row, cmd.rgba);
-          break;
-
-        case 'cache-hit':
-          this.drawCacheHit(cmd.col, cmd.row, cmd.hash, frameSeq);
-          break;
-
-        case 'qoi':
-          this.drawQoi(cmd.col, cmd.row, cmd.hash, cmd.data, epoch);
-          break;
-
-        case 'zstd':
-          this.drawZstd(cmd.col, cmd.row, cmd.hash, cmd.data, epoch);
-          break;
-
-        case 'video-region':
-          // Zero-size region means video ended — clear it.
-          this.videoRegion = (cmd.w > 0 && cmd.h > 0)
-            ? { x: cmd.x, y: cmd.y, w: cmd.w, h: cmd.h }
-            : null;
-          break;
-
-        case 'grid-config':
-        case 'batch-end':
-        case 'scroll-stats':
-          // Not expected in queued per-frame command list.
-          break;
-      }
+    const completed = this.tileBatchCommandApplier.applyCommands({
+      commands,
+      frameSeq,
+      epoch,
+      shouldContinue: () => epoch === this.epoch,
+    });
+    if (!completed) {
+      return;
     }
     if (epoch === this.epoch) {
       this.lastAppliedFrameSeq = frameSeq;
