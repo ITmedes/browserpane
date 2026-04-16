@@ -13,6 +13,7 @@ import { TileCache, parseTileMessage, CH_TILES } from './tile-cache.js';
 import type { TileCommand, TileGridConfig } from './tile-cache.js';
 import { CacheHitTileRenderer } from './render/cache-hit-tile-renderer.js';
 import { CanvasScrollCopyRenderer } from './render/canvas-scroll-copy-renderer.js';
+import { FillTileRenderer } from './render/fill-tile-renderer.js';
 import { QoiTileRenderer } from './render/qoi-tile-renderer.js';
 import { resolveTileRect } from './render/tile-rect-resolver.js';
 import { ZstdTileRenderer } from './render/zstd-tile-renderer.js';
@@ -53,6 +54,7 @@ export class TileCompositor {
   private epoch = 0;
   private activeBatchFrameSeq: number | null = null;
   private onCacheMiss: ((event: CacheMissEvent) => void) | null = null;
+  private readonly fillTileRenderer: FillTileRenderer;
   private readonly cacheHitTileRenderer: CacheHitTileRenderer;
   private readonly qoiTileRenderer: QoiTileRenderer;
   private readonly zstdTileRenderer: ZstdTileRenderer;
@@ -74,12 +76,14 @@ export class TileCompositor {
 
   constructor(
     cache?: TileCache,
+    fillTileRenderer: FillTileRenderer = new FillTileRenderer(),
     cacheHitTileRenderer: CacheHitTileRenderer = new CacheHitTileRenderer(),
     qoiTileRenderer: QoiTileRenderer = new QoiTileRenderer(),
     zstdTileRenderer: ZstdTileRenderer = new ZstdTileRenderer(),
     canvasScrollCopyRenderer: CanvasScrollCopyRenderer = new CanvasScrollCopyRenderer(),
   ) {
     this.cache = cache ?? new TileCache();
+    this.fillTileRenderer = fillTileRenderer;
     this.cacheHitTileRenderer = cacheHitTileRenderer;
     this.qoiTileRenderer = qoiTileRenderer;
     this.zstdTileRenderer = zstdTileRenderer;
@@ -301,22 +305,16 @@ export class TileCompositor {
   }
 
   private drawFill(col: number, row: number, rgba: number): void {
-    if (!this.ctx && !this.glRenderer) return;
-    const rect = this.tileRect(col, row);
-    if (!rect) return;
+    const result = this.fillTileRenderer.draw({
+      rect: this.tileRect(col, row),
+      rgba,
+      ctx: this.ctx,
+      glRenderer: this.glRenderer,
+    });
 
-    const r = (rgba >>> 0) & 0xFF;
-    const g = (rgba >>> 8) & 0xFF;
-    const b = (rgba >>> 16) & 0xFF;
-    const a = ((rgba >>> 24) & 0xFF) / 255;
-
-    if (this.glRenderer) {
-      this.glRenderer.drawFill(rect.x, rect.y, rect.w, rect.h, r, g, b, a);
-    } else if (this.ctx) {
-      this.ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
-      this.ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    if (result.kind === 'drawn') {
+      this.stats.fills++;
     }
-    this.stats.fills++;
   }
 
   private drawCacheHit(col: number, row: number, hash: bigint, frameSeq: number): void {
