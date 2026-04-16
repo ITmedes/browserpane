@@ -13,8 +13,8 @@ import { TileCache, parseTileMessage, CH_TILES } from './tile-cache.js';
 import type { TileCommand, TileGridConfig } from './tile-cache.js';
 import { CacheHitTileRenderer } from './render/cache-hit-tile-renderer.js';
 import { CanvasScrollCopyRenderer } from './render/canvas-scroll-copy-renderer.js';
+import { QoiTileRenderer } from './render/qoi-tile-renderer.js';
 import { resolveTileRect } from './render/tile-rect-resolver.js';
-import { decodeQoi } from './qoi.js';
 import { decompress } from 'fzstd';
 import type { WebGLTileRenderer } from './webgl-compositor.js';
 
@@ -54,6 +54,7 @@ export class TileCompositor {
   private activeBatchFrameSeq: number | null = null;
   private onCacheMiss: ((event: CacheMissEvent) => void) | null = null;
   private readonly cacheHitTileRenderer: CacheHitTileRenderer;
+  private readonly qoiTileRenderer: QoiTileRenderer;
   private readonly canvasScrollCopyRenderer: CanvasScrollCopyRenderer;
 
   stats: CompositorStats = {
@@ -73,10 +74,12 @@ export class TileCompositor {
   constructor(
     cache?: TileCache,
     cacheHitTileRenderer: CacheHitTileRenderer = new CacheHitTileRenderer(),
+    qoiTileRenderer: QoiTileRenderer = new QoiTileRenderer(),
     canvasScrollCopyRenderer: CanvasScrollCopyRenderer = new CanvasScrollCopyRenderer(),
   ) {
     this.cache = cache ?? new TileCache();
     this.cacheHitTileRenderer = cacheHitTileRenderer;
+    this.qoiTileRenderer = qoiTileRenderer;
     this.canvasScrollCopyRenderer = canvasScrollCopyRenderer;
   }
 
@@ -334,41 +337,26 @@ export class TileCompositor {
   }
 
   private drawQoi(col: number, row: number, hash: bigint, data: Uint8Array, epoch: number): void {
-    if (!this.ctx && !this.glRenderer) return;
-    const wasCachedBefore = this.cache.has(hash);
-    if (wasCachedBefore) {
-      // Host resent a tile the client already had by hash.
-      this.stats.qoiRedundant++;
-      this.stats.qoiRedundantBytes += data.byteLength;
-    }
+    const result = this.qoiTileRenderer.draw({
+      cache: this.cache,
+      hash,
+      data,
+      rect: this.tileRect(col, row),
+      ctx: this.ctx,
+      glRenderer: this.glRenderer,
+      shouldDraw: () => epoch === this.epoch,
+    });
 
-    try {
-      const decoded = decodeQoi(data);
-      if (!decoded) {
-        this.stats.cacheMisses++;
-        return;
-      }
-
-      const rect = this.tileRect(col, row);
-      if (!rect) return;
-
-      if (decoded.width !== rect.w || decoded.height !== rect.h) {
-        this.stats.cacheMisses++;
-        return;
-      }
-
-      const imageData = new ImageData(decoded.pixels, decoded.width, decoded.height);
-      // Always cache decoded pixels (used for future CacheHit draws).
-      this.cache.set(hash, imageData);
-      // Skip stale decode completions after a grid reset.
-      if (epoch !== this.epoch) return;
-      if (this.glRenderer) {
-        this.glRenderer.drawTileImageData(rect.x, rect.y, rect.w, rect.h, imageData);
-      } else if (this.ctx) {
-        this.ctx.putImageData(imageData, rect.x, rect.y);
+    if (result.kind === 'drawn') {
+      if (result.redundant) {
+        this.stats.qoiRedundant++;
+        this.stats.qoiRedundantBytes += result.decodedBytes;
       }
       this.stats.qoiDecodes++;
-    } catch {
+      return;
+    }
+
+    if (result.kind === 'miss') {
       this.stats.cacheMisses++;
     }
   }
