@@ -1,11 +1,14 @@
 import {
+  evaluateCameraAdaptation,
+  type QualityLimitationReason,
+} from './camera/camera-adaptation-policy.js';
+import {
   CameraProfileCatalog,
   type CameraProfile,
 } from './camera/camera-profile-catalog.js';
 
 type CameraSendResult = 'sent' | 'queued' | 'replaced';
 type SendCameraFrameFn = (payload: Uint8Array) => CameraSendResult;
-type QualityLimitationReason = 'none' | 'bandwidth' | 'cpu';
 
 export interface CameraTelemetryProfile extends Pick<
   CameraProfile,
@@ -32,7 +35,6 @@ export interface CameraTelemetrySnapshot {
 }
 
 const CAMERA_ADAPT_INTERVAL_MS = 2000;
-const CAMERA_STABLE_WINDOWS_FOR_UPGRADE = 3;
 const CAMERA_ENCODER_QUEUE_LIMIT = 2;
 
 export class CameraController {
@@ -297,44 +299,31 @@ export class CameraController {
   private evaluateAdaptation(): void {
     const profile = this.supportedProfiles[this.activeProfileIndex];
     if (!this.active || !profile) return;
+    const decision = evaluateCameraAdaptation({
+      activeProfileIndex: this.activeProfileIndex,
+      profileCount: this.supportedProfiles.length,
+      currentProfileFps: profile.fps,
+      stableWindows: this.stableWindows,
+      qualityLimitationReason: this.qualityLimitationReason,
+      windowStats: {
+        transportQueued: this.windowTransportQueued,
+        transportReplaced: this.windowTransportReplaced,
+        encoderQueueDrops: this.windowEncoderQueueDrops,
+        encodeTimeMs: this.windowEncodeTimeMs,
+        encodedSamples: this.windowEncodedSamples,
+      },
+    });
 
-    const frameBudgetMs = 1000 / profile.fps;
-    const averageEncodeTimeMs = this.windowEncodedSamples > 0
-      ? this.windowEncodeTimeMs / this.windowEncodedSamples
-      : 0;
-    const cpuLimited = this.windowEncoderQueueDrops > 0
-      || (this.windowEncodedSamples > 0 && averageEncodeTimeMs > frameBudgetMs * 0.7);
-    const bandwidthLimited = this.windowTransportReplaced > 0
-      || this.windowTransportQueued > Math.max(3, Math.ceil(profile.fps / 4));
+    this.stableWindows = decision.nextStableWindows;
+    this.qualityLimitationReason = decision.qualityLimitationReason;
 
-    if (cpuLimited || bandwidthLimited) {
-      this.stableWindows = 0;
-      const reason: QualityLimitationReason = cpuLimited ? 'cpu' : 'bandwidth';
-      if (this.activeProfileIndex < this.supportedProfiles.length - 1) {
-        this.applyProfile(this.activeProfileIndex + 1, reason);
-      } else {
-        this.qualityLimitationReason = reason;
-      }
+    if (decision.kind === 'downgrade' || decision.kind === 'upgrade') {
+      this.applyProfile(decision.nextProfileIndex, decision.qualityLimitationReason);
+    }
+
+    if (decision.shouldResetWindow) {
       this.resetAdaptationWindow();
-      return;
     }
-
-    this.stableWindows += 1;
-    if (
-      this.activeProfileIndex > 0
-      && this.stableWindows >= CAMERA_STABLE_WINDOWS_FOR_UPGRADE
-      && averageEncodeTimeMs < frameBudgetMs * 0.35
-    ) {
-      this.applyProfile(this.activeProfileIndex - 1, 'none');
-      this.stableWindows = 0;
-      this.resetAdaptationWindow();
-      return;
-    }
-
-    if (this.stableWindows >= 2) {
-      this.qualityLimitationReason = 'none';
-    }
-    this.resetAdaptationWindow();
   }
 
   private async captureFrame(): Promise<void> {
