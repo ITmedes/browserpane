@@ -19,6 +19,7 @@ import {
 } from './render/webgl-context-selection.js';
 import { WebGLCachedVideoRenderer } from './render/webgl-cached-video-renderer.js';
 import { WebGLScrollCopyRenderer } from './render/webgl-scroll-copy-renderer.js';
+import { WebGLTextureSourceRenderer } from './render/webgl-texture-source-renderer.js';
 import { createWebGLTileProgram } from './render/webgl-tile-program.js';
 
 export type {
@@ -39,7 +40,6 @@ export class WebGLTileRenderer {
   private gl: WebGL2RenderingContext;
   private info: WebGLContextInfo;
   private program: WebGLProgram;
-  private tileTexture: WebGLTexture;
   private uRect: WebGLUniformLocation;
   private uResolution: WebGLUniformLocation;
   private uMode: WebGLUniformLocation;
@@ -49,6 +49,7 @@ export class WebGLTileRenderer {
 
   private cachedVideoRenderer: WebGLCachedVideoRenderer;
   private scrollCopyRenderer: WebGLScrollCopyRenderer;
+  private textureSourceRenderer: WebGLTextureSourceRenderer;
 
   // Current canvas dimensions (set via resize())
   private canvasW = 0;
@@ -73,15 +74,12 @@ export class WebGLTileRenderer {
       uMode: this.uMode,
     });
     this.scrollCopyRenderer = new WebGLScrollCopyRenderer(gl);
-
-    // Create the reusable tile texture
-    this.tileTexture = gl.createTexture()!;
-    gl.bindTexture(gl.TEXTURE_2D, this.tileTexture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    this.textureSourceRenderer = new WebGLTextureSourceRenderer(gl, {
+      program: this.program,
+      vao: this.vao,
+      uRect: this.uRect,
+      uMode: this.uMode,
+    });
 
     // Disable blending — opaque tiles, no transparency on main canvas
     gl.disable(gl.BLEND);
@@ -125,6 +123,7 @@ export class WebGLTileRenderer {
     this.canvasW = width;
     this.canvasH = height;
     this.cachedVideoRenderer.resize(height);
+    this.textureSourceRenderer.resize(height);
     const gl = this.gl;
     gl.viewport(0, 0, width, height);
     gl.useProgram(this.program);
@@ -145,37 +144,12 @@ export class WebGLTileRenderer {
 
   /** Draw a tile from ImageData at pixel coordinates. */
   drawTileImageData(x: number, y: number, w: number, h: number, imageData: ImageData): void {
-    const gl = this.gl;
-    gl.useProgram(this.program);
-    gl.bindVertexArray(this.vao);
-
-    // Upload ImageData to the reusable tile texture
-    gl.bindTexture(gl.TEXTURE_2D, this.tileTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
-
-    gl.uniform4f(this.uRect, x, y, w, h);
-    gl.uniform1i(this.uMode, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindVertexArray(null);
+    this.textureSourceRenderer.draw(x, y, w, h, imageData);
   }
 
   /** Draw a tile from an ImageBitmap at pixel coordinates (zero-copy on Chrome). */
   drawTileImageBitmap(x: number, y: number, w: number, h: number, bitmap: ImageBitmap): void {
-    const gl = this.gl;
-    gl.useProgram(this.program);
-    gl.bindVertexArray(this.vao);
-
-    gl.bindTexture(gl.TEXTURE_2D, this.tileTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
-
-    gl.uniform4f(this.uRect, x, y, w, h);
-    gl.uniform1i(this.uMode, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindVertexArray(null);
+    this.textureSourceRenderer.draw(x, y, w, h, bitmap);
   }
 
   /**
@@ -183,20 +157,7 @@ export class WebGLTileRenderer {
    * The caller is responsible for closing the VideoFrame after this call.
    */
   drawVideoFrame(x: number, y: number, w: number, h: number, frame: VideoFrame): void {
-    const gl = this.gl;
-    gl.useProgram(this.program);
-    gl.bindVertexArray(this.vao);
-
-    gl.bindTexture(gl.TEXTURE_2D, this.tileTexture);
-    // VideoFrame is accepted as a TexImageSource in Chrome
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, frame as any);
-
-    gl.uniform4f(this.uRect, x, y, w, h);
-    gl.uniform1i(this.uMode, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindVertexArray(null);
+    this.textureSourceRenderer.draw(x, y, w, h, frame);
   }
 
   /**
@@ -236,19 +197,7 @@ export class WebGLTileRenderer {
    * at pixel coordinates. Useful for compositing the video overlay buffer.
    */
   drawTexImageSource(x: number, y: number, w: number, h: number, source: TexImageSource): void {
-    const gl = this.gl;
-    gl.useProgram(this.program);
-    gl.bindVertexArray(this.vao);
-
-    gl.bindTexture(gl.TEXTURE_2D, this.tileTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-
-    gl.uniform4f(this.uRect, x, y, w, h);
-    gl.uniform1i(this.uMode, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindVertexArray(null);
+    this.textureSourceRenderer.draw(x, y, w, h, source);
   }
 
   /**
@@ -265,37 +214,19 @@ export class WebGLTileRenderer {
     destX: number, destY: number, destW: number, destH: number,
     sourceWidth: number, sourceHeight: number,
   ): void {
-    const gl = this.gl;
-    gl.useProgram(this.program);
-    gl.bindVertexArray(this.vao);
-
-    gl.bindTexture(gl.TEXTURE_2D, this.tileTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-
-    // Use scissor test to clip to the destination rect, and adjust quad to
-    // handle the source sub-rect. The simplest approach: draw the full source
-    // scaled/positioned so the source sub-rect lands on the dest rect.
-    //
-    // Full-source rect would cover:
-    //   destX - (srcX/srcW)*destW, destY - (srcY/srcH)*destH
-    //   with size: (sourceWidth/srcW)*destW, (sourceHeight/srcH)*destH
-    const fullW = (sourceWidth / srcW) * destW;
-    const fullH = (sourceHeight / srcH) * destH;
-    const fullX = destX - (srcX / srcW) * destW;
-    const fullY = destY - (srcY / srcH) * destH;
-
-    gl.enable(gl.SCISSOR_TEST);
-    // Scissor Y is in GL coords (bottom-up)
-    const canvasH = this.canvasH;
-    gl.scissor(destX, canvasH - (destY + destH), destW, destH);
-
-    gl.uniform4f(this.uRect, fullX, fullY, fullW, fullH);
-    gl.uniform1i(this.uMode, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    gl.disable(gl.SCISSOR_TEST);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindVertexArray(null);
+    this.textureSourceRenderer.drawCropped(
+      source,
+      srcX,
+      srcY,
+      srcW,
+      srcH,
+      destX,
+      destY,
+      destW,
+      destH,
+      sourceWidth,
+      sourceHeight,
+    );
   }
 
   /**
@@ -338,7 +269,7 @@ export class WebGLTileRenderer {
     const gl = this.gl;
     this.cachedVideoRenderer.destroy();
     this.scrollCopyRenderer.destroy();
-    gl.deleteTexture(this.tileTexture);
+    this.textureSourceRenderer.destroy();
     gl.deleteBuffer(this.quadBuffer);
     gl.deleteVertexArray(this.vao);
     gl.deleteProgram(this.program);
