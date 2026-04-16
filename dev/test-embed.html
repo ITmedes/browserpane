@@ -154,6 +154,7 @@
     <span id="resolution">Resolution: --</span>
     <span id="frames">Frames: --</span>
     <span id="latency">RTT: --</span>
+    <span id="render-backend">Render: --</span>
     <span id="tile-stats">Tiles: --</span>
     <span id="tile-types">Tile Types: --</span>
     <span id="scroll-comp-stats">Scroll Compose: --</span>
@@ -184,6 +185,7 @@
     const resolutionEl = document.getElementById('resolution');
     const framesEl = document.getElementById('frames');
     const latencyEl = document.getElementById('latency');
+    const renderBackendEl = document.getElementById('render-backend');
     const tileStatsEl = document.getElementById('tile-stats');
     const tileTypesEl = document.getElementById('tile-types');
     const scrollCompStatsEl = document.getElementById('scroll-comp-stats');
@@ -265,6 +267,16 @@
         .join(' ');
     }
 
+    function formatRenderDiagnostics(diagnostics) {
+      if (!diagnostics) return 'Render: --';
+      const renderer = diagnostics.renderer
+        ? diagnostics.renderer
+            .replace(/^ANGLE \([^,]+,\s*/, '')
+            .replace(/, Unspecified Version\)$/, '')
+        : '';
+      return `Render: ${diagnostics.backend} (${diagnostics.reason})${renderer ? ` ${renderer}` : ''}`;
+    }
+
     // ── Token fetch ─────────────────────────────────────────────────
     async function fetchToken() {
       try {
@@ -342,6 +354,7 @@
                 window._lastFpsTime = now;
               }
               framesEl.textContent = `Frames: ${count}  (${window._currentFps} fps)`;
+              renderBackendEl.textContent = formatRenderDiagnostics(session.getRenderDiagnostics());
               // Tile cache stats
               const ts = session.getTileCacheStats();
               tileStatsEl.textContent =
@@ -419,6 +432,7 @@
             resolutionEl.textContent = 'Resolution: --';
             framesEl.textContent = 'Frames: --';
             latencyEl.textContent = 'RTT: --';
+            renderBackendEl.textContent = 'Render: --';
             tileStatsEl.textContent = 'Tiles: --';
             tileTypesEl.textContent = 'Tile Types: --';
             scrollCompStatsEl.textContent = 'Scroll Compose: --';
@@ -445,6 +459,8 @@
             log(`Resolution: ${w}x${h}`, 'ok');
           },
         });
+        renderBackendEl.textContent = formatRenderDiagnostics(session.getRenderDiagnostics());
+        log(formatRenderDiagnostics(session.getRenderDiagnostics()), 'info');
       } catch (e) {
         log(`Connection failed: ${e.message}`, 'error');
         setStatus('Connection failed', 'error');
@@ -475,6 +491,7 @@
       resolutionEl.textContent = 'Resolution: --';
       framesEl.textContent = 'Frames: --';
       latencyEl.textContent = 'RTT: --';
+      renderBackendEl.textContent = 'Render: --';
       tileStatsEl.textContent = 'Tiles: --';
       tileTypesEl.textContent = 'Tile Types: --';
       scrollCompStatsEl.textContent = 'Scroll Compose: --';
