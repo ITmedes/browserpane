@@ -1,57 +1,9 @@
 const PLAYBACK_SAMPLE_RATE = 48000;
 const PLAYBACK_WORKLET_NAME = 'bpane-audio-processor';
 
-function buildAudioPlaybackWorkletCode(): string {
-  return `
-class BpaneAudioProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.ring = new Float32Array(96000);
-    this.wPos = 0;
-    this.rPos = 0;
-    this.started = false;
-    this.port.onmessage = (e) => {
-      if (e.data.type === 'audio-data') {
-        const samples = new Float32Array(e.data.samples);
-        for (let i = 0; i < samples.length; i++) {
-          this.ring[this.wPos] = samples[i];
-          this.wPos = (this.wPos + 1) % 96000;
-        }
-      }
-    };
-  }
-  process(inputs, outputs) {
-    const output = outputs[0];
-    if (!output || output.length < 2) return true;
-    const left = output[0];
-    const right = output[1];
-    const n = left.length;
-    let avail = this.wPos - this.rPos;
-    if (avail < 0) avail += 96000;
-    if (!this.started) {
-      if (avail < 10560) { left.fill(0); right.fill(0); return true; }
-      this.started = true;
-    }
-    if (avail < n * 2) {
-      left.fill(0); right.fill(0);
-      this.started = false;
-      return true;
-    }
-    if (avail > 19200) {
-      const drop = avail - 9600;
-      this.rPos = (this.rPos + drop) % 96000;
-    }
-    for (let i = 0; i < n; i++) {
-      left[i] = this.ring[this.rPos];
-      this.rPos = (this.rPos + 1) % 96000;
-      right[i] = this.ring[this.rPos];
-      this.rPos = (this.rPos + 1) % 96000;
-    }
-    return true;
-  }
-}
-registerProcessor('${PLAYBACK_WORKLET_NAME}', BpaneAudioProcessor);
-`;
+function resolvePlaybackWorkletModuleUrl(): string {
+  const moduleBaseUrl = import.meta.url;
+  return new URL('./audio-worklet.js', moduleBaseUrl).href;
 }
 
 export class AudioPlaybackRuntime {
@@ -100,15 +52,7 @@ export class AudioPlaybackRuntime {
     this.audioContext = audioContext;
 
     try {
-      const blob = new Blob([buildAudioPlaybackWorkletCode()], {
-        type: 'application/javascript',
-      });
-      const url = URL.createObjectURL(blob);
-      try {
-        await audioContext.audioWorklet.addModule(url);
-      } finally {
-        URL.revokeObjectURL(url);
-      }
+      await audioContext.audioWorklet.addModule(resolvePlaybackWorkletModuleUrl());
 
       if (this.audioContext !== audioContext) {
         return;

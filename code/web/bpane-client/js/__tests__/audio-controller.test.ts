@@ -251,7 +251,9 @@ describe('AudioController', () => {
     await flushAsync();
 
     expect(MockAudioContext.instances).toHaveLength(1);
-    expect(MockAudioContext.instances[0].audioWorklet.addModule).toHaveBeenCalledWith('blob:mock-audio');
+    expect(MockAudioContext.instances[0].audioWorklet.addModule).toHaveBeenCalledWith(
+      expect.stringContaining('/audio/audio-worklet.js'),
+    );
     expect(MockAudioWorkletNode.instances).toHaveLength(1);
 
     const pcmPayload = concatBytes(
