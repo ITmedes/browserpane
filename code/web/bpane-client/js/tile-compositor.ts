@@ -11,6 +11,7 @@
 
 import { TileCache, parseTileMessage, CH_TILES } from './tile-cache.js';
 import type { TileCommand, TileGridConfig } from './tile-cache.js';
+import { CacheHitTileRenderer } from './render/cache-hit-tile-renderer.js';
 import { CanvasScrollCopyRenderer } from './render/canvas-scroll-copy-renderer.js';
 import { resolveTileRect } from './render/tile-rect-resolver.js';
 import { decodeQoi } from './qoi.js';
@@ -52,6 +53,7 @@ export class TileCompositor {
   private epoch = 0;
   private activeBatchFrameSeq: number | null = null;
   private onCacheMiss: ((event: CacheMissEvent) => void) | null = null;
+  private readonly cacheHitTileRenderer: CacheHitTileRenderer;
   private readonly canvasScrollCopyRenderer: CanvasScrollCopyRenderer;
 
   stats: CompositorStats = {
@@ -70,9 +72,11 @@ export class TileCompositor {
 
   constructor(
     cache?: TileCache,
+    cacheHitTileRenderer: CacheHitTileRenderer = new CacheHitTileRenderer(),
     canvasScrollCopyRenderer: CanvasScrollCopyRenderer = new CanvasScrollCopyRenderer(),
   ) {
     this.cache = cache ?? new TileCache();
+    this.cacheHitTileRenderer = cacheHitTileRenderer;
     this.canvasScrollCopyRenderer = canvasScrollCopyRenderer;
   }
 
@@ -310,39 +314,20 @@ export class TileCompositor {
   }
 
   private drawCacheHit(col: number, row: number, hash: bigint, frameSeq: number): void {
-    if (!this.ctx && !this.glRenderer) return;
-    const rect = this.tileRect(col, row);
-    if (!rect) return;
+    const result = this.cacheHitTileRenderer.draw({
+      cache: this.cache,
+      hash,
+      rect: this.tileRect(col, row),
+      ctx: this.ctx,
+      glRenderer: this.glRenderer,
+    });
 
-    const tile = this.cache.get(hash);
-    if (tile) {
-      if (this.glRenderer) {
-        if ('close' in tile && typeof tile.close === 'function') {
-          this.glRenderer.drawTileImageBitmap(rect.x, rect.y, rect.w, rect.h, tile as ImageBitmap);
-        } else {
-          const imageData = tile as ImageData;
-          if (imageData.width !== rect.w || imageData.height !== rect.h) {
-            this.stats.cacheMisses++;
-            this.onCacheMiss?.({ frameSeq, col, row, hash });
-            return;
-          }
-          this.glRenderer.drawTileImageData(rect.x, rect.y, rect.w, rect.h, imageData);
-        }
-      } else if (this.ctx) {
-        if ('close' in tile && typeof tile.close === 'function') {
-          this.ctx.drawImage(tile as ImageBitmap, rect.x, rect.y, rect.w, rect.h);
-        } else {
-          const imageData = tile as ImageData;
-          if (imageData.width !== rect.w || imageData.height !== rect.h) {
-            this.stats.cacheMisses++;
-            this.onCacheMiss?.({ frameSeq, col, row, hash });
-            return;
-          }
-          this.ctx.putImageData(imageData, rect.x, rect.y);
-        }
-      }
+    if (result.kind === 'drawn') {
       this.stats.cacheHits++;
-    } else {
+      return;
+    }
+
+    if (result.kind === 'miss') {
       this.stats.cacheMisses++;
       this.onCacheMiss?.({ frameSeq, col, row, hash });
     }
