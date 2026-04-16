@@ -11,6 +11,7 @@
 
 import { TileCache, parseTileMessage, CH_TILES } from './tile-cache.js';
 import type { TileCommand, TileGridConfig } from './tile-cache.js';
+import { CanvasScrollCopyRenderer } from './render/canvas-scroll-copy-renderer.js';
 import { decodeQoi } from './qoi.js';
 import { decompress } from 'fzstd';
 import type { WebGLTileRenderer } from './webgl-compositor.js';
@@ -50,8 +51,7 @@ export class TileCompositor {
   private epoch = 0;
   private activeBatchFrameSeq: number | null = null;
   private onCacheMiss: ((event: CacheMissEvent) => void) | null = null;
-  private scrollScratch: HTMLCanvasElement | null = null;
-  private scrollScratchCtx: CanvasRenderingContext2D | null = null;
+  private readonly canvasScrollCopyRenderer: CanvasScrollCopyRenderer;
 
   stats: CompositorStats = {
     fills: 0,
@@ -67,8 +67,12 @@ export class TileCompositor {
     scrollCopies: 0,
   };
 
-  constructor(cache?: TileCache) {
+  constructor(
+    cache?: TileCache,
+    canvasScrollCopyRenderer: CanvasScrollCopyRenderer = new CanvasScrollCopyRenderer(),
+  ) {
     this.cache = cache ?? new TileCache();
+    this.canvasScrollCopyRenderer = canvasScrollCopyRenderer;
   }
 
   /** Bind to a canvas rendering context for drawing (Canvas2D fallback). */
@@ -158,8 +162,7 @@ export class TileCompositor {
     this.flushChain = Promise.resolve();
     this.lastAppliedFrameSeq = null;
     this.activeBatchFrameSeq = null;
-    this.scrollScratch = null;
-    this.scrollScratchCtx = null;
+    this.canvasScrollCopyRenderer.reset();
     this.applyOffsetMode = true;
   }
 
@@ -186,31 +189,6 @@ export class TileCompositor {
   /** Whether tile draws should apply gridOffset (true for content tiles, false for static header/scrollbar tiles). */
   private applyOffsetMode = true;
 
-  /**
-   * Apply a scroll copy: shift existing canvas pixels by (dx, dy).
-   * Grid offset is NOT derived here — the server's GridOffset message
-   * is the sole authority for tile positioning.
-   */
-  private ensureScrollScratch(width: number, height: number): boolean {
-    if (!this.scrollScratch
-      || this.scrollScratch.width !== width
-      || this.scrollScratch.height !== height
-    ) {
-      const scratch = document.createElement('canvas');
-      scratch.width = width;
-      scratch.height = height;
-      const scratchCtx = scratch.getContext('2d');
-      if (!scratchCtx) {
-        this.scrollScratch = null;
-        this.scrollScratchCtx = null;
-        return false;
-      }
-      this.scrollScratch = scratch;
-      this.scrollScratchCtx = scratchCtx;
-    }
-    return this.scrollScratch !== null && this.scrollScratchCtx !== null;
-  }
-
   private applyScrollCopy(dx: number, dy: number, regionTop: number, regionBottom: number, regionRight: number): void {
     if (!this.gridConfig) return;
 
@@ -225,55 +203,17 @@ export class TileCompositor {
     }
 
     if (!this.ctx) return;
-    const canvas = this.ctx.canvas as HTMLCanvasElement;
-    const tx = -dx || 0;
-    const ty = -dy || 0;
-
-    const hasRegion = regionTop !== 0 || regionBottom !== this.gridConfig.screenH || regionRight !== this.gridConfig.screenW;
-
-    if (hasRegion) {
-      // Region-aware scroll: only shift pixels within the viewport region.
-      // Header (above regionTop) and scrollbar (right of regionRight) stay put.
-      const rw = regionRight;
-      const rh = regionBottom - regionTop;
-      if (rw <= 0 || rh <= 0) return;
-
-      if (this.ensureScrollScratch(canvas.width, canvas.height) && this.scrollScratch && this.scrollScratchCtx) {
-        // Copy the viewport region to scratch
-        this.scrollScratchCtx.clearRect(0, 0, canvas.width, canvas.height);
-        this.scrollScratchCtx.drawImage(
-          canvas,
-          0, regionTop, rw, rh,   // source: viewport region
-          0, 0, rw, rh,           // dest: temp at origin
-        );
-
-        const srcX = Math.max(0, -tx);
-        const srcY = Math.max(0, -ty);
-        const destX = Math.max(0, tx);
-        const destY = regionTop + Math.max(0, ty);
-        const srcW = rw - Math.abs(tx);
-        const srcH = rh - Math.abs(ty);
-
-        if (srcW > 0 && srcH > 0) {
-          // Leave the exposed strip stale until repair tiles arrive.
-          // Briefly showing old pixels is less jarring than flashing the
-          // canvas clear color when repair work lands a frame late.
-          this.ctx.drawImage(
-            this.scrollScratch,
-            srcX, srcY, srcW, srcH,
-            destX, destY, srcW, srcH,
-          );
-        }
-      }
-    } else {
-      // Full-screen scroll (no viewport info or full-screen viewport).
-      if (this.ensureScrollScratch(canvas.width, canvas.height) && this.scrollScratch && this.scrollScratchCtx) {
-        this.scrollScratchCtx.clearRect(0, 0, canvas.width, canvas.height);
-        this.scrollScratchCtx.drawImage(canvas, 0, 0);
-        this.ctx.drawImage(this.scrollScratch, tx, ty);
-      } else {
-        this.ctx.drawImage(canvas, tx, ty);
-      }
+    if (!this.canvasScrollCopyRenderer.apply({
+      ctx: this.ctx,
+      dx,
+      dy,
+      regionTop,
+      regionBottom,
+      regionRight,
+      screenW: this.gridConfig.screenW,
+      screenH: this.gridConfig.screenH,
+    })) {
+      return;
     }
     this.stats.scrollCopies++;
   }
