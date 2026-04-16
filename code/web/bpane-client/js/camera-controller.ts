@@ -6,6 +6,7 @@ import {
   CameraProfileCatalog,
   type CameraProfile,
 } from './camera/camera-profile-catalog.js';
+import { CameraTelemetryTracker } from './camera/camera-telemetry-tracker.js';
 
 type CameraSendResult = 'sent' | 'queued' | 'replaced';
 type SendCameraFrameFn = (payload: Uint8Array) => CameraSendResult;
@@ -55,25 +56,7 @@ export class CameraController {
   private encodeStarts = new Map<number, number>();
   private qualityLimitationReason: QualityLimitationReason = 'none';
   private stableWindows = 0;
-
-  private framesCaptured = 0;
-  private framesEncoded = 0;
-  private keyframesEncoded = 0;
-  private encodedBytes = 0;
-  private transportFramesQueued = 0;
-  private transportFramesReplaced = 0;
-  private encoderQueueDrops = 0;
-  private totalEncodeTimeMs = 0;
-  private maxEncodeTimeMs = 0;
-  private profileUpgrades = 0;
-  private profileDowngrades = 0;
-  private reconfigurations = 0;
-
-  private windowTransportQueued = 0;
-  private windowTransportReplaced = 0;
-  private windowEncoderQueueDrops = 0;
-  private windowEncodeTimeMs = 0;
-  private windowEncodedSamples = 0;
+  private telemetry = new CameraTelemetryTracker();
 
   constructor(sendFrame: SendCameraFrameFn) {
     this.sendFrame = sendFrame;
@@ -166,24 +149,13 @@ export class CameraController {
 
   getStats(): CameraTelemetrySnapshot {
     const profile = this.activeProfileIndex >= 0 ? { ...this.supportedProfiles[this.activeProfileIndex] } : null;
-    const averageEncodeTimeMs = this.framesEncoded > 0 ? this.totalEncodeTimeMs / this.framesEncoded : 0;
+    const metrics = this.telemetry.getMetrics();
     return {
       supported: this.supportedProfiles.length > 0,
       active: this.active,
       profile,
       qualityLimitationReason: this.qualityLimitationReason,
-      framesCaptured: this.framesCaptured,
-      framesEncoded: this.framesEncoded,
-      keyframesEncoded: this.keyframesEncoded,
-      encodedBytes: this.encodedBytes,
-      transportFramesQueued: this.transportFramesQueued,
-      transportFramesReplaced: this.transportFramesReplaced,
-      encoderQueueDrops: this.encoderQueueDrops,
-      averageEncodeTimeMs,
-      maxEncodeTimeMs: this.maxEncodeTimeMs,
-      profileUpgrades: this.profileUpgrades,
-      profileDowngrades: this.profileDowngrades,
-      reconfigurations: this.reconfigurations,
+      ...metrics,
     };
   }
 
@@ -192,27 +164,12 @@ export class CameraController {
     this.stableWindows = 0;
     this.frameTimestampUs = 0;
     this.forceKeyframe = true;
-    this.framesCaptured = 0;
-    this.framesEncoded = 0;
-    this.keyframesEncoded = 0;
-    this.encodedBytes = 0;
-    this.transportFramesQueued = 0;
-    this.transportFramesReplaced = 0;
-    this.encoderQueueDrops = 0;
-    this.totalEncodeTimeMs = 0;
-    this.maxEncodeTimeMs = 0;
-    this.profileUpgrades = 0;
-    this.profileDowngrades = 0;
-    this.reconfigurations = 0;
+    this.telemetry.reset();
     this.resetAdaptationWindow();
   }
 
   private resetAdaptationWindow(): void {
-    this.windowTransportQueued = 0;
-    this.windowTransportReplaced = 0;
-    this.windowEncoderQueueDrops = 0;
-    this.windowEncodeTimeMs = 0;
-    this.windowEncodedSamples = 0;
+    this.telemetry.resetWindow();
   }
 
   private applyProfile(index: number, reason: QualityLimitationReason): void {
@@ -220,14 +177,7 @@ export class CameraController {
     if (!profile) return;
 
     const previousIndex = this.activeProfileIndex;
-    if (previousIndex >= 0 && previousIndex !== index) {
-      this.reconfigurations += 1;
-      if (index > previousIndex) {
-        this.profileDowngrades += 1;
-      } else {
-        this.profileUpgrades += 1;
-      }
-    }
+    this.telemetry.recordProfileChange(previousIndex, index);
 
     this.activeProfileIndex = index;
     this.qualityLimitationReason = reason;
@@ -268,32 +218,23 @@ export class CameraController {
   }
 
   private handleEncodedChunk(chunk: EncodedVideoChunk): void {
+    let encodeTimeMs: number | undefined;
     const startedAt = this.encodeStarts.get(chunk.timestamp);
     if (typeof startedAt === 'number') {
       this.encodeStarts.delete(chunk.timestamp);
-      const encodeTimeMs = performance.now() - startedAt;
-      this.totalEncodeTimeMs += encodeTimeMs;
-      this.windowEncodeTimeMs += encodeTimeMs;
-      this.windowEncodedSamples += 1;
-      this.maxEncodeTimeMs = Math.max(this.maxEncodeTimeMs, encodeTimeMs);
+      encodeTimeMs = performance.now() - startedAt;
     }
 
     const payload = new Uint8Array(chunk.byteLength);
     chunk.copyTo(payload);
-    this.framesEncoded += 1;
-    if (chunk.type === 'key') {
-      this.keyframesEncoded += 1;
-    }
-    this.encodedBytes += payload.byteLength;
 
     const result = this.sendFrame(payload);
-    if (result === 'queued') {
-      this.transportFramesQueued += 1;
-      this.windowTransportQueued += 1;
-    } else if (result === 'replaced') {
-      this.transportFramesReplaced += 1;
-      this.windowTransportReplaced += 1;
-    }
+    this.telemetry.recordEncodedChunk({
+      chunkType: chunk.type,
+      chunkByteLength: payload.byteLength,
+      sendResult: result,
+      encodeTimeMs,
+    });
   }
 
   private evaluateAdaptation(): void {
@@ -305,13 +246,7 @@ export class CameraController {
       currentProfileFps: profile.fps,
       stableWindows: this.stableWindows,
       qualityLimitationReason: this.qualityLimitationReason,
-      windowStats: {
-        transportQueued: this.windowTransportQueued,
-        transportReplaced: this.windowTransportReplaced,
-        encoderQueueDrops: this.windowEncoderQueueDrops,
-        encodeTimeMs: this.windowEncodeTimeMs,
-        encodedSamples: this.windowEncodedSamples,
-      },
+      windowStats: this.telemetry.getWindowStats(),
     });
 
     this.stableWindows = decision.nextStableWindows;
@@ -330,8 +265,7 @@ export class CameraController {
     if (!this.active || this.capturePending || !this.videoEl || !this.canvas || !this.ctx || !this.encoder) return;
     if (this.videoEl.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
     if (this.encoder.encodeQueueSize > CAMERA_ENCODER_QUEUE_LIMIT) {
-      this.encoderQueueDrops += 1;
-      this.windowEncoderQueueDrops += 1;
+      this.telemetry.recordEncoderQueueDrop();
       return;
     }
 
@@ -341,12 +275,13 @@ export class CameraController {
     this.capturePending = true;
     try {
       this.ctx.drawImage(this.videoEl, 0, 0, this.canvas.width, this.canvas.height);
-      this.framesCaptured += 1;
+      this.telemetry.recordCapture();
       const timestampUs = this.frameTimestampUs;
       this.frameTimestampUs += Math.round(1_000_000 / profile.fps);
       const frame = new VideoFrame(this.canvas, { timestamp: timestampUs });
+      const encodedFrames = this.telemetry.getFramesEncoded();
       const keyFrame = this.forceKeyframe
-        || (this.framesEncoded > 0 && (this.framesEncoded % profile.keyframeInterval) === 0);
+        || (encodedFrames > 0 && (encodedFrames % profile.keyframeInterval) === 0);
       this.forceKeyframe = false;
       this.encodeStarts.set(timestampUs, performance.now());
       try {
