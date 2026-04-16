@@ -12,6 +12,7 @@
 import { TileCache, parseTileMessage, CH_TILES } from './tile-cache.js';
 import type { TileCommand, TileGridConfig } from './tile-cache.js';
 import { CanvasScrollCopyRenderer } from './render/canvas-scroll-copy-renderer.js';
+import { resolveTileRect } from './render/tile-rect-resolver.js';
 import { decodeQoi } from './qoi.js';
 import { decompress } from 'fzstd';
 import type { WebGLTileRenderer } from './webgl-compositor.js';
@@ -279,22 +280,14 @@ export class TileCompositor {
   }
 
   private tileRect(col: number, row: number): { x: number; y: number; w: number; h: number } | null {
-    if (!this.gridConfig) return null;
-    const ts = this.gridConfig.tileSize;
-    // Static tiles (applyOffsetMode=false) are drawn at raw grid positions — no offset.
-    const offX = this.applyOffsetMode ? this.gridOffsetX : 0;
-    const offY = this.applyOffsetMode ? this.gridOffsetY : 0;
-    const rawX = col * ts - offX;
-    const rawY = row * ts - offY;
-    // Clamp to screen bounds — partial tiles at edges when grid is offset
-    const x = Math.max(0, rawX);
-    const y = Math.max(0, rawY);
-    const endX = Math.min(this.gridConfig.screenW, rawX + ts);
-    const endY = Math.min(this.gridConfig.screenH, rawY + ts);
-    const w = endX - x;
-    const h = endY - y;
-    if (w <= 0 || h <= 0) return null;
-    return { x, y, w, h };
+    return resolveTileRect({
+      gridConfig: this.gridConfig,
+      col,
+      row,
+      gridOffsetX: this.gridOffsetX,
+      gridOffsetY: this.gridOffsetY,
+      applyOffset: this.applyOffsetMode,
+    });
   }
 
   private drawFill(col: number, row: number, rgba: number): void {
