@@ -16,6 +16,7 @@ import { CanvasScrollCopyRenderer } from './render/canvas-scroll-copy-renderer.j
 import { FillTileRenderer } from './render/fill-tile-renderer.js';
 import { QoiTileRenderer } from './render/qoi-tile-renderer.js';
 import { TileBatchCommandApplier } from './render/tile-batch-command-applier.js';
+import { TileBatchSequencer, type QueuedTileBatch } from './render/tile-batch-sequencer.js';
 import { resolveTileRect } from './render/tile-rect-resolver.js';
 import { ZstdTileRenderer } from './render/zstd-tile-renderer.js';
 import type { WebGLTileRenderer } from './webgl-compositor.js';
@@ -50,10 +51,6 @@ export class TileCompositor {
   private glRenderer: WebGLTileRenderer | null = null;
   private gridOffsetX = 0;
   private gridOffsetY = 0;
-  private flushChain: Promise<void> = Promise.resolve();
-  private lastAppliedFrameSeq: number | null = null;
-  private epoch = 0;
-  private activeBatchFrameSeq: number | null = null;
   private onCacheMiss: ((event: CacheMissEvent) => void) | null = null;
   private readonly fillTileRenderer: FillTileRenderer;
   private readonly cacheHitTileRenderer: CacheHitTileRenderer;
@@ -61,6 +58,7 @@ export class TileCompositor {
   private readonly zstdTileRenderer: ZstdTileRenderer;
   private readonly canvasScrollCopyRenderer: CanvasScrollCopyRenderer;
   private readonly tileBatchCommandApplier: TileBatchCommandApplier;
+  private readonly tileBatchSequencer = new TileBatchSequencer();
 
   stats: CompositorStats = {
     fills: 0,
@@ -171,15 +169,14 @@ export class TileCompositor {
     switch (cmd.type) {
       case 'grid-config':
         // Invalidate any in-flight async decode work and reset drawing state.
-        this.epoch++;
+        this.tileBatchSequencer.invalidate();
         this.pendingCommands = [];
-        this.lastAppliedFrameSeq = null;
         this.applyGridConfig(cmd.config);
         break;
 
       case 'batch-end':
         // Frame-sequenced, serialized batch processing.
-        this.enqueueBatch(cmd.frameSeq >>> 0, this.pendingCommands, this.epoch);
+        this.tileBatchSequencer.enqueueBatch(cmd.frameSeq >>> 0, this.pendingCommands, (batch) => this.applyBatch(batch));
         this.pendingCommands = [];
         this.stats.batchesProcessed++;
         break;
@@ -196,16 +193,13 @@ export class TileCompositor {
 
   /** Reset state (e.g., on disconnect or resize). */
   reset(): void {
-    this.epoch++;
+    this.tileBatchSequencer.reset();
     this.cache.clear();
     this.gridConfig = null;
     this.videoRegion = null;
     this.pendingCommands = [];
     this.gridOffsetX = 0;
     this.gridOffsetY = 0;
-    this.flushChain = Promise.resolve();
-    this.lastAppliedFrameSeq = null;
-    this.activeBatchFrameSeq = null;
     this.canvasScrollCopyRenderer.reset();
     this.applyOffsetMode = true;
   }
@@ -217,17 +211,6 @@ export class TileCompositor {
     this.gridOffsetX = 0;
     this.gridOffsetY = 0;
     this.applyOffsetMode = true;
-  }
-
-  private isNewerFrameSeq(seq: number): boolean {
-    if (this.lastAppliedFrameSeq === null) return true;
-    const diff = (seq - this.lastAppliedFrameSeq) >>> 0;
-    return diff !== 0 && diff < 0x80000000;
-  }
-
-  private enqueueBatch(frameSeq: number, commands: TileCommand[], epoch: number): void {
-    const batch = [...commands];
-    this.flushChain = this.flushChain.then(() => this.applyBatch(frameSeq, batch, epoch));
   }
 
   /** Whether tile draws should apply gridOffset (true for content tiles, false for static header/scrollbar tiles). */
@@ -263,25 +246,26 @@ export class TileCompositor {
   }
 
   /** Apply one batch atomically in protocol frame sequence order. */
-  private async applyBatch(frameSeq: number, commands: TileCommand[], epoch: number): Promise<void> {
-    if (epoch !== this.epoch) return;
-    if (!this.isNewerFrameSeq(frameSeq)) return;
-    this.activeBatchFrameSeq = frameSeq;
+  private applyBatch(batch: QueuedTileBatch): boolean {
+    const { frameSeq, commands, epoch } = batch;
+    if (!this.tileBatchSequencer.isCurrentEpoch(epoch)) {
+      return false;
+    }
     const completed = this.tileBatchCommandApplier.applyCommands({
       commands,
       frameSeq,
       epoch,
-      shouldContinue: () => epoch === this.epoch,
+      shouldContinue: () => this.tileBatchSequencer.isCurrentEpoch(epoch),
     });
     if (!completed) {
-      return;
+      return false;
     }
-    if (epoch === this.epoch) {
-      this.lastAppliedFrameSeq = frameSeq;
-      this.activeBatchFrameSeq = null;
+    if (this.tileBatchSequencer.isCurrentEpoch(epoch)) {
       // Safety: ensure offset mode is restored even if TileDrawMode(true) was missed.
       this.applyOffsetMode = true;
+      return true;
     }
+    return false;
   }
 
   private tileRect(col: number, row: number): { x: number; y: number; w: number; h: number } | null {
@@ -336,7 +320,7 @@ export class TileCompositor {
       rect: this.tileRect(col, row),
       ctx: this.ctx,
       glRenderer: this.glRenderer,
-      shouldDraw: () => epoch === this.epoch,
+      shouldDraw: () => this.tileBatchSequencer.isCurrentEpoch(epoch),
     });
 
     if (result.kind === 'drawn' || result.kind === 'cached') {
@@ -361,7 +345,7 @@ export class TileCompositor {
       rect: this.tileRect(col, row),
       ctx: this.ctx,
       glRenderer: this.glRenderer,
-      shouldDraw: () => epoch === this.epoch,
+      shouldDraw: () => this.tileBatchSequencer.isCurrentEpoch(epoch),
     });
 
     if (result.kind === 'drawn' || result.kind === 'cached') {
