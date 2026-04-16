@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CH_FILE_DOWN, CH_FILE_UP, encodeFrame } from '../protocol.js';
+import { ValidationError } from '../shared/errors.js';
+import { FileTransferCodec } from '../file-transfer/codec.js';
 import {
   FileTransferController,
   decodeFileMessage,
@@ -9,6 +11,69 @@ import {
   encodeFileHeader,
 } from '../file-transfer.js';
 import { wireFixture } from './wire-fixtures.js';
+
+describe('FileTransferCodec', () => {
+  it('encodes and decodes the shared file fixtures', () => {
+    const headerPayload = FileTransferCodec.encodeHeader({
+      id: 42,
+      filename: 'invoice.pdf',
+      size: 123456789,
+      mime: 'application/pdf',
+    });
+    expect(encodeFrame(CH_FILE_UP, headerPayload)).toEqual(wireFixture('file_header_upload'));
+
+    const chunkPayload = FileTransferCodec.encodeChunk({
+      id: 42,
+      seq: 3,
+      data: new Uint8Array([0x00, 0xFF, 0x10, 0x20]),
+    });
+    expect(encodeFrame(CH_FILE_DOWN, chunkPayload)).toEqual(wireFixture('file_chunk_download'));
+
+    const completePayload = FileTransferCodec.encodeComplete(42);
+    expect(encodeFrame(CH_FILE_DOWN, completePayload)).toEqual(wireFixture('file_complete_download'));
+
+    expect(FileTransferCodec.decode(headerPayload)).toMatchObject({
+      type: 'header',
+      id: 42,
+      filename: 'invoice.pdf',
+      size: 123456789,
+      mime: 'application/pdf',
+    });
+    expect(FileTransferCodec.decode(chunkPayload)).toMatchObject({
+      type: 'chunk',
+      id: 42,
+      seq: 3,
+      data: new Uint8Array([0x00, 0xFF, 0x10, 0x20]),
+    });
+    expect(FileTransferCodec.decode(completePayload)).toMatchObject({
+      type: 'complete',
+      id: 42,
+    });
+  });
+
+  it('throws ValidationError for truncated file chunks', () => {
+    expect(() => FileTransferCodec.decode(
+      wireFixture('invalid_file_chunk_truncated').subarray(5),
+    )).toThrowError(ValidationError);
+  });
+
+  it('throws ValidationError for unknown file tags', () => {
+    expect(() => FileTransferCodec.decode(new Uint8Array([0x7F]))).toThrowError(ValidationError);
+
+    try {
+      FileTransferCodec.decode(new Uint8Array([0x7F]));
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: 'bpane.file_transfer.unknown_tag',
+        message: 'unknown file tag: 127',
+      });
+    }
+  });
+
+  it('throws ValidationError for short file completions', () => {
+    expect(() => FileTransferCodec.decode(new Uint8Array([0x03, 0x01, 0x00]))).toThrowError(ValidationError);
+  });
+});
 
 describe('FileTransferController', () => {
   afterEach(() => {
