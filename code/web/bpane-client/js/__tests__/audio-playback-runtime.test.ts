@@ -62,16 +62,6 @@ describe('AudioPlaybackRuntime', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal('AudioContext', MockAudioContext);
     vi.stubGlobal('AudioWorkletNode', MockAudioWorkletNode);
-    Object.defineProperty(URL, 'createObjectURL', {
-      configurable: true,
-      writable: true,
-      value: vi.fn(() => 'blob:mock-audio'),
-    });
-    Object.defineProperty(URL, 'revokeObjectURL', {
-      configurable: true,
-      writable: true,
-      value: vi.fn(),
-    });
   });
 
   afterEach(() => {
@@ -86,7 +76,9 @@ describe('AudioPlaybackRuntime', () => {
     await flushAsync();
 
     expect(MockAudioContext.instances).toHaveLength(1);
-    expect(MockAudioContext.instances[0].audioWorklet.addModule).toHaveBeenCalledWith('blob:mock-audio');
+    expect(MockAudioContext.instances[0].audioWorklet.addModule).toHaveBeenCalledWith(
+      expect.stringContaining('/audio/audio-worklet.js'),
+    );
     expect(MockAudioWorkletNode.instances).toHaveLength(1);
     expect(MockAudioWorkletNode.instances[0].connect).toHaveBeenCalledWith(MockAudioContext.instances[0].destination);
     expect(runtime.ensureStarted()).toBe(true);
