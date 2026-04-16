@@ -9,6 +9,7 @@ import {
   decodeAudioFramePayload,
 } from './audio-frame-decoder.js';
 import { MicrophoneRuntime } from './audio/microphone-runtime.js';
+import { OpusPlaybackRuntime } from './audio/opus-playback-runtime.js';
 
 export type SendFrameFn = (channelId: number, payload: Uint8Array) => void;
 
@@ -17,17 +18,15 @@ export class AudioController {
   private audioWorkletNode: AudioWorkletNode | null = null;
   private audioInitialized = false;
   private audioEnabled: boolean;
-  private opusDecoder: AudioDecoder | null = null;
-  private opusTimestamp = 0;
-  // Reusable buffers for Opus decode to avoid per-frame GC pressure.
-  // 960 samples/channel x 2 channels = 1920 interleaved samples per 20ms frame.
-  private opusPlane = new Float32Array(960);
-  private opusInterleaved = new Float32Array(1920);
   private microphoneRuntime: MicrophoneRuntime;
+  private opusPlaybackRuntime: OpusPlaybackRuntime;
 
   constructor(enabled: boolean, sendFrame: SendFrameFn) {
     this.audioEnabled = enabled;
     this.microphoneRuntime = new MicrophoneRuntime(sendFrame);
+    this.opusPlaybackRuntime = new OpusPlaybackRuntime((samples) => {
+      this.postSamplesToWorklet(samples);
+    });
   }
 
   static async isMicrophoneSupported(): Promise<boolean> {
@@ -49,7 +48,7 @@ export class AudioController {
 
     if (decodedFrame.kind === 'opus') {
       try {
-        this.decodeOpus(decodedFrame.encoded);
+        this.opusPlaybackRuntime.decode(decodedFrame.encoded);
       } catch (_) {
         // Opus decode/config failure must not propagate to stream handler
       }
@@ -60,92 +59,7 @@ export class AudioController {
       return;
     }
 
-    this.audioWorkletNode.port.postMessage(
-      { type: 'audio-data', samples: decodedFrame.samples.buffer },
-      [decodedFrame.samples.buffer],
-    );
-  }
-
-  private decodeOpus(data: Uint8Array): void {
-    if (!this.audioWorkletNode) return;
-    const worklet = this.audioWorkletNode;
-
-    if (!this.opusDecoder) {
-      const plane = this.opusPlane;
-      const interleaved = this.opusInterleaved;
-
-      this.opusDecoder = new AudioDecoder({
-        output: (frame: AudioData) => {
-          const n = frame.numberOfFrames;
-          const ch = frame.numberOfChannels;
-          const fmt = (frame as any).format as string | undefined;
-          if (ch === 0 || n === 0) { frame.close(); return; }
-
-          const interleavedNeeded = n * 2;
-          let il: Float32Array;
-
-          if (fmt === 'f32' || fmt === 'f32-interleaved') {
-            // Already interleaved f32 — copy directly
-            il = new Float32Array(n * ch);
-            frame.copyTo(il, { planeIndex: 0 });
-            if (ch === 1) {
-              // Expand mono to stereo
-              const stereo = new Float32Array(interleavedNeeded);
-              for (let i = 0; i < n; i++) {
-                stereo[i * 2] = il[i];
-                stereo[i * 2 + 1] = il[i];
-              }
-              il = stereo;
-            }
-          } else {
-            // f32-planar (default for Opus in Chrome)
-            const planeNeeded = n;
-            let p = plane.length >= planeNeeded ? plane : new Float32Array(planeNeeded);
-            il = interleaved.length >= interleavedNeeded ? interleaved : new Float32Array(interleavedNeeded);
-
-            if (ch === 1) {
-              frame.copyTo(p, { planeIndex: 0, format: 'f32-planar' } as any);
-              for (let i = 0; i < n; i++) {
-                il[i * 2] = p[i];
-                il[i * 2 + 1] = p[i];
-              }
-            } else {
-              frame.copyTo(p, { planeIndex: 0, format: 'f32-planar' } as any);
-              for (let i = 0; i < n; i++) il[i * 2] = p[i];
-              frame.copyTo(p, { planeIndex: 1, format: 'f32-planar' } as any);
-              for (let i = 0; i < n; i++) il[i * 2 + 1] = p[i];
-            }
-          }
-          frame.close();
-
-          // Transfer a copy to the worklet (the buffer is transferred, not shared)
-          const out = il.slice(0, interleavedNeeded);
-          worklet.port.postMessage(
-            { type: 'audio-data', samples: out.buffer },
-            [out.buffer],
-          );
-        },
-        error: (e: DOMException) => {
-          console.error('[bpane] Opus AudioDecoder error:', e.message);
-          this.opusDecoder = null;
-        },
-      });
-      this.opusDecoder.configure({
-        codec: 'opus',
-        numberOfChannels: 2,
-        sampleRate: 48000,
-      });
-      this.opusTimestamp = 0;
-    }
-
-    // Feed Opus packet to the decoder — copy since subarray view may be invalidated
-    const opusData = data.slice(0);
-    this.opusDecoder.decode(new EncodedAudioChunk({
-      type: 'key', // Opus frames are independently decodable
-      timestamp: this.opusTimestamp,
-      data: opusData,
-    }));
-    this.opusTimestamp += 20_000; // 20ms in microseconds
+    this.postSamplesToWorklet(decodedFrame.samples);
   }
 
   private initAudio(): void {
@@ -235,6 +149,17 @@ registerProcessor('bpane-audio-processor', BpaneAudioProcessor);
     start();
   }
 
+  private postSamplesToWorklet(samples: Float32Array): void {
+    if (!this.audioWorkletNode || samples.length === 0) {
+      return;
+    }
+
+    this.audioWorkletNode.port.postMessage(
+      { type: 'audio-data', samples: samples.buffer },
+      [samples.buffer],
+    );
+  }
+
   // ── Microphone ─────────────────────────────────────────────────────
 
   async startMicrophone(): Promise<void> {
@@ -252,11 +177,7 @@ registerProcessor('bpane-audio-processor', BpaneAudioProcessor);
       this.audioWorkletNode.disconnect();
       this.audioWorkletNode = null;
     }
-    if (this.opusDecoder) {
-      try { this.opusDecoder.close(); } catch (_) { /* ignore */ }
-      this.opusDecoder = null;
-      this.opusTimestamp = 0;
-    }
+    this.opusPlaybackRuntime.destroy();
     if (this.audioContext) {
       this.audioContext.close();
       this.audioContext = null;
