@@ -1,10 +1,6 @@
 import { CH_FILE_DOWN, CH_FILE_UP } from './protocol.js';
+import { FileTransferCodec, type DecodedFileMessage } from './file-transfer/codec.js';
 
-const FILE_HEADER = 0x01;
-const FILE_CHUNK = 0x02;
-const FILE_COMPLETE = 0x03;
-const FILE_NAME_BYTES = 256;
-const FILE_MIME_BYTES = 64;
 const FILE_UPLOAD_CHUNK_SIZE = 64 * 1024;
 
 type SendFrameFn = (channelId: number, payload: Uint8Array) => void;
@@ -23,11 +19,6 @@ interface DownloadState {
   expectedSeq: number;
   chunks: ArrayBuffer[];
 }
-
-export type DecodedFileMessage =
-  | { type: 'header'; id: number; filename: string; size: number; mime: string }
-  | { type: 'chunk'; id: number; seq: number; data: Uint8Array }
-  | { type: 'complete'; id: number };
 
 export class FileTransferController {
   private container: HTMLElement;
@@ -239,14 +230,7 @@ export function encodeFileHeader(message: {
   size: number;
   mime: string;
 }): Uint8Array {
-  const payload = new Uint8Array(1 + 4 + FILE_NAME_BYTES + 8 + FILE_MIME_BYTES);
-  const view = new DataView(payload.buffer);
-  payload[0] = FILE_HEADER;
-  view.setUint32(1, message.id >>> 0, true);
-  payload.set(encodeFixedString(message.filename, FILE_NAME_BYTES), 5);
-  view.setBigUint64(5 + FILE_NAME_BYTES, BigInt(message.size), true);
-  payload.set(encodeFixedString(message.mime, FILE_MIME_BYTES), 13 + FILE_NAME_BYTES);
-  return payload;
+  return FileTransferCodec.encodeHeader(message);
 }
 
 export function encodeFileChunk(message: {
@@ -254,69 +238,15 @@ export function encodeFileChunk(message: {
   seq: number;
   data: Uint8Array;
 }): Uint8Array {
-  const payload = new Uint8Array(1 + 4 + 4 + 4 + message.data.byteLength);
-  const view = new DataView(payload.buffer);
-  payload[0] = FILE_CHUNK;
-  view.setUint32(1, message.id >>> 0, true);
-  view.setUint32(5, message.seq >>> 0, true);
-  view.setUint32(9, message.data.byteLength >>> 0, true);
-  payload.set(message.data, 13);
-  return payload;
+  return FileTransferCodec.encodeChunk(message);
 }
 
 export function encodeFileComplete(id: number): Uint8Array {
-  const payload = new Uint8Array(1 + 4);
-  const view = new DataView(payload.buffer);
-  payload[0] = FILE_COMPLETE;
-  view.setUint32(1, id >>> 0, true);
-  return payload;
+  return FileTransferCodec.encodeComplete(id);
 }
 
 export function decodeFileMessage(payload: Uint8Array): DecodedFileMessage {
-  if (payload.byteLength < 1) {
-    throw new Error('file payload too short');
-  }
-
-  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-  const tag = payload[0];
-  if (tag === FILE_HEADER) {
-    if (payload.byteLength < 1 + 4 + FILE_NAME_BYTES + 8 + FILE_MIME_BYTES) {
-      throw new Error('file header too short');
-    }
-    return {
-      type: 'header',
-      id: view.getUint32(1, true),
-      filename: decodeFixedString(payload.subarray(5, 5 + FILE_NAME_BYTES)),
-      size: Number(view.getBigUint64(5 + FILE_NAME_BYTES, true)),
-      mime: decodeFixedString(payload.subarray(13 + FILE_NAME_BYTES, 13 + FILE_NAME_BYTES + FILE_MIME_BYTES)),
-    };
-  }
-  if (tag === FILE_CHUNK) {
-    if (payload.byteLength < 13) {
-      throw new Error('file chunk too short');
-    }
-    const length = view.getUint32(9, true);
-    if (payload.byteLength < 13 + length) {
-      throw new Error('file chunk truncated');
-    }
-    return {
-      type: 'chunk',
-      id: view.getUint32(1, true),
-      seq: view.getUint32(5, true),
-      data: payload.subarray(13, 13 + length),
-    };
-  }
-  if (tag === FILE_COMPLETE) {
-    if (payload.byteLength < 5) {
-      throw new Error('file completion too short');
-    }
-    return {
-      type: 'complete',
-      id: view.getUint32(1, true),
-    };
-  }
-
-  throw new Error(`unknown file tag: ${tag}`);
+  return FileTransferCodec.decode(payload);
 }
 
 function normalizeFiles(filesInput: FileList | Iterable<File>): File[] {
@@ -341,25 +271,4 @@ function normalizeFiles(filesInput: FileList | Iterable<File>): File[] {
 function hasFilePayload(event: DragEvent): boolean {
   const types = event.dataTransfer?.types;
   return !!types && Array.from(types).includes('Files');
-}
-
-function encodeFixedString(input: string, maxBytes: number): Uint8Array {
-  const output = new Uint8Array(maxBytes);
-  const encoder = new TextEncoder();
-  let offset = 0;
-  for (const char of input) {
-    const encoded = encoder.encode(char);
-    if (offset + encoded.byteLength > maxBytes) {
-      break;
-    }
-    output.set(encoded, offset);
-    offset += encoded.byteLength;
-  }
-  return output;
-}
-
-function decodeFixedString(bytes: Uint8Array): string {
-  let end = bytes.indexOf(0);
-  if (end < 0) end = bytes.byteLength;
-  return new TextDecoder().decode(bytes.subarray(0, end)).trim();
 }
