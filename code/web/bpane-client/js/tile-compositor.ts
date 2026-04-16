@@ -17,48 +17,24 @@ import { FillTileRenderer } from './render/fill-tile-renderer.js';
 import { QoiTileRenderer } from './render/qoi-tile-renderer.js';
 import { TileBatchCommandApplier } from './render/tile-batch-command-applier.js';
 import { TileBatchSequencer, type QueuedTileBatch } from './render/tile-batch-sequencer.js';
-import { resolveTileRect } from './render/tile-rect-resolver.js';
+import {
+  TileDrawRuntime,
+  type CacheMissEvent,
+  type TileCompositorRenderStats,
+} from './render/tile-draw-runtime.js';
 import { ZstdTileRenderer } from './render/zstd-tile-renderer.js';
 import type { WebGLTileRenderer } from './webgl-compositor.js';
 
-export interface CompositorStats {
-  fills: number;
-  cacheHits: number;
-  cacheMisses: number;
-  qoiDecodes: number;
-  qoiRedundant: number;
-  qoiRedundantBytes: number;
-  zstdDecodes: number;
-  zstdRedundant: number;
-  zstdRedundantBytes: number;
+export interface CompositorStats extends TileCompositorRenderStats {
   batchesProcessed: number;
-  scrollCopies: number;
-}
-
-export interface CacheMissEvent {
-  frameSeq: number;
-  col: number;
-  row: number;
-  hash: bigint;
 }
 
 export class TileCompositor {
-  private cache: TileCache;
-  private gridConfig: TileGridConfig | null = null;
   private videoRegion: { x: number; y: number; w: number; h: number } | null = null;
   private pendingCommands: TileCommand[] = [];
-  private ctx: CanvasRenderingContext2D | null = null;
-  private glRenderer: WebGLTileRenderer | null = null;
-  private gridOffsetX = 0;
-  private gridOffsetY = 0;
-  private onCacheMiss: ((event: CacheMissEvent) => void) | null = null;
-  private readonly fillTileRenderer: FillTileRenderer;
-  private readonly cacheHitTileRenderer: CacheHitTileRenderer;
-  private readonly qoiTileRenderer: QoiTileRenderer;
-  private readonly zstdTileRenderer: ZstdTileRenderer;
-  private readonly canvasScrollCopyRenderer: CanvasScrollCopyRenderer;
   private readonly tileBatchCommandApplier: TileBatchCommandApplier;
   private readonly tileBatchSequencer = new TileBatchSequencer();
+  private readonly tileDrawRuntime: TileDrawRuntime;
 
   stats: CompositorStats = {
     fills: 0,
@@ -82,60 +58,62 @@ export class TileCompositor {
     zstdTileRenderer: ZstdTileRenderer = new ZstdTileRenderer(),
     canvasScrollCopyRenderer: CanvasScrollCopyRenderer = new CanvasScrollCopyRenderer(),
   ) {
-    this.cache = cache ?? new TileCache();
-    this.fillTileRenderer = fillTileRenderer;
-    this.cacheHitTileRenderer = cacheHitTileRenderer;
-    this.qoiTileRenderer = qoiTileRenderer;
-    this.zstdTileRenderer = zstdTileRenderer;
-    this.canvasScrollCopyRenderer = canvasScrollCopyRenderer;
+    this.tileDrawRuntime = new TileDrawRuntime({
+      cache,
+      stats: this.stats,
+      fillTileRenderer,
+      cacheHitTileRenderer,
+      qoiTileRenderer,
+      zstdTileRenderer,
+      canvasScrollCopyRenderer,
+    });
     this.tileBatchCommandApplier = new TileBatchCommandApplier({
       applyScrollCopy: (dx, dy, regionTop, regionBottom, regionRight) => {
-        this.applyScrollCopy(dx, dy, regionTop, regionBottom, regionRight);
+        this.tileDrawRuntime.applyScrollCopy(dx, dy, regionTop, regionBottom, regionRight);
       },
       setGridOffset: (offsetX, offsetY) => {
-        this.gridOffsetX = offsetX;
-        this.gridOffsetY = offsetY;
+        this.tileDrawRuntime.setGridOffset(offsetX, offsetY);
       },
       setApplyOffsetMode: (applyOffset) => {
-        this.applyOffsetMode = applyOffset;
+        this.tileDrawRuntime.setApplyOffsetMode(applyOffset);
       },
       setVideoRegion: (region) => {
         this.videoRegion = region;
       },
       drawFill: (col, row, rgba) => {
-        this.drawFill(col, row, rgba);
+        this.tileDrawRuntime.drawFill(col, row, rgba);
       },
       drawCacheHit: (col, row, hash, frameSeq) => {
-        this.drawCacheHit(col, row, hash, frameSeq);
+        this.tileDrawRuntime.drawCacheHit(col, row, hash, frameSeq);
       },
       drawQoi: (col, row, hash, data, epoch) => {
-        this.drawQoi(col, row, hash, data, epoch);
+        this.tileDrawRuntime.drawQoi(col, row, hash, data, () => this.tileBatchSequencer.isCurrentEpoch(epoch));
       },
       drawZstd: (col, row, hash, data, epoch) => {
-        this.drawZstd(col, row, hash, data, epoch);
+        this.tileDrawRuntime.drawZstd(col, row, hash, data, () => this.tileBatchSequencer.isCurrentEpoch(epoch));
       },
     });
   }
 
   /** Bind to a canvas rendering context for drawing (Canvas2D fallback). */
   setContext(ctx: CanvasRenderingContext2D): void {
-    this.ctx = ctx;
+    this.tileDrawRuntime.setContext(ctx);
   }
 
   /** Bind a WebGL2 renderer for GPU-accelerated drawing. When set, draw calls
    *  are routed to WebGL instead of Canvas2D. Pass null to revert to Canvas2D. */
   setWebGLRenderer(renderer: WebGLTileRenderer | null): void {
-    this.glRenderer = renderer;
+    this.tileDrawRuntime.setWebGLRenderer(renderer);
   }
 
   /** Whether a WebGL renderer is currently active. */
   hasWebGL(): boolean {
-    return this.glRenderer !== null;
+    return this.tileDrawRuntime.hasWebGL();
   }
 
   /** Current tile grid configuration, or null if not yet received. */
   getGridConfig(): TileGridConfig | null {
-    return this.gridConfig;
+    return this.tileDrawRuntime.getGridConfig();
   }
 
   /** Current video region bounding box, or null. */
@@ -145,12 +123,12 @@ export class TileCompositor {
 
   /** Access the underlying tile cache. */
   getCache(): TileCache {
-    return this.cache;
+    return this.tileDrawRuntime.getCache();
   }
 
   /** Register a callback for cache-miss telemetry back to the host. */
   setCacheMissHandler(handler: ((event: CacheMissEvent) => void) | null): void {
-    this.onCacheMiss = handler;
+    this.tileDrawRuntime.setCacheMissHandler(handler);
   }
 
   /**
@@ -171,7 +149,8 @@ export class TileCompositor {
         // Invalidate any in-flight async decode work and reset drawing state.
         this.tileBatchSequencer.invalidate();
         this.pendingCommands = [];
-        this.applyGridConfig(cmd.config);
+        this.videoRegion = null;
+        this.tileDrawRuntime.applyGridConfig(cmd.config);
         break;
 
       case 'batch-end':
@@ -194,55 +173,9 @@ export class TileCompositor {
   /** Reset state (e.g., on disconnect or resize). */
   reset(): void {
     this.tileBatchSequencer.reset();
-    this.cache.clear();
-    this.gridConfig = null;
+    this.tileDrawRuntime.reset();
     this.videoRegion = null;
     this.pendingCommands = [];
-    this.gridOffsetX = 0;
-    this.gridOffsetY = 0;
-    this.canvasScrollCopyRenderer.reset();
-    this.applyOffsetMode = true;
-  }
-
-  private applyGridConfig(config: TileGridConfig): void {
-    this.gridConfig = config;
-    this.cache.clear();
-    this.videoRegion = null;
-    this.gridOffsetX = 0;
-    this.gridOffsetY = 0;
-    this.applyOffsetMode = true;
-  }
-
-  /** Whether tile draws should apply gridOffset (true for content tiles, false for static header/scrollbar tiles). */
-  private applyOffsetMode = true;
-
-  private applyScrollCopy(dx: number, dy: number, regionTop: number, regionBottom: number, regionRight: number): void {
-    if (!this.gridConfig) return;
-
-    // WebGL path: delegate scroll to the GPU renderer
-    if (this.glRenderer) {
-      this.glRenderer.scrollCopy(
-        dx, dy, regionTop, regionBottom, regionRight,
-        this.gridConfig.screenW, this.gridConfig.screenH,
-      );
-      this.stats.scrollCopies++;
-      return;
-    }
-
-    if (!this.ctx) return;
-    if (!this.canvasScrollCopyRenderer.apply({
-      ctx: this.ctx,
-      dx,
-      dy,
-      regionTop,
-      regionBottom,
-      regionRight,
-      screenW: this.gridConfig.screenW,
-      screenH: this.gridConfig.screenH,
-    })) {
-      return;
-    }
-    this.stats.scrollCopies++;
   }
 
   /** Apply one batch atomically in protocol frame sequence order. */
@@ -262,105 +195,10 @@ export class TileCompositor {
     }
     if (this.tileBatchSequencer.isCurrentEpoch(epoch)) {
       // Safety: ensure offset mode is restored even if TileDrawMode(true) was missed.
-      this.applyOffsetMode = true;
+      this.tileDrawRuntime.restoreDefaultDrawMode();
       return true;
     }
     return false;
-  }
-
-  private tileRect(col: number, row: number): { x: number; y: number; w: number; h: number } | null {
-    return resolveTileRect({
-      gridConfig: this.gridConfig,
-      col,
-      row,
-      gridOffsetX: this.gridOffsetX,
-      gridOffsetY: this.gridOffsetY,
-      applyOffset: this.applyOffsetMode,
-    });
-  }
-
-  private drawFill(col: number, row: number, rgba: number): void {
-    const result = this.fillTileRenderer.draw({
-      rect: this.tileRect(col, row),
-      rgba,
-      ctx: this.ctx,
-      glRenderer: this.glRenderer,
-    });
-
-    if (result.kind === 'drawn') {
-      this.stats.fills++;
-    }
-  }
-
-  private drawCacheHit(col: number, row: number, hash: bigint, frameSeq: number): void {
-    const result = this.cacheHitTileRenderer.draw({
-      cache: this.cache,
-      hash,
-      rect: this.tileRect(col, row),
-      ctx: this.ctx,
-      glRenderer: this.glRenderer,
-    });
-
-    if (result.kind === 'drawn') {
-      this.stats.cacheHits++;
-      return;
-    }
-
-    if (result.kind === 'miss') {
-      this.stats.cacheMisses++;
-      this.onCacheMiss?.({ frameSeq, col, row, hash });
-    }
-  }
-
-  private drawQoi(col: number, row: number, hash: bigint, data: Uint8Array, epoch: number): void {
-    const result = this.qoiTileRenderer.draw({
-      cache: this.cache,
-      hash,
-      data,
-      rect: this.tileRect(col, row),
-      ctx: this.ctx,
-      glRenderer: this.glRenderer,
-      shouldDraw: () => this.tileBatchSequencer.isCurrentEpoch(epoch),
-    });
-
-    if (result.kind === 'drawn' || result.kind === 'cached') {
-      if (result.redundant) {
-        this.stats.qoiRedundant++;
-        this.stats.qoiRedundantBytes += result.decodedBytes;
-      }
-      if (result.kind === 'cached') return;
-      this.stats.qoiDecodes++;
-      return;
-    }
-
-    if (result.kind === 'miss') {
-      this.stats.cacheMisses++;
-    }
-  }
-  private drawZstd(col: number, row: number, hash: bigint, data: Uint8Array, epoch: number): void {
-    const result = this.zstdTileRenderer.draw({
-      cache: this.cache,
-      hash,
-      data,
-      rect: this.tileRect(col, row),
-      ctx: this.ctx,
-      glRenderer: this.glRenderer,
-      shouldDraw: () => this.tileBatchSequencer.isCurrentEpoch(epoch),
-    });
-
-    if (result.kind === 'drawn' || result.kind === 'cached') {
-      if (result.redundant) {
-        this.stats.zstdRedundant++;
-        this.stats.zstdRedundantBytes += result.encodedBytes;
-      }
-      if (result.kind === 'cached') return;
-      this.stats.zstdDecodes++;
-      return;
-    }
-
-    if (result.kind === 'miss') {
-      this.stats.cacheMisses++;
-    }
   }
 }
 
