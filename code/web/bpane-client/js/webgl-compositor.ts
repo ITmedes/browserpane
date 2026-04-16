@@ -17,6 +17,7 @@ import {
   type WebGLContextInfo,
   type WebGLRendererDiagnostics,
 } from './render/webgl-context-selection.js';
+import { WebGLScrollCopyRenderer } from './render/webgl-scroll-copy-renderer.js';
 import { createWebGLTileProgram } from './render/webgl-tile-program.js';
 
 export type {
@@ -52,11 +53,7 @@ export class WebGLTileRenderer {
   private videoTexH = 0;
   private videoTexValid = false;
 
-  // Scroll copy resources (lazy-initialized)
-  private scrollFbo: WebGLFramebuffer | null = null;
-  private scrollTexture: WebGLTexture | null = null;
-  private scrollTexW = 0;
-  private scrollTexH = 0;
+  private scrollCopyRenderer: WebGLScrollCopyRenderer;
 
   // Current canvas dimensions (set via resize())
   private canvasW = 0;
@@ -74,6 +71,7 @@ export class WebGLTileRenderer {
     this.uColor = tileProgram.uColor;
     this.vao = tileProgram.vao;
     this.quadBuffer = tileProgram.quadBuffer;
+    this.scrollCopyRenderer = new WebGLScrollCopyRenderer(gl);
 
     // Create the reusable tile texture
     this.tileTexture = gl.createTexture()!;
@@ -357,72 +355,17 @@ export class WebGLTileRenderer {
     screenW: number,
     screenH: number,
   ): void {
-    const gl = this.gl;
-    const cw = this.canvasW;
-    const ch = this.canvasH;
-    if (cw <= 0 || ch <= 0) return;
-
-    // Negate: server sends scroll direction, we shift pixels in the opposite direction
-    const tx = -dx || 0;
-    const ty = -dy || 0;
-
-    // Ensure scroll FBO/texture exist and are the right size
-    this.ensureScrollResources(cw, ch);
-    if (!this.scrollFbo || !this.scrollTexture) return;
-
-    const hasRegion = regionTop !== 0 || regionBottom !== screenH || regionRight !== screenW;
-
-    // Step 1: Copy current framebuffer to the scroll texture.
-    // Only blit the scroll region when available (avoids full-framebuffer copy).
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.scrollFbo);
-    if (hasRegion) {
-      // Blit only the viewport region (GL Y is bottom-up)
-      const glTop = ch - regionBottom;
-      const glBot = ch - regionTop;
-      gl.blitFramebuffer(
-        0, glTop, regionRight, glBot,
-        0, glTop, regionRight, glBot,
-        gl.COLOR_BUFFER_BIT,
-        gl.NEAREST,
-      );
-    } else {
-      gl.blitFramebuffer(
-        0, 0, cw, ch,
-        0, 0, cw, ch,
-        gl.COLOR_BUFFER_BIT,
-        gl.NEAREST,
-      );
-    }
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-
-    // Step 2: Redraw the shifted portion over the existing framebuffer.
-    if (hasRegion) {
-      const rw = regionRight;
-      const rh = regionBottom - regionTop;
-      if (rw <= 0 || rh <= 0) return;
-
-      // Compute clipped source/dest regions
-      const srcX = Math.max(0, -tx);
-      const srcY = regionTop + Math.max(0, -ty);
-      const destX = Math.max(0, tx);
-      const destY = regionTop + Math.max(0, ty);
-      const srcW = rw - Math.abs(tx);
-      const srcH = rh - Math.abs(ty);
-
-      if (srcW > 0 && srcH > 0) {
-        this.drawScrollTexturePortion(srcX, srcY, srcW, srcH, destX, destY, srcW, srcH);
-      }
-    } else {
-      // Full-screen scroll — redraw the shifted framebuffer content.
-      this.drawScrollTexturePortion(
-        Math.max(0, -tx), Math.max(0, -ty),
-        cw - Math.abs(tx), ch - Math.abs(ty),
-        Math.max(0, tx), Math.max(0, ty),
-        cw - Math.abs(tx), ch - Math.abs(ty),
-      );
-    }
+    this.scrollCopyRenderer.scrollCopy({
+      canvasWidth: this.canvasW,
+      canvasHeight: this.canvasH,
+      dx,
+      dy,
+      regionTop,
+      regionBottom,
+      regionRight,
+      screenW,
+      screenH,
+    });
   }
 
   /** Clear the entire canvas. */
@@ -433,103 +376,11 @@ export class WebGLTileRenderer {
   /** Release GPU resources. Call on disconnect/cleanup. */
   destroy(): void {
     const gl = this.gl;
-    if (this.scrollFbo) { gl.deleteFramebuffer(this.scrollFbo); this.scrollFbo = null; }
-    if (this.scrollTexture) { gl.deleteTexture(this.scrollTexture); this.scrollTexture = null; }
+    this.scrollCopyRenderer.destroy();
     if (this.videoTexture) { gl.deleteTexture(this.videoTexture); this.videoTexture = null; }
     gl.deleteTexture(this.tileTexture);
     gl.deleteBuffer(this.quadBuffer);
     gl.deleteVertexArray(this.vao);
     gl.deleteProgram(this.program);
-  }
-
-  // ── Private helpers ──────────────────────────────────────────────
-
-  /**
-   * Ensure the scroll framebuffer + texture exist and match canvas size.
-   */
-  private ensureScrollResources(width: number, height: number): void {
-    const gl = this.gl;
-    if (this.scrollTexture && this.scrollTexW === width && this.scrollTexH === height) {
-      return;
-    }
-
-    // (Re)create texture
-    if (this.scrollTexture) gl.deleteTexture(this.scrollTexture);
-    this.scrollTexture = gl.createTexture()!;
-    gl.bindTexture(gl.TEXTURE_2D, this.scrollTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-
-    // (Re)create framebuffer
-    if (this.scrollFbo) gl.deleteFramebuffer(this.scrollFbo);
-    this.scrollFbo = gl.createFramebuffer()!;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.scrollFbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.scrollTexture, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    this.scrollTexW = width;
-    this.scrollTexH = height;
-  }
-
-  /**
-   * Draw a portion of the scroll texture onto the default framebuffer.
-   * Coordinates are in canvas-space (top-left origin, Y-down).
-   */
-  private drawScrollTexturePortion(
-    srcX: number, srcY: number, srcW: number, srcH: number,
-    destX: number, destY: number, destW: number, destH: number,
-  ): void {
-    const gl = this.gl;
-    const cw = this.canvasW;
-    const ch = this.canvasH;
-
-    gl.useProgram(this.program);
-    gl.bindVertexArray(this.vao);
-
-    // Bind the scroll texture (not the tile texture)
-    gl.bindTexture(gl.TEXTURE_2D, this.scrollTexture);
-
-    // We need custom tex coords that sample the source region from the scroll texture.
-    // The scroll texture is a copy of the framebuffer which has OpenGL Y orientation
-    // (bottom row = row 0), but our texImage2D copied it via blitFramebuffer which
-    // preserves orientation. So the texture has GL orientation.
-    //
-    // Our vertex shader transforms a_position (0..1) into clip space using u_rect.
-    // The a_texCoord (0..1) goes straight to the fragment shader.
-    // We need to remap tex coords from the full-quad 0..1 to the source sub-rect.
-    //
-    // Instead of modifying the VBO, we use a simpler approach:
-    // Set u_rect to the destination rect, and use a second draw with adjusted
-    // texture coordinates via a separate uniform.
-    //
-    // Actually, the simplest approach is to use blitFramebuffer for the scroll copy
-    // since we already have the content in the FBO. Let's do that.
-
-    gl.bindVertexArray(null);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-
-    // Use blitFramebuffer from the scroll FBO to the default framebuffer
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.scrollFbo);
-    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-
-    // Convert canvas-space (Y-down) coordinates to GL-space (Y-up) for blitFramebuffer
-    const glSrcY0 = ch - (srcY + srcH);
-    const glSrcY1 = ch - srcY;
-    const glDstY0 = ch - (destY + destH);
-    const glDstY1 = ch - destY;
-
-    gl.blitFramebuffer(
-      srcX, glSrcY0, srcX + srcW, glSrcY1,
-      destX, glDstY0, destX + destW, glDstY1,
-      gl.COLOR_BUFFER_BIT,
-      gl.NEAREST,
-    );
-
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
   }
 }
