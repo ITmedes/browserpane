@@ -17,6 +17,7 @@ import {
   type WebGLContextInfo,
   type WebGLRendererDiagnostics,
 } from './render/webgl-context-selection.js';
+import { WebGLCachedVideoRenderer } from './render/webgl-cached-video-renderer.js';
 import { WebGLScrollCopyRenderer } from './render/webgl-scroll-copy-renderer.js';
 import { createWebGLTileProgram } from './render/webgl-tile-program.js';
 
@@ -46,13 +47,7 @@ export class WebGLTileRenderer {
   private vao: WebGLVertexArrayObject;
   private quadBuffer: WebGLBuffer;
 
-  // Persistent video texture — caches last uploaded video frame on the GPU
-  // so re-compositing doesn't require a CPU round-trip.
-  private videoTexture: WebGLTexture | null = null;
-  private videoTexW = 0;
-  private videoTexH = 0;
-  private videoTexValid = false;
-
+  private cachedVideoRenderer: WebGLCachedVideoRenderer;
   private scrollCopyRenderer: WebGLScrollCopyRenderer;
 
   // Current canvas dimensions (set via resize())
@@ -71,6 +66,12 @@ export class WebGLTileRenderer {
     this.uColor = tileProgram.uColor;
     this.vao = tileProgram.vao;
     this.quadBuffer = tileProgram.quadBuffer;
+    this.cachedVideoRenderer = new WebGLCachedVideoRenderer(gl, {
+      program: this.program,
+      vao: this.vao,
+      uRect: this.uRect,
+      uMode: this.uMode,
+    });
     this.scrollCopyRenderer = new WebGLScrollCopyRenderer(gl);
 
     // Create the reusable tile texture
@@ -123,6 +124,7 @@ export class WebGLTileRenderer {
   resize(width: number, height: number): void {
     this.canvasW = width;
     this.canvasH = height;
+    this.cachedVideoRenderer.resize(height);
     const gl = this.gl;
     gl.viewport(0, 0, width, height);
     gl.useProgram(this.program);
@@ -202,25 +204,7 @@ export class WebGLTileRenderer {
    * The caller must close the VideoFrame after this call.
    */
   uploadVideoFrame(frame: VideoFrame): void {
-    const gl = this.gl;
-    const fw = frame.displayWidth;
-    const fh = frame.displayHeight;
-    if (!this.videoTexture || this.videoTexW !== fw || this.videoTexH !== fh) {
-      if (this.videoTexture) gl.deleteTexture(this.videoTexture);
-      this.videoTexture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, this.videoTexture);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      this.videoTexW = fw;
-      this.videoTexH = fh;
-    } else {
-      gl.bindTexture(gl.TEXTURE_2D, this.videoTexture);
-    }
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, frame as any);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    this.videoTexValid = true;
+    this.cachedVideoRenderer.upload(frame);
   }
 
   /**
@@ -228,17 +212,7 @@ export class WebGLTileRenderer {
    * Returns false if no video texture has been uploaded yet.
    */
   drawCachedVideo(x: number, y: number, w: number, h: number): boolean {
-    if (!this.videoTexture || !this.videoTexValid) return false;
-    const gl = this.gl;
-    gl.useProgram(this.program);
-    gl.bindVertexArray(this.vao);
-    gl.bindTexture(gl.TEXTURE_2D, this.videoTexture);
-    gl.uniform4f(this.uRect, x, y, w, h);
-    gl.uniform1i(this.uMode, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindVertexArray(null);
-    return true;
+    return this.cachedVideoRenderer.draw(x, y, w, h);
   }
 
   /**
@@ -249,26 +223,12 @@ export class WebGLTileRenderer {
     srcX: number, srcY: number, srcW: number, srcH: number,
     dstX: number, dstY: number, dstW: number, dstH: number,
   ): boolean {
-    if (!this.videoTexture || !this.videoTexValid) return false;
-    const gl = this.gl;
-    gl.useProgram(this.program);
-    gl.bindVertexArray(this.vao);
-    gl.bindTexture(gl.TEXTURE_2D, this.videoTexture);
-    // Use scissor to crop, draw full texture at destination
-    gl.enable(gl.SCISSOR_TEST);
-    gl.scissor(dstX, this.canvasH - dstY - dstH, dstW, dstH);
-    gl.uniform4f(this.uRect, dstX, dstY, dstW, dstH);
-    gl.uniform1i(this.uMode, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-    gl.disable(gl.SCISSOR_TEST);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindVertexArray(null);
-    return true;
+    return this.cachedVideoRenderer.drawCropped(srcX, srcY, srcW, srcH, dstX, dstY, dstW, dstH);
   }
 
   /** Invalidate the cached video texture (e.g., on disconnect). */
   invalidateVideoTexture(): void {
-    this.videoTexValid = false;
+    this.cachedVideoRenderer.invalidate();
   }
 
   /**
@@ -376,8 +336,8 @@ export class WebGLTileRenderer {
   /** Release GPU resources. Call on disconnect/cleanup. */
   destroy(): void {
     const gl = this.gl;
+    this.cachedVideoRenderer.destroy();
     this.scrollCopyRenderer.destroy();
-    if (this.videoTexture) { gl.deleteTexture(this.videoTexture); this.videoTexture = null; }
     gl.deleteTexture(this.tileTexture);
     gl.deleteBuffer(this.quadBuffer);
     gl.deleteVertexArray(this.vao);
