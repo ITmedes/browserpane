@@ -10,8 +10,11 @@ use std::convert::{TryFrom, TryInto};
 use std::ffi::CString;
 #[cfg(target_os = "linux")]
 use std::fs::{self, File, OpenOptions};
+use std::io::{self, ErrorKind, Write};
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
@@ -41,6 +44,14 @@ fn pipe_source_load_module_args(pipe_path: &Path) -> Vec<String> {
 
 fn set_default_source_args() -> [&'static str; 2] {
     ["set-default-source", MIC_SOURCE_NAME]
+}
+
+fn write_pcm_frame<W: Write>(writer: &mut W, pcm: &[u8]) -> io::Result<usize> {
+    match writer.write(pcm) {
+        Ok(bytes_written) => Ok(bytes_written),
+        Err(err) if err.kind() == ErrorKind::WouldBlock => Ok(0),
+        Err(err) => Err(err),
+    }
 }
 
 fn decode_audio_input_payload(
@@ -117,11 +128,13 @@ impl MicInput {
             .args(set_default_source_args())
             .output();
 
-        // Keep the FIFO open read/write on our side so writes do not block or
-        // fail before an application actually starts recording from the source.
+        // Keep the FIFO open read/write on our side so writes do not fail before
+        // an application starts recording. Use nonblocking writes so an idle
+        // source cannot stall the host loop when the pipe buffer fills.
         let pipe = OpenOptions::new()
             .read(true)
             .write(true)
+            .custom_flags(libc::O_NONBLOCK)
             .open(&pipe_path)
             .map_err(|e| {
                 anyhow::anyhow!(
@@ -144,7 +157,6 @@ impl MicInput {
 
     /// Write an incoming audio frame into the backing source FIFO after decoding if needed.
     pub fn write_frame(&mut self, audio_frame: &AudioFrame) {
-        use std::io::Write;
         let pcm = match decode_audio_input_payload(&audio_frame.data, &mut self.opus_decoder) {
             Ok(pcm) => pcm,
             Err(e) => {
@@ -152,8 +164,19 @@ impl MicInput {
                 return;
             }
         };
-        if let Err(e) = self.pipe.write_all(&pcm) {
-            tracing::debug!("mic: write failed: {e}");
+        match write_pcm_frame(&mut self.pipe, &pcm) {
+            Ok(0) => {
+                tracing::debug!("mic: pipe backpressured, dropping frame");
+            }
+            Ok(bytes_written) if bytes_written < pcm.len() => {
+                tracing::debug!(
+                    "mic: partial write dropped tail bytes_written={} frame_bytes={}",
+                    bytes_written,
+                    pcm.len()
+                );
+            }
+            Ok(_) => {}
+            Err(e) => tracing::debug!("mic: write failed: {e}"),
         }
     }
 }
@@ -216,6 +239,33 @@ mod tests {
     use super::*;
     use audiopus::{coder::Encoder, Application, Bitrate};
     use std::path::Path;
+
+    struct VecWriter {
+        written: Vec<u8>,
+    }
+
+    impl Write for VecWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.written.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct WouldBlockWriter;
+
+    impl Write for WouldBlockWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from(ErrorKind::WouldBlock))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn mic_input_new_does_not_panic() {
@@ -287,5 +337,28 @@ mod tests {
             set_default_source_args(),
             ["set-default-source", MIC_SOURCE_NAME]
         );
+    }
+
+    #[test]
+    fn write_pcm_frame_writes_full_payload() {
+        let mut writer = VecWriter {
+            written: Vec::new(),
+        };
+        let payload = [0x34, 0x12, 0x78, 0x56];
+
+        let written = write_pcm_frame(&mut writer, &payload).unwrap();
+
+        assert_eq!(written, payload.len());
+        assert_eq!(writer.written, payload);
+    }
+
+    #[test]
+    fn write_pcm_frame_treats_backpressure_as_dropped_frame() {
+        let mut writer = WouldBlockWriter;
+        let payload = [0x34, 0x12, 0x78, 0x56];
+
+        let written = write_pcm_frame(&mut writer, &payload).unwrap();
+
+        assert_eq!(written, 0);
     }
 }
