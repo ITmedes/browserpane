@@ -1021,49 +1021,74 @@ describe('BpaneSession', () => {
   describe('error handling', () => {
     it('rejects connect when container is not an HTMLElement', async () => {
       const { BpaneSession } = await import('../bpane.js');
+      const { ValidationError } = await import('../shared/errors.js');
 
-      await expect(BpaneSession.connect({
+      const error = await BpaneSession.connect({
         container: null as unknown as HTMLElement,
         gatewayUrl: 'https://localhost:4433',
         token: 'test',
-      })).rejects.toThrow('BpaneSession.connect requires a valid container HTMLElement');
+      }).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(ValidationError);
+      expect(error).toMatchObject({
+        code: 'bpane.connect.invalid_container',
+        message: 'BpaneSession.connect requires a valid container HTMLElement',
+      });
     });
 
     it('rejects connect when gatewayUrl is empty', async () => {
       const { BpaneSession } = await import('../bpane.js');
+      const { ValidationError } = await import('../shared/errors.js');
 
-      await expect(BpaneSession.connect({
+      const error = await BpaneSession.connect({
         container: createContainer(),
         gatewayUrl: '   ',
         token: 'test',
-      })).rejects.toThrow('BpaneSession.connect requires a non-empty gatewayUrl');
+      }).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(ValidationError);
+      expect(error).toMatchObject({
+        code: 'bpane.connect.invalid_gateway_url',
+        message: 'BpaneSession.connect requires a non-empty gatewayUrl',
+      });
     });
 
     it('rejects connect when token is empty', async () => {
       const { BpaneSession } = await import('../bpane.js');
+      const { ValidationError } = await import('../shared/errors.js');
 
-      await expect(BpaneSession.connect({
+      const error = await BpaneSession.connect({
         container: createContainer(),
         gatewayUrl: 'https://localhost:4433',
         token: '   ',
-      })).rejects.toThrow('BpaneSession.connect requires a non-empty token');
+      }).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(ValidationError);
+      expect(error).toMatchObject({
+        code: 'bpane.connect.invalid_token',
+        message: 'BpaneSession.connect requires a non-empty token',
+      });
     });
 
     it('rejects connect when WebTransport is unavailable', async () => {
       const onError = vi.fn();
       (globalThis as any).WebTransport = undefined;
       const { BpaneSession } = await import('../bpane.js');
+      const { UnsupportedFeatureError } = await import('../shared/errors.js');
 
-      await expect(BpaneSession.connect({
+      const error = await BpaneSession.connect({
         container: createContainer(),
         gatewayUrl: 'https://localhost:4433',
         token: 'test',
         onError,
-      })).rejects.toThrow('WebTransport is unavailable in this browser');
+      }).catch((caught) => caught);
 
-      expect(onError).toHaveBeenCalledWith(expect.objectContaining({
+      expect(error).toBeInstanceOf(UnsupportedFeatureError);
+      expect(error).toMatchObject({
+        code: 'bpane.transport.webtransport_unavailable',
         message: 'WebTransport is unavailable in this browser',
-      }));
+      });
+      expect(onError).toHaveBeenCalledWith(error);
     });
 
     it('rejects microphone start when disabled in session options', async () => {
