@@ -17,6 +17,7 @@ import {
   type WebGLContextInfo,
   type WebGLRendererDiagnostics,
 } from './render/webgl-context-selection.js';
+import { createWebGLTileProgram } from './render/webgl-tile-program.js';
 
 export type {
   RenderBackend,
@@ -28,68 +29,6 @@ export type {
 export interface WebGLRendererCreationResult {
   renderer: WebGLTileRenderer | null;
   diagnostics: WebGLRendererDiagnostics;
-}
-
-// ── Shader sources ──────────────────────────────────────────────────
-
-const VERTEX_SHADER_SRC = `#version 300 es
-in vec2 a_position;
-in vec2 a_texCoord;
-out vec2 v_texCoord;
-uniform vec4 u_rect;       // (x, y, w, h) in pixels
-uniform vec2 u_resolution;  // canvas size
-void main() {
-  vec2 pos = u_rect.xy + a_position * u_rect.zw;
-  vec2 clip = (pos / u_resolution) * 2.0 - 1.0;
-  clip.y = -clip.y; // flip Y — canvas origin is top-left
-  gl_Position = vec4(clip, 0.0, 1.0);
-  v_texCoord = a_texCoord;
-}
-`;
-
-const FRAGMENT_SHADER_SRC = `#version 300 es
-precision mediump float;
-in vec2 v_texCoord;
-out vec4 fragColor;
-uniform sampler2D u_texture;
-uniform int u_mode; // 0 = texture, 1 = solid color
-uniform vec4 u_color;
-void main() {
-  if (u_mode == 1) {
-    fragColor = u_color;
-  } else {
-    fragColor = texture(u_texture, v_texCoord);
-  }
-}
-`;
-
-// ── Helper: compile shader ──────────────────────────────────────────
-
-function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
-  const shader = gl.createShader(type);
-  if (!shader) throw new Error('Failed to create shader');
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const log = gl.getShaderInfoLog(shader);
-    gl.deleteShader(shader);
-    throw new Error(`Shader compile error: ${log}`);
-  }
-  return shader;
-}
-
-function linkProgram(gl: WebGL2RenderingContext, vs: WebGLShader, fs: WebGLShader): WebGLProgram {
-  const program = gl.createProgram();
-  if (!program) throw new Error('Failed to create program');
-  gl.attachShader(program, vs);
-  gl.attachShader(program, fs);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const log = gl.getProgramInfoLog(program);
-    gl.deleteProgram(program);
-    throw new Error(`Program link error: ${log}`);
-  }
-  return program;
 }
 
 // ── WebGLTileRenderer ───────────────────────────────────────────────
@@ -127,50 +66,14 @@ export class WebGLTileRenderer {
     this.gl = gl;
     this.info = info;
 
-    // Compile shaders and link program
-    const vs = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER_SRC);
-    const fs = compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER_SRC);
-    this.program = linkProgram(gl, vs, fs);
-    // Shaders can be deleted after linking
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-
-    gl.useProgram(this.program);
-
-    // Uniform locations
-    this.uRect = gl.getUniformLocation(this.program, 'u_rect')!;
-    this.uResolution = gl.getUniformLocation(this.program, 'u_resolution')!;
-    this.uMode = gl.getUniformLocation(this.program, 'u_mode')!;
-    this.uColor = gl.getUniformLocation(this.program, 'u_color')!;
-
-    // Create a unit quad (positions 0..1, texcoords 0..1)
-    // Two triangles covering a unit square
-    const quadData = new Float32Array([
-      // position (x,y), texCoord (u,v)
-      0, 0, 0, 0,
-      1, 0, 1, 0,
-      0, 1, 0, 1,
-      0, 1, 0, 1,
-      1, 0, 1, 0,
-      1, 1, 1, 1,
-    ]);
-
-    this.vao = gl.createVertexArray()!;
-    gl.bindVertexArray(this.vao);
-
-    this.quadBuffer = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, quadData, gl.STATIC_DRAW);
-
-    const aPos = gl.getAttribLocation(this.program, 'a_position');
-    const aTex = gl.getAttribLocation(this.program, 'a_texCoord');
-
-    gl.enableVertexAttribArray(aPos);
-    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
-    gl.enableVertexAttribArray(aTex);
-    gl.vertexAttribPointer(aTex, 2, gl.FLOAT, false, 16, 8);
-
-    gl.bindVertexArray(null);
+    const tileProgram = createWebGLTileProgram(gl);
+    this.program = tileProgram.program;
+    this.uRect = tileProgram.uRect;
+    this.uResolution = tileProgram.uResolution;
+    this.uMode = tileProgram.uMode;
+    this.uColor = tileProgram.uColor;
+    this.vao = tileProgram.vao;
+    this.quadBuffer = tileProgram.quadBuffer;
 
     // Create the reusable tile texture
     this.tileTexture = gl.createTexture()!;
