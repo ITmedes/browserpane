@@ -322,7 +322,7 @@ afterEach(() => {
 
 // ── Helper to create a connected session ───────────────────────────
 
-async function createSession(overrides: Record<string, any> = {}) {
+function createContainer(): HTMLDivElement {
   const container = document.createElement('div');
   Object.defineProperty(container, 'clientWidth', { value: 800 });
   Object.defineProperty(container, 'clientHeight', { value: 600 });
@@ -330,7 +330,11 @@ async function createSession(overrides: Record<string, any> = {}) {
     width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600,
     x: 0, y: 0, toJSON: () => {},
   });
+  return container;
+}
 
+async function createSession(overrides: Record<string, any> = {}) {
+  const container = createContainer();
   const { BpaneSession } = await import('../bpane.js');
 
   const session = await BpaneSession.connect({
@@ -1015,6 +1019,53 @@ describe('BpaneSession', () => {
   });
 
   describe('error handling', () => {
+    it('rejects connect when container is not an HTMLElement', async () => {
+      const { BpaneSession } = await import('../bpane.js');
+
+      await expect(BpaneSession.connect({
+        container: null as unknown as HTMLElement,
+        gatewayUrl: 'https://localhost:4433',
+        token: 'test',
+      })).rejects.toThrow('BpaneSession.connect requires a valid container HTMLElement');
+    });
+
+    it('rejects connect when gatewayUrl is empty', async () => {
+      const { BpaneSession } = await import('../bpane.js');
+
+      await expect(BpaneSession.connect({
+        container: createContainer(),
+        gatewayUrl: '   ',
+        token: 'test',
+      })).rejects.toThrow('BpaneSession.connect requires a non-empty gatewayUrl');
+    });
+
+    it('rejects connect when token is empty', async () => {
+      const { BpaneSession } = await import('../bpane.js');
+
+      await expect(BpaneSession.connect({
+        container: createContainer(),
+        gatewayUrl: 'https://localhost:4433',
+        token: '   ',
+      })).rejects.toThrow('BpaneSession.connect requires a non-empty token');
+    });
+
+    it('rejects connect when WebTransport is unavailable', async () => {
+      const onError = vi.fn();
+      (globalThis as any).WebTransport = undefined;
+      const { BpaneSession } = await import('../bpane.js');
+
+      await expect(BpaneSession.connect({
+        container: createContainer(),
+        gatewayUrl: 'https://localhost:4433',
+        token: 'test',
+        onError,
+      })).rejects.toThrow('WebTransport is unavailable in this browser');
+
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({
+        message: 'WebTransport is unavailable in this browser',
+      }));
+    });
+
     it('rejects microphone start when disabled in session options', async () => {
       const { session } = await createSession({ microphone: false });
       await expect(session.startMicrophone()).rejects.toThrow('microphone input is disabled in session options');
@@ -1075,18 +1126,10 @@ describe('BpaneSession', () => {
         datagrams: { readable: { getReader: () => new MockReader() } },
       }));
 
-      const container = document.createElement('div');
-      Object.defineProperty(container, 'clientWidth', { value: 800 });
-      Object.defineProperty(container, 'clientHeight', { value: 600 });
-      container.getBoundingClientRect = () => ({
-        width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600,
-        x: 0, y: 0, toJSON: () => {},
-      });
-
       const { BpaneSession } = await import('../bpane.js');
 
       await expect(BpaneSession.connect({
-        container,
+        container: createContainer(),
         gatewayUrl: 'https://localhost:4433',
         token: 'test',
         onError,

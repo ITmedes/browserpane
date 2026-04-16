@@ -1,6 +1,31 @@
 import { describe, it, expect } from 'vitest';
-import { inferLayoutHint, inferLayoutName } from '../bpane.js';
+import * as bpane from '../bpane.js';
 import { encodeFrame, parseFrames, CH_CONTROL, CH_CLIPBOARD, CH_INPUT, CH_CURSOR } from '../protocol.js';
+
+const { inferLayoutHint, inferLayoutName } = bpane;
+
+describe('bpane public facade', () => {
+  it('exposes the stable named exports used by embedding clients', () => {
+    expect(typeof bpane.BpaneSession.connect).toBe('function');
+    expect(bpane).toMatchObject({
+      InputController: expect.any(Function),
+      TileCompositor: expect.any(Function),
+      TileCache: expect.any(Function),
+      NalReassembler: expect.any(Function),
+      fnvHash: expect.any(Function),
+      domCodeToEvdev: expect.any(Function),
+      buildModifiers: expect.any(Function),
+      normalizeScroll: expect.any(Function),
+      createScrollState: expect.any(Function),
+      encodeFrame: expect.any(Function),
+      parseFrames: expect.any(Function),
+      parseTileMessage: expect.any(Function),
+      parseTileInfo: expect.any(Function),
+      getNalType: expect.any(Function),
+    });
+    expect(typeof bpane.CH_TILES).toBe('number');
+  });
+});
 
 describe('inferLayoutName', () => {
   it('detects US QWERTY layout', () => {
