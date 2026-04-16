@@ -227,6 +227,7 @@ export class BpaneSession {
    * Connect to a BrowserPane gateway and start a remote desktop session.
    */
   static async connect(options: BpaneOptions): Promise<BpaneSession> {
+    BpaneSession.validateConnectOptions(options);
     const session = new BpaneSession(options);
     session.microphoneEncoderSupported = await AudioController.isMicrophoneSupported();
     session.cameraEncoderSupported = await CameraController.isSupported();
@@ -243,6 +244,19 @@ export class BpaneSession {
     });
     session.input.setup();
     return session;
+  }
+
+  private static validateConnectOptions(options: BpaneOptions): void {
+    const raw = options as Partial<BpaneOptions> | null | undefined;
+    if (!raw || !(raw.container instanceof HTMLElement)) {
+      throw new Error('BpaneSession.connect requires a valid container HTMLElement');
+    }
+    if (typeof raw.gatewayUrl !== 'string' || raw.gatewayUrl.trim() === '') {
+      throw new Error('BpaneSession.connect requires a non-empty gatewayUrl');
+    }
+    if (typeof raw.token !== 'string' || raw.token.trim() === '') {
+      throw new Error('BpaneSession.connect requires a non-empty token');
+    }
   }
 
   /** Number of decoded video frames since connect. */
@@ -410,6 +424,9 @@ export class BpaneSession {
     }
 
     try {
+      if (typeof WebTransport === 'undefined') {
+        throw new Error('WebTransport is unavailable in this browser');
+      }
       const wtOptions: WebTransportOptions = {};
       if (certHash) {
         wtOptions.serverCertificateHashes = [{
