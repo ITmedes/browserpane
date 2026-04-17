@@ -26,6 +26,7 @@ import {
   sendKeyboardLayoutHint,
 } from './input/layout-hint.js';
 import { PointerInputRuntime } from './input/pointer-input-runtime.js';
+import { SuppressedKeyupTracker } from './input/suppressed-keyup-tracker.js';
 import { fnvHash } from './hash.js';
 
 const PENDING_COMPOSITION_FALLBACK_MS = 16;
@@ -126,6 +127,7 @@ export class InputController {
   private readonly clipboardSync: ClipboardSyncRuntime;
   private readonly keyboardSink: KeyboardSinkRuntime;
   private readonly pointerInput: PointerInputRuntime;
+  private readonly suppressedKeyups: SuppressedKeyupTracker;
   /** Tracks keys remapped on keydown (e.g., ArrowLeft→Home) for correct keyup. */
   private remappedKeys = new Map<string, RemappedKeyState>();
   /** Command keys currently held in the browser. */
@@ -144,10 +146,6 @@ export class InputController {
   private pendingSyntheticAccent: PendingSyntheticAccentState | null = null;
   /** Timer used to fall back to the base key if no composed text arrives. */
   private pendingCompositionFallbackTimer: number | null = null;
-  /** Suppress the browser's keyup after synthesizing a composed character. */
-  private suppressedKeyupCodes = new Set<string>();
-  /** Expiry timers for keyups that some mac shortcuts never deliver. */
-  private suppressedKeyupTimers = new Map<string, number>();
   /** Deferred Ctrl+V while clipboard sync completes. */
   private pendingCtrlPaste: PendingCtrlPasteState | null = null;
 
@@ -192,6 +190,11 @@ export class InputController {
       canvas: this.canvas,
       documentLike: typeof document === 'undefined' ? undefined : document,
     });
+    this.suppressedKeyups = new SuppressedKeyupTracker({
+      timeoutMs: SUPPRESSED_KEYUP_TIMEOUT_MS,
+      setTimeoutFn: window.setTimeout,
+      clearTimeoutFn: window.clearTimeout,
+    });
   }
 
   /** Set up all DOM event listeners on the canvas. */
@@ -219,7 +222,7 @@ export class InputController {
 
     keyboardTarget.addEventListener('keydown', (e: KeyboardEvent) => {
       if (!e.repeat) {
-        this.clearSuppressedKeyup(e.code);
+        this.suppressedKeyups.clear(e.code);
       }
 
       if (this.isMacMetaKey(e.code)) {
@@ -293,7 +296,7 @@ export class InputController {
       if (this.shouldSuppressLockedWindowShortcut(e)) {
         e.preventDefault();
         if (!e.repeat) {
-          this.suppressNextKeyup(e.code);
+          this.suppressedKeyups.suppress(e.code);
         }
         return;
       }
@@ -310,7 +313,7 @@ export class InputController {
         if (e.repeat) {
           return;
         }
-        this.suppressNextKeyup(e.code);
+        this.suppressedKeyups.suppress(e.code);
         this.dispatchAtomicMacCtrlShortcutWithClipboardSync(e.code, e.key);
         return;
       }
@@ -325,7 +328,7 @@ export class InputController {
           heldCtrlCodes: new Set(this.activeControlCodes),
           releasedCtrlCodes: new Set<string>(),
         };
-        this.suppressNextKeyup(e.code);
+        this.suppressedKeyups.suppress(e.code);
         void this.syncClipboardBeforePaste().finally(() => {
           this.flushDeferredCtrlPaste();
         });
@@ -496,7 +499,7 @@ export class InputController {
         }
       }
 
-      if (this.clearSuppressedKeyup(e.code)) {
+      if (this.suppressedKeyups.clear(e.code)) {
         e.preventDefault();
         return;
       }
@@ -571,11 +574,7 @@ export class InputController {
     this.pendingSyntheticAccent = null;
     this.pendingCtrlPaste = null;
     this.clearPendingCompositionFallback();
-    this.suppressedKeyupCodes.clear();
-    for (const timer of this.suppressedKeyupTimers.values()) {
-      window.clearTimeout(timer);
-    }
-    this.suppressedKeyupTimers.clear();
+    this.suppressedKeyups.reset();
     this.keyboardSink.destroy();
   }
 
@@ -650,7 +649,7 @@ export class InputController {
     this.clearPendingCompositionFallback();
     this.sendKeyEvent(pending.code, text, true, false, false, pending.shift, false, false);
     this.sendKeyEvent(pending.code, text, false, false, false, pending.shift, false, false);
-    this.suppressNextKeyup(pending.code);
+    this.suppressedKeyups.suppress(pending.code);
     this.keyboardSink.clear();
   }
 
@@ -674,32 +673,6 @@ export class InputController {
       window.clearTimeout(this.pendingCompositionFallbackTimer);
       this.pendingCompositionFallbackTimer = null;
     }
-  }
-
-  private suppressNextKeyup(code: string): void {
-    this.suppressedKeyupCodes.add(code);
-    const existingTimer = this.suppressedKeyupTimers.get(code);
-    if (existingTimer !== undefined) {
-      window.clearTimeout(existingTimer);
-    }
-    const timer = window.setTimeout(() => {
-      this.suppressedKeyupCodes.delete(code);
-      this.suppressedKeyupTimers.delete(code);
-    }, SUPPRESSED_KEYUP_TIMEOUT_MS);
-    this.suppressedKeyupTimers.set(code, timer);
-  }
-
-  private clearSuppressedKeyup(code: string): boolean {
-    if (!this.suppressedKeyupCodes.has(code)) {
-      return false;
-    }
-    this.suppressedKeyupCodes.delete(code);
-    const timer = this.suppressedKeyupTimers.get(code);
-    if (timer !== undefined) {
-      window.clearTimeout(timer);
-      this.suppressedKeyupTimers.delete(code);
-    }
-    return true;
   }
 
   private emitSyntheticAccentFallback(pending: PendingSyntheticAccentState): void {
