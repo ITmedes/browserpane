@@ -19,6 +19,7 @@ import {
   encodeScrollMessage,
 } from './input/input-message-codec.js';
 import { ClipboardSyncRuntime } from './input/clipboard-sync-runtime.js';
+import { KeyboardSinkRuntime } from './input/keyboard-sink-runtime.js';
 import {
   inferLayoutHint,
   inferLayoutName,
@@ -121,9 +122,9 @@ export class InputController {
   private deadKeyPending = false;
   private deadKeyCode: string | null = null;
   private inputAbortController: AbortController | null = null;
-  private keyboardSink: HTMLTextAreaElement | null = null;
   private lastClipboardHash: bigint = 0n;
   private readonly clipboardSync: ClipboardSyncRuntime;
+  private readonly keyboardSink: KeyboardSinkRuntime;
   private readonly pointerInput: PointerInputRuntime;
   /** Tracks keys remapped on keydown (e.g., ArrowLeft→Home) for correct keyup. */
   private remappedKeys = new Map<string, RemappedKeyState>();
@@ -187,23 +188,27 @@ export class InputController {
         this.sendScroll(dx, dy);
       },
     });
+    this.keyboardSink = new KeyboardSinkRuntime({
+      canvas: this.canvas,
+      documentLike: typeof document === 'undefined' ? undefined : document,
+    });
   }
 
   /** Set up all DOM event listeners on the canvas. */
   setup(): void {
     this.inputAbortController = new AbortController();
     const signal = this.inputAbortController.signal;
-    const keyboardTarget = this.ensureKeyboardSink();
+    const keyboardTarget = this.keyboardSink.ensure();
     const handleCompositionEnd = (e: Event) => {
       const event = e as CompositionEvent;
       this.commitPendingComposition(event.data ?? '');
-      this.clearKeyboardSink();
+      this.keyboardSink.clear();
     };
     const handleTextInput = (e: Event) => {
       const event = e as InputEvent;
-      const text = event.data ?? this.keyboardSink?.value ?? '';
+      const text = event.data ?? this.keyboardSink.getValue();
       this.commitPendingComposition(text);
-      this.clearKeyboardSink();
+      this.keyboardSink.clear();
     };
     this.pointerInput.bind({
       signal,
@@ -244,7 +249,7 @@ export class InputController {
         this.deadKeyPending = false;
         this.pendingComposition = null;
         this.clearPendingCompositionFallback();
-        this.clearKeyboardSink();
+        this.keyboardSink.clear();
         this.deadKeyCode = e.code;
         this.pendingSyntheticAccent = {
           accent: supportedDeadAccent,
@@ -269,7 +274,7 @@ export class InputController {
           e.preventDefault();
           this.pendingSyntheticAccent.baseCode = e.code;
           this.pendingSyntheticAccent.baseChar = composedChar;
-          this.clearKeyboardSink();
+          this.keyboardSink.clear();
           return;
         }
 
@@ -571,10 +576,7 @@ export class InputController {
       window.clearTimeout(timer);
     }
     this.suppressedKeyupTimers.clear();
-    if (this.keyboardSink) {
-      this.keyboardSink.remove();
-      this.keyboardSink = null;
-    }
+    this.keyboardSink.destroy();
   }
 
   /** Update the clipboard hash when a remote clipboard message arrives. */
@@ -641,34 +643,6 @@ export class InputController {
     return this.macMetaAsCtrl && Object.hasOwn(MAC_META_TO_CTRL, code);
   }
 
-  private ensureKeyboardSink(): HTMLTextAreaElement {
-    if (this.keyboardSink) return this.keyboardSink;
-    const sink = document.createElement('textarea');
-    sink.setAttribute('data-bpane-keyboard-sink', 'true');
-    sink.setAttribute('aria-hidden', 'true');
-    sink.autocomplete = 'off';
-    sink.autocapitalize = 'off';
-    sink.spellcheck = false;
-    sink.tabIndex = -1;
-    sink.style.position = 'absolute';
-    sink.style.left = '-9999px';
-    sink.style.top = '0';
-    sink.style.width = '1px';
-    sink.style.height = '1px';
-    sink.style.opacity = '0';
-    sink.style.pointerEvents = 'none';
-    sink.style.whiteSpace = 'pre';
-    (this.canvas.parentElement ?? document.body).appendChild(sink);
-    this.keyboardSink = sink;
-    return sink;
-  }
-
-  private clearKeyboardSink(): void {
-    if (this.keyboardSink) {
-      this.keyboardSink.value = '';
-    }
-  }
-
   private commitPendingComposition(text: string): void {
     if (!this.pendingComposition || text.length !== 1) return;
     const pending = this.pendingComposition;
@@ -677,7 +651,7 @@ export class InputController {
     this.sendKeyEvent(pending.code, text, true, false, false, pending.shift, false, false);
     this.sendKeyEvent(pending.code, text, false, false, false, pending.shift, false, false);
     this.suppressNextKeyup(pending.code);
-    this.clearKeyboardSink();
+    this.keyboardSink.clear();
   }
 
   private schedulePendingCompositionFallback(): void {
@@ -691,7 +665,7 @@ export class InputController {
         this.sendKeyEvent(pending.code, pending.fallbackKey, true, false, false, pending.shift, false, false);
         this.sendKeyEvent(pending.code, pending.fallbackKey, false, false, false, pending.shift, false, false);
       }
-      this.clearKeyboardSink();
+      this.keyboardSink.clear();
     }, PENDING_COMPOSITION_FALLBACK_MS);
   }
 
