@@ -9,7 +9,7 @@ import {
   encodeFrame,
   CH_INPUT, CH_CLIPBOARD, CH_CONTROL,
 } from './protocol.js';
-import { normalizeScroll, createScrollState, isMacPlatform, type ScrollState } from './input-map.js';
+import { isMacPlatform } from './input-map.js';
 import {
   encodeClipboardTextMessage,
   encodeKeyEventMessage,
@@ -24,9 +24,9 @@ import {
   inferLayoutName,
   sendKeyboardLayoutHint,
 } from './input/layout-hint.js';
+import { PointerInputRuntime } from './input/pointer-input-runtime.js';
 import { fnvHash } from './hash.js';
 
-const INPUT_THROTTLE_MS = 16; // ~60Hz
 const PENDING_COMPOSITION_FALLBACK_MS = 16;
 const SUPPRESSED_KEYUP_TIMEOUT_MS = 750;
 
@@ -118,16 +118,13 @@ export class InputController {
   private macMetaAsCtrl: boolean;
   private isMac: boolean;
 
-  private lastMouseSendTime = 0;
   private deadKeyPending = false;
   private deadKeyCode: string | null = null;
-  private scrollState: ScrollState = createScrollState();
-  private pendingScrollDx = 0;
-  private pendingScrollDy = 0;
   private inputAbortController: AbortController | null = null;
   private keyboardSink: HTMLTextAreaElement | null = null;
   private lastClipboardHash: bigint = 0n;
   private readonly clipboardSync: ClipboardSyncRuntime;
+  private readonly pointerInput: PointerInputRuntime;
   /** Tracks keys remapped on keydown (e.g., ArrowLeft→Home) for correct keyup. */
   private remappedKeys = new Map<string, RemappedKeyState>();
   /** Command keys currently held in the browser. */
@@ -176,6 +173,20 @@ export class InputController {
       navigatorLike: typeof navigator === 'undefined' ? undefined : navigator,
       documentLike: typeof document === 'undefined' ? undefined : document,
     });
+    this.pointerInput = new PointerInputRuntime({
+      canvas: this.canvas,
+      drawCursor: this.drawCursor,
+      getRemoteDims: this.getRemoteDims,
+      sendMouseMove: (x, y) => {
+        this.sendMouseMove(x, y);
+      },
+      sendMouseButton: (button, down, x, y) => {
+        this.sendMouseButton(button, down, x, y);
+      },
+      sendScroll: (dx, dy) => {
+        this.sendScroll(dx, dy);
+      },
+    });
   }
 
   /** Set up all DOM event listeners on the canvas. */
@@ -194,48 +205,12 @@ export class InputController {
       this.commitPendingComposition(text);
       this.clearKeyboardSink();
     };
-
-    this.canvas.addEventListener('pointermove', (e: PointerEvent) => {
-      const now = performance.now();
-      if (now - this.lastMouseSendTime < INPUT_THROTTLE_MS) return;
-      this.lastMouseSendTime = now;
-
-      const rect = this.canvas.getBoundingClientRect();
-      const { width: targetW, height: targetH } = this.getRemoteDims();
-      const scaleX = targetW / rect.width;
-      const scaleY = targetH / rect.height;
-      const x = Math.round((e.clientX - rect.left) * scaleX);
-      const y = Math.round((e.clientY - rect.top) * scaleY);
-      this.sendMouseMove(x, y);
-    }, { signal });
-
-    this.canvas.addEventListener('pointerdown', (e: PointerEvent) => {
-      e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
-      const { width: targetW, height: targetH } = this.getRemoteDims();
-      const scaleX = targetW / rect.width;
-      const scaleY = targetH / rect.height;
-      const x = Math.round((e.clientX - rect.left) * scaleX);
-      const y = Math.round((e.clientY - rect.top) * scaleY);
-      this.sendMouseButton(e.button, true, x, y);
-    }, { signal });
-
-    this.canvas.addEventListener('pointerup', (e: PointerEvent) => {
-      e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
-      const { width: targetW, height: targetH } = this.getRemoteDims();
-      const scaleX = targetW / rect.width;
-      const scaleY = targetH / rect.height;
-      const x = Math.round((e.clientX - rect.left) * scaleX);
-      const y = Math.round((e.clientY - rect.top) * scaleY);
-      this.sendMouseButton(e.button, false, x, y);
-    }, { signal });
-
-    this.canvas.addEventListener('wheel', (e: WheelEvent) => {
-      e.preventDefault();
-      const { dx, dy } = normalizeScroll(e.deltaX, e.deltaY, e.deltaMode, this.scrollState);
-      if (dx || dy) this.sendScroll(dx, dy);
-    }, { passive: false, signal });
+    this.pointerInput.bind({
+      signal,
+      focusKeyboardTarget: () => {
+        keyboardTarget.focus();
+      },
+    });
 
     keyboardTarget.addEventListener('keydown', (e: KeyboardEvent) => {
       if (!e.repeat) {
@@ -561,8 +536,6 @@ export class InputController {
       this.sendKeyEvent(e.code, e.key, false, ctrl, alt, e.shiftKey, meta && !this.macMetaAsCtrl, altgr);
     }, { signal });
 
-    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault(), { signal });
-    this.canvas.addEventListener('click', () => keyboardTarget.focus(), { signal });
     keyboardTarget.addEventListener('compositionend', handleCompositionEnd, { signal });
     keyboardTarget.addEventListener('input', handleTextInput, { signal });
     document.addEventListener('compositionend', handleCompositionEnd, { capture: true, signal });
@@ -581,8 +554,7 @@ export class InputController {
       this.inputAbortController.abort();
       this.inputAbortController = null;
     }
-    this.pendingScrollDx = 0;
-    this.pendingScrollDy = 0;
+    this.pointerInput.reset();
     this.clipboardSync.reset();
     this.activeMacMetaCodes.clear();
     this.activeControlCodes.clear();
@@ -617,7 +589,6 @@ export class InputController {
   // ── Input message encoding ─────────────────────────────────────────
 
   private sendMouseMove(x: number, y: number): void {
-    this.drawCursor(null, x, y);
     this.sendFrame(CH_INPUT, encodeMouseMoveMessage(x, y));
   }
 

@@ -15,6 +15,23 @@ interface DecodedKeyFrame {
   keyChar: number;
 }
 
+interface DecodedMouseMoveFrame {
+  x: number;
+  y: number;
+}
+
+interface DecodedMouseButtonFrame {
+  button: number;
+  down: boolean;
+  x: number;
+  y: number;
+}
+
+interface DecodedScrollFrame {
+  dx: number;
+  dy: number;
+}
+
 function decodeKeyFrames(frames: SentFrame[]): DecodedKeyFrame[] {
   return frames.map(({ payload }) => ({
     keycode: payload[1] | (payload[2] << 8) | (payload[3] << 16) | (payload[4] << 24),
@@ -30,6 +47,30 @@ function decodeClipboardText(frame: SentFrame): string {
     | (frame.payload[3] << 16)
     | (frame.payload[4] << 24);
   return new TextDecoder().decode(frame.payload.slice(5, 5 + length));
+}
+
+function decodeMouseMoveFrame(frame: SentFrame): DecodedMouseMoveFrame {
+  return {
+    x: frame.payload[1] | (frame.payload[2] << 8),
+    y: frame.payload[3] | (frame.payload[4] << 8),
+  };
+}
+
+function decodeMouseButtonFrame(frame: SentFrame): DecodedMouseButtonFrame {
+  return {
+    button: frame.payload[1],
+    down: frame.payload[2] === 1,
+    x: frame.payload[3] | (frame.payload[4] << 8),
+    y: frame.payload[5] | (frame.payload[6] << 8),
+  };
+}
+
+function decodeScrollFrame(frame: SentFrame): DecodedScrollFrame {
+  const view = new DataView(frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength);
+  return {
+    dx: view.getInt16(1, true),
+    dy: view.getInt16(3, true),
+  };
 }
 
 function setPlatform(platform: string, userAgentDataPlatform: string): void {
@@ -73,20 +114,87 @@ function dispatchInput(target: HTMLTextAreaElement, data: string): void {
   }));
 }
 
-function createController(options: { clipboardEnabled?: boolean } = {}) {
+function dispatchPointer(
+  target: HTMLElement,
+  type: 'pointermove' | 'pointerdown' | 'pointerup',
+  init: {
+    clientX: number;
+    clientY: number;
+    button?: number;
+  },
+): Event {
+  const event = new Event(type, {
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperties(event, {
+    clientX: { configurable: true, value: init.clientX },
+    clientY: { configurable: true, value: init.clientY },
+    button: { configurable: true, value: init.button ?? 0 },
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function dispatchWheel(
+  target: HTMLElement,
+  init: {
+    deltaX?: number;
+    deltaY: number;
+    deltaMode?: number;
+  },
+): Event {
+  const event = new Event('wheel', {
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperties(event, {
+    deltaX: { configurable: true, value: init.deltaX ?? 0 },
+    deltaY: { configurable: true, value: init.deltaY },
+    deltaMode: { configurable: true, value: init.deltaMode ?? 0 },
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function setCanvasRect(canvas: HTMLCanvasElement, rect: {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}): void {
+  Object.defineProperty(canvas, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      ...rect,
+      right: rect.left + rect.width,
+      bottom: rect.top + rect.height,
+      x: rect.left,
+      y: rect.top,
+      toJSON: () => ({}),
+    }),
+  });
+}
+
+function createController(options: {
+  clipboardEnabled?: boolean;
+  getRemoteDims?: () => { width: number; height: number };
+  drawCursor?: (shape: null, x: number, y: number) => void;
+} = {}) {
   const canvas = document.createElement('canvas');
   canvas.tabIndex = 0;
   document.body.appendChild(canvas);
 
   const sentFrames: SentFrame[] = [];
+  const drawCursor = vi.fn(options.drawCursor ?? (() => {}));
   const controller = new InputController({
     canvas,
     sendFrame: (channelId, payload) => sentFrames.push({
       channelId,
       payload: new Uint8Array(payload),
     }),
-    drawCursor: () => {},
-    getRemoteDims: () => ({ width: 800, height: 600 }),
+    drawCursor,
+    getRemoteDims: options.getRemoteDims ?? (() => ({ width: 800, height: 600 })),
     clipboardEnabled: options.clipboardEnabled ?? false,
   });
   controller.serverSupportsKeyEventEx = true;
@@ -96,7 +204,13 @@ function createController(options: { clipboardEnabled?: boolean } = {}) {
     throw new Error('keyboard sink not created');
   }
 
-  return { canvas, controller, keyboardTarget, sentFrames };
+  return {
+    canvas,
+    controller,
+    keyboardTarget,
+    sentFrames,
+    drawCursor,
+  };
 }
 
 beforeEach(() => {
@@ -163,6 +277,115 @@ describe('InputController locked window shortcuts', () => {
     controller.destroy();
 
     expect(sentFrames).toHaveLength(0);
+  });
+});
+
+describe('InputController pointer and scroll handling', () => {
+  beforeEach(() => {
+    setPlatform('Linux x86_64', 'Linux');
+  });
+
+  it('scales pointer coordinates and throttles pointer move events', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValueOnce(100).mockReturnValueOnce(110).mockReturnValueOnce(130);
+
+    const {
+      canvas,
+      controller,
+      sentFrames,
+      drawCursor,
+    } = createController();
+    setCanvasRect(canvas, {
+      left: 10,
+      top: 20,
+      width: 400,
+      height: 300,
+    });
+
+    dispatchPointer(canvas, 'pointermove', { clientX: 110, clientY: 170 });
+    dispatchPointer(canvas, 'pointermove', { clientX: 120, clientY: 180 });
+    dispatchPointer(canvas, 'pointermove', { clientX: 210, clientY: 220 });
+
+    controller.destroy();
+
+    const moveFrames = sentFrames.filter(({ payload }) => payload[0] === 0x01);
+    expect(moveFrames).toHaveLength(2);
+    expect(moveFrames.map(decodeMouseMoveFrame)).toEqual([
+      { x: 200, y: 300 },
+      { x: 400, y: 400 },
+    ]);
+    expect(drawCursor).toHaveBeenNthCalledWith(1, null, 200, 300);
+    expect(drawCursor).toHaveBeenNthCalledWith(2, null, 400, 400);
+  });
+
+  it('sends scaled pointer buttons, normalized wheel input, and focuses the keyboard sink on click', () => {
+    const {
+      canvas,
+      controller,
+      keyboardTarget,
+      sentFrames,
+    } = createController();
+    setCanvasRect(canvas, {
+      left: 50,
+      top: 100,
+      width: 200,
+      height: 150,
+    });
+    const focusSpy = vi.spyOn(keyboardTarget, 'focus');
+
+    const pointerDown = dispatchPointer(canvas, 'pointerdown', {
+      clientX: 150,
+      clientY: 175,
+      button: 2,
+    });
+    const pointerUp = dispatchPointer(canvas, 'pointerup', {
+      clientX: 150,
+      clientY: 175,
+      button: 2,
+    });
+    const firstWheel = dispatchWheel(canvas, { deltaY: 30 });
+    const secondWheel = dispatchWheel(canvas, { deltaY: 30 });
+    const contextMenu = new Event('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+    });
+    canvas.dispatchEvent(contextMenu);
+    canvas.dispatchEvent(new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    controller.destroy();
+
+    expect(pointerDown.defaultPrevented).toBe(true);
+    expect(pointerUp.defaultPrevented).toBe(true);
+    expect(firstWheel.defaultPrevented).toBe(true);
+    expect(secondWheel.defaultPrevented).toBe(true);
+    expect(contextMenu.defaultPrevented).toBe(true);
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+
+    const buttonFrames = sentFrames.filter(({ payload }) => payload[0] === 0x02);
+    expect(buttonFrames.map(decodeMouseButtonFrame)).toEqual([
+      {
+        button: 2,
+        down: true,
+        x: 400,
+        y: 300,
+      },
+      {
+        button: 2,
+        down: false,
+        x: 400,
+        y: 300,
+      },
+    ]);
+
+    const scrollFrames = sentFrames.filter(({ payload }) => payload[0] === 0x03);
+    expect(scrollFrames).toHaveLength(1);
+    expect(decodeScrollFrame(scrollFrames[0])).toEqual({
+      dx: 0,
+      dy: -1,
+    });
   });
 });
 
