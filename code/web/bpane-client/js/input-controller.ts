@@ -18,6 +18,7 @@ import {
   encodeMouseMoveMessage,
   encodeScrollMessage,
 } from './input/input-message-codec.js';
+import { ClipboardSyncRuntime } from './input/clipboard-sync-runtime.js';
 import {
   inferLayoutHint,
   inferLayoutName,
@@ -125,8 +126,8 @@ export class InputController {
   private pendingScrollDy = 0;
   private inputAbortController: AbortController | null = null;
   private keyboardSink: HTMLTextAreaElement | null = null;
-  private clipboardListenersBound = false;
   private lastClipboardHash: bigint = 0n;
+  private readonly clipboardSync: ClipboardSyncRuntime;
   /** Tracks keys remapped on keydown (e.g., ArrowLeft→Home) for correct keyup. */
   private remappedKeys = new Map<string, RemappedKeyState>();
   /** Command keys currently held in the browser. */
@@ -163,6 +164,18 @@ export class InputController {
     this.clipboardEnabled = deps.clipboardEnabled;
     this.isMac = isMacPlatform();
     this.macMetaAsCtrl = deps.macMetaAsCtrl ?? this.isMac;
+    this.clipboardSync = new ClipboardSyncRuntime({
+      canvas: this.canvas,
+      sendClipboardText: (text) => {
+        this.sendClipboardText(text);
+      },
+      getLastClipboardHash: () => this.lastClipboardHash,
+      setLastClipboardHash: (hash) => {
+        this.lastClipboardHash = hash;
+      },
+      navigatorLike: typeof navigator === 'undefined' ? undefined : navigator,
+      documentLike: typeof document === 'undefined' ? undefined : document,
+    });
   }
 
   /** Set up all DOM event listeners on the canvas. */
@@ -555,7 +568,10 @@ export class InputController {
     document.addEventListener('compositionend', handleCompositionEnd, { capture: true, signal });
 
     if (this.clipboardEnabled) {
-      this.setupClipboardHandlers();
+      this.clipboardSync.bind({
+        keyboardTarget,
+        signal,
+      });
     }
   }
 
@@ -567,7 +583,7 @@ export class InputController {
     }
     this.pendingScrollDx = 0;
     this.pendingScrollDy = 0;
-    this.clipboardListenersBound = false;
+    this.clipboardSync.reset();
     this.activeMacMetaCodes.clear();
     this.activeControlCodes.clear();
     this.materializedMacCtrlCodes.clear();
@@ -592,42 +608,6 @@ export class InputController {
   /** Update the clipboard hash when a remote clipboard message arrives. */
   setLastClipboardHash(hash: bigint): void {
     this.lastClipboardHash = hash;
-  }
-
-  // ── Clipboard handlers ──────────────────────────────────────────────
-
-  private setupClipboardHandlers(): void {
-    if (this.clipboardListenersBound) return;
-    this.clipboardListenersBound = true;
-
-    const signal = this.inputAbortController?.signal;
-
-    const readAndSend = async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (!text) return;
-        const hash = fnvHash(text);
-        if (hash === this.lastClipboardHash) return;
-        this.lastClipboardHash = hash;
-        this.sendClipboardText(text);
-      } catch { /* ignore */ }
-    };
-
-    (this.keyboardSink ?? this.canvas).addEventListener('paste', (e: Event) => {
-      const event = e as ClipboardEvent;
-      event.preventDefault();
-      const text = event.clipboardData?.getData('text/plain');
-      if (text) {
-        const hash = fnvHash(text);
-        if (hash !== this.lastClipboardHash) {
-          this.lastClipboardHash = hash;
-          this.sendClipboardText(text);
-        }
-      }
-    }, { signal });
-
-    document.addEventListener('copy', () => { setTimeout(readAndSend, 50); }, { signal });
-    document.addEventListener('cut', () => { setTimeout(readAndSend, 50); }, { signal });
   }
 
   sendClipboardText(text: string): void {
@@ -970,17 +950,8 @@ export class InputController {
     });
   }
 
-  private async syncClipboardBeforePaste(): Promise<void> {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (!text) return;
-      const hash = fnvHash(text);
-      if (hash === this.lastClipboardHash) return;
-      this.lastClipboardHash = hash;
-      this.sendClipboardText(text);
-    } catch {
-      // Ignore clipboard permission and browser support failures.
-    }
+  private syncClipboardBeforePaste(): Promise<void> {
+    return this.clipboardSync.syncClipboardBeforePaste();
   }
 
   private flushDeferredCtrlPaste(): void {
