@@ -10,6 +10,7 @@ import {
   CameraProfileCatalog,
   type CameraProfile,
 } from './camera/camera-profile-catalog.js';
+import { CameraSessionResources } from './camera/camera-session-resources.js';
 import { CameraTelemetryTracker } from './camera/camera-telemetry-tracker.js';
 
 export interface CameraTelemetryProfile extends Pick<
@@ -40,10 +41,7 @@ const CAMERA_ADAPT_INTERVAL_MS = 2000;
 
 export class CameraController {
   private readonly sendFrame: SendCameraFrameFn;
-  private stream: MediaStream | null = null;
-  private videoEl: HTMLVideoElement | null = null;
-  private canvas: HTMLCanvasElement | null = null;
-  private ctx: CanvasRenderingContext2D | null = null;
+  private sessionResources: CameraSessionResources | null = null;
   private captureRuntime: CameraCaptureRuntime | null = null;
   private adaptationTimer: ReturnType<typeof setInterval> | null = null;
   private active = false;
@@ -75,24 +73,13 @@ export class CameraController {
         throw new Error('camera video encoding is not supported in this browser');
       }
 
-      this.stream = await navigator.mediaDevices.getUserMedia(CameraProfileCatalog.getCaptureConstraints());
-
-      this.videoEl = document.createElement('video');
-      this.videoEl.muted = true;
-      this.videoEl.playsInline = true;
-      this.videoEl.autoplay = true;
-      this.videoEl.srcObject = this.stream;
-
-      this.canvas = document.createElement('canvas');
-      this.ctx = this.canvas.getContext('2d');
-      if (!this.ctx) {
-        throw new Error('camera canvas context unavailable');
-      }
+      this.sessionResources = new CameraSessionResources();
+      const sessionSnapshot = await this.sessionResources.open();
 
       this.captureRuntime = new CameraCaptureRuntime({
-        videoElement: this.videoEl,
-        canvasElement: this.canvas,
-        canvasContext: this.ctx,
+        videoElement: sessionSnapshot.videoElement,
+        canvasElement: sessionSnapshot.canvasElement,
+        canvasContext: sessionSnapshot.canvasContext,
         sendFrame: this.sendFrame,
         telemetry: this.telemetry,
         onEncoderError: (error) => {
@@ -100,8 +87,6 @@ export class CameraController {
           this.stopCamera();
         },
       });
-
-      await this.videoEl.play();
 
       this.resetTelemetry();
       this.active = true;
@@ -117,7 +102,7 @@ export class CameraController {
   }
 
   stopCamera(): void {
-    if (!this.active && !this.stream) return;
+    if (!this.active && !this.sessionResources?.getSnapshot()) return;
     this.active = false;
     if (this.adaptationTimer) {
       clearInterval(this.adaptationTimer);
@@ -125,17 +110,8 @@ export class CameraController {
     }
     this.captureRuntime?.stop();
     this.captureRuntime = null;
-    if (this.stream) {
-      this.stream.getTracks().forEach((track) => track.stop());
-      this.stream = null;
-    }
-    if (this.videoEl) {
-      this.videoEl.pause();
-      this.videoEl.srcObject = null;
-      this.videoEl = null;
-    }
-    this.canvas = null;
-    this.ctx = null;
+    this.sessionResources?.close();
+    this.sessionResources = null;
     this.activeProfileIndex = -1;
     this.sendFrame(new Uint8Array());
   }
