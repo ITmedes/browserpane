@@ -9,7 +9,15 @@ import {
   encodeFrame,
   CH_INPUT, CH_CLIPBOARD, CH_CONTROL,
 } from './protocol.js';
-import { domCodeToEvdev, buildModifiers, normalizeScroll, createScrollState, isMacPlatform, type ScrollState } from './input-map.js';
+import { normalizeScroll, createScrollState, isMacPlatform, type ScrollState } from './input-map.js';
+import {
+  encodeClipboardTextMessage,
+  encodeKeyEventMessage,
+  encodeLayoutHintMessage,
+  encodeMouseButtonMessage,
+  encodeMouseMoveMessage,
+  encodeScrollMessage,
+} from './input/input-message-codec.js';
 import { fnvHash } from './hash.js';
 
 const INPUT_THROTTLE_MS = 16; // ~60Hz
@@ -79,10 +87,6 @@ const SYNTHETIC_DEAD_ACCENT_MAP: Record<SupportedDeadAccent, Record<SyntheticDea
     Space: '^',
   },
 };
-
-function clampI16(value: number): number {
-  return Math.max(-32768, Math.min(32767, Math.trunc(value)));
-}
 
 export interface InputControllerDeps {
   /** Canvas element to bind event listeners to. */
@@ -622,49 +626,22 @@ export class InputController {
   }
 
   sendClipboardText(text: string): void {
-    const encoded = new TextEncoder().encode(text);
-    const payload = new Uint8Array(5 + encoded.length);
-    payload[0] = 0x01; // CLIPBOARD_TEXT
-    payload[1] = encoded.length & 0xFF;
-    payload[2] = (encoded.length >> 8) & 0xFF;
-    payload[3] = (encoded.length >> 16) & 0xFF;
-    payload[4] = (encoded.length >> 24) & 0xFF;
-    payload.set(encoded, 5);
-    this.sendFrame(CH_CLIPBOARD, payload);
+    this.sendFrame(CH_CLIPBOARD, encodeClipboardTextMessage(text));
   }
 
   // ── Input message encoding ─────────────────────────────────────────
 
   private sendMouseMove(x: number, y: number): void {
     this.drawCursor(null, x, y);
-    const payload = new Uint8Array(5);
-    payload[0] = 0x01; // INPUT_MOUSE_MOVE
-    payload[1] = x & 0xFF;
-    payload[2] = (x >> 8) & 0xFF;
-    payload[3] = y & 0xFF;
-    payload[4] = (y >> 8) & 0xFF;
-    this.sendFrame(CH_INPUT, payload);
+    this.sendFrame(CH_INPUT, encodeMouseMoveMessage(x, y));
   }
 
   private sendMouseButton(button: number, down: boolean, x: number, y: number): void {
-    const payload = new Uint8Array(7);
-    payload[0] = 0x02; // INPUT_MOUSE_BUTTON
-    payload[1] = button;
-    payload[2] = down ? 1 : 0;
-    payload[3] = x & 0xFF;
-    payload[4] = (x >> 8) & 0xFF;
-    payload[5] = y & 0xFF;
-    payload[6] = (y >> 8) & 0xFF;
-    this.sendFrame(CH_INPUT, payload);
+    this.sendFrame(CH_INPUT, encodeMouseButtonMessage(button, down, x, y));
   }
 
   private sendScroll(dx: number, dy: number): void {
-    const payload = new Uint8Array(5);
-    const view = new DataView(payload.buffer);
-    view.setUint8(0, 0x03); // INPUT_MOUSE_SCROLL
-    view.setInt16(1, clampI16(dx), true);
-    view.setInt16(3, clampI16(dy), true);
-    this.sendFrame(CH_INPUT, payload);
+    this.sendFrame(CH_INPUT, encodeScrollMessage(dx, dy));
   }
 
   private sendKeyEvent(
@@ -677,41 +654,21 @@ export class InputController {
     meta: boolean,
     altgr: boolean = false,
   ): void {
-    const keycode = domCodeToEvdev(code);
-    if (keycode === undefined) return;
-
-    const modifiers = buildModifiers(ctrl, alt, shift, meta, altgr);
-
-    if (this.serverSupportsKeyEventEx) {
-      let keyChar = 0;
-      if (key.length === 1) {
-        keyChar = key.codePointAt(0) ?? 0;
-      }
-
-      const payload = new Uint8Array(11);
-      payload[0] = 0x05; // INPUT_KEY_EVENT_EX
-      payload[1] = keycode & 0xFF;
-      payload[2] = (keycode >> 8) & 0xFF;
-      payload[3] = (keycode >> 16) & 0xFF;
-      payload[4] = (keycode >> 24) & 0xFF;
-      payload[5] = down ? 1 : 0;
-      payload[6] = modifiers;
-      payload[7] = keyChar & 0xFF;
-      payload[8] = (keyChar >> 8) & 0xFF;
-      payload[9] = (keyChar >> 16) & 0xFF;
-      payload[10] = (keyChar >> 24) & 0xFF;
-      this.sendFrame(CH_INPUT, payload);
-    } else {
-      const payload = new Uint8Array(7);
-      payload[0] = 0x04; // INPUT_KEY_EVENT
-      payload[1] = keycode & 0xFF;
-      payload[2] = (keycode >> 8) & 0xFF;
-      payload[3] = (keycode >> 16) & 0xFF;
-      payload[4] = (keycode >> 24) & 0xFF;
-      payload[5] = down ? 1 : 0;
-      payload[6] = modifiers;
-      this.sendFrame(CH_INPUT, payload);
+    const payload = encodeKeyEventMessage({
+      code,
+      key,
+      down,
+      ctrl,
+      alt,
+      shift,
+      meta,
+      altgr,
+      extended: this.serverSupportsKeyEventEx,
+    });
+    if (!payload) {
+      return;
     }
+    this.sendFrame(CH_INPUT, payload);
   }
 
   /** Send keyboard layout hint to server. */
@@ -719,12 +676,7 @@ export class InputController {
     if (typeof navigator === 'undefined') return;
 
     const sendHint = (hint: string) => {
-      const payload = new Uint8Array(33);
-      payload[0] = 0x06; // CTRL_KEYBOARD_LAYOUT_INFO
-      const encoder = new TextEncoder();
-      const bytes = encoder.encode(hint.slice(0, 31));
-      payload.set(bytes, 1);
-      this.sendFrame(CH_CONTROL, payload);
+      this.sendFrame(CH_CONTROL, encodeLayoutHintMessage(hint));
     };
 
     if ((navigator as any).keyboard?.getLayoutMap) {
