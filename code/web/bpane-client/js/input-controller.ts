@@ -18,6 +18,11 @@ import {
   encodeMouseMoveMessage,
   encodeScrollMessage,
 } from './input/input-message-codec.js';
+import {
+  inferLayoutHint,
+  inferLayoutName,
+  sendKeyboardLayoutHint,
+} from './input/layout-hint.js';
 import { fnvHash } from './hash.js';
 
 const INPUT_THROTTLE_MS = 16; // ~60Hz
@@ -673,29 +678,12 @@ export class InputController {
 
   /** Send keyboard layout hint to server. */
   sendLayoutHint(): void {
-    if (typeof navigator === 'undefined') return;
-
-    const sendHint = (hint: string) => {
-      this.sendFrame(CH_CONTROL, encodeLayoutHintMessage(hint));
-    };
-
-    if ((navigator as any).keyboard?.getLayoutMap) {
-      (navigator as any).keyboard.getLayoutMap().then((map: any) => {
-        sendHint(inferLayoutHint(map));
-      }).catch(() => {
-        sendHint('');
-      });
-
-      if ((navigator as any).keyboard?.addEventListener) {
-        (navigator as any).keyboard.addEventListener('layoutchange', () => {
-          (navigator as any).keyboard.getLayoutMap().then((map: any) => {
-            sendHint(inferLayoutHint(map));
-          }).catch(() => {});
-        });
-      }
-    } else {
-      sendHint('');
-    }
+    sendKeyboardLayoutHint({
+      navigatorLike: typeof navigator === 'undefined' ? undefined : navigator,
+      sendHint: (hint) => {
+        this.sendFrame(CH_CONTROL, encodeLayoutHintMessage(hint));
+      },
+    });
   }
 
   private isMacMetaKey(code: string): boolean {
@@ -1019,53 +1007,4 @@ export class InputController {
   }
 }
 
-/**
- * Detect physical keyboard type from layout map.
- * ISO keyboards have IntlBackslash; ANSI do not.
- */
-function detectPhysicalLayout(map: Map<string, string>): 'iso' | 'ansi' {
-  return map.has('IntlBackslash') ? 'iso' : 'ansi';
-}
-
-/**
- * Detect OS platform for layout hint.
- */
-function detectOsPlatform(): 'mac' | 'win' | 'linux' {
-  if (isMacPlatform()) return 'mac';
-  if (typeof navigator !== 'undefined' && navigator.platform?.startsWith('Linux')) return 'linux';
-  return 'win';
-}
-
-/**
- * Infer a legacy layout name from the Keyboard API layout map.
- */
-export function inferLayoutName(map: Map<string, string>): string {
-  const q = map.get('KeyQ') ?? '';
-  const w = map.get('KeyW') ?? '';
-  const y = map.get('KeyY') ?? '';
-  const z = map.get('KeyZ') ?? '';
-
-  if (q === 'a' && w === 'z') {
-    return 'fr'; // AZERTY
-  }
-  if (z === 'y' && y === 'z') {
-    return 'de'; // QWERTZ
-  }
-  if (q === 'q' && w === 'w' && z === 'z') {
-    return 'us'; // QWERTY
-  }
-  return '';
-}
-
-/**
- * Infer a structured layout hint from the Keyboard API layout map.
- * Format: "{lang}-{physical}-{os}", e.g. "de-iso-mac", "us-ansi-win"
- */
-export function inferLayoutHint(map: Map<string, string>): string {
-  const lang = inferLayoutName(map);
-  if (!lang) return '';
-  const physical = detectPhysicalLayout(map);
-  const os = detectOsPlatform();
-
-  return `${lang}-${physical}-${os}`;
-}
+export { inferLayoutName, inferLayoutHint } from './input/layout-hint.js';
