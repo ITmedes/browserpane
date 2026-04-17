@@ -1,5 +1,9 @@
 import { CH_FILE_DOWN, CH_FILE_UP } from './protocol.js';
 import { FileTransferCodec, type DecodedFileMessage } from './file-transfer/codec.js';
+import {
+  FileDownloadRuntime,
+  type CompletedDownload,
+} from './file-transfer/download-runtime.js';
 
 const FILE_UPLOAD_CHUNK_SIZE = 64 * 1024;
 
@@ -11,15 +15,6 @@ interface FileTransferOptions {
   sendFrame: SendFrameFn;
 }
 
-interface DownloadState {
-  filename: string;
-  mime: string;
-  expectedSize: number;
-  receivedSize: number;
-  expectedSeq: number;
-  chunks: ArrayBuffer[];
-}
-
 export class FileTransferController {
   private container: HTMLElement;
   private enabled: boolean;
@@ -27,7 +22,7 @@ export class FileTransferController {
   private fileInput: HTMLInputElement | null = null;
   private dragDepth = 0;
   private nextTransferId = 1;
-  private readonly activeDownloads = new Map<number, DownloadState>();
+  private readonly downloadRuntime = new FileDownloadRuntime();
 
   private readonly handleInputChange = (): void => {
     const files = this.fileInput?.files;
@@ -85,7 +80,7 @@ export class FileTransferController {
       }
       this.fileInput = null;
     }
-    this.activeDownloads.clear();
+    this.downloadRuntime.destroy();
   }
 
   setEnabled(enabled: boolean): void {
@@ -111,23 +106,9 @@ export class FileTransferController {
 
   handleFrame(payload: Uint8Array): void {
     const message = decodeFileMessage(payload);
-    switch (message.type) {
-      case 'header':
-        this.activeDownloads.set(message.id, {
-          filename: message.filename || `download-${message.id}`,
-          mime: message.mime || 'application/octet-stream',
-          expectedSize: message.size,
-          receivedSize: 0,
-          expectedSeq: 0,
-          chunks: [],
-        });
-        break;
-      case 'chunk':
-        this.handleDownloadChunk(message.id, message.seq, message.data);
-        break;
-      case 'complete':
-        this.completeDownload(message.id);
-        break;
+    const completedDownload = this.downloadRuntime.handleMessage(message);
+    if (completedDownload) {
+      triggerBrowserDownload(completedDownload);
     }
   }
 
@@ -170,57 +151,6 @@ export class FileTransferController {
     }
 
     this.sendFrame(CH_FILE_UP, encodeFileComplete(id));
-  }
-
-  private handleDownloadChunk(id: number, seq: number, data: Uint8Array): void {
-    const download = this.activeDownloads.get(id);
-    if (!download) {
-      console.warn('[bpane] dropped file chunk without header', { id, seq });
-      return;
-    }
-    if (seq !== download.expectedSeq) {
-      console.warn('[bpane] file chunk sequence mismatch', {
-        id,
-        expectedSeq: download.expectedSeq,
-        seq,
-      });
-      this.activeDownloads.delete(id);
-      return;
-    }
-
-    download.chunks.push(new Uint8Array(data).buffer);
-    download.receivedSize += data.byteLength;
-    download.expectedSeq += 1;
-  }
-
-  private completeDownload(id: number): void {
-    const download = this.activeDownloads.get(id);
-    if (!download) {
-      console.warn('[bpane] dropped file completion without header', { id });
-      return;
-    }
-    this.activeDownloads.delete(id);
-
-    if (download.expectedSize > 0 && download.receivedSize !== download.expectedSize) {
-      console.warn('[bpane] file download size mismatch', {
-        id,
-        expectedSize: download.expectedSize,
-        receivedSize: download.receivedSize,
-      });
-    }
-
-    const blob = new Blob(download.chunks, {
-      type: download.mime || 'application/octet-stream',
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = download.filename;
-    anchor.style.display = 'none';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 }
 
@@ -271,4 +201,19 @@ function normalizeFiles(filesInput: FileList | Iterable<File>): File[] {
 function hasFilePayload(event: DragEvent): boolean {
   const types = event.dataTransfer?.types;
   return !!types && Array.from(types).includes('Files');
+}
+
+function triggerBrowserDownload(download: CompletedDownload): void {
+  const blob = new Blob(download.chunks, {
+    type: download.mime || 'application/octet-stream',
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = download.filename;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
