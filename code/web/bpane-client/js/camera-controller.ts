@@ -11,31 +11,15 @@ import {
   type CameraProfile,
 } from './camera/camera-profile-catalog.js';
 import { CameraSessionResources } from './camera/camera-session-resources.js';
+import {
+  buildCameraTelemetrySnapshot,
+  type CameraTelemetrySnapshot,
+} from './camera/camera-telemetry-snapshot.js';
 import { CameraTelemetryTracker } from './camera/camera-telemetry-tracker.js';
-
-export interface CameraTelemetryProfile extends Pick<
-  CameraProfile,
-  'name' | 'width' | 'height' | 'fps' | 'bitrate' | 'smooth' | 'powerEfficient'
-> {}
-
-export interface CameraTelemetrySnapshot {
-  supported: boolean;
-  active: boolean;
-  profile: CameraTelemetryProfile | null;
-  qualityLimitationReason: QualityLimitationReason;
-  framesCaptured: number;
-  framesEncoded: number;
-  keyframesEncoded: number;
-  encodedBytes: number;
-  transportFramesQueued: number;
-  transportFramesReplaced: number;
-  encoderQueueDrops: number;
-  averageEncodeTimeMs: number;
-  maxEncodeTimeMs: number;
-  profileUpgrades: number;
-  profileDowngrades: number;
-  reconfigurations: number;
-}
+export type {
+  CameraTelemetryProfile,
+  CameraTelemetrySnapshot,
+} from './camera/camera-telemetry-snapshot.js';
 
 const CAMERA_ADAPT_INTERVAL_MS = 2000;
 
@@ -122,14 +106,13 @@ export class CameraController {
 
   getStats(): CameraTelemetrySnapshot {
     const profile = this.activeProfileIndex >= 0 ? { ...this.supportedProfiles[this.activeProfileIndex] } : null;
-    const metrics = this.telemetry.getMetrics();
-    return {
-      supported: this.supportedProfiles.length > 0,
+    return buildCameraTelemetrySnapshot({
+      supportedProfilesCount: this.supportedProfiles.length,
       active: this.active,
       profile,
       qualityLimitationReason: this.qualityLimitationReason,
-      ...metrics,
-    };
+      metrics: this.telemetry.getMetrics(),
+    });
   }
 
   private resetTelemetry(): void {
