@@ -4,8 +4,7 @@ import {
   FileDownloadRuntime,
   type CompletedDownload,
 } from './file-transfer/download-runtime.js';
-
-const FILE_UPLOAD_CHUNK_SIZE = 64 * 1024;
+import { FileUploadRuntime } from './file-transfer/upload-runtime.js';
 
 type SendFrameFn = (channelId: number, payload: Uint8Array) => void;
 
@@ -18,11 +17,10 @@ interface FileTransferOptions {
 export class FileTransferController {
   private container: HTMLElement;
   private enabled: boolean;
-  private sendFrame: SendFrameFn;
   private fileInput: HTMLInputElement | null = null;
   private dragDepth = 0;
-  private nextTransferId = 1;
   private readonly downloadRuntime = new FileDownloadRuntime();
+  private readonly uploadRuntime: FileUploadRuntime;
 
   private readonly handleInputChange = (): void => {
     const files = this.fileInput?.files;
@@ -64,7 +62,7 @@ export class FileTransferController {
   constructor(options: FileTransferOptions) {
     this.container = options.container;
     this.enabled = options.enabled;
-    this.sendFrame = options.sendFrame;
+    this.uploadRuntime = new FileUploadRuntime(options.sendFrame);
     this.setup();
   }
 
@@ -98,10 +96,7 @@ export class FileTransferController {
 
   async uploadFiles(filesInput: FileList | Iterable<File>): Promise<void> {
     if (!this.enabled) return;
-    const files = normalizeFiles(filesInput);
-    for (const file of files) {
-      await this.uploadFile(file);
-    }
+    await this.uploadRuntime.uploadFiles(filesInput);
   }
 
   handleFrame(payload: Uint8Array): void {
@@ -125,32 +120,6 @@ export class FileTransferController {
     this.container.addEventListener('dragover', this.handleDragOver);
     this.container.addEventListener('dragleave', this.handleDragLeave);
     this.container.addEventListener('drop', this.handleDrop);
-  }
-
-  private async uploadFile(file: File): Promise<void> {
-    const id = this.nextTransferId++;
-    this.sendFrame(
-      CH_FILE_UP,
-      encodeFileHeader({
-        id,
-        filename: file.name || `upload-${id}`,
-        size: file.size,
-        mime: file.type || 'application/octet-stream',
-      }),
-    );
-
-    let offset = 0;
-    let seq = 0;
-    while (offset < file.size) {
-      const chunk = new Uint8Array(
-        await file.slice(offset, offset + FILE_UPLOAD_CHUNK_SIZE).arrayBuffer(),
-      );
-      this.sendFrame(CH_FILE_UP, encodeFileChunk({ id, seq, data: chunk }));
-      offset += chunk.byteLength;
-      seq += 1;
-    }
-
-    this.sendFrame(CH_FILE_UP, encodeFileComplete(id));
   }
 }
 
@@ -177,25 +146,6 @@ export function encodeFileComplete(id: number): Uint8Array {
 
 export function decodeFileMessage(payload: Uint8Array): DecodedFileMessage {
   return FileTransferCodec.decode(payload);
-}
-
-function normalizeFiles(filesInput: FileList | Iterable<File>): File[] {
-  if (typeof (filesInput as FileList).item === 'function') {
-    const files = filesInput as FileList;
-    const normalized: File[] = [];
-    for (let index = 0; index < files.length; index += 1) {
-      const file = files.item(index);
-      if (file) normalized.push(file);
-    }
-    return normalized;
-  }
-  if (Symbol.iterator in Object(filesInput)) {
-    return Array.from(filesInput as Iterable<File>);
-  }
-  if (typeof (filesInput as ArrayLike<File>).length === 'number') {
-    return Array.from(filesInput as ArrayLike<File>).filter((file): file is File => !!file);
-  }
-  return Array.from(filesInput);
 }
 
 function hasFilePayload(event: DragEvent): boolean {
