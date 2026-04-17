@@ -27,6 +27,12 @@ import {
 } from './input/layout-hint.js';
 import { PointerInputRuntime } from './input/pointer-input-runtime.js';
 import { SuppressedKeyupTracker } from './input/suppressed-keyup-tracker.js';
+import {
+  composeSyntheticDeadAccent,
+  getSyntheticDeadAccentSpacingCharacter,
+  resolveSupportedDeadAccent,
+  type SupportedDeadAccent,
+} from './input/synthetic-dead-accent.js';
 import { fnvHash } from './hash.js';
 
 const PENDING_COMPOSITION_FALLBACK_MS = 16;
@@ -40,7 +46,6 @@ const MAC_META_TO_CTRL: Record<string, string> = {
   MetaRight: 'ControlRight',
 };
 const MAC_OPTION_CODES = new Set(['AltLeft', 'AltRight']);
-const MAC_CIRCUMFLEX_DEAD_CODES = new Set(['Backquote', 'Digit6', 'IntlBackslash']);
 const CTRL_KEY_CODES = new Set(['ControlLeft', 'ControlRight']);
 const KEYBOARD_MODIFIER_CODES = new Set([
   'ShiftLeft', 'ShiftRight',
@@ -65,9 +70,6 @@ interface PendingCtrlPasteState {
   releasedCtrlCodes: Set<string>;
 }
 
-type SupportedDeadAccent = 'acute' | 'grave' | 'circumflex';
-type SyntheticDeadAccentBaseKey = 'a' | 'e' | 'i' | 'o' | 'u' | 'A' | 'E' | 'I' | 'O' | 'U' | 'Space';
-
 interface PendingSyntheticAccentState {
   accent: SupportedDeadAccent;
   deadCode: string;
@@ -77,24 +79,6 @@ interface PendingSyntheticAccentState {
   baseReleased: boolean;
   emitted: boolean;
 }
-
-const SYNTHETIC_DEAD_ACCENT_MAP: Record<SupportedDeadAccent, Record<SyntheticDeadAccentBaseKey, string>> = {
-  acute: {
-    a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú',
-    A: 'Á', E: 'É', I: 'Í', O: 'Ó', U: 'Ú',
-    Space: '´',
-  },
-  grave: {
-    a: 'à', e: 'è', i: 'ì', o: 'ò', u: 'ù',
-    A: 'À', E: 'È', I: 'Ì', O: 'Ò', U: 'Ù',
-    Space: '`',
-  },
-  circumflex: {
-    a: 'â', e: 'ê', i: 'î', o: 'ô', u: 'û',
-    A: 'Â', E: 'Ê', I: 'Î', O: 'Ô', U: 'Û',
-    Space: '^',
-  },
-};
 
 export interface InputControllerDeps {
   /** Canvas element to bind event listeners to. */
@@ -246,7 +230,7 @@ export class InputController {
         return;
       }
 
-      const supportedDeadAccent = this.resolveSupportedDeadAccent(e);
+      const supportedDeadAccent = resolveSupportedDeadAccent(e, this.isMac);
       if (supportedDeadAccent) {
         e.preventDefault();
         this.deadKeyPending = false;
@@ -272,7 +256,7 @@ export class InputController {
           return;
         }
 
-        const composedChar = this.composeSyntheticDeadAccent(this.pendingSyntheticAccent.accent, e);
+        const composedChar = composeSyntheticDeadAccent(this.pendingSyntheticAccent.accent, e);
         if (composedChar) {
           e.preventDefault();
           this.pendingSyntheticAccent.baseCode = e.code;
@@ -676,7 +660,7 @@ export class InputController {
   }
 
   private emitSyntheticAccentFallback(pending: PendingSyntheticAccentState): void {
-    const spacingAccent = SYNTHETIC_DEAD_ACCENT_MAP[pending.accent].Space;
+    const spacingAccent = getSyntheticDeadAccentSpacingCharacter(pending.accent);
     this.sendKeyEvent(pending.deadCode, spacingAccent, true, false, false, false, false, false);
     this.sendKeyEvent(pending.deadCode, spacingAccent, false, false, false, false, false, false);
     if (pending.deadReleased) {
@@ -684,65 +668,6 @@ export class InputController {
     } else {
       this.deadKeyCode = pending.deadCode;
     }
-  }
-
-  private resolveSupportedDeadAccent(e: KeyboardEvent): SupportedDeadAccent | null {
-    if (!this.isMac || e.key !== 'Dead' || e.ctrlKey || e.metaKey) return null;
-
-    if (e.altKey) {
-      switch (e.code) {
-        case 'KeyE':
-          return 'acute';
-        case 'KeyI':
-          return 'circumflex';
-        case 'Backquote':
-          return 'grave';
-        default:
-          return null;
-      }
-    }
-
-    switch (e.code) {
-      case 'Equal':
-        return e.shiftKey ? 'grave' : 'acute';
-      default:
-        if (MAC_CIRCUMFLEX_DEAD_CODES.has(e.code)) {
-          return 'circumflex';
-        }
-        return null;
-    }
-  }
-
-  private composeSyntheticDeadAccent(accent: SupportedDeadAccent, e: KeyboardEvent): string | null {
-    const normalizedKey = this.normalizeSyntheticAccentBaseKey(e);
-    if (!normalizedKey) return null;
-    return SYNTHETIC_DEAD_ACCENT_MAP[accent][normalizedKey] ?? null;
-  }
-
-  private normalizeSyntheticAccentBaseKey(e: KeyboardEvent): SyntheticDeadAccentBaseKey | null {
-    if (e.key === ' ' || e.code === 'Space') {
-      return 'Space';
-    }
-
-    if (e.key.length === 1) {
-      const lower = e.key.toLowerCase();
-      if ('aeiou'.includes(lower)) {
-        return e.key === lower
-          ? lower as SyntheticDeadAccentBaseKey
-          : lower.toUpperCase() as SyntheticDeadAccentBaseKey;
-      }
-    }
-
-    if (e.code.startsWith('Key')) {
-      const lower = e.code.slice(3).toLowerCase();
-      if ('aeiou'.includes(lower)) {
-        return e.shiftKey
-          ? lower.toUpperCase() as SyntheticDeadAccentBaseKey
-          : lower as SyntheticDeadAccentBaseKey;
-      }
-    }
-
-    return null;
   }
 
   private isMacOptionKey(code: string): boolean {
