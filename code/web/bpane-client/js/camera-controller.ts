@@ -3,13 +3,14 @@ import {
   type QualityLimitationReason,
 } from './camera/camera-adaptation-policy.js';
 import {
+  CameraCaptureRuntime,
+  type SendCameraFrameFn,
+} from './camera/camera-capture-runtime.js';
+import {
   CameraProfileCatalog,
   type CameraProfile,
 } from './camera/camera-profile-catalog.js';
 import { CameraTelemetryTracker } from './camera/camera-telemetry-tracker.js';
-
-type CameraSendResult = 'sent' | 'queued' | 'replaced';
-type SendCameraFrameFn = (payload: Uint8Array) => CameraSendResult;
 
 export interface CameraTelemetryProfile extends Pick<
   CameraProfile,
@@ -36,27 +37,21 @@ export interface CameraTelemetrySnapshot {
 }
 
 const CAMERA_ADAPT_INTERVAL_MS = 2000;
-const CAMERA_ENCODER_QUEUE_LIMIT = 2;
 
 export class CameraController {
-  private sendFrame: SendCameraFrameFn;
+  private readonly sendFrame: SendCameraFrameFn;
   private stream: MediaStream | null = null;
   private videoEl: HTMLVideoElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
-  private encoder: VideoEncoder | null = null;
-  private captureTimer: ReturnType<typeof setInterval> | null = null;
+  private captureRuntime: CameraCaptureRuntime | null = null;
   private adaptationTimer: ReturnType<typeof setInterval> | null = null;
   private active = false;
-  private capturePending = false;
   private activeProfileIndex = -1;
   private supportedProfiles: CameraProfile[] = [];
-  private forceKeyframe = true;
-  private frameTimestampUs = 0;
-  private encodeStarts = new Map<number, number>();
   private qualityLimitationReason: QualityLimitationReason = 'none';
   private stableWindows = 0;
-  private telemetry = new CameraTelemetryTracker();
+  private readonly telemetry = new CameraTelemetryTracker();
 
   constructor(sendFrame: SendCameraFrameFn) {
     this.sendFrame = sendFrame;
@@ -94,6 +89,18 @@ export class CameraController {
         throw new Error('camera canvas context unavailable');
       }
 
+      this.captureRuntime = new CameraCaptureRuntime({
+        videoElement: this.videoEl,
+        canvasElement: this.canvas,
+        canvasContext: this.ctx,
+        sendFrame: this.sendFrame,
+        telemetry: this.telemetry,
+        onEncoderError: (error) => {
+          console.error('[bpane] camera encoder error:', error);
+          this.stopCamera();
+        },
+      });
+
       await this.videoEl.play();
 
       this.resetTelemetry();
@@ -112,20 +119,12 @@ export class CameraController {
   stopCamera(): void {
     if (!this.active && !this.stream) return;
     this.active = false;
-    if (this.captureTimer) {
-      clearInterval(this.captureTimer);
-      this.captureTimer = null;
-    }
     if (this.adaptationTimer) {
       clearInterval(this.adaptationTimer);
       this.adaptationTimer = null;
     }
-    this.capturePending = false;
-    this.encodeStarts.clear();
-    if (this.encoder) {
-      try { this.encoder.close(); } catch (_) { /* ignore */ }
-      this.encoder = null;
-    }
+    this.captureRuntime?.stop();
+    this.captureRuntime = null;
     if (this.stream) {
       this.stream.getTracks().forEach((track) => track.stop());
       this.stream = null;
@@ -138,8 +137,6 @@ export class CameraController {
     this.canvas = null;
     this.ctx = null;
     this.activeProfileIndex = -1;
-    this.frameTimestampUs = 0;
-    this.forceKeyframe = true;
     this.sendFrame(new Uint8Array());
   }
 
@@ -162,8 +159,6 @@ export class CameraController {
   private resetTelemetry(): void {
     this.qualityLimitationReason = 'none';
     this.stableWindows = 0;
-    this.frameTimestampUs = 0;
-    this.forceKeyframe = true;
     this.telemetry.reset();
     this.resetAdaptationWindow();
   }
@@ -181,60 +176,7 @@ export class CameraController {
 
     this.activeProfileIndex = index;
     this.qualityLimitationReason = reason;
-    this.forceKeyframe = true;
-    this.frameTimestampUs = 0;
-    this.encodeStarts.clear();
-
-    if (this.canvas) {
-      this.canvas.width = profile.width;
-      this.canvas.height = profile.height;
-    }
-
-    if (this.encoder) {
-      try { this.encoder.close(); } catch (_) { /* ignore */ }
-    }
-    this.encoder = new VideoEncoder({
-      output: (chunk) => this.handleEncodedChunk(chunk),
-      error: (e) => {
-        console.error('[bpane] camera encoder error:', e);
-        this.stopCamera();
-      },
-    });
-    this.encoder.configure(CameraProfileCatalog.toEncoderConfig(profile));
-    this.restartCaptureTimer();
-  }
-
-  private restartCaptureTimer(): void {
-    if (this.captureTimer) {
-      clearInterval(this.captureTimer);
-      this.captureTimer = null;
-    }
-    const profile = this.supportedProfiles[this.activeProfileIndex];
-    if (!this.active || !profile) return;
-    const intervalMs = Math.max(16, Math.round(1000 / profile.fps));
-    this.captureTimer = setInterval(() => {
-      void this.captureFrame();
-    }, intervalMs);
-  }
-
-  private handleEncodedChunk(chunk: EncodedVideoChunk): void {
-    let encodeTimeMs: number | undefined;
-    const startedAt = this.encodeStarts.get(chunk.timestamp);
-    if (typeof startedAt === 'number') {
-      this.encodeStarts.delete(chunk.timestamp);
-      encodeTimeMs = performance.now() - startedAt;
-    }
-
-    const payload = new Uint8Array(chunk.byteLength);
-    chunk.copyTo(payload);
-
-    const result = this.sendFrame(payload);
-    this.telemetry.recordEncodedChunk({
-      chunkType: chunk.type,
-      chunkByteLength: payload.byteLength,
-      sendResult: result,
-      encodeTimeMs,
-    });
+    this.captureRuntime?.applyProfile(profile);
   }
 
   private evaluateAdaptation(): void {
@@ -258,41 +200,6 @@ export class CameraController {
 
     if (decision.shouldResetWindow) {
       this.resetAdaptationWindow();
-    }
-  }
-
-  private async captureFrame(): Promise<void> {
-    if (!this.active || this.capturePending || !this.videoEl || !this.canvas || !this.ctx || !this.encoder) return;
-    if (this.videoEl.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-    if (this.encoder.encodeQueueSize > CAMERA_ENCODER_QUEUE_LIMIT) {
-      this.telemetry.recordEncoderQueueDrop();
-      return;
-    }
-
-    const profile = this.supportedProfiles[this.activeProfileIndex];
-    if (!profile) return;
-
-    this.capturePending = true;
-    try {
-      this.ctx.drawImage(this.videoEl, 0, 0, this.canvas.width, this.canvas.height);
-      this.telemetry.recordCapture();
-      const timestampUs = this.frameTimestampUs;
-      this.frameTimestampUs += Math.round(1_000_000 / profile.fps);
-      const frame = new VideoFrame(this.canvas, { timestamp: timestampUs });
-      const encodedFrames = this.telemetry.getFramesEncoded();
-      const keyFrame = this.forceKeyframe
-        || (encodedFrames > 0 && (encodedFrames % profile.keyframeInterval) === 0);
-      this.forceKeyframe = false;
-      this.encodeStarts.set(timestampUs, performance.now());
-      try {
-        this.encoder.encode(frame, { keyFrame });
-      } finally {
-        frame.close();
-      }
-    } catch (e) {
-      console.error('[bpane] camera frame capture failed:', e);
-    } finally {
-      this.capturePending = false;
     }
   }
 }
