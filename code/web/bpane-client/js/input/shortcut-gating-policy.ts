@@ -15,7 +15,7 @@ export class ShortcutGatingPolicy {
   private readonly isMac: boolean;
   private readonly macMetaAsCtrl: boolean;
   private readonly macMetaPassthrough = new Set(['KeyQ', 'KeyW', 'Tab']);
-  private readonly macMetaAtomicShortcuts = new Set(['KeyC', 'KeyV']);
+  private readonly macMetaAtomicShortcuts = new Set(['KeyC', 'KeyV', 'KeyX']);
 
   constructor(input: ShortcutGatingPolicyInput) {
     this.isMac = input.isMac;

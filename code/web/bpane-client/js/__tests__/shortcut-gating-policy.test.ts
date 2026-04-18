@@ -46,7 +46,7 @@ describe('ShortcutGatingPolicy', () => {
     expect(policy.shouldPassThroughMacMetaShortcut(createEvent({ code: 'KeyQ', metaKey: false }))).toBe(false);
   });
 
-  it('detects atomic mac command shortcuts only for bare Cmd+C and Cmd+V', () => {
+  it('detects atomic mac command shortcuts only for bare Cmd+C, Cmd+V, and Cmd+X', () => {
     const policy = new ShortcutGatingPolicy({
       isMac: true,
       macMetaAsCtrl: true,
@@ -58,6 +58,7 @@ describe('ShortcutGatingPolicy', () => {
 
     expect(policy.shouldSendAtomicMacCtrlShortcut(createEvent({ code: 'KeyC', metaKey: true }))).toBe(true);
     expect(policy.shouldSendAtomicMacCtrlShortcut(createEvent({ code: 'KeyV', metaKey: true }))).toBe(true);
+    expect(policy.shouldSendAtomicMacCtrlShortcut(createEvent({ code: 'KeyX', metaKey: true }))).toBe(true);
     expect(policy.shouldSendAtomicMacCtrlShortcut(createEvent({ code: 'KeyV', metaKey: true, shiftKey: true }))).toBe(false);
     expect(policy.shouldSendAtomicMacCtrlShortcut(createEvent({ code: 'KeyV', metaKey: true, altKey: true }))).toBe(false);
     expect(disabledPolicy.shouldSendAtomicMacCtrlShortcut(createEvent({ code: 'KeyV', metaKey: true }))).toBe(false);

@@ -410,6 +410,29 @@ describe('InputController macOS command remapping', () => {
     expect(keyFrames.some(({ keycode }) => keycode === 125 || keycode === 126)).toBe(false);
   });
 
+  it('dispatches Cmd+X atomically even if Meta is released first', () => {
+    const { keyboardTarget, controller, sentFrames } = createController();
+
+    dispatchKey(keyboardTarget, 'keydown', { code: 'MetaLeft', key: 'Meta', metaKey: true });
+    dispatchKey(keyboardTarget, 'keydown', { code: 'KeyX', key: 'x', metaKey: true });
+    dispatchKey(keyboardTarget, 'keyup', { code: 'MetaLeft', key: 'Meta' });
+    dispatchKey(keyboardTarget, 'keyup', { code: 'KeyX', key: 'x' });
+
+    controller.destroy();
+
+    const keyFrames = decodeKeyFrames(sentFrames);
+    expect(keyFrames.map(({ keycode, down, modifiers }) => ({
+      keycode,
+      down,
+      modifiers,
+    }))).toEqual([
+      { keycode: 29, down: true, modifiers: 0 },
+      { keycode: 45, down: true, modifiers: 1 },
+      { keycode: 45, down: false, modifiers: 1 },
+      { keycode: 29, down: false, modifiers: 0 },
+    ]);
+  });
+
   it('dispatches Cmd+V atomically even if Meta is released first', () => {
     const { keyboardTarget, controller, sentFrames } = createController();
 
