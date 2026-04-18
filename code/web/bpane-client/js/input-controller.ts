@@ -30,11 +30,9 @@ import { PointerInputRuntime } from './input/pointer-input-runtime.js';
 import { ShortcutGatingPolicy } from './input/shortcut-gating-policy.js';
 import { ShortcutKeyReleaseRuntime } from './input/shortcut-key-release-runtime.js';
 import { SuppressedKeyupTracker } from './input/suppressed-keyup-tracker.js';
+import { SyntheticDeadAccentRuntime } from './input/synthetic-dead-accent-runtime.js';
 import {
-  composeSyntheticDeadAccent,
-  getSyntheticDeadAccentSpacingCharacter,
   resolveSupportedDeadAccent,
-  type SupportedDeadAccent,
 } from './input/synthetic-dead-accent.js';
 import { MacModifierStateRuntime } from './input/mac-modifier-state-runtime.js';
 import { PendingCompositionRuntime } from './input/pending-composition-runtime.js';
@@ -47,16 +45,6 @@ const CTRL_KEY_CODES = new Set(['ControlLeft', 'ControlRight']);
 
 interface RemappedKeyState {
   releasedCtrlCodes: string[];
-}
-
-interface PendingSyntheticAccentState {
-  accent: SupportedDeadAccent;
-  deadCode: string;
-  deadReleased: boolean;
-  baseCode: string | null;
-  baseChar: string | null;
-  baseReleased: boolean;
-  emitted: boolean;
 }
 
 export interface InputControllerDeps {
@@ -93,13 +81,12 @@ export class InputController {
   private readonly suppressedKeyups: SuppressedKeyupTracker;
   /** Tracks keys remapped on keydown (e.g., ArrowLeft→Home) for correct keyup. */
   private remappedKeys = new Map<string, RemappedKeyState>();
-  /** Narrow mac dead-key workaround for accented vowels. */
-  private pendingSyntheticAccent: PendingSyntheticAccentState | null = null;
   private readonly pendingComposition: PendingCompositionRuntime;
   private readonly macModifiers: MacModifierStateRuntime;
   private readonly deferredCtrlPaste: DeferredCtrlPasteRuntime;
   private readonly shortcutPolicy: ShortcutGatingPolicy;
   private readonly shortcutKeyRelease: ShortcutKeyReleaseRuntime;
+  private readonly syntheticDeadAccent: SyntheticDeadAccentRuntime;
 
   // Set by BpaneSession when server capabilities are received
   serverSupportsKeyEventEx = false;
@@ -157,6 +144,7 @@ export class InputController {
       macMetaAsCtrl: this.macMetaAsCtrl,
     });
     this.shortcutKeyRelease = new ShortcutKeyReleaseRuntime();
+    this.syntheticDeadAccent = new SyntheticDeadAccentRuntime();
     this.macModifiers = new MacModifierStateRuntime({
       isMac: this.isMac,
       macMetaAsCtrl: this.macMetaAsCtrl,
@@ -237,40 +225,25 @@ export class InputController {
         this.pendingComposition.reset();
         this.keyboardSink.clear();
         this.deadKeyCode = e.code;
-        this.pendingSyntheticAccent = {
-          accent: supportedDeadAccent,
-          deadCode: e.code,
-          deadReleased: false,
-          baseCode: null,
-          baseChar: null,
-          baseReleased: false,
-          emitted: false,
-        };
+        this.syntheticDeadAccent.begin(supportedDeadAccent, e.code);
         return;
       }
 
-      if (this.pendingSyntheticAccent) {
-        if (e.code === this.pendingSyntheticAccent.baseCode) {
-          e.preventDefault();
-          return;
-        }
-
-        const composedChar = composeSyntheticDeadAccent(this.pendingSyntheticAccent.accent, e);
-        if (composedChar) {
-          e.preventDefault();
-          this.pendingSyntheticAccent.baseCode = e.code;
-          this.pendingSyntheticAccent.baseChar = composedChar;
+      const syntheticDeadAccentKeydown = this.syntheticDeadAccent.handleKeydown(e);
+      if (syntheticDeadAccentKeydown.handled) {
+        e.preventDefault();
+        if (syntheticDeadAccentKeydown.clearKeyboardSink) {
           this.keyboardSink.clear();
-          return;
         }
+        return;
+      }
 
-        if (e.code === this.pendingSyntheticAccent.deadCode) {
-          e.preventDefault();
-          return;
-        }
-
-        this.emitSyntheticAccentFallback(this.pendingSyntheticAccent);
-        this.pendingSyntheticAccent = null;
+      if (syntheticDeadAccentKeydown.fallback) {
+        this.emitSyntheticAccentFallback(
+          syntheticDeadAccentKeydown.fallback.deadCode,
+          syntheticDeadAccentKeydown.fallback.spacingAccent,
+          syntheticDeadAccentKeydown.fallback.deadKeyCode,
+        );
       }
 
       if (e.isComposing && !this.deadKeyPending) return;
@@ -450,33 +423,17 @@ export class InputController {
 
       this.shortcutKeyRelease.noteObservedKeyup(e.code);
 
-      if (this.pendingSyntheticAccent) {
-        if (e.code === this.pendingSyntheticAccent.baseCode) {
-          e.preventDefault();
-          if (!this.pendingSyntheticAccent.emitted && this.pendingSyntheticAccent.baseChar) {
-            this.sendKeyEvent(e.code, this.pendingSyntheticAccent.baseChar, true, false, false, false, false, false);
-            this.sendKeyEvent(e.code, this.pendingSyntheticAccent.baseChar, false, false, false, false, false, false);
-            this.pendingSyntheticAccent.emitted = true;
-          }
-          if (this.pendingSyntheticAccent.emitted) {
-            this.pendingSyntheticAccent.baseReleased = true;
-            if (this.pendingSyntheticAccent.deadReleased
-              || this.pendingSyntheticAccent.deadCode === this.pendingSyntheticAccent.baseCode) {
-              this.pendingSyntheticAccent = null;
-              this.deadKeyCode = null;
-            }
-          }
-          return;
+      const syntheticDeadAccentKeyup = this.syntheticDeadAccent.handleKeyup(e.code);
+      if (syntheticDeadAccentKeyup.handled) {
+        e.preventDefault();
+        if (syntheticDeadAccentKeyup.emitCharacter) {
+          this.sendKeyEvent(e.code, syntheticDeadAccentKeyup.emitCharacter.key, true, false, false, false, false, false);
+          this.sendKeyEvent(e.code, syntheticDeadAccentKeyup.emitCharacter.key, false, false, false, false, false, false);
         }
-        if (e.code === this.pendingSyntheticAccent.deadCode) {
-          e.preventDefault();
-          this.pendingSyntheticAccent.deadReleased = true;
-          if (this.pendingSyntheticAccent.emitted && this.pendingSyntheticAccent.baseReleased) {
-            this.pendingSyntheticAccent = null;
-            this.deadKeyCode = null;
-          }
-          return;
+        if (syntheticDeadAccentKeyup.clearDeadKeyCode) {
+          this.deadKeyCode = null;
         }
+        return;
       }
 
       if (this.suppressedKeyups.clear(e.code)) {
@@ -548,7 +505,7 @@ export class InputController {
     this.macModifiers.reset();
     this.remappedKeys.clear();
     this.pendingComposition.reset();
-    this.pendingSyntheticAccent = null;
+    this.syntheticDeadAccent.reset();
     this.suppressedKeyups.reset();
     this.shortcutKeyRelease.reset();
     this.keyboardSink.destroy();
@@ -615,15 +572,10 @@ export class InputController {
     });
   }
 
-  private emitSyntheticAccentFallback(pending: PendingSyntheticAccentState): void {
-    const spacingAccent = getSyntheticDeadAccentSpacingCharacter(pending.accent);
-    this.sendKeyEvent(pending.deadCode, spacingAccent, true, false, false, false, false, false);
-    this.sendKeyEvent(pending.deadCode, spacingAccent, false, false, false, false, false, false);
-    if (pending.deadReleased) {
-      this.deadKeyCode = null;
-    } else {
-      this.deadKeyCode = pending.deadCode;
-    }
+  private emitSyntheticAccentFallback(deadCode: string, spacingAccent: string, deadKeyCode: string | null): void {
+    this.sendKeyEvent(deadCode, spacingAccent, true, false, false, false, false, false);
+    this.sendKeyEvent(deadCode, spacingAccent, false, false, false, false, false, false);
+    this.deadKeyCode = deadKeyCode;
   }
 
   private shouldDeferCtrlPasteShortcut(e: KeyboardEvent): boolean {
