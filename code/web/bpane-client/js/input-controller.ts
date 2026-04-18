@@ -27,6 +27,7 @@ import {
   sendKeyboardLayoutHint,
 } from './input/layout-hint.js';
 import { PointerInputRuntime } from './input/pointer-input-runtime.js';
+import { ShortcutGatingPolicy } from './input/shortcut-gating-policy.js';
 import { SuppressedKeyupTracker } from './input/suppressed-keyup-tracker.js';
 import {
   composeSyntheticDeadAccent,
@@ -41,9 +42,6 @@ import { fnvHash } from './hash.js';
 const PENDING_COMPOSITION_FALLBACK_MS = 16;
 const SUPPRESSED_KEYUP_TIMEOUT_MS = 750;
 
-/** Keys that should NOT be remapped from Meta→Ctrl on Mac (let browser handle). */
-const MAC_META_PASSTHROUGH = new Set(['KeyQ', 'KeyW', 'Tab']);
-const MAC_META_ATOMIC_SHORTCUTS = new Set(['KeyC', 'KeyV']);
 const CTRL_KEY_CODES = new Set(['ControlLeft', 'ControlRight']);
 
 interface RemappedKeyState {
@@ -99,6 +97,7 @@ export class InputController {
   private readonly pendingComposition: PendingCompositionRuntime;
   private readonly macModifiers: MacModifierStateRuntime;
   private readonly deferredCtrlPaste: DeferredCtrlPasteRuntime;
+  private readonly shortcutPolicy: ShortcutGatingPolicy;
 
   // Set by BpaneSession when server capabilities are received
   serverSupportsKeyEventEx = false;
@@ -150,6 +149,10 @@ export class InputController {
       emitKeyEvent: (code, down, ctrl) => {
         this.sendKeyEvent(code, '', down, ctrl, false, false, false, false);
       },
+    });
+    this.shortcutPolicy = new ShortcutGatingPolicy({
+      isMac: this.isMac,
+      macMetaAsCtrl: this.macMetaAsCtrl,
     });
     this.macModifiers = new MacModifierStateRuntime({
       isMac: this.isMac,
@@ -270,7 +273,7 @@ export class InputController {
       if (e.isComposing && !this.deadKeyPending) return;
 
       // Keep the hosted Chromium window pinned open and at a fixed size.
-      if (this.shouldSuppressLockedWindowShortcut(e)) {
+      if (this.shortcutPolicy.shouldSuppressLockedWindowShortcut(e)) {
         e.preventDefault();
         if (!e.repeat) {
           this.suppressedKeyups.suppress(e.code);
@@ -279,13 +282,13 @@ export class InputController {
       }
 
       // Mac Meta passthrough: let browser handle Cmd+Q, Cmd+W, Cmd+Tab
-      if (this.macMetaAsCtrl && e.metaKey && MAC_META_PASSTHROUGH.has(e.code)) {
+      if (this.shortcutPolicy.shouldPassThroughMacMetaShortcut(e)) {
         this.macModifiers.releaseMacCtrlsForRemap();
         return; // don't preventDefault, let browser handle
       }
 
       const effectiveCtrl = e.ctrlKey || (this.macMetaAsCtrl && e.metaKey);
-      if (this.shouldSendAtomicMacCtrlShortcut(e)) {
+      if (this.shortcutPolicy.shouldSendAtomicMacCtrlShortcut(e)) {
         e.preventDefault();
         if (e.repeat) {
           return;
@@ -599,31 +602,6 @@ export class InputController {
     } else {
       this.deadKeyCode = pending.deadCode;
     }
-  }
-
-  private shouldSuppressLockedWindowShortcut(e: KeyboardEvent): boolean {
-    if (!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && e.code === 'F11') {
-      return true;
-    }
-
-    if (!e.ctrlKey && e.altKey && !e.metaKey && !e.shiftKey && e.code === 'F4') {
-      return true;
-    }
-
-    return !this.isMac
-      && e.ctrlKey
-      && !e.altKey
-      && !e.metaKey
-      && (e.code === 'KeyQ' || e.code === 'KeyW');
-  }
-
-  private shouldSendAtomicMacCtrlShortcut(e: KeyboardEvent): boolean {
-    return this.macMetaAsCtrl
-      && e.metaKey
-      && !e.ctrlKey
-      && !e.altKey
-      && !e.shiftKey
-      && MAC_META_ATOMIC_SHORTCUTS.has(e.code);
   }
 
   private shouldDeferCtrlPasteShortcut(e: KeyboardEvent): boolean {
