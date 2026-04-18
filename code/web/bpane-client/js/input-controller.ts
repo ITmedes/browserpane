@@ -33,6 +33,7 @@ import {
   resolveSupportedDeadAccent,
   type SupportedDeadAccent,
 } from './input/synthetic-dead-accent.js';
+import { MacModifierStateRuntime } from './input/mac-modifier-state-runtime.js';
 import { PendingCompositionRuntime } from './input/pending-composition-runtime.js';
 import { fnvHash } from './hash.js';
 
@@ -42,18 +43,7 @@ const SUPPRESSED_KEYUP_TIMEOUT_MS = 750;
 /** Keys that should NOT be remapped from Meta→Ctrl on Mac (let browser handle). */
 const MAC_META_PASSTHROUGH = new Set(['KeyQ', 'KeyW', 'Tab']);
 const MAC_META_ATOMIC_SHORTCUTS = new Set(['KeyC', 'KeyV']);
-const MAC_META_TO_CTRL: Record<string, string> = {
-  MetaLeft: 'ControlLeft',
-  MetaRight: 'ControlRight',
-};
-const MAC_OPTION_CODES = new Set(['AltLeft', 'AltRight']);
 const CTRL_KEY_CODES = new Set(['ControlLeft', 'ControlRight']);
-const KEYBOARD_MODIFIER_CODES = new Set([
-  'ShiftLeft', 'ShiftRight',
-  'ControlLeft', 'ControlRight',
-  'AltLeft', 'AltRight',
-  'MetaLeft', 'MetaRight',
-]);
 
 interface RemappedKeyState {
   releasedCtrlCodes: string[];
@@ -109,21 +99,14 @@ export class InputController {
   private readonly suppressedKeyups: SuppressedKeyupTracker;
   /** Tracks keys remapped on keydown (e.g., ArrowLeft→Home) for correct keyup. */
   private remappedKeys = new Map<string, RemappedKeyState>();
-  /** Command keys currently held in the browser. */
-  private activeMacMetaCodes = new Set<string>();
   /** Physical Control keys currently held in the browser. */
   private activeControlCodes = new Set<string>();
-  /** Command keys materialized as Ctrl on the host. */
-  private materializedMacCtrlCodes = new Set<string>();
-  /** Option keys currently held on macOS. */
-  private activeMacOptionCodes = new Set<string>();
-  /** Option keys materialized as Alt on the host for shortcut use. */
-  private materializedMacOptionCodes = new Set<string>();
   /** Narrow mac dead-key workaround for accented vowels. */
   private pendingSyntheticAccent: PendingSyntheticAccentState | null = null;
   /** Deferred Ctrl+V while clipboard sync completes. */
   private pendingCtrlPaste: PendingCtrlPasteState | null = null;
   private readonly pendingComposition: PendingCompositionRuntime;
+  private readonly macModifiers: MacModifierStateRuntime;
 
   // Set by BpaneSession when server capabilities are received
   serverSupportsKeyEventEx = false;
@@ -171,6 +154,13 @@ export class InputController {
       setTimeoutFn: window.setTimeout,
       clearTimeoutFn: window.clearTimeout,
     });
+    this.macModifiers = new MacModifierStateRuntime({
+      isMac: this.isMac,
+      macMetaAsCtrl: this.macMetaAsCtrl,
+      emitModifierKey: (code, down) => {
+        this.sendKeyEvent(code, '', down, false, false, false, false, false);
+      },
+    });
     this.pendingComposition = new PendingCompositionRuntime({
       fallbackDelayMs: PENDING_COMPOSITION_FALLBACK_MS,
       setTimeoutFn: window.setTimeout,
@@ -216,15 +206,15 @@ export class InputController {
         this.suppressedKeyups.clear(e.code);
       }
 
-      if (this.isMacMetaKey(e.code)) {
+      if (this.macModifiers.isMacMetaKey(e.code)) {
         e.preventDefault();
-        this.activeMacMetaCodes.add(e.code);
+        this.macModifiers.noteMetaKeydown(e.code);
         return;
       }
 
-      if (this.isMacOptionKey(e.code)) {
+      if (this.macModifiers.isMacOptionKey(e.code)) {
         e.preventDefault();
-        this.activeMacOptionCodes.add(e.code);
+        this.macModifiers.noteOptionKeydown(e.code);
         return;
       }
 
@@ -293,7 +283,7 @@ export class InputController {
 
       // Mac Meta passthrough: let browser handle Cmd+Q, Cmd+W, Cmd+Tab
       if (this.macMetaAsCtrl && e.metaKey && MAC_META_PASSTHROUGH.has(e.code)) {
-        this.releaseMacCtrlsForRemap();
+        this.macModifiers.releaseMacCtrlsForRemap();
         return; // don't preventDefault, let browser handle
       }
 
@@ -344,11 +334,11 @@ export class InputController {
       if (this.macMetaAsCtrl && e.metaKey && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
         e.preventDefault();
         const remapCode = e.code === 'ArrowLeft' ? 'Home' : 'End';
-        const releasedCtrlCodes = this.releaseMacCtrlsForRemap();
+        const releasedCtrlCodes = this.macModifiers.releaseMacCtrlsForRemap();
         this.remappedKeys.set(e.code, { releasedCtrlCodes });
         this.sendKeyEvent(remapCode, '', true, false, false, e.shiftKey, false, false);
         this.sendKeyEvent(remapCode, '', false, false, false, e.shiftKey, false, false);
-        this.restoreMacCtrls(releasedCtrlCodes);
+        this.macModifiers.restoreMacCtrls(releasedCtrlCodes);
         return;
       }
 
@@ -382,11 +372,11 @@ export class InputController {
         // Keep deadKeyCode set — we need it to suppress the dead key's own keyup
       }
 
-      if (this.shouldMaterializeMacCtrl(e)) {
-        this.materializeMacCtrl();
+      if (this.macModifiers.shouldMaterializeMacCtrl(e)) {
+        this.macModifiers.materializeMacCtrl();
       }
-      if (this.shouldMaterializeMacOption(e)) {
-        this.materializeMacOption();
+      if (this.macModifiers.shouldMaterializeMacOption(e)) {
+        this.macModifiers.materializeMacOption();
       }
 
       // Detect AltGr: getModifierState('AltGraph') is true (Windows/Linux)
@@ -412,7 +402,7 @@ export class InputController {
       // Mac Option composition: Option+key producing a printable character
       // is character composition (like AltGr), not a raw Alt modifier.
       // This handles @, |, \, ~, {, }, [, ] and dead-key sequences on macOS.
-      if (this.isMacOptionComposition(e)) {
+      if (this.macModifiers.isMacOptionComposition(e)) {
         altgr = true;
         alt = false;
       }
@@ -429,24 +419,13 @@ export class InputController {
         return;
       }
 
-      if (this.isMacMetaKey(e.code)) {
+      if (this.macModifiers.handleMetaKeyup(e.code)) {
         e.preventDefault();
-        this.activeMacMetaCodes.delete(e.code);
-        const ctrlCode = MAC_META_TO_CTRL[e.code];
-        if (ctrlCode && this.materializedMacCtrlCodes.has(ctrlCode)) {
-          this.materializedMacCtrlCodes.delete(ctrlCode);
-          this.sendKeyEvent(ctrlCode, '', false, false, false, false, false, false);
-        }
         return;
       }
 
-      if (this.isMacOptionKey(e.code)) {
+      if (this.macModifiers.handleOptionKeyup(e.code)) {
         e.preventDefault();
-        this.activeMacOptionCodes.delete(e.code);
-        if (this.materializedMacOptionCodes.has(e.code)) {
-          this.materializedMacOptionCodes.delete(e.code);
-          this.sendKeyEvent(e.code, '', false, false, false, false, false, false);
-        }
         return;
       }
 
@@ -525,7 +504,7 @@ export class InputController {
       }
 
       // Mac Option composition on keyup (same detection as keydown)
-      if (this.isMacOptionComposition(e)) {
+      if (this.macModifiers.isMacOptionComposition(e)) {
         altgr = true;
         alt = false;
       }
@@ -553,11 +532,8 @@ export class InputController {
     }
     this.pointerInput.reset();
     this.clipboardSync.reset();
-    this.activeMacMetaCodes.clear();
     this.activeControlCodes.clear();
-    this.materializedMacCtrlCodes.clear();
-    this.activeMacOptionCodes.clear();
-    this.materializedMacOptionCodes.clear();
+    this.macModifiers.reset();
     this.remappedKeys.clear();
     this.pendingComposition.reset();
     this.pendingSyntheticAccent = null;
@@ -626,10 +602,6 @@ export class InputController {
     });
   }
 
-  private isMacMetaKey(code: string): boolean {
-    return this.macMetaAsCtrl && Object.hasOwn(MAC_META_TO_CTRL, code);
-  }
-
   private emitSyntheticAccentFallback(pending: PendingSyntheticAccentState): void {
     const spacingAccent = getSyntheticDeadAccentSpacingCharacter(pending.accent);
     this.sendKeyEvent(pending.deadCode, spacingAccent, true, false, false, false, false, false);
@@ -639,25 +611,6 @@ export class InputController {
     } else {
       this.deadKeyCode = pending.deadCode;
     }
-  }
-
-  private isMacOptionKey(code: string): boolean {
-    return this.isMac && MAC_OPTION_CODES.has(code);
-  }
-
-  private isMacOptionComposition(e: KeyboardEvent): boolean {
-    return this.isMac
-      && this.activeMacOptionCodes.size > 0
-      && !e.ctrlKey
-      && !e.metaKey
-      && (e.key === 'Dead' || e.key.length === 1);
-  }
-
-  private shouldMaterializeMacCtrl(e: KeyboardEvent): boolean {
-    return this.macMetaAsCtrl
-      && e.metaKey
-      && !KEYBOARD_MODIFIER_CODES.has(e.code)
-      && this.activeMacMetaCodes.size > 0;
   }
 
   private shouldSuppressLockedWindowShortcut(e: KeyboardEvent): boolean {
@@ -695,58 +648,8 @@ export class InputController {
       && this.activeControlCodes.size > 0;
   }
 
-  private shouldMaterializeMacOption(e: KeyboardEvent): boolean {
-    return this.isMac
-      && e.altKey
-      && !e.ctrlKey
-      && !e.metaKey
-      && !KEYBOARD_MODIFIER_CODES.has(e.code)
-      && this.activeMacOptionCodes.size > 0
-      && !this.isMacOptionComposition(e);
-  }
-
-  private materializeMacCtrl(): void {
-    for (const metaCode of this.activeMacMetaCodes) {
-      const ctrlCode = MAC_META_TO_CTRL[metaCode];
-      if (!ctrlCode || this.materializedMacCtrlCodes.has(ctrlCode)) continue;
-      this.sendKeyEvent(ctrlCode, '', true, false, false, false, false, false);
-      this.materializedMacCtrlCodes.add(ctrlCode);
-    }
-  }
-
-  private materializeMacOption(): void {
-    for (const optionCode of this.activeMacOptionCodes) {
-      if (this.materializedMacOptionCodes.has(optionCode)) continue;
-      this.sendKeyEvent(optionCode, '', true, false, false, false, false, false);
-      this.materializedMacOptionCodes.add(optionCode);
-    }
-  }
-
-  private releaseMacCtrlsForRemap(): string[] {
-    const released: string[] = [];
-    for (const metaCode of this.activeMacMetaCodes) {
-      const ctrlCode = MAC_META_TO_CTRL[metaCode];
-      if (!ctrlCode || !this.materializedMacCtrlCodes.has(ctrlCode)) continue;
-      this.materializedMacCtrlCodes.delete(ctrlCode);
-      this.sendKeyEvent(ctrlCode, '', false, false, false, false, false, false);
-      released.push(ctrlCode);
-    }
-    return released;
-  }
-
-  private restoreMacCtrls(ctrlCodes: Iterable<string>): void {
-    for (const ctrlCode of ctrlCodes) {
-      const metaCode = Object.entries(MAC_META_TO_CTRL).find(([, mappedCtrl]) => mappedCtrl === ctrlCode)?.[0];
-      if (!metaCode || !this.activeMacMetaCodes.has(metaCode) || this.materializedMacCtrlCodes.has(ctrlCode)) {
-        continue;
-      }
-      this.sendKeyEvent(ctrlCode, '', true, false, false, false, false, false);
-      this.materializedMacCtrlCodes.add(ctrlCode);
-    }
-  }
-
   private dispatchAtomicMacCtrlShortcut(code: string, key: string): void {
-    const ctrlCode = this.preferredMacCtrlCode();
+    const ctrlCode = this.macModifiers.preferredMacCtrlCode();
     this.sendKeyEvent(ctrlCode, '', true, false, false, false, false, false);
     this.sendKeyEvent(code, key, true, true, false, false, false, false);
     this.sendKeyEvent(code, key, false, true, false, false, false, false);
@@ -779,16 +682,6 @@ export class InputController {
     for (const ctrlCode of pending.releasedCtrlCodes) {
       this.sendKeyEvent(ctrlCode, '', false, false, false, false, false, false);
     }
-  }
-
-  private preferredMacCtrlCode(): string {
-    for (const metaCode of this.activeMacMetaCodes) {
-      const ctrlCode = MAC_META_TO_CTRL[metaCode];
-      if (ctrlCode) {
-        return ctrlCode;
-      }
-    }
-    return 'ControlLeft';
   }
 }
 
