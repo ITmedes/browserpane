@@ -33,6 +33,7 @@ import {
   resolveSupportedDeadAccent,
   type SupportedDeadAccent,
 } from './input/synthetic-dead-accent.js';
+import { PendingCompositionRuntime } from './input/pending-composition-runtime.js';
 import { fnvHash } from './hash.js';
 
 const PENDING_COMPOSITION_FALLBACK_MS = 16;
@@ -56,12 +57,6 @@ const KEYBOARD_MODIFIER_CODES = new Set([
 
 interface RemappedKeyState {
   releasedCtrlCodes: string[];
-}
-
-interface PendingCompositionState {
-  code: string;
-  shift: boolean;
-  fallbackKey: string;
 }
 
 interface PendingCtrlPasteState {
@@ -124,14 +119,11 @@ export class InputController {
   private activeMacOptionCodes = new Set<string>();
   /** Option keys materialized as Alt on the host for shortcut use. */
   private materializedMacOptionCodes = new Set<string>();
-  /** Dead-key composition awaiting the final composed character. */
-  private pendingComposition: PendingCompositionState | null = null;
   /** Narrow mac dead-key workaround for accented vowels. */
   private pendingSyntheticAccent: PendingSyntheticAccentState | null = null;
-  /** Timer used to fall back to the base key if no composed text arrives. */
-  private pendingCompositionFallbackTimer: number | null = null;
   /** Deferred Ctrl+V while clipboard sync completes. */
   private pendingCtrlPaste: PendingCtrlPasteState | null = null;
+  private readonly pendingComposition: PendingCompositionRuntime;
 
   // Set by BpaneSession when server capabilities are received
   serverSupportsKeyEventEx = false;
@@ -179,6 +171,21 @@ export class InputController {
       setTimeoutFn: window.setTimeout,
       clearTimeoutFn: window.clearTimeout,
     });
+    this.pendingComposition = new PendingCompositionRuntime({
+      fallbackDelayMs: PENDING_COMPOSITION_FALLBACK_MS,
+      setTimeoutFn: window.setTimeout,
+      clearTimeoutFn: window.clearTimeout,
+      emitCharacter: (input) => {
+        this.sendKeyEvent(input.code, input.key, true, false, false, input.shift, false, false);
+        this.sendKeyEvent(input.code, input.key, false, false, false, input.shift, false, false);
+      },
+      suppressKeyup: (code) => {
+        this.suppressedKeyups.suppress(code);
+      },
+      clearKeyboardSink: () => {
+        this.keyboardSink.clear();
+      },
+    });
   }
 
   /** Set up all DOM event listeners on the canvas. */
@@ -188,13 +195,13 @@ export class InputController {
     const keyboardTarget = this.keyboardSink.ensure();
     const handleCompositionEnd = (e: Event) => {
       const event = e as CompositionEvent;
-      this.commitPendingComposition(event.data ?? '');
+      this.pendingComposition.commit(event.data ?? '');
       this.keyboardSink.clear();
     };
     const handleTextInput = (e: Event) => {
       const event = e as InputEvent;
       const text = event.data ?? this.keyboardSink.getValue();
-      this.commitPendingComposition(text);
+      this.pendingComposition.commit(text);
       this.keyboardSink.clear();
     };
     this.pointerInput.bind({
@@ -234,8 +241,7 @@ export class InputController {
       if (supportedDeadAccent) {
         e.preventDefault();
         this.deadKeyPending = false;
-        this.pendingComposition = null;
-        this.clearPendingCompositionFallback();
+        this.pendingComposition.reset();
         this.keyboardSink.clear();
         this.deadKeyCode = e.code;
         this.pendingSyntheticAccent = {
@@ -356,15 +362,15 @@ export class InputController {
 
       if (this.deadKeyPending) {
         this.deadKeyPending = false;
-        this.pendingComposition = {
+        this.pendingComposition.begin({
           code: e.code,
           shift: e.shiftKey,
           fallbackKey: e.key,
-        };
+        });
         return;
       }
 
-      if (this.pendingComposition?.code === e.code) {
+      if (this.pendingComposition.hasPendingCode(e.code)) {
         e.preventDefault();
         return;
       }
@@ -488,9 +494,8 @@ export class InputController {
         return;
       }
 
-      if (this.pendingComposition?.code === e.code) {
+      if (this.pendingComposition.handleKeyup(e.code)) {
         e.preventDefault();
-        this.schedulePendingCompositionFallback();
         return;
       }
 
@@ -554,10 +559,9 @@ export class InputController {
     this.activeMacOptionCodes.clear();
     this.materializedMacOptionCodes.clear();
     this.remappedKeys.clear();
-    this.pendingComposition = null;
+    this.pendingComposition.reset();
     this.pendingSyntheticAccent = null;
     this.pendingCtrlPaste = null;
-    this.clearPendingCompositionFallback();
     this.suppressedKeyups.reset();
     this.keyboardSink.destroy();
   }
@@ -624,39 +628,6 @@ export class InputController {
 
   private isMacMetaKey(code: string): boolean {
     return this.macMetaAsCtrl && Object.hasOwn(MAC_META_TO_CTRL, code);
-  }
-
-  private commitPendingComposition(text: string): void {
-    if (!this.pendingComposition || text.length !== 1) return;
-    const pending = this.pendingComposition;
-    this.pendingComposition = null;
-    this.clearPendingCompositionFallback();
-    this.sendKeyEvent(pending.code, text, true, false, false, pending.shift, false, false);
-    this.sendKeyEvent(pending.code, text, false, false, false, pending.shift, false, false);
-    this.suppressedKeyups.suppress(pending.code);
-    this.keyboardSink.clear();
-  }
-
-  private schedulePendingCompositionFallback(): void {
-    if (!this.pendingComposition) return;
-    this.clearPendingCompositionFallback();
-    this.pendingCompositionFallbackTimer = window.setTimeout(() => {
-      this.pendingCompositionFallbackTimer = null;
-      const pending = this.pendingComposition;
-      this.pendingComposition = null;
-      if (pending?.fallbackKey.length === 1) {
-        this.sendKeyEvent(pending.code, pending.fallbackKey, true, false, false, pending.shift, false, false);
-        this.sendKeyEvent(pending.code, pending.fallbackKey, false, false, false, pending.shift, false, false);
-      }
-      this.keyboardSink.clear();
-    }, PENDING_COMPOSITION_FALLBACK_MS);
-  }
-
-  private clearPendingCompositionFallback(): void {
-    if (this.pendingCompositionFallbackTimer !== null) {
-      window.clearTimeout(this.pendingCompositionFallbackTimer);
-      this.pendingCompositionFallbackTimer = null;
-    }
   }
 
   private emitSyntheticAccentFallback(pending: PendingSyntheticAccentState): void {
