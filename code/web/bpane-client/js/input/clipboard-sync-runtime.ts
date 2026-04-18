@@ -30,7 +30,7 @@ export class ClipboardSyncRuntime {
   private readonly setLastClipboardHashFn: (hash: bigint) => void;
   private readonly navigatorLike?: ClipboardNavigatorLike;
   private readonly documentLike?: Document;
-  private readonly scheduleTimeout: (callback: () => void, delayMs: number) => number;
+  private readonly scheduleTimeoutFn: (callback: () => void, delayMs: number) => number;
   private listenersBound = false;
 
   private readonly handlePaste = (event: Event): void => {
@@ -55,7 +55,7 @@ export class ClipboardSyncRuntime {
     this.setLastClipboardHashFn = input.setLastClipboardHash;
     this.navigatorLike = input.navigatorLike;
     this.documentLike = input.documentLike;
-    this.scheduleTimeout = input.scheduleTimeout ?? ((callback, delayMs) => window.setTimeout(callback, delayMs));
+    this.scheduleTimeoutFn = input.scheduleTimeout ?? ((callback, delayMs) => window.setTimeout(callback, delayMs));
   }
 
   bind(input: ClipboardSyncBindingInput): void {
@@ -76,6 +76,10 @@ export class ClipboardSyncRuntime {
 
   syncClipboardBeforePaste(): Promise<void> {
     return this.readAndSendClipboardText();
+  }
+
+  private scheduleTimeout(callback: () => void, delayMs: number): number {
+    return Reflect.apply(this.scheduleTimeoutFn, globalThis, [callback, delayMs]);
   }
 
   private scheduleClipboardRead(): void {

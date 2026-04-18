@@ -142,4 +142,50 @@ describe('ClipboardSyncRuntime', () => {
 
     expect(readText).toHaveBeenCalledTimes(2);
   });
+
+  it('invokes a bare scheduleTimeout function with the global receiver', () => {
+    const canvas = document.createElement('canvas');
+    let lastClipboardHash = 0n;
+    const scheduled = new Map<number, () => void>();
+    let nextTimerId = 1;
+    let seenThis = false;
+    const scheduleTimeout = function(this: unknown, handler: () => void, delayMs: number): number {
+      seenThis = this === globalThis;
+      if (this !== globalThis) {
+        throw new TypeError('Illegal invocation');
+      }
+      expect(delayMs).toBe(50);
+      const timerId = nextTimerId++;
+      scheduled.set(timerId, handler);
+      return timerId;
+    };
+
+    const runtime = new ClipboardSyncRuntime({
+      canvas,
+      sendClipboardText: vi.fn(),
+      getLastClipboardHash: () => lastClipboardHash,
+      setLastClipboardHash: (hash) => {
+        lastClipboardHash = hash;
+      },
+      navigatorLike: {
+        clipboard: {
+          readText: vi.fn().mockResolvedValue('copied text'),
+        },
+      },
+      documentLike: document,
+      scheduleTimeout: scheduleTimeout as (callback: () => void, delayMs: number) => number,
+    });
+    const abortController = new AbortController();
+    const keyboardTarget = document.createElement('textarea');
+
+    runtime.bind({
+      keyboardTarget,
+      signal: abortController.signal,
+    });
+
+    document.dispatchEvent(new Event('copy'));
+
+    expect(seenThis).toBe(true);
+    expect(scheduled.size).toBe(1);
+  });
 });
