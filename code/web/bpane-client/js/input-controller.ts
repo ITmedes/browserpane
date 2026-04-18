@@ -19,6 +19,7 @@ import {
   encodeScrollMessage,
 } from './input/input-message-codec.js';
 import { ClipboardSyncRuntime } from './input/clipboard-sync-runtime.js';
+import { DeferredCtrlPasteRuntime } from './input/deferred-ctrl-paste-runtime.js';
 import { KeyboardSinkRuntime } from './input/keyboard-sink-runtime.js';
 import {
   inferLayoutHint,
@@ -47,12 +48,6 @@ const CTRL_KEY_CODES = new Set(['ControlLeft', 'ControlRight']);
 
 interface RemappedKeyState {
   releasedCtrlCodes: string[];
-}
-
-interface PendingCtrlPasteState {
-  code: string;
-  heldCtrlCodes: Set<string>;
-  releasedCtrlCodes: Set<string>;
 }
 
 interface PendingSyntheticAccentState {
@@ -99,14 +94,11 @@ export class InputController {
   private readonly suppressedKeyups: SuppressedKeyupTracker;
   /** Tracks keys remapped on keydown (e.g., ArrowLeft→Home) for correct keyup. */
   private remappedKeys = new Map<string, RemappedKeyState>();
-  /** Physical Control keys currently held in the browser. */
-  private activeControlCodes = new Set<string>();
   /** Narrow mac dead-key workaround for accented vowels. */
   private pendingSyntheticAccent: PendingSyntheticAccentState | null = null;
-  /** Deferred Ctrl+V while clipboard sync completes. */
-  private pendingCtrlPaste: PendingCtrlPasteState | null = null;
   private readonly pendingComposition: PendingCompositionRuntime;
   private readonly macModifiers: MacModifierStateRuntime;
+  private readonly deferredCtrlPaste: DeferredCtrlPasteRuntime;
 
   // Set by BpaneSession when server capabilities are received
   serverSupportsKeyEventEx = false;
@@ -153,6 +145,11 @@ export class InputController {
       timeoutMs: SUPPRESSED_KEYUP_TIMEOUT_MS,
       setTimeoutFn: window.setTimeout,
       clearTimeoutFn: window.clearTimeout,
+    });
+    this.deferredCtrlPaste = new DeferredCtrlPasteRuntime({
+      emitKeyEvent: (code, down, ctrl) => {
+        this.sendKeyEvent(code, '', down, ctrl, false, false, false, false);
+      },
     });
     this.macModifiers = new MacModifierStateRuntime({
       isMac: this.isMac,
@@ -219,7 +216,7 @@ export class InputController {
       }
 
       if (CTRL_KEY_CODES.has(e.code)) {
-        this.activeControlCodes.add(e.code);
+        this.deferredCtrlPaste.noteControlKeydown(e.code);
       }
 
       if (this.remappedKeys.has(e.code)) {
@@ -300,14 +297,9 @@ export class InputController {
 
       if (this.shouldDeferCtrlPasteShortcut(e)) {
         e.preventDefault();
-        if (e.repeat || this.pendingCtrlPaste) {
+        if (e.repeat || !this.deferredCtrlPaste.begin(e.code)) {
           return;
         }
-        this.pendingCtrlPaste = {
-          code: e.code,
-          heldCtrlCodes: new Set(this.activeControlCodes),
-          releasedCtrlCodes: new Set<string>(),
-        };
         this.suppressedKeyups.suppress(e.code);
         void this.syncClipboardBeforePaste().finally(() => {
           this.flushDeferredCtrlPaste();
@@ -430,13 +422,10 @@ export class InputController {
       }
 
       if (CTRL_KEY_CODES.has(e.code)) {
-        if (this.pendingCtrlPaste?.heldCtrlCodes.has(e.code)) {
+        if (this.deferredCtrlPaste.noteControlKeyup(e.code)) {
           e.preventDefault();
-          this.activeControlCodes.delete(e.code);
-          this.pendingCtrlPaste.releasedCtrlCodes.add(e.code);
           return;
         }
-        this.activeControlCodes.delete(e.code);
       }
 
       if (this.pendingSyntheticAccent) {
@@ -532,12 +521,11 @@ export class InputController {
     }
     this.pointerInput.reset();
     this.clipboardSync.reset();
-    this.activeControlCodes.clear();
+    this.deferredCtrlPaste.reset();
     this.macModifiers.reset();
     this.remappedKeys.clear();
     this.pendingComposition.reset();
     this.pendingSyntheticAccent = null;
-    this.pendingCtrlPaste = null;
     this.suppressedKeyups.reset();
     this.keyboardSink.destroy();
   }
@@ -639,13 +627,7 @@ export class InputController {
   }
 
   private shouldDeferCtrlPasteShortcut(e: KeyboardEvent): boolean {
-    return this.clipboardEnabled
-      && e.code === 'KeyV'
-      && e.ctrlKey
-      && !e.altKey
-      && !e.metaKey
-      && !e.shiftKey
-      && this.activeControlCodes.size > 0;
+    return this.deferredCtrlPaste.shouldDeferPaste(e, this.clipboardEnabled);
   }
 
   private dispatchAtomicMacCtrlShortcut(code: string, key: string): void {
@@ -672,16 +654,7 @@ export class InputController {
   }
 
   private flushDeferredCtrlPaste(): void {
-    const pending = this.pendingCtrlPaste;
-    if (!pending) return;
-
-    this.pendingCtrlPaste = null;
-    this.sendKeyEvent(pending.code, '', true, true, false, false, false, false);
-    this.sendKeyEvent(pending.code, '', false, true, false, false, false, false);
-
-    for (const ctrlCode of pending.releasedCtrlCodes) {
-      this.sendKeyEvent(ctrlCode, '', false, false, false, false, false, false);
-    }
+    this.deferredCtrlPaste.flush();
   }
 }
 
