@@ -17,16 +17,24 @@ export class SuppressedKeyupTracker {
     this.clearTimeoutFn = input.clearTimeoutFn;
   }
 
+  private setTimeout(callback: () => void): number {
+    return Reflect.apply(this.setTimeoutFn, globalThis, [callback, this.timeoutMs]);
+  }
+
+  private clearTimeout(timer: number): void {
+    Reflect.apply(this.clearTimeoutFn, globalThis, [timer]);
+  }
+
   suppress(code: string): void {
     this.suppressedCodes.add(code);
     const existingTimer = this.timers.get(code);
     if (existingTimer !== undefined) {
-      this.clearTimeoutFn(existingTimer);
+      this.clearTimeout(existingTimer);
     }
-    const timer = this.setTimeoutFn(() => {
+    const timer = this.setTimeout(() => {
       this.suppressedCodes.delete(code);
       this.timers.delete(code);
-    }, this.timeoutMs);
+    });
     this.timers.set(code, timer);
   }
 
@@ -37,7 +45,7 @@ export class SuppressedKeyupTracker {
     this.suppressedCodes.delete(code);
     const timer = this.timers.get(code);
     if (timer !== undefined) {
-      this.clearTimeoutFn(timer);
+      this.clearTimeout(timer);
       this.timers.delete(code);
     }
     return true;
@@ -46,7 +54,7 @@ export class SuppressedKeyupTracker {
   reset(): void {
     this.suppressedCodes.clear();
     for (const timer of this.timers.values()) {
-      this.clearTimeoutFn(timer);
+      this.clearTimeout(timer);
     }
     this.timers.clear();
   }
