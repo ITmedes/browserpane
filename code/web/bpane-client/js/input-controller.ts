@@ -28,6 +28,7 @@ import {
 } from './input/layout-hint.js';
 import { PointerInputRuntime } from './input/pointer-input-runtime.js';
 import { ShortcutGatingPolicy } from './input/shortcut-gating-policy.js';
+import { ShortcutKeyReleaseRuntime } from './input/shortcut-key-release-runtime.js';
 import { SuppressedKeyupTracker } from './input/suppressed-keyup-tracker.js';
 import {
   composeSyntheticDeadAccent,
@@ -98,6 +99,7 @@ export class InputController {
   private readonly macModifiers: MacModifierStateRuntime;
   private readonly deferredCtrlPaste: DeferredCtrlPasteRuntime;
   private readonly shortcutPolicy: ShortcutGatingPolicy;
+  private readonly shortcutKeyRelease: ShortcutKeyReleaseRuntime;
 
   // Set by BpaneSession when server capabilities are received
   serverSupportsKeyEventEx = false;
@@ -154,6 +156,7 @@ export class InputController {
       isMac: this.isMac,
       macMetaAsCtrl: this.macMetaAsCtrl,
     });
+    this.shortcutKeyRelease = new ShortcutKeyReleaseRuntime();
     this.macModifiers = new MacModifierStateRuntime({
       isMac: this.isMac,
       macMetaAsCtrl: this.macMetaAsCtrl,
@@ -402,7 +405,17 @@ export class InputController {
         alt = false;
       }
 
-      this.sendKeyEvent(e.code, e.key, true, ctrl, alt, e.shiftKey, meta && !this.macMetaAsCtrl, altgr);
+      if (this.sendKeyEvent(e.code, e.key, true, ctrl, alt, e.shiftKey, meta && !this.macMetaAsCtrl, altgr)) {
+        this.shortcutKeyRelease.noteSentKeydown({
+          code: e.code,
+          key: e.key,
+          ctrl,
+          alt,
+          shift: e.shiftKey,
+          meta: meta && !this.macMetaAsCtrl,
+          altgr,
+        });
+      }
     }, { signal });
 
     keyboardTarget.addEventListener('keyup', (e: KeyboardEvent) => {
@@ -414,12 +427,16 @@ export class InputController {
         return;
       }
 
-      if (this.macModifiers.handleMetaKeyup(e.code)) {
+      if (this.macModifiers.isMacMetaKey(e.code)) {
+        this.releaseTrackedShortcutKeysForModifierKeyup(e);
+        this.macModifiers.handleMetaKeyup(e.code);
         e.preventDefault();
         return;
       }
 
-      if (this.macModifiers.handleOptionKeyup(e.code)) {
+      if (this.macModifiers.isMacOptionKey(e.code)) {
+        this.releaseTrackedShortcutKeysForModifierKeyup(e);
+        this.macModifiers.handleOptionKeyup(e.code);
         e.preventDefault();
         return;
       }
@@ -430,6 +447,8 @@ export class InputController {
           return;
         }
       }
+
+      this.shortcutKeyRelease.noteObservedKeyup(e.code);
 
       if (this.pendingSyntheticAccent) {
         if (e.code === this.pendingSyntheticAccent.baseCode) {
@@ -478,6 +497,7 @@ export class InputController {
         return;
       }
 
+      this.releaseTrackedShortcutKeysForModifierKeyup(e);
       e.preventDefault();
 
       let altgr = e.getModifierState('AltGraph');
@@ -530,6 +550,7 @@ export class InputController {
     this.pendingComposition.reset();
     this.pendingSyntheticAccent = null;
     this.suppressedKeyups.reset();
+    this.shortcutKeyRelease.reset();
     this.keyboardSink.destroy();
   }
 
@@ -565,7 +586,7 @@ export class InputController {
     shift: boolean,
     meta: boolean,
     altgr: boolean = false,
-  ): void {
+  ): boolean {
     const payload = encodeKeyEventMessage({
       code,
       key,
@@ -578,9 +599,10 @@ export class InputController {
       extended: this.serverSupportsKeyEventEx,
     });
     if (!payload) {
-      return;
+      return false;
     }
     this.sendFrame(CH_INPUT, payload);
+    return true;
   }
 
   /** Send keyboard layout hint to server. */
@@ -633,6 +655,23 @@ export class InputController {
 
   private flushDeferredCtrlPaste(): void {
     this.deferredCtrlPaste.flush();
+  }
+
+  private releaseTrackedShortcutKeysForModifierKeyup(e: KeyboardEvent): void {
+    const releases = this.shortcutKeyRelease.releaseKeysForModifierKeyup(e);
+    for (const release of releases) {
+      this.sendKeyEvent(
+        release.code,
+        release.key,
+        false,
+        release.ctrl,
+        release.alt,
+        release.shift,
+        release.meta,
+        release.altgr,
+      );
+      this.suppressedKeyups.suppress(release.code);
+    }
   }
 }
 

@@ -456,6 +456,28 @@ describe('InputController macOS command remapping', () => {
     ]);
   });
 
+  it('releases Cmd+L when the browser drops the keyup before Meta is released', () => {
+    const { keyboardTarget, controller, sentFrames } = createController();
+
+    dispatchKey(keyboardTarget, 'keydown', { code: 'MetaLeft', key: 'Meta', metaKey: true });
+    dispatchKey(keyboardTarget, 'keydown', { code: 'KeyL', key: 'l', metaKey: true });
+    dispatchKey(keyboardTarget, 'keyup', { code: 'MetaLeft', key: 'Meta' });
+
+    controller.destroy();
+
+    const keyFrames = decodeKeyFrames(sentFrames);
+    expect(keyFrames.map(({ keycode, down, modifiers }) => ({
+      keycode,
+      down,
+      modifiers,
+    }))).toEqual([
+      { keycode: 29, down: true, modifiers: 0 },
+      { keycode: 38, down: true, modifiers: 1 },
+      { keycode: 38, down: false, modifiers: 1 },
+      { keycode: 29, down: false, modifiers: 0 },
+    ]);
+  });
+
   it('waits for clipboard sync before dispatching Cmd+V', async () => {
     let resolveClipboard = (_text: string) => {};
     const readText = vi.fn(() => new Promise<string>((resolve) => {
@@ -1053,6 +1075,30 @@ describe('InputController macOS command remapping', () => {
 });
 
 describe('InputController Windows paste handling', () => {
+  it('releases Ctrl+L when the browser drops the keyup before Control is released', () => {
+    setPlatform('Win32', 'Windows');
+
+    const { keyboardTarget, controller, sentFrames } = createController();
+
+    dispatchKey(keyboardTarget, 'keydown', { code: 'ControlLeft', key: 'Control', ctrlKey: true });
+    dispatchKey(keyboardTarget, 'keydown', { code: 'KeyL', key: 'l', ctrlKey: true });
+    dispatchKey(keyboardTarget, 'keyup', { code: 'ControlLeft', key: 'Control' });
+
+    controller.destroy();
+
+    const keyFrames = decodeKeyFrames(sentFrames);
+    expect(keyFrames.map(({ keycode, down, modifiers }) => ({
+      keycode,
+      down,
+      modifiers,
+    }))).toEqual([
+      { keycode: 29, down: true, modifiers: 1 },
+      { keycode: 38, down: true, modifiers: 1 },
+      { keycode: 38, down: false, modifiers: 1 },
+      { keycode: 29, down: false, modifiers: 0 },
+    ]);
+  });
+
   it('waits for clipboard sync before Ctrl+V and delays Ctrl release until after V', async () => {
     setPlatform('Win32', 'Windows');
 
