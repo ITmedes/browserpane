@@ -63,6 +63,7 @@ export class TileDrawRuntime {
   private gridOffsetY = 0;
   private applyOffsetMode = true;
   private onCacheMiss: ((event: CacheMissEvent) => void) | null = null;
+  private scrollCopyEnabled = true;
   private readonly fillTileRenderer: FillTileRendererLike;
   private readonly cacheHitTileRenderer: CacheHitTileRendererLike;
   private readonly qoiTileRenderer: QoiTileRendererLike;
@@ -115,6 +116,10 @@ export class TileDrawRuntime {
     this.onCacheMiss = handler;
   }
 
+  setScrollCopyEnabled(enabled: boolean): void {
+    this.scrollCopyEnabled = enabled;
+  }
+
   applyGridConfig(config: TileGridConfig): void {
     this.gridConfig = config;
     this.cache.clear();
@@ -146,6 +151,9 @@ export class TileDrawRuntime {
   }
 
   applyScrollCopy(dx: number, dy: number, regionTop: number, regionBottom: number, regionRight: number): void {
+    if (!this.scrollCopyEnabled) {
+      return;
+    }
     if (!this.gridConfig) {
       return;
     }

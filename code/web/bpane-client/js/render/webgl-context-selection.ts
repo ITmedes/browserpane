@@ -5,6 +5,7 @@ export type RenderSelectionReason =
   | 'unsupported'
   | 'major-performance-caveat'
   | 'software-renderer'
+  | 'forced-canvas2d'
   | 'initialization-failed';
 
 export interface WebGLContextInfo {

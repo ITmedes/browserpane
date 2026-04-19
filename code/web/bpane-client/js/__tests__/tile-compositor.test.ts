@@ -307,6 +307,20 @@ describe('TileCompositor', () => {
       expect(compositor.stats.scrollCopies).toBe(1);
     });
 
+    it('skips scroll-copy drawing when the diagnostic toggle is disabled', async () => {
+      compositor.setScrollCopyEnabled(false);
+      compositor.handlePayload(buildGridConfigPayload({
+        tileSize: 64, cols: 10, rows: 10, screenW: 640, screenH: 640,
+      }));
+
+      compositor.processCommand({ type: 'scroll-copy', dx: 0, dy: -128, regionTop: 0, regionBottom: 640, regionRight: 640 });
+      compositor.processCommand({ type: 'batch-end', frameSeq: 1 });
+      await new Promise(r => setTimeout(r, 10));
+
+      expect(ctx.drawImage).not.toHaveBeenCalled();
+      expect(compositor.stats.scrollCopies).toBe(0);
+    });
+
     it('clips and redraws a viewport-only scroll at the shifted Y position', async () => {
       compositor.handlePayload(buildGridConfigPayload({
         tileSize: 64, cols: 10, rows: 10, screenW: 640, screenH: 640,

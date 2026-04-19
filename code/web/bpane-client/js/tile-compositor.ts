@@ -131,6 +131,11 @@ export class TileCompositor {
     this.tileDrawRuntime.setCacheMissHandler(handler);
   }
 
+  /** Diagnostic switch to disable retained scroll-copy reuse. */
+  setScrollCopyEnabled(enabled: boolean): void {
+    this.tileDrawRuntime.setScrollCopyEnabled(enabled);
+  }
+
   /**
    * Process a raw Tiles channel payload.
    * Returns the parsed command, or null if malformed.
