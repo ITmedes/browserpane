@@ -40,7 +40,6 @@ import {
 } from './input/synthetic-dead-accent.js';
 import { MacModifierStateRuntime } from './input/mac-modifier-state-runtime.js';
 import { PendingCompositionRuntime } from './input/pending-composition-runtime.js';
-import { fnvHash } from './hash.js';
 
 const PENDING_COMPOSITION_FALLBACK_MS = 16;
 const SUPPRESSED_KEYUP_TIMEOUT_MS = 750;
@@ -167,7 +166,7 @@ export class InputController {
           event.altgr,
         );
       },
-      syncClipboardBeforePaste: () => this.syncClipboardBeforePaste(),
+      syncClipboardBeforePaste: () => this.clipboardSync.syncClipboardBeforePaste(),
     });
     this.shortcutPolicy = new ShortcutGatingPolicy({
       isMac: this.isMac,
@@ -312,23 +311,15 @@ export class InputController {
           return;
         }
         this.suppressedKeyups.suppress(e.code);
-        void this.syncClipboardBeforePaste().finally(() => {
-          this.flushDeferredCtrlPaste();
+        void this.clipboardSync.syncClipboardBeforePaste().finally(() => {
+          this.deferredCtrlPaste.flush();
         });
         return;
       }
 
       // Intercept Ctrl+V / Cmd+V: sync clipboard before keystroke
       if (effectiveCtrl && e.code === 'KeyV' && !e.repeat && this.clipboardEnabled) {
-        navigator.clipboard.readText().then((text) => {
-          if (text) {
-            const hash = fnvHash(text);
-            if (hash !== this.lastClipboardHash) {
-              this.lastClipboardHash = hash;
-              this.sendClipboardText(text);
-            }
-          }
-        }).catch(() => {});
+        void this.clipboardSync.refreshClipboardText();
       }
 
       // Mac Cmd+Arrow → Home/End remapping (text line selection shortcuts).
@@ -571,14 +562,6 @@ export class InputController {
 
   private shouldDeferCtrlPasteShortcut(e: KeyboardEvent): boolean {
     return this.deferredCtrlPaste.shouldDeferPaste(e, this.clipboardEnabled);
-  }
-
-  private syncClipboardBeforePaste(): Promise<void> {
-    return this.clipboardSync.syncClipboardBeforePaste();
-  }
-
-  private flushDeferredCtrlPaste(): void {
-    this.deferredCtrlPaste.flush();
   }
 
   private releaseTrackedShortcutKeysForModifierKeyup(e: KeyboardEvent): void {

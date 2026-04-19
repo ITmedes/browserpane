@@ -74,8 +74,12 @@ export class ClipboardSyncRuntime {
     this.listenersBound = false;
   }
 
-  syncClipboardBeforePaste(): Promise<void> {
+  refreshClipboardText(): Promise<void> {
     return this.readAndSendClipboardText();
+  }
+
+  syncClipboardBeforePaste(): Promise<void> {
+    return this.refreshClipboardText();
   }
 
   private scheduleTimeout(callback: () => void, delayMs: number): number {
@@ -84,7 +88,7 @@ export class ClipboardSyncRuntime {
 
   private scheduleClipboardRead(): void {
     this.scheduleTimeout(() => {
-      void this.readAndSendClipboardText();
+      void this.refreshClipboardText();
     }, CLIPBOARD_SYNC_DELAY_MS);
   }
 
