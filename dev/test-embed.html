@@ -130,8 +130,20 @@
       <button id="btn-connect">Connect</button>
       <button id="btn-disconnect" disabled>Disconnect</button>
       <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
+        Render
+        <select id="render-backend-select">
+          <option value="auto" selected>Auto</option>
+          <option value="webgl2">WebGL2</option>
+          <option value="canvas2d">Canvas2D</option>
+        </select>
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
         <input type="checkbox" id="hidpi-toggle" checked>
         HiDPI (use devicePixelRatio)
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
+        <input type="checkbox" id="scroll-copy-toggle" checked>
+        Scroll Copy
       </label>
       <button id="btn-camera" disabled>Cam Off</button>
       <button id="btn-mic" disabled>Mic Off</button>
@@ -194,7 +206,9 @@
     const transferRateEl = document.getElementById('transfer-rate');
     const connectBtn = document.getElementById('btn-connect');
     const disconnectBtn = document.getElementById('btn-disconnect');
+    const renderBackendSelect = document.getElementById('render-backend-select');
     const hidpiToggle = document.getElementById('hidpi-toggle');
+    const scrollCopyToggle = document.getElementById('scroll-copy-toggle');
     const logsBtn = document.getElementById('btn-logs');
     const cameraBtn = document.getElementById('btn-camera');
     const micBtn = document.getElementById('btn-mic');
@@ -318,11 +332,17 @@
       log(`Connecting to ${GATEWAY_URL}...`);
 
       try {
+        log(
+          `Connect options: render=${renderBackendSelect.value}, scrollCopy=${scrollCopyToggle.checked ? 'on' : 'off'}, hiDpi=${hidpiToggle.checked}`,
+          'info',
+        );
         session = await BpaneSession.connect({
           container,
           gatewayUrl: `${GATEWAY_URL}/session`,
           token,
+          renderBackend: renderBackendSelect.value,
           hiDpi: hidpiToggle.checked,
+          scrollCopy: scrollCopyToggle.checked,
           clipboard: true,
           audio: true,
           camera: true,

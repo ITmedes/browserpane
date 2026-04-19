@@ -255,12 +255,13 @@ class MockCameraVideoFrame {
 let mockTransport: ReturnType<typeof createMockTransport>;
 let microphoneSupportSpy: ReturnType<typeof vi.spyOn>;
 let cameraSupportSpy: ReturnType<typeof vi.spyOn>;
+let canvasGetContextSpy: ReturnType<typeof installCanvasGetContextMock>;
 
 beforeEach(() => {
   mockTransport = createMockTransport();
   microphoneSupportSpy = vi.spyOn(AudioController, 'isMicrophoneSupported').mockResolvedValue(true);
   cameraSupportSpy = vi.spyOn(CameraController, 'isSupported').mockResolvedValue(true);
-  installCanvasGetContextMock();
+  canvasGetContextSpy = installCanvasGetContextMock();
 
   // Install mocks on global
   (globalThis as any).WebTransport = vi.fn(() => mockTransport);
@@ -383,6 +384,19 @@ describe('BpaneSession', () => {
       const diagnostics = session.getRenderDiagnostics();
       expect(diagnostics.backend).toBe('canvas2d');
       expect(diagnostics.reason).not.toBe('hardware-accelerated');
+    });
+
+    it('skips WebGL probing when canvas2d is forced', async () => {
+      const { session } = await createSession({ renderBackend: 'canvas2d' });
+
+      expect(session.getRenderDiagnostics()).toEqual({
+        backend: 'canvas2d',
+        renderer: null,
+        vendor: null,
+        software: false,
+        reason: 'forced-canvas2d',
+      });
+      expect(canvasGetContextSpy.mock.calls.some(([contextId]) => contextId === 'webgl2')).toBe(false);
     });
 
     it('constructs WebTransport with correct URL', async () => {

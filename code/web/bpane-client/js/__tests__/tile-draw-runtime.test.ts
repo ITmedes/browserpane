@@ -167,4 +167,30 @@ describe('TileDrawRuntime', () => {
     expect(runtime.getStats().scrollCopies).toBe(1);
     expect(canvasScrollCopyRenderer.apply).toHaveBeenCalledTimes(2);
   });
+
+  it('skips scroll-copy application entirely when disabled', () => {
+    const canvasScrollCopyRenderer = {
+      apply: vi.fn().mockReturnValue(true),
+      reset: vi.fn(),
+    };
+    const runtime = new TileDrawRuntime({
+      cache: new TileCache(),
+      stats: createStats(),
+      canvasScrollCopyRenderer: canvasScrollCopyRenderer as any,
+    });
+    runtime.setContext({ canvas: { width: 640, height: 640 } } as CanvasRenderingContext2D);
+    runtime.applyGridConfig({
+      tileSize: 64,
+      cols: 10,
+      rows: 10,
+      screenW: 640,
+      screenH: 640,
+    });
+    runtime.setScrollCopyEnabled(false);
+
+    runtime.applyScrollCopy(0, -64, 0, 640, 640);
+
+    expect(runtime.getStats().scrollCopies).toBe(0);
+    expect(canvasScrollCopyRenderer.apply).not.toHaveBeenCalled();
+  });
 });

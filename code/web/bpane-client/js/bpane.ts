@@ -29,6 +29,8 @@ import { SessionStreamReaderRuntime } from './session-stream-reader-runtime.js';
 import { SessionTransportRuntime } from './session-transport-runtime.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
 
+export type RenderBackendPreference = 'auto' | 'canvas2d' | 'webgl2';
+
 export interface BpaneOptions {
   container: HTMLElement;
   gatewayUrl: string;
@@ -41,6 +43,10 @@ export interface BpaneOptions {
   fileTransfer?: boolean;
   /** URL to fetch TLS cert SHA-256 hash (base64) for self-signed certs */
   certHashUrl?: string;
+  /** Diagnostic backend override. Defaults to 'auto'. */
+  renderBackend?: RenderBackendPreference;
+  /** Diagnostic switch. Disable retained scroll-copy reuse and rely on repair tiles only. */
+  scrollCopy?: boolean;
   onConnect?: () => void;
   onDisconnect?: (reason: string) => void;
   onError?: (error: Error) => void;
@@ -144,6 +150,7 @@ export class BpaneSession {
   private constructor(options: BpaneOptions) {
     this.options = options;
     this.container = options.container;
+    this.tileCompositor.setScrollCopyEnabled(options.scrollCopy !== false);
     this.audio = new AudioController(
       options.audio ?? true,
       (channelId, payload) => this.sendFrame(channelId, payload),
@@ -312,9 +319,19 @@ export class BpaneSession {
     });
 
     // Try WebGL2 first for GPU-accelerated tile compositing, fall back to Canvas2D.
-    const webgl = WebGLTileRenderer.tryCreate(this.canvas);
-    this.glRenderer = webgl.renderer;
-    this.renderDiagnostics = webgl.diagnostics;
+    if ((options.renderBackend ?? 'auto') !== 'canvas2d') {
+      const webgl = WebGLTileRenderer.tryCreate(this.canvas);
+      this.glRenderer = webgl.renderer;
+      this.renderDiagnostics = webgl.diagnostics;
+    } else {
+      this.renderDiagnostics = {
+        backend: 'canvas2d',
+        renderer: null,
+        vendor: null,
+        software: false,
+        reason: 'forced-canvas2d',
+      };
+    }
     if (this.glRenderer) {
       this.tileCompositor.setWebGLRenderer(this.glRenderer);
       // ctx stays null — Canvas2D is not used when WebGL is active
