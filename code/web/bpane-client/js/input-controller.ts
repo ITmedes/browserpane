@@ -24,6 +24,7 @@ import { DeadKeyStateRuntime } from './input/dead-key-state-runtime.js';
 import { DeferredCtrlPasteRuntime } from './input/deferred-ctrl-paste-runtime.js';
 import { KeyEventStateResolver } from './input/key-event-state-resolver.js';
 import { MacNavigationRemapRuntime } from './input/mac-navigation-remap-runtime.js';
+import { MacNavigationShortcutDispatcher } from './input/mac-navigation-shortcut-dispatcher.js';
 import { KeyboardSinkRuntime } from './input/keyboard-sink-runtime.js';
 import {
   inferLayoutHint,
@@ -81,6 +82,7 @@ export class InputController {
   private readonly macModifiers: MacModifierStateRuntime;
   private readonly keyEventStateResolver: KeyEventStateResolver;
   private readonly macNavigationRemap: MacNavigationRemapRuntime;
+  private readonly macNavigationShortcutDispatcher: MacNavigationShortcutDispatcher;
   private readonly deferredCtrlPaste: DeferredCtrlPasteRuntime;
   private readonly atomicMacShortcutDispatcher: AtomicMacShortcutDispatcher;
   private readonly shortcutPolicy: ShortcutGatingPolicy;
@@ -186,6 +188,14 @@ export class InputController {
       isMacOptionComposition: (event) => this.macModifiers.isMacOptionComposition(event),
     });
     this.macNavigationRemap = new MacNavigationRemapRuntime();
+    this.macNavigationShortcutDispatcher = new MacNavigationShortcutDispatcher({
+      remapRuntime: this.macNavigationRemap,
+      releaseMacCtrlsForRemap: () => this.macModifiers.releaseMacCtrlsForRemap(),
+      restoreMacCtrls: (ctrlCodes) => this.macModifiers.restoreMacCtrls(ctrlCodes),
+      emitNavigationKey: (code, down, shift) => {
+        this.sendKeyEvent(code, '', down, false, false, shift, false, false);
+      },
+    });
     this.pendingComposition = new PendingCompositionRuntime({
       fallbackDelayMs: PENDING_COMPOSITION_FALLBACK_MS,
       setTimeoutFn: window.setTimeout,
@@ -327,15 +337,7 @@ export class InputController {
       // cannot collapse the selection by reusing a held synthetic Home/End key.
       if (this.macMetaAsCtrl && e.metaKey && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
         e.preventDefault();
-        const releasedCtrlCodes = this.macModifiers.releaseMacCtrlsForRemap();
-        const remap = this.macNavigationRemap.begin(e.code, releasedCtrlCodes);
-        if (!remap) {
-          this.macModifiers.restoreMacCtrls(releasedCtrlCodes);
-          return;
-        }
-        this.sendKeyEvent(remap.remapCode, '', true, false, false, e.shiftKey, false, false);
-        this.sendKeyEvent(remap.remapCode, '', false, false, false, e.shiftKey, false, false);
-        this.macModifiers.restoreMacCtrls(releasedCtrlCodes);
+        this.macNavigationShortcutDispatcher.dispatchShortcut(e.code, e.shiftKey);
         return;
       }
 
