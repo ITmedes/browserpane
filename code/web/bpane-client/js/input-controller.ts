@@ -18,6 +18,7 @@ import {
   encodeMouseMoveMessage,
   encodeScrollMessage,
 } from './input/input-message-codec.js';
+import { AtomicMacShortcutDispatcher } from './input/atomic-mac-shortcut-dispatcher.js';
 import { ClipboardSyncRuntime } from './input/clipboard-sync-runtime.js';
 import { DeferredCtrlPasteRuntime } from './input/deferred-ctrl-paste-runtime.js';
 import { KeyEventStateResolver } from './input/key-event-state-resolver.js';
@@ -82,6 +83,7 @@ export class InputController {
   private readonly keyEventStateResolver: KeyEventStateResolver;
   private readonly macNavigationRemap: MacNavigationRemapRuntime;
   private readonly deferredCtrlPaste: DeferredCtrlPasteRuntime;
+  private readonly atomicMacShortcutDispatcher: AtomicMacShortcutDispatcher;
   private readonly shortcutPolicy: ShortcutGatingPolicy;
   private readonly shortcutKeyRelease: ShortcutKeyReleaseRuntime;
   private readonly syntheticDeadAccent: SyntheticDeadAccentRuntime;
@@ -136,6 +138,22 @@ export class InputController {
       emitKeyEvent: (code, down, ctrl) => {
         this.sendKeyEvent(code, '', down, ctrl, false, false, false, false);
       },
+    });
+    this.atomicMacShortcutDispatcher = new AtomicMacShortcutDispatcher({
+      getPreferredCtrlCode: () => this.macModifiers.preferredMacCtrlCode(),
+      emitKeyEvent: (event) => {
+        this.sendKeyEvent(
+          event.code,
+          event.key,
+          event.down,
+          event.ctrl,
+          event.alt,
+          event.shift,
+          event.meta,
+          event.altgr,
+        );
+      },
+      syncClipboardBeforePaste: () => this.syncClipboardBeforePaste(),
     });
     this.shortcutPolicy = new ShortcutGatingPolicy({
       isMac: this.isMac,
@@ -273,7 +291,11 @@ export class InputController {
           return;
         }
         this.suppressedKeyups.suppress(e.code);
-        this.dispatchAtomicMacCtrlShortcutWithClipboardSync(e.code, e.key);
+        this.atomicMacShortcutDispatcher.dispatchShortcutWithClipboardSync({
+          code: e.code,
+          key: e.key,
+          clipboardEnabled: this.clipboardEnabled,
+        });
         return;
       }
 
@@ -556,25 +578,6 @@ export class InputController {
 
   private shouldDeferCtrlPasteShortcut(e: KeyboardEvent): boolean {
     return this.deferredCtrlPaste.shouldDeferPaste(e, this.clipboardEnabled);
-  }
-
-  private dispatchAtomicMacCtrlShortcut(code: string, key: string): void {
-    const ctrlCode = this.macModifiers.preferredMacCtrlCode();
-    this.sendKeyEvent(ctrlCode, '', true, false, false, false, false, false);
-    this.sendKeyEvent(code, key, true, true, false, false, false, false);
-    this.sendKeyEvent(code, key, false, true, false, false, false, false);
-    this.sendKeyEvent(ctrlCode, '', false, false, false, false, false, false);
-  }
-
-  private dispatchAtomicMacCtrlShortcutWithClipboardSync(code: string, key: string): void {
-    if (code !== 'KeyV' || !this.clipboardEnabled) {
-      this.dispatchAtomicMacCtrlShortcut(code, key);
-      return;
-    }
-
-    void this.syncClipboardBeforePaste().finally(() => {
-      this.dispatchAtomicMacCtrlShortcut(code, key);
-    });
   }
 
   private syncClipboardBeforePaste(): Promise<void> {
