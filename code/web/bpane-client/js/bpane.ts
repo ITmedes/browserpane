@@ -23,6 +23,7 @@ import { AudioController } from './audio-controller.js';
 import { CameraController } from './camera-controller.js';
 import { FileTransferController } from './file-transfer.js';
 import { InputController } from './input-controller.js';
+import { SessionCapabilityRuntime } from './session-capability-runtime.js';
 import { UnsupportedFeatureError } from './shared/errors.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
 
@@ -98,6 +99,7 @@ export class BpaneSession {
     fileTransfer: false,
     keyboardLayout: false,
   };
+  private capabilityRuntime: SessionCapabilityRuntime;
   private fileTransfer: FileTransferController | null = null;
   private pingInterval: ReturnType<typeof setInterval> | null = null;
   private pingSeq = 0;
@@ -159,6 +161,17 @@ export class BpaneSession {
       container: this.container,
       enabled: options.fileTransfer !== false,
       sendFrame: (channelId, payload) => this.sendFrame(channelId, payload),
+    });
+    this.capabilityRuntime = new SessionCapabilityRuntime({
+      fileTransferOptionEnabled: options.fileTransfer !== false,
+      stopMicrophone: () => this.audio.stopMicrophone(),
+      stopCamera: () => this.camera.stopCamera(),
+      setFileTransferEnabled: (enabled) => {
+        this.fileTransfer?.setEnabled(enabled);
+      },
+      onCapabilitiesChange: (capabilities) => {
+        this.options.onCapabilitiesChange?.(capabilities);
+      },
     });
 
     // Create canvas element
@@ -1038,35 +1051,13 @@ export class BpaneSession {
   }
 
   private updateCapabilities(): void {
-    const next: SessionCapabilities = {
-      audio: (this.sessionFlags & 0x01) !== 0,
-      microphone: (this.sessionFlags & 0x08) !== 0
-        && this.microphoneEncoderSupported
-        && !this.resolutionLocked,
-      camera: (this.sessionFlags & 0x10) !== 0
-        && this.cameraEncoderSupported
-        && !this.resolutionLocked,
-      fileTransfer: (this.sessionFlags & 0x04) !== 0 && !this.resolutionLocked,
-      keyboardLayout: (this.sessionFlags & 0x20) !== 0 && !this.resolutionLocked,
-    };
-
-    if (!next.microphone) {
-      this.audio.stopMicrophone();
-    }
-    if (!next.camera) {
-      this.camera.stopCamera();
-    }
-    this.fileTransfer?.setEnabled((this.options.fileTransfer !== false) && next.fileTransfer);
-
-    const changed = this.capabilities.audio !== next.audio
-      || this.capabilities.microphone !== next.microphone
-      || this.capabilities.camera !== next.camera
-      || this.capabilities.fileTransfer !== next.fileTransfer
-      || this.capabilities.keyboardLayout !== next.keyboardLayout;
-    this.capabilities = next;
-    if (changed) {
-      this.options.onCapabilitiesChange?.({ ...next });
-    }
+    this.capabilities = this.capabilityRuntime.apply({
+      current: this.capabilities,
+      sessionFlags: this.sessionFlags,
+      microphoneEncoderSupported: this.microphoneEncoderSupported,
+      cameraEncoderSupported: this.cameraEncoderSupported,
+      resolutionLocked: this.resolutionLocked,
+    });
   }
 
   private sendResizeRequest(width: number, height: number): void {
