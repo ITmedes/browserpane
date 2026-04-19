@@ -24,6 +24,7 @@ import { CompositionTextRuntime } from './input/composition-text-runtime.js';
 import { DeadKeyStateRuntime } from './input/dead-key-state-runtime.js';
 import { DeferredCtrlPasteRuntime } from './input/deferred-ctrl-paste-runtime.js';
 import { KeyEventStateResolver } from './input/key-event-state-resolver.js';
+import { KeyboardInputRuntime } from './input/keyboard-input-runtime.js';
 import { MacNavigationRemapRuntime } from './input/mac-navigation-remap-runtime.js';
 import { MacNavigationShortcutDispatcher } from './input/mac-navigation-shortcut-dispatcher.js';
 import { KeyboardSinkRuntime } from './input/keyboard-sink-runtime.js';
@@ -46,8 +47,6 @@ import { PendingCompositionRuntime } from './input/pending-composition-runtime.j
 
 const PENDING_COMPOSITION_FALLBACK_MS = 16;
 const SUPPRESSED_KEYUP_TIMEOUT_MS = 750;
-
-const CTRL_KEY_CODES = new Set(['ControlLeft', 'ControlRight']);
 
 export interface InputControllerDeps {
   /** Canvas element to bind event listeners to. */
@@ -92,6 +91,7 @@ export class InputController {
   private readonly shortcutKeyRelease: ShortcutKeyReleaseRuntime;
   private readonly shortcutKeyReleaseDispatcher: ShortcutKeyReleaseDispatcher;
   private readonly syntheticDeadAccent: SyntheticDeadAccentRuntime;
+  private readonly keyboardInput: KeyboardInputRuntime;
 
   // Set by BpaneSession when server capabilities are received
   serverSupportsKeyEventEx = false;
@@ -243,6 +243,37 @@ export class InputController {
         this.keyboardSink.clear();
       },
     });
+    this.keyboardInput = new KeyboardInputRuntime({
+      clipboardEnabled: this.clipboardEnabled,
+      isMac: this.isMac,
+      macMetaAsCtrl: this.macMetaAsCtrl,
+      keyboardSink: this.keyboardSink,
+      suppressedKeyups: this.suppressedKeyups,
+      macModifiers: this.macModifiers,
+      deferredCtrlPaste: this.deferredCtrlPaste,
+      macNavigationRemap: this.macNavigationRemap,
+      resolveSupportedDeadAccent,
+      deadKeyState: this.deadKeyState,
+      syntheticDeadAccent: this.syntheticDeadAccent,
+      shortcutPolicy: this.shortcutPolicy,
+      atomicMacShortcutDispatcher: this.atomicMacShortcutDispatcher,
+      clipboardSync: this.clipboardSync,
+      macNavigationShortcutDispatcher: this.macNavigationShortcutDispatcher,
+      pendingComposition: this.pendingComposition,
+      keyEventStateResolver: this.keyEventStateResolver,
+      shortcutKeyRelease: this.shortcutKeyRelease,
+      shortcutKeyReleaseDispatcher: this.shortcutKeyReleaseDispatcher,
+      emitKeyEvent: (event) => this.sendKeyEvent(
+        event.code,
+        event.key,
+        event.down,
+        event.ctrl,
+        event.alt,
+        event.shift,
+        event.meta,
+        event.altgr,
+      ),
+    });
   }
 
   /** Set up all DOM event listeners on the canvas. */
@@ -256,240 +287,10 @@ export class InputController {
         keyboardTarget.focus();
       },
     });
-
-    keyboardTarget.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (!e.repeat) {
-        this.suppressedKeyups.clear(e.code);
-      }
-
-      if (this.macModifiers.isMacMetaKey(e.code)) {
-        e.preventDefault();
-        this.macModifiers.noteMetaKeydown(e.code);
-        return;
-      }
-
-      if (this.macModifiers.isMacOptionKey(e.code)) {
-        e.preventDefault();
-        this.macModifiers.noteOptionKeydown(e.code);
-        return;
-      }
-
-      if (CTRL_KEY_CODES.has(e.code)) {
-        this.deferredCtrlPaste.noteControlKeydown(e.code);
-      }
-
-      if (this.macNavigationRemap.hasActiveRemap(e.code)) {
-        e.preventDefault();
-        return;
-      }
-
-      const supportedDeadAccent = resolveSupportedDeadAccent(e, this.isMac);
-      if (supportedDeadAccent) {
-        e.preventDefault();
-        this.deadKeyState.startSupportedDeadAccent(e.code);
-        this.syntheticDeadAccent.begin(supportedDeadAccent, e.code);
-        return;
-      }
-
-      const syntheticDeadAccentKeydown = this.syntheticDeadAccent.handleKeydown(e);
-      if (syntheticDeadAccentKeydown.handled) {
-        e.preventDefault();
-        if (syntheticDeadAccentKeydown.clearKeyboardSink) {
-          this.keyboardSink.clear();
-        }
-        return;
-      }
-
-      if (syntheticDeadAccentKeydown.fallback) {
-        this.deadKeyState.applySyntheticAccentFallback(syntheticDeadAccentKeydown.fallback);
-      }
-
-      if (this.deadKeyState.shouldIgnoreComposingKeydown(e.isComposing)) return;
-
-      // Keep the hosted Chromium window pinned open and at a fixed size.
-      if (this.shortcutPolicy.shouldSuppressLockedWindowShortcut(e)) {
-        e.preventDefault();
-        if (!e.repeat) {
-          this.suppressedKeyups.suppress(e.code);
-        }
-        return;
-      }
-
-      // Mac Meta passthrough: let browser handle Cmd+Q, Cmd+W, Cmd+Tab
-      if (this.shortcutPolicy.shouldPassThroughMacMetaShortcut(e)) {
-        this.macModifiers.releaseMacCtrlsForRemap();
-        return; // don't preventDefault, let browser handle
-      }
-
-      const effectiveCtrl = e.ctrlKey || (this.macMetaAsCtrl && e.metaKey);
-      if (this.shortcutPolicy.shouldSendAtomicMacCtrlShortcut(e)) {
-        e.preventDefault();
-        if (e.repeat) {
-          return;
-        }
-        this.suppressedKeyups.suppress(e.code);
-        this.atomicMacShortcutDispatcher.dispatchShortcutWithClipboardSync({
-          code: e.code,
-          key: e.key,
-          clipboardEnabled: this.clipboardEnabled,
-        });
-        return;
-      }
-
-      if (this.shouldDeferCtrlPasteShortcut(e)) {
-        e.preventDefault();
-        if (e.repeat || !this.deferredCtrlPaste.begin(e.code)) {
-          return;
-        }
-        this.suppressedKeyups.suppress(e.code);
-        void this.clipboardSync.syncClipboardBeforePaste().finally(() => {
-          this.deferredCtrlPaste.flush();
-        });
-        return;
-      }
-
-      // Intercept Ctrl+V / Cmd+V: sync clipboard before keystroke
-      if (effectiveCtrl && e.code === 'KeyV' && !e.repeat && this.clipboardEnabled) {
-        void this.clipboardSync.refreshClipboardText();
-      }
-
-      // Mac Cmd+Arrow → Home/End remapping (text line selection shortcuts).
-      // Dispatch atomically on keydown so later modifier release/repeat events
-      // cannot collapse the selection by reusing a held synthetic Home/End key.
-      if (this.macMetaAsCtrl && e.metaKey && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
-        e.preventDefault();
-        this.macNavigationShortcutDispatcher.dispatchShortcut(e.code, e.shiftKey);
-        return;
-      }
-
-      // Dead keys: do NOT call preventDefault — browser needs default handling
-      // to enter composition mode. Without it, ´+e won't produce é.
-      if (e.key === 'Dead') {
-        this.deadKeyState.noteNativeDeadKey(e.code);
-        return;
-      }
-
-      if (this.deadKeyState.beginPendingCompositionIfNeeded({
-          code: e.code,
-          shift: e.shiftKey,
-          fallbackKey: e.key,
-        })) {
-        return;
-      }
-
-      if (this.pendingComposition.hasPendingCode(e.code)) {
-        e.preventDefault();
-        return;
-      }
-
-      e.preventDefault();
-
-      if (this.macModifiers.shouldMaterializeMacCtrl(e)) {
-        this.macModifiers.materializeMacCtrl();
-      }
-      if (this.macModifiers.shouldMaterializeMacOption(e)) {
-        this.macModifiers.materializeMacOption();
-      }
-
-      const resolvedState = this.keyEventStateResolver.resolve(e);
-      if (this.sendKeyEvent(
-        e.code,
-        e.key,
-        true,
-        resolvedState.ctrl,
-        resolvedState.alt,
-        resolvedState.shift,
-        resolvedState.meta,
-        resolvedState.altgr,
-      )) {
-        this.shortcutKeyRelease.noteSentKeydown({
-          code: e.code,
-          key: e.key,
-          ctrl: resolvedState.ctrl,
-          alt: resolvedState.alt,
-          shift: resolvedState.shift,
-          meta: resolvedState.meta,
-          altgr: resolvedState.altgr,
-        });
-      }
-    }, { signal });
-
-    keyboardTarget.addEventListener('keyup', (e: KeyboardEvent) => {
-      // Clear remapped keys (e.g., Cmd+Left was sent as atomic Home)
-      const remapped = this.macNavigationRemap.handleKeyup(e.code);
-      if (remapped) {
-        e.preventDefault();
-        return;
-      }
-
-      if (this.macModifiers.isMacMetaKey(e.code)) {
-        this.shortcutKeyReleaseDispatcher.releaseKeysForModifierKeyup(e);
-        this.macModifiers.handleMetaKeyup(e.code);
-        e.preventDefault();
-        return;
-      }
-
-      if (this.macModifiers.isMacOptionKey(e.code)) {
-        this.shortcutKeyReleaseDispatcher.releaseKeysForModifierKeyup(e);
-        this.macModifiers.handleOptionKeyup(e.code);
-        e.preventDefault();
-        return;
-      }
-
-      if (CTRL_KEY_CODES.has(e.code)) {
-        if (this.deferredCtrlPaste.noteControlKeyup(e.code)) {
-          e.preventDefault();
-          return;
-        }
-      }
-
-      this.shortcutKeyRelease.noteObservedKeyup(e.code);
-
-      const syntheticDeadAccentKeyup = this.syntheticDeadAccent.handleKeyup(e.code);
-      if (syntheticDeadAccentKeyup.handled) {
-        e.preventDefault();
-        if (syntheticDeadAccentKeyup.emitCharacter) {
-          this.sendKeyEvent(e.code, syntheticDeadAccentKeyup.emitCharacter.key, true, false, false, false, false, false);
-          this.sendKeyEvent(e.code, syntheticDeadAccentKeyup.emitCharacter.key, false, false, false, false, false, false);
-        }
-        if (syntheticDeadAccentKeyup.clearDeadKeyCode) {
-          this.deadKeyState.clearTrackedDeadKey();
-        }
-        return;
-      }
-
-      if (this.suppressedKeyups.clear(e.code)) {
-        e.preventDefault();
-        return;
-      }
-
-      if (this.pendingComposition.handleKeyup(e.code)) {
-        e.preventDefault();
-        return;
-      }
-
-      if (e.isComposing) return;
-
-      // Suppress the dead key's own keyup (unpaired release prevention)
-      if (this.deadKeyState.consumeTrackedDeadKeyKeyup(e.code)) {
-        return;
-      }
-
-      this.shortcutKeyReleaseDispatcher.releaseKeysForModifierKeyup(e);
-      e.preventDefault();
-
-      const resolvedState = this.keyEventStateResolver.resolve(e);
-      this.sendKeyEvent(
-        e.code,
-        e.key,
-        false,
-        resolvedState.ctrl,
-        resolvedState.alt,
-        resolvedState.shift,
-        resolvedState.meta,
-        resolvedState.altgr,
-      );
-    }, { signal });
+    this.keyboardInput.bind({
+      keyboardTarget,
+      signal,
+    });
 
     this.compositionText.bind({
       keyboardTarget,
@@ -582,10 +383,6 @@ export class InputController {
         this.sendFrame(CH_CONTROL, encodeLayoutHintMessage(hint));
       },
     });
-  }
-
-  private shouldDeferCtrlPasteShortcut(e: KeyboardEvent): boolean {
-    return this.deferredCtrlPaste.shouldDeferPaste(e, this.clipboardEnabled);
   }
 }
 
