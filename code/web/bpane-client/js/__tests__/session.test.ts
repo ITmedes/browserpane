@@ -876,6 +876,52 @@ describe('BpaneSession', () => {
       await new Promise(r => setTimeout(r, 10));
     });
 
+    it('keeps the last cursor position when CursorShape arrives without a move', async () => {
+      const { container } = await createSession();
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await new Promise(r => setTimeout(r, 10));
+
+      const cursorCanvas = container.querySelectorAll('canvas')[1] as HTMLCanvasElement;
+      const cursorCtx = cursorCanvas.getContext('2d') as unknown as {
+        drawImage: ReturnType<typeof vi.fn>;
+      };
+
+      const movePayload = new Uint8Array(5);
+      const moveView = new DataView(movePayload.buffer);
+      moveView.setUint8(0, 0x01); // CursorMove
+      moveView.setUint16(1, 100, true);
+      moveView.setUint16(3, 200, true);
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CURSOR, movePayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      cursorCtx.drawImage.mockClear();
+
+      const width = 16;
+      const height = 16;
+      const dataLen = width * height * 4;
+      const shapePayload = new Uint8Array(11 + dataLen);
+      const shapeView = new DataView(shapePayload.buffer);
+      shapeView.setUint8(0, 0x02); // CursorShape
+      shapeView.setUint16(1, width, true);
+      shapeView.setUint16(3, height, true);
+      shapeView.setUint8(5, 8); // hotspot_x
+      shapeView.setUint8(6, 8); // hotspot_y
+      shapeView.setUint32(7, dataLen, true);
+      for (let i = 0; i < dataLen; i += 4) {
+        shapePayload[11 + i] = 255;
+        shapePayload[11 + i + 1] = 255;
+        shapePayload[11 + i + 2] = 255;
+        shapePayload[11 + i + 3] = 255;
+      }
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CURSOR, shapePayload));
+
+      await new Promise(r => setTimeout(r, 10));
+      expect(cursorCtx.drawImage).toHaveBeenCalledTimes(1);
+      expect(cursorCtx.drawImage.mock.calls[0]?.[1]).toBe(92);
+      expect(cursorCtx.drawImage.mock.calls[0]?.[2]).toBe(192);
+    });
+
     it('processes CursorShape messages', async () => {
       await createSession();
 
