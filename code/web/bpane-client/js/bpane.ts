@@ -77,6 +77,7 @@ export class BpaneSession {
   private cursorEl: HTMLCanvasElement | null = null;
   private cursorCtx: CanvasRenderingContext2D | null = null;
   private cursorHotspot: { x: number; y: number } = { x: 0, y: 0 };
+  private cursorPosition: { x: number; y: number } | null = null;
   private sendWritable: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private pendingFrames: Uint8Array[] = [];
   private pendingCameraFrame: Uint8Array | null = null;
@@ -415,6 +416,7 @@ export class BpaneSession {
       this.cursorEl = null;
       this.cursorCtx = null;
     }
+    this.cursorPosition = null;
 
     this.tileCompositor.reset();
     if (this.glRenderer) {
@@ -951,7 +953,11 @@ export class BpaneSession {
       if (payload.length < 11 + dataLen) return;
       const data = payload.subarray(11, 11 + dataLen);
       this.cursorHotspot = { x: hotspot_x, y: hotspot_y };
-      this.drawCursor({ width, height, data }, null, null);
+      this.drawCursor(
+        { width, height, data },
+        this.cursorPosition?.x ?? null,
+        this.cursorPosition?.y ?? null,
+      );
       this.displayDirty = true;
     }
   }
@@ -1130,6 +1136,9 @@ export class BpaneSession {
     moveY: number | null,
   ): void {
     if (!this.cursorEl || !this.cursorCtx) return;
+    if (moveX !== null && moveY !== null) {
+      this.cursorPosition = { x: moveX, y: moveY };
+    }
     // Resize overlay if needed
     const w = Math.max(64, this.canvas.width);
     const h = Math.max(64, this.canvas.height);
@@ -1159,9 +1168,13 @@ export class BpaneSession {
       }
     }
 
+    if (!this.cursorPosition) {
+      return;
+    }
+
     const bmp = (this.cursorCtx as any)._cursorBitmap as HTMLCanvasElement | null;
-    const x = (moveX ?? 0) - this.cursorHotspot.x;
-    const y = (moveY ?? 0) - this.cursorHotspot.y;
+    const x = this.cursorPosition.x - this.cursorHotspot.x;
+    const y = this.cursorPosition.y - this.cursorHotspot.y;
     if (bmp) {
       this.cursorCtx.drawImage(bmp, x, y);
     } else {
