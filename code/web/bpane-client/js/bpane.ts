@@ -6,8 +6,6 @@
  */
 
 import {
-  parseFrames,
-  FRAME_HEADER_SIZE,
   CH_VIDEO, CH_AUDIO_OUT, CH_CURSOR,
   CH_CLIPBOARD, CH_CONTROL, CH_FILE_DOWN,
 } from './protocol.js';
@@ -26,6 +24,7 @@ import { SessionControlRuntime } from './session-control-runtime.js';
 import { SessionCursorRuntime } from './session-cursor-runtime.js';
 import { SessionResizeRuntime } from './session-resize-runtime.js';
 import { SessionSendRuntime } from './session-send-runtime.js';
+import { SessionStreamReaderRuntime } from './session-stream-reader-runtime.js';
 import { SessionTransportRuntime } from './session-transport-runtime.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
 
@@ -93,6 +92,7 @@ export class BpaneSession {
   };
   private capabilityRuntime: SessionCapabilityRuntime;
   private fileTransfer: FileTransferController | null = null;
+  private streamReaderRuntime: SessionStreamReaderRuntime;
   private transportRuntime: SessionTransportRuntime;
   private pingSeq = 0;
   private remoteWidth = 0;
@@ -207,6 +207,18 @@ export class BpaneSession {
       },
       onWriteError: (message, error) => {
         console.error(message, error);
+      },
+    });
+    this.streamReaderRuntime = new SessionStreamReaderRuntime({
+      isConnected: () => this.connected,
+      recordRx: (channelId, bytes) => {
+        this.stats.recordRx(channelId, bytes);
+      },
+      onFrame: (channelId, payload) => {
+        this.handleFrame(channelId, payload);
+      },
+      onReadError: (error) => {
+        console.error('[bpane] stream read error:', error);
       },
     });
     this.transportRuntime = new SessionTransportRuntime({
@@ -675,51 +687,7 @@ export class BpaneSession {
         this.sendResizeRequest(dims.width, dims.height);
       });
     }
-
-    const reader = stream.readable.getReader();
-    let buf = new Uint8Array(128 * 1024);
-    let bufLen = 0;
-
-    try {
-      while (this.connected) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (!value) continue;
-
-        const chunk = new Uint8Array(value.buffer || value, value.byteOffset || 0, value.byteLength || value.length);
-
-        // Grow buffer if needed (double or fit, whichever is larger)
-        const needed = bufLen + chunk.length;
-        if (needed > buf.length) {
-          const newBuf = new Uint8Array(Math.max(needed, buf.length * 2));
-          newBuf.set(buf.subarray(0, bufLen));
-          buf = newBuf;
-        }
-
-        // Append chunk
-        buf.set(chunk, bufLen);
-        bufLen += chunk.length;
-
-        // Parse frames from buf[0..bufLen] — payloads are zero-copy subarray views
-        const [frames, remaining] = parseFrames(buf.subarray(0, bufLen));
-
-        // Process frames synchronously (safe: subarray views into buf are valid until next iteration)
-        for (const frame of frames) {
-          this.stats.recordRx(frame.channelId, frame.payload.length + FRAME_HEADER_SIZE);
-          this.handleFrame(frame.channelId, frame.payload);
-        }
-
-        // Compact: move remaining bytes to front
-        if (remaining.length > 0) {
-          buf.copyWithin(0, bufLen - remaining.length, bufLen);
-        }
-        bufLen = remaining.length;
-      }
-    } catch (e) {
-      if (this.connected) {
-        console.error('[bpane] stream read error:', e);
-      }
-    }
+    await this.streamReaderRuntime.readStream(stream);
   }
 
   private handleFrame(channelId: number, payload: Uint8Array): void {
