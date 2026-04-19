@@ -20,6 +20,7 @@ import {
 } from './input/input-message-codec.js';
 import { AtomicMacShortcutDispatcher } from './input/atomic-mac-shortcut-dispatcher.js';
 import { ClipboardSyncRuntime } from './input/clipboard-sync-runtime.js';
+import { DeadKeyStateRuntime } from './input/dead-key-state-runtime.js';
 import { DeferredCtrlPasteRuntime } from './input/deferred-ctrl-paste-runtime.js';
 import { KeyEventStateResolver } from './input/key-event-state-resolver.js';
 import { MacNavigationRemapRuntime } from './input/mac-navigation-remap-runtime.js';
@@ -70,11 +71,10 @@ export class InputController {
   private macMetaAsCtrl: boolean;
   private isMac: boolean;
 
-  private deadKeyPending = false;
-  private deadKeyCode: string | null = null;
   private inputAbortController: AbortController | null = null;
   private lastClipboardHash: bigint = 0n;
   private readonly clipboardSync: ClipboardSyncRuntime;
+  private readonly deadKeyState: DeadKeyStateRuntime;
   private readonly keyboardSink: KeyboardSinkRuntime;
   private readonly pointerInput: PointerInputRuntime;
   private readonly suppressedKeyups: SuppressedKeyupTracker;
@@ -110,6 +110,20 @@ export class InputController {
       },
       navigatorLike: typeof navigator === 'undefined' ? undefined : navigator,
       documentLike: typeof document === 'undefined' ? undefined : document,
+    });
+    this.deadKeyState = new DeadKeyStateRuntime({
+      resetPendingComposition: () => {
+        this.pendingComposition.reset();
+      },
+      clearKeyboardSink: () => {
+        this.keyboardSink.clear();
+      },
+      beginPendingComposition: (input) => {
+        this.pendingComposition.begin(input);
+      },
+      emitSyntheticKeyEvent: (code, key, down) => {
+        this.sendKeyEvent(code, key, down, false, false, false, false, false);
+      },
     });
     this.pointerInput = new PointerInputRuntime({
       canvas: this.canvas,
@@ -242,10 +256,7 @@ export class InputController {
       const supportedDeadAccent = resolveSupportedDeadAccent(e, this.isMac);
       if (supportedDeadAccent) {
         e.preventDefault();
-        this.deadKeyPending = false;
-        this.pendingComposition.reset();
-        this.keyboardSink.clear();
-        this.deadKeyCode = e.code;
+        this.deadKeyState.startSupportedDeadAccent(e.code);
         this.syntheticDeadAccent.begin(supportedDeadAccent, e.code);
         return;
       }
@@ -260,14 +271,10 @@ export class InputController {
       }
 
       if (syntheticDeadAccentKeydown.fallback) {
-        this.emitSyntheticAccentFallback(
-          syntheticDeadAccentKeydown.fallback.deadCode,
-          syntheticDeadAccentKeydown.fallback.spacingAccent,
-          syntheticDeadAccentKeydown.fallback.deadKeyCode,
-        );
+        this.deadKeyState.applySyntheticAccentFallback(syntheticDeadAccentKeydown.fallback);
       }
 
-      if (e.isComposing && !this.deadKeyPending) return;
+      if (this.deadKeyState.shouldIgnoreComposingKeydown(e.isComposing)) return;
 
       // Keep the hosted Chromium window pinned open and at a fixed size.
       if (this.shortcutPolicy.shouldSuppressLockedWindowShortcut(e)) {
@@ -344,18 +351,15 @@ export class InputController {
       // Dead keys: do NOT call preventDefault — browser needs default handling
       // to enter composition mode. Without it, ´+e won't produce é.
       if (e.key === 'Dead') {
-        this.deadKeyPending = true;
-        this.deadKeyCode = e.code;
+        this.deadKeyState.noteNativeDeadKey(e.code);
         return;
       }
 
-      if (this.deadKeyPending) {
-        this.deadKeyPending = false;
-        this.pendingComposition.begin({
+      if (this.deadKeyState.beginPendingCompositionIfNeeded({
           code: e.code,
           shift: e.shiftKey,
           fallbackKey: e.key,
-        });
+        })) {
         return;
       }
 
@@ -365,11 +369,6 @@ export class InputController {
       }
 
       e.preventDefault();
-
-      if (this.deadKeyPending) {
-        this.deadKeyPending = false;
-        // Keep deadKeyCode set — we need it to suppress the dead key's own keyup
-      }
 
       if (this.macModifiers.shouldMaterializeMacCtrl(e)) {
         this.macModifiers.materializeMacCtrl();
@@ -440,7 +439,7 @@ export class InputController {
           this.sendKeyEvent(e.code, syntheticDeadAccentKeyup.emitCharacter.key, false, false, false, false, false, false);
         }
         if (syntheticDeadAccentKeyup.clearDeadKeyCode) {
-          this.deadKeyCode = null;
+          this.deadKeyState.clearTrackedDeadKey();
         }
         return;
       }
@@ -458,8 +457,7 @@ export class InputController {
       if (e.isComposing) return;
 
       // Suppress the dead key's own keyup (unpaired release prevention)
-      if (e.code === this.deadKeyCode) {
-        this.deadKeyCode = null;
+      if (this.deadKeyState.consumeTrackedDeadKeyKeyup(e.code)) {
         return;
       }
 
@@ -499,6 +497,7 @@ export class InputController {
     }
     this.pointerInput.reset();
     this.clipboardSync.reset();
+    this.deadKeyState.reset();
     this.deferredCtrlPaste.reset();
     this.macNavigationRemap.reset();
     this.macModifiers.reset();
@@ -568,12 +567,6 @@ export class InputController {
         this.sendFrame(CH_CONTROL, encodeLayoutHintMessage(hint));
       },
     });
-  }
-
-  private emitSyntheticAccentFallback(deadCode: string, spacingAccent: string, deadKeyCode: string | null): void {
-    this.sendKeyEvent(deadCode, spacingAccent, true, false, false, false, false, false);
-    this.sendKeyEvent(deadCode, spacingAccent, false, false, false, false, false, false);
-    this.deadKeyCode = deadKeyCode;
   }
 
   private shouldDeferCtrlPasteShortcut(e: KeyboardEvent): boolean {
