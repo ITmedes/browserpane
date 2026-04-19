@@ -103,3 +103,26 @@ where
         }
     })
 }
+
+pub(super) fn spawn_direct_control_task<S>(
+    session: Arc<Session>,
+    send_stream: Arc<Mutex<S>>,
+    mut control_rx: tokio::sync::mpsc::Receiver<ControlMessage>,
+) -> JoinHandle<()>
+where
+    S: AsyncWrite + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        while let Some(message) = control_rx.recv().await {
+            if !session.is_active() {
+                break;
+            }
+
+            let encoded = message.to_frame().encode();
+            let mut stream = send_stream.lock().await;
+            if stream.write_all(&encoded).await.is_err() {
+                break;
+            }
+        }
+    })
+}

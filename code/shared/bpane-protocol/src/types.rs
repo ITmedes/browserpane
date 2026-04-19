@@ -112,6 +112,87 @@ impl BitAndAssign for SessionFlags {
     }
 }
 
+/// Gateway-managed client access state flags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ClientAccessFlags(u8);
+
+impl ClientAccessFlags {
+    /// Client is in a read-only viewer mode.
+    pub const VIEW_ONLY: Self = Self(0x01);
+    /// Client must keep the current remote resolution and not drive resize.
+    pub const RESIZE_LOCKED: Self = Self(0x02);
+
+    /// Construct access-state flags from raw wire bits.
+    pub const fn new(flags: u8) -> Self {
+        Self(flags)
+    }
+
+    /// Construct an empty flag set.
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    /// Return the raw wire bits.
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+
+    /// Return whether no flags are set.
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Return whether all bits in `other` are present.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Return whether a specific flag bit is set.
+    pub const fn has(self, flag: Self) -> bool {
+        self.contains(flag)
+    }
+}
+
+impl From<u8> for ClientAccessFlags {
+    fn from(value: u8) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<ClientAccessFlags> for u8 {
+    fn from(flags: ClientAccessFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl BitOr for ClientAccessFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for ClientAccessFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for ClientAccessFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for ClientAccessFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
 /// Modifier key bitmask for keyboard events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Modifiers(u8);
@@ -263,6 +344,14 @@ pub enum ControlMessage {
     /// S->C (gateway-injected): Resolution is locked by the session owner.
     /// Non-owner clients must display at this resolution without resizing.
     ResolutionLocked { width: u16, height: u16 },
+    /// S->C (gateway-injected): Current client access state.
+    /// This lets the gateway independently control resize ownership and
+    /// read-only viewer restrictions.
+    ClientAccessState {
+        flags: ClientAccessFlags,
+        width: u16,
+        height: u16,
+    },
 }
 
 // ── Input Channel Messages ──────────────────────────────────────────

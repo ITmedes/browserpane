@@ -13,7 +13,7 @@ export interface SessionCapabilityStateInput {
   sessionFlags: number;
   microphoneEncoderSupported: boolean;
   cameraEncoderSupported: boolean;
-  resolutionLocked: boolean;
+  viewerRestricted: boolean;
 }
 
 export class SessionCapabilityRuntime {
@@ -54,12 +54,12 @@ export class SessionCapabilityRuntime {
       audio: (input.sessionFlags & 0x01) !== 0,
       microphone: (input.sessionFlags & 0x08) !== 0
         && input.microphoneEncoderSupported
-        && !input.resolutionLocked,
+        && !input.viewerRestricted,
       camera: (input.sessionFlags & 0x10) !== 0
         && input.cameraEncoderSupported
-        && !input.resolutionLocked,
-      fileTransfer: (input.sessionFlags & 0x04) !== 0 && !input.resolutionLocked,
-      keyboardLayout: (input.sessionFlags & 0x20) !== 0 && !input.resolutionLocked,
+        && !input.viewerRestricted,
+      fileTransfer: (input.sessionFlags & 0x04) !== 0 && !input.viewerRestricted,
+      keyboardLayout: (input.sessionFlags & 0x20) !== 0 && !input.viewerRestricted,
     };
   }
 

@@ -7,7 +7,7 @@ use super::bitrate::DatagramStats;
 use super::bootstrap::send_initial_frames;
 use super::egress::{spawn_agent_to_browser_task, EgressTaskContext};
 use super::ingress::spawn_browser_to_agent_task;
-use super::tasks::{spawn_bitrate_hint_task, spawn_gateway_pinger};
+use super::tasks::{spawn_bitrate_hint_task, spawn_direct_control_task, spawn_gateway_pinger};
 use crate::session::Session;
 use crate::session_registry::SessionRegistry;
 
@@ -21,7 +21,8 @@ pub(super) async fn handle_session(
     let (client_handle, hub) = registry.join(agent_socket_path).await?;
     let client_id = client_handle.client_id;
     let joined_as_owner = client_handle.is_owner;
-    let locked_resolution = client_handle.locked_resolution;
+    let initial_access_state = client_handle.initial_access_state;
+    let control_rx = client_handle.control_rx;
     let from_host = client_handle.from_host;
     let to_host = client_handle.to_host;
     let initial_frames = client_handle.initial_frames;
@@ -46,7 +47,7 @@ pub(super) async fn handle_session(
         &send_stream,
         &initial_frames,
         joined_as_owner,
-        locked_resolution,
+        initial_access_state,
         session_id,
         client_id,
     )
@@ -79,15 +80,18 @@ pub(super) async fn handle_session(
         hub.clone(),
         client_id,
         recv_stream,
-        send_stream.clone(),
         to_host,
     );
+
+    let direct_control_task =
+        spawn_direct_control_task(session.clone(), send_stream.clone(), control_rx);
 
     let gateway_pinger = spawn_gateway_pinger(session.clone(), send_stream.clone());
 
     tokio::select! {
         _ = agent_to_browser => {}
         _ = browser_to_agent => {}
+        _ = direct_control_task => {}
         _ = gateway_pinger => {}
         _ = bitrate_hint_task => {}
     }

@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use crate::{
     channel::ChannelId,
-    types::{ControlMessage, SessionFlags},
+    types::{ClientAccessFlags, ControlMessage, SessionFlags},
 };
 
 use super::{
@@ -19,6 +19,7 @@ const PONG: u8 = 0x05;
 const KEYBOARD_LAYOUT_INFO: u8 = 0x06;
 const BITRATE_HINT: u8 = 0x07;
 const RESOLUTION_LOCKED: u8 = 0x08;
+const CLIENT_ACCESS_STATE: u8 = 0x09;
 
 impl ControlMessage {
     /// Encode a control message payload.
@@ -62,6 +63,16 @@ impl ControlMessage {
                 w.write_u16(*width);
                 w.write_u16(*height);
             }
+            Self::ClientAccessState {
+                flags,
+                width,
+                height,
+            } => {
+                w.write_u8(CLIENT_ACCESS_STATE);
+                w.write_u8(flags.bits());
+                w.write_u16(*width);
+                w.write_u16(*height);
+            }
         }
         w.finish()
     }
@@ -101,6 +112,11 @@ impl ControlMessage {
                 target_bps: r.read_u32()?,
             }),
             RESOLUTION_LOCKED => Ok(Self::ResolutionLocked {
+                width: r.read_u16()?,
+                height: r.read_u16()?,
+            }),
+            CLIENT_ACCESS_STATE => Ok(Self::ClientAccessState {
+                flags: ClientAccessFlags::from(r.read_u8()?),
                 width: r.read_u16()?,
                 height: r.read_u16()?,
             }),

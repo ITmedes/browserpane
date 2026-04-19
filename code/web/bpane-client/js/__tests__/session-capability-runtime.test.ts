@@ -46,7 +46,7 @@ describe('SessionCapabilityRuntime', () => {
       sessionFlags: 0x1d,
       microphoneEncoderSupported: true,
       cameraEncoderSupported: true,
-      resolutionLocked: false,
+      viewerRestricted: false,
     });
 
     expect(next).toEqual({
@@ -82,7 +82,7 @@ describe('SessionCapabilityRuntime', () => {
       sessionFlags: 0x3d,
       microphoneEncoderSupported: false,
       cameraEncoderSupported: true,
-      resolutionLocked: true,
+      viewerRestricted: true,
     });
 
     expect(next).toEqual({
@@ -95,6 +95,42 @@ describe('SessionCapabilityRuntime', () => {
     expect(stopMicrophone).toHaveBeenCalledTimes(1);
     expect(stopCamera).toHaveBeenCalledTimes(1);
     expect(setFileTransferEnabled).toHaveBeenCalledWith(false);
+    expect(onCapabilitiesChange).toHaveBeenCalledWith(next);
+  });
+
+  it('keeps collaborative resize-locked clients interactive', () => {
+    const {
+      runtime,
+      stopMicrophone,
+      stopCamera,
+      setFileTransferEnabled,
+      onCapabilitiesChange,
+    } = createRuntime();
+
+    const next = runtime.apply({
+      current: {
+        audio: true,
+        microphone: false,
+        camera: false,
+        fileTransfer: false,
+        keyboardLayout: false,
+      },
+      sessionFlags: 0x3d,
+      microphoneEncoderSupported: true,
+      cameraEncoderSupported: true,
+      viewerRestricted: false,
+    });
+
+    expect(next).toEqual({
+      audio: true,
+      microphone: true,
+      camera: true,
+      fileTransfer: true,
+      keyboardLayout: true,
+    });
+    expect(stopMicrophone).not.toHaveBeenCalled();
+    expect(stopCamera).not.toHaveBeenCalled();
+    expect(setFileTransferEnabled).toHaveBeenCalledWith(true);
     expect(onCapabilitiesChange).toHaveBeenCalledWith(next);
   });
 
@@ -122,7 +158,7 @@ describe('SessionCapabilityRuntime', () => {
       sessionFlags: 0x05,
       microphoneEncoderSupported: true,
       cameraEncoderSupported: true,
-      resolutionLocked: false,
+      viewerRestricted: false,
     });
 
     expect(next).toEqual({

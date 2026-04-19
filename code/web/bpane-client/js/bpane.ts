@@ -105,8 +105,9 @@ export class BpaneSession {
   private pingSeq = 0;
   private remoteWidth = 0;
   private remoteHeight = 0;
-  // Resolution lock state (set when gateway sends ResolutionLocked for non-owner clients)
+  // Gateway-managed access state.
   private resolutionLocked = false;
+  private viewerRestricted = false;
 
   // Tile compositor
   private tileCompositor = new TileCompositor();
@@ -912,7 +913,7 @@ export class BpaneSession {
   // ── Clipboard ──────────────────────────────────────────────────────
 
   private handleClipboardUpdate(payload: Uint8Array): void {
-    if (!this.options.clipboard || this.resolutionLocked) return;
+    if (!this.options.clipboard || this.viewerRestricted) return;
     if (payload.length > 5 && payload[0] === 0x01) {
       const len = (payload[1] | (payload[2] << 8) | (payload[3] << 16) | (payload[4] << 24)) >>> 0;
       if (payload.length < 5 + len) return;
@@ -963,11 +964,19 @@ export class BpaneSession {
         break;
       case 0x05: // Pong — latency measurement (available via stats)
         break;
-      case 0x08: // ResolutionLocked — non-owner client, resolution is fixed
+      case 0x08: // ResolutionLocked — legacy viewer lock message
         if (payload.length >= 5) {
           const lockedW = payload[1] | (payload[2] << 8);
           const lockedH = payload[3] | (payload[4] << 8);
-          this.lockResolution(lockedW, lockedH);
+          this.applyClientAccessState(0x03, lockedW, lockedH);
+        }
+        break;
+      case 0x09: // ClientAccessState — resize lock and view-only state are independent
+        if (payload.length >= 6) {
+          const flags = payload[1];
+          const width = payload[2] | (payload[3] << 8);
+          const height = payload[4] | (payload[5] << 8);
+          this.applyClientAccessState(flags, width, height);
         }
         break;
     }
@@ -999,14 +1008,13 @@ export class BpaneSession {
   }
 
   /**
-   * Lock the resolution for non-owner clients.
+   * Lock the local view to a gateway-selected remote resolution.
    * Disconnects the ResizeObserver so browser resize has no effect.
    * Sets the container to a fixed pixel size matching the remote resolution.
-   * This follows the industry standard (VNC shared, RDP shadow, Parsec, Guacamole):
-   * only the session owner controls resolution; viewers get a fixed-size view.
+   * This may apply both to true viewers and to collaborative clients that are
+   * interactive but not allowed to drive the remote resolution.
    */
-  private lockResolution(width: number, height: number): void {
-    if (this.resolutionLocked) return; // already locked
+  private setResolutionLock(width: number, height: number): void {
     this.resolutionLocked = true;
     this.remoteWidth = width;
     this.remoteHeight = height;
@@ -1044,10 +1052,53 @@ export class BpaneSession {
     this.container.style.resize = 'none';
     this.container.style.maxWidth = `${cssW}px`;
     this.container.style.maxHeight = `${cssH}px`;
-    this.updateCapabilities();
 
     console.log(`[bpane] resolution locked to ${width}x${height} (container: ${cssW}x${cssH}px)`);
     this.options.onResolutionChange?.(width, height);
+  }
+
+  private unlockResolution(): void {
+    if (!this.resolutionLocked) return;
+
+    this.resolutionLocked = false;
+    this.container.style.flex = '';
+    this.container.style.width = '';
+    this.container.style.height = '';
+    this.container.style.resize = '';
+    this.container.style.maxWidth = '';
+    this.container.style.maxHeight = '';
+    this.resizeObserver.observe(this.container);
+
+    const rect = this.container.getBoundingClientRect();
+    const dims = this.scaledDims(rect.width, rect.height);
+    this.canvas.width = dims.width;
+    this.canvas.height = dims.height;
+    if (this.glRenderer) {
+      this.glRenderer.resize(dims.width, dims.height);
+    }
+    if (this.cursorEl) {
+      this.cursorEl.width = dims.width;
+      this.cursorEl.height = dims.height;
+    }
+    this.displayDirty = true;
+    this.sendResizeRequest(dims.width, dims.height);
+  }
+
+  private applyClientAccessState(flags: number, width: number, height: number): void {
+    this.viewerRestricted = (flags & 0x01) !== 0;
+    const resizeLocked = (flags & 0x02) !== 0;
+
+    if (resizeLocked) {
+      if (width > 0 && height > 0) {
+        this.setResolutionLock(width, height);
+      } else {
+        this.resolutionLocked = true;
+      }
+    } else {
+      this.unlockResolution();
+    }
+
+    this.updateCapabilities();
   }
 
   private updateCapabilities(): void {
@@ -1056,7 +1107,7 @@ export class BpaneSession {
       sessionFlags: this.sessionFlags,
       microphoneEncoderSupported: this.microphoneEncoderSupported,
       cameraEncoderSupported: this.cameraEncoderSupported,
-      resolutionLocked: this.resolutionLocked,
+      viewerRestricted: this.viewerRestricted,
     });
   }
 
@@ -1174,7 +1225,7 @@ export class BpaneSession {
   }
 
   private isViewerBlockedChannel(channelId: number, payload: Uint8Array): boolean {
-    if (!this.resolutionLocked) {
+    if (!this.viewerRestricted) {
       return false;
     }
 
@@ -1266,7 +1317,7 @@ export class BpaneSession {
     if (this.options.microphone === false) {
       throw new Error('microphone input is disabled in session options');
     }
-    if (this.resolutionLocked) {
+    if (this.viewerRestricted) {
       throw new Error('microphone input is disabled for viewer sessions');
     }
     if (!this.microphoneEncoderSupported) {
@@ -1286,7 +1337,7 @@ export class BpaneSession {
     if (this.options.camera === false) {
       throw new Error('camera input is disabled in session options');
     }
-    if (this.resolutionLocked) {
+    if (this.viewerRestricted) {
       throw new Error('camera input is disabled for viewer sessions');
     }
     if (!this.cameraEncoderSupported) {
@@ -1303,12 +1354,12 @@ export class BpaneSession {
   }
 
   promptFileUpload(): void {
-    if (this.resolutionLocked || !this.capabilities.fileTransfer) return;
+    if (this.viewerRestricted || !this.capabilities.fileTransfer) return;
     this.fileTransfer?.promptUpload();
   }
 
   async uploadFiles(files: FileList | Iterable<File>): Promise<void> {
-    if (this.resolutionLocked) {
+    if (this.viewerRestricted) {
       throw new Error('file upload is disabled for viewer sessions');
     }
     if (!this.fileTransfer) return;

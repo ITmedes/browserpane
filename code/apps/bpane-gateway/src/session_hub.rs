@@ -1,8 +1,10 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::{collections::HashMap};
 use tokio::sync::{broadcast, mpsc, Mutex};
 
 use bpane_protocol::frame::Frame;
+use bpane_protocol::ControlMessage;
 
 use crate::relay::Relay;
 
@@ -31,6 +33,7 @@ pub struct SessionHub {
     exclusive_browser_owner: bool,
     current_resolution: Arc<Mutex<(u16, u16)>>,
     connected_clients: Mutex<Vec<u64>>,
+    client_control_txs: Mutex<HashMap<u64, mpsc::Sender<ControlMessage>>>,
     client_counter: AtomicU64,
     client_count: AtomicU32,
     owner_id: AtomicU64,
@@ -92,6 +95,7 @@ impl SessionHub {
             exclusive_browser_owner,
             current_resolution,
             connected_clients: Mutex::new(Vec::new()),
+            client_control_txs: Mutex::new(HashMap::new()),
             client_counter: AtomicU64::new(0),
             client_count: AtomicU32::new(0),
             owner_id: AtomicU64::new(0),
