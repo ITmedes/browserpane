@@ -64,6 +64,18 @@ beforeEach(() => {
 });
 
 describe('ClipboardSyncRuntime', () => {
+  it('refreshes changed clipboard text without requiring a paste shortcut wait', async () => {
+    const { runtime, readText, sendClipboardText, getLastClipboardHash } = createRuntime({
+      clipboardText: 'background refresh',
+    });
+
+    await runtime.refreshClipboardText();
+
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(sendClipboardText).toHaveBeenCalledWith('background refresh');
+    expect(getLastClipboardHash()).toBe(fnvHash('background refresh'));
+  });
+
   it('reads and sends changed clipboard text before paste shortcuts', async () => {
     const { runtime, readText, sendClipboardText, getLastClipboardHash } = createRuntime({
       clipboardText: 'fresh paste',
