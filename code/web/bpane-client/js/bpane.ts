@@ -25,6 +25,7 @@ import { FileTransferController } from './file-transfer.js';
 import { InputController } from './input-controller.js';
 import { SessionCapabilityRuntime } from './session-capability-runtime.js';
 import { SessionControlRuntime } from './session-control-runtime.js';
+import { SessionCursorRuntime } from './session-cursor-runtime.js';
 import { SessionResizeRuntime } from './session-resize-runtime.js';
 import { UnsupportedFeatureError } from './shared/errors.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
@@ -75,9 +76,7 @@ export class BpaneSession {
   private input: InputController | null = null;
   private videoDecoder: VideoDecoder | null = null;
   private cursorEl: HTMLCanvasElement | null = null;
-  private cursorCtx: CanvasRenderingContext2D | null = null;
-  private cursorHotspot: { x: number; y: number } = { x: 0, y: 0 };
-  private cursorPosition: { x: number; y: number } | null = null;
+  private cursorRuntime: SessionCursorRuntime;
   private sendWritable: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private pendingFrames: Uint8Array[] = [];
   private pendingCameraFrame: Uint8Array | null = null;
@@ -227,9 +226,14 @@ export class BpaneSession {
     this.cursorEl.width = Math.max(64, Math.floor(this.container.clientWidth));
     this.cursorEl.height = Math.max(64, Math.floor(this.container.clientHeight));
     this.cursorEl.style.zIndex = '2';
-    this.cursorCtx = this.cursorEl.getContext('2d');
+    const cursorCtx = this.cursorEl.getContext('2d');
     this.container.style.position = 'relative';
     this.container.appendChild(this.cursorEl);
+    this.cursorRuntime = new SessionCursorRuntime({
+      canvas: this.canvas,
+      cursorEl: this.cursorEl,
+      cursorCtx,
+    });
 
     // Try WebGL2 first for GPU-accelerated tile compositing, fall back to Canvas2D.
     const webgl = WebGLTileRenderer.tryCreate(this.canvas);
@@ -299,7 +303,7 @@ export class BpaneSession {
     session.input = new InputController({
       canvas: session.canvas,
       sendFrame: (channelId, payload) => session.sendFrame(channelId, payload),
-      drawCursor: (_shape, x, y) => session.drawCursor(null, x, y),
+      drawCursor: (_shape, x, y) => session.cursorRuntime.drawMove(x, y),
       getRemoteDims: () => ({
         width: session.remoteWidth || session.canvas.width,
         height: session.remoteHeight || session.canvas.height,
@@ -414,9 +418,8 @@ export class BpaneSession {
     if (this.cursorEl && this.cursorEl.parentNode) {
       this.cursorEl.parentNode.removeChild(this.cursorEl);
       this.cursorEl = null;
-      this.cursorCtx = null;
     }
-    this.cursorPosition = null;
+    this.cursorRuntime.reset();
 
     this.tileCompositor.reset();
     if (this.glRenderer) {
@@ -936,28 +939,7 @@ export class BpaneSession {
   // ── Cursor ─────────────────────────────────────────────────────────
 
   private handleCursorUpdate(payload: Uint8Array): void {
-    if (!payload.length) return;
-    const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-    const tag = view.getUint8(0);
-    if (tag === 0x01 && payload.length >= 5) {
-      const x = view.getUint16(1, true);
-      const y = view.getUint16(3, true);
-      this.drawCursor(null, x, y);
-      this.displayDirty = true;
-    } else if (tag === 0x02 && payload.length >= 11) {
-      const width = view.getUint16(1, true);
-      const height = view.getUint16(3, true);
-      const hotspot_x = view.getUint8(5);
-      const hotspot_y = view.getUint8(6);
-      const dataLen = view.getUint32(7, true);
-      if (payload.length < 11 + dataLen) return;
-      const data = payload.subarray(11, 11 + dataLen);
-      this.cursorHotspot = { x: hotspot_x, y: hotspot_y };
-      this.drawCursor(
-        { width, height, data },
-        this.cursorPosition?.x ?? null,
-        this.cursorPosition?.y ?? null,
-      );
+    if (this.cursorRuntime.handlePayload(payload)) {
       this.displayDirty = true;
     }
   }
@@ -1126,68 +1108,6 @@ export class BpaneSession {
       || channelId === CH_AUDIO_IN
       || channelId === CH_VIDEO_IN
       || channelId === CH_FILE_UP;
-  }
-
-  // ── Cursor drawing ─────────────────────────────────────────────────
-
-  private drawCursor(
-    shape: { width: number; height: number; data: Uint8Array } | null,
-    moveX: number | null,
-    moveY: number | null,
-  ): void {
-    if (!this.cursorEl || !this.cursorCtx) return;
-    if (moveX !== null && moveY !== null) {
-      this.cursorPosition = { x: moveX, y: moveY };
-    }
-    // Resize overlay if needed
-    const w = Math.max(64, this.canvas.width);
-    const h = Math.max(64, this.canvas.height);
-    if (this.cursorEl.width !== w || this.cursorEl.height !== h) {
-      this.cursorEl.width = w;
-      this.cursorEl.height = h;
-    }
-    this.cursorCtx.clearRect(0, 0, this.cursorEl.width, this.cursorEl.height);
-
-    if (shape) {
-      if (shape.data.length === shape.width * shape.height * 4) {
-        const imageData = new ImageData(
-          new Uint8ClampedArray(shape.data),
-          shape.width,
-          shape.height
-        );
-        const off = document.createElement('canvas');
-        off.width = shape.width;
-        off.height = shape.height;
-        const offCtx = off.getContext('2d');
-        if (offCtx) {
-          offCtx.putImageData(imageData, 0, 0);
-          (this.cursorCtx as any)._cursorBitmap = off;
-        }
-      } else {
-        (this.cursorCtx as any)._cursorBitmap = null;
-      }
-    }
-
-    if (!this.cursorPosition) {
-      return;
-    }
-
-    const bmp = (this.cursorCtx as any)._cursorBitmap as HTMLCanvasElement | null;
-    const x = this.cursorPosition.x - this.cursorHotspot.x;
-    const y = this.cursorPosition.y - this.cursorHotspot.y;
-    if (bmp) {
-      this.cursorCtx.drawImage(bmp, x, y);
-    } else {
-      this.cursorCtx.fillStyle = '#ffffff';
-      this.cursorCtx.strokeStyle = '#000000';
-      this.cursorCtx.beginPath();
-      this.cursorCtx.moveTo(x, y);
-      this.cursorCtx.lineTo(x + 12, y + 6);
-      this.cursorCtx.lineTo(x + 6, y + 12);
-      this.cursorCtx.closePath();
-      this.cursorCtx.fill();
-      this.cursorCtx.stroke();
-    }
   }
 
   // ── Microphone (delegated to AudioController) ──────────────────────
