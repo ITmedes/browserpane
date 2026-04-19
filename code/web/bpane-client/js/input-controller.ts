@@ -21,6 +21,7 @@ import {
 import { ClipboardSyncRuntime } from './input/clipboard-sync-runtime.js';
 import { DeferredCtrlPasteRuntime } from './input/deferred-ctrl-paste-runtime.js';
 import { KeyEventStateResolver } from './input/key-event-state-resolver.js';
+import { MacNavigationRemapRuntime } from './input/mac-navigation-remap-runtime.js';
 import { KeyboardSinkRuntime } from './input/keyboard-sink-runtime.js';
 import {
   inferLayoutHint,
@@ -43,10 +44,6 @@ const PENDING_COMPOSITION_FALLBACK_MS = 16;
 const SUPPRESSED_KEYUP_TIMEOUT_MS = 750;
 
 const CTRL_KEY_CODES = new Set(['ControlLeft', 'ControlRight']);
-
-interface RemappedKeyState {
-  releasedCtrlCodes: string[];
-}
 
 export interface InputControllerDeps {
   /** Canvas element to bind event listeners to. */
@@ -80,11 +77,10 @@ export class InputController {
   private readonly keyboardSink: KeyboardSinkRuntime;
   private readonly pointerInput: PointerInputRuntime;
   private readonly suppressedKeyups: SuppressedKeyupTracker;
-  /** Tracks keys remapped on keydown (e.g., ArrowLeft→Home) for correct keyup. */
-  private remappedKeys = new Map<string, RemappedKeyState>();
   private readonly pendingComposition: PendingCompositionRuntime;
   private readonly macModifiers: MacModifierStateRuntime;
   private readonly keyEventStateResolver: KeyEventStateResolver;
+  private readonly macNavigationRemap: MacNavigationRemapRuntime;
   private readonly deferredCtrlPaste: DeferredCtrlPasteRuntime;
   private readonly shortcutPolicy: ShortcutGatingPolicy;
   private readonly shortcutKeyRelease: ShortcutKeyReleaseRuntime;
@@ -158,6 +154,7 @@ export class InputController {
       macMetaAsCtrl: this.macMetaAsCtrl,
       isMacOptionComposition: (event) => this.macModifiers.isMacOptionComposition(event),
     });
+    this.macNavigationRemap = new MacNavigationRemapRuntime();
     this.pendingComposition = new PendingCompositionRuntime({
       fallbackDelayMs: PENDING_COMPOSITION_FALLBACK_MS,
       setTimeoutFn: window.setTimeout,
@@ -219,7 +216,7 @@ export class InputController {
         this.deferredCtrlPaste.noteControlKeydown(e.code);
       }
 
-      if (this.remappedKeys.has(e.code)) {
+      if (this.macNavigationRemap.hasActiveRemap(e.code)) {
         e.preventDefault();
         return;
       }
@@ -310,11 +307,14 @@ export class InputController {
       // cannot collapse the selection by reusing a held synthetic Home/End key.
       if (this.macMetaAsCtrl && e.metaKey && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
         e.preventDefault();
-        const remapCode = e.code === 'ArrowLeft' ? 'Home' : 'End';
         const releasedCtrlCodes = this.macModifiers.releaseMacCtrlsForRemap();
-        this.remappedKeys.set(e.code, { releasedCtrlCodes });
-        this.sendKeyEvent(remapCode, '', true, false, false, e.shiftKey, false, false);
-        this.sendKeyEvent(remapCode, '', false, false, false, e.shiftKey, false, false);
+        const remap = this.macNavigationRemap.begin(e.code, releasedCtrlCodes);
+        if (!remap) {
+          this.macModifiers.restoreMacCtrls(releasedCtrlCodes);
+          return;
+        }
+        this.sendKeyEvent(remap.remapCode, '', true, false, false, e.shiftKey, false, false);
+        this.sendKeyEvent(remap.remapCode, '', false, false, false, e.shiftKey, false, false);
         this.macModifiers.restoreMacCtrls(releasedCtrlCodes);
         return;
       }
@@ -381,10 +381,9 @@ export class InputController {
 
     keyboardTarget.addEventListener('keyup', (e: KeyboardEvent) => {
       // Clear remapped keys (e.g., Cmd+Left was sent as atomic Home)
-      const remapped = this.remappedKeys.get(e.code);
+      const remapped = this.macNavigationRemap.handleKeyup(e.code);
       if (remapped) {
         e.preventDefault();
-        this.remappedKeys.delete(e.code);
         return;
       }
 
@@ -479,8 +478,8 @@ export class InputController {
     this.pointerInput.reset();
     this.clipboardSync.reset();
     this.deferredCtrlPaste.reset();
+    this.macNavigationRemap.reset();
     this.macModifiers.reset();
-    this.remappedKeys.clear();
     this.pendingComposition.reset();
     this.syntheticDeadAccent.reset();
     this.suppressedKeyups.reset();
