@@ -577,6 +577,112 @@ describe('BpaneSession', () => {
       });
     });
 
+    it('keeps collaborative capabilities after resize-only client access state', async () => {
+      const onCapabilitiesChange = vi.fn();
+      await createSession({ onCapabilitiesChange });
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await new Promise(r => setTimeout(r, 10));
+
+      const readyPayload = new Uint8Array(3);
+      readyPayload[0] = 0x03; // SessionReady
+      readyPayload[1] = 1;
+      readyPayload[2] = 0x3d; // audio + file transfer + microphone + camera + keyboard layout
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, readyPayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      const accessPayload = new Uint8Array(6);
+      accessPayload[0] = 0x09; // ClientAccessState
+      accessPayload[1] = 0x02; // resize locked only
+      accessPayload[2] = 0x00; accessPayload[3] = 0x05; // 1280
+      accessPayload[4] = 0xD0; accessPayload[5] = 0x02; // 720
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, accessPayload));
+
+      await new Promise(r => setTimeout(r, 10));
+      expect(onCapabilitiesChange).toHaveBeenLastCalledWith({
+        audio: true,
+        microphone: true,
+        camera: true,
+        fileTransfer: true,
+        keyboardLayout: true,
+      });
+    });
+
+    it('keeps clipboard updates enabled for resize-locked collaborative clients', async () => {
+      await createSession();
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await new Promise(r => setTimeout(r, 10));
+
+      const accessPayload = new Uint8Array(6);
+      accessPayload[0] = 0x09; // ClientAccessState
+      accessPayload[1] = 0x02; // resize locked only
+      accessPayload[2] = 0x00; accessPayload[3] = 0x05; // 1280
+      accessPayload[4] = 0xD0; accessPayload[5] = 0x02; // 720
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, accessPayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      const writeText = vi.mocked(navigator.clipboard.writeText);
+      writeText.mockClear();
+
+      const text = new TextEncoder().encode('collaborative clipboard');
+      const clipPayload = new Uint8Array(5 + text.length);
+      clipPayload[0] = 0x01;
+      clipPayload[1] = text.length & 0xFF;
+      clipPayload[2] = (text.length >> 8) & 0xFF;
+      clipPayload[3] = (text.length >> 16) & 0xFF;
+      clipPayload[4] = (text.length >> 24) & 0xFF;
+      clipPayload.set(text, 5);
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CLIPBOARD, clipPayload));
+
+      await new Promise(r => setTimeout(r, 10));
+      expect(writeText).toHaveBeenCalledWith('collaborative clipboard');
+    });
+
+    it('restores promoted viewer capabilities after full SessionReady replay and unlock', async () => {
+      const onCapabilitiesChange = vi.fn();
+      await createSession({ onCapabilitiesChange });
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await new Promise(r => setTimeout(r, 10));
+
+      const readyPayload = new Uint8Array(3);
+      readyPayload[0] = 0x03; // SessionReady
+      readyPayload[1] = 1;
+      readyPayload[2] = 0x01; // viewer-adapted SessionReady keeps audio only
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, readyPayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      const viewerPayload = new Uint8Array(6);
+      viewerPayload[0] = 0x09; // ClientAccessState
+      viewerPayload[1] = 0x03; // view only + resize locked
+      viewerPayload[2] = 0x00; viewerPayload[3] = 0x05; // 1280
+      viewerPayload[4] = 0xD0; viewerPayload[5] = 0x02; // 720
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, viewerPayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      const restoredReadyPayload = new Uint8Array(3);
+      restoredReadyPayload[0] = 0x03; // SessionReady
+      restoredReadyPayload[1] = 1;
+      restoredReadyPayload[2] = 0x3d; // audio + file transfer + microphone + camera + keyboard layout
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, restoredReadyPayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      const unlockedPayload = new Uint8Array(6);
+      unlockedPayload[0] = 0x09; // ClientAccessState
+      unlockedPayload[1] = 0x00;
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, unlockedPayload));
+
+      await new Promise(r => setTimeout(r, 10));
+      expect(onCapabilitiesChange).toHaveBeenLastCalledWith({
+        audio: true,
+        microphone: true,
+        camera: true,
+        fileTransfer: true,
+        keyboardLayout: true,
+      });
+    });
+
     it('ignores clipboard updates for viewer sessions', async () => {
       await createSession();
 

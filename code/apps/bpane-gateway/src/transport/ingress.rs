@@ -2,22 +2,20 @@ use std::sync::Arc;
 
 use bpane_protocol::channel::ChannelId;
 use bpane_protocol::frame::{Frame, FrameDecoder};
-use bpane_protocol::ControlMessage;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{error, warn};
-use wtransport::{RecvStream, SendStream};
+use wtransport::RecvStream;
 
 use super::policy::viewer_can_forward_frame;
 use crate::session::Session;
-use crate::session_hub::{ResizeResult, SessionHub};
+use crate::session_hub::SessionHub;
 
 pub(super) fn spawn_browser_to_agent_task(
     session: Arc<Session>,
     hub: Arc<SessionHub>,
     client_id: u64,
     mut recv_stream: RecvStream,
-    send_stream: Arc<Mutex<SendStream>>,
     to_host: mpsc::Sender<Frame>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
@@ -44,19 +42,6 @@ pub(super) fn spawn_browser_to_agent_task(
                                 let is_owner = hub.is_browser_owner(client_id);
 
                                 if let Some((req_w, req_h)) = resolution_request(&frame) {
-                                    if !is_owner {
-                                        match hub.request_resize(client_id, req_w, req_h).await {
-                                            ResizeResult::Applied => {}
-                                            ResizeResult::Locked(w, h) => {
-                                                if w > 0 && h > 0 {
-                                                    send_resolution_locked(&send_stream, w, h)
-                                                        .await;
-                                                }
-                                            }
-                                        }
-                                        continue;
-                                    }
-
                                     let _ = hub.request_resize(client_id, req_w, req_h).await;
                                     continue;
                                 }
@@ -96,13 +81,6 @@ fn resolution_request(frame: &Frame) -> Option<(u16, u16)> {
         u16::from_le_bytes([frame.payload[1], frame.payload[2]]),
         u16::from_le_bytes([frame.payload[3], frame.payload[4]]),
     ))
-}
-
-async fn send_resolution_locked(send_stream: &Arc<Mutex<SendStream>>, width: u16, height: u16) {
-    let locked = ControlMessage::ResolutionLocked { width, height };
-    let encoded = locked.to_frame().encode();
-    let mut stream = send_stream.lock().await;
-    let _ = stream.write_all(&encoded).await;
 }
 
 #[cfg(test)]
