@@ -33,6 +33,7 @@ import {
 } from './input/layout-hint.js';
 import { PointerInputRuntime } from './input/pointer-input-runtime.js';
 import { ShortcutGatingPolicy } from './input/shortcut-gating-policy.js';
+import { ShortcutKeyReleaseDispatcher } from './input/shortcut-key-release-dispatcher.js';
 import { ShortcutKeyReleaseRuntime } from './input/shortcut-key-release-runtime.js';
 import { SuppressedKeyupTracker } from './input/suppressed-keyup-tracker.js';
 import { SyntheticDeadAccentRuntime } from './input/synthetic-dead-accent-runtime.js';
@@ -87,6 +88,7 @@ export class InputController {
   private readonly atomicMacShortcutDispatcher: AtomicMacShortcutDispatcher;
   private readonly shortcutPolicy: ShortcutGatingPolicy;
   private readonly shortcutKeyRelease: ShortcutKeyReleaseRuntime;
+  private readonly shortcutKeyReleaseDispatcher: ShortcutKeyReleaseDispatcher;
   private readonly syntheticDeadAccent: SyntheticDeadAccentRuntime;
 
   // Set by BpaneSession when server capabilities are received
@@ -175,6 +177,24 @@ export class InputController {
       macMetaAsCtrl: this.macMetaAsCtrl,
     });
     this.shortcutKeyRelease = new ShortcutKeyReleaseRuntime();
+    this.shortcutKeyReleaseDispatcher = new ShortcutKeyReleaseDispatcher({
+      runtime: this.shortcutKeyRelease,
+      emitKeyRelease: (release) => {
+        this.sendKeyEvent(
+          release.code,
+          release.key,
+          false,
+          release.ctrl,
+          release.alt,
+          release.shift,
+          release.meta,
+          release.altgr,
+        );
+      },
+      suppressKeyup: (code) => {
+        this.suppressedKeyups.suppress(code);
+      },
+    });
     this.syntheticDeadAccent = new SyntheticDeadAccentRuntime();
     this.macModifiers = new MacModifierStateRuntime({
       isMac: this.isMac,
@@ -402,14 +422,14 @@ export class InputController {
       }
 
       if (this.macModifiers.isMacMetaKey(e.code)) {
-        this.releaseTrackedShortcutKeysForModifierKeyup(e);
+        this.shortcutKeyReleaseDispatcher.releaseKeysForModifierKeyup(e);
         this.macModifiers.handleMetaKeyup(e.code);
         e.preventDefault();
         return;
       }
 
       if (this.macModifiers.isMacOptionKey(e.code)) {
-        this.releaseTrackedShortcutKeysForModifierKeyup(e);
+        this.shortcutKeyReleaseDispatcher.releaseKeysForModifierKeyup(e);
         this.macModifiers.handleOptionKeyup(e.code);
         e.preventDefault();
         return;
@@ -454,7 +474,7 @@ export class InputController {
         return;
       }
 
-      this.releaseTrackedShortcutKeysForModifierKeyup(e);
+      this.shortcutKeyReleaseDispatcher.releaseKeysForModifierKeyup(e);
       e.preventDefault();
 
       const resolvedState = this.keyEventStateResolver.resolve(e);
@@ -564,23 +584,6 @@ export class InputController {
 
   private shouldDeferCtrlPasteShortcut(e: KeyboardEvent): boolean {
     return this.deferredCtrlPaste.shouldDeferPaste(e, this.clipboardEnabled);
-  }
-
-  private releaseTrackedShortcutKeysForModifierKeyup(e: KeyboardEvent): void {
-    const releases = this.shortcutKeyRelease.releaseKeysForModifierKeyup(e);
-    for (const release of releases) {
-      this.sendKeyEvent(
-        release.code,
-        release.key,
-        false,
-        release.ctrl,
-        release.alt,
-        release.shift,
-        release.meta,
-        release.altgr,
-      );
-      this.suppressedKeyups.suppress(release.code);
-    }
   }
 }
 
