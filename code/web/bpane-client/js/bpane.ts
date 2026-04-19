@@ -6,8 +6,8 @@
  */
 
 import {
-  CH_VIDEO, CH_AUDIO_OUT, CH_CURSOR,
-  CH_CLIPBOARD, CH_CONTROL, CH_FILE_DOWN,
+  CH_VIDEO,
+  CH_CONTROL,
 } from './protocol.js';
 
 import { NalReassembler, getNalType, type ReassembledNal, type TileInfo } from './nal.js';
@@ -22,6 +22,7 @@ import { InputController } from './input-controller.js';
 import { SessionCapabilityRuntime } from './session-capability-runtime.js';
 import { SessionControlRuntime } from './session-control-runtime.js';
 import { SessionCursorRuntime } from './session-cursor-runtime.js';
+import { SessionFrameRouterRuntime } from './session-frame-router-runtime.js';
 import { SessionResizeRuntime } from './session-resize-runtime.js';
 import { SessionSendRuntime } from './session-send-runtime.js';
 import { SessionStreamReaderRuntime } from './session-stream-reader-runtime.js';
@@ -92,6 +93,7 @@ export class BpaneSession {
   };
   private capabilityRuntime: SessionCapabilityRuntime;
   private fileTransfer: FileTransferController | null = null;
+  private frameRouterRuntime: SessionFrameRouterRuntime;
   private streamReaderRuntime: SessionStreamReaderRuntime;
   private transportRuntime: SessionTransportRuntime;
   private pingSeq = 0;
@@ -215,10 +217,38 @@ export class BpaneSession {
         this.stats.recordRx(channelId, bytes);
       },
       onFrame: (channelId, payload) => {
-        this.handleFrame(channelId, payload);
+        this.frameRouterRuntime.handleFrame(channelId, payload);
       },
       onReadError: (error) => {
         console.error('[bpane] stream read error:', error);
+      },
+    });
+    this.frameRouterRuntime = new SessionFrameRouterRuntime({
+      tileCompositor: this.tileCompositor,
+      stats: this.stats,
+      handleVideoFrame: (payload) => {
+        this.handleVideoFrame(payload);
+      },
+      handleAudioFrame: (payload) => {
+        this.audio.handleFrame(payload);
+      },
+      handleCursorUpdate: (payload) => {
+        this.handleCursorUpdate(payload);
+      },
+      handleClipboardUpdate: (payload) => {
+        this.handleClipboardUpdate(payload);
+      },
+      handleControlMessage: (payload) => {
+        this.handleControlMessage(payload);
+      },
+      handleFileDownloadFrame: (payload) => {
+        this.fileTransfer?.handleFrame(payload);
+      },
+      clearVideoOverlay: () => {
+        this.clearVideoOverlay();
+      },
+      markDisplayDirty: () => {
+        this.displayDirty = true;
       },
     });
     this.transportRuntime = new SessionTransportRuntime({
@@ -688,109 +718,6 @@ export class BpaneSession {
       });
     }
     await this.streamReaderRuntime.readStream(stream);
-  }
-
-  private handleFrame(channelId: number, payload: Uint8Array): void {
-    switch (channelId) {
-      case CH_VIDEO:
-        this.handleVideoFrame(payload);
-        break;
-      case CH_AUDIO_OUT:
-        this.audio.handleFrame(payload);
-        break;
-      case CH_CURSOR:
-        this.handleCursorUpdate(payload);
-        break;
-      case CH_CLIPBOARD:
-        this.handleClipboardUpdate(payload);
-        break;
-      case CH_CONTROL:
-        this.handleControlMessage(payload);
-        break;
-      case CH_FILE_DOWN:
-        this.fileTransfer?.handleFrame(payload);
-        break;
-      case CH_TILES:
-        {
-          this.stats.tileCommandBytes += payload.byteLength;
-          const cmd = this.tileCompositor.handlePayload(payload);
-          if (!cmd) {
-            this.stats.tileCommandCounts.unknown += 1;
-            break;
-          }
-          switch (cmd.type) {
-            case 'grid-config':
-              this.stats.tileCommandCounts.gridConfig += 1;
-              this.stats.resetPendingTileBatch();
-              break;
-            case 'batch-end':
-              this.stats.tileCommandCounts.batchEnd += 1;
-              {
-                const grid = this.tileCompositor.getGridConfig();
-                const tileSize = grid?.tileSize ?? 64;
-                const cols = grid?.cols ?? 0;
-                const rows = grid?.rows ?? 0;
-                this.stats.finalizePendingTileBatch(tileSize, cols, rows);
-              }
-              this.displayDirty = true;
-              break;
-            case 'fill':
-              this.stats.tileCommandCounts.fill += 1;
-              this.stats.pendingTileBatch.fill += 1;
-              break;
-            case 'qoi':
-              this.stats.tileCommandCounts.qoi += 1;
-              this.stats.pendingTileBatch.qoi += 1;
-              this.stats.pendingTileBatch.qoiBytes += cmd.data.byteLength;
-              break;
-            case 'zstd':
-              this.stats.tileCommandCounts.zstd += 1;
-              this.stats.pendingTileBatch.qoi += 1;
-              this.stats.pendingTileBatch.qoiBytes += cmd.data.byteLength;
-              break;
-            case 'cache-hit':
-              this.stats.tileCommandCounts.cacheHit += 1;
-              this.stats.pendingTileBatch.cacheHit += 1;
-              break;
-            case 'video-region':
-              this.stats.tileCommandCounts.videoRegion += 1;
-              break;
-            case 'scroll-copy':
-              this.stats.tileCommandCounts.scrollCopy += 1;
-              this.stats.pendingTileBatch.hasScrollCopy = true;
-              this.stats.pendingTileBatch.maxAbsDy = Math.max(this.stats.pendingTileBatch.maxAbsDy, Math.abs(cmd.dy));
-              break;
-            case 'grid-offset':
-              this.stats.tileCommandCounts.gridOffset += 1;
-              this.stats.pendingTileBatch.gridOffsetY = cmd.offsetY;
-              break;
-            case 'scroll-stats':
-              this.stats.tileCommandCounts.scrollStats += 1;
-              this.stats.recordHostScrollStats(
-                cmd.scrollBatchesTotal,
-                cmd.scrollFullFallbacksTotal,
-                cmd.scrollPotentialTilesTotal,
-                cmd.scrollSavedTilesTotal,
-              );
-              break;
-            default:
-              this.stats.tileCommandCounts.unknown += 1;
-              break;
-          }
-          if (cmd.type === 'scroll-copy') {
-            // During scroll-copy/grid-shift, stale video overlays drift from
-            // true content position. Clear and wait for fresh video frames.
-            this.clearVideoOverlay();
-          } else if (cmd.type === 'grid-offset') {
-            if (cmd.offsetX !== 0 || cmd.offsetY !== 0) {
-              this.clearVideoOverlay();
-            }
-          } else if (cmd.type === 'grid-config') {
-            this.clearVideoOverlay();
-          }
-        }
-        break;
-    }
   }
 
   private handleVideoFrame(payload: Uint8Array): void {
