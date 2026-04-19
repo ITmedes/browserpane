@@ -24,6 +24,7 @@ import { CameraController } from './camera-controller.js';
 import { FileTransferController } from './file-transfer.js';
 import { InputController } from './input-controller.js';
 import { SessionCapabilityRuntime } from './session-capability-runtime.js';
+import { SessionResizeRuntime } from './session-resize-runtime.js';
 import { UnsupportedFeatureError } from './shared/errors.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
 
@@ -59,7 +60,6 @@ export type { ChannelTransferStats, TileCommandStats } from './session-stats.js'
 export type { SessionStatsSnapshot as SessionStats } from './session-stats.js';
 export type { WebGLRendererDiagnostics as RenderDiagnostics } from './webgl-compositor.js';
 
-const RESIZE_DEBOUNCE_MS = 150;
 const PING_INTERVAL_MS = 5000;
 const TILE_CACHE_MISS = 0x09;
 const VIDEO_OVERLAY_STALE_MS = 450;
@@ -67,19 +67,15 @@ export class BpaneSession {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null = null;
   private container: HTMLElement;
-  private resizeObserver: ResizeObserver;
   private transport: WebTransport | null = null;
   private options: BpaneOptions;
   private connected = false;
-  private resizeTimeout: number | null = null;
   // Extracted: input event handling
   private input: InputController | null = null;
   private videoDecoder: VideoDecoder | null = null;
   private cursorEl: HTMLCanvasElement | null = null;
   private cursorCtx: CanvasRenderingContext2D | null = null;
   private cursorHotspot: { x: number; y: number } = { x: 0, y: 0 };
-  private hiDpi: boolean;
-  private scale = 1;
   private sendWritable: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private pendingFrames: Uint8Array[] = [];
   private pendingCameraFrame: Uint8Array | null = null;
@@ -106,8 +102,8 @@ export class BpaneSession {
   private remoteWidth = 0;
   private remoteHeight = 0;
   // Gateway-managed access state.
-  private resolutionLocked = false;
   private viewerRestricted = false;
+  private resizeRuntime: SessionResizeRuntime;
 
   // Tile compositor
   private tileCompositor = new TileCompositor();
@@ -149,8 +145,6 @@ export class BpaneSession {
   private constructor(options: BpaneOptions) {
     this.options = options;
     this.container = options.container;
-    this.hiDpi = options.hiDpi ?? false;
-    this.scale = this.computeScale();
     this.audio = new AudioController(
       options.audio ?? true,
       (channelId, payload) => this.sendFrame(channelId, payload),
@@ -217,23 +211,39 @@ export class BpaneSession {
       this.sendTileCacheMiss(frameSeq, col, row, hash);
     });
 
-    // ResizeObserver for container-driven sizing
-    this.resizeObserver = new ResizeObserver((entries) => {
+    const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        this.handleResize(Math.floor(width), Math.floor(height));
+        this.resizeRuntime.handleResize(Math.floor(width), Math.floor(height));
       }
     });
-    this.resizeObserver.observe(this.container);
-
-    // Set initial canvas size
-    const rect = this.container.getBoundingClientRect();
-    const dims = this.scaledDims(rect.width, rect.height);
-    this.canvas.width = dims.width;
-    this.canvas.height = dims.height;
-    if (this.glRenderer) {
-      this.glRenderer.resize(dims.width, dims.height);
-    }
+    this.resizeRuntime = new SessionResizeRuntime({
+      container: this.container,
+      canvas: this.canvas,
+      cursorEl: this.cursorEl,
+      hiDpi: options.hiDpi ?? false,
+      resizeObserver,
+      resizeRenderer: (width, height) => {
+        if (this.glRenderer) {
+          this.glRenderer.resize(width, height);
+        }
+      },
+      markDisplayDirty: () => {
+        this.displayDirty = true;
+      },
+      sendResizeRequest: (width, height) => {
+        this.sendResizeRequest(width, height);
+      },
+      setRemoteSize: (width, height) => {
+        this.remoteWidth = width;
+        this.remoteHeight = height;
+      },
+      onResolutionChange: (width, height) => {
+        this.options.onResolutionChange?.(width, height);
+      },
+    });
+    this.resizeRuntime.initializeCanvasSize();
+    resizeObserver.observe(this.container);
 
     // Start display loop
     this.startDisplayLoop();
@@ -327,7 +337,7 @@ export class BpaneSession {
     if (!this.connected) return;
     this.connected = false;
     this.displayLoopRunning = false;
-    this.resizeObserver.disconnect();
+    this.resizeRuntime.destroy();
 
     // Remove all DOM event listeners
     if (this.input) {
@@ -725,8 +735,7 @@ export class BpaneSession {
       }
       this.schedulePendingCameraFlush(0);
       // Send initial resolution
-      const rect = this.container.getBoundingClientRect();
-      const dims = this.scaledDims(rect.width, rect.height);
+      const dims = this.resizeRuntime.getContainerResizeDims();
       this.sendResizeRequest(dims.width, dims.height);
     }
 
@@ -984,120 +993,9 @@ export class BpaneSession {
 
   // ── Resize ─────────────────────────────────────────────────────────
 
-  private handleResize(width: number, height: number): void {
-    // Non-owner clients have a locked resolution — ignore resize events
-    if (this.resolutionLocked) return;
-
-    if (this.resizeTimeout !== null) {
-      clearTimeout(this.resizeTimeout);
-    }
-    this.resizeTimeout = window.setTimeout(() => {
-      const dims = this.scaledDims(width, height);
-      this.canvas.width = dims.width;
-      this.canvas.height = dims.height;
-      if (this.glRenderer) {
-        this.glRenderer.resize(dims.width, dims.height);
-      }
-      if (this.cursorEl) {
-        this.cursorEl.width = dims.width;
-        this.cursorEl.height = dims.height;
-      }
-      this.displayDirty = true;
-      this.sendResizeRequest(dims.width, dims.height);
-    }, RESIZE_DEBOUNCE_MS);
-  }
-
-  /**
-   * Lock the local view to a gateway-selected remote resolution.
-   * Disconnects the ResizeObserver so browser resize has no effect.
-   * Sets the container to a fixed pixel size matching the remote resolution.
-   * This may apply both to true viewers and to collaborative clients that are
-   * interactive but not allowed to drive the remote resolution.
-   */
-  private setResolutionLock(width: number, height: number): void {
-    this.resolutionLocked = true;
-    this.remoteWidth = width;
-    this.remoteHeight = height;
-
-    // Stop watching for container resizes
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-    }
-
-    // Clear any pending resize
-    if (this.resizeTimeout !== null) {
-      clearTimeout(this.resizeTimeout);
-      this.resizeTimeout = null;
-    }
-
-    // Set canvas pixel dimensions to match the locked resolution exactly
-    this.canvas.width = width;
-    this.canvas.height = height;
-    if (this.glRenderer) {
-      this.glRenderer.resize(width, height);
-    }
-    if (this.cursorEl) {
-      this.cursorEl.width = width;
-      this.cursorEl.height = height;
-    }
-
-    // Set the container to a fixed size so it does not respond to browser resize.
-    // CSS size = remote pixels / scale, so the canvas at 100% CSS fills exactly.
-    const scale = this.computeScale();
-    const cssW = Math.ceil(width / scale);
-    const cssH = Math.ceil(height / scale);
-    this.container.style.flex = 'none';
-    this.container.style.width = `${cssW}px`;
-    this.container.style.height = `${cssH}px`;
-    this.container.style.resize = 'none';
-    this.container.style.maxWidth = `${cssW}px`;
-    this.container.style.maxHeight = `${cssH}px`;
-
-    console.log(`[bpane] resolution locked to ${width}x${height} (container: ${cssW}x${cssH}px)`);
-    this.options.onResolutionChange?.(width, height);
-  }
-
-  private unlockResolution(): void {
-    if (!this.resolutionLocked) return;
-
-    this.resolutionLocked = false;
-    this.container.style.flex = '';
-    this.container.style.width = '';
-    this.container.style.height = '';
-    this.container.style.resize = '';
-    this.container.style.maxWidth = '';
-    this.container.style.maxHeight = '';
-    this.resizeObserver.observe(this.container);
-
-    const rect = this.container.getBoundingClientRect();
-    const dims = this.scaledDims(rect.width, rect.height);
-    this.canvas.width = dims.width;
-    this.canvas.height = dims.height;
-    if (this.glRenderer) {
-      this.glRenderer.resize(dims.width, dims.height);
-    }
-    if (this.cursorEl) {
-      this.cursorEl.width = dims.width;
-      this.cursorEl.height = dims.height;
-    }
-    this.displayDirty = true;
-    this.sendResizeRequest(dims.width, dims.height);
-  }
-
   private applyClientAccessState(flags: number, width: number, height: number): void {
     this.viewerRestricted = (flags & 0x01) !== 0;
-    const resizeLocked = (flags & 0x02) !== 0;
-
-    if (resizeLocked) {
-      if (width > 0 && height > 0) {
-        this.setResolutionLock(width, height);
-      } else {
-        this.resolutionLocked = true;
-      }
-    } else {
-      this.unlockResolution();
-    }
-
+    this.resizeRuntime.applyClientAccessState(flags, width, height);
     this.updateCapabilities();
   }
 
@@ -1238,22 +1136,6 @@ export class BpaneSession {
       || channelId === CH_AUDIO_IN
       || channelId === CH_VIDEO_IN
       || channelId === CH_FILE_UP;
-  }
-
-  // ── Scaling ────────────────────────────────────────────────────────
-
-  private computeScale(): number {
-    if (!this.hiDpi) return 1;
-    const dpr = window.devicePixelRatio || 1;
-    return Math.max(1, Math.min(3, dpr));
-  }
-
-  private scaledDims(width: number, height: number): { width: number; height: number } {
-    this.scale = this.computeScale();
-    return {
-      width: Math.floor(width * this.scale),
-      height: Math.floor(height * this.scale),
-    };
   }
 
   // ── Cursor drawing ─────────────────────────────────────────────────
