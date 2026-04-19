@@ -20,6 +20,7 @@ import {
 } from './input/input-message-codec.js';
 import { AtomicMacShortcutDispatcher } from './input/atomic-mac-shortcut-dispatcher.js';
 import { ClipboardSyncRuntime } from './input/clipboard-sync-runtime.js';
+import { CompositionTextRuntime } from './input/composition-text-runtime.js';
 import { DeadKeyStateRuntime } from './input/dead-key-state-runtime.js';
 import { DeferredCtrlPasteRuntime } from './input/deferred-ctrl-paste-runtime.js';
 import { KeyEventStateResolver } from './input/key-event-state-resolver.js';
@@ -75,6 +76,7 @@ export class InputController {
   private inputAbortController: AbortController | null = null;
   private lastClipboardHash: bigint = 0n;
   private readonly clipboardSync: ClipboardSyncRuntime;
+  private readonly compositionText: CompositionTextRuntime;
   private readonly deadKeyState: DeadKeyStateRuntime;
   private readonly keyboardSink: KeyboardSinkRuntime;
   private readonly pointerInput: PointerInputRuntime;
@@ -112,6 +114,16 @@ export class InputController {
         this.lastClipboardHash = hash;
       },
       navigatorLike: typeof navigator === 'undefined' ? undefined : navigator,
+      documentLike: typeof document === 'undefined' ? undefined : document,
+    });
+    this.compositionText = new CompositionTextRuntime({
+      commitText: (text) => {
+        this.pendingComposition.commit(text);
+      },
+      getKeyboardSinkValue: () => this.keyboardSink.getValue(),
+      clearKeyboardSink: () => {
+        this.keyboardSink.clear();
+      },
       documentLike: typeof document === 'undefined' ? undefined : document,
     });
     this.deadKeyState = new DeadKeyStateRuntime({
@@ -238,17 +250,6 @@ export class InputController {
     this.inputAbortController = new AbortController();
     const signal = this.inputAbortController.signal;
     const keyboardTarget = this.keyboardSink.ensure();
-    const handleCompositionEnd = (e: Event) => {
-      const event = e as CompositionEvent;
-      this.pendingComposition.commit(event.data ?? '');
-      this.keyboardSink.clear();
-    };
-    const handleTextInput = (e: Event) => {
-      const event = e as InputEvent;
-      const text = event.data ?? this.keyboardSink.getValue();
-      this.pendingComposition.commit(text);
-      this.keyboardSink.clear();
-    };
     this.pointerInput.bind({
       signal,
       focusKeyboardTarget: () => {
@@ -490,9 +491,10 @@ export class InputController {
       );
     }, { signal });
 
-    keyboardTarget.addEventListener('compositionend', handleCompositionEnd, { signal });
-    keyboardTarget.addEventListener('input', handleTextInput, { signal });
-    document.addEventListener('compositionend', handleCompositionEnd, { capture: true, signal });
+    this.compositionText.bind({
+      keyboardTarget,
+      signal,
+    });
 
     if (this.clipboardEnabled) {
       this.clipboardSync.bind({
