@@ -26,7 +26,7 @@ import { SessionControlRuntime } from './session-control-runtime.js';
 import { SessionCursorRuntime } from './session-cursor-runtime.js';
 import { SessionResizeRuntime } from './session-resize-runtime.js';
 import { SessionSendRuntime } from './session-send-runtime.js';
-import { UnsupportedFeatureError } from './shared/errors.js';
+import { SessionTransportRuntime } from './session-transport-runtime.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
 
 export interface BpaneOptions {
@@ -68,7 +68,6 @@ export class BpaneSession {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null = null;
   private container: HTMLElement;
-  private transport: WebTransport | null = null;
   private options: BpaneOptions;
   private connected = false;
   // Extracted: input event handling
@@ -94,7 +93,7 @@ export class BpaneSession {
   };
   private capabilityRuntime: SessionCapabilityRuntime;
   private fileTransfer: FileTransferController | null = null;
-  private pingInterval: ReturnType<typeof setInterval> | null = null;
+  private transportRuntime: SessionTransportRuntime;
   private pingSeq = 0;
   private remoteWidth = 0;
   private remoteHeight = 0;
@@ -209,6 +208,36 @@ export class BpaneSession {
       onWriteError: (message, error) => {
         console.error(message, error);
       },
+    });
+    this.transportRuntime = new SessionTransportRuntime({
+      onConnect: () => {
+        this.connected = true;
+        this.options.onConnect?.();
+      },
+      onDisconnect: (reason) => {
+        if (!this.connected) {
+          return;
+        }
+        this.connected = false;
+        this.options.onDisconnect?.(reason);
+      },
+      onError: (error) => {
+        this.options.onError?.(error);
+      },
+      onStream: (stream) => this.handleStream(stream),
+      onDatagram: (datagram) => {
+        this.stats.recordRx(CH_VIDEO, datagram.byteLength);
+        this.stats.videoDatagramsRx += 1;
+        this.stats.videoDatagramBytesRx += datagram.byteLength;
+        this.handleVideoFrame(datagram);
+      },
+      onDatagramReadError: (error) => {
+        console.error('[bpane] datagram read error:', error);
+      },
+      sendPing: () => {
+        this.sendPing();
+      },
+      pingIntervalMs: PING_INTERVAL_MS,
     });
 
     // Create canvas element
@@ -392,11 +421,6 @@ export class BpaneSession {
       this.input = null;
     }
 
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
-
     if (this.videoDecoder) {
       try { this.videoDecoder.close(); } catch (_) { /* ignore */ }
       this.videoDecoder = null;
@@ -411,11 +435,7 @@ export class BpaneSession {
     }
 
     this.clearVideoOverlay();
-
-    if (this.transport) {
-      this.transport.close();
-      this.transport = null;
-    }
+    this.transportRuntime.disconnect();
 
     if (this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas);
@@ -466,127 +486,11 @@ export class BpaneSession {
   }
 
   private async setupTransport(): Promise<void> {
-    // Unique nonce prevents Chrome from pooling this WebTransport session
-    // onto an existing QUIC connection (wtransport only handles one session
-    // per QUIC connection).
-    const nonce = `${Date.now()}.${Math.random().toString(36).slice(2)}`;
-    const url = `${this.options.gatewayUrl}?token=${encodeURIComponent(this.options.token)}&_=${nonce}`;
-
-    // Fetch cert hash for self-signed certs
-    let certHash: Uint8Array | null = null;
-    if (this.options.certHashUrl) {
-      certHash = await this.fetchCertHash(this.options.certHashUrl);
-    }
-
-    try {
-      if (typeof WebTransport === 'undefined') {
-        throw new UnsupportedFeatureError(
-          'bpane.transport.webtransport_unavailable',
-          'WebTransport is unavailable in this browser',
-        );
-      }
-      const wtOptions: WebTransportOptions = {};
-      if (certHash) {
-        wtOptions.serverCertificateHashes = [{
-          algorithm: 'sha-256',
-          value: new Uint8Array(certHash).buffer,
-        }];
-      }
-      this.transport = new WebTransport(url, wtOptions);
-      await this.transport.ready;
-      this.connected = true;
-      this.options.onConnect?.();
-
-      // Handle transport close
-      this.transport.closed.then(() => {
-        if (this.connected) {
-          this.connected = false;
-          this.options.onDisconnect?.('transport closed');
-        }
-      }).catch((e: Error) => {
-        if (this.connected) {
-          this.connected = false;
-          this.options.onError?.(e);
-          this.options.onDisconnect?.('transport error');
-        }
-      });
-
-      this.readStreams();
-      this.readDatagrams();
-      this.startPingTimer();
-    } catch (e) {
-      const error = e instanceof Error ? e : new Error(String(e));
-      this.options.onError?.(error);
-      throw error;
-    }
-  }
-
-  private async fetchCertHash(url: string): Promise<Uint8Array | null> {
-    try {
-      const resp = await fetch(url);
-      if (!resp.ok) return null;
-      const b64 = (await resp.text()).trim();
-      if (b64.length < 10) return null;
-      const raw = atob(b64);
-      const bytes = new Uint8Array(raw.length);
-      for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-      return bytes;
-    } catch {
-      return null;
-    }
-  }
-
-  private async readStreams(): Promise<void> {
-    if (!this.transport) return;
-    const reader = this.transport.incomingBidirectionalStreams.getReader();
-    try {
-      while (this.connected) {
-        const { value: stream, done } = await reader.read();
-        if (done) break;
-        if (stream) this.handleStream(stream);
-      }
-    } catch (e) {
-      if (this.connected) {
-        this.options.onError?.(e instanceof Error ? e : new Error(String(e)));
-      }
-    }
-  }
-
-  private async readDatagrams(): Promise<void> {
-    if (!this.transport) return;
-    try {
-      const reader = this.transport.datagrams.readable.getReader();
-      while (this.connected) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) {
-          const datagram = new Uint8Array(value);
-          this.stats.recordRx(CH_VIDEO, datagram.byteLength);
-          this.stats.videoDatagramsRx += 1;
-          this.stats.videoDatagramBytesRx += datagram.byteLength;
-          this.handleVideoFrame(datagram);
-        }
-      }
-    } catch (e) {
-      if (this.connected) {
-        console.error('[bpane] datagram read error:', e);
-      }
-    }
-  }
-
-  private startPingTimer(): void {
-    this.pingInterval = setInterval(() => {
-      if (!this.connected) return;
-      this.pingSeq++;
-      const now = BigInt(Date.now());
-      const payload = new Uint8Array(13);
-      const view = new DataView(payload.buffer);
-      payload[0] = 0x04; // Ping tag
-      view.setUint32(1, this.pingSeq, true);
-      view.setUint32(5, Number(now & 0xFFFFFFFFn), true);
-      view.setUint32(9, Number((now >> 32n) & 0xFFFFFFFFn), true);
-      this.sendFrame(CH_CONTROL, payload);
-    }, PING_INTERVAL_MS);
+    await this.transportRuntime.connect({
+      gatewayUrl: this.options.gatewayUrl,
+      token: this.options.token,
+      certHashUrl: this.options.certHashUrl,
+    });
   }
 
   // ── Video decode via WebCodecs ────────────────────────────────────
@@ -979,6 +883,18 @@ export class BpaneSession {
     payload[2] = (width >> 8) & 0xFF;
     payload[3] = height & 0xFF;
     payload[4] = (height >> 8) & 0xFF;
+    this.sendFrame(CH_CONTROL, payload);
+  }
+
+  private sendPing(): void {
+    this.pingSeq++;
+    const now = BigInt(Date.now());
+    const payload = new Uint8Array(13);
+    const view = new DataView(payload.buffer);
+    payload[0] = 0x04; // Ping tag
+    view.setUint32(1, this.pingSeq, true);
+    view.setUint32(5, Number(now & 0xFFFFFFFFn), true);
+    view.setUint32(9, Number((now >> 32n) & 0xFFFFFFFFn), true);
     this.sendFrame(CH_CONTROL, payload);
   }
 
