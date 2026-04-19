@@ -24,6 +24,7 @@ import { CameraController } from './camera-controller.js';
 import { FileTransferController } from './file-transfer.js';
 import { InputController } from './input-controller.js';
 import { SessionCapabilityRuntime } from './session-capability-runtime.js';
+import { SessionControlRuntime } from './session-control-runtime.js';
 import { SessionResizeRuntime } from './session-resize-runtime.js';
 import { UnsupportedFeatureError } from './shared/errors.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
@@ -103,6 +104,7 @@ export class BpaneSession {
   private remoteHeight = 0;
   // Gateway-managed access state.
   private viewerRestricted = false;
+  private controlRuntime: SessionControlRuntime;
   private resizeRuntime: SessionResizeRuntime;
 
   // Tile compositor
@@ -166,6 +168,41 @@ export class BpaneSession {
       },
       onCapabilitiesChange: (capabilities) => {
         this.options.onCapabilitiesChange?.(capabilities);
+      },
+    });
+    this.controlRuntime = new SessionControlRuntime({
+      setRemoteSize: (width, height) => {
+        this.remoteWidth = width;
+        this.remoteHeight = height;
+      },
+      onResolutionChange: (width, height) => {
+        this.options.onResolutionChange?.(width, height);
+      },
+      setSessionFlags: (flags) => {
+        this.sessionFlags = flags;
+      },
+      setMicrophoneSupported: (supported) => {
+        this.microphoneSupported = supported;
+      },
+      setCameraSupported: (supported) => {
+        this.cameraSupported = supported;
+      },
+      configureInputExtendedKeyEvents: (enabled) => {
+        if (this.input) {
+          this.input.serverSupportsKeyEventEx = enabled;
+        }
+      },
+      sendLayoutHint: () => {
+        this.input?.sendLayoutHint();
+      },
+      updateCapabilities: () => {
+        this.updateCapabilities();
+      },
+      applyClientAccessState: (flags, width, height) => {
+        this.applyClientAccessState(flags, width, height);
+      },
+      sendControlFrame: (payload) => {
+        this.sendFrame(CH_CONTROL, payload);
       },
     });
 
@@ -935,60 +972,7 @@ export class BpaneSession {
   // ── Control ────────────────────────────────────────────────────────
 
   private handleControlMessage(payload: Uint8Array): void {
-    if (payload.length < 1) return;
-    const tag = payload[0];
-    switch (tag) {
-      case 0x02: // ResolutionAck
-        if (payload.length >= 5) {
-          const width = payload[1] | (payload[2] << 8);
-          const height = payload[3] | (payload[4] << 8);
-          this.remoteWidth = width;
-          this.remoteHeight = height;
-          this.options.onResolutionChange?.(width, height);
-        }
-        break;
-      case 0x03: // SessionReady
-        if (payload.length >= 3) {
-          const flags = payload[2];
-          this.sessionFlags = flags;
-          const supportsEx = (flags & 0x20) !== 0;
-          this.microphoneSupported = (flags & 0x08) !== 0;
-          this.cameraSupported = (flags & 0x10) !== 0;
-          if (this.input) {
-            this.input.serverSupportsKeyEventEx = supportsEx;
-            if (supportsEx) {
-              this.input.sendLayoutHint();
-            }
-          }
-          this.updateCapabilities();
-        }
-        break;
-      case 0x04: // Ping — respond with Pong
-        if (payload.length >= 13) {
-          const pong = new Uint8Array(13);
-          pong[0] = 0x05; // Pong tag
-          pong.set(payload.slice(1, 13), 1);
-          this.sendFrame(CH_CONTROL, pong);
-        }
-        break;
-      case 0x05: // Pong — latency measurement (available via stats)
-        break;
-      case 0x08: // ResolutionLocked — legacy viewer lock message
-        if (payload.length >= 5) {
-          const lockedW = payload[1] | (payload[2] << 8);
-          const lockedH = payload[3] | (payload[4] << 8);
-          this.applyClientAccessState(0x03, lockedW, lockedH);
-        }
-        break;
-      case 0x09: // ClientAccessState — resize lock and view-only state are independent
-        if (payload.length >= 6) {
-          const flags = payload[1];
-          const width = payload[2] | (payload[3] << 8);
-          const height = payload[4] | (payload[5] << 8);
-          this.applyClientAccessState(flags, width, height);
-        }
-        break;
-    }
+    this.controlRuntime.handle(payload);
   }
 
   // ── Resize ─────────────────────────────────────────────────────────
