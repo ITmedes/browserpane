@@ -6,12 +6,10 @@
  */
 
 import {
-  encodeFrame, parseFrames,
+  parseFrames,
   FRAME_HEADER_SIZE,
-  CH_VIDEO, CH_AUDIO_OUT, CH_AUDIO_IN, CH_VIDEO_IN, CH_INPUT, CH_CURSOR,
-  CH_CLIPBOARD, CH_CONTROL, CH_FILE_UP, CH_FILE_DOWN,
-  INPUT_MOUSE_MOVE,
-  CTRL_KEYBOARD_LAYOUT,
+  CH_VIDEO, CH_AUDIO_OUT, CH_CURSOR,
+  CH_CLIPBOARD, CH_CONTROL, CH_FILE_DOWN,
 } from './protocol.js';
 
 import { NalReassembler, getNalType, type ReassembledNal, type TileInfo } from './nal.js';
@@ -27,6 +25,7 @@ import { SessionCapabilityRuntime } from './session-capability-runtime.js';
 import { SessionControlRuntime } from './session-control-runtime.js';
 import { SessionCursorRuntime } from './session-cursor-runtime.js';
 import { SessionResizeRuntime } from './session-resize-runtime.js';
+import { SessionSendRuntime } from './session-send-runtime.js';
 import { UnsupportedFeatureError } from './shared/errors.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
 
@@ -77,10 +76,7 @@ export class BpaneSession {
   private videoDecoder: VideoDecoder | null = null;
   private cursorEl: HTMLCanvasElement | null = null;
   private cursorRuntime: SessionCursorRuntime;
-  private sendWritable: WritableStreamDefaultWriter<Uint8Array> | null = null;
-  private pendingFrames: Uint8Array[] = [];
-  private pendingCameraFrame: Uint8Array | null = null;
-  private pendingCameraFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private sendRuntime: SessionSendRuntime;
   // Extracted: audio output, Opus decode, and microphone
   private audio: AudioController;
   private camera: CameraController;
@@ -203,6 +199,15 @@ export class BpaneSession {
       },
       sendControlFrame: (payload) => {
         this.sendFrame(CH_CONTROL, payload);
+      },
+    });
+    this.sendRuntime = new SessionSendRuntime({
+      isViewerRestricted: () => this.viewerRestricted,
+      recordTx: (channelId, bytes) => {
+        this.stats.recordTx(channelId, bytes);
+      },
+      onWriteError: (message, error) => {
+        console.error(message, error);
       },
     });
 
@@ -427,12 +432,7 @@ export class BpaneSession {
       this.glRenderer = null;
       this.tileCompositor.setWebGLRenderer(null);
     }
-    if (this.pendingCameraFlushTimer) {
-      clearTimeout(this.pendingCameraFlushTimer);
-      this.pendingCameraFlushTimer = null;
-    }
-    this.sendWritable = null;
-    this.pendingCameraFrame = null;
+    this.sendRuntime.destroy();
     this.remoteWidth = 0;
     this.remoteHeight = 0;
     this.microphoneEncoderSupported = false;
@@ -765,20 +765,11 @@ export class BpaneSession {
   // ── Stream handling ────────────────────────────────────────────────
 
   private async handleStream(stream: WebTransportBidirectionalStream): Promise<void> {
-    if (!this.sendWritable) {
-      this.sendWritable = stream.writable.getWriter();
-      // Flush queued frames
-      if (this.pendingFrames.length > 0) {
-        const queued = this.pendingFrames.splice(0);
-        queued.forEach((f) => {
-          this.stats.recordTx(f[0] ?? 0, f.length);
-          this.sendWritable?.write(f).catch(() => {});
-        });
-      }
-      this.schedulePendingCameraFlush(0);
-      // Send initial resolution
-      const dims = this.resizeRuntime.getContainerResizeDims();
-      this.sendResizeRequest(dims.width, dims.height);
+    if (!this.sendRuntime.hasWriter()) {
+      this.sendRuntime.attachWriter(stream.writable.getWriter(), () => {
+        const dims = this.resizeRuntime.getContainerResizeDims();
+        this.sendResizeRequest(dims.width, dims.height);
+      });
     }
 
     const reader = stream.readable.getReader();
@@ -1005,109 +996,11 @@ export class BpaneSession {
   }
 
   private sendCameraFrame(payload: Uint8Array): 'sent' | 'queued' | 'replaced' {
-    if (payload.length === 0) {
-      this.pendingCameraFrame = null;
-      this.sendFrame(CH_VIDEO_IN, payload);
-      return 'sent';
-    }
-
-    const frame = encodeFrame(CH_VIDEO_IN, payload);
-    if (!this.sendWritable) {
-      const replaced = this.pendingCameraFrame !== null;
-      this.pendingCameraFrame = frame;
-      return replaced ? 'replaced' : 'queued';
-    }
-
-    const ds = this.sendWritable.desiredSize;
-    if (ds !== null && ds <= 0) {
-      const replaced = this.pendingCameraFrame !== null;
-      this.pendingCameraFrame = frame;
-      this.schedulePendingCameraFlush();
-      return replaced ? 'replaced' : 'queued';
-    }
-
-    this.stats.recordTx(CH_VIDEO_IN, frame.length);
-    this.sendWritable.write(frame).catch((e) => {
-      console.error('[bpane] camera frame write failed', e);
-    });
-    return 'sent';
-  }
-
-  private schedulePendingCameraFlush(delayMs = 40): void {
-    if (this.pendingCameraFlushTimer) return;
-    this.pendingCameraFlushTimer = setTimeout(() => {
-      this.pendingCameraFlushTimer = null;
-      this.flushPendingCameraFrame();
-    }, delayMs);
-  }
-
-  private flushPendingCameraFrame(): void {
-    if (!this.pendingCameraFrame || !this.sendWritable) return;
-
-    const ds = this.sendWritable.desiredSize;
-    if (ds !== null && ds <= 0) {
-      this.schedulePendingCameraFlush();
-      return;
-    }
-
-    const frame = this.pendingCameraFrame;
-    this.pendingCameraFrame = null;
-    this.stats.recordTx(CH_VIDEO_IN, frame.length);
-    this.sendWritable.write(frame).catch((e) => {
-      console.error('[bpane] pending camera frame write failed', e);
-    });
-    if (this.pendingCameraFrame) {
-      this.schedulePendingCameraFlush(0);
-    }
+    return this.sendRuntime.sendCameraFrame(payload);
   }
 
   private sendFrame(channelId: number, payload: Uint8Array): void {
-    if (this.isViewerBlockedChannel(channelId, payload)) {
-      return;
-    }
-
-    const frame = encodeFrame(channelId, payload);
-
-    if (!this.sendWritable) {
-      this.pendingFrames.push(frame);
-      return;
-    }
-
-    // Backpressure: drop low-priority frames when the write queue is full.
-    // desiredSize <= 0 means the internal buffer is at or over capacity.
-    const ds = this.sendWritable.desiredSize;
-    if (ds !== null && ds <= 0 && channelId === CH_INPUT && payload[0] === INPUT_MOUSE_MOVE) {
-      // Only mouse-move frames are safe to drop under pressure because the
-      // next move supersedes the previous position. Keyboard/button frames
-      // must preserve both press and release ordering.
-      return;
-    }
-    if (ds !== null && ds <= 0 && channelId === CH_VIDEO_IN && payload.length > 0) {
-      // Webcam ingress is live media; when transport backpressure builds,
-      // drop stale frames instead of increasing end-to-end latency.
-      return;
-    }
-
-    this.stats.recordTx(channelId, frame.length);
-    this.sendWritable.write(frame).catch((e) => {
-      console.error('[bpane] sendFrame write failed', e);
-    });
-  }
-
-  private isViewerBlockedChannel(channelId: number, payload: Uint8Array): boolean {
-    if (!this.viewerRestricted) {
-      return false;
-    }
-
-    if (channelId === CH_CONTROL) {
-      return payload[0] === CTRL_KEYBOARD_LAYOUT;
-    }
-
-    return channelId === CH_INPUT
-      || channelId === CH_CLIPBOARD
-      || channelId === CH_AUDIO_IN
-      || channelId === CH_VIDEO_IN
-      || channelId === CH_FILE_UP;
+    this.sendRuntime.sendFrame(channelId, payload);
   }
 
   // ── Microphone (delegated to AudioController) ──────────────────────
