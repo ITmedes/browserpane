@@ -20,6 +20,7 @@ import {
 } from './input/input-message-codec.js';
 import { ClipboardSyncRuntime } from './input/clipboard-sync-runtime.js';
 import { DeferredCtrlPasteRuntime } from './input/deferred-ctrl-paste-runtime.js';
+import { KeyEventStateResolver } from './input/key-event-state-resolver.js';
 import { KeyboardSinkRuntime } from './input/keyboard-sink-runtime.js';
 import {
   inferLayoutHint,
@@ -83,6 +84,7 @@ export class InputController {
   private remappedKeys = new Map<string, RemappedKeyState>();
   private readonly pendingComposition: PendingCompositionRuntime;
   private readonly macModifiers: MacModifierStateRuntime;
+  private readonly keyEventStateResolver: KeyEventStateResolver;
   private readonly deferredCtrlPaste: DeferredCtrlPasteRuntime;
   private readonly shortcutPolicy: ShortcutGatingPolicy;
   private readonly shortcutKeyRelease: ShortcutKeyReleaseRuntime;
@@ -151,6 +153,10 @@ export class InputController {
       emitModifierKey: (code, down) => {
         this.sendKeyEvent(code, '', down, false, false, false, false, false);
       },
+    });
+    this.keyEventStateResolver = new KeyEventStateResolver({
+      macMetaAsCtrl: this.macMetaAsCtrl,
+      isMacOptionComposition: (event) => this.macModifiers.isMacOptionComposition(event),
     });
     this.pendingComposition = new PendingCompositionRuntime({
       fallbackDelayMs: PENDING_COMPOSITION_FALLBACK_MS,
@@ -350,43 +356,25 @@ export class InputController {
         this.macModifiers.materializeMacOption();
       }
 
-      // Detect AltGr: getModifierState('AltGraph') is true (Windows/Linux)
-      let altgr = e.getModifierState('AltGraph');
-
-      // Compute effective modifier state
-      let ctrl = e.ctrlKey;
-      let alt = e.altKey;
-      const meta = e.metaKey;
-
-      // Mac: remap Meta → Ctrl (Command key sends Ctrl to Linux)
-      if (this.macMetaAsCtrl && meta) {
-        ctrl = true;
-      }
-
-      // AltGr (Windows/Linux): set ALT but NOT CTRL
-      // Windows sends fake Ctrl+Alt for AltGr — strip the fake Ctrl
-      if (altgr) {
-        ctrl = false;
-        alt = true;
-      }
-
-      // Mac Option composition: Option+key producing a printable character
-      // is character composition (like AltGr), not a raw Alt modifier.
-      // This handles @, |, \, ~, {, }, [, ] and dead-key sequences on macOS.
-      if (this.macModifiers.isMacOptionComposition(e)) {
-        altgr = true;
-        alt = false;
-      }
-
-      if (this.sendKeyEvent(e.code, e.key, true, ctrl, alt, e.shiftKey, meta && !this.macMetaAsCtrl, altgr)) {
+      const resolvedState = this.keyEventStateResolver.resolve(e);
+      if (this.sendKeyEvent(
+        e.code,
+        e.key,
+        true,
+        resolvedState.ctrl,
+        resolvedState.alt,
+        resolvedState.shift,
+        resolvedState.meta,
+        resolvedState.altgr,
+      )) {
         this.shortcutKeyRelease.noteSentKeydown({
           code: e.code,
           key: e.key,
-          ctrl,
-          alt,
-          shift: e.shiftKey,
-          meta: meta && !this.macMetaAsCtrl,
-          altgr,
+          ctrl: resolvedState.ctrl,
+          alt: resolvedState.alt,
+          shift: resolvedState.shift,
+          meta: resolvedState.meta,
+          altgr: resolvedState.altgr,
         });
       }
     }, { signal });
@@ -457,28 +445,17 @@ export class InputController {
       this.releaseTrackedShortcutKeysForModifierKeyup(e);
       e.preventDefault();
 
-      let altgr = e.getModifierState('AltGraph');
-
-      let ctrl = e.ctrlKey;
-      let alt = e.altKey;
-      const meta = e.metaKey;
-
-      if (this.macMetaAsCtrl && meta) {
-        ctrl = true;
-      }
-
-      if (altgr) {
-        ctrl = false;
-        alt = true;
-      }
-
-      // Mac Option composition on keyup (same detection as keydown)
-      if (this.macModifiers.isMacOptionComposition(e)) {
-        altgr = true;
-        alt = false;
-      }
-
-      this.sendKeyEvent(e.code, e.key, false, ctrl, alt, e.shiftKey, meta && !this.macMetaAsCtrl, altgr);
+      const resolvedState = this.keyEventStateResolver.resolve(e);
+      this.sendKeyEvent(
+        e.code,
+        e.key,
+        false,
+        resolvedState.ctrl,
+        resolvedState.alt,
+        resolvedState.shift,
+        resolvedState.meta,
+        resolvedState.altgr,
+      );
     }, { signal });
 
     keyboardTarget.addEventListener('compositionend', handleCompositionEnd, { signal });
