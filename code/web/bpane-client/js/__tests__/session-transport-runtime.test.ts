@@ -188,6 +188,59 @@ describe('SessionTransportRuntime', () => {
     });
   });
 
+  it('binds browser globals when loading certificate hashes', async () => {
+    const transport = createMockTransport();
+    const createTransport = vi.fn((url: string, options: WebTransportOptions) => {
+      void url;
+      void options;
+      return transport as unknown as WebTransport;
+    });
+    const certHashBytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const originalFetch = globalThis.fetch;
+    const originalAtob = globalThis.atob;
+    (globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = vi.fn(function fetchWithReceiver(
+      this: unknown,
+      url: string | URL | Request,
+    ) {
+      expect(this).toBe(globalThis);
+      expect(url).toBe('/cert-hash');
+      return Promise.resolve({
+        ok: true,
+        text: async () => btoa(String.fromCharCode(...certHashBytes)),
+      } as Response);
+    }) as typeof fetch;
+    (globalThis as typeof globalThis & { atob: typeof atob }).atob = vi.fn(function atobWithReceiver(
+      this: unknown,
+      data: string,
+    ) {
+      expect(this).toBe(globalThis);
+      return originalAtob.call(globalThis, data);
+    }) as typeof atob;
+
+    try {
+      const { runtime } = createRuntime({
+        createTransport,
+        pingIntervalMs: 1000,
+      });
+      await runtime.connect({
+        gatewayUrl: 'https://localhost:4433',
+        token: 'test-token',
+        certHashUrl: '/cert-hash',
+      });
+
+      const [, options] = createTransport.mock.calls[0];
+      expect(options).toEqual({
+        serverCertificateHashes: [{
+          algorithm: 'sha-256',
+          value: certHashBytes.buffer,
+        }],
+      });
+    } finally {
+      (globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = originalFetch;
+      (globalThis as typeof globalThis & { atob: typeof atob }).atob = originalAtob;
+    }
+  });
+
   it('forwards incoming streams and datagrams to callbacks', async () => {
     const transport = createMockTransport();
     const createTransport = vi.fn((url: string, options: WebTransportOptions) => {

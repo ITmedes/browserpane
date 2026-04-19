@@ -51,8 +51,8 @@ export class SessionTransportRuntime {
     this.sendPing = input.sendPing;
     this.pingIntervalMs = input.pingIntervalMs ?? 5000;
     this.createTransport = input.createTransport;
-    this.fetchFn = input.fetchFn ?? fetch;
-    this.atobFn = input.atobFn ?? atob;
+    this.fetchFn = input.fetchFn ?? globalThis.fetch.bind(globalThis);
+    this.atobFn = input.atobFn ?? globalThis.atob.bind(globalThis);
     this.setIntervalFn = input.setIntervalFn ?? window.setInterval.bind(window);
     this.clearIntervalFn = input.clearIntervalFn ?? window.clearInterval.bind(window);
   }
