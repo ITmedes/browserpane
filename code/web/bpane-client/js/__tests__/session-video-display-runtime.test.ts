@@ -227,4 +227,35 @@ describe('SessionVideoDisplayRuntime', () => {
     expect(glRenderer.uploadVideoFrame).not.toHaveBeenCalled();
     expect(glRenderer.drawCachedVideo).not.toHaveBeenCalled();
   });
+
+  it('binds the default requestAnimationFrame receiver for browser globals', () => {
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    let capturedCallback: FrameRequestCallback | null = null;
+    window.requestAnimationFrame = function (callback: FrameRequestCallback): number {
+      if (this !== window) {
+        throw new TypeError('Illegal invocation');
+      }
+      capturedCallback = callback;
+      return 1;
+    };
+
+    try {
+      const runtime = new SessionVideoDisplayRuntime({
+        canvas: { width: 800, height: 600 } as HTMLCanvasElement,
+        ctx: null,
+        glRenderer: {
+          uploadVideoFrame: vi.fn(),
+          drawCachedVideo: vi.fn(() => true),
+          drawCachedVideoCropped: vi.fn(() => true),
+        },
+        getGridConfig: () => null,
+        getVideoRegion: () => null,
+      });
+
+      expect(() => runtime.start()).not.toThrow();
+      expect(capturedCallback).not.toBeNull();
+    } finally {
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+  });
 });
