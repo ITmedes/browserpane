@@ -13,7 +13,7 @@ import {
 import { NalReassembler } from './nal.js';
 import { fnvHash } from './hash.js';
 import { TileCompositor, CH_TILES } from './tile-compositor.js';
-import { WebGLTileRenderer, type WebGLRendererDiagnostics } from './webgl-compositor.js';
+import type { WebGLRendererDiagnostics } from './webgl-compositor.js';
 import { SessionStats } from './session-stats.js';
 import { AudioController } from './audio-controller.js';
 import { CameraController } from './camera-controller.js';
@@ -21,13 +21,11 @@ import { FileTransferController } from './file-transfer.js';
 import { InputController } from './input-controller.js';
 import { SessionCapabilityRuntime } from './session-capability-runtime.js';
 import { SessionControlRuntime } from './session-control-runtime.js';
-import { SessionCursorRuntime } from './session-cursor-runtime.js';
 import { SessionFrameRouterRuntime } from './session-frame-router-runtime.js';
-import { SessionResizeRuntime } from './session-resize-runtime.js';
 import { SessionSendRuntime } from './session-send-runtime.js';
 import { SessionStreamReaderRuntime } from './session-stream-reader-runtime.js';
+import { SessionSurfaceRuntime } from './session-surface-runtime.js';
 import { SessionTransportRuntime } from './session-transport-runtime.js';
-import { SessionVideoDisplayRuntime } from './session-video-display-runtime.js';
 import { SessionVideoDecoderRuntime } from './session-video-decoder-runtime.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
 
@@ -72,15 +70,11 @@ export type { WebGLRendererDiagnostics as RenderDiagnostics } from './webgl-comp
 const PING_INTERVAL_MS = 5000;
 const TILE_CACHE_MISS = 0x09;
 export class BpaneSession {
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D | null = null;
   private container: HTMLElement;
   private options: BpaneOptions;
   private connected = false;
   // Extracted: input event handling
   private input: InputController | null = null;
-  private cursorEl: HTMLCanvasElement | null = null;
-  private cursorRuntime: SessionCursorRuntime;
   private sendRuntime: SessionSendRuntime;
   // Extracted: audio output, Opus decode, and microphone
   private audio: AudioController;
@@ -108,26 +102,15 @@ export class BpaneSession {
   // Gateway-managed access state.
   private viewerRestricted = false;
   private controlRuntime: SessionControlRuntime;
-  private resizeRuntime: SessionResizeRuntime;
 
   // Tile compositor
   private tileCompositor = new TileCompositor();
 
-  // WebGL2 renderer (null if WebGL2 not available, falls back to Canvas2D)
-  private glRenderer: WebGLTileRenderer | null = null;
-  private renderDiagnostics: WebGLRendererDiagnostics = {
-    backend: 'canvas2d',
-    renderer: null,
-    vendor: null,
-    software: false,
-    reason: 'unsupported',
-  };
-
   // NAL reassembly
   private nalReassembler = new NalReassembler();
 
-  // Video decode state
-  private videoDisplayRuntime: SessionVideoDisplayRuntime;
+  // Render surface/runtime
+  private surfaceRuntime: SessionSurfaceRuntime;
   private videoDecoderRuntime: SessionVideoDecoderRuntime;
   // Extracted: all transfer/tile/scroll stats live in SessionStats
   private stats = new SessionStats();
@@ -240,7 +223,7 @@ export class BpaneSession {
         this.clearVideoOverlay();
       },
       markDisplayDirty: () => {
-        this.videoDisplayRuntime.markDirty();
+        this.surfaceRuntime.markDisplayDirty();
       },
     });
     this.transportRuntime = new SessionTransportRuntime({
@@ -274,107 +257,13 @@ export class BpaneSession {
       pingIntervalMs: PING_INTERVAL_MS,
     });
 
-    // Create canvas element
-    this.canvas = document.createElement('canvas');
-    this.canvas.style.width = '100%';
-    this.canvas.style.height = '100%';
-    this.canvas.style.display = 'block';
-    this.canvas.style.cursor = 'none';
-    this.canvas.tabIndex = 0;
-    this.container.appendChild(this.canvas);
-
-    // Cursor overlay
-    this.cursorEl = document.createElement('canvas');
-    this.cursorEl.style.position = 'absolute';
-    this.cursorEl.style.pointerEvents = 'none';
-    this.cursorEl.style.top = '0';
-    this.cursorEl.style.left = '0';
-    this.cursorEl.style.width = '100%';
-    this.cursorEl.style.height = '100%';
-    this.cursorEl.width = Math.max(64, Math.floor(this.container.clientWidth));
-    this.cursorEl.height = Math.max(64, Math.floor(this.container.clientHeight));
-    this.cursorEl.style.zIndex = '2';
-    const cursorCtx = this.cursorEl.getContext('2d');
-    this.container.style.position = 'relative';
-    this.container.appendChild(this.cursorEl);
-    this.cursorRuntime = new SessionCursorRuntime({
-      canvas: this.canvas,
-      cursorEl: this.cursorEl,
-      cursorCtx,
-    });
-
-    // Try WebGL2 first for GPU-accelerated tile compositing, fall back to Canvas2D.
-    if ((options.renderBackend ?? 'auto') !== 'canvas2d') {
-      const webgl = WebGLTileRenderer.tryCreate(this.canvas);
-      this.glRenderer = webgl.renderer;
-      this.renderDiagnostics = webgl.diagnostics;
-    } else {
-      this.renderDiagnostics = {
-        backend: 'canvas2d',
-        renderer: null,
-        vendor: null,
-        software: false,
-        reason: 'forced-canvas2d',
-      };
-    }
-    if (this.glRenderer) {
-      this.tileCompositor.setWebGLRenderer(this.glRenderer);
-      // ctx stays null — Canvas2D is not used when WebGL is active
-    } else {
-      this.ctx = this.canvas.getContext('2d', {
-        alpha: false,
-        desynchronized: true,
-      });
-      if (this.ctx) this.tileCompositor.setContext(this.ctx);
-    }
-    this.tileCompositor.setCacheMissHandler(({ frameSeq, col, row, hash }) => {
-      this.sendTileCacheMiss(frameSeq, col, row, hash);
-    });
-    this.videoDisplayRuntime = new SessionVideoDisplayRuntime({
-      canvas: this.canvas,
-      ctx: this.ctx,
-      glRenderer: this.glRenderer,
-      getGridConfig: () => this.tileCompositor.getGridConfig(),
-      getVideoRegion: () => this.tileCompositor.getVideoRegion(),
-    });
-    this.videoDecoderRuntime = new SessionVideoDecoderRuntime({
-      onDecodedFrame: (frame, tileInfo) => {
-        if ((!this.ctx && !this.glRenderer) || !this.canvas) {
-          frame.close();
-          return;
-        }
-        this.videoDisplayRuntime.handleDecodedFrame(frame, tileInfo);
-      },
-      incrementFrameCount: () => {
-        this.stats.frameCount += 1;
-      },
-      incrementDroppedFrame: () => {
-        this.stats.videoFramesDropped += 1;
-      },
-      onDecoderError: (error) => {
-        console.error('[bpane] VideoDecoder error:', error.message);
-      },
-    });
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        this.resizeRuntime.handleResize(Math.floor(width), Math.floor(height));
-      }
-    });
-    this.resizeRuntime = new SessionResizeRuntime({
+    this.surfaceRuntime = new SessionSurfaceRuntime({
       container: this.container,
-      canvas: this.canvas,
-      cursorEl: this.cursorEl,
+      tileCompositor: this.tileCompositor,
       hiDpi: options.hiDpi ?? false,
-      resizeObserver,
-      resizeRenderer: (width, height) => {
-        if (this.glRenderer) {
-          this.glRenderer.resize(width, height);
-        }
-      },
-      markDisplayDirty: () => {
-        this.videoDisplayRuntime.markDirty();
+      renderBackend: options.renderBackend,
+      onTileCacheMiss: ({ frameSeq, col, row, hash }) => {
+        this.sendTileCacheMiss(frameSeq, col, row, hash);
       },
       sendResizeRequest: (width, height) => {
         this.sendResizeRequest(width, height);
@@ -387,11 +276,21 @@ export class BpaneSession {
         this.options.onResolutionChange?.(width, height);
       },
     });
-    this.resizeRuntime.initializeCanvasSize();
-    resizeObserver.observe(this.container);
-
-    // Start display loop
-    this.videoDisplayRuntime.start();
+    this.videoDecoderRuntime = new SessionVideoDecoderRuntime({
+      onDecodedFrame: (frame, tileInfo) => {
+        this.surfaceRuntime.handleDecodedFrame(frame, tileInfo);
+      },
+      incrementFrameCount: () => {
+        this.stats.frameCount += 1;
+      },
+      incrementDroppedFrame: () => {
+        this.stats.videoFramesDropped += 1;
+      },
+      onDecoderError: (error) => {
+        console.error('[bpane] VideoDecoder error:', error.message);
+      },
+    });
+    this.surfaceRuntime.start();
   }
 
   /**
@@ -404,12 +303,12 @@ export class BpaneSession {
     session.cameraEncoderSupported = await CameraController.isSupported();
     await session.setupTransport();
     session.input = new InputController({
-      canvas: session.canvas,
+      canvas: session.surfaceRuntime.getCanvas(),
       sendFrame: (channelId, payload) => session.sendFrame(channelId, payload),
-      drawCursor: (_shape, x, y) => session.cursorRuntime.drawMove(x, y),
+      drawCursor: (_shape, x, y) => session.surfaceRuntime.drawCursorMove(x, y),
       getRemoteDims: () => ({
-        width: session.remoteWidth || session.canvas.width,
-        height: session.remoteHeight || session.canvas.height,
+        width: session.remoteWidth || session.surfaceRuntime.getCanvas().width,
+        height: session.remoteHeight || session.surfaceRuntime.getCanvas().height,
       }),
       clipboardEnabled: options.clipboard !== false,
     });
@@ -472,7 +371,7 @@ export class BpaneSession {
 
   /** Active render backend and WebGL selection diagnostics for embedding clients. */
   getRenderDiagnostics(): WebGLRendererDiagnostics {
-    return { ...this.renderDiagnostics };
+    return this.surfaceRuntime.getRenderDiagnostics();
   }
 
   /**
@@ -481,7 +380,6 @@ export class BpaneSession {
   disconnect(): void {
     if (!this.connected) return;
     this.connected = false;
-    this.resizeRuntime.destroy();
 
     // Remove all DOM event listeners
     if (this.input) {
@@ -498,25 +396,10 @@ export class BpaneSession {
       this.fileTransfer = null;
     }
 
-    this.clearVideoOverlay();
-    this.videoDisplayRuntime.destroy();
     this.transportRuntime.disconnect();
-
-    if (this.canvas.parentNode) {
-      this.canvas.parentNode.removeChild(this.canvas);
-    }
-    if (this.cursorEl && this.cursorEl.parentNode) {
-      this.cursorEl.parentNode.removeChild(this.cursorEl);
-      this.cursorEl = null;
-    }
-    this.cursorRuntime.reset();
+    this.surfaceRuntime.destroy();
 
     this.tileCompositor.reset();
-    if (this.glRenderer) {
-      this.glRenderer.destroy();
-      this.glRenderer = null;
-      this.tileCompositor.setWebGLRenderer(null);
-    }
     this.sendRuntime.destroy();
     this.remoteWidth = 0;
     this.remoteHeight = 0;
@@ -538,7 +421,7 @@ export class BpaneSession {
   }
 
   private clearVideoOverlay(): void {
-    this.videoDisplayRuntime.clearVideoOverlay();
+    this.surfaceRuntime.clearVideoOverlay();
   }
 
   private async setupTransport(): Promise<void> {
@@ -556,7 +439,7 @@ export class BpaneSession {
   private async handleStream(stream: WebTransportBidirectionalStream): Promise<void> {
     if (!this.sendRuntime.hasWriter()) {
       this.sendRuntime.attachWriter(stream.writable.getWriter(), () => {
-        const dims = this.resizeRuntime.getContainerResizeDims();
+        const dims = this.surfaceRuntime.getContainerResizeDims();
         this.sendResizeRequest(dims.width, dims.height);
       });
     }
@@ -572,9 +455,7 @@ export class BpaneSession {
   // ── Cursor ─────────────────────────────────────────────────────────
 
   private handleCursorUpdate(payload: Uint8Array): void {
-    if (this.cursorRuntime.handlePayload(payload)) {
-      this.videoDisplayRuntime.markDirty();
-    }
+    this.surfaceRuntime.handleCursorPayload(payload);
   }
 
   // ── Clipboard ──────────────────────────────────────────────────────
@@ -600,7 +481,7 @@ export class BpaneSession {
 
   private applyClientAccessState(flags: number, width: number, height: number): void {
     this.viewerRestricted = (flags & 0x01) !== 0;
-    this.resizeRuntime.applyClientAccessState(flags, width, height);
+    this.surfaceRuntime.applyClientAccessState(flags, width, height);
     this.updateCapabilities();
   }
 
