@@ -17,12 +17,18 @@ export class HostScrollHealthTracker {
     hostScrollFallbacksTotal: number;
     hostScrollPotentialTilesTotal: number;
     hostScrollSavedTilesTotal: number;
+    hostScrollNonQuantizedFallbacksTotal: number;
+    hostScrollResidualFullRepaintsTotal: number;
+    hostScrollZeroSavedBatchesTotal: number;
     lastHostScrollStatsAtMs: number;
   } = {
     hostScrollBatchesTotal: 0,
     hostScrollFallbacksTotal: 0,
     hostScrollPotentialTilesTotal: 0,
     hostScrollSavedTilesTotal: 0,
+    hostScrollNonQuantizedFallbacksTotal: 0,
+    hostScrollResidualFullRepaintsTotal: 0,
+    hostScrollZeroSavedBatchesTotal: 0,
     lastHostScrollStatsAtMs: 0,
   };
 
@@ -37,11 +43,17 @@ export class HostScrollHealthTracker {
     hostScrollFallbacksTotal: number,
     hostScrollPotentialTilesTotal: number,
     hostScrollSavedTilesTotal: number,
+    hostScrollNonQuantizedFallbacksTotal: number,
+    hostScrollResidualFullRepaintsTotal: number,
+    hostScrollZeroSavedBatchesTotal: number,
   ): void {
     const prevBatches = this.totals.hostScrollBatchesTotal;
     const prevFallbacks = this.totals.hostScrollFallbacksTotal;
     const prevPotential = this.totals.hostScrollPotentialTilesTotal;
     const prevSaved = this.totals.hostScrollSavedTilesTotal;
+    const prevNonQuantized = this.totals.hostScrollNonQuantizedFallbacksTotal;
+    const prevResidualFullRepaints = this.totals.hostScrollResidualFullRepaintsTotal;
+    const prevZeroSaved = this.totals.hostScrollZeroSavedBatchesTotal;
 
     if (
       !this.initialized
@@ -49,6 +61,9 @@ export class HostScrollHealthTracker {
       || hostScrollFallbacksTotal < prevFallbacks
       || hostScrollPotentialTilesTotal < prevPotential
       || hostScrollSavedTilesTotal < prevSaved
+      || hostScrollNonQuantizedFallbacksTotal < prevNonQuantized
+      || hostScrollResidualFullRepaintsTotal < prevResidualFullRepaints
+      || hostScrollZeroSavedBatchesTotal < prevZeroSaved
     ) {
       this.recentHistory = [];
       this.initialized = true;
@@ -68,6 +83,9 @@ export class HostScrollHealthTracker {
     this.totals.hostScrollFallbacksTotal = hostScrollFallbacksTotal;
     this.totals.hostScrollPotentialTilesTotal = hostScrollPotentialTilesTotal;
     this.totals.hostScrollSavedTilesTotal = hostScrollSavedTilesTotal;
+    this.totals.hostScrollNonQuantizedFallbacksTotal = hostScrollNonQuantizedFallbacksTotal;
+    this.totals.hostScrollResidualFullRepaintsTotal = hostScrollResidualFullRepaintsTotal;
+    this.totals.hostScrollZeroSavedBatchesTotal = hostScrollZeroSavedBatchesTotal;
     this.totals.lastHostScrollStatsAtMs = this.nowProvider();
   }
 
@@ -84,6 +102,9 @@ export class HostScrollHealthTracker {
     return {
       hostScrollBatchesTotal: this.totals.hostScrollBatchesTotal,
       hostScrollFallbacksTotal: this.totals.hostScrollFallbacksTotal,
+      hostScrollNonQuantizedFallbacksTotal: this.totals.hostScrollNonQuantizedFallbacksTotal,
+      hostScrollResidualFullRepaintsTotal: this.totals.hostScrollResidualFullRepaintsTotal,
+      hostScrollZeroSavedBatchesTotal: this.totals.hostScrollZeroSavedBatchesTotal,
       hostFallbackRate,
       hostFallbackRateRecent20: recent20.rate,
       hostFallbackRateRecent50: recent50.rate,

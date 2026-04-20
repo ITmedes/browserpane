@@ -89,6 +89,9 @@ describe('TileBatchCommandApplier', () => {
         scrollFullFallbacksTotal: 2,
         scrollPotentialTilesTotal: 3,
         scrollSavedTilesTotal: 4,
+        scrollNonQuantizedFallbacksTotal: 1,
+        scrollResidualFullRepaintsTotal: 1,
+        scrollZeroSavedBatchesTotal: 2,
       },
     ];
 

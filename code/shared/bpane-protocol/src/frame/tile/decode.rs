@@ -73,6 +73,9 @@ pub(super) fn decode(buf: &[u8]) -> Result<TileMessage, FrameError> {
             scroll_full_fallbacks_total: r.read_u32()?,
             scroll_potential_tiles_total: r.read_u32()?,
             scroll_saved_tiles_total: r.read_u32()?,
+            scroll_non_quantized_fallbacks_total: r.read_u32()?,
+            scroll_residual_full_repaints_total: r.read_u32()?,
+            scroll_zero_saved_batches_total: r.read_u32()?,
         }),
         _ => Err(FrameError::UnknownMessageType {
             channel: ChannelId::Tiles.as_u8(),

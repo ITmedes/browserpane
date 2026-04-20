@@ -688,6 +688,9 @@ fn tile_pipeline_all_variants() {
         scroll_full_fallbacks_total: 5,
         scroll_potential_tiles_total: 2000,
         scroll_saved_tiles_total: 1800,
+        scroll_non_quantized_fallbacks_total: 2,
+        scroll_residual_full_repaints_total: 3,
+        scroll_zero_saved_batches_total: 4,
     };
     wire_data.extend_from_slice(&stats.to_frame().encode());
 

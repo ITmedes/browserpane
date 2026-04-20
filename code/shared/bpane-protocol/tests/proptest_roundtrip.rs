@@ -267,14 +267,26 @@ fn arb_tile_message() -> impl Strategy<Value = TileMessage> {
             offset_y: oy
         }),
         any::<bool>().prop_map(|ao| TileMessage::TileDrawMode { apply_offset: ao }),
-        (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()).prop_map(|(a, b, c, d)| {
-            TileMessage::ScrollStats {
-                scroll_batches_total: a,
-                scroll_full_fallbacks_total: b,
-                scroll_potential_tiles_total: c,
-                scroll_saved_tiles_total: d,
-            }
-        }),
+        (
+            any::<u32>(),
+            any::<u32>(),
+            any::<u32>(),
+            any::<u32>(),
+            any::<u32>(),
+            any::<u32>(),
+            any::<u32>(),
+        )
+            .prop_map(|(a, b, c, d, e, f, g)| {
+                TileMessage::ScrollStats {
+                    scroll_batches_total: a,
+                    scroll_full_fallbacks_total: b,
+                    scroll_potential_tiles_total: c,
+                    scroll_saved_tiles_total: d,
+                    scroll_non_quantized_fallbacks_total: e,
+                    scroll_residual_full_repaints_total: f,
+                    scroll_zero_saved_batches_total: g,
+                }
+            }),
     ]
 }
 

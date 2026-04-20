@@ -416,6 +416,10 @@
       metricsScrollEl.textContent =
         `Scroll: batches=${summary.scroll.scrollBatches} saved=${summary.scroll.scrollSavedRate.toFixed(1)}% ` +
         `hostFallback=${summary.scroll.hostFallbackRate.toFixed(1)}% ` +
+        `reasons=nq:${summary.scroll.hostFallbackReasons.nonQuantizedFallbacks} ` +
+        `repaint:${summary.scroll.hostFallbackReasons.residualFullRepaints} ` +
+        `zero:${summary.scroll.hostFallbackReasons.zeroSavedBatches} ` +
+        `dom=${summary.scroll.dominantHostFallbackReason} ` +
         `r20=${summary.scroll.hostFallbackRateRecent20.toFixed(1)}% ` +
         `r50=${summary.scroll.hostFallbackRateRecent50.toFixed(1)}%`;
       metricsVideoEl.textContent =
@@ -434,6 +438,23 @@
       benchmarkState.peakTileRate = 0;
       benchmarkState.peakVideoRate = 0;
       renderBenchmarkMetrics();
+    }
+
+    function dominantHostScrollReason(reasonCounts) {
+      const entries = [
+        ['non-quantized', reasonCounts.nonQuantizedFallbacks],
+        ['residual-full-repaint', reasonCounts.residualFullRepaints],
+        ['zero-saved', reasonCounts.zeroSavedBatches],
+      ];
+      let bestLabel = 'none';
+      let bestValue = 0;
+      for (const [label, value] of entries) {
+        if (value > bestValue) {
+          bestLabel = label;
+          bestValue = value;
+        }
+      }
+      return bestLabel;
     }
 
     function buildBenchmarkBaseline(now, frameCount, diagnostics, tileRuntime, sessionStats) {
@@ -455,6 +476,9 @@
         scrollSavedTiles: sessionStats.tiles.scrollComposition.scrollSavedTiles,
         hostFallbacks: sessionStats.tiles.scrollHealth.hostScrollFallbacksTotal,
         hostScrollBatches: sessionStats.tiles.scrollHealth.hostScrollBatchesTotal,
+        hostNonQuantizedFallbacks: sessionStats.tiles.scrollHealth.hostScrollNonQuantizedFallbacksTotal,
+        hostResidualFullRepaints: sessionStats.tiles.scrollHealth.hostScrollResidualFullRepaintsTotal,
+        hostZeroSavedBatches: sessionStats.tiles.scrollHealth.hostScrollZeroSavedBatchesTotal,
         resolution: makeResolutionLabel().replace(/^Resolution:\s*/, ''),
         render: diagnostics ? {
           backend: diagnostics.backend,
@@ -488,6 +512,23 @@
       const scrollSavedTiles = Math.max(0, scrollComposition.scrollSavedTiles - baseline.scrollSavedTiles);
       const hostScrollBatches = Math.max(0, scrollHealth.hostScrollBatchesTotal - baseline.hostScrollBatches);
       const hostFallbacks = Math.max(0, scrollHealth.hostScrollFallbacksTotal - baseline.hostFallbacks);
+      const hostNonQuantizedFallbacks = Math.max(
+        0,
+        scrollHealth.hostScrollNonQuantizedFallbacksTotal - baseline.hostNonQuantizedFallbacks,
+      );
+      const hostResidualFullRepaints = Math.max(
+        0,
+        scrollHealth.hostScrollResidualFullRepaintsTotal - baseline.hostResidualFullRepaints,
+      );
+      const hostZeroSavedBatches = Math.max(
+        0,
+        scrollHealth.hostScrollZeroSavedBatchesTotal - baseline.hostZeroSavedBatches,
+      );
+      const hostFallbackReasons = {
+        nonQuantizedFallbacks: hostNonQuantizedFallbacks,
+        residualFullRepaints: hostResidualFullRepaints,
+        zeroSavedBatches: hostZeroSavedBatches,
+      };
 
       benchmarkState.summary = {
         durationMs,
@@ -531,6 +572,8 @@
           hostScrollBatches,
           hostFallbacks,
           hostFallbackRate: hostScrollBatches > 0 ? (hostFallbacks / hostScrollBatches) * 100 : 0,
+          hostFallbackReasons,
+          dominantHostFallbackReason: dominantHostScrollReason(hostFallbackReasons),
           hostFallbackRateRecent20: scrollHealth.hostFallbackRateRecent20,
           hostFallbackRateRecent50: scrollHealth.hostFallbackRateRecent50,
         },
@@ -744,6 +787,9 @@
                   `r20=${sh.hostFallbackRateRecent20.toFixed(1)}%/${sh.hostFallbackRateRecent20Batches} ` +
                   `r50=${sh.hostFallbackRateRecent50.toFixed(1)}%/${sh.hostFallbackRateRecent50Batches} ` +
                   `(${sh.hostScrollFallbacksTotal}/${sh.hostScrollBatchesTotal}) ` +
+                  `reasons=nq:${sh.hostScrollNonQuantizedFallbacksTotal} ` +
+                  `repaint:${sh.hostScrollResidualFullRepaintsTotal} ` +
+                  `zero:${sh.hostScrollZeroSavedBatchesTotal} ` +
                   `saved=${sh.hostScrollSavedRate.toFixed(1)}%`;
               } else {
                 scrollHealthStatsEl.textContent = 'Scroll Health: waiting for scroll telemetry';

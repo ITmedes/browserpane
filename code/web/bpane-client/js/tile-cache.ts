@@ -39,6 +39,9 @@ export type TileCommand =
     scrollFullFallbacksTotal: number;
     scrollPotentialTilesTotal: number;
     scrollSavedTilesTotal: number;
+    scrollNonQuantizedFallbacksTotal: number;
+    scrollResidualFullRepaintsTotal: number;
+    scrollZeroSavedBatchesTotal: number;
   };
 
 const DEFAULT_MAX_ENTRIES = 8192;

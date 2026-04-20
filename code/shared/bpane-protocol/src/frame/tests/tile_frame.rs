@@ -83,6 +83,9 @@ fn tile_all_variants_via_frame() {
             scroll_full_fallbacks_total: 1,
             scroll_potential_tiles_total: 100,
             scroll_saved_tiles_total: 72,
+            scroll_non_quantized_fallbacks_total: 1,
+            scroll_residual_full_repaints_total: 0,
+            scroll_zero_saved_batches_total: 2,
         },
     ];
 

@@ -73,6 +73,9 @@ describe('SessionStatsSnapshotBuilder', () => {
       hostScrollHealth: {
         hostScrollBatchesTotal: 0,
         hostScrollFallbacksTotal: 0,
+        hostScrollNonQuantizedFallbacksTotal: 0,
+        hostScrollResidualFullRepaintsTotal: 0,
+        hostScrollZeroSavedBatchesTotal: 0,
         hostFallbackRate: 0,
         hostFallbackRateRecent20: 0,
         hostFallbackRateRecent50: 0,
@@ -146,6 +149,9 @@ describe('SessionStatsSnapshotBuilder', () => {
       hostScrollHealth: {
         hostScrollBatchesTotal: 0,
         hostScrollFallbacksTotal: 0,
+        hostScrollNonQuantizedFallbacksTotal: 0,
+        hostScrollResidualFullRepaintsTotal: 0,
+        hostScrollZeroSavedBatchesTotal: 0,
         hostFallbackRate: 0,
         hostFallbackRateRecent20: 0,
         hostFallbackRateRecent50: 0,
@@ -201,6 +207,9 @@ describe('SessionStatsSnapshotBuilder', () => {
       hostScrollHealth: {
         hostScrollBatchesTotal: 0,
         hostScrollFallbacksTotal: 0,
+        hostScrollNonQuantizedFallbacksTotal: 0,
+        hostScrollResidualFullRepaintsTotal: 0,
+        hostScrollZeroSavedBatchesTotal: 0,
         hostFallbackRate: 0,
         hostFallbackRateRecent20: 0,
         hostFallbackRateRecent50: 0,

@@ -6,13 +6,13 @@ describe('HostScrollHealthTracker', () => {
     let now = 1_000;
     const tracker = new HostScrollHealthTracker(() => now);
 
-    tracker.record(0, 0, 0, 0);
+    tracker.record(0, 0, 0, 0, 0, 0, 0);
 
     now = 1_100;
-    tracker.record(10, 2, 100, 80);
+    tracker.record(10, 2, 100, 80, 1, 1, 2);
 
     now = 1_200;
-    tracker.record(30, 8, 300, 210);
+    tracker.record(30, 8, 300, 210, 3, 5, 4);
 
     const snapshot = tracker.snapshot();
 
@@ -21,6 +21,9 @@ describe('HostScrollHealthTracker', () => {
     expect(snapshot.hostFallbackRateRecent20).toBeCloseTo(30, 5);
     expect(snapshot.hostFallbackRateRecent50Batches).toBe(30);
     expect(snapshot.hostFallbackRateRecent50).toBeCloseTo((8 / 30) * 100, 5);
+    expect(snapshot.hostScrollNonQuantizedFallbacksTotal).toBe(3);
+    expect(snapshot.hostScrollResidualFullRepaintsTotal).toBe(5);
+    expect(snapshot.hostScrollZeroSavedBatchesTotal).toBe(4);
     expect(snapshot.hostScrollSavedRate).toBeCloseTo((210 / 300) * 100, 5);
     expect(snapshot.lastHostScrollStatsAtMs).toBe(1_200);
   });
@@ -28,14 +31,17 @@ describe('HostScrollHealthTracker', () => {
   it('clears rolling history when counters reset', () => {
     const tracker = new HostScrollHealthTracker();
 
-    tracker.record(0, 0, 0, 0);
-    tracker.record(12, 3, 120, 90);
-    tracker.record(1, 0, 10, 10);
+    tracker.record(0, 0, 0, 0, 0, 0, 0);
+    tracker.record(12, 3, 120, 90, 1, 2, 3);
+    tracker.record(1, 0, 10, 10, 0, 0, 1);
 
     const snapshot = tracker.snapshot();
 
     expect(snapshot.hostScrollBatchesTotal).toBe(1);
     expect(snapshot.hostScrollFallbacksTotal).toBe(0);
+    expect(snapshot.hostScrollNonQuantizedFallbacksTotal).toBe(0);
+    expect(snapshot.hostScrollResidualFullRepaintsTotal).toBe(0);
+    expect(snapshot.hostScrollZeroSavedBatchesTotal).toBe(1);
     expect(snapshot.hostFallbackRateRecent20Batches).toBe(0);
     expect(snapshot.hostFallbackRateRecent20).toBe(0);
     expect(snapshot.hostFallbackRateRecent50Batches).toBe(0);
@@ -48,6 +54,9 @@ describe('HostScrollHealthTracker', () => {
     expect(tracker.snapshot()).toEqual({
       hostScrollBatchesTotal: 0,
       hostScrollFallbacksTotal: 0,
+      hostScrollNonQuantizedFallbacksTotal: 0,
+      hostScrollResidualFullRepaintsTotal: 0,
+      hostScrollZeroSavedBatchesTotal: 0,
       hostFallbackRate: 0,
       hostFallbackRateRecent20: 0,
       hostFallbackRateRecent50: 0,

@@ -104,6 +104,9 @@ fn tile_scroll_messages_round_trip() {
         scroll_full_fallbacks_total: 9,
         scroll_potential_tiles_total: 12_345,
         scroll_saved_tiles_total: 8_765,
+        scroll_non_quantized_fallbacks_total: 4,
+        scroll_residual_full_repaints_total: 5,
+        scroll_zero_saved_batches_total: 6,
     };
     let offset = TileMessage::GridOffset {
         offset_x: -32,
