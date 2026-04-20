@@ -160,7 +160,11 @@ export class TileCompositor {
 
       case 'batch-end':
         // Frame-sequenced, serialized batch processing.
-        this.tileBatchSequencer.enqueueBatch(cmd.frameSeq >>> 0, this.pendingCommands, (batch) => this.applyBatch(batch));
+        this.tileBatchSequencer.enqueueOwnedBatch(
+          cmd.frameSeq >>> 0,
+          this.pendingCommands,
+          (batch) => this.applyBatch(batch),
+        );
         this.pendingCommands = [];
         this.stats.batchesProcessed++;
         break;

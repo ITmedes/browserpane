@@ -50,6 +50,20 @@ describe('TileBatchSequencer', () => {
     expect(started).toEqual([1, 2]);
   });
 
+  it('can take ownership of command arrays without cloning them', async () => {
+    const sequencer = new TileBatchSequencer();
+    const commands = [fillCommand(1)];
+    const applied = vi.fn(() => true);
+
+    sequencer.enqueueOwnedBatch(1, commands, applied);
+    await sequencer.flush();
+
+    expect(applied).toHaveBeenCalledWith(expect.objectContaining({
+      frameSeq: 1,
+      commands,
+    }));
+  });
+
   it('drops queued stale batches after invalidation', async () => {
     const sequencer = new TileBatchSequencer();
     const appliedFrames: number[] = [];
