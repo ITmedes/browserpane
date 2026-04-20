@@ -121,7 +121,23 @@ export class SessionResizeRuntime {
 
     this.applyCanvasSize(width, height);
 
-    console.log(`[bpane] resolution locked to ${width}x${height} (scaled to local container)`);
+    const scale = this.computeScale();
+    const cssW = Math.ceil(width / scale);
+    const cssH = Math.ceil(height / scale);
+    const rect = this.container.getBoundingClientRect();
+
+    if (rect.width >= cssW && rect.height >= cssH) {
+      this.container.style.flex = 'none';
+      this.container.style.width = `${cssW}px`;
+      this.container.style.height = `${cssH}px`;
+      this.container.style.resize = 'none';
+      this.container.style.maxWidth = `${cssW}px`;
+      this.container.style.maxHeight = `${cssH}px`;
+      console.log(`[bpane] resolution locked to ${width}x${height} (container fixed to ${cssW}x${cssH}px)`);
+    } else {
+      console.log(`[bpane] resolution locked to ${width}x${height} (scaled to local container)`);
+    }
+
     this.onResolutionChange?.(width, height);
   }
 
@@ -131,6 +147,12 @@ export class SessionResizeRuntime {
     }
 
     this.resolutionLocked = false;
+    this.container.style.flex = '';
+    this.container.style.width = '';
+    this.container.style.height = '';
+    this.container.style.resize = '';
+    this.container.style.maxWidth = '';
+    this.container.style.maxHeight = '';
     this.resizeObserver.observe(this.container);
 
     const dims = this.getContainerResizeDims();
