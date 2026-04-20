@@ -6,8 +6,9 @@
  * re-decoding/re-rendering the tile.
  *
  * Capacity is bounded by both entry count (defense in depth) and total byte
- * size. The primary limit is 50 MB; the entry count cap of 8192 is a secondary
- * safeguard. Eviction removes LRU entries until both limits are satisfied.
+ * size. The byte cap is sized so the default 64x64 RGBA tile case does not
+ * undercut the 8192-entry contract used by the host-side sent-hash cache.
+ * Eviction removes LRU entries until both limits are satisfied.
  */
 
 import { CH_TILES, parseTileMessage } from './render/tile-message-parser.js';
@@ -48,7 +49,7 @@ export type TileCommand =
   };
 
 const DEFAULT_MAX_ENTRIES = 8192;
-const DEFAULT_MAX_BYTES = 50 * 1024 * 1024; // 50 MB
+const DEFAULT_MAX_BYTES = DEFAULT_MAX_ENTRIES * 64 * 64 * 4; // 128 MB at default tile size
 export type CachedTile = ImageBitmap | ImageData;
 
 export class TileCache {
