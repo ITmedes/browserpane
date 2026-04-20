@@ -50,7 +50,7 @@ export class SessionVideoDisplayRuntime {
     this.getGridConfig = input.getGridConfig;
     this.getVideoRegion = input.getVideoRegion;
     this.createCanvas = input.createCanvas ?? (() => document.createElement('canvas'));
-    this.requestAnimationFrameFn = input.requestAnimationFrameFn ?? requestAnimationFrame;
+    this.requestAnimationFrameFn = input.requestAnimationFrameFn ?? window.requestAnimationFrame.bind(window);
     this.now = input.now ?? (() => performance.now());
     this.staleMs = input.staleMs ?? DEFAULT_VIDEO_OVERLAY_STALE_MS;
   }
