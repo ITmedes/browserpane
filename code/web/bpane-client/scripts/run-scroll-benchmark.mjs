@@ -28,6 +28,8 @@ const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
   hostCdpUrl: process.env.BPANE_BENCHMARK_HOST_CDP ?? '',
   remoteUrl: '',
+  hostWindowWidth: 1600,
+  hostWindowHeight: 1000,
   renderBackend: 'auto',
   scrollCopy: true,
   hiDpi: true,
@@ -69,6 +71,12 @@ function parseArgs(argv) {
       i++;
     } else if (arg === '--remote-url' && next) {
       options.remoteUrl = next;
+      i++;
+    } else if (arg === '--host-window-width' && next) {
+      options.hostWindowWidth = Number(next);
+      i++;
+    } else if (arg === '--host-window-height' && next) {
+      options.hostWindowHeight = Number(next);
       i++;
     } else if (arg === '--render-backend' && next) {
       options.renderBackend = next;
@@ -136,6 +144,8 @@ Options:
   --page-url <url>            Local dev page URL (default: ${DEFAULTS.pageUrl})
   --host-cdp-url <url>        Host Chromium CDP endpoint
   --remote-url <url>          Remote page URL to open in host Chromium before the run
+  --host-window-width <px>    Host Chromium window width (default: ${DEFAULTS.hostWindowWidth})
+  --host-window-height <px>   Host Chromium window height (default: ${DEFAULTS.hostWindowHeight})
   --render-backend <mode>     auto | webgl2 | canvas2d
   --scroll-copy <on|off>      Toggle scroll-copy (default: on)
   --hidpi <on|off>            Toggle HiDPI (default: on)
@@ -179,6 +189,23 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function setHostWindowBounds(page, options) {
+  const session = await page.context().newCDPSession(page);
+  try {
+    const { windowId } = await session.send('Browser.getWindowForTarget');
+    await session.send('Browser.setWindowBounds', {
+      windowId,
+      bounds: {
+        windowState: 'normal',
+        width: options.hostWindowWidth,
+        height: options.hostWindowHeight,
+      },
+    });
+  } finally {
+    await session.detach().catch(() => {});
+  }
+}
+
 async function setRemotePage(options) {
   if (!options.hostCdpUrl || !options.remoteUrl) {
     return null;
@@ -190,6 +217,7 @@ async function setRemotePage(options) {
     if (!page) {
       page = await context.newPage();
     }
+    await setHostWindowBounds(page, options);
     await page.goto(options.remoteUrl, { waitUntil: 'load' });
     await page.bringToFront();
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -307,6 +335,8 @@ async function main() {
         pageUrl: options.pageUrl,
         hostCdpUrl: options.hostCdpUrl || null,
         remoteUrl: options.remoteUrl || null,
+        hostWindowWidth: options.hostWindowWidth,
+        hostWindowHeight: options.hostWindowHeight,
         remoteSettleMs: options.remoteSettleMs,
         renderBackend: options.renderBackend,
         scrollCopy: options.scrollCopy,
