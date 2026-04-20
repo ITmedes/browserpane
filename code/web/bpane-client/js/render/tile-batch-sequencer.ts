@@ -30,10 +30,33 @@ export class TileBatchSequencer {
     commands: TileCommand[],
     applyBatch: (batch: QueuedTileBatch) => Promise<boolean> | boolean,
   ): void {
-    const batch: QueuedTileBatch = {
+    this.enqueueQueuedBatch({
       frameSeq,
       commands: [...commands],
       epoch: this.epoch,
+    }, applyBatch);
+  }
+
+  enqueueOwnedBatch(
+    frameSeq: number,
+    commands: TileCommand[],
+    applyBatch: (batch: QueuedTileBatch) => Promise<boolean> | boolean,
+  ): void {
+    this.enqueueQueuedBatch({
+      frameSeq,
+      commands,
+      epoch: this.epoch,
+    }, applyBatch);
+  }
+
+  private enqueueQueuedBatch(
+    queuedBatch: QueuedTileBatch,
+    applyBatch: (batch: QueuedTileBatch) => Promise<boolean> | boolean,
+  ): void {
+    const batch: QueuedTileBatch = {
+      frameSeq: queuedBatch.frameSeq,
+      commands: queuedBatch.commands,
+      epoch: queuedBatch.epoch,
     };
 
     this.flushChain = this.flushChain.then(async () => {
