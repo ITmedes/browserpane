@@ -344,6 +344,14 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
     const dpr = window.devicePixelRatio || 1;
     const insetX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
     const insetY = Math.max(0, window.outerHeight - window.innerHeight);
+    const viewportCssWidth = Math.max(
+      0,
+      window.innerWidth || (document.documentElement ? document.documentElement.clientWidth : 0),
+    );
+    const viewportCssHeight = Math.max(
+      0,
+      window.innerHeight || (document.documentElement ? document.documentElement.clientHeight : 0),
+    );
     const isElementVisible = (el) => {
       const style = window.getComputedStyle(el);
       if (!style) return false;
@@ -576,11 +584,10 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
       const rect = activeEditable.getBoundingClientRect();
       if (rect.width >= 2 && rect.height >= 2) {
         const expanded = expandEditableRect(rect);
-        const contentW = document.documentElement.clientWidth || window.innerWidth;
         const vpX = Math.round((window.screenX + insetX) * dpr);
         const vpY = Math.round((window.screenY + insetY) * dpr);
-        const vpW = Math.round(contentW * dpr);
-        const vpH = Math.round(window.innerHeight * dpr);
+        const vpW = Math.round(viewportCssWidth * dpr);
+        const vpH = Math.round(viewportCssHeight * dpr);
         return {
           visible,
           focused,
@@ -643,11 +650,10 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
       }
     }
 
-    const contentW = document.documentElement.clientWidth || window.innerWidth;
     const vpX = Math.round((window.screenX + insetX) * dpr);
     const vpY = Math.round((window.screenY + insetY) * dpr);
-    const vpW = Math.round(contentW * dpr);
-    const vpH = Math.round(window.innerHeight * dpr);
+    const vpW = Math.round(viewportCssWidth * dpr);
+    const vpH = Math.round(viewportCssHeight * dpr);
 
     return {
       visible,
@@ -2339,6 +2345,13 @@ mod tests {
         assert!(js.contains("getVideoPlaybackQuality"));
         assert!(js.contains("FRAME_ACTIVITY_GRACE_MS"));
         assert!(js.contains("recentFrame || recentProgress || recentPlaying || recentSeeked"));
+    }
+
+    #[test]
+    fn build_video_probe_js_uses_full_visible_viewport_width() {
+        let js = build_video_probe_js(false, DEFAULT_SCROLL_PAUSE_WINDOW_MS, 0);
+        assert!(js.contains("const viewportCssWidth = Math.max("));
+        assert!(js.contains("window.innerWidth || (document.documentElement ? document.documentElement.clientWidth : 0)"));
     }
 
     #[test]
