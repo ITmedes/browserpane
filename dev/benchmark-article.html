@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BrowserPane Realistic Scroll Benchmark</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f4ee;
+      --surface: #fffdf8;
+      --surface-strong: #fff;
+      --ink: #1f2937;
+      --muted: #5d687b;
+      --line: rgba(31, 41, 55, 0.1);
+      --accent: #c2410c;
+      --accent-soft: rgba(194, 65, 12, 0.08);
+      --hero: linear-gradient(140deg, #111827 0%, #1d4ed8 55%, #60a5fa 100%);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background:
+        radial-gradient(circle at top right, rgba(96, 165, 250, 0.12), transparent 22rem),
+        var(--bg);
+      color: var(--ink);
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(16px);
+      background: rgba(247, 244, 238, 0.9);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .topbar-inner {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 14px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      font-family: "SF Pro Text", "Segoe UI", sans-serif;
+    }
+
+    .brand {
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .nav {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .hero {
+      max-width: 1160px;
+      margin: 24px auto 0;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.9fr);
+      gap: 24px;
+    }
+
+    .hero-main {
+      padding: 28px;
+      border-radius: 26px;
+      overflow: hidden;
+      background: var(--hero);
+      color: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 28px 58px rgba(17, 24, 39, 0.22);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.16);
+      font: 700 12px/1 "SF Pro Text", "Segoe UI", sans-serif;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    .hero-main h1 {
+      margin: 18px 0 14px;
+      font-size: 54px;
+      line-height: 0.96;
+      letter-spacing: -0.05em;
+    }
+
+    .hero-main p {
+      margin: 0;
+      max-width: 42rem;
+      font: 400 19px/1.6 "Georgia", "Times New Roman", serif;
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    .hero-side {
+      padding: 22px;
+      border-radius: 26px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 38px rgba(17, 24, 39, 0.08);
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      font-family: "SF Pro Text", "Segoe UI", sans-serif;
+    }
+
+    .hero-side h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: -0.03em;
+    }
+
+    .chip-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .layout {
+      max-width: 1160px;
+      margin: 28px auto 72px;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 26px;
+      align-items: start;
+    }
+
+    .article {
+      display: grid;
+      gap: 22px;
+    }
+
+    .article-card,
+    .sidebar-card {
+      background: var(--surface-strong);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: 0 16px 34px rgba(17, 24, 39, 0.06);
+    }
+
+    .article-card {
+      overflow: hidden;
+    }
+
+    .article-image {
+      height: 280px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.14), transparent 36%),
+        linear-gradient(135deg, rgba(194, 65, 12, 0.88), rgba(251, 191, 36, 0.88));
+      position: relative;
+    }
+
+    .article-image::after {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.18), transparent 44%),
+        repeating-linear-gradient(
+          90deg,
+          rgba(255,255,255,0.08) 0,
+          rgba(255,255,255,0.08) 12px,
+          transparent 12px,
+          transparent 28px
+        );
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+
+    .article-body {
+      padding: 26px 28px 28px;
+    }
+
+    .article-body h2 {
+      margin: 0 0 14px;
+      font-size: 36px;
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+    }
+
+    .meta {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+      color: var(--muted);
+      font: 700 12px/1.4 "SF Pro Text", "Segoe UI", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .article-body p {
+      margin: 0 0 16px;
+      font-size: 20px;
+      line-height: 1.78;
+    }
+
+    .article-body .dropcap::first-letter {
+      float: left;
+      font-size: 76px;
+      line-height: 0.82;
+      padding-right: 10px;
+      color: var(--accent);
+    }
+
+    .pullquote {
+      margin: 26px 0;
+      padding: 18px 20px 18px 24px;
+      border-left: 4px solid var(--accent);
+      background: rgba(194, 65, 12, 0.05);
+      font-size: 28px;
+      line-height: 1.35;
+      letter-spacing: -0.03em;
+    }
+
+    .subgrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .subcard {
+      padding: 18px;
+      border-radius: 20px;
+      background: #f8fafc;
+      border: 1px solid rgba(31, 41, 55, 0.08);
+    }
+
+    .subcard h3 {
+      margin: 0 0 10px;
+      font-family: "SF Pro Text", "Segoe UI", sans-serif;
+      font-size: 16px;
+      letter-spacing: -0.02em;
+    }
+
+    .subcard p {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--muted);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 86px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .sidebar-card {
+      padding: 20px;
+      font-family: "SF Pro Text", "Segoe UI", sans-serif;
+    }
+
+    .sidebar-card h3 {
+      margin: 0 0 14px;
+      font-size: 17px;
+      letter-spacing: -0.02em;
+    }
+
+    .story-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .story {
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .story:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .story strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 16px;
+      line-height: 1.35;
+    }
+
+    .story p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .metrics-strip {
+      display: grid;
+      gap: 10px;
+    }
+
+    .metric {
+      padding: 14px;
+      border-radius: 18px;
+      background: #f8fafc;
+      border: 1px solid rgba(31, 41, 55, 0.08);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .metric strong {
+      font-size: 28px;
+      letter-spacing: -0.04em;
+    }
+
+    @media (max-width: 960px) {
+      .hero,
+      .layout,
+      .subgrid {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+      }
+
+      .hero-main h1 {
+        font-size: 42px;
+      }
+
+      .article-body p {
+        font-size: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">BrowserPane Realistic Benchmark</div>
+      <nav class="nav">
+        <span>World</span>
+        <span>Markets</span>
+        <span>Science</span>
+        <span>Culture</span>
+        <span>Longform</span>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-main">
+      <span class="eyebrow">Realistic Scroll Fixture</span>
+      <h1>A calmer article workload for comparing practical scroll performance.</h1>
+      <p>
+        This page is designed to resemble a modern editorial layout: a sticky top bar,
+        long-form article text, an image hero, side rail modules, and repeated story cards.
+        It should behave more like a real site than the harsher stress fixture.
+      </p>
+    </div>
+    <aside class="hero-side">
+      <h2>Use this for</h2>
+      <div class="chip-row">
+        <span class="chip">Realistic wheel input</span>
+        <span class="chip">Article-style layout</span>
+        <span class="chip">Long text flow</span>
+      </div>
+      <p style="margin:0; color:var(--muted); line-height:1.65; font-size:15px;">
+        The goal is not to maximize fallback. The goal is to capture the sort of mixed text and
+        chrome rendering path people actually feel while reading and scrolling.
+      </p>
+    </aside>
+  </section>
+
+  <main class="layout">
+    <section class="article" id="article-root"></section>
+    <aside class="sidebar">
+      <section class="sidebar-card">
+        <h3>Scroll Benchmark Notes</h3>
+        <div class="metrics-strip">
+          <div class="metric"><span>Target</span><strong>Article</strong></div>
+          <div class="metric"><span>Pattern</span><strong>Moderate</strong></div>
+          <div class="metric"><span>Intent</span><strong>Realistic</strong></div>
+        </div>
+      </section>
+      <section class="sidebar-card">
+        <h3>Related Modules</h3>
+        <div class="story-list" id="sidebar-stories"></div>
+      </section>
+    </aside>
+  </main>
+
+  <script>
+    const articleRoot = document.getElementById('article-root');
+    const sidebarStories = document.getElementById('sidebar-stories');
+    const paragraphs = [
+      'BrowserPane uses a tile-first transport because ordinary user interfaces are dominated by static text, box geometry, and sharply bounded updates. That tradeoff keeps detail crisp, but it also means scroll behavior is highly sensitive to repair throughput and queue discipline.',
+      'A useful benchmark should not only stress the worst case. It should also capture the smoother everyday case, where the viewport contains mostly readable text, a few rich blocks, and a modest amount of sticky chrome.',
+      'This page is intentionally calmer than the synthetic stress fixture. The layout remains long, dense, and varied, but it avoids the oversized jumpy patterns that can dominate the scroll heuristics and hide more practical regressions.',
+      'When comparing branches, the most useful result is not only raw bandwidth. It is whether text remains stable, whether scroll repairs land quickly enough, and whether the session feels subjectively quiet under repeated wheel bursts.',
+      'For that reason, this fixture uses long-form content, repeating modules, and a right rail that behaves like a real editorial or analysis page instead of a deliberately pathological demo.',
+    ];
+
+    function makeStory(index) {
+      const story = document.createElement('div');
+      story.className = 'story';
+      story.innerHTML = `
+        <strong>Sidebar story ${index + 1}: measured scrolling should feel boring.</strong>
+        <p>${paragraphs[index % paragraphs.length]}</p>
+      `;
+      return story;
+    }
+
+    function makeArticleCard(index) {
+      const card = document.createElement('article');
+      card.className = 'article-card';
+      const body = paragraphs
+        .map((text, pIndex) => `<p${pIndex === 0 ? ' class="dropcap"' : ''}>${text} Section ${index + 1}, paragraph ${pIndex + 1} keeps the viewport rich enough to expose timing issues without turning the layout into an artificial torture test.</p>`)
+        .join('');
+      card.innerHTML = `
+        <div class="article-image"></div>
+        <div class="article-body">
+          <div class="meta">
+            <span>Feature ${String(index + 1).padStart(2, '0')}</span>
+            <span>Benchmark desk</span>
+            <span>${12 + index} min read</span>
+          </div>
+          <h2>Measured scroll behavior matters more than isolated micro-wins.</h2>
+          ${body}
+          <blockquote class="pullquote">
+            Good scroll performance is not only a number. It is the absence of visible repair debt.
+          </blockquote>
+          <div class="subgrid">
+            <div class="subcard">
+              <h3>Observation</h3>
+              <p>${paragraphs[(index + 1) % paragraphs.length]}</p>
+            </div>
+            <div class="subcard">
+              <h3>Follow-up</h3>
+              <p>${paragraphs[(index + 2) % paragraphs.length]}</p>
+            </div>
+          </div>
+        </div>
+      `;
+      return card;
+    }
+
+    for (let i = 0; i < 18; i++) {
+      articleRoot.appendChild(makeArticleCard(i));
+    }
+
+    for (let i = 0; i < 14; i++) {
+      sidebarStories.appendChild(makeStory(i));
+    }
+  </script>
+</body>
+</html>

@@ -6,6 +6,8 @@
   "scripts": {
     "build": "vite build && node scripts/copy-audio-worklet.mjs",
     "benchmark:scroll": "node scripts/run-scroll-benchmark.mjs",
+    "benchmark:stress": "node scripts/run-scroll-benchmark.mjs --profile stress",
+    "benchmark:realistic": "node scripts/run-scroll-benchmark.mjs --profile realistic",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"

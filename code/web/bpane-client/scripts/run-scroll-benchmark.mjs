@@ -2,13 +2,38 @@ import fs from 'node:fs/promises';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
 
+const PROFILE_PRESETS = {
+  stress: {
+    remoteUrl: 'http://web:8080/benchmark-scroll.html',
+    cycles: 4,
+    downSteps: 18,
+    upSteps: 18,
+    wheelDeltaY: 720,
+    stepDelayMs: 110,
+    settleMs: 1200,
+  },
+  realistic: {
+    remoteUrl: 'http://web:8080/benchmark-article.html',
+    cycles: 3,
+    downSteps: 16,
+    upSteps: 16,
+    wheelDeltaY: 360,
+    stepDelayMs: 140,
+    settleMs: 1400,
+  },
+};
+
 const DEFAULTS = {
+  profile: '',
   pageUrl: 'http://localhost:8080',
+  hostCdpUrl: process.env.BPANE_BENCHMARK_HOST_CDP ?? '',
+  remoteUrl: '',
   renderBackend: 'auto',
   scrollCopy: true,
   hiDpi: true,
   headless: false,
   connectTimeoutMs: 30000,
+  remoteSettleMs: 800,
   settleMs: 1200,
   stepDelayMs: 110,
   downSteps: 18,
@@ -33,8 +58,17 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const next = argv[i + 1];
-    if (arg === '--page-url' && next) {
+    if (arg === '--profile' && next) {
+      applyProfile(options, next);
+      i++;
+    } else if (arg === '--page-url' && next) {
       options.pageUrl = next;
+      i++;
+    } else if (arg === '--host-cdp-url' && next) {
+      options.hostCdpUrl = next;
+      i++;
+    } else if (arg === '--remote-url' && next) {
+      options.remoteUrl = next;
       i++;
     } else if (arg === '--render-backend' && next) {
       options.renderBackend = next;
@@ -49,6 +83,9 @@ function parseArgs(argv) {
       options.headless = true;
     } else if (arg === '--connect-timeout-ms' && next) {
       options.connectTimeoutMs = Number(next);
+      i++;
+    } else if (arg === '--remote-settle-ms' && next) {
+      options.remoteSettleMs = Number(next);
       i++;
     } else if (arg === '--settle-ms' && next) {
       options.settleMs = Number(next);
@@ -81,15 +118,28 @@ function parseArgs(argv) {
   return options;
 }
 
+function applyProfile(options, profileName) {
+  const preset = PROFILE_PRESETS[profileName];
+  if (!preset) {
+    throw new Error(`Unknown benchmark profile: ${profileName}`);
+  }
+  options.profile = profileName;
+  Object.assign(options, preset);
+}
+
 function printHelp() {
   console.log(`
 Usage: node scripts/run-scroll-benchmark.mjs [options]
 
 Options:
+  --profile <name>            stress | realistic
   --page-url <url>            Local dev page URL (default: ${DEFAULTS.pageUrl})
+  --host-cdp-url <url>        Host Chromium CDP endpoint
+  --remote-url <url>          Remote page URL to open in host Chromium before the run
   --render-backend <mode>     auto | webgl2 | canvas2d
   --scroll-copy <on|off>      Toggle scroll-copy (default: on)
   --hidpi <on|off>            Toggle HiDPI (default: on)
+  --remote-settle-ms <ms>     Delay after remote navigation (default: ${DEFAULTS.remoteSettleMs})
   --cycles <n>                Down/up scroll cycles (default: ${DEFAULTS.cycles})
   --down-steps <n>            Wheel steps per down cycle (default: ${DEFAULTS.downSteps})
   --up-steps <n>              Wheel steps per up cycle (default: ${DEFAULTS.upSteps})
@@ -102,11 +152,12 @@ Options:
 
 Environment:
   BPANE_BENCHMARK_CHROME      Explicit Chrome/Chromium executable path
+  BPANE_BENCHMARK_HOST_CDP    Default host Chromium CDP endpoint
 
 Notes:
-  For deterministic remote content, start the host browser with:
-    BPANE_URL=http://web:8080/benchmark-scroll.html
-  inside the compose network.
+  Profiles:
+    stress     -> remote ${PROFILE_PRESETS.stress.remoteUrl}
+    realistic  -> remote ${PROFILE_PRESETS.realistic.remoteUrl}
 `);
 }
 
@@ -126,6 +177,30 @@ async function resolveChromeExecutable() {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function setRemotePage(options) {
+  if (!options.hostCdpUrl || !options.remoteUrl) {
+    return null;
+  }
+  const remoteBrowser = await chromium.connectOverCDP(options.hostCdpUrl);
+  try {
+    const context = remoteBrowser.contexts()[0] ?? await remoteBrowser.newContext();
+    let page = context.pages().find((candidate) => candidate.url().startsWith(options.remoteUrl));
+    if (!page) {
+      page = await context.newPage();
+    }
+    await page.goto(options.remoteUrl, { waitUntil: 'load' });
+    await page.bringToFront();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(options.remoteSettleMs);
+    return {
+      title: await page.title(),
+      url: page.url(),
+    };
+  } finally {
+    await remoteBrowser.close();
+  }
 }
 
 async function configurePage(page, options) {
@@ -178,6 +253,7 @@ async function runScrollSequence(page, options) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const executablePath = await resolveChromeExecutable();
+  const remotePage = await setRemotePage(options);
   const browser = await chromium.launch({
     headless: options.headless,
     executablePath,
@@ -227,7 +303,11 @@ async function main() {
     const result = {
       capturedAt: new Date().toISOString(),
       config: {
+        profile: options.profile || 'custom',
         pageUrl: options.pageUrl,
+        hostCdpUrl: options.hostCdpUrl || null,
+        remoteUrl: options.remoteUrl || null,
+        remoteSettleMs: options.remoteSettleMs,
         renderBackend: options.renderBackend,
         scrollCopy: options.scrollCopy,
         hiDpi: options.hiDpi,
@@ -239,6 +319,7 @@ async function main() {
         settleMs: options.settleMs,
         headless: options.headless,
       },
+      remotePage,
       summary,
     };
 
