@@ -6,6 +6,10 @@ Project-wide Rust coding standards live in `RUST_STANDARDS.md`.
 - Apply them to all Rust crates in this repo.
 - Update that file instead of expanding this one with detailed Rust style rules.
 
+Project-wide TypeScript and Node.js coding standards live in `NODEJS_STANDARDS.md`.
+- Apply them to `code/web/bpane-client`, `code/integrations/mcp-bridge`, and future TS/Node packages.
+- Update that file instead of expanding this one with detailed TS/Node style rules.
+
 When docs disagree, prefer:
 1. The code
 2. Runtime manifests and package scripts
