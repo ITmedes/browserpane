@@ -2,6 +2,7 @@
 //! ScrollCopy, when to defer repair, capture cadence, quantisation.
 
 use super::{
+    SCROLL_DEFER_REPAIR_HIGH_INTERIOR_MIN_SAVED_RATIO, SCROLL_DEFER_REPAIR_HIGH_INTERIOR_RATIO,
     SCROLL_DEFER_REPAIR_MAX_INTERIOR_RATIO, SCROLL_DEFER_REPAIR_MAX_ROW_SHIFT,
     SCROLL_DEFER_REPAIR_MIN_SAVED_RATIO, SCROLL_RESIDUAL_FULL_REPAINT_RATIO_DEFAULT,
 };
@@ -59,13 +60,16 @@ pub fn should_defer_scroll_repair(
         return false;
     }
     if interior_ratio <= SCROLL_RESIDUAL_FULL_REPAINT_RATIO_DEFAULT
-        || interior_ratio > SCROLL_DEFER_REPAIR_MAX_INTERIOR_RATIO
+        || interior_ratio > SCROLL_DEFER_REPAIR_HIGH_INTERIOR_RATIO
+        || row_shift.abs() > SCROLL_DEFER_REPAIR_MAX_ROW_SHIFT
     {
         return false;
     }
     let saved_ratio = saved_tiles as f32 / potential_tiles as f32;
-    row_shift.abs() <= SCROLL_DEFER_REPAIR_MAX_ROW_SHIFT
-        && saved_ratio >= SCROLL_DEFER_REPAIR_MIN_SAVED_RATIO
+    if interior_ratio <= SCROLL_DEFER_REPAIR_MAX_INTERIOR_RATIO {
+        return saved_ratio >= SCROLL_DEFER_REPAIR_MIN_SAVED_RATIO;
+    }
+    row_shift.abs() <= 1 && saved_ratio >= SCROLL_DEFER_REPAIR_HIGH_INTERIOR_MIN_SAVED_RATIO
 }
 
 /// Check if a scroll delta is quantized to the given pixel quantum.

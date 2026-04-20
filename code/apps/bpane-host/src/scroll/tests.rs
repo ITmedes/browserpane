@@ -105,8 +105,15 @@ fn moderate_residual_can_defer_repair_for_small_row_shifts() {
 }
 
 #[test]
+fn high_residual_only_defers_for_strong_single_row_saves() {
+    assert!(should_defer_scroll_repair(true, 0.88, 56, 160, 1));
+    assert!(!should_defer_scroll_repair(true, 0.88, 48, 160, 2));
+    assert!(!should_defer_scroll_repair(true, 0.88, 48, 160, 1));
+}
+
+#[test]
 fn severe_or_low_value_residual_still_forces_full_repaint() {
-    assert!(!should_defer_scroll_repair(true, 0.90, 48, 160, 2));
+    assert!(!should_defer_scroll_repair(true, 0.91, 48, 160, 2));
     assert!(!should_defer_scroll_repair(true, 0.76, 12, 160, 2));
     assert!(!should_defer_scroll_repair(true, 0.76, 48, 160, 3));
     assert!(!should_defer_scroll_repair(false, 0.76, 48, 160, 2));
