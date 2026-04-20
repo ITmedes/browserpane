@@ -5,7 +5,7 @@ import type { FillTileDrawResult } from './fill-tile-renderer.js';
 import { FillTileRenderer } from './fill-tile-renderer.js';
 import type { QoiTileDrawResult } from './qoi-tile-renderer.js';
 import { QoiTileRenderer } from './qoi-tile-renderer.js';
-import { resolveTileRect } from './tile-rect-resolver.js';
+import { resolveTileRectInto, type TileRect } from './tile-rect-resolver.js';
 import type { ZstdTileDrawResult } from './zstd-tile-renderer.js';
 import { ZstdTileRenderer } from './zstd-tile-renderer.js';
 import type { TileCache, TileGridConfig } from '../tile-cache.js';
@@ -69,6 +69,7 @@ export class TileDrawRuntime {
   private readonly qoiTileRenderer: QoiTileRendererLike;
   private readonly zstdTileRenderer: ZstdTileRendererLike;
   private readonly canvasScrollCopyRenderer: CanvasScrollCopyRendererLike;
+  private readonly scratchRect: TileRect = { x: 0, y: 0, w: 0, h: 0 };
 
   constructor(args: {
     cache?: TileCache;
@@ -279,14 +280,14 @@ export class TileDrawRuntime {
     }
   }
 
-  private tileRect(col: number, row: number): { x: number; y: number; w: number; h: number } | null {
-    return resolveTileRect({
+  private tileRect(col: number, row: number): TileRect | null {
+    return resolveTileRectInto({
       gridConfig: this.gridConfig,
       col,
       row,
       gridOffsetX: this.gridOffsetX,
       gridOffsetY: this.gridOffsetY,
       applyOffset: this.applyOffsetMode,
-    });
+    }, this.scratchRect);
   }
 }
