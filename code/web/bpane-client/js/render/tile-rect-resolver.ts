@@ -1,5 +1,12 @@
 import type { TileGridConfig } from '../tile-cache.js';
 
+export type TileRect = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
 export type ResolveTileRectArgs = {
   gridConfig: TileGridConfig | null;
   col: number;
@@ -9,7 +16,7 @@ export type ResolveTileRectArgs = {
   applyOffset: boolean;
 };
 
-export function resolveTileRect(args: ResolveTileRectArgs): { x: number; y: number; w: number; h: number } | null {
+export function resolveTileRectInto(args: ResolveTileRectArgs, outRect: TileRect): TileRect | null {
   const { gridConfig, col, row, gridOffsetX, gridOffsetY, applyOffset } = args;
   if (!gridConfig) return null;
 
@@ -26,5 +33,13 @@ export function resolveTileRect(args: ResolveTileRectArgs): { x: number; y: numb
   const height = endY - y;
 
   if (width <= 0 || height <= 0) return null;
-  return { x, y, w: width, h: height };
+  outRect.x = x;
+  outRect.y = y;
+  outRect.w = width;
+  outRect.h = height;
+  return outRect;
+}
+
+export function resolveTileRect(args: ResolveTileRectArgs): TileRect | null {
+  return resolveTileRectInto(args, { x: 0, y: 0, w: 0, h: 0 });
 }
