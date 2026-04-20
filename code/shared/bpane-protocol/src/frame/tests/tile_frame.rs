@@ -86,6 +86,9 @@ fn tile_all_variants_via_frame() {
             scroll_non_quantized_fallbacks_total: 1,
             scroll_residual_full_repaints_total: 0,
             scroll_zero_saved_batches_total: 2,
+            host_sent_hash_entries: 64,
+            host_sent_hash_evictions_total: 5,
+            host_cache_miss_reports_total: 3,
         },
     ];
 

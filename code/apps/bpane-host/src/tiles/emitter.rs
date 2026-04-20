@@ -86,6 +86,7 @@ pub struct TileEmitter {
     /// IndexSet provides O(1) lookup, O(1) insert, and preserves insertion
     /// order for bounded eviction (oldest = index 0).
     sent_hashes: IndexSet<u64>,
+    sent_hash_evictions_total: u64,
     /// Last video region sideband sent to the client.
     /// Used to send updates and a clearing VideoRegion(0,0,0,0) on exit.
     last_video_region: Option<Rect>,
@@ -109,6 +110,7 @@ impl TileEmitter {
             static_last_hashes: vec![0; count],
             cols,
             sent_hashes: IndexSet::with_capacity(MAX_SENT_HASHES),
+            sent_hash_evictions_total: 0,
             last_video_region: None,
             tile_scratch: Vec::new(),
             codec,
@@ -122,6 +124,7 @@ impl TileEmitter {
         self.static_last_hashes = vec![0; count];
         self.cols = cols;
         self.sent_hashes.clear();
+        self.sent_hash_evictions_total = 0;
         self.last_video_region = None;
         self.tile_scratch.clear();
     }
@@ -253,8 +256,17 @@ impl TileEmitter {
         // Evict oldest (index 0) if at capacity
         while self.sent_hashes.len() >= MAX_SENT_HASHES {
             self.sent_hashes.shift_remove_index(0);
+            self.sent_hash_evictions_total = self.sent_hash_evictions_total.saturating_add(1);
         }
         self.sent_hashes.insert(hash);
+    }
+
+    pub fn sent_hash_entries(&self) -> usize {
+        self.sent_hashes.len()
+    }
+
+    pub fn sent_hash_evictions_total(&self) -> u64 {
+        self.sent_hash_evictions_total
     }
 
     /// Update `last_hashes` for tiles verified correct by scroll residual analysis.

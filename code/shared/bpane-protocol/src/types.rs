@@ -541,6 +541,9 @@ pub enum TileMessage {
         scroll_non_quantized_fallbacks_total: u32,
         scroll_residual_full_repaints_total: u32,
         scroll_zero_saved_batches_total: u32,
+        host_sent_hash_entries: u32,
+        host_sent_hash_evictions_total: u32,
+        host_cache_miss_reports_total: u32,
     },
 }
 

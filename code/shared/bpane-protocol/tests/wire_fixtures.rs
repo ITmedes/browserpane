@@ -130,6 +130,9 @@ fn valid_wire_fixtures_match_exact_rust_encoders() {
             scroll_non_quantized_fallbacks_total: 1,
             scroll_residual_full_repaints_total: 1,
             scroll_zero_saved_batches_total: 3,
+            host_sent_hash_entries: 0,
+            host_sent_hash_evictions_total: 0,
+            host_cache_miss_reports_total: 0,
         }
         .to_frame()
         .encode()

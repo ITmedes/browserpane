@@ -1,6 +1,10 @@
 import fs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import process from 'node:process';
+import { promisify } from 'node:util';
 import { chromium } from 'playwright-core';
+
+const execFileAsync = promisify(execFile);
 
 const PROFILE_PRESETS = {
   stress: {
@@ -26,6 +30,7 @@ const PROFILE_PRESETS = {
 const DEFAULTS = {
   profile: '',
   pageUrl: 'http://localhost:8080',
+  gatewayStatusUrl: 'http://localhost:8932/api/session/status',
   hostCdpUrl: process.env.BPANE_BENCHMARK_HOST_CDP ?? '',
   remoteUrl: '',
   hostWindowWidth: 1600,
@@ -65,6 +70,9 @@ function parseArgs(argv) {
       i++;
     } else if (arg === '--page-url' && next) {
       options.pageUrl = next;
+      i++;
+    } else if (arg === '--gateway-status-url' && next) {
+      options.gatewayStatusUrl = next;
       i++;
     } else if (arg === '--host-cdp-url' && next) {
       options.hostCdpUrl = next;
@@ -142,6 +150,7 @@ Usage: node scripts/run-scroll-benchmark.mjs [options]
 Options:
   --profile <name>            stress | realistic
   --page-url <url>            Local dev page URL (default: ${DEFAULTS.pageUrl})
+  --gateway-status-url <url>  Gateway status API URL (default: ${DEFAULTS.gatewayStatusUrl})
   --host-cdp-url <url>        Host Chromium CDP endpoint
   --remote-url <url>          Remote page URL to open in host Chromium before the run
   --host-window-width <px>    Host Chromium window width (default: ${DEFAULTS.hostWindowWidth})
@@ -187,6 +196,71 @@ async function resolveChromeExecutable() {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchGatewayStatus(options) {
+  if (!options.gatewayStatusUrl) {
+    return null;
+  }
+  try {
+    const response = await fetch(options.gatewayStatusUrl);
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    const fallbackUrl = await resolveGatewayContainerStatusUrl(options.gatewayStatusUrl);
+    if (fallbackUrl) {
+      try {
+        const response = await fetch(fallbackUrl);
+        if (!response.ok) {
+          throw new Error(`status ${response.status}`);
+        }
+        return {
+          ...(await response.json()),
+          resolvedFromContainer: true,
+          resolvedUrl: fallbackUrl,
+        };
+      } catch (fallbackError) {
+        return {
+          error: String(fallbackError),
+          url: fallbackUrl,
+          initialError: String(error),
+        };
+      }
+    }
+    return {
+      error: String(error),
+      url: options.gatewayStatusUrl,
+    };
+  }
+}
+
+async function resolveGatewayContainerStatusUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (!['localhost', '127.0.0.1'].includes(parsed.hostname)) {
+    return null;
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      'docker',
+      ['inspect', '-f', '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}', 'deploy-gateway-1'],
+      { timeout: 3000 },
+    );
+    const ip = stdout.trim();
+    if (!ip) {
+      return null;
+    }
+    parsed.hostname = ip;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 
 async function setHostWindowBounds(page, options) {
@@ -323,6 +397,7 @@ async function main() {
       window.__bpaneBenchmarkMetrics.stopSample();
       return window.__bpaneBenchmarkMetrics.getSummary();
     });
+    const gatewayStatus = await fetchGatewayStatus(options);
 
     if (!summary) {
       throw new Error('Benchmark summary was empty.');
@@ -333,6 +408,7 @@ async function main() {
       config: {
         profile: options.profile || 'custom',
         pageUrl: options.pageUrl,
+        gatewayStatusUrl: options.gatewayStatusUrl || null,
         hostCdpUrl: options.hostCdpUrl || null,
         remoteUrl: options.remoteUrl || null,
         hostWindowWidth: options.hostWindowWidth,
@@ -351,6 +427,7 @@ async function main() {
       },
       remotePage,
       summary,
+      gatewayStatus,
     };
 
     const output = JSON.stringify(result, null, 2);

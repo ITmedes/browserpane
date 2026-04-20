@@ -122,6 +122,9 @@ impl super::TileCaptureThread {
                 self.scroll_fallback_residual_full_repaint_total,
             ),
             scroll_zero_saved_batches_total: to_u32_sat(self.scroll_zero_saved_batches_total),
+            host_sent_hash_entries: to_u32_sat(self.emitter.sent_hash_entries() as u64),
+            host_sent_hash_evictions_total: to_u32_sat(self.emitter.sent_hash_evictions_total()),
+            host_cache_miss_reports_total: to_u32_sat(self.client_cache_miss_reports_total),
         }
         .to_frame();
         if self.tile_tx.blocking_send(scroll_stats_frame).is_err() {

@@ -412,13 +412,16 @@
         `Tiles: total=${summary.tiles.totalCommands} image=${summary.tiles.imageCommands} ` +
         `video=${summary.tiles.videoCommands} draw=${summary.tiles.drawCommands} ` +
         `cache=${summary.tiles.cacheHitRateObserved.toFixed(1)}% size=${summary.tiles.cacheSizeObserved} ` +
-        `redundantQoi=${formatBytes(summary.tiles.redundantQoiBytes)}`;
+        `evict=${summary.tiles.cacheEvictions} bytes=${formatBytes(summary.tiles.cacheBytesObserved)} ` +
+        `batchMax=${summary.tiles.maxBatchCommands} pendMax=${summary.tiles.maxPendingCommands}`;
       metricsScrollEl.textContent =
         `Scroll: batches=${summary.scroll.scrollBatches} saved=${summary.scroll.scrollSavedRate.toFixed(1)}% ` +
         `hostFallback=${summary.scroll.hostFallbackRate.toFixed(1)}% ` +
         `reasons=nq:${summary.scroll.hostFallbackReasons.nonQuantizedFallbacks} ` +
         `repaint:${summary.scroll.hostFallbackReasons.residualFullRepaints} ` +
         `zero:${summary.scroll.hostFallbackReasons.zeroSavedBatches} ` +
+        `sent=${summary.scroll.hostSentHashEntries} evict=${summary.scroll.hostSentHashEvictions} ` +
+        `miss=${summary.scroll.hostCacheMissReports} ` +
         `dom=${summary.scroll.dominantHostFallbackReason} ` +
         `r20=${summary.scroll.hostFallbackRateRecent20.toFixed(1)}% ` +
         `r50=${summary.scroll.hostFallbackRateRecent50.toFixed(1)}%`;
@@ -437,6 +440,9 @@
       benchmarkState.peakTxRate = 0;
       benchmarkState.peakTileRate = 0;
       benchmarkState.peakVideoRate = 0;
+      benchmarkState.maxPendingCommands = 0;
+      benchmarkState.maxBatchCommands = 0;
+      benchmarkState.lastObservedBatchCount = 0;
       renderBenchmarkMetrics();
     }
 
@@ -479,6 +485,8 @@
         hostNonQuantizedFallbacks: sessionStats.tiles.scrollHealth.hostScrollNonQuantizedFallbacksTotal,
         hostResidualFullRepaints: sessionStats.tiles.scrollHealth.hostScrollResidualFullRepaintsTotal,
         hostZeroSavedBatches: sessionStats.tiles.scrollHealth.hostScrollZeroSavedBatchesTotal,
+        hostSentHashEvictions: sessionStats.tiles.scrollHealth.hostSentHashEvictionsTotal,
+        hostCacheMissReports: sessionStats.tiles.scrollHealth.hostCacheMissReportsTotal,
         resolution: makeResolutionLabel().replace(/^Resolution:\s*/, ''),
         render: diagnostics ? {
           backend: diagnostics.backend,
@@ -490,6 +498,12 @@
           renderer: '',
         },
         cacheSizeObserved: tileRuntime.size,
+        cacheBytesObserved: tileRuntime.bytes,
+        cacheHits: tileRuntime.hits,
+        cacheMisses: tileRuntime.misses,
+        cacheEvictions: tileRuntime.evictions,
+        batchesQueued: tileRuntime.batchesQueued,
+        totalBatchCommands: tileRuntime.totalBatchCommands,
       };
     }
 
@@ -502,6 +516,17 @@
       benchmarkState.peakTxRate = Math.max(benchmarkState.peakTxRate, rates.txRate);
       benchmarkState.peakTileRate = Math.max(benchmarkState.peakTileRate, rates.tileRate);
       benchmarkState.peakVideoRate = Math.max(benchmarkState.peakVideoRate, rates.videoRate);
+      benchmarkState.maxPendingCommands = Math.max(
+        benchmarkState.maxPendingCommands,
+        tileRuntime.currentPendingCommands,
+      );
+      if (tileRuntime.batchesQueued > benchmarkState.lastObservedBatchCount) {
+        benchmarkState.maxBatchCommands = Math.max(
+          benchmarkState.maxBatchCommands,
+          tileRuntime.lastBatchCommands,
+        );
+        benchmarkState.lastObservedBatchCount = tileRuntime.batchesQueued;
+      }
 
       const baseline = benchmarkState.baseline;
       const durationMs = Math.max(0, now - baseline.capturedAtMs);
@@ -523,6 +548,14 @@
       const hostZeroSavedBatches = Math.max(
         0,
         scrollHealth.hostScrollZeroSavedBatchesTotal - baseline.hostZeroSavedBatches,
+      );
+      const hostSentHashEvictions = Math.max(
+        0,
+        scrollHealth.hostSentHashEvictionsTotal - baseline.hostSentHashEvictions,
+      );
+      const hostCacheMissReports = Math.max(
+        0,
+        scrollHealth.hostCacheMissReportsTotal - baseline.hostCacheMissReports,
       );
       const hostFallbackReasons = {
         nonQuantizedFallbacks: hostNonQuantizedFallbacks,
@@ -562,7 +595,19 @@
           totalCommands: Math.max(0, sessionStats.tiles.totalCommands - baseline.totalCommands),
           cacheHitRateObserved: sessionStats.tiles.cacheHitRateObserved,
           cacheSizeObserved: tileRuntime.size,
+          cacheBytesObserved: tileRuntime.bytes,
+          cacheHits: Math.max(0, tileRuntime.hits - baseline.cacheHits),
+          cacheMisses: Math.max(0, tileRuntime.misses - baseline.cacheMisses),
+          cacheEvictions: Math.max(0, tileRuntime.evictions - baseline.cacheEvictions),
           redundantQoiBytes: sessionStats.tiles.redundantQoiBytes,
+          batchesQueued: Math.max(0, tileRuntime.batchesQueued - baseline.batchesQueued),
+          totalBatchCommands: Math.max(0, tileRuntime.totalBatchCommands - baseline.totalBatchCommands),
+          averageBatchCommands: Math.max(0, tileRuntime.batchesQueued - baseline.batchesQueued) > 0
+            ? Math.max(0, tileRuntime.totalBatchCommands - baseline.totalBatchCommands)
+              / Math.max(1, tileRuntime.batchesQueued - baseline.batchesQueued)
+            : 0,
+          maxBatchCommands: benchmarkState.maxBatchCommands,
+          maxPendingCommands: benchmarkState.maxPendingCommands,
         },
         scroll: {
           scrollBatches: Math.max(0, scrollComposition.scrollBatches - baseline.scrollBatches),
@@ -576,6 +621,9 @@
           dominantHostFallbackReason: dominantHostScrollReason(hostFallbackReasons),
           hostFallbackRateRecent20: scrollHealth.hostFallbackRateRecent20,
           hostFallbackRateRecent50: scrollHealth.hostFallbackRateRecent50,
+          hostSentHashEntries: scrollHealth.hostSentHashEntries,
+          hostSentHashEvictions,
+          hostCacheMissReports,
         },
         video: {
           datagrams: Math.max(0, sessionStats.video.datagrams - baseline.datagrams),
@@ -601,6 +649,8 @@
       benchmarkState.peakTxRate = 0;
       benchmarkState.peakTileRate = 0;
       benchmarkState.peakVideoRate = 0;
+      benchmarkState.maxPendingCommands = 0;
+      benchmarkState.maxBatchCommands = 0;
       benchmarkState.baseline = buildBenchmarkBaseline(
         now,
         session.getFrameCount(),
@@ -609,6 +659,7 @@
         sessionStats,
       );
       benchmarkState.summary = null;
+      benchmarkState.lastObservedBatchCount = benchmarkState.baseline.batchesQueued;
       renderBenchmarkMetrics();
       log('Benchmark sample started', 'info');
     }
@@ -697,6 +748,9 @@
       peakTxRate: 0,
       peakTileRate: 0,
       peakVideoRate: 0,
+      maxPendingCommands: 0,
+      maxBatchCommands: 0,
+      lastObservedBatchCount: 0,
     };
 
     async function connect() {

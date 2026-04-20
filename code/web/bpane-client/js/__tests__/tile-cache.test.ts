@@ -96,8 +96,11 @@ function buildScrollStats(
   nonQuantizedFallbacks = 0,
   residualFullRepaints = 0,
   zeroSavedBatches = 0,
+  hostSentHashEntries = 0,
+  hostSentHashEvictionsTotal = 0,
+  hostCacheMissReportsTotal = 0,
 ): Uint8Array {
-  const buf = new Uint8Array(29);
+  const buf = new Uint8Array(41);
   const view = new DataView(buf.buffer);
   buf[0] = 0x0A; // TILE_SCROLL_STATS
   view.setUint32(1, batches, true);
@@ -107,6 +110,9 @@ function buildScrollStats(
   view.setUint32(17, nonQuantizedFallbacks, true);
   view.setUint32(21, residualFullRepaints, true);
   view.setUint32(25, zeroSavedBatches, true);
+  view.setUint32(29, hostSentHashEntries, true);
+  view.setUint32(33, hostSentHashEvictionsTotal, true);
+  view.setUint32(37, hostCacheMissReportsTotal, true);
   return buf;
 }
 
@@ -424,7 +430,7 @@ describe('parseTileMessage', () => {
   });
 
   it('parses scroll-stats', () => {
-    const msg = parseTileMessage(buildScrollStats(11, 2, 1000, 730, 1, 1, 3));
+    const msg = parseTileMessage(buildScrollStats(11, 2, 1000, 730, 1, 1, 3, 128, 9, 7));
     expect(msg).not.toBeNull();
     expect(msg!.type).toBe('scroll-stats');
     if (msg!.type === 'scroll-stats') {
@@ -435,6 +441,9 @@ describe('parseTileMessage', () => {
       expect(msg!.scrollNonQuantizedFallbacksTotal).toBe(1);
       expect(msg!.scrollResidualFullRepaintsTotal).toBe(1);
       expect(msg!.scrollZeroSavedBatchesTotal).toBe(3);
+      expect(msg!.hostSentHashEntries).toBe(128);
+      expect(msg!.hostSentHashEvictionsTotal).toBe(9);
+      expect(msg!.hostCacheMissReportsTotal).toBe(7);
     }
   });
 
@@ -551,6 +560,9 @@ describe('parseTileMessage', () => {
       scrollNonQuantizedFallbacksTotal: 1,
       scrollResidualFullRepaintsTotal: 1,
       scrollZeroSavedBatchesTotal: 3,
+      hostSentHashEntries: 0,
+      hostSentHashEvictionsTotal: 0,
+      hostCacheMissReportsTotal: 0,
     });
 
     const [zstdFrames] = parseFrames(wireFixture('tile_zstd'));

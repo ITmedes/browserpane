@@ -257,6 +257,9 @@ describe('SessionFrameRouterRuntime', () => {
         scrollNonQuantizedFallbacksTotal: 1,
         scrollResidualFullRepaintsTotal: 1,
         scrollZeroSavedBatchesTotal: 3,
+        hostSentHashEntries: 64,
+        hostSentHashEvictionsTotal: 5,
+        hostCacheMissReportsTotal: 4,
       });
     const runtime = new SessionFrameRouterRuntime({
       tileCompositor: {
@@ -285,7 +288,7 @@ describe('SessionFrameRouterRuntime', () => {
     expect(stats.tileCommandCounts.gridOffset).toBe(2);
     expect(stats.pendingTileBatch.gridOffsetY).toBe(12);
     expect(stats.tileCommandCounts.scrollStats).toBe(1);
-    expect(stats.recordHostScrollStats).toHaveBeenCalledWith(10, 2, 100, 80, 1, 1, 3);
+    expect(stats.recordHostScrollStats).toHaveBeenCalledWith(10, 2, 100, 80, 1, 1, 3, 64, 5, 4);
     expect(clearVideoOverlay).toHaveBeenCalledTimes(2);
   });
 });

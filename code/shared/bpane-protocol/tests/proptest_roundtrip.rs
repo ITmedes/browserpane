@@ -275,8 +275,11 @@ fn arb_tile_message() -> impl Strategy<Value = TileMessage> {
             any::<u32>(),
             any::<u32>(),
             any::<u32>(),
+            any::<u32>(),
+            any::<u32>(),
+            any::<u32>(),
         )
-            .prop_map(|(a, b, c, d, e, f, g)| {
+            .prop_map(|(a, b, c, d, e, f, g, h, i, j)| {
                 TileMessage::ScrollStats {
                     scroll_batches_total: a,
                     scroll_full_fallbacks_total: b,
@@ -285,6 +288,9 @@ fn arb_tile_message() -> impl Strategy<Value = TileMessage> {
                     scroll_non_quantized_fallbacks_total: e,
                     scroll_residual_full_repaints_total: f,
                     scroll_zero_saved_batches_total: g,
+                    host_sent_hash_entries: h,
+                    host_sent_hash_evictions_total: i,
+                    host_cache_miss_reports_total: j,
                 }
             }),
     ]

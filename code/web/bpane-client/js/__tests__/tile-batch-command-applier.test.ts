@@ -92,6 +92,9 @@ describe('TileBatchCommandApplier', () => {
         scrollNonQuantizedFallbacksTotal: 1,
         scrollResidualFullRepaintsTotal: 1,
         scrollZeroSavedBatchesTotal: 2,
+        hostSentHashEntries: 0,
+        hostSentHashEvictionsTotal: 0,
+        hostCacheMissReportsTotal: 0,
       },
     ];
 

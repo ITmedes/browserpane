@@ -52,6 +52,9 @@ export type HostScrollHealthSnapshot = {
   hostScrollNonQuantizedFallbacksTotal: number;
   hostScrollResidualFullRepaintsTotal: number;
   hostScrollZeroSavedBatchesTotal: number;
+  hostSentHashEntries: number;
+  hostSentHashEvictionsTotal: number;
+  hostCacheMissReportsTotal: number;
   hostFallbackRate: number;
   hostFallbackRateRecent20: number;
   hostFallbackRateRecent50: number;
@@ -105,7 +108,7 @@ export type SessionStatsSnapshot = {
       subTileScrollReuseRate: number;
       subTileComposeCandidateRate: number;
     };
-    scrollHealth: HostScrollHealthSnapshot;
+  scrollHealth: HostScrollHealthSnapshot;
   };
   video: {
     decodedFrames: number;

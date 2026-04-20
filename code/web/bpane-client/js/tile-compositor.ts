@@ -27,6 +27,12 @@ import type { WebGLTileRenderer } from './webgl-compositor.js';
 
 export interface CompositorStats extends TileCompositorRenderStats {
   batchesProcessed: number;
+  batchesQueued: number;
+  totalBatchCommands: number;
+  maxBatchCommands: number;
+  lastBatchCommands: number;
+  currentPendingCommands: number;
+  pendingCommandsHighWaterMark: number;
 }
 
 export class TileCompositor {
@@ -48,6 +54,12 @@ export class TileCompositor {
     zstdRedundantBytes: 0,
     batchesProcessed: 0,
     scrollCopies: 0,
+    batchesQueued: 0,
+    totalBatchCommands: 0,
+    maxBatchCommands: 0,
+    lastBatchCommands: 0,
+    currentPendingCommands: 0,
+    pendingCommandsHighWaterMark: 0,
   };
 
   constructor(
@@ -154,18 +166,24 @@ export class TileCompositor {
         // Invalidate any in-flight async decode work and reset drawing state.
         this.tileBatchSequencer.invalidate();
         this.pendingCommands = [];
+        this.stats.currentPendingCommands = 0;
         this.videoRegion = null;
         this.tileDrawRuntime.applyGridConfig(cmd.config);
         break;
 
       case 'batch-end':
         // Frame-sequenced, serialized batch processing.
+        this.stats.batchesQueued += 1;
+        this.stats.lastBatchCommands = this.pendingCommands.length;
+        this.stats.totalBatchCommands += this.pendingCommands.length;
+        this.stats.maxBatchCommands = Math.max(this.stats.maxBatchCommands, this.pendingCommands.length);
         this.tileBatchSequencer.enqueueOwnedBatch(
           cmd.frameSeq >>> 0,
           this.pendingCommands,
           (batch) => this.applyBatch(batch),
         );
         this.pendingCommands = [];
+        this.stats.currentPendingCommands = 0;
         this.stats.batchesProcessed++;
         break;
 
@@ -175,6 +193,11 @@ export class TileCompositor {
 
       default:
         this.pendingCommands.push(cmd);
+        this.stats.currentPendingCommands = this.pendingCommands.length;
+        this.stats.pendingCommandsHighWaterMark = Math.max(
+          this.stats.pendingCommandsHighWaterMark,
+          this.pendingCommands.length,
+        );
         break;
     }
   }
@@ -185,6 +208,7 @@ export class TileCompositor {
     this.tileDrawRuntime.reset();
     this.videoRegion = null;
     this.pendingCommands = [];
+    this.stats.currentPendingCommands = 0;
   }
 
   /** Apply one batch atomically in protocol frame sequence order. */
