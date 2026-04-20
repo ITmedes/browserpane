@@ -50,8 +50,13 @@ impl Default for HintRegionKind {
 pub struct PageHintState {
     pub video_region: Option<CaptureRegion>,
     pub region_kind: HintRegionKind,
-    /// Browser content viewport in screen pixels (excludes toolbar/scrollbar).
+    /// Browser content viewport in screen pixels (excludes toolbar and native
+    /// scrollbar gutter). Used for scroll/static partitioning and wheel routing.
     pub viewport: Option<CaptureRegion>,
+    /// Full visible tab viewport in screen pixels (excludes browser chrome but
+    /// includes native scrollbar gutter). Used only for active-tab metrics
+    /// overrides after resize.
+    pub metrics_viewport: Option<CaptureRegion>,
     /// `window.devicePixelRatio * 1000`, rounded.
     pub device_scale_factor_milli: u16,
     pub scroll_y: Option<i64>,
@@ -67,6 +72,7 @@ impl Default for PageHintState {
             video_region: None,
             region_kind: HintRegionKind::Video,
             viewport: None,
+            metrics_viewport: None,
             device_scale_factor_milli: 1000,
             scroll_y: None,
             scroll_delta_y: 0,
@@ -188,6 +194,23 @@ impl BrowserCdpHandle {
             _ => false,
         }
     }
+}
+
+fn can_dispatch_direct_wheel(hint: &PageHintState) -> bool {
+    hint.visible && hint.focused
+}
+
+fn should_switch_to_focused_target(
+    current_ws_url: Option<&str>,
+    current_hint: &PageHintState,
+    next_url: &str,
+    next_hint: &PageHintState,
+) -> bool {
+    current_hint.visible
+        && !current_hint.focused
+        && next_hint.visible
+        && next_hint.focused
+        && current_ws_url != Some(next_url)
 }
 
 pub async fn resize_visible_target_window(width: u16, height: u16) -> bool {
@@ -321,12 +344,28 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
           if (p && typeof p.catch === "function") p.catch(() => {});
         } catch (_e) {}
       }
-      return { visible, focused, scrollY: currentScrollY, scrollDeltaY, region: null, viewport: null };
+      return { visible, focused, scrollY: currentScrollY, scrollDeltaY, region: null, viewport: null, metricsViewport: null };
     }
 
     const dpr = window.devicePixelRatio || 1;
     const insetX = Math.max(0, (window.outerWidth - window.innerWidth) / 2);
     const insetY = Math.max(0, window.outerHeight - window.innerHeight);
+    const viewportCssWidth = Math.max(
+      0,
+      window.innerWidth || (document.documentElement ? document.documentElement.clientWidth : 0),
+    );
+    const viewportCssHeight = Math.max(
+      0,
+      window.innerHeight || (document.documentElement ? document.documentElement.clientHeight : 0),
+    );
+    const contentViewportCssWidth = Math.max(
+      0,
+      document.documentElement ? document.documentElement.clientWidth : viewportCssWidth,
+    );
+    const contentViewportCssHeight = Math.max(
+      0,
+      document.documentElement ? document.documentElement.clientHeight : viewportCssHeight,
+    );
     const isElementVisible = (el) => {
       const style = window.getComputedStyle(el);
       if (!style) return false;
@@ -559,11 +598,12 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
       const rect = activeEditable.getBoundingClientRect();
       if (rect.width >= 2 && rect.height >= 2) {
         const expanded = expandEditableRect(rect);
-        const contentW = document.documentElement.clientWidth || window.innerWidth;
         const vpX = Math.round((window.screenX + insetX) * dpr);
         const vpY = Math.round((window.screenY + insetY) * dpr);
-        const vpW = Math.round(contentW * dpr);
-        const vpH = Math.round(window.innerHeight * dpr);
+        const vpW = Math.round(contentViewportCssWidth * dpr);
+        const vpH = Math.round(contentViewportCssHeight * dpr);
+        const metricsVpW = Math.round(viewportCssWidth * dpr);
+        const metricsVpH = Math.round(viewportCssHeight * dpr);
         return {
           visible,
           focused,
@@ -573,6 +613,7 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
           regionKind: 'editable',
           region: toScreenRegion(expanded),
           viewport: { x: vpX, y: vpY, w: vpW, h: vpH },
+          metricsViewport: { x: vpX, y: vpY, w: metricsVpW, h: metricsVpH },
         };
       }
     }
@@ -626,11 +667,12 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
       }
     }
 
-    const contentW = document.documentElement.clientWidth || window.innerWidth;
     const vpX = Math.round((window.screenX + insetX) * dpr);
     const vpY = Math.round((window.screenY + insetY) * dpr);
-    const vpW = Math.round(contentW * dpr);
-    const vpH = Math.round(window.innerHeight * dpr);
+    const vpW = Math.round(contentViewportCssWidth * dpr);
+    const vpH = Math.round(contentViewportCssHeight * dpr);
+    const metricsVpW = Math.round(viewportCssWidth * dpr);
+    const metricsVpH = Math.round(viewportCssHeight * dpr);
 
     return {
       visible,
@@ -641,6 +683,7 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
       regionKind: best ? 'video' : null,
       region: best ? { x: best.x, y: best.y, w: best.w, h: best.h } : null,
       viewport: { x: vpX, y: vpY, w: vpW, h: vpH },
+      metricsViewport: { x: vpX, y: vpY, w: metricsVpW, h: metricsVpH },
     };
   } catch (_e) {
     return {
@@ -650,7 +693,8 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
       scrollY: null,
       scrollDeltaY: 0,
       region: null,
-      viewport: null
+      viewport: null,
+      metricsViewport: null
     };
   }
 })()"#;
@@ -841,6 +885,36 @@ pub fn spawn_video_hint_task(shared: Arc<Mutex<PageHintState>>) -> BrowserCdpHan
                 tokio::time::sleep(retry_backoff).await;
                 continue;
             };
+
+            if !hint.focused {
+                if let Some((next_url, next_stream, next_hint)) = connect_visible_target_stream(
+                    &http,
+                    debug_port,
+                    ws_url.as_deref(),
+                    &video_probe_js,
+                    &mut request_id,
+                )
+                .await
+                {
+                    if should_switch_to_focused_target(
+                        ws_url.as_deref(),
+                        &hint,
+                        &next_url,
+                        &next_hint,
+                    ) {
+                        debug!(
+                            from_target = ws_url.as_deref().unwrap_or("<unknown>"),
+                            to_target = %next_url,
+                            "cdp switching to newly focused target"
+                        );
+                        set_shared_state(&shared, PageHintState::default());
+                        ws_url = Some(next_url);
+                        ws_stream = Some(next_stream);
+                        prefetched_hint = Some(next_hint);
+                        continue;
+                    }
+                }
+            }
 
             if !hint.visible {
                 debug!(
@@ -1187,7 +1261,9 @@ async fn maybe_apply_resize_device_metrics(
         .map(|hint| hint.device_scale_factor_milli)
         .unwrap_or(fallback_scale_milli)
         .max(1);
-    let params = build_device_metrics_override(width, height, scale_milli);
+    let (override_width, override_height) =
+        resize_metrics_override_size(width, height, settled_hint.as_ref());
+    let params = build_device_metrics_override(override_width, override_height, scale_milli);
     let applied = send_cdp_command(
         stream,
         request_id,
@@ -1198,11 +1274,13 @@ async fn maybe_apply_resize_device_metrics(
     .is_some();
     if applied {
         debug!(
-            width,
-            height,
+            requested_width = width,
+            requested_height = height,
+            override_width,
+            override_height,
             scale_milli,
-            css_width = screen_px_to_window_dips(width, scale_milli),
-            css_height = screen_px_to_window_dips(height, scale_milli),
+            css_width = screen_px_to_window_dips(override_width, scale_milli),
+            css_height = screen_px_to_window_dips(override_height, scale_milli),
             "cdp resize metrics override applied"
         );
         let _ = maybe_apply_horizontal_overflow_fix(stream, request_id).await;
@@ -1237,8 +1315,25 @@ fn page_hint_is_stable(previous: &PageHintState, current: &PageHintState) -> boo
         && current.visible
         && previous.viewport.is_some()
         && current.viewport.is_some()
+        && previous.metrics_viewport.is_some()
+        && current.metrics_viewport.is_some()
         && previous.device_scale_factor_milli == current.device_scale_factor_milli
         && previous.viewport == current.viewport
+        && previous.metrics_viewport == current.metrics_viewport
+}
+
+fn resize_metrics_override_size(
+    requested_width: u32,
+    requested_height: u32,
+    settled_hint: Option<&PageHintState>,
+) -> (u32, u32) {
+    if let Some(viewport) = settled_hint.and_then(|hint| hint.metrics_viewport) {
+        return (viewport.w.max(1), viewport.h.max(1));
+    }
+    if let Some(viewport) = settled_hint.and_then(|hint| hint.viewport) {
+        return (viewport.w.max(1), viewport.h.max(1));
+    }
+    (requested_width.max(1), requested_height.max(1))
 }
 
 fn build_device_metrics_override(width: u32, height: u32, scale_milli: u16) -> Value {
@@ -1487,10 +1582,12 @@ fn parse_page_hint(raw: &Value) -> PageHintState {
             .and_then(|value| parse_region(value, region_kind))
             .or_else(|| parse_region(raw, region_kind));
         let viewport = obj.get("viewport").and_then(parse_viewport);
+        let metrics_viewport = obj.get("metricsViewport").and_then(parse_viewport);
         return PageHintState {
             video_region,
             region_kind,
             viewport,
+            metrics_viewport,
             device_scale_factor_milli,
             scroll_y,
             scroll_delta_y,
@@ -1631,11 +1728,15 @@ fn set_shared_state(shared: &Arc<Mutex<PageHintState>>, next: PageHintState) {
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
     };
-    // Preserve viewport once established — it only changes on display resize,
-    // and transient CDP errors should not wipe it out.
+    // Preserve viewports once established — they only change on display resize,
+    // and transient CDP errors should not wipe them out.
     let mut final_state = next;
     if final_state.viewport.is_none() && guard.viewport.is_some() {
         final_state.viewport = guard.viewport;
+        final_state.device_scale_factor_milli = guard.device_scale_factor_milli;
+    }
+    if final_state.metrics_viewport.is_none() && guard.metrics_viewport.is_some() {
+        final_state.metrics_viewport = guard.metrics_viewport;
         final_state.device_scale_factor_milli = guard.device_scale_factor_milli;
     }
     if *guard != final_state {
@@ -1727,6 +1828,10 @@ async fn handle_wheel_command(
         Ok(g) => *g,
         Err(poisoned) => *poisoned.into_inner(),
     };
+    if !can_dispatch_direct_wheel(&hint) {
+        let _ = cmd.response.send(false);
+        return true;
+    }
     let dispatches: Vec<WheelDispatch> = paced_wheel_components(cmd.dx, cmd.dy)
         .into_iter()
         .filter_map(|(step_dx, step_dy)| {
@@ -1933,7 +2038,8 @@ mod tests {
                     "value": {
                         "visible": true,
                         "focused": false,
-                        "viewport": { "x": 40, "y": 80, "w": 640, "h": 320 }
+                        "viewport": { "x": 40, "y": 80, "w": 624, "h": 320 },
+                        "metricsViewport": { "x": 40, "y": 80, "w": 640, "h": 320 }
                     }
                 }
             }
@@ -1944,6 +2050,15 @@ mod tests {
         assert!(!parsed.focused);
         assert_eq!(
             parsed.viewport,
+            Some(CaptureRegion {
+                x: 40,
+                y: 80,
+                w: 624,
+                h: 320,
+            })
+        );
+        assert_eq!(
+            parsed.metrics_viewport,
             Some(CaptureRegion {
                 x: 40,
                 y: 80,
@@ -1961,6 +2076,12 @@ mod tests {
             viewport: Some(CaptureRegion {
                 x: 0,
                 y: 0,
+                w: 1400,
+                h: 1036,
+            }),
+            metrics_viewport: Some(CaptureRegion {
+                x: 0,
+                y: 0,
                 w: 1416,
                 h: 1036,
             }),
@@ -1970,6 +2091,12 @@ mod tests {
             visible: true,
             device_scale_factor_milli: 2000,
             viewport: Some(CaptureRegion {
+                x: 0,
+                y: 0,
+                w: 1400,
+                h: 1036,
+            }),
+            metrics_viewport: Some(CaptureRegion {
                 x: 0,
                 y: 0,
                 w: 1416,
@@ -1984,6 +2111,12 @@ mod tests {
                 x: 0,
                 y: 0,
                 w: 1280,
+                h: 960,
+            }),
+            metrics_viewport: Some(CaptureRegion {
+                x: 0,
+                y: 0,
+                w: 1296,
                 h: 960,
             }),
             ..current
@@ -2004,6 +2137,40 @@ mod tests {
         assert_eq!(
             params.get("deviceScaleFactor").and_then(Value::as_f64),
             Some(2.0)
+        );
+    }
+
+    #[test]
+    fn resize_metrics_override_size_prefers_settled_viewport() {
+        let hint = PageHintState {
+            viewport: Some(CaptureRegion {
+                x: 0,
+                y: 0,
+                w: 1390,
+                h: 914,
+            }),
+            metrics_viewport: Some(CaptureRegion {
+                x: 0,
+                y: 0,
+                w: 1406,
+                h: 914,
+            }),
+            ..PageHintState::default()
+        };
+
+        assert_eq!(
+            resize_metrics_override_size(1406, 952, Some(&hint)),
+            (1406, 914)
+        );
+    }
+
+    #[test]
+    fn resize_metrics_override_size_falls_back_to_requested_resolution() {
+        assert_eq!(resize_metrics_override_size(1406, 952, None), (1406, 952));
+        let hint = PageHintState::default();
+        assert_eq!(
+            resize_metrics_override_size(1406, 952, Some(&hint)),
+            (1406, 952)
         );
     }
 
@@ -2248,6 +2415,18 @@ mod tests {
     }
 
     #[test]
+    fn build_video_probe_js_uses_full_visible_viewport_width() {
+        let js = build_video_probe_js(false, DEFAULT_SCROLL_PAUSE_WINDOW_MS, 0);
+        assert!(js.contains("const viewportCssWidth = Math.max("));
+        assert!(js.contains("const contentViewportCssWidth = Math.max("));
+        assert!(js.contains("window.innerWidth || (document.documentElement ? document.documentElement.clientWidth : 0)"));
+        assert!(js.contains(
+            "document.documentElement ? document.documentElement.clientWidth : viewportCssWidth"
+        ));
+        assert!(js.contains("metricsViewport: { x: vpX, y: vpY, w: metricsVpW, h: metricsVpH }"));
+    }
+
+    #[test]
     fn ordered_target_candidates_skip_devtools_pages() {
         let targets = vec![DevToolsTarget {
             target_type: "page".to_string(),
@@ -2290,5 +2469,75 @@ mod tests {
             ordered[0].web_socket_debugger_url.as_deref(),
             Some("ws://127.0.0.1:9222/devtools/page/youtube")
         );
+    }
+
+    #[test]
+    fn direct_wheel_dispatch_requires_focused_visible_target() {
+        let mut hint = PageHintState {
+            visible: true,
+            focused: true,
+            ..PageHintState::default()
+        };
+        assert!(can_dispatch_direct_wheel(&hint));
+
+        hint.focused = false;
+        assert!(!can_dispatch_direct_wheel(&hint));
+
+        hint.visible = false;
+        hint.focused = true;
+        assert!(!can_dispatch_direct_wheel(&hint));
+    }
+
+    #[test]
+    fn should_switch_to_newly_focused_target() {
+        let current_hint = PageHintState {
+            visible: true,
+            focused: false,
+            ..PageHintState::default()
+        };
+        let next_hint = PageHintState {
+            visible: true,
+            focused: true,
+            ..PageHintState::default()
+        };
+
+        assert!(should_switch_to_focused_target(
+            Some("ws://127.0.0.1:9222/devtools/page/old"),
+            &current_hint,
+            "ws://127.0.0.1:9222/devtools/page/new",
+            &next_hint,
+        ));
+    }
+
+    #[test]
+    fn should_not_switch_without_a_different_focused_target() {
+        let current_hint = PageHintState {
+            visible: true,
+            focused: false,
+            ..PageHintState::default()
+        };
+        let same_target_hint = PageHintState {
+            visible: true,
+            focused: true,
+            ..PageHintState::default()
+        };
+        assert!(!should_switch_to_focused_target(
+            Some("ws://127.0.0.1:9222/devtools/page/current"),
+            &current_hint,
+            "ws://127.0.0.1:9222/devtools/page/current",
+            &same_target_hint,
+        ));
+
+        let visible_fallback_hint = PageHintState {
+            visible: true,
+            focused: false,
+            ..PageHintState::default()
+        };
+        assert!(!should_switch_to_focused_target(
+            Some("ws://127.0.0.1:9222/devtools/page/current"),
+            &current_hint,
+            "ws://127.0.0.1:9222/devtools/page/other",
+            &visible_fallback_hint,
+        ));
     }
 }

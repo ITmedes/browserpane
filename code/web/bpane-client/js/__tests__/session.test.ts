@@ -255,12 +255,13 @@ class MockCameraVideoFrame {
 let mockTransport: ReturnType<typeof createMockTransport>;
 let microphoneSupportSpy: ReturnType<typeof vi.spyOn>;
 let cameraSupportSpy: ReturnType<typeof vi.spyOn>;
+let canvasGetContextSpy: ReturnType<typeof installCanvasGetContextMock>;
 
 beforeEach(() => {
   mockTransport = createMockTransport();
   microphoneSupportSpy = vi.spyOn(AudioController, 'isMicrophoneSupported').mockResolvedValue(true);
   cameraSupportSpy = vi.spyOn(CameraController, 'isSupported').mockResolvedValue(true);
-  installCanvasGetContextMock();
+  canvasGetContextSpy = installCanvasGetContextMock();
 
   // Install mocks on global
   (globalThis as any).WebTransport = vi.fn(() => mockTransport);
@@ -322,7 +323,7 @@ afterEach(() => {
 
 // ── Helper to create a connected session ───────────────────────────
 
-async function createSession(overrides: Record<string, any> = {}) {
+function createContainer(): HTMLDivElement {
   const container = document.createElement('div');
   Object.defineProperty(container, 'clientWidth', { value: 800 });
   Object.defineProperty(container, 'clientHeight', { value: 600 });
@@ -330,7 +331,11 @@ async function createSession(overrides: Record<string, any> = {}) {
     width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600,
     x: 0, y: 0, toJSON: () => {},
   });
+  return container;
+}
 
+async function createSession(overrides: Record<string, any> = {}) {
+  const container = createContainer();
   const { BpaneSession } = await import('../bpane.js');
 
   const session = await BpaneSession.connect({
@@ -379,6 +384,19 @@ describe('BpaneSession', () => {
       const diagnostics = session.getRenderDiagnostics();
       expect(diagnostics.backend).toBe('canvas2d');
       expect(diagnostics.reason).not.toBe('hardware-accelerated');
+    });
+
+    it('skips WebGL probing when canvas2d is forced', async () => {
+      const { session } = await createSession({ renderBackend: 'canvas2d' });
+
+      expect(session.getRenderDiagnostics()).toEqual({
+        backend: 'canvas2d',
+        renderer: null,
+        vendor: null,
+        software: false,
+        reason: 'forced-canvas2d',
+      });
+      expect(canvasGetContextSpy.mock.calls.some(([contextId]) => contextId === 'webgl2')).toBe(false);
     });
 
     it('constructs WebTransport with correct URL', async () => {
@@ -573,6 +591,136 @@ describe('BpaneSession', () => {
       });
     });
 
+    it('keeps collaborative capabilities after resize-only client access state', async () => {
+      const onCapabilitiesChange = vi.fn();
+      await createSession({ onCapabilitiesChange });
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await new Promise(r => setTimeout(r, 10));
+
+      const readyPayload = new Uint8Array(3);
+      readyPayload[0] = 0x03; // SessionReady
+      readyPayload[1] = 1;
+      readyPayload[2] = 0x3d; // audio + file transfer + microphone + camera + keyboard layout
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, readyPayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      const accessPayload = new Uint8Array(6);
+      accessPayload[0] = 0x09; // ClientAccessState
+      accessPayload[1] = 0x02; // resize locked only
+      accessPayload[2] = 0x00; accessPayload[3] = 0x05; // 1280
+      accessPayload[4] = 0xD0; accessPayload[5] = 0x02; // 720
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, accessPayload));
+
+      await new Promise(r => setTimeout(r, 10));
+      expect(onCapabilitiesChange).toHaveBeenLastCalledWith({
+        audio: true,
+        microphone: true,
+        camera: true,
+        fileTransfer: true,
+        keyboardLayout: true,
+      });
+    });
+
+    it('keeps clipboard updates enabled for resize-locked collaborative clients', async () => {
+      await createSession();
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await new Promise(r => setTimeout(r, 10));
+
+      const accessPayload = new Uint8Array(6);
+      accessPayload[0] = 0x09; // ClientAccessState
+      accessPayload[1] = 0x02; // resize locked only
+      accessPayload[2] = 0x00; accessPayload[3] = 0x05; // 1280
+      accessPayload[4] = 0xD0; accessPayload[5] = 0x02; // 720
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, accessPayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      const writeText = vi.mocked(navigator.clipboard.writeText);
+      writeText.mockClear();
+
+      const text = new TextEncoder().encode('collaborative clipboard');
+      const clipPayload = new Uint8Array(5 + text.length);
+      clipPayload[0] = 0x01;
+      clipPayload[1] = text.length & 0xFF;
+      clipPayload[2] = (text.length >> 8) & 0xFF;
+      clipPayload[3] = (text.length >> 16) & 0xFF;
+      clipPayload[4] = (text.length >> 24) & 0xFF;
+      clipPayload.set(text, 5);
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CLIPBOARD, clipPayload));
+
+      await new Promise(r => setTimeout(r, 10));
+      expect(writeText).toHaveBeenCalledWith('collaborative clipboard');
+    });
+
+    it('keeps the local container size for resize-locked collaborative clients', async () => {
+      const { container } = await createSession();
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await new Promise(r => setTimeout(r, 10));
+
+      const accessPayload = new Uint8Array(6);
+      accessPayload[0] = 0x09; // ClientAccessState
+      accessPayload[1] = 0x02; // resize locked only
+      accessPayload[2] = 0x00; accessPayload[3] = 0x05; // 1280
+      accessPayload[4] = 0xD0; accessPayload[5] = 0x02; // 720
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, accessPayload));
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const canvas = container.querySelector('canvas')!;
+      expect(container.style.width).toBe('');
+      expect(container.style.height).toBe('');
+      expect(canvas.width).toBe(1280);
+      expect(canvas.height).toBe(720);
+      expect(canvas.style.width).toBe('100%');
+      expect(canvas.style.height).toBe('100%');
+    });
+
+    it('restores promoted viewer capabilities after full SessionReady replay and unlock', async () => {
+      const onCapabilitiesChange = vi.fn();
+      await createSession({ onCapabilitiesChange });
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await new Promise(r => setTimeout(r, 10));
+
+      const readyPayload = new Uint8Array(3);
+      readyPayload[0] = 0x03; // SessionReady
+      readyPayload[1] = 1;
+      readyPayload[2] = 0x01; // viewer-adapted SessionReady keeps audio only
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, readyPayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      const viewerPayload = new Uint8Array(6);
+      viewerPayload[0] = 0x09; // ClientAccessState
+      viewerPayload[1] = 0x03; // view only + resize locked
+      viewerPayload[2] = 0x00; viewerPayload[3] = 0x05; // 1280
+      viewerPayload[4] = 0xD0; viewerPayload[5] = 0x02; // 720
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, viewerPayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      const restoredReadyPayload = new Uint8Array(3);
+      restoredReadyPayload[0] = 0x03; // SessionReady
+      restoredReadyPayload[1] = 1;
+      restoredReadyPayload[2] = 0x3d; // audio + file transfer + microphone + camera + keyboard layout
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, restoredReadyPayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      const unlockedPayload = new Uint8Array(6);
+      unlockedPayload[0] = 0x09; // ClientAccessState
+      unlockedPayload[1] = 0x00;
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, unlockedPayload));
+
+      await new Promise(r => setTimeout(r, 10));
+      expect(onCapabilitiesChange).toHaveBeenLastCalledWith({
+        audio: true,
+        microphone: true,
+        camera: true,
+        fileTransfer: true,
+        keyboardLayout: true,
+      });
+    });
+
     it('ignores clipboard updates for viewer sessions', async () => {
       await createSession();
 
@@ -764,6 +912,52 @@ describe('BpaneSession', () => {
 
       // Should not throw
       await new Promise(r => setTimeout(r, 10));
+    });
+
+    it('keeps the last cursor position when CursorShape arrives without a move', async () => {
+      const { container } = await createSession();
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await new Promise(r => setTimeout(r, 10));
+
+      const cursorCanvas = container.querySelectorAll('canvas')[1] as HTMLCanvasElement;
+      const cursorCtx = cursorCanvas.getContext('2d') as unknown as {
+        drawImage: ReturnType<typeof vi.fn>;
+      };
+
+      const movePayload = new Uint8Array(5);
+      const moveView = new DataView(movePayload.buffer);
+      moveView.setUint8(0, 0x01); // CursorMove
+      moveView.setUint16(1, 100, true);
+      moveView.setUint16(3, 200, true);
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CURSOR, movePayload));
+      await new Promise(r => setTimeout(r, 10));
+
+      cursorCtx.drawImage.mockClear();
+
+      const width = 16;
+      const height = 16;
+      const dataLen = width * height * 4;
+      const shapePayload = new Uint8Array(11 + dataLen);
+      const shapeView = new DataView(shapePayload.buffer);
+      shapeView.setUint8(0, 0x02); // CursorShape
+      shapeView.setUint16(1, width, true);
+      shapeView.setUint16(3, height, true);
+      shapeView.setUint8(5, 8); // hotspot_x
+      shapeView.setUint8(6, 8); // hotspot_y
+      shapeView.setUint32(7, dataLen, true);
+      for (let i = 0; i < dataLen; i += 4) {
+        shapePayload[11 + i] = 255;
+        shapePayload[11 + i + 1] = 255;
+        shapePayload[11 + i + 2] = 255;
+        shapePayload[11 + i + 3] = 255;
+      }
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CURSOR, shapePayload));
+
+      await new Promise(r => setTimeout(r, 10));
+      expect(cursorCtx.drawImage).toHaveBeenCalledTimes(1);
+      expect(cursorCtx.drawImage.mock.calls[0]?.[1]).toBe(92);
+      expect(cursorCtx.drawImage.mock.calls[0]?.[2]).toBe(192);
     });
 
     it('processes CursorShape messages', async () => {
@@ -1015,6 +1209,78 @@ describe('BpaneSession', () => {
   });
 
   describe('error handling', () => {
+    it('rejects connect when container is not an HTMLElement', async () => {
+      const { BpaneSession } = await import('../bpane.js');
+      const { ValidationError } = await import('../shared/errors.js');
+
+      const error = await BpaneSession.connect({
+        container: null as unknown as HTMLElement,
+        gatewayUrl: 'https://localhost:4433',
+        token: 'test',
+      }).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(ValidationError);
+      expect(error).toMatchObject({
+        code: 'bpane.connect.invalid_container',
+        message: 'BpaneSession.connect requires a valid container HTMLElement',
+      });
+    });
+
+    it('rejects connect when gatewayUrl is empty', async () => {
+      const { BpaneSession } = await import('../bpane.js');
+      const { ValidationError } = await import('../shared/errors.js');
+
+      const error = await BpaneSession.connect({
+        container: createContainer(),
+        gatewayUrl: '   ',
+        token: 'test',
+      }).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(ValidationError);
+      expect(error).toMatchObject({
+        code: 'bpane.connect.invalid_gateway_url',
+        message: 'BpaneSession.connect requires a non-empty gatewayUrl',
+      });
+    });
+
+    it('rejects connect when token is empty', async () => {
+      const { BpaneSession } = await import('../bpane.js');
+      const { ValidationError } = await import('../shared/errors.js');
+
+      const error = await BpaneSession.connect({
+        container: createContainer(),
+        gatewayUrl: 'https://localhost:4433',
+        token: '   ',
+      }).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(ValidationError);
+      expect(error).toMatchObject({
+        code: 'bpane.connect.invalid_token',
+        message: 'BpaneSession.connect requires a non-empty token',
+      });
+    });
+
+    it('rejects connect when WebTransport is unavailable', async () => {
+      const onError = vi.fn();
+      (globalThis as any).WebTransport = undefined;
+      const { BpaneSession } = await import('../bpane.js');
+      const { UnsupportedFeatureError } = await import('../shared/errors.js');
+
+      const error = await BpaneSession.connect({
+        container: createContainer(),
+        gatewayUrl: 'https://localhost:4433',
+        token: 'test',
+        onError,
+      }).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(UnsupportedFeatureError);
+      expect(error).toMatchObject({
+        code: 'bpane.transport.webtransport_unavailable',
+        message: 'WebTransport is unavailable in this browser',
+      });
+      expect(onError).toHaveBeenCalledWith(error);
+    });
+
     it('rejects microphone start when disabled in session options', async () => {
       const { session } = await createSession({ microphone: false });
       await expect(session.startMicrophone()).rejects.toThrow('microphone input is disabled in session options');
@@ -1075,18 +1341,10 @@ describe('BpaneSession', () => {
         datagrams: { readable: { getReader: () => new MockReader() } },
       }));
 
-      const container = document.createElement('div');
-      Object.defineProperty(container, 'clientWidth', { value: 800 });
-      Object.defineProperty(container, 'clientHeight', { value: 600 });
-      container.getBoundingClientRect = () => ({
-        width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600,
-        x: 0, y: 0, toJSON: () => {},
-      });
-
       const { BpaneSession } = await import('../bpane.js');
 
       await expect(BpaneSession.connect({
-        container,
+        container: createContainer(),
         gatewayUrl: 'https://localhost:4433',
         token: 'test',
         onError,

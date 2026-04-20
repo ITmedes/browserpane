@@ -130,8 +130,20 @@
       <button id="btn-connect">Connect</button>
       <button id="btn-disconnect" disabled>Disconnect</button>
       <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
+        Render
+        <select id="render-backend-select">
+          <option value="auto" selected>Auto</option>
+          <option value="webgl2">WebGL2</option>
+          <option value="canvas2d">Canvas2D</option>
+        </select>
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
         <input type="checkbox" id="hidpi-toggle" checked>
         HiDPI (use devicePixelRatio)
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
+        <input type="checkbox" id="scroll-copy-toggle" checked>
+        Scroll Copy
       </label>
       <button id="btn-camera" disabled>Cam Off</button>
       <button id="btn-mic" disabled>Mic Off</button>
@@ -154,6 +166,7 @@
     <span id="resolution">Resolution: --</span>
     <span id="frames">Frames: --</span>
     <span id="latency">RTT: --</span>
+    <span id="render-backend">Render: --</span>
     <span id="tile-stats">Tiles: --</span>
     <span id="tile-types">Tile Types: --</span>
     <span id="scroll-comp-stats">Scroll Compose: --</span>
@@ -184,6 +197,7 @@
     const resolutionEl = document.getElementById('resolution');
     const framesEl = document.getElementById('frames');
     const latencyEl = document.getElementById('latency');
+    const renderBackendEl = document.getElementById('render-backend');
     const tileStatsEl = document.getElementById('tile-stats');
     const tileTypesEl = document.getElementById('tile-types');
     const scrollCompStatsEl = document.getElementById('scroll-comp-stats');
@@ -192,7 +206,9 @@
     const transferRateEl = document.getElementById('transfer-rate');
     const connectBtn = document.getElementById('btn-connect');
     const disconnectBtn = document.getElementById('btn-disconnect');
+    const renderBackendSelect = document.getElementById('render-backend-select');
     const hidpiToggle = document.getElementById('hidpi-toggle');
+    const scrollCopyToggle = document.getElementById('scroll-copy-toggle');
     const logsBtn = document.getElementById('btn-logs');
     const cameraBtn = document.getElementById('btn-camera');
     const micBtn = document.getElementById('btn-mic');
@@ -265,6 +281,16 @@
         .join(' ');
     }
 
+    function formatRenderDiagnostics(diagnostics) {
+      if (!diagnostics) return 'Render: --';
+      const renderer = diagnostics.renderer
+        ? diagnostics.renderer
+            .replace(/^ANGLE \([^,]+,\s*/, '')
+            .replace(/, Unspecified Version\)$/, '')
+        : '';
+      return `Render: ${diagnostics.backend} (${diagnostics.reason})${renderer ? ` ${renderer}` : ''}`;
+    }
+
     // ── Token fetch ─────────────────────────────────────────────────
     async function fetchToken() {
       try {
@@ -306,11 +332,17 @@
       log(`Connecting to ${GATEWAY_URL}...`);
 
       try {
+        log(
+          `Connect options: render=${renderBackendSelect.value}, scrollCopy=${scrollCopyToggle.checked ? 'on' : 'off'}, hiDpi=${hidpiToggle.checked}`,
+          'info',
+        );
         session = await BpaneSession.connect({
           container,
           gatewayUrl: `${GATEWAY_URL}/session`,
           token,
+          renderBackend: renderBackendSelect.value,
           hiDpi: hidpiToggle.checked,
+          scrollCopy: scrollCopyToggle.checked,
           clipboard: true,
           audio: true,
           camera: true,
@@ -342,6 +374,7 @@
                 window._lastFpsTime = now;
               }
               framesEl.textContent = `Frames: ${count}  (${window._currentFps} fps)`;
+              renderBackendEl.textContent = formatRenderDiagnostics(session.getRenderDiagnostics());
               // Tile cache stats
               const ts = session.getTileCacheStats();
               tileStatsEl.textContent =
@@ -419,6 +452,7 @@
             resolutionEl.textContent = 'Resolution: --';
             framesEl.textContent = 'Frames: --';
             latencyEl.textContent = 'RTT: --';
+            renderBackendEl.textContent = 'Render: --';
             tileStatsEl.textContent = 'Tiles: --';
             tileTypesEl.textContent = 'Tile Types: --';
             scrollCompStatsEl.textContent = 'Scroll Compose: --';
@@ -445,6 +479,8 @@
             log(`Resolution: ${w}x${h}`, 'ok');
           },
         });
+        renderBackendEl.textContent = formatRenderDiagnostics(session.getRenderDiagnostics());
+        log(formatRenderDiagnostics(session.getRenderDiagnostics()), 'info');
       } catch (e) {
         log(`Connection failed: ${e.message}`, 'error');
         setStatus('Connection failed', 'error');
@@ -475,6 +511,7 @@
       resolutionEl.textContent = 'Resolution: --';
       framesEl.textContent = 'Frames: --';
       latencyEl.textContent = 'RTT: --';
+      renderBackendEl.textContent = 'Render: --';
       tileStatsEl.textContent = 'Tiles: --';
       tileTypesEl.textContent = 'Tile Types: --';
       scrollCompStatsEl.textContent = 'Scroll Compose: --';

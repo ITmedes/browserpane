@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  encodeFrame, parseFrames,
+  encodeFrame, parseFrames, parseFramesInto,
   FRAME_HEADER_SIZE, MAX_FRAME_PAYLOAD,
   CH_VIDEO, CH_AUDIO_OUT, CH_AUDIO_IN, CH_VIDEO_IN,
   CH_INPUT, CH_CURSOR, CH_CLIPBOARD, CH_FILE_UP, CH_FILE_DOWN, CH_CONTROL,
@@ -213,5 +213,28 @@ describe('parseFrames', () => {
     expect(() => parseFrames(wireFixture('invalid_frame_oversized_length'))).toThrow(
       'frame payload too large',
     );
+  });
+});
+
+describe('parseFramesInto', () => {
+  it('invokes the visitor for complete frames and returns the incomplete suffix', () => {
+    const first = encodeFrame(CH_INPUT, new Uint8Array([0x11]));
+    const second = encodeFrame(CH_CONTROL, new Uint8Array([0x22, 0x33]));
+    const partial = second.slice(0, 4);
+    const buffer = new Uint8Array(first.length + partial.length);
+    buffer.set(first, 0);
+    buffer.set(partial, first.length);
+
+    const seen: Array<{ channelId: number; payload: Uint8Array }> = [];
+    const remaining = parseFramesInto(buffer, (channelId, payload) => {
+      seen.push({ channelId, payload });
+    });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toEqual({
+      channelId: CH_INPUT,
+      payload: new Uint8Array([0x11]),
+    });
+    expect(remaining).toEqual(partial);
   });
 });

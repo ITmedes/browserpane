@@ -10,36 +10,21 @@
 
 const RING_SIZE = 96000; // 1 second of interleaved stereo @ 48kHz
 const JITTER_THRESHOLD = 10560; // 110ms of interleaved samples before starting
-const MAX_BUFFERED = 19200; // 200ms — drop old samples beyond this
-const DROP_TARGET = 9600; // 100ms — target buffer level after drop
-
-declare abstract class AudioWorkletProcessor {
-  readonly port: MessagePort;
-  constructor();
-  abstract process(
-    inputs: Float32Array[][],
-    outputs: Float32Array[][],
-    parameters: Record<string, Float32Array>,
-  ): boolean;
-}
-
-declare function registerProcessor(
-  name: string,
-  processorCtor: new () => AudioWorkletProcessor,
-): void;
+const MAX_BUFFERED = 19200; // 200ms - drop old samples beyond this
+const DROP_TARGET = 9600; // 100ms - target buffer level after drop
 
 class BpaneAudioProcessor extends AudioWorkletProcessor {
-  private ring = new Float32Array(RING_SIZE);
-  private wPos = 0;
-  private rPos = 0;
-  private started = false;
-
   constructor() {
     super();
-    this.port.onmessage = (event: MessageEvent) => {
+    this.ring = new Float32Array(RING_SIZE);
+    this.wPos = 0;
+    this.rPos = 0;
+    this.started = false;
+
+    this.port.onmessage = (event) => {
       if (event.data.type === 'audio-data') {
         const samples = new Float32Array(event.data.samples);
-        for (let i = 0; i < samples.length; i++) {
+        for (let i = 0; i < samples.length; i += 1) {
           this.ring[this.wPos] = samples[i];
           this.wPos = (this.wPos + 1) % RING_SIZE;
         }
@@ -47,24 +32,19 @@ class BpaneAudioProcessor extends AudioWorkletProcessor {
     };
   }
 
-  process(
-    _inputs: Float32Array[][],
-    outputs: Float32Array[][],
-    _parameters: Record<string, Float32Array>,
-  ): boolean {
+  process(_inputs, outputs) {
     const output = outputs[0];
     if (!output || output.length < 2) return true;
 
     const left = output[0];
     const right = output[1];
-    const n = left.length; // 128 (render quantum)
+    const frameSize = left.length;
 
-    let avail = this.wPos - this.rPos;
-    if (avail < 0) avail += RING_SIZE;
+    let available = this.wPos - this.rPos;
+    if (available < 0) available += RING_SIZE;
 
-    // Wait for jitter buffer to fill before starting playback
     if (!this.started) {
-      if (avail < JITTER_THRESHOLD) {
+      if (available < JITTER_THRESHOLD) {
         left.fill(0);
         right.fill(0);
         return true;
@@ -72,22 +52,19 @@ class BpaneAudioProcessor extends AudioWorkletProcessor {
       this.started = true;
     }
 
-    // If buffer drains completely, pause until refilled
-    if (avail < n * 2) {
+    if (available < frameSize * 2) {
       left.fill(0);
       right.fill(0);
       this.started = false;
       return true;
     }
 
-    // Drop old samples if buffer grows too large (clock drift protection)
-    if (avail > MAX_BUFFERED) {
-      const drop = avail - DROP_TARGET;
+    if (available > MAX_BUFFERED) {
+      const drop = available - DROP_TARGET;
       this.rPos = (this.rPos + drop) % RING_SIZE;
     }
 
-    // Deinterleave: ring contains [L0, R0, L1, R1, ...]
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < frameSize; i += 1) {
       left[i] = this.ring[this.rPos];
       this.rPos = (this.rPos + 1) % RING_SIZE;
       right[i] = this.ring[this.rPos];
@@ -99,5 +76,3 @@ class BpaneAudioProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('bpane-audio-processor', BpaneAudioProcessor);
-
-export {};

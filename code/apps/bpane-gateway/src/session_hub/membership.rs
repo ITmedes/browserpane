@@ -3,6 +3,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use bpane_protocol::frame::Frame;
+use bpane_protocol::ControlMessage;
+use tokio::sync::mpsc;
 use tracing::debug;
 
 use super::{ClientHandle, SessionHub, SubscribeError};
@@ -15,6 +17,8 @@ pub(super) async fn subscribe(hub: &SessionHub) -> Result<ClientHandle, Subscrib
     let prev_count = connected_clients.len() as u32;
     let current_owner_id = hub.owner_id.load(Ordering::Relaxed);
     let exclusive_browser_owner = hub.exclusive_browser_owner;
+    let is_resize_owner = !mcp_is_owner && current_owner_id == 0;
+    let (control_tx, control_rx) = mpsc::channel::<ControlMessage>(8);
 
     let is_owner = if mcp_is_owner {
         false
@@ -41,16 +45,20 @@ pub(super) async fn subscribe(hub: &SessionHub) -> Result<ClientHandle, Subscrib
     }
 
     connected_clients.push(client_id);
-    if is_owner {
+    if is_resize_owner {
         hub.owner_id.store(client_id, Ordering::Relaxed);
     }
     hub.client_count
         .store(connected_clients.len() as u32, Ordering::Relaxed);
     drop(connected_clients);
 
+    hub.client_control_txs
+        .lock()
+        .await
+        .insert(client_id, control_tx);
+
     let initial_frames = gather_initial_frames(hub).await;
-    let locked_resolution =
-        locked_resolution(hub, is_owner, mcp_is_owner, exclusive_browser_owner).await;
+    let initial_access_state = super::policy::initial_access_state(hub, client_id).await;
 
     if prev_count > 0 {
         let tiles_requested = hub.request_full_refresh().await;
@@ -68,7 +76,8 @@ pub(super) async fn subscribe(hub: &SessionHub) -> Result<ClientHandle, Subscrib
         client_id,
         is_owner,
         initial_frames,
-        locked_resolution,
+        initial_access_state,
+        control_rx,
     })
 }
 
@@ -78,6 +87,7 @@ pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
     hub.client_count
         .store(connected_clients.len() as u32, Ordering::Relaxed);
 
+    let remaining_clients = connected_clients.clone();
     if hub.owner_id.load(Ordering::Relaxed) == client_id {
         let next_owner = if hub.mcp_is_owner.load(Ordering::Relaxed) {
             0
@@ -98,6 +108,10 @@ pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
             debug!(client_id, next_owner, "restored missing session owner");
         }
     }
+    drop(connected_clients);
+
+    hub.client_control_txs.lock().await.remove(&client_id);
+    super::policy::notify_client_access_states(hub, &remaining_clients, None).await;
 }
 
 async fn gather_initial_frames(hub: &SessionHub) -> Vec<Arc<Frame>> {
@@ -112,26 +126,4 @@ async fn gather_initial_frames(hub: &SessionHub) -> Vec<Arc<Frame>> {
         initial_frames.push(kf.clone());
     }
     initial_frames
-}
-
-async fn locked_resolution(
-    hub: &SessionHub,
-    is_owner: bool,
-    mcp_is_owner: bool,
-    exclusive_browser_owner: bool,
-) -> Option<(u16, u16)> {
-    if is_owner {
-        None
-    } else if mcp_is_owner {
-        *hub.mcp_resolution.lock().await
-    } else if exclusive_browser_owner {
-        let (w, h) = *hub.current_resolution.lock().await;
-        if w > 0 && h > 0 {
-            Some((w, h))
-        } else {
-            None
-        }
-    } else {
-        None
-    }
 }

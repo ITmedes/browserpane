@@ -13,7 +13,7 @@ pub(super) async fn send_initial_frames<S>(
     send_stream: &Arc<Mutex<S>>,
     initial_frames: &[Arc<Frame>],
     joined_as_owner: bool,
-    locked_resolution: Option<(u16, u16)>,
+    initial_access_state: Option<ControlMessage>,
     session_id: u64,
     client_id: u64,
 ) -> anyhow::Result<()>
@@ -30,22 +30,17 @@ where
             .context("failed to send initial frames")?;
     }
 
-    if !joined_as_owner {
-        if let Some((w, h)) = locked_resolution {
-            let locked = ControlMessage::ResolutionLocked {
-                width: w,
-                height: h,
-            };
-            let encoded = locked.to_frame().encode();
-            stream
-                .write_all(&encoded)
-                .await
-                .context("failed to send ResolutionLocked")?;
-            debug!(
-                session_id,
-                client_id, w, h, "sent ResolutionLocked to non-owner client"
-            );
-        }
+    if let Some(access_state) = initial_access_state {
+        let encoded = access_state.to_frame().encode();
+        stream
+            .write_all(&encoded)
+            .await
+            .context("failed to send ClientAccessState")?;
+        debug!(
+            session_id,
+            client_id,
+            "sent initial client access state to browser client"
+        );
     }
 
     Ok(())
@@ -56,14 +51,14 @@ mod tests {
     use std::sync::Arc;
 
     use bpane_protocol::frame::FrameDecoder;
-    use bpane_protocol::{ControlMessage, SessionFlags};
+    use bpane_protocol::{ClientAccessFlags, ControlMessage, SessionFlags};
     use tokio::io::{duplex, AsyncReadExt};
     use tokio::sync::Mutex;
 
     use super::send_initial_frames;
 
     #[tokio::test]
-    async fn non_owner_receives_adapted_ready_and_resolution_locked() {
+    async fn non_owner_receives_adapted_ready_and_initial_access_state() {
         let (writer, mut reader) = duplex(4096);
         let send_stream = Arc::new(Mutex::new(writer));
         let initial_frames = vec![Arc::new(
@@ -82,7 +77,11 @@ mod tests {
             &send_stream,
             &initial_frames,
             false,
-            Some((1280, 720)),
+            Some(ControlMessage::ClientAccessState {
+                flags: ClientAccessFlags::VIEW_ONLY | ClientAccessFlags::RESIZE_LOCKED,
+                width: 1280,
+                height: 720,
+            }),
             7,
             11,
         )
@@ -95,7 +94,7 @@ mod tests {
         decoder.push(&buf[..n]).unwrap();
 
         let ready = decoder.next_frame().unwrap().unwrap();
-        let locked = decoder.next_frame().unwrap().unwrap();
+        let access_state = decoder.next_frame().unwrap().unwrap();
 
         assert_eq!(ready.payload[0], 0x03);
         assert_ne!(ready.payload[2] & SessionFlags::AUDIO.bits(), 0);
@@ -105,8 +104,9 @@ mod tests {
         assert_eq!(ready.payload[2] & SessionFlags::CAMERA.bits(), 0);
 
         assert_eq!(
-            ControlMessage::decode(&locked.payload).unwrap(),
-            ControlMessage::ResolutionLocked {
+            ControlMessage::decode(&access_state.payload).unwrap(),
+            ControlMessage::ClientAccessState {
+                flags: ClientAccessFlags::VIEW_ONLY | ClientAccessFlags::RESIZE_LOCKED,
                 width: 1280,
                 height: 720,
             }
@@ -115,7 +115,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn owner_receives_initial_frames_without_resolution_locked() {
+    async fn resize_locked_collaborator_receives_full_ready_and_lock_only_state() {
         let (writer, mut reader) = duplex(4096);
         let send_stream = Arc::new(Mutex::new(writer));
         let initial_frames = vec![Arc::new(
@@ -126,7 +126,59 @@ mod tests {
             .to_frame(),
         )];
 
-        send_initial_frames(&send_stream, &initial_frames, true, Some((1600, 900)), 3, 5)
+        send_initial_frames(
+            &send_stream,
+            &initial_frames,
+            true,
+            Some(ControlMessage::ClientAccessState {
+                flags: ClientAccessFlags::RESIZE_LOCKED,
+                width: 1440,
+                height: 900,
+            }),
+            8,
+            13,
+        )
+        .await
+        .unwrap();
+
+        let mut buf = vec![0u8; 512];
+        let n = reader.read(&mut buf).await.unwrap();
+        let mut decoder = FrameDecoder::new();
+        decoder.push(&buf[..n]).unwrap();
+
+        let ready = decoder.next_frame().unwrap().unwrap();
+        let access_state = decoder.next_frame().unwrap().unwrap();
+        assert_eq!(
+            ControlMessage::decode(&ready.payload).unwrap(),
+            ControlMessage::SessionReady {
+                version: 1,
+                flags: SessionFlags::FILE_TRANSFER | SessionFlags::CAMERA,
+            }
+        );
+        assert_eq!(
+            ControlMessage::decode(&access_state.payload).unwrap(),
+            ControlMessage::ClientAccessState {
+                flags: ClientAccessFlags::RESIZE_LOCKED,
+                width: 1440,
+                height: 900,
+            }
+        );
+        assert!(decoder.next_frame().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn owner_receives_initial_frames_without_access_state() {
+        let (writer, mut reader) = duplex(4096);
+        let send_stream = Arc::new(Mutex::new(writer));
+        let initial_frames = vec![Arc::new(
+            ControlMessage::SessionReady {
+                version: 1,
+                flags: SessionFlags::FILE_TRANSFER | SessionFlags::CAMERA,
+            }
+            .to_frame(),
+        )];
+
+        send_initial_frames(&send_stream, &initial_frames, true, None, 3, 5)
             .await
             .unwrap();
 
