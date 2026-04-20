@@ -5,6 +5,10 @@ export type FillTileDrawResult =
   | { kind: 'skipped'; reason: 'offscreen' | 'no-output' };
 
 export class FillTileRenderer {
+  private lastCanvasCtx: CanvasRenderingContext2D | null = null;
+  private lastCanvasRgba: number | null = null;
+  private lastCanvasFillStyle = '';
+
   draw(args: {
     rect: { x: number; y: number; w: number; h: number } | null;
     rgba: number;
@@ -27,8 +31,14 @@ export class FillTileRenderer {
     if (glRenderer) {
       glRenderer.drawFill(rect.x, rect.y, rect.w, rect.h, r, g, b, a);
     } else {
-      ctx!.fillStyle = `rgba(${r},${g},${b},${a})`;
-      ctx!.fillRect(rect.x, rect.y, rect.w, rect.h);
+      const canvasContext = ctx!;
+      if (canvasContext !== this.lastCanvasCtx || rgba !== this.lastCanvasRgba) {
+        this.lastCanvasFillStyle = `rgba(${r},${g},${b},${a})`;
+        canvasContext.fillStyle = this.lastCanvasFillStyle;
+        this.lastCanvasCtx = canvasContext;
+        this.lastCanvasRgba = rgba;
+      }
+      canvasContext.fillRect(rect.x, rect.y, rect.w, rect.h);
     }
 
     return { kind: 'drawn' };
