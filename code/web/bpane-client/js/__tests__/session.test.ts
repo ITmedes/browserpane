@@ -653,6 +653,30 @@ describe('BpaneSession', () => {
       expect(writeText).toHaveBeenCalledWith('collaborative clipboard');
     });
 
+    it('keeps the local container size for resize-locked collaborative clients', async () => {
+      const { container } = await createSession();
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await new Promise(r => setTimeout(r, 10));
+
+      const accessPayload = new Uint8Array(6);
+      accessPayload[0] = 0x09; // ClientAccessState
+      accessPayload[1] = 0x02; // resize locked only
+      accessPayload[2] = 0x00; accessPayload[3] = 0x05; // 1280
+      accessPayload[4] = 0xD0; accessPayload[5] = 0x02; // 720
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, accessPayload));
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const canvas = container.querySelector('canvas')!;
+      expect(container.style.width).toBe('');
+      expect(container.style.height).toBe('');
+      expect(canvas.width).toBe(1280);
+      expect(canvas.height).toBe(720);
+      expect(canvas.style.width).toBe('100%');
+      expect(canvas.style.height).toBe('100%');
+    });
+
     it('restores promoted viewer capabilities after full SessionReady replay and unlock', async () => {
       const onCapabilitiesChange = vi.fn();
       await createSession({ onCapabilitiesChange });
