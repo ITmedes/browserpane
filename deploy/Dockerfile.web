@@ -12,6 +12,7 @@ FROM nginx:alpine
 RUN rm /etc/nginx/conf.d/default.conf
 COPY deploy/nginx.conf /etc/nginx/conf.d/bpane.conf
 COPY dev/test-embed.html /usr/share/nginx/html/index.html
+COPY dev/benchmark-scroll.html /usr/share/nginx/html/benchmark-scroll.html
 COPY --from=build /app/dist/ /usr/share/nginx/html/dist/
 
 # The token file will be mounted at /usr/share/nginx/html/token

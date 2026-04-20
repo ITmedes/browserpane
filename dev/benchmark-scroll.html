@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BrowserPane Scroll Benchmark</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6fb;
+      --panel: rgba(255, 255, 255, 0.9);
+      --ink: #142033;
+      --muted: #52627d;
+      --line: rgba(20, 32, 51, 0.12);
+      --hero: linear-gradient(135deg, #0f172a 0%, #1d4ed8 48%, #38bdf8 100%);
+      --accent: linear-gradient(135deg, #f97316, #facc15);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.18), transparent 18rem),
+        radial-gradient(circle at 80% 10%, rgba(249, 115, 22, 0.12), transparent 20rem),
+        var(--bg);
+      color: var(--ink);
+    }
+
+    .chrome {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(18px);
+      background: rgba(244, 246, 251, 0.82);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .chrome-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .pill-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .hero {
+      max-width: 1180px;
+      margin: 24px auto;
+      padding: 28px;
+      display: grid;
+      grid-template-columns: 1.35fr 0.95fr;
+      gap: 24px;
+      border-radius: 28px;
+      overflow: hidden;
+      background: var(--hero);
+      color: #eff6ff;
+      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.22);
+    }
+
+    .hero h1 {
+      margin: 0 0 14px;
+      font-size: 48px;
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 42rem;
+      font-size: 18px;
+      line-height: 1.55;
+      color: rgba(239, 246, 255, 0.88);
+    }
+
+    .hero-visual {
+      min-height: 280px;
+      border-radius: 24px;
+      background:
+        linear-gradient(155deg, rgba(255, 255, 255, 0.2), transparent 52%),
+        radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.45), transparent 7rem),
+        linear-gradient(180deg, rgba(15, 23, 42, 0.24), rgba(15, 23, 42, 0.04));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-visual::before,
+    .hero-visual::after {
+      content: "";
+      position: absolute;
+      inset: auto;
+      border-radius: 50%;
+      filter: blur(0.5px);
+    }
+
+    .hero-visual::before {
+      width: 240px;
+      height: 240px;
+      right: -32px;
+      top: -24px;
+      background: rgba(248, 250, 252, 0.2);
+    }
+
+    .hero-visual::after {
+      width: 180px;
+      height: 180px;
+      left: -22px;
+      bottom: -26px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .layout {
+      max-width: 1180px;
+      margin: 0 auto 64px;
+      padding: 0 28px;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .rail {
+      position: sticky;
+      top: 104px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .panel {
+      padding: 18px;
+      border-radius: 22px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+    }
+
+    .panel h2,
+    .panel h3 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      letter-spacing: -0.02em;
+    }
+
+    .panel p,
+    .panel li {
+      margin: 0;
+      line-height: 1.55;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .panel ul {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .accent-card {
+      background: var(--accent);
+      color: #231707;
+      border: none;
+    }
+
+    .accent-card p {
+      color: rgba(35, 23, 7, 0.82);
+    }
+
+    .content {
+      display: grid;
+      gap: 18px;
+    }
+
+    .section {
+      padding: 22px;
+      border-radius: 26px;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.07);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: -0.04em;
+    }
+
+    .section-head span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .section-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .stat {
+      padding: 16px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.9));
+      border: 1px solid rgba(20, 32, 51, 0.08);
+      min-height: 132px;
+    }
+
+    .stat strong {
+      display: block;
+      margin-top: 12px;
+      font-size: 28px;
+      letter-spacing: -0.04em;
+    }
+
+    .stat p {
+      margin-top: 8px;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .story {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .story-copy {
+      display: grid;
+      gap: 12px;
+    }
+
+    .story-copy p {
+      color: var(--muted);
+      line-height: 1.7;
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .media-block {
+      position: relative;
+      min-height: 240px;
+      border-radius: 24px;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.82)),
+        linear-gradient(45deg, rgba(56, 189, 248, 0.3), transparent 60%);
+    }
+
+    .media-block::before {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 36%),
+        repeating-linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0.02) 0,
+          rgba(255, 255, 255, 0.02) 14px,
+          transparent 14px,
+          transparent 32px
+        );
+      border: 1px solid rgba(255, 255, 255, 0.09);
+    }
+
+    .ticker {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .ticker span {
+      display: inline-flex;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(20, 32, 51, 0.06);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .footer {
+      max-width: 1180px;
+      margin: 0 auto 48px;
+      padding: 0 28px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .layout,
+      .story {
+        grid-template-columns: 1fr;
+      }
+
+      .rail {
+        position: static;
+      }
+
+      .section-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero h1 {
+        font-size: 36px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="chrome">
+    <div class="chrome-inner">
+      <div>
+        <strong>BrowserPane Scroll Benchmark Fixture</strong>
+      </div>
+      <div class="pill-row">
+        <span class="pill">Sticky header</span>
+        <span class="pill">Mixed text + media</span>
+        <span class="pill">Long scroll path</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div>
+      <h1>Deterministic scroll workload for tile repair and compositing.</h1>
+      <p>
+        This page exists to stress retained scrolling, sub-tile repair, mixed text/image regions,
+        and sticky chrome. It is intentionally rich enough to surface rendering artifacts without
+        depending on an external site.
+      </p>
+      <div class="ticker">
+        <span>High text density</span>
+        <span>Floating media blocks</span>
+        <span>Repeated card layouts</span>
+        <span>Sticky rail</span>
+      </div>
+    </div>
+    <div class="hero-visual" aria-hidden="true"></div>
+  </section>
+
+  <main class="layout">
+    <aside class="rail">
+      <section class="panel accent-card">
+        <h2>Benchmark Notes</h2>
+        <p>
+          For deterministic comparisons, point the host browser at
+          <code>http://web:8080/benchmark-scroll.html</code> inside the compose network.
+        </p>
+      </section>
+      <section class="panel">
+        <h3>What this stresses</h3>
+        <ul>
+          <li>Scroll-copy correctness under repeated wheel bursts</li>
+          <li>Tile repair throughput across text and media regions</li>
+          <li>Sticky UI separation from main content updates</li>
+          <li>Long-session repaint stability after many batches</li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h3>Recommended run</h3>
+        <ul>
+          <li>WebGL2 auto mode</li>
+          <li>Scroll Copy enabled</li>
+          <li>4 down/up cycles</li>
+          <li>Capture benchmark summary JSON</li>
+        </ul>
+      </section>
+    </aside>
+
+    <section class="content" id="content-root"></section>
+  </main>
+
+  <footer class="footer">
+    BrowserPane benchmark fixture. Local-only. No external assets.
+  </footer>
+
+  <script>
+    const root = document.getElementById('content-root');
+    const LOREM = [
+      'BrowserPane keeps UI detail on the reliable tile path and pushes motion into ROI video only when it is worthwhile.',
+      'This benchmark keeps text density high so small repair artifacts are easy to notice after aggressive wheel scrolling.',
+      'The layout intentionally mixes sticky elements, gradient media blocks, cards, and dense copy to create varied tile boundaries.',
+      'Use this page when comparing branches or tuning hot paths in capture, gateway fan-out, tile parsing, and client compositing.',
+    ];
+
+    function makeStat(sectionIndex, statIndex) {
+      const card = document.createElement('article');
+      card.className = 'stat';
+      card.innerHTML = `
+        <span class="pill">Panel ${sectionIndex + 1}.${statIndex + 1}</span>
+        <strong>${(sectionIndex + 1) * (statIndex + 2) * 7} ms</strong>
+        <p>${LOREM[(sectionIndex + statIndex) % LOREM.length]}</p>
+      `;
+      return card;
+    }
+
+    function makeSection(index) {
+      const section = document.createElement('section');
+      section.className = 'section';
+      const stats = Array.from({ length: 6 }, (_, statIndex) => makeStat(index, statIndex));
+      const storyParagraphs = Array.from({ length: 3 }, (_, copyIndex) =>
+        `<p>${LOREM[(index + copyIndex) % LOREM.length]} Section ${index + 1} block ${copyIndex + 1} adds enough text to keep tile repair busy during rapid scroll movement.</p>`,
+      ).join('');
+      section.innerHTML = `
+        <div class="section-head">
+          <h2>Section ${index + 1}</h2>
+          <span>Scroll Window ${String(index + 1).padStart(2, '0')}</span>
+        </div>
+        <div class="section-grid"></div>
+        <div class="story" style="margin-top: 18px;">
+          <div class="story-copy">
+            ${storyParagraphs}
+            <div class="ticker">
+              <span>repair path</span>
+              <span>cache hits</span>
+              <span>sub-tile qoi</span>
+              <span>draw commands</span>
+            </div>
+          </div>
+          <div class="media-block" aria-hidden="true"></div>
+        </div>
+      `;
+      section.querySelector('.section-grid').append(...stats);
+      return section;
+    }
+
+    for (let i = 0; i < 28; i++) {
+      root.appendChild(makeSection(i));
+    }
+  </script>
+</body>
+</html>
