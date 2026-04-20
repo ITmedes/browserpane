@@ -176,4 +176,24 @@ describe('ZstdTileRenderer', () => {
       glRenderer: null,
     })).toEqual({ kind: 'skipped', reason: 'no-output' });
   });
+
+  it('reuses the decompressed buffer when creating ImageData', () => {
+    const decompressed = new Uint8Array([0x11, 0x22, 0x33, 0x44]);
+    const cache = new TileCache();
+    const renderer = new ZstdTileRenderer(() => decompressed);
+
+    const result = renderer.draw({
+      cache,
+      hash: 9n,
+      data: new Uint8Array([0x28, 0xb5]),
+      rect: { x: 0, y: 0, w: 1, h: 1 },
+      ctx: createCanvasContext(),
+      glRenderer: null,
+    });
+
+    expect(result.kind).toBe('drawn');
+    const imageData = cache.get(9n) as ImageData;
+    expect(imageData.data.buffer).toBe(decompressed.buffer);
+    expect(imageData.data.byteOffset).toBe(decompressed.byteOffset);
+  });
 });

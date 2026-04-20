@@ -10,6 +10,12 @@ export type ZstdTileDrawResult =
   | { kind: 'skipped'; reason: 'offscreen' | 'no-output' };
 
 export class ZstdTileRenderer {
+  private readonly decompressFn: (data: Uint8Array) => Uint8Array;
+
+  constructor(decompressFn: (data: Uint8Array) => Uint8Array = decompress) {
+    this.decompressFn = decompressFn;
+  }
+
   draw(args: {
     cache: TileCache;
     hash: bigint;
@@ -29,7 +35,7 @@ export class ZstdTileRenderer {
 
     let decompressed: Uint8Array;
     try {
-      decompressed = decompress(data);
+      decompressed = this.decompressFn(data);
     } catch {
       return { kind: 'miss', reason: 'decode-failed' };
     }
@@ -39,7 +45,14 @@ export class ZstdTileRenderer {
       return { kind: 'miss', reason: 'size-mismatch' };
     }
 
-    const imageData = new ImageData(new Uint8ClampedArray(decompressed), rect.w, rect.h);
+    const pixels = decompressed.buffer instanceof ArrayBuffer
+      ? new Uint8ClampedArray(
+        decompressed.buffer,
+        decompressed.byteOffset,
+        decompressed.byteLength,
+      )
+      : Uint8ClampedArray.from(decompressed);
+    const imageData = new ImageData(pixels, rect.w, rect.h);
     const redundant = cache.has(hash);
     cache.set(hash, imageData);
 
