@@ -76,13 +76,15 @@ export class NalReassembler {
     const isKeyframe = view.getUint8(8) !== 0;
     const ptsUs = Number(view.getBigUint64(9, true));
     const dataLen = view.getUint32(17, true);
-    const data = payload.slice(21, 21 + dataLen);
+    const dataEnd = 21 + dataLen;
+    if (payload.length < dataEnd) return null;
+    const data = payload.subarray(21, dataEnd);
 
     // Deduplicate: skip NALs already delivered (from datagram or reliable)
     if (this.completed.has(nalId)) return null;
 
     // Parse optional tile info
-    const tileInfo = parseTileInfo(payload, 21 + dataLen);
+    const tileInfo = parseTileInfo(payload, dataEnd);
 
     // Single-fragment NAL — no reassembly needed
     if (fragTotal === 1) {

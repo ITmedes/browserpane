@@ -29,7 +29,7 @@ async function loadWorklet(): Promise<RegisteredProcessorCtor> {
     registeredName = name;
     registeredCtor = ctor;
   }));
-  await import('../audio-worklet.js');
+  await import('../audio/audio-worklet.js');
   expect(registeredName).toBe('bpane-audio-processor');
   expect(registeredCtor).not.toBeNull();
   return registeredCtor!;

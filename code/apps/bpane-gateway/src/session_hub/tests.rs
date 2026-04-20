@@ -1,6 +1,6 @@
 use bpane_protocol::channel::ChannelId;
 use bpane_protocol::frame::FrameDecoder;
-use bpane_protocol::{ControlMessage, SessionFlags, TileMessage};
+use bpane_protocol::{ClientAccessFlags, ControlMessage, SessionFlags, TileMessage};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
 
@@ -52,4 +52,20 @@ async fn mock_agent(sock_path: &str) -> tokio::task::JoinHandle<()> {
             }
         }
     })
+}
+
+async fn expect_control_message_eventually(
+    rx: &mut tokio::sync::mpsc::Receiver<ControlMessage>,
+    expected: ControlMessage,
+) {
+    for _ in 0..4 {
+        let message = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
+            .await
+            .unwrap();
+        if message == Some(expected.clone()) {
+            return;
+        }
+    }
+
+    panic!("did not receive expected control message: {expected:?}");
 }

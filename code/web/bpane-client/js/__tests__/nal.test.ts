@@ -68,6 +68,20 @@ describe('NalReassembler', () => {
     expect(result!.tileInfo).toBeNull();
   });
 
+  it('reuses the datagram payload view for single-fragment NALs', () => {
+    const nal = new NalReassembler();
+    const data = new Uint8Array([0x00, 0x00, 0x01, 0x65, 0xAA]);
+    const payload = buildDatagram({
+      nalId: 2, fragSeq: 0, fragTotal: 1, isKeyframe: true, data,
+    });
+
+    const result = nal.push(payload);
+    expect(result).not.toBeNull();
+    expect(result!.data.buffer).toBe(payload.buffer);
+    expect(result!.data.byteOffset).toBe(payload.byteOffset + 21);
+    expect(result!.data.byteLength).toBe(data.byteLength);
+  });
+
   it('reassembles two fragments', () => {
     const nal = new NalReassembler();
     const part0 = new Uint8Array([0x00, 0x00, 0x01]);
@@ -112,6 +126,19 @@ describe('NalReassembler', () => {
     const nal = new NalReassembler();
     expect(nal.push(new Uint8Array(20))).toBeNull(); // < 21 bytes
     expect(nal.push(new Uint8Array(0))).toBeNull();
+  });
+
+  it('rejects payloads whose declared data length exceeds the datagram bytes', () => {
+    const nal = new NalReassembler();
+    const payload = buildDatagram({
+      nalId: 3,
+      fragSeq: 0,
+      fragTotal: 1,
+      isKeyframe: true,
+      data: new Uint8Array([0x00, 0x00, 0x01, 0x65]),
+    });
+    new DataView(payload.buffer).setUint32(17, 1024, true);
+    expect(nal.push(payload)).toBeNull();
   });
 
   it('discards NAL with missing fragment', () => {

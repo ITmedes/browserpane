@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use bpane_protocol::frame::Frame;
+use bpane_protocol::ControlMessage;
 use tokio::sync::{broadcast, mpsc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,11 +31,14 @@ pub struct ClientHandle {
     /// Unique client ID within this session.
     pub client_id: u64,
     /// Whether this client is the session owner (first to connect).
+    /// In collaborative mode this stays `true` for interactive late joiners.
     pub is_owner: bool,
     /// Frames to send immediately on connect (cached SessionReady + last keyframe).
     pub initial_frames: Vec<Arc<Frame>>,
-    /// The current locked resolution (only set for non-owner clients).
-    pub locked_resolution: Option<(u16, u16)>,
+    /// Optional gateway-managed access state to send immediately on connect.
+    pub initial_access_state: Option<ControlMessage>,
+    /// Direct per-client gateway control updates (promotion, lock changes, etc.).
+    pub control_rx: mpsc::Receiver<ControlMessage>,
 }
 
 /// Result of a resize request.

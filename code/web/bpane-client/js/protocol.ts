@@ -65,18 +65,17 @@ export interface ParsedFrame {
   payload: Uint8Array;
 }
 
+export type FrameVisitor = (channelId: number, payload: Uint8Array) => void;
+
 /**
- * Parse as many complete frames as possible from a buffer.
- * Returns [parsed_frames, remaining_bytes].
- * Throws on frames exceeding MAX_FRAME_PAYLOAD.
+ * Parse complete frames from a buffer and invoke `onFrame` for each one.
+ * Returns the remaining incomplete suffix as a view into `buf`.
  */
-export function parseFrames(buf: Uint8Array): [ParsedFrame[], Uint8Array] {
-  const frames: ParsedFrame[] = [];
+export function parseFramesInto(buf: Uint8Array, onFrame: FrameVisitor): Uint8Array {
   let offset = 0;
 
   while (offset + FRAME_HEADER_SIZE <= buf.length) {
     const channelId = buf[offset];
-    // Use >>> 0 to force unsigned 32-bit interpretation (JS << yields signed i32)
     const length =
       (buf[offset + 1] |
       (buf[offset + 2] << 8) |
@@ -88,15 +87,27 @@ export function parseFrames(buf: Uint8Array): [ParsedFrame[], Uint8Array] {
     }
 
     const totalSize = FRAME_HEADER_SIZE + length;
-    if (offset + totalSize > buf.length) break; // incomplete
+    if (offset + totalSize > buf.length) break;
 
-    frames.push({
-      channelId,
-      payload: buf.subarray(offset + FRAME_HEADER_SIZE, offset + totalSize),
-    });
+    onFrame(channelId, buf.subarray(offset + FRAME_HEADER_SIZE, offset + totalSize));
     offset += totalSize;
   }
 
-  const remaining = buf.subarray(offset);
+  return buf.subarray(offset);
+}
+
+/**
+ * Parse as many complete frames as possible from a buffer.
+ * Returns [parsed_frames, remaining_bytes].
+ * Throws on frames exceeding MAX_FRAME_PAYLOAD.
+ */
+export function parseFrames(buf: Uint8Array): [ParsedFrame[], Uint8Array] {
+  const frames: ParsedFrame[] = [];
+  const remaining = parseFramesInto(buf, (channelId, payload) => {
+    frames.push({
+      channelId,
+      payload,
+    });
+  });
   return [frames, remaining];
 }
