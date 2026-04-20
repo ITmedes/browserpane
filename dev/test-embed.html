@@ -956,7 +956,7 @@
     });
 
     window.__bpaneBenchmarkMetrics = {
-      startSample,
+      startSample: startBenchmarkSample,
       stopSample: () => stopBenchmarkSample('api'),
       resetSample: resetBenchmarkMetrics,
       getSummary: () => cloneSummary(benchmarkState.summary),
