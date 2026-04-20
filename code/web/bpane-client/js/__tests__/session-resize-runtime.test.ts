@@ -129,7 +129,7 @@ describe('SessionResizeRuntime', () => {
     expect(sendResizeRequest).toHaveBeenCalledWith(1800, 1400);
   });
 
-  it('locks resolution to a fixed container size and ignores later resize events', async () => {
+  it('locks remote resolution while preserving the local container size and ignores later resize events', async () => {
     vi.useFakeTimers();
     const {
       runtime,
@@ -152,10 +152,10 @@ describe('SessionResizeRuntime', () => {
     expect(canvas.height).toBe(720);
     expect(cursorEl.width).toBe(1280);
     expect(cursorEl.height).toBe(720);
-    expect(container.style.width).toBe('1280px');
-    expect(container.style.height).toBe('720px');
-    expect(container.style.maxWidth).toBe('1280px');
-    expect(container.style.maxHeight).toBe('720px');
+    expect(container.style.width).toBe('');
+    expect(container.style.height).toBe('');
+    expect(container.style.maxWidth).toBe('');
+    expect(container.style.maxHeight).toBe('');
     expect(setRemoteSize).toHaveBeenCalledWith(1280, 720);
     expect(onResolutionChange).toHaveBeenCalledWith(1280, 720);
     expect(resizeRenderer).toHaveBeenCalledWith(1280, 720);
@@ -187,10 +187,6 @@ describe('SessionResizeRuntime', () => {
     runtime.applyClientAccessState(0x00, 0, 0);
 
     expect(runtime.isResolutionLocked()).toBe(false);
-    expect(container.style.width).toBe('');
-    expect(container.style.height).toBe('');
-    expect(container.style.maxWidth).toBe('');
-    expect(container.style.maxHeight).toBe('');
     expect(resizeObserver.observe).toHaveBeenCalledWith(container);
     expect(canvas.width).toBe(500);
     expect(canvas.height).toBe(400);
