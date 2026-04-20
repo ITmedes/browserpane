@@ -267,6 +267,31 @@ describe('SessionTransportRuntime', () => {
     expect(onDatagram).toHaveBeenCalledWith(new Uint8Array([0x01, 0x02]));
   });
 
+  it('passes through Uint8Array datagrams without cloning them', async () => {
+    const transport = createMockTransport();
+    const createTransport = vi.fn((url: string, options: WebTransportOptions) => {
+      void url;
+      void options;
+      return transport as unknown as WebTransport;
+    });
+    const { runtime, onDatagram } = createRuntime({
+      createTransport,
+      pingIntervalMs: 1000,
+    });
+
+    await runtime.connect({
+      gatewayUrl: 'https://localhost:4433',
+      token: 'test-token',
+    });
+
+    const datagram = new Uint8Array([0x03, 0x04]);
+    transport.datagrams.readable.pushValue(datagram);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onDatagram).toHaveBeenCalledWith(datagram);
+    expect(onDatagram.mock.calls[0]?.[0]).toBe(datagram);
+  });
+
   it('sends periodic pings and stops after disconnect', async () => {
     vi.useFakeTimers();
     const transport = createMockTransport();
