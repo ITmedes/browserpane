@@ -10,7 +10,7 @@ import {
   CH_CONTROL,
 } from './protocol.js';
 
-import { NalReassembler, getNalType, type ReassembledNal, type TileInfo } from './nal.js';
+import { NalReassembler } from './nal.js';
 import { fnvHash } from './hash.js';
 import { TileCompositor, CH_TILES } from './tile-compositor.js';
 import { WebGLTileRenderer, type WebGLRendererDiagnostics } from './webgl-compositor.js';
@@ -28,6 +28,7 @@ import { SessionSendRuntime } from './session-send-runtime.js';
 import { SessionStreamReaderRuntime } from './session-stream-reader-runtime.js';
 import { SessionTransportRuntime } from './session-transport-runtime.js';
 import { SessionVideoDisplayRuntime } from './session-video-display-runtime.js';
+import { SessionVideoDecoderRuntime } from './session-video-decoder-runtime.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
 
 export type RenderBackendPreference = 'auto' | 'canvas2d' | 'webgl2';
@@ -78,7 +79,6 @@ export class BpaneSession {
   private connected = false;
   // Extracted: input event handling
   private input: InputController | null = null;
-  private videoDecoder: VideoDecoder | null = null;
   private cursorEl: HTMLCanvasElement | null = null;
   private cursorRuntime: SessionCursorRuntime;
   private sendRuntime: SessionSendRuntime;
@@ -127,13 +127,8 @@ export class BpaneSession {
   private nalReassembler = new NalReassembler();
 
   // Video decode state
-  private decoderConfigured = false;
-  private decoderTimestamp = 0;
-  private spsNal: Uint8Array | null = null;
-  private ppsNal: Uint8Array | null = null;
-  private seiNals: Uint8Array[] = [];
-  private currentDecodeTileInfo: TileInfo | null = null;
   private videoDisplayRuntime: SessionVideoDisplayRuntime;
+  private videoDecoderRuntime: SessionVideoDecoderRuntime;
   // Extracted: all transfer/tile/scroll stats live in SessionStats
   private stats = new SessionStats();
 
@@ -342,6 +337,24 @@ export class BpaneSession {
       getGridConfig: () => this.tileCompositor.getGridConfig(),
       getVideoRegion: () => this.tileCompositor.getVideoRegion(),
     });
+    this.videoDecoderRuntime = new SessionVideoDecoderRuntime({
+      onDecodedFrame: (frame, tileInfo) => {
+        if ((!this.ctx && !this.glRenderer) || !this.canvas) {
+          frame.close();
+          return;
+        }
+        this.videoDisplayRuntime.handleDecodedFrame(frame, tileInfo);
+      },
+      incrementFrameCount: () => {
+        this.stats.frameCount += 1;
+      },
+      incrementDroppedFrame: () => {
+        this.stats.videoFramesDropped += 1;
+      },
+      onDecoderError: (error) => {
+        console.error('[bpane] VideoDecoder error:', error.message);
+      },
+    });
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -476,11 +489,7 @@ export class BpaneSession {
       this.input = null;
     }
 
-    if (this.videoDecoder) {
-      try { this.videoDecoder.close(); } catch (_) { /* ignore */ }
-      this.videoDecoder = null;
-    }
-    this.decoderConfigured = false;
+    this.videoDecoderRuntime.destroy();
 
     this.camera.destroy();
     this.audio.destroy();
@@ -529,7 +538,6 @@ export class BpaneSession {
   }
 
   private clearVideoOverlay(): void {
-    this.currentDecodeTileInfo = null;
     this.videoDisplayRuntime.clearVideoOverlay();
   }
 
@@ -542,87 +550,6 @@ export class BpaneSession {
   }
 
   // ── Video decode via WebCodecs ────────────────────────────────────
-
-  private initDecoder(): void {
-    if (this.videoDecoder) {
-      try { this.videoDecoder.close(); } catch (_) { /* ignore */ }
-    }
-    this.videoDecoder = new VideoDecoder({
-      output: (frame: VideoFrame) => {
-        if ((!this.ctx && !this.glRenderer) || !this.canvas) { frame.close(); return; }
-        this.videoDisplayRuntime.handleDecodedFrame(frame, this.currentDecodeTileInfo);
-      },
-      error: (e: DOMException) => {
-        console.error('[bpane] VideoDecoder error:', e.message);
-        this.decoderConfigured = false;
-      },
-    });
-    this.videoDecoder.configure({
-      codec: 'avc1.42002a', // H.264 Baseline Level 4.2
-      optimizeForLatency: true,
-    });
-    this.decoderConfigured = true;
-    this.decoderTimestamp = 0;
-  }
-
-  private decodeVideoNal(nalData: Uint8Array, isKeyframe: boolean, tileInfo: TileInfo | null): void {
-    const nalType = getNalType(nalData);
-
-    // Cache parameter sets
-    if (nalType === 7) { this.spsNal = nalData; return; }
-    if (nalType === 8) { this.ppsNal = nalData; return; }
-    if (nalType === 6) { this.seiNals.push(nalData); return; } // SEI — accumulate
-
-    // Only feed VCL NALs (slice types: 1=non-IDR, 5=IDR)
-    if (nalType !== 1 && nalType !== 5) return;
-
-    // Initialize decoder on first frame
-    if (!this.videoDecoder) this.initDecoder();
-
-    // If decoder errored, wait for next keyframe to reinitialize
-    if (!this.decoderConfigured && nalType !== 5) return;
-    if (!this.decoderConfigured) this.initDecoder();
-
-    // Build access unit: prepend SPS+PPS+SEIs for keyframes
-    let chunk: Uint8Array;
-    if (nalType === 5 && this.spsNal && this.ppsNal) {
-      let totalLen = this.spsNal.length + this.ppsNal.length + nalData.length;
-      for (const sei of this.seiNals) totalLen += sei.length;
-      chunk = new Uint8Array(totalLen);
-      let off = 0;
-      chunk.set(this.spsNal, off); off += this.spsNal.length;
-      chunk.set(this.ppsNal, off); off += this.ppsNal.length;
-      for (const sei of this.seiNals) {
-        chunk.set(sei, off); off += sei.length;
-      }
-      chunk.set(nalData, off);
-      this.seiNals = [];
-    } else {
-      chunk = nalData;
-    }
-
-    // Store tile info for the decoder output callback
-    this.currentDecodeTileInfo = tileInfo;
-
-    // Avoid decoder backpressure adding latency
-    if (this.videoDecoder!.decodeQueueSize > 3) {
-      this.stats.videoFramesDropped++;
-      return;
-    }
-
-    this.stats.frameCount++;
-
-    this.decoderTimestamp += 1;
-    try {
-      this.videoDecoder!.decode(new EncodedVideoChunk({
-        type: nalType === 5 ? 'key' : 'delta',
-        timestamp: this.decoderTimestamp,
-        data: chunk,
-      }));
-    } catch (e) {
-      console.error('[bpane] decode error:', e);
-    }
-  }
 
   // ── Stream handling ────────────────────────────────────────────────
 
@@ -639,7 +566,7 @@ export class BpaneSession {
   private handleVideoFrame(payload: Uint8Array): void {
     const result = this.nalReassembler.push(payload);
     if (!result) return;
-    this.decodeVideoNal(result.data, result.isKeyframe, result.tileInfo);
+    this.videoDecoderRuntime.decodeNal(result.data, result.tileInfo);
   }
 
   // ── Cursor ─────────────────────────────────────────────────────────
