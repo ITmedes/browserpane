@@ -146,12 +146,18 @@ export class SessionStats {
     hostScrollFallbacksTotal: number,
     hostScrollPotentialTilesTotal: number,
     hostScrollSavedTilesTotal: number,
+    hostScrollNonQuantizedFallbacksTotal: number,
+    hostScrollResidualFullRepaintsTotal: number,
+    hostScrollZeroSavedBatchesTotal: number,
   ): void {
     this.hostScrollHealthTracker.record(
       hostScrollBatchesTotal,
       hostScrollFallbacksTotal,
       hostScrollPotentialTilesTotal,
       hostScrollSavedTilesTotal,
+      hostScrollNonQuantizedFallbacksTotal,
+      hostScrollResidualFullRepaintsTotal,
+      hostScrollZeroSavedBatchesTotal,
     );
   }
 

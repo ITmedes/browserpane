@@ -127,6 +127,9 @@ fn valid_wire_fixtures_match_exact_rust_encoders() {
             scroll_full_fallbacks_total: 2,
             scroll_potential_tiles_total: 1_000,
             scroll_saved_tiles_total: 730,
+            scroll_non_quantized_fallbacks_total: 1,
+            scroll_residual_full_repaints_total: 1,
+            scroll_zero_saved_batches_total: 3,
         }
         .to_frame()
         .encode()

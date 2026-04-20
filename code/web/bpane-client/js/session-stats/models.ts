@@ -49,6 +49,9 @@ export type ScrollBatchStats = {
 export type HostScrollHealthSnapshot = {
   hostScrollBatchesTotal: number;
   hostScrollFallbacksTotal: number;
+  hostScrollNonQuantizedFallbacksTotal: number;
+  hostScrollResidualFullRepaintsTotal: number;
+  hostScrollZeroSavedBatchesTotal: number;
   hostFallbackRate: number;
   hostFallbackRateRecent20: number;
   hostFallbackRateRecent50: number;

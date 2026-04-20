@@ -538,6 +538,9 @@ pub enum TileMessage {
         scroll_full_fallbacks_total: u32,
         scroll_potential_tiles_total: u32,
         scroll_saved_tiles_total: u32,
+        scroll_non_quantized_fallbacks_total: u32,
+        scroll_residual_full_repaints_total: u32,
+        scroll_zero_saved_batches_total: u32,
     },
 }
 
