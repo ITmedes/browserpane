@@ -1234,7 +1234,9 @@ async fn maybe_apply_resize_device_metrics(
         .map(|hint| hint.device_scale_factor_milli)
         .unwrap_or(fallback_scale_milli)
         .max(1);
-    let params = build_device_metrics_override(width, height, scale_milli);
+    let (override_width, override_height) =
+        resize_metrics_override_size(width, height, settled_hint.as_ref());
+    let params = build_device_metrics_override(override_width, override_height, scale_milli);
     let applied = send_cdp_command(
         stream,
         request_id,
@@ -1245,11 +1247,13 @@ async fn maybe_apply_resize_device_metrics(
     .is_some();
     if applied {
         debug!(
-            width,
-            height,
+            requested_width = width,
+            requested_height = height,
+            override_width,
+            override_height,
             scale_milli,
-            css_width = screen_px_to_window_dips(width, scale_milli),
-            css_height = screen_px_to_window_dips(height, scale_milli),
+            css_width = screen_px_to_window_dips(override_width, scale_milli),
+            css_height = screen_px_to_window_dips(override_height, scale_milli),
             "cdp resize metrics override applied"
         );
         let _ = maybe_apply_horizontal_overflow_fix(stream, request_id).await;
@@ -1286,6 +1290,17 @@ fn page_hint_is_stable(previous: &PageHintState, current: &PageHintState) -> boo
         && current.viewport.is_some()
         && previous.device_scale_factor_milli == current.device_scale_factor_milli
         && previous.viewport == current.viewport
+}
+
+fn resize_metrics_override_size(
+    requested_width: u32,
+    requested_height: u32,
+    settled_hint: Option<&PageHintState>,
+) -> (u32, u32) {
+    if let Some(viewport) = settled_hint.and_then(|hint| hint.viewport) {
+        return (viewport.w.max(1), viewport.h.max(1));
+    }
+    (requested_width.max(1), requested_height.max(1))
 }
 
 fn build_device_metrics_override(width: u32, height: u32, scale_milli: u16) -> Value {
@@ -2055,6 +2070,34 @@ mod tests {
         assert_eq!(
             params.get("deviceScaleFactor").and_then(Value::as_f64),
             Some(2.0)
+        );
+    }
+
+    #[test]
+    fn resize_metrics_override_size_prefers_settled_viewport() {
+        let hint = PageHintState {
+            viewport: Some(CaptureRegion {
+                x: 0,
+                y: 0,
+                w: 1406,
+                h: 914,
+            }),
+            ..PageHintState::default()
+        };
+
+        assert_eq!(
+            resize_metrics_override_size(1406, 952, Some(&hint)),
+            (1406, 914)
+        );
+    }
+
+    #[test]
+    fn resize_metrics_override_size_falls_back_to_requested_resolution() {
+        assert_eq!(resize_metrics_override_size(1406, 952, None), (1406, 952));
+        let hint = PageHintState::default();
+        assert_eq!(
+            resize_metrics_override_size(1406, 952, Some(&hint)),
+            (1406, 952)
         );
     }
 
