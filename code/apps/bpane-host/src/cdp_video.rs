@@ -190,6 +190,23 @@ impl BrowserCdpHandle {
     }
 }
 
+fn can_dispatch_direct_wheel(hint: &PageHintState) -> bool {
+    hint.visible && hint.focused
+}
+
+fn should_switch_to_focused_target(
+    current_ws_url: Option<&str>,
+    current_hint: &PageHintState,
+    next_url: &str,
+    next_hint: &PageHintState,
+) -> bool {
+    current_hint.visible
+        && !current_hint.focused
+        && next_hint.visible
+        && next_hint.focused
+        && current_ws_url != Some(next_url)
+}
+
 pub async fn resize_visible_target_window(width: u16, height: u16) -> bool {
     if width < 2 || height < 2 || !env_bool("BPANE_CHROMIUM_DEBUG_ENABLE", true) {
         return false;
@@ -841,6 +858,36 @@ pub fn spawn_video_hint_task(shared: Arc<Mutex<PageHintState>>) -> BrowserCdpHan
                 tokio::time::sleep(retry_backoff).await;
                 continue;
             };
+
+            if !hint.focused {
+                if let Some((next_url, next_stream, next_hint)) = connect_visible_target_stream(
+                    &http,
+                    debug_port,
+                    ws_url.as_deref(),
+                    &video_probe_js,
+                    &mut request_id,
+                )
+                .await
+                {
+                    if should_switch_to_focused_target(
+                        ws_url.as_deref(),
+                        &hint,
+                        &next_url,
+                        &next_hint,
+                    ) {
+                        debug!(
+                            from_target = ws_url.as_deref().unwrap_or("<unknown>"),
+                            to_target = %next_url,
+                            "cdp switching to newly focused target"
+                        );
+                        set_shared_state(&shared, PageHintState::default());
+                        ws_url = Some(next_url);
+                        ws_stream = Some(next_stream);
+                        prefetched_hint = Some(next_hint);
+                        continue;
+                    }
+                }
+            }
 
             if !hint.visible {
                 debug!(
@@ -1727,6 +1774,10 @@ async fn handle_wheel_command(
         Ok(g) => *g,
         Err(poisoned) => *poisoned.into_inner(),
     };
+    if !can_dispatch_direct_wheel(&hint) {
+        let _ = cmd.response.send(false);
+        return true;
+    }
     let dispatches: Vec<WheelDispatch> = paced_wheel_components(cmd.dx, cmd.dy)
         .into_iter()
         .filter_map(|(step_dx, step_dy)| {
@@ -2290,5 +2341,75 @@ mod tests {
             ordered[0].web_socket_debugger_url.as_deref(),
             Some("ws://127.0.0.1:9222/devtools/page/youtube")
         );
+    }
+
+    #[test]
+    fn direct_wheel_dispatch_requires_focused_visible_target() {
+        let mut hint = PageHintState {
+            visible: true,
+            focused: true,
+            ..PageHintState::default()
+        };
+        assert!(can_dispatch_direct_wheel(&hint));
+
+        hint.focused = false;
+        assert!(!can_dispatch_direct_wheel(&hint));
+
+        hint.visible = false;
+        hint.focused = true;
+        assert!(!can_dispatch_direct_wheel(&hint));
+    }
+
+    #[test]
+    fn should_switch_to_newly_focused_target() {
+        let current_hint = PageHintState {
+            visible: true,
+            focused: false,
+            ..PageHintState::default()
+        };
+        let next_hint = PageHintState {
+            visible: true,
+            focused: true,
+            ..PageHintState::default()
+        };
+
+        assert!(should_switch_to_focused_target(
+            Some("ws://127.0.0.1:9222/devtools/page/old"),
+            &current_hint,
+            "ws://127.0.0.1:9222/devtools/page/new",
+            &next_hint,
+        ));
+    }
+
+    #[test]
+    fn should_not_switch_without_a_different_focused_target() {
+        let current_hint = PageHintState {
+            visible: true,
+            focused: false,
+            ..PageHintState::default()
+        };
+        let same_target_hint = PageHintState {
+            visible: true,
+            focused: true,
+            ..PageHintState::default()
+        };
+        assert!(!should_switch_to_focused_target(
+            Some("ws://127.0.0.1:9222/devtools/page/current"),
+            &current_hint,
+            "ws://127.0.0.1:9222/devtools/page/current",
+            &same_target_hint,
+        ));
+
+        let visible_fallback_hint = PageHintState {
+            visible: true,
+            focused: false,
+            ..PageHintState::default()
+        };
+        assert!(!should_switch_to_focused_target(
+            Some("ws://127.0.0.1:9222/devtools/page/current"),
+            &current_hint,
+            "ws://127.0.0.1:9222/devtools/page/other",
+            &visible_fallback_hint,
+        ));
     }
 }
