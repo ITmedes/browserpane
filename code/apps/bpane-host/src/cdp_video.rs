@@ -50,8 +50,13 @@ impl Default for HintRegionKind {
 pub struct PageHintState {
     pub video_region: Option<CaptureRegion>,
     pub region_kind: HintRegionKind,
-    /// Browser content viewport in screen pixels (excludes toolbar/scrollbar).
+    /// Browser content viewport in screen pixels (excludes toolbar and native
+    /// scrollbar gutter). Used for scroll/static partitioning and wheel routing.
     pub viewport: Option<CaptureRegion>,
+    /// Full visible tab viewport in screen pixels (excludes browser chrome but
+    /// includes native scrollbar gutter). Used only for active-tab metrics
+    /// overrides after resize.
+    pub metrics_viewport: Option<CaptureRegion>,
     /// `window.devicePixelRatio * 1000`, rounded.
     pub device_scale_factor_milli: u16,
     pub scroll_y: Option<i64>,
@@ -67,6 +72,7 @@ impl Default for PageHintState {
             video_region: None,
             region_kind: HintRegionKind::Video,
             viewport: None,
+            metrics_viewport: None,
             device_scale_factor_milli: 1000,
             scroll_y: None,
             scroll_delta_y: 0,
@@ -338,7 +344,7 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
           if (p && typeof p.catch === "function") p.catch(() => {});
         } catch (_e) {}
       }
-      return { visible, focused, scrollY: currentScrollY, scrollDeltaY, region: null, viewport: null };
+      return { visible, focused, scrollY: currentScrollY, scrollDeltaY, region: null, viewport: null, metricsViewport: null };
     }
 
     const dpr = window.devicePixelRatio || 1;
@@ -351,6 +357,14 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
     const viewportCssHeight = Math.max(
       0,
       window.innerHeight || (document.documentElement ? document.documentElement.clientHeight : 0),
+    );
+    const contentViewportCssWidth = Math.max(
+      0,
+      document.documentElement ? document.documentElement.clientWidth : viewportCssWidth,
+    );
+    const contentViewportCssHeight = Math.max(
+      0,
+      document.documentElement ? document.documentElement.clientHeight : viewportCssHeight,
     );
     const isElementVisible = (el) => {
       const style = window.getComputedStyle(el);
@@ -586,8 +600,10 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
         const expanded = expandEditableRect(rect);
         const vpX = Math.round((window.screenX + insetX) * dpr);
         const vpY = Math.round((window.screenY + insetY) * dpr);
-        const vpW = Math.round(viewportCssWidth * dpr);
-        const vpH = Math.round(viewportCssHeight * dpr);
+        const vpW = Math.round(contentViewportCssWidth * dpr);
+        const vpH = Math.round(contentViewportCssHeight * dpr);
+        const metricsVpW = Math.round(viewportCssWidth * dpr);
+        const metricsVpH = Math.round(viewportCssHeight * dpr);
         return {
           visible,
           focused,
@@ -597,6 +613,7 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
           regionKind: 'editable',
           region: toScreenRegion(expanded),
           viewport: { x: vpX, y: vpY, w: vpW, h: vpH },
+          metricsViewport: { x: vpX, y: vpY, w: metricsVpW, h: metricsVpH },
         };
       }
     }
@@ -652,8 +669,10 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
 
     const vpX = Math.round((window.screenX + insetX) * dpr);
     const vpY = Math.round((window.screenY + insetY) * dpr);
-    const vpW = Math.round(viewportCssWidth * dpr);
-    const vpH = Math.round(viewportCssHeight * dpr);
+    const vpW = Math.round(contentViewportCssWidth * dpr);
+    const vpH = Math.round(contentViewportCssHeight * dpr);
+    const metricsVpW = Math.round(viewportCssWidth * dpr);
+    const metricsVpH = Math.round(viewportCssHeight * dpr);
 
     return {
       visible,
@@ -664,6 +683,7 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
       regionKind: best ? 'video' : null,
       region: best ? { x: best.x, y: best.y, w: best.w, h: best.h } : null,
       viewport: { x: vpX, y: vpY, w: vpW, h: vpH },
+      metricsViewport: { x: vpX, y: vpY, w: metricsVpW, h: metricsVpH },
     };
   } catch (_e) {
     return {
@@ -673,7 +693,8 @@ const VIDEO_PROBE_JS_TEMPLATE: &str = r#"(() => {
       scrollY: null,
       scrollDeltaY: 0,
       region: null,
-      viewport: null
+      viewport: null,
+      metricsViewport: null
     };
   }
 })()"#;
@@ -1294,8 +1315,11 @@ fn page_hint_is_stable(previous: &PageHintState, current: &PageHintState) -> boo
         && current.visible
         && previous.viewport.is_some()
         && current.viewport.is_some()
+        && previous.metrics_viewport.is_some()
+        && current.metrics_viewport.is_some()
         && previous.device_scale_factor_milli == current.device_scale_factor_milli
         && previous.viewport == current.viewport
+        && previous.metrics_viewport == current.metrics_viewport
 }
 
 fn resize_metrics_override_size(
@@ -1303,6 +1327,9 @@ fn resize_metrics_override_size(
     requested_height: u32,
     settled_hint: Option<&PageHintState>,
 ) -> (u32, u32) {
+    if let Some(viewport) = settled_hint.and_then(|hint| hint.metrics_viewport) {
+        return (viewport.w.max(1), viewport.h.max(1));
+    }
     if let Some(viewport) = settled_hint.and_then(|hint| hint.viewport) {
         return (viewport.w.max(1), viewport.h.max(1));
     }
@@ -1555,10 +1582,12 @@ fn parse_page_hint(raw: &Value) -> PageHintState {
             .and_then(|value| parse_region(value, region_kind))
             .or_else(|| parse_region(raw, region_kind));
         let viewport = obj.get("viewport").and_then(parse_viewport);
+        let metrics_viewport = obj.get("metricsViewport").and_then(parse_viewport);
         return PageHintState {
             video_region,
             region_kind,
             viewport,
+            metrics_viewport,
             device_scale_factor_milli,
             scroll_y,
             scroll_delta_y,
@@ -1699,11 +1728,15 @@ fn set_shared_state(shared: &Arc<Mutex<PageHintState>>, next: PageHintState) {
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
     };
-    // Preserve viewport once established — it only changes on display resize,
-    // and transient CDP errors should not wipe it out.
+    // Preserve viewports once established — they only change on display resize,
+    // and transient CDP errors should not wipe them out.
     let mut final_state = next;
     if final_state.viewport.is_none() && guard.viewport.is_some() {
         final_state.viewport = guard.viewport;
+        final_state.device_scale_factor_milli = guard.device_scale_factor_milli;
+    }
+    if final_state.metrics_viewport.is_none() && guard.metrics_viewport.is_some() {
+        final_state.metrics_viewport = guard.metrics_viewport;
         final_state.device_scale_factor_milli = guard.device_scale_factor_milli;
     }
     if *guard != final_state {
@@ -2005,7 +2038,8 @@ mod tests {
                     "value": {
                         "visible": true,
                         "focused": false,
-                        "viewport": { "x": 40, "y": 80, "w": 640, "h": 320 }
+                        "viewport": { "x": 40, "y": 80, "w": 624, "h": 320 },
+                        "metricsViewport": { "x": 40, "y": 80, "w": 640, "h": 320 }
                     }
                 }
             }
@@ -2016,6 +2050,15 @@ mod tests {
         assert!(!parsed.focused);
         assert_eq!(
             parsed.viewport,
+            Some(CaptureRegion {
+                x: 40,
+                y: 80,
+                w: 624,
+                h: 320,
+            })
+        );
+        assert_eq!(
+            parsed.metrics_viewport,
             Some(CaptureRegion {
                 x: 40,
                 y: 80,
@@ -2033,6 +2076,12 @@ mod tests {
             viewport: Some(CaptureRegion {
                 x: 0,
                 y: 0,
+                w: 1400,
+                h: 1036,
+            }),
+            metrics_viewport: Some(CaptureRegion {
+                x: 0,
+                y: 0,
                 w: 1416,
                 h: 1036,
             }),
@@ -2042,6 +2091,12 @@ mod tests {
             visible: true,
             device_scale_factor_milli: 2000,
             viewport: Some(CaptureRegion {
+                x: 0,
+                y: 0,
+                w: 1400,
+                h: 1036,
+            }),
+            metrics_viewport: Some(CaptureRegion {
                 x: 0,
                 y: 0,
                 w: 1416,
@@ -2056,6 +2111,12 @@ mod tests {
                 x: 0,
                 y: 0,
                 w: 1280,
+                h: 960,
+            }),
+            metrics_viewport: Some(CaptureRegion {
+                x: 0,
+                y: 0,
+                w: 1296,
                 h: 960,
             }),
             ..current
@@ -2083,6 +2144,12 @@ mod tests {
     fn resize_metrics_override_size_prefers_settled_viewport() {
         let hint = PageHintState {
             viewport: Some(CaptureRegion {
+                x: 0,
+                y: 0,
+                w: 1390,
+                h: 914,
+            }),
+            metrics_viewport: Some(CaptureRegion {
                 x: 0,
                 y: 0,
                 w: 1406,
@@ -2351,7 +2418,12 @@ mod tests {
     fn build_video_probe_js_uses_full_visible_viewport_width() {
         let js = build_video_probe_js(false, DEFAULT_SCROLL_PAUSE_WINDOW_MS, 0);
         assert!(js.contains("const viewportCssWidth = Math.max("));
+        assert!(js.contains("const contentViewportCssWidth = Math.max("));
         assert!(js.contains("window.innerWidth || (document.documentElement ? document.documentElement.clientWidth : 0)"));
+        assert!(js.contains(
+            "document.documentElement ? document.documentElement.clientWidth : viewportCssWidth"
+        ));
+        assert!(js.contains("metricsViewport: { x: vpX, y: vpY, w: metricsVpW, h: metricsVpH }"));
     }
 
     #[test]
