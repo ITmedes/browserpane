@@ -22,6 +22,7 @@ import { InputController } from './input-controller.js';
 import { SessionCapabilityRuntime } from './session-capability-runtime.js';
 import { SessionControlRuntime } from './session-control-runtime.js';
 import { SessionFrameRouterRuntime } from './session-frame-router-runtime.js';
+import { SessionRuntimeFactory } from './session-runtime-factory.js';
 import { SessionSendRuntime } from './session-send-runtime.js';
 import { SessionStreamReaderRuntime } from './session-stream-reader-runtime.js';
 import { SessionSurfaceRuntime } from './session-surface-runtime.js';
@@ -119,177 +120,102 @@ export class BpaneSession {
     this.options = options;
     this.container = options.container;
     this.tileCompositor.setScrollCopyEnabled(options.scrollCopy !== false);
-    this.audio = new AudioController(
-      options.audio ?? true,
-      (channelId, payload) => this.sendFrame(channelId, payload),
-    );
-    this.camera = new CameraController(
-      (payload) => this.sendCameraFrame(payload),
-    );
-    this.fileTransfer = new FileTransferController({
+    const runtimes = new SessionRuntimeFactory().create({
       container: this.container,
-      enabled: options.fileTransfer !== false,
-      sendFrame: (channelId, payload) => this.sendFrame(channelId, payload),
-    });
-    this.capabilityRuntime = new SessionCapabilityRuntime({
-      fileTransferOptionEnabled: options.fileTransfer !== false,
-      stopMicrophone: () => this.audio.stopMicrophone(),
-      stopCamera: () => this.camera.stopCamera(),
-      setFileTransferEnabled: (enabled) => {
-        this.fileTransfer?.setEnabled(enabled);
-      },
-      onCapabilitiesChange: (capabilities) => {
-        this.options.onCapabilitiesChange?.(capabilities);
-      },
-    });
-    this.controlRuntime = new SessionControlRuntime({
-      setRemoteSize: (width, height) => {
-        this.remoteWidth = width;
-        this.remoteHeight = height;
-      },
-      onResolutionChange: (width, height) => {
-        this.options.onResolutionChange?.(width, height);
-      },
-      setSessionFlags: (flags) => {
-        this.sessionFlags = flags;
-      },
-      setMicrophoneSupported: (supported) => {
-        this.microphoneSupported = supported;
-      },
-      setCameraSupported: (supported) => {
-        this.cameraSupported = supported;
-      },
-      configureInputExtendedKeyEvents: (enabled) => {
-        if (this.input) {
-          this.input.serverSupportsKeyEventEx = enabled;
-        }
-      },
-      sendLayoutHint: () => {
-        this.input?.sendLayoutHint();
-      },
-      updateCapabilities: () => {
-        this.updateCapabilities();
-      },
-      applyClientAccessState: (flags, width, height) => {
-        this.applyClientAccessState(flags, width, height);
-      },
-      sendControlFrame: (payload) => {
-        this.sendFrame(CH_CONTROL, payload);
-      },
-    });
-    this.sendRuntime = new SessionSendRuntime({
-      isViewerRestricted: () => this.viewerRestricted,
-      recordTx: (channelId, bytes) => {
-        this.stats.recordTx(channelId, bytes);
-      },
-      onWriteError: (message, error) => {
-        console.error(message, error);
-      },
-    });
-    this.streamReaderRuntime = new SessionStreamReaderRuntime({
-      isConnected: () => this.connected,
-      recordRx: (channelId, bytes) => {
-        this.stats.recordRx(channelId, bytes);
-      },
-      onFrame: (channelId, payload) => {
-        this.frameRouterRuntime.handleFrame(channelId, payload);
-      },
-      onReadError: (error) => {
-        console.error('[bpane] stream read error:', error);
-      },
-    });
-    this.frameRouterRuntime = new SessionFrameRouterRuntime({
       tileCompositor: this.tileCompositor,
       stats: this.stats,
-      handleVideoFrame: (payload) => {
-        this.handleVideoFrame(payload);
+      options: {
+        audioEnabled: options.audio ?? true,
+        fileTransferEnabled: options.fileTransfer !== false,
+        hiDpi: options.hiDpi ?? false,
+        pingIntervalMs: PING_INTERVAL_MS,
+        renderBackend: options.renderBackend,
+        onCapabilitiesChange: (capabilities) => {
+          this.options.onCapabilitiesChange?.(capabilities);
+        },
       },
-      handleAudioFrame: (payload) => {
-        this.audio.handleFrame(payload);
-      },
-      handleCursorUpdate: (payload) => {
-        this.handleCursorUpdate(payload);
-      },
-      handleClipboardUpdate: (payload) => {
-        this.handleClipboardUpdate(payload);
-      },
-      handleControlMessage: (payload) => {
-        this.handleControlMessage(payload);
-      },
-      handleFileDownloadFrame: (payload) => {
-        this.fileTransfer?.handleFrame(payload);
-      },
-      clearVideoOverlay: () => {
-        this.clearVideoOverlay();
-      },
-      markDisplayDirty: () => {
-        this.surfaceRuntime.markDisplayDirty();
-      },
-    });
-    this.transportRuntime = new SessionTransportRuntime({
-      onConnect: () => {
-        this.connected = true;
-        this.options.onConnect?.();
-      },
-      onDisconnect: (reason) => {
-        if (!this.connected) {
-          return;
-        }
-        this.connected = false;
-        this.options.onDisconnect?.(reason);
-      },
-      onError: (error) => {
-        this.options.onError?.(error);
-      },
-      onStream: (stream) => this.handleStream(stream),
-      onDatagram: (datagram) => {
-        this.stats.recordRx(CH_VIDEO, datagram.byteLength);
-        this.stats.videoDatagramsRx += 1;
-        this.stats.videoDatagramBytesRx += datagram.byteLength;
-        this.handleVideoFrame(datagram);
-      },
-      onDatagramReadError: (error) => {
-        console.error('[bpane] datagram read error:', error);
-      },
-      sendPing: () => {
-        this.sendPing();
-      },
-      pingIntervalMs: PING_INTERVAL_MS,
-    });
-
-    this.surfaceRuntime = new SessionSurfaceRuntime({
-      container: this.container,
-      tileCompositor: this.tileCompositor,
-      hiDpi: options.hiDpi ?? false,
-      renderBackend: options.renderBackend,
-      onTileCacheMiss: ({ frameSeq, col, row, hash }) => {
-        this.sendTileCacheMiss(frameSeq, col, row, hash);
-      },
-      sendResizeRequest: (width, height) => {
-        this.sendResizeRequest(width, height);
-      },
-      setRemoteSize: (width, height) => {
-        this.remoteWidth = width;
-        this.remoteHeight = height;
-      },
-      onResolutionChange: (width, height) => {
-        this.options.onResolutionChange?.(width, height);
-      },
-    });
-    this.videoDecoderRuntime = new SessionVideoDecoderRuntime({
-      onDecodedFrame: (frame, tileInfo) => {
-        this.surfaceRuntime.handleDecodedFrame(frame, tileInfo);
-      },
-      incrementFrameCount: () => {
-        this.stats.frameCount += 1;
-      },
-      incrementDroppedFrame: () => {
-        this.stats.videoFramesDropped += 1;
-      },
-      onDecoderError: (error) => {
-        console.error('[bpane] VideoDecoder error:', error.message);
+      context: {
+        isConnected: () => this.connected,
+        isViewerRestricted: () => this.viewerRestricted,
+        getInputController: () => this.input,
+        setRemoteSize: (width, height) => {
+          this.remoteWidth = width;
+          this.remoteHeight = height;
+        },
+        onResolutionChange: (width, height) => {
+          this.options.onResolutionChange?.(width, height);
+        },
+        setSessionFlags: (flags) => {
+          this.sessionFlags = flags;
+        },
+        setMicrophoneSupported: (supported) => {
+          this.microphoneSupported = supported;
+        },
+        setCameraSupported: (supported) => {
+          this.cameraSupported = supported;
+        },
+        updateCapabilities: () => {
+          this.updateCapabilities();
+        },
+        applyClientAccessState: (flags, width, height) => {
+          this.applyClientAccessState(flags, width, height);
+        },
+        handleVideoFrame: (payload) => {
+          this.handleVideoFrame(payload);
+        },
+        handleCursorUpdate: (payload) => {
+          this.handleCursorUpdate(payload);
+        },
+        handleClipboardUpdate: (payload) => {
+          this.handleClipboardUpdate(payload);
+        },
+        handleControlMessage: (payload) => {
+          this.handleControlMessage(payload);
+        },
+        clearVideoOverlay: () => {
+          this.clearVideoOverlay();
+        },
+        onConnect: () => {
+          this.connected = true;
+          this.options.onConnect?.();
+        },
+        onDisconnect: (reason) => {
+          if (!this.connected) {
+            return;
+          }
+          this.connected = false;
+          this.options.onDisconnect?.(reason);
+        },
+        onError: (error) => {
+          this.options.onError?.(error);
+        },
+        handleStream: (stream) => this.handleStream(stream),
+        sendPing: () => {
+          this.sendPing();
+        },
+        sendResizeRequest: (width, height) => {
+          this.sendResizeRequest(width, height);
+        },
+        sendTileCacheMiss: (frameSeq, col, row, hash) => {
+          this.sendTileCacheMiss(frameSeq, col, row, hash);
+        },
+        sendFrame: (channelId, payload) => {
+          this.sendFrame(channelId, payload);
+        },
+        sendCameraFrame: (payload) => this.sendCameraFrame(payload),
       },
     });
+    this.audio = runtimes.audio;
+    this.camera = runtimes.camera;
+    this.fileTransfer = runtimes.fileTransfer;
+    this.capabilityRuntime = runtimes.capabilityRuntime;
+    this.controlRuntime = runtimes.controlRuntime;
+    this.sendRuntime = runtimes.sendRuntime;
+    this.streamReaderRuntime = runtimes.streamReaderRuntime;
+    this.frameRouterRuntime = runtimes.frameRouterRuntime;
+    this.transportRuntime = runtimes.transportRuntime;
+    this.surfaceRuntime = runtimes.surfaceRuntime;
+    this.videoDecoderRuntime = runtimes.videoDecoderRuntime;
     this.surfaceRuntime.start();
   }
 
