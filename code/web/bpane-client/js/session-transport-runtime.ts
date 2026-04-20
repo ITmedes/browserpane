@@ -179,7 +179,7 @@ export class SessionTransportRuntime {
           break;
         }
         if (value) {
-          this.onDatagram?.(new Uint8Array(value));
+          this.onDatagram?.(this.toUint8Array(value));
         }
       }
     } catch (error) {
@@ -206,5 +206,15 @@ export class SessionTransportRuntime {
     }
     this.clearIntervalFn(this.pingInterval);
     this.pingInterval = null;
+  }
+
+  private toUint8Array(value: ArrayBufferLike | ArrayBufferView): Uint8Array {
+    if (value instanceof Uint8Array) {
+      return value;
+    }
+    if (ArrayBuffer.isView(value)) {
+      return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    }
+    return new Uint8Array(value);
   }
 }
