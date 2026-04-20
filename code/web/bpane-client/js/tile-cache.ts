@@ -42,6 +42,9 @@ export type TileCommand =
     scrollNonQuantizedFallbacksTotal: number;
     scrollResidualFullRepaintsTotal: number;
     scrollZeroSavedBatchesTotal: number;
+    hostSentHashEntries: number;
+    hostSentHashEvictionsTotal: number;
+    hostCacheMissReportsTotal: number;
   };
 
 const DEFAULT_MAX_ENTRIES = 8192;

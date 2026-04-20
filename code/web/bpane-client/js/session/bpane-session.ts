@@ -192,6 +192,8 @@ export class BpaneSession {
     misses: number;
     hitRate: number;
     size: number;
+    bytes: number;
+    evictions: number;
     fills: number;
     qoiDecodes: number;
     qoiRedundant: number;
@@ -201,6 +203,12 @@ export class BpaneSession {
     zstdRedundantBytes: number;
     cacheMisses: number;
     scrollCopies: number;
+    batchesQueued: number;
+    totalBatchCommands: number;
+    maxBatchCommands: number;
+    lastBatchCommands: number;
+    currentPendingCommands: number;
+    pendingCommandsHighWaterMark: number;
   } {
     const cache = this.tileCompositor.getCache();
     const stats = this.tileCompositor.stats;
@@ -209,6 +217,8 @@ export class BpaneSession {
       misses: cache.misses,
       hitRate: cache.hitRate,
       size: cache.size,
+      bytes: cache.bytes,
+      evictions: cache.evictions,
       fills: stats.fills,
       qoiDecodes: stats.qoiDecodes,
       qoiRedundant: stats.qoiRedundant,
@@ -218,6 +228,12 @@ export class BpaneSession {
       zstdRedundantBytes: stats.zstdRedundantBytes,
       cacheMisses: stats.cacheMisses,
       scrollCopies: stats.scrollCopies,
+      batchesQueued: stats.batchesQueued,
+      totalBatchCommands: stats.totalBatchCommands,
+      maxBatchCommands: stats.maxBatchCommands,
+      lastBatchCommands: stats.lastBatchCommands,
+      currentPendingCommands: stats.currentPendingCommands,
+      pendingCommandsHighWaterMark: stats.pendingCommandsHighWaterMark,
     };
   }
 

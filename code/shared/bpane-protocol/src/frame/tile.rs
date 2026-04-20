@@ -131,6 +131,9 @@ impl TileMessage {
                 scroll_non_quantized_fallbacks_total,
                 scroll_residual_full_repaints_total,
                 scroll_zero_saved_batches_total,
+                host_sent_hash_entries,
+                host_sent_hash_evictions_total,
+                host_cache_miss_reports_total,
             } => {
                 w.write_u8(SCROLL_STATS);
                 w.write_u32(*scroll_batches_total);
@@ -140,6 +143,9 @@ impl TileMessage {
                 w.write_u32(*scroll_non_quantized_fallbacks_total);
                 w.write_u32(*scroll_residual_full_repaints_total);
                 w.write_u32(*scroll_zero_saved_batches_total);
+                w.write_u32(*host_sent_hash_entries);
+                w.write_u32(*host_sent_hash_evictions_total);
+                w.write_u32(*host_cache_miss_reports_total);
             }
         }
         w.finish()

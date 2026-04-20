@@ -43,6 +43,12 @@ struct SessionTelemetry {
     full_refresh_tiles_requested: u64,
     last_full_refresh_tiles: u64,
     max_full_refresh_tiles: u64,
+    egress_send_stream_lock_acquires_total: u64,
+    egress_send_stream_lock_wait_us_total: u64,
+    egress_send_stream_lock_wait_us_average: f64,
+    egress_send_stream_lock_wait_us_max: u64,
+    egress_lagged_receives_total: u64,
+    egress_lagged_frames_total: u64,
 }
 
 #[derive(Deserialize)]
@@ -94,6 +100,12 @@ fn session_status_from_snapshot(snapshot: SessionTelemetrySnapshot) -> SessionSt
             full_refresh_tiles_requested: snapshot.full_refresh_tiles_requested,
             last_full_refresh_tiles: snapshot.last_full_refresh_tiles,
             max_full_refresh_tiles: snapshot.max_full_refresh_tiles,
+            egress_send_stream_lock_acquires_total: snapshot.egress_send_stream_lock_acquires_total,
+            egress_send_stream_lock_wait_us_total: snapshot.egress_send_stream_lock_wait_us_total,
+            egress_send_stream_lock_wait_us_average: snapshot.egress_send_stream_lock_wait_us_average,
+            egress_send_stream_lock_wait_us_max: snapshot.egress_send_stream_lock_wait_us_max,
+            egress_lagged_receives_total: snapshot.egress_lagged_receives_total,
+            egress_lagged_frames_total: snapshot.egress_lagged_frames_total,
         },
     }
 }

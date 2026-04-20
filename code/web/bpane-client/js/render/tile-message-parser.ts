@@ -195,7 +195,7 @@ export class TileMessageParser {
   }
 
   private static parseScrollStats(payload: Uint8Array, view: DataView): TileCommand | null {
-    if (payload.length < 29) {
+    if (payload.length < 41) {
       return null;
     }
 
@@ -208,6 +208,9 @@ export class TileMessageParser {
       scrollNonQuantizedFallbacksTotal: view.getUint32(17, true),
       scrollResidualFullRepaintsTotal: view.getUint32(21, true),
       scrollZeroSavedBatchesTotal: view.getUint32(25, true),
+      hostSentHashEntries: view.getUint32(29, true),
+      hostSentHashEvictionsTotal: view.getUint32(33, true),
+      hostCacheMissReportsTotal: view.getUint32(37, true),
     };
   }
 }

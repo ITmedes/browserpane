@@ -691,6 +691,9 @@ fn tile_pipeline_all_variants() {
         scroll_non_quantized_fallbacks_total: 2,
         scroll_residual_full_repaints_total: 3,
         scroll_zero_saved_batches_total: 4,
+        host_sent_hash_entries: 128,
+        host_sent_hash_evictions_total: 9,
+        host_cache_miss_reports_total: 7,
     };
     wire_data.extend_from_slice(&stats.to_frame().encode());
 

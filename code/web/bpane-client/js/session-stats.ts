@@ -149,6 +149,9 @@ export class SessionStats {
     hostScrollNonQuantizedFallbacksTotal: number,
     hostScrollResidualFullRepaintsTotal: number,
     hostScrollZeroSavedBatchesTotal: number,
+    hostSentHashEntries = 0,
+    hostSentHashEvictionsTotal = 0,
+    hostCacheMissReportsTotal = 0,
   ): void {
     this.hostScrollHealthTracker.record(
       hostScrollBatchesTotal,
@@ -158,6 +161,9 @@ export class SessionStats {
       hostScrollNonQuantizedFallbacksTotal,
       hostScrollResidualFullRepaintsTotal,
       hostScrollZeroSavedBatchesTotal,
+      hostSentHashEntries,
+      hostSentHashEvictionsTotal,
+      hostCacheMissReportsTotal,
     );
   }
 

@@ -20,6 +20,9 @@ export class HostScrollHealthTracker {
     hostScrollNonQuantizedFallbacksTotal: number;
     hostScrollResidualFullRepaintsTotal: number;
     hostScrollZeroSavedBatchesTotal: number;
+    hostSentHashEntries: number;
+    hostSentHashEvictionsTotal: number;
+    hostCacheMissReportsTotal: number;
     lastHostScrollStatsAtMs: number;
   } = {
     hostScrollBatchesTotal: 0,
@@ -29,6 +32,9 @@ export class HostScrollHealthTracker {
     hostScrollNonQuantizedFallbacksTotal: 0,
     hostScrollResidualFullRepaintsTotal: 0,
     hostScrollZeroSavedBatchesTotal: 0,
+    hostSentHashEntries: 0,
+    hostSentHashEvictionsTotal: 0,
+    hostCacheMissReportsTotal: 0,
     lastHostScrollStatsAtMs: 0,
   };
 
@@ -46,6 +52,9 @@ export class HostScrollHealthTracker {
     hostScrollNonQuantizedFallbacksTotal: number,
     hostScrollResidualFullRepaintsTotal: number,
     hostScrollZeroSavedBatchesTotal: number,
+    hostSentHashEntries = 0,
+    hostSentHashEvictionsTotal = 0,
+    hostCacheMissReportsTotal = 0,
   ): void {
     const prevBatches = this.totals.hostScrollBatchesTotal;
     const prevFallbacks = this.totals.hostScrollFallbacksTotal;
@@ -54,6 +63,8 @@ export class HostScrollHealthTracker {
     const prevNonQuantized = this.totals.hostScrollNonQuantizedFallbacksTotal;
     const prevResidualFullRepaints = this.totals.hostScrollResidualFullRepaintsTotal;
     const prevZeroSaved = this.totals.hostScrollZeroSavedBatchesTotal;
+    const prevSentHashEvictions = this.totals.hostSentHashEvictionsTotal;
+    const prevCacheMissReports = this.totals.hostCacheMissReportsTotal;
 
     if (
       !this.initialized
@@ -64,6 +75,8 @@ export class HostScrollHealthTracker {
       || hostScrollNonQuantizedFallbacksTotal < prevNonQuantized
       || hostScrollResidualFullRepaintsTotal < prevResidualFullRepaints
       || hostScrollZeroSavedBatchesTotal < prevZeroSaved
+      || hostSentHashEvictionsTotal < prevSentHashEvictions
+      || hostCacheMissReportsTotal < prevCacheMissReports
     ) {
       this.recentHistory = [];
       this.initialized = true;
@@ -86,6 +99,9 @@ export class HostScrollHealthTracker {
     this.totals.hostScrollNonQuantizedFallbacksTotal = hostScrollNonQuantizedFallbacksTotal;
     this.totals.hostScrollResidualFullRepaintsTotal = hostScrollResidualFullRepaintsTotal;
     this.totals.hostScrollZeroSavedBatchesTotal = hostScrollZeroSavedBatchesTotal;
+    this.totals.hostSentHashEntries = hostSentHashEntries;
+    this.totals.hostSentHashEvictionsTotal = hostSentHashEvictionsTotal;
+    this.totals.hostCacheMissReportsTotal = hostCacheMissReportsTotal;
     this.totals.lastHostScrollStatsAtMs = this.nowProvider();
   }
 
@@ -105,6 +121,9 @@ export class HostScrollHealthTracker {
       hostScrollNonQuantizedFallbacksTotal: this.totals.hostScrollNonQuantizedFallbacksTotal,
       hostScrollResidualFullRepaintsTotal: this.totals.hostScrollResidualFullRepaintsTotal,
       hostScrollZeroSavedBatchesTotal: this.totals.hostScrollZeroSavedBatchesTotal,
+      hostSentHashEntries: this.totals.hostSentHashEntries,
+      hostSentHashEvictionsTotal: this.totals.hostSentHashEvictionsTotal,
+      hostCacheMissReportsTotal: this.totals.hostCacheMissReportsTotal,
       hostFallbackRate,
       hostFallbackRateRecent20: recent20.rate,
       hostFallbackRateRecent50: recent50.rate,

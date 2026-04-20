@@ -24,6 +24,9 @@ type FrameRouterStats = {
     hostScrollNonQuantizedFallbacksTotal: number,
     hostScrollResidualFullRepaintsTotal: number,
     hostScrollZeroSavedBatchesTotal: number,
+    hostSentHashEntries: number,
+    hostSentHashEvictionsTotal: number,
+    hostCacheMissReportsTotal: number,
   ) => void;
 };
 
@@ -162,6 +165,9 @@ export class SessionFrameRouterRuntime {
           command.scrollNonQuantizedFallbacksTotal,
           command.scrollResidualFullRepaintsTotal,
           command.scrollZeroSavedBatchesTotal,
+          command.hostSentHashEntries,
+          command.hostSentHashEvictionsTotal,
+          command.hostCacheMissReportsTotal,
         );
         break;
       default:
