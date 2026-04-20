@@ -27,6 +27,7 @@ import { SessionResizeRuntime } from './session-resize-runtime.js';
 import { SessionSendRuntime } from './session-send-runtime.js';
 import { SessionStreamReaderRuntime } from './session-stream-reader-runtime.js';
 import { SessionTransportRuntime } from './session-transport-runtime.js';
+import { SessionVideoDisplayRuntime } from './session-video-display-runtime.js';
 import { SessionConnectOptionsValidator } from './shared/connect-options-validator.js';
 
 export type RenderBackendPreference = 'auto' | 'canvas2d' | 'webgl2';
@@ -69,7 +70,6 @@ export type { WebGLRendererDiagnostics as RenderDiagnostics } from './webgl-comp
 
 const PING_INTERVAL_MS = 5000;
 const TILE_CACHE_MISS = 0x09;
-const VIDEO_OVERLAY_STALE_MS = 450;
 export class BpaneSession {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null = null;
@@ -132,20 +132,10 @@ export class BpaneSession {
   private spsNal: Uint8Array | null = null;
   private ppsNal: Uint8Array | null = null;
   private seiNals: Uint8Array[] = [];
-  private pendingTileInfo: TileInfo | null = null;
   private currentDecodeTileInfo: TileInfo | null = null;
-  private pendingVideoFrame: VideoFrame | null = null;
-  private displayLoopRunning = false;
-  private displayDirty = false;
+  private videoDisplayRuntime: SessionVideoDisplayRuntime;
   // Extracted: all transfer/tile/scroll stats live in SessionStats
   private stats = new SessionStats();
-
-  // Persistent video buffer: holds the latest decoded video frame so it can
-  // be redrawn on top of tiles every rAF, ensuring correct z-ordering.
-  private videoBuffer: HTMLCanvasElement | null = null;
-  private videoBufferCtx: CanvasRenderingContext2D | null = null;
-  private videoBufferTileInfo: TileInfo | null = null;
-  private lastVideoFrameAtMs = 0;
 
   private constructor(options: BpaneOptions) {
     this.options = options;
@@ -255,7 +245,7 @@ export class BpaneSession {
         this.clearVideoOverlay();
       },
       markDisplayDirty: () => {
-        this.displayDirty = true;
+        this.videoDisplayRuntime.markDirty();
       },
     });
     this.transportRuntime = new SessionTransportRuntime({
@@ -345,6 +335,13 @@ export class BpaneSession {
     this.tileCompositor.setCacheMissHandler(({ frameSeq, col, row, hash }) => {
       this.sendTileCacheMiss(frameSeq, col, row, hash);
     });
+    this.videoDisplayRuntime = new SessionVideoDisplayRuntime({
+      canvas: this.canvas,
+      ctx: this.ctx,
+      glRenderer: this.glRenderer,
+      getGridConfig: () => this.tileCompositor.getGridConfig(),
+      getVideoRegion: () => this.tileCompositor.getVideoRegion(),
+    });
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -364,7 +361,7 @@ export class BpaneSession {
         }
       },
       markDisplayDirty: () => {
-        this.displayDirty = true;
+        this.videoDisplayRuntime.markDirty();
       },
       sendResizeRequest: (width, height) => {
         this.sendResizeRequest(width, height);
@@ -381,7 +378,7 @@ export class BpaneSession {
     resizeObserver.observe(this.container);
 
     // Start display loop
-    this.startDisplayLoop();
+    this.videoDisplayRuntime.start();
   }
 
   /**
@@ -471,7 +468,6 @@ export class BpaneSession {
   disconnect(): void {
     if (!this.connected) return;
     this.connected = false;
-    this.displayLoopRunning = false;
     this.resizeRuntime.destroy();
 
     // Remove all DOM event listeners
@@ -494,6 +490,7 @@ export class BpaneSession {
     }
 
     this.clearVideoOverlay();
+    this.videoDisplayRuntime.destroy();
     this.transportRuntime.disconnect();
 
     if (this.canvas.parentNode) {
@@ -532,16 +529,8 @@ export class BpaneSession {
   }
 
   private clearVideoOverlay(): void {
-    if (this.pendingVideoFrame) {
-      this.pendingVideoFrame.close();
-      this.pendingVideoFrame = null;
-    }
-    this.pendingTileInfo = null;
     this.currentDecodeTileInfo = null;
-    this.videoBuffer = null;
-    this.videoBufferCtx = null;
-    this.videoBufferTileInfo = null;
-    this.lastVideoFrameAtMs = 0;
+    this.videoDisplayRuntime.clearVideoOverlay();
   }
 
   private async setupTransport(): Promise<void> {
@@ -554,93 +543,6 @@ export class BpaneSession {
 
   // ── Video decode via WebCodecs ────────────────────────────────────
 
-  private startDisplayLoop(): void {
-    if (this.displayLoopRunning) return;
-    this.displayLoopRunning = true;
-    const loop = () => {
-      if (!this.displayDirty) {
-        if (this.displayLoopRunning) requestAnimationFrame(loop);
-        return;
-      }
-      this.displayDirty = false;
-
-      // Step 1: If there's a new decoded video frame, capture it for re-compositing.
-      if (this.pendingVideoFrame) {
-        if (this.glRenderer) {
-          // WebGL path: upload VideoFrame directly to GPU texture (zero-copy on Chrome).
-          // No intermediate Canvas2D copy needed.
-          this.glRenderer.uploadVideoFrame(this.pendingVideoFrame);
-        } else {
-          // Canvas2D path: copy to a persistent canvas buffer for re-compositing.
-          const fw = this.pendingVideoFrame.displayWidth;
-          const fh = this.pendingVideoFrame.displayHeight;
-          if (!this.videoBuffer || this.videoBuffer.width !== fw || this.videoBuffer.height !== fh) {
-            this.videoBuffer = document.createElement('canvas');
-            this.videoBuffer.width = fw;
-            this.videoBuffer.height = fh;
-            this.videoBufferCtx = this.videoBuffer.getContext('2d');
-          }
-          if (this.videoBufferCtx) {
-            this.videoBufferCtx.drawImage(this.pendingVideoFrame, 0, 0);
-          }
-        }
-        this.pendingVideoFrame.close();
-        this.videoBufferTileInfo = this.pendingTileInfo;
-        this.lastVideoFrameAtMs = performance.now();
-        this.pendingVideoFrame = null;
-        this.pendingTileInfo = null;
-      }
-
-      // Step 2: Composite video on top of tiles. This runs every rAF so
-      // even if tiles drew over the video region, video is always on top.
-      const hasFreshVideo = this.lastVideoFrameAtMs > 0
-        && (performance.now() - this.lastVideoFrameAtMs) <= VIDEO_OVERLAY_STALE_MS;
-      if (hasFreshVideo && this.canvas) {
-        if (this.glRenderer) {
-          // WebGL path: redraw cached GPU video texture (no CPU round-trip)
-          const tile = this.videoBufferTileInfo;
-          if (tile && tile.tileW > 0 && tile.tileH > 0) {
-            this.glRenderer.drawCachedVideo(tile.tileX, tile.tileY, tile.tileW, tile.tileH);
-          } else if (!this.tileCompositor.getGridConfig()) {
-            this.glRenderer.drawCachedVideo(0, 0, this.canvas.width, this.canvas.height);
-          } else {
-            const vr = this.tileCompositor.getVideoRegion();
-            if (vr && vr.w > 0 && vr.h > 0) {
-              this.glRenderer.drawCachedVideoCropped(
-                vr.x, vr.y, vr.w, vr.h,
-                vr.x, vr.y, vr.w, vr.h,
-              );
-            }
-          }
-        } else if (this.ctx && this.videoBuffer && this.videoBufferCtx) {
-          // Canvas2D path (fallback)
-          const tile = this.videoBufferTileInfo;
-          if (tile && tile.tileW > 0 && tile.tileH > 0) {
-            this.ctx.drawImage(
-              this.videoBuffer,
-              0, 0, this.videoBuffer.width, this.videoBuffer.height,
-              tile.tileX, tile.tileY, tile.tileW, tile.tileH,
-            );
-          } else if (!this.tileCompositor.getGridConfig()) {
-            this.ctx.drawImage(this.videoBuffer, 0, 0, this.canvas.width, this.canvas.height);
-          } else {
-            const vr = this.tileCompositor.getVideoRegion();
-            if (vr && vr.w > 0 && vr.h > 0) {
-              this.ctx.drawImage(
-                this.videoBuffer,
-                vr.x, vr.y, vr.w, vr.h,
-                vr.x, vr.y, vr.w, vr.h,
-              );
-            }
-          }
-        }
-      }
-
-      if (this.displayLoopRunning) requestAnimationFrame(loop);
-    };
-    requestAnimationFrame(loop);
-  }
-
   private initDecoder(): void {
     if (this.videoDecoder) {
       try { this.videoDecoder.close(); } catch (_) { /* ignore */ }
@@ -648,10 +550,7 @@ export class BpaneSession {
     this.videoDecoder = new VideoDecoder({
       output: (frame: VideoFrame) => {
         if ((!this.ctx && !this.glRenderer) || !this.canvas) { frame.close(); return; }
-        if (this.pendingVideoFrame) this.pendingVideoFrame.close();
-        this.pendingVideoFrame = frame;
-        this.pendingTileInfo = this.currentDecodeTileInfo;
-        this.displayDirty = true;
+        this.videoDisplayRuntime.handleDecodedFrame(frame, this.currentDecodeTileInfo);
       },
       error: (e: DOMException) => {
         console.error('[bpane] VideoDecoder error:', e.message);
@@ -747,7 +646,7 @@ export class BpaneSession {
 
   private handleCursorUpdate(payload: Uint8Array): void {
     if (this.cursorRuntime.handlePayload(payload)) {
-      this.displayDirty = true;
+      this.videoDisplayRuntime.markDirty();
     }
   }
 
