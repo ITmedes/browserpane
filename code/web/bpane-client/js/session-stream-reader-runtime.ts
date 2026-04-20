@@ -1,4 +1,4 @@
-import { FRAME_HEADER_SIZE, parseFrames } from './protocol.js';
+import { FRAME_HEADER_SIZE, parseFramesInto } from './protocol.js';
 
 export interface SessionStreamReaderRuntimeInput {
   isConnected: () => boolean;
@@ -46,11 +46,10 @@ export class SessionStreamReaderRuntime {
         buffer.set(chunk, bufferLength);
         bufferLength += chunk.length;
 
-        const [frames, remaining] = parseFrames(buffer.subarray(0, bufferLength));
-        for (const frame of frames) {
-          this.recordRx(frame.channelId, frame.payload.length + FRAME_HEADER_SIZE);
-          this.onFrame(frame.channelId, frame.payload);
-        }
+        const remaining = parseFramesInto(buffer.subarray(0, bufferLength), (channelId, payload) => {
+          this.recordRx(channelId, payload.length + FRAME_HEADER_SIZE);
+          this.onFrame(channelId, payload);
+        });
 
         if (remaining.length > 0) {
           buffer.copyWithin(0, bufferLength - remaining.length, bufferLength);
