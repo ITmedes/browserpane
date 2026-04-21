@@ -6,6 +6,8 @@ use crate::tiles;
 pub struct ScrollResidualCoords {
     pub residual: Vec<tiles::TileCoord>,
     pub exposed_strip: Vec<tiles::TileCoord>,
+    pub residual_area_px: usize,
+    pub exposed_strip_area_px: usize,
 }
 
 fn band_matches_shifted_prev(
@@ -53,6 +55,43 @@ fn contiguous_row_span(row_coords: &[tiles::TileCoord]) -> Option<(u16, u16)> {
     Some((first, last))
 }
 
+fn shifted_diff_row_area(
+    current: &[u8],
+    previous: &[u8],
+    stride: usize,
+    screen_h: usize,
+    rect: &tiles::Rect,
+    scroll_dy: i16,
+) -> usize {
+    if rect.w == 0 || rect.h == 0 {
+        return 0;
+    }
+    let dy = scroll_dy as i32;
+    let x_bytes = rect.x as usize * 4;
+    let row_bytes = rect.w as usize * 4;
+    let mut changed_rows = 0usize;
+
+    for row in 0..rect.h as usize {
+        let cy = rect.y as i32 + row as i32;
+        let py = cy + dy;
+        if py < 0 || py >= screen_h as i32 {
+            return rect.w as usize * rect.h as usize;
+        }
+        let curr_off = cy as usize * stride + x_bytes;
+        let prev_off = py as usize * stride + x_bytes;
+        let curr_end = curr_off + row_bytes;
+        let prev_end = prev_off + row_bytes;
+        if curr_end > current.len() || prev_end > previous.len() {
+            return rect.w as usize * rect.h as usize;
+        }
+        if current[curr_off..curr_end] != previous[prev_off..prev_end] {
+            changed_rows += 1;
+        }
+    }
+
+    changed_rows * rect.w as usize
+}
+
 fn analyze_scroll_residual_row_bands(
     current: &[u8],
     previous: &[u8],
@@ -66,6 +105,8 @@ fn analyze_scroll_residual_row_bands(
     let ts = grid.tile_size;
     let mut residual = Vec::with_capacity(emit_coords.len() / 2);
     let mut exposed_strip = Vec::with_capacity((emit_coords.len() / 8).max(1));
+    let mut residual_area_px = 0usize;
+    let mut exposed_strip_area_px = 0usize;
     let mut index = 0usize;
 
     while index < emit_coords.len() {
@@ -86,6 +127,15 @@ fn analyze_scroll_residual_row_bands(
         if shifted_top < 0 || shifted_bottom >= screen_h {
             exposed_strip.extend_from_slice(row_coords);
             residual.extend_from_slice(row_coords);
+            let row_area = row_coords
+                .iter()
+                .map(|coord| {
+                    let x = coord.col * ts;
+                    usize::from(ts.min(grid.screen_w.saturating_sub(x))) * h
+                })
+                .sum::<usize>();
+            residual_area_px += row_area;
+            exposed_strip_area_px += row_area;
             continue;
         }
 
@@ -118,15 +168,17 @@ fn analyze_scroll_residual_row_bands(
             let x = coord.col * ts;
             let w = ts.min(grid.screen_w.saturating_sub(x));
             let rect = tiles::Rect::new(x, row * ts, w, h as u16);
-            if !tile_matches_shifted_prev(
+            let changed_area = shifted_diff_row_area(
                 current,
                 previous,
                 stride,
                 grid.screen_h as usize,
                 &rect,
                 scroll_dy,
-            ) {
+            );
+            if changed_area > 0 {
                 residual.push(coord);
+                residual_area_px += changed_area;
             }
         }
     }
@@ -134,6 +186,8 @@ fn analyze_scroll_residual_row_bands(
     ScrollResidualCoords {
         residual,
         exposed_strip,
+        residual_area_px,
+        exposed_strip_area_px,
     }
 }
 
@@ -210,6 +264,14 @@ pub fn analyze_scroll_residual_emit_coords(
         return ScrollResidualCoords {
             residual: emit_coords.to_vec(),
             exposed_strip: Vec::new(),
+            residual_area_px: emit_coords
+                .iter()
+                .map(|coord| {
+                    let rect = offset_tile_rect_for_emit(*coord, grid, grid_offset_y);
+                    rect.w as usize * rect.h as usize
+                })
+                .sum(),
+            exposed_strip_area_px: 0,
         };
     }
     if grid_offset_y == 0
@@ -230,6 +292,8 @@ pub fn analyze_scroll_residual_emit_coords(
     let screen_h = grid.screen_h as i32;
     let mut residual = Vec::with_capacity(emit_coords.len() / 2);
     let mut exposed_strip = Vec::with_capacity((emit_coords.len() / 8).max(1));
+    let mut residual_area_px = 0usize;
+    let mut exposed_strip_area_px = 0usize;
 
     for &coord in emit_coords {
         let rect = offset_tile_rect_for_emit(coord, grid, grid_offset_y);
@@ -241,23 +305,30 @@ pub fn analyze_scroll_residual_emit_coords(
         if shifted_top < 0 || shifted_bottom >= screen_h {
             exposed_strip.push(coord);
             residual.push(coord);
+            let rect_area = rect.w as usize * rect.h as usize;
+            residual_area_px += rect_area;
+            exposed_strip_area_px += rect_area;
             continue;
         }
-        if !tile_matches_shifted_prev(
+        let changed_area = shifted_diff_row_area(
             current,
             previous,
             stride,
             grid.screen_h as usize,
             &rect,
             scroll_dy,
-        ) {
+        );
+        if changed_area > 0 {
             residual.push(coord);
+            residual_area_px += changed_area;
         }
     }
 
     ScrollResidualCoords {
         residual,
         exposed_strip,
+        residual_area_px,
+        exposed_strip_area_px,
     }
 }
 
