@@ -49,6 +49,25 @@ export type ScrollBatchStats = {
 export type HostScrollHealthSnapshot = {
   hostScrollBatchesTotal: number;
   hostScrollFallbacksTotal: number;
+  hostScrollNonQuantizedFallbacksTotal: number;
+  hostScrollResidualFullRepaintsTotal: number;
+  hostScrollResidualInteriorLimitFallbacksTotal: number;
+  hostScrollResidualLowSavedRatioFallbacksTotal: number;
+  hostScrollResidualLargeRowShiftFallbacksTotal: number;
+  hostScrollResidualOtherFallbacksTotal: number;
+  hostScrollZeroSavedBatchesTotal: number;
+  hostScrollSplitRegionBatchesTotal: number;
+  hostScrollStickyBandBatchesTotal: number;
+  hostScrollChromeTilesTotal: number;
+  hostScrollExposedStripTilesTotal: number;
+  hostScrollInteriorResidualTilesTotal: number;
+  hostScrollEdgeStripResidualTilesTotal: number;
+  hostScrollSmallEdgeStripResidualTilesTotal: number;
+  hostScrollSmallEdgeStripResidualRowsTotal: number;
+  hostScrollSmallEdgeStripResidualAreaPxTotal: number;
+  hostSentHashEntries: number;
+  hostSentHashEvictionsTotal: number;
+  hostCacheMissReportsTotal: number;
   hostFallbackRate: number;
   hostFallbackRateRecent20: number;
   hostFallbackRateRecent50: number;
@@ -102,7 +121,7 @@ export type SessionStatsSnapshot = {
       subTileScrollReuseRate: number;
       subTileComposeCandidateRate: number;
     };
-    scrollHealth: HostScrollHealthSnapshot;
+  scrollHealth: HostScrollHealthSnapshot;
   };
   video: {
     decodedFrames: number;

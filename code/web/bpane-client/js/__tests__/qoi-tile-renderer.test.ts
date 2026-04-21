@@ -131,6 +131,29 @@ describe('QoiTileRenderer', () => {
     expect(ctx.putImageData).not.toHaveBeenCalled();
   });
 
+  it('does not cache tiles with a zero hash', () => {
+    const cache = new TileCache();
+    const ctx = createCanvasContext();
+    const renderer = new QoiTileRenderer();
+
+    const result = renderer.draw({
+      cache,
+      hash: 0n,
+      data: createPngLikeQoi(),
+      rect: { x: 0, y: 0, w: 1, h: 1 },
+      ctx,
+      glRenderer: null,
+    });
+
+    expect(result).toEqual({
+      kind: 'drawn',
+      redundant: false,
+      decodedBytes: createPngLikeQoi().byteLength,
+    });
+    expect(cache.size).toBe(0);
+    expect(ctx.putImageData).toHaveBeenCalledWith(expect.any(ImageData), 0, 0);
+  });
+
   it('reports decode failure for malformed payloads', () => {
     const renderer = new QoiTileRenderer();
 

@@ -195,7 +195,7 @@ export class TileMessageParser {
   }
 
   private static parseScrollStats(payload: Uint8Array, view: DataView): TileCommand | null {
-    if (payload.length < 17) {
+    if (payload.length < 93) {
       return null;
     }
 
@@ -205,6 +205,25 @@ export class TileMessageParser {
       scrollFullFallbacksTotal: view.getUint32(5, true),
       scrollPotentialTilesTotal: view.getUint32(9, true),
       scrollSavedTilesTotal: view.getUint32(13, true),
+      scrollNonQuantizedFallbacksTotal: view.getUint32(17, true),
+      scrollResidualFullRepaintsTotal: view.getUint32(21, true),
+      scrollResidualInteriorLimitFallbacksTotal: view.getUint32(25, true),
+      scrollResidualLowSavedRatioFallbacksTotal: view.getUint32(29, true),
+      scrollResidualLargeRowShiftFallbacksTotal: view.getUint32(33, true),
+      scrollResidualOtherFallbacksTotal: view.getUint32(37, true),
+      scrollZeroSavedBatchesTotal: view.getUint32(41, true),
+      scrollSplitRegionBatchesTotal: view.getUint32(45, true),
+      scrollStickyBandBatchesTotal: view.getUint32(49, true),
+      scrollChromeTilesTotal: view.getUint32(53, true),
+      scrollExposedStripTilesTotal: view.getUint32(57, true),
+      scrollInteriorResidualTilesTotal: view.getUint32(61, true),
+      scrollEdgeStripResidualTilesTotal: view.getUint32(65, true),
+      scrollSmallEdgeStripResidualTilesTotal: view.getUint32(69, true),
+      scrollSmallEdgeStripResidualRowsTotal: view.getUint32(73, true),
+      scrollSmallEdgeStripResidualAreaPxTotal: view.getUint32(77, true),
+      hostSentHashEntries: view.getUint32(81, true),
+      hostSentHashEvictionsTotal: view.getUint32(85, true),
+      hostCacheMissReportsTotal: view.getUint32(89, true),
     };
   }
 }

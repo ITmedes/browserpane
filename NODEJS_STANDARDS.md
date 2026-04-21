@@ -39,6 +39,68 @@ TypeScript changes should normally pass the narrowest relevant set of:
 
 When linting is added or expanded, use typed linting rather than syntax-only linting.
 
+## Performance Baseline
+
+Treat performance as part of design, not as a late cleanup pass.
+
+- Node.js is a good fit here for gateways, orchestration, protocol adapters, APIs, and control-plane services.
+- Do not treat Node.js as the default place for ultra-deterministic, hottest compute loops. If a path becomes truly CPU-bound and latency-critical, move that compute behind a dedicated Rust, native, or worker-owned boundary.
+- Keep callback and event-handler work bounded. Do not let a single DOM event, stream read, poll tick, or request handler perform unbounded work.
+- Prefer chunking, batching with caps, or yielding over long synchronous loops in hot paths.
+- Do not put blocking or CPU-heavy work on the main Node request path or the browser event path when it can be isolated behind a dedicated runtime, worker, or native subsystem.
+- Optimize only after identifying the hot path. Prefer measurements over intuition for any invasive rewrite.
+
+For this repo, the most important practical rule is:
+
+- Favor predictable, low-allocation hot paths in render, transport, parsing, and connection-management code.
+
+## Node Runtime And Throughput Rules
+
+- Keep the event loop for orchestration and non-blocking I/O. Use `worker_threads` only for CPU-heavy JavaScript, not for normal network I/O.
+- If one machine needs more ingress capacity, prefer multiple processes or sockets over trying to push all ingress through one event loop.
+- Respect backpressure everywhere:
+  - stop writing when a stream returns `false`
+  - wait for `drain`
+  - bound queues instead of letting memory absorb bursts silently
+- For latency-sensitive TCP flows, explicitly disable Nagle with `setNoDelay(true)` unless there is a proven reason not to.
+- For internal HTTP traffic, configure keep-alive deliberately. Do not rely on implicit default socket behavior for performance-sensitive paths.
+- Prefer explicit connection, queue, and retry limits over “best effort” growth. A saturated service should shed work predictably rather than collapse under unbounded buffering.
+
+## Memory And GC Rules
+
+- Assume allocation rate matters. In long-running Node services and browser hot paths, object churn is a performance bug until proven otherwise.
+- Prefer binary payloads and typed arrays over transient object graphs in hot code.
+- Measure memory explicitly:
+  - heap usage
+  - RSS
+  - external / buffer memory
+  - queue depth or live buffered work
+- Tune heap flags only after measurement. Do not cargo-cult `--max-old-space-size` or other GC flags into runtime manifests.
+- Prefer eliminating allocation churn before trying to “fix” GC with heap-size changes.
+
+## TypeScript Build And Runtime Rules
+
+- Treat TypeScript primarily as a build-time safety tool. Runtime performance comes from emitted JavaScript shape and actual runtime behavior, not from TypeScript syntax itself.
+- For service-style Node code, prefer precompiled JavaScript artifacts for production-oriented execution paths.
+- Do not rely on Node’s built-in lightweight TypeScript stripping as a substitute for normal build and typecheck flows in production services.
+- For Node-targeted packages, prefer this compiler baseline where practical:
+  - `isolatedModules`
+  - `verbatimModuleSyntax`
+  - `incremental`
+- Use build-speed tradeoffs such as `skipLibCheck` deliberately and keep full correctness checks in CI or release gates.
+- Optimize the runtime data model, not the TypeScript surface syntax:
+  - stable object shapes
+  - dense arrays
+  - typed arrays on binary paths
+  - explicit ownership of buffers and views
+
+## Hot-Path Data Ownership Rules
+
+- A zero-copy view is only valid when the backing buffer outlives the consumer.
+- Do not replace safe copies with `subarray()` or shared views if the source buffer is compacted, reused, or mutated later.
+- When payload lifetime is not obvious, choose explicit ownership over cleverness.
+- When reusable scratch buffers or objects are introduced, document who owns them and when reuse is safe.
+
 ## Project Structure
 
 Organize TypeScript code around explicit layers and bounded contexts:
@@ -87,6 +149,20 @@ Rules:
 - Prefer explicit return types on exported functions and public methods.
 - Avoid boolean-flag APIs that combine multiple behaviors. Use explicit command objects or discriminated unions instead.
 - Prefer `null` only when an external API or protocol requires it. Otherwise use absence or an explicit union.
+
+## Performance-Oriented Data Rules
+
+These rules matter most in `bpane-client` render/transport paths and in long-running Node services such as `mcp-bridge`.
+
+- Prefer binary data in `Uint8Array`, `ArrayBuffer`, `DataView`, and other typed-array forms on hot paths.
+- Avoid converting binary payloads into object graphs earlier than necessary.
+- Avoid unnecessary copies. Use views only when ownership and lifetime are still correct.
+- Do not replace safe copies with shared views if the source buffer is reused, compacted, or mutated later.
+- Keep object shapes stable in hot code. Initialize fields consistently and avoid ad-hoc property mutation patterns.
+- Keep arrays dense and type-stable. Do not mix unrelated element shapes in performance-sensitive arrays.
+- Reuse scratch buffers, output objects, and temporary typed arrays when ownership is local and safe.
+- Avoid per-item allocation in high-frequency loops when a reusable caller-owned scratch object or buffer is possible.
+- Avoid string construction in hot loops when the same derived value can be cached safely.
 
 ## `type` vs `interface`
 
@@ -250,6 +326,56 @@ Usage rules:
 - Fire-and-forget work must be rare and must route failures to a named handler.
 - Do not mix `.then()` chains and `await` in the same method without a clear reason.
 - Prefer `async` and `await` for linear application flow.
+
+## Backpressure And Queueing
+
+- Every queue must be bounded or have an explicit growth policy.
+- Do not allow silent unbounded accumulation of messages, frames, requests, or connection state.
+- When a producer can outrun a consumer, define the behavior explicitly:
+  - block
+  - drop oldest
+  - drop newest
+  - coalesce
+  - degrade quality
+- Document the chosen policy in the owning class.
+- For stream-like code, respect backpressure signals instead of continuing to write blindly.
+- For browser-side high-frequency events, coalescing is usually better than naive queue growth.
+
+## Node Service Runtime Rules
+
+These rules apply especially to `code/integrations/mcp-bridge` and future Node services.
+
+- Use precompiled JavaScript artifacts in production-oriented service flows rather than relying on runtime TypeScript behavior.
+- Add timeouts to network calls that can otherwise hang indefinitely.
+- Use `AbortController` for fetch-style operations where timeout and cancellation matter.
+- Add bounded retry and backoff behavior for polling and retry loops.
+- Bound live connection maps and session registries. Do not rely on “normal close behavior” as the only protection against overload.
+- Prefer one clear concurrency model per service. Do not mix timers, event handlers, and ad-hoc background work without explicit ownership.
+
+For Node-targeted TypeScript configs, prefer:
+
+- `isolatedModules`
+- `verbatimModuleSyntax`
+- `incremental`
+
+Use build-speed tradeoffs such as `skipLibCheck` only deliberately and keep full correctness checks in CI or release gates.
+
+## Runtime Observability
+
+- Long-running Node services should expose or log enough runtime data to detect saturation early.
+- At minimum, track:
+  - CPU usage
+  - memory usage
+  - queue depth or buffered work
+  - connection counts
+  - retry / timeout counts
+- For event-loop-driven Node services, event loop utilization and event loop delay are preferred runtime signals.
+- For browser-client hot paths, add domain-specific counters instead of generic noise:
+  - tile batch sizes
+  - decode counts
+  - dropped frames
+  - cache misses
+  - scroll-copy effectiveness
 
 ## Testing Standards
 

@@ -67,6 +67,7 @@ pub struct TileCaptureThread {
     // ── Grid & emitter ───────────────────────────────────────────────
     pub(crate) grid: tiles::TileGrid,
     pub(crate) emitter: tiles::emitter::TileEmitter,
+    pub(crate) full_emit_coords: Vec<tiles::TileCoord>,
 
     // ── Scroll state ─────────────────────────────────────────────────
     pub(crate) prev_frame: Option<Vec<u8>>,
@@ -79,9 +80,26 @@ pub struct TileCaptureThread {
     pub(crate) scroll_cooldown_frames: u8,
     pub(crate) scroll_residual_batches_total: u64,
     pub(crate) scroll_residual_fallback_full_total: u64,
+    pub(crate) scroll_fallback_non_quantized_total: u64,
+    pub(crate) scroll_fallback_residual_full_repaint_total: u64,
+    pub(crate) scroll_fallback_residual_interior_limit_total: u64,
+    pub(crate) scroll_fallback_residual_low_saved_ratio_total: u64,
+    pub(crate) scroll_fallback_residual_large_row_shift_total: u64,
+    pub(crate) scroll_fallback_residual_other_total: u64,
+    pub(crate) scroll_zero_saved_batches_total: u64,
     pub(crate) scroll_potential_tiles_total: u64,
     pub(crate) scroll_residual_tiles_total: u64,
     pub(crate) scroll_saved_tiles_total: u64,
+    pub(crate) scroll_partition_split_batches_total: u64,
+    pub(crate) scroll_partition_sticky_band_batches_total: u64,
+    pub(crate) scroll_chrome_tiles_total: u64,
+    pub(crate) scroll_exposed_strip_tiles_total: u64,
+    pub(crate) scroll_interior_residual_tiles_total: u64,
+    pub(crate) scroll_edge_strip_residual_tiles_total: u64,
+    pub(crate) scroll_small_edge_strip_residual_tiles_total: u64,
+    pub(crate) scroll_small_edge_strip_residual_rows_total: u64,
+    pub(crate) scroll_small_edge_strip_residual_area_px_total: u64,
+    pub(crate) client_cache_miss_reports_total: u64,
     pub(crate) scroll_thin_mode_active: bool,
     pub(crate) scroll_residual_was_active: bool,
     pub(crate) scroll_quiet_frames: u8,
@@ -180,6 +198,9 @@ impl TileCaptureThread {
         let grid = tiles::TileGrid::new(screen_w, screen_h, tile_size);
         let emitter = tiles::emitter::TileEmitter::with_codec(grid.cols, grid.rows, tile_codec);
         let total_tiles = grid.cols as usize * grid.rows as usize;
+        let full_emit_coords: Vec<tiles::TileCoord> = (0..grid.rows)
+            .flat_map(|r| (0..grid.cols).map(move |c| tiles::TileCoord::new(c, r)))
+            .collect();
 
         let damage = capture::x11::DamageTracker::with_options(
             display,
@@ -214,6 +235,7 @@ impl TileCaptureThread {
             screen_h,
             grid,
             emitter,
+            full_emit_coords,
             prev_frame: None,
             content_origin_y: 0,
             grid_offset_y: 0,
@@ -224,9 +246,26 @@ impl TileCaptureThread {
             scroll_cooldown_frames: 0,
             scroll_residual_batches_total: 0,
             scroll_residual_fallback_full_total: 0,
+            scroll_fallback_non_quantized_total: 0,
+            scroll_fallback_residual_full_repaint_total: 0,
+            scroll_fallback_residual_interior_limit_total: 0,
+            scroll_fallback_residual_low_saved_ratio_total: 0,
+            scroll_fallback_residual_large_row_shift_total: 0,
+            scroll_fallback_residual_other_total: 0,
+            scroll_zero_saved_batches_total: 0,
             scroll_potential_tiles_total: 0,
             scroll_residual_tiles_total: 0,
             scroll_saved_tiles_total: 0,
+            scroll_partition_split_batches_total: 0,
+            scroll_partition_sticky_band_batches_total: 0,
+            scroll_chrome_tiles_total: 0,
+            scroll_exposed_strip_tiles_total: 0,
+            scroll_interior_residual_tiles_total: 0,
+            scroll_edge_strip_residual_tiles_total: 0,
+            scroll_small_edge_strip_residual_tiles_total: 0,
+            scroll_small_edge_strip_residual_rows_total: 0,
+            scroll_small_edge_strip_residual_area_px_total: 0,
+            client_cache_miss_reports_total: 0,
             scroll_thin_mode_active: false,
             scroll_residual_was_active: false,
             scroll_quiet_frames: 0,

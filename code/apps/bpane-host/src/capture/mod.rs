@@ -6,7 +6,7 @@ pub mod x11;
 pub struct CapturedFrame {
     pub width: u32,
     pub height: u32,
-    /// XRGB8888 pixel data (4 bytes per pixel).
+    /// BGRA/XRGB8888 pixel data (4 bytes per pixel).
     pub data: Vec<u8>,
     pub timestamp_us: u64,
 }
@@ -46,11 +46,11 @@ impl CaptureBackend for TestCaptureBackend {
         let pixel_count = (self.width * self.height) as usize;
         let mut data = Vec::with_capacity(pixel_count * 4);
 
-        // Generate a test pattern: alternating colors per frame
+        // Generate a test pattern in BGRA byte order.
         let color = match self.frame_count % 3 {
-            0 => [0xFF, 0x00, 0x00, 0xFF], // Red
+            0 => [0x00, 0x00, 0xFF, 0xFF], // Red
             1 => [0x00, 0xFF, 0x00, 0xFF], // Green
-            _ => [0x00, 0x00, 0xFF, 0xFF], // Blue
+            _ => [0xFF, 0x00, 0x00, 0xFF], // Blue
         };
 
         for _ in 0..pixel_count {

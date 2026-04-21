@@ -21,6 +21,12 @@ pub struct SessionTelemetrySnapshot {
     pub full_refresh_tiles_requested: u64,
     pub last_full_refresh_tiles: u64,
     pub max_full_refresh_tiles: u64,
+    pub egress_send_stream_lock_acquires_total: u64,
+    pub egress_send_stream_lock_wait_us_total: u64,
+    pub egress_send_stream_lock_wait_us_average: f64,
+    pub egress_send_stream_lock_wait_us_max: u64,
+    pub egress_lagged_receives_total: u64,
+    pub egress_lagged_frames_total: u64,
 }
 
 pub(super) fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelemetrySnapshot {
@@ -28,6 +34,10 @@ pub(super) fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelem
     let viewer_clients = hub.viewer_count();
     let joins_accepted = hub.joins_accepted.load(Ordering::Relaxed);
     let total_join_latency_ms = hub.total_join_latency_ms.load(Ordering::Relaxed);
+    let egress_send_stream_lock_acquires_total =
+        hub.egress_send_stream_lock_acquires_total.load(Ordering::Relaxed);
+    let egress_send_stream_lock_wait_us_total =
+        hub.egress_send_stream_lock_wait_us_total.load(Ordering::Relaxed);
 
     SessionTelemetrySnapshot {
         browser_clients,
@@ -50,6 +60,19 @@ pub(super) fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelem
         full_refresh_tiles_requested: hub.full_refresh_tiles_requested.load(Ordering::Relaxed),
         last_full_refresh_tiles: hub.last_full_refresh_tiles.load(Ordering::Relaxed),
         max_full_refresh_tiles: hub.max_full_refresh_tiles.load(Ordering::Relaxed),
+        egress_send_stream_lock_acquires_total,
+        egress_send_stream_lock_wait_us_total,
+        egress_send_stream_lock_wait_us_average: if egress_send_stream_lock_acquires_total == 0 {
+            0.0
+        } else {
+            egress_send_stream_lock_wait_us_total as f64
+                / egress_send_stream_lock_acquires_total as f64
+        },
+        egress_send_stream_lock_wait_us_max: hub
+            .egress_send_stream_lock_wait_us_max
+            .load(Ordering::Relaxed),
+        egress_lagged_receives_total: hub.egress_lagged_receives_total.load(Ordering::Relaxed),
+        egress_lagged_frames_total: hub.egress_lagged_frames_total.load(Ordering::Relaxed),
     }
 }
 
@@ -68,6 +91,21 @@ pub(super) fn record_refresh_burst(hub: &SessionHub, tiles_requested: u64) {
     hub.last_full_refresh_tiles
         .store(tiles_requested, Ordering::Relaxed);
     update_max(&hub.max_full_refresh_tiles, tiles_requested);
+}
+
+pub(super) fn record_egress_send_stream_lock_wait(hub: &SessionHub, elapsed: Duration) {
+    let wait_us = elapsed.as_micros().min(u128::from(u64::MAX)) as u64;
+    hub.egress_send_stream_lock_wait_us_total
+        .fetch_add(wait_us, Ordering::Relaxed);
+    hub.egress_send_stream_lock_acquires_total
+        .fetch_add(1, Ordering::Relaxed);
+    update_max(&hub.egress_send_stream_lock_wait_us_max, wait_us);
+}
+
+pub(super) fn record_egress_lagged(hub: &SessionHub, frames: u64) {
+    hub.egress_lagged_receives_total.fetch_add(1, Ordering::Relaxed);
+    hub.egress_lagged_frames_total
+        .fetch_add(frames, Ordering::Relaxed);
 }
 
 fn update_max(target: &AtomicU64, value: u64) {
