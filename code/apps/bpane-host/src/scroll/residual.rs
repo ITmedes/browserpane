@@ -3,6 +3,11 @@
 
 use crate::tiles;
 
+pub struct ScrollResidualCoords {
+    pub residual: Vec<tiles::TileCoord>,
+    pub exposed_strip: Vec<tiles::TileCoord>,
+}
+
 /// Compute the tile extraction rect used by the emitter when a vertical
 /// grid offset is active.
 pub fn offset_tile_rect_for_emit(
@@ -63,6 +68,57 @@ pub fn tile_matches_shifted_prev(
 /// Build the residual dirty set for a trusted vertical scroll frame.
 /// Compares current pixels against previous shifted by `scroll_dy`;
 /// only mismatches are included.
+pub fn analyze_scroll_residual_emit_coords(
+    current: &[u8],
+    previous: &[u8],
+    stride: usize,
+    grid: &tiles::TileGrid,
+    grid_offset_y: u16,
+    scroll_dy: i16,
+    emit_coords: &[tiles::TileCoord],
+) -> ScrollResidualCoords {
+    if scroll_dy == 0 || emit_coords.is_empty() {
+        return ScrollResidualCoords {
+            residual: emit_coords.to_vec(),
+            exposed_strip: Vec::new(),
+        };
+    }
+
+    let dy = scroll_dy as i32;
+    let screen_h = grid.screen_h as i32;
+    let mut residual = Vec::with_capacity(emit_coords.len() / 2);
+    let mut exposed_strip = Vec::with_capacity((emit_coords.len() / 8).max(1));
+
+    for &coord in emit_coords {
+        let rect = offset_tile_rect_for_emit(coord, grid, grid_offset_y);
+        if rect.w == 0 || rect.h == 0 {
+            continue;
+        }
+        let shifted_top = rect.y as i32 + dy;
+        let shifted_bottom = rect.y as i32 + rect.h as i32 - 1 + dy;
+        if shifted_top < 0 || shifted_bottom >= screen_h {
+            exposed_strip.push(coord);
+            residual.push(coord);
+            continue;
+        }
+        if !tile_matches_shifted_prev(
+            current,
+            previous,
+            stride,
+            grid.screen_h as usize,
+            &rect,
+            scroll_dy,
+        ) {
+            residual.push(coord);
+        }
+    }
+
+    ScrollResidualCoords {
+        residual,
+        exposed_strip,
+    }
+}
+
 pub fn build_scroll_residual_emit_coords(
     current: &[u8],
     previous: &[u8],
@@ -72,21 +128,16 @@ pub fn build_scroll_residual_emit_coords(
     scroll_dy: i16,
     emit_coords: &[tiles::TileCoord],
 ) -> Vec<tiles::TileCoord> {
-    if scroll_dy == 0 || emit_coords.is_empty() {
-        return emit_coords.to_vec();
-    }
-    let screen_h = grid.screen_h as usize;
-    let mut out = Vec::with_capacity(emit_coords.len() / 2);
-    for &coord in emit_coords {
-        let rect = offset_tile_rect_for_emit(coord, grid, grid_offset_y);
-        if rect.w == 0 || rect.h == 0 {
-            continue;
-        }
-        if !tile_matches_shifted_prev(current, previous, stride, screen_h, &rect, scroll_dy) {
-            out.push(coord);
-        }
-    }
-    out
+    analyze_scroll_residual_emit_coords(
+        current,
+        previous,
+        stride,
+        grid,
+        grid_offset_y,
+        scroll_dy,
+        emit_coords,
+    )
+    .residual
 }
 
 /// Build the exposed-strip dirty set for a vertical scroll copy.

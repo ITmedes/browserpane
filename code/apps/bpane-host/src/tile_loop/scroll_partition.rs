@@ -4,9 +4,8 @@
 use std::collections::HashSet;
 
 use crate::scroll::{
-    build_scroll_exposed_strip_emit_coords, build_scroll_residual_emit_coords,
-    can_emit_scroll_copy, has_scroll_region_split, is_content_tile_in_scroll_region,
-    should_defer_scroll_repair,
+    analyze_scroll_residual_emit_coords, can_emit_scroll_copy, has_scroll_region_split,
+    is_content_tile_in_scroll_region, should_defer_scroll_repair,
 };
 use crate::tiles;
 
@@ -111,6 +110,7 @@ pub(crate) struct PartitionResult {
     pub content_emit_coords: Vec<tiles::TileCoord>,
     pub chrome_emit_coords: Vec<tiles::TileCoord>,
     pub residual: Vec<tiles::TileCoord>,
+    pub exposed_strip_coords: Vec<tiles::TileCoord>,
     pub potential_tiles: usize,
     pub residual_tiles: usize,
     pub residual_ratio: f32,
@@ -119,8 +119,6 @@ pub(crate) struct PartitionResult {
     pub saved_tiles: usize,
     pub defer_scroll_repair: bool,
     pub scroll_row_shift: i32,
-    pub srt_for_split: u16,
-    pub srb_for_split: u16,
     pub scroll_dy: i16,
 }
 
@@ -173,7 +171,7 @@ pub(crate) fn partition_and_compare(
         (full_emit_coords.to_vec(), Vec::new())
     };
 
-    let mut residual = build_scroll_residual_emit_coords(
+    let initial_analysis = analyze_scroll_residual_emit_coords(
         rgba,
         prev,
         stride,
@@ -183,23 +181,27 @@ pub(crate) fn partition_and_compare(
         &content_emit_coords,
     );
 
-    let saved_tiles = content_emit_coords.len().saturating_sub(residual.len());
+    let saved_tiles = content_emit_coords
+        .len()
+        .saturating_sub(initial_analysis.residual.len());
     (content_emit_coords, chrome_emit_coords) = trim_sticky_bands(
         content_emit_coords,
         chrome_emit_coords,
-        &residual,
+        &initial_analysis.residual,
         saved_tiles,
         grid,
     );
-    residual = build_scroll_residual_emit_coords(
-        rgba,
-        prev,
-        stride,
-        grid,
-        grid_offset_y,
-        scroll_dy,
-        &content_emit_coords,
-    );
+    let content_set: std::collections::HashSet<_> = content_emit_coords.iter().copied().collect();
+    let residual: Vec<_> = initial_analysis
+        .residual
+        .into_iter()
+        .filter(|coord| content_set.contains(coord))
+        .collect();
+    let exposed_strip_coords: Vec<_> = initial_analysis
+        .exposed_strip
+        .into_iter()
+        .filter(|coord| content_set.contains(coord))
+        .collect();
 
     let potential_tiles = content_emit_coords.len();
     let residual_tiles = residual.len();
@@ -209,19 +211,9 @@ pub(crate) fn partition_and_compare(
         residual_tiles as f32 / potential_tiles as f32
     };
 
-    let exposed_tiles: HashSet<_> = build_scroll_exposed_strip_emit_coords(
-        grid,
-        grid_offset_y,
-        scroll_dy,
-        &content_emit_coords,
-    )
-    .into_iter()
-    .collect();
-    let interior_residual = residual
-        .iter()
-        .filter(|c| !exposed_tiles.contains(c))
-        .count();
-    let interior_total = potential_tiles.saturating_sub(exposed_tiles.len());
+    let exposed_strip_count = exposed_strip_coords.len();
+    let interior_residual = residual_tiles.saturating_sub(exposed_strip_count);
+    let interior_total = potential_tiles.saturating_sub(exposed_strip_count);
     let interior_ratio = if interior_total == 0 {
         0.0
     } else {
@@ -241,6 +233,7 @@ pub(crate) fn partition_and_compare(
         content_emit_coords,
         chrome_emit_coords,
         residual,
+        exposed_strip_coords,
         potential_tiles,
         residual_tiles,
         residual_ratio,
@@ -249,8 +242,6 @@ pub(crate) fn partition_and_compare(
         saved_tiles,
         defer_scroll_repair,
         scroll_row_shift,
-        srt_for_split,
-        srb_for_split,
         scroll_dy,
     }
 }

@@ -18,12 +18,11 @@ pub use detect::{
 };
 pub use policy::{
     can_emit_scroll_copy, has_scroll_region_split, is_content_tile_in_scroll_region,
-    is_scroll_delta_quantized, next_scroll_active_capture_frames, select_capture_frame_interval,
-    should_defer_scroll_repair, should_emit_scroll_copy,
+    next_scroll_active_capture_frames, select_capture_frame_interval, should_defer_scroll_repair,
+    should_emit_scroll_copy,
 };
 pub use residual::{
-    build_scroll_exposed_strip_emit_coords, build_scroll_residual_emit_coords,
-    offset_tile_rect_for_emit, tile_matches_shifted_prev,
+    analyze_scroll_residual_emit_coords, build_scroll_exposed_strip_emit_coords,
 };
 
 /// Top-level constants shared across scroll submodules.

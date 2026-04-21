@@ -1,11 +1,9 @@
 //! Scroll residual analysis: apply partition results, manage fallback,
 //! thin mode, and repair scheduling.
 
-use std::collections::HashSet;
-
 use tracing::trace;
 
-use crate::scroll::{build_scroll_exposed_strip_emit_coords, offset_tile_rect_for_emit};
+use crate::scroll::build_scroll_exposed_strip_emit_coords;
 use crate::tiles;
 
 use super::frame_types::DetectedScrollFrame;
@@ -144,34 +142,6 @@ impl super::TileCaptureThread {
             } else {
                 all_dirty = p.residual;
                 all_dirty.extend(p.chrome_emit_coords.iter().copied());
-                // Force content tiles overlapping the exposed strip into dirty set.
-                {
-                    let mut dirty_coords: HashSet<_> = all_dirty.iter().copied().collect();
-                    let (exp_start, exp_end) = if p.scroll_dy > 0 {
-                        let start = (p.srb_for_split as i32 - p.scroll_dy as i32)
-                            .max(p.srt_for_split as i32);
-                        (start, p.srb_for_split as i32)
-                    } else {
-                        let end = (p.srt_for_split as i32 + (-p.scroll_dy) as i32)
-                            .min(p.srb_for_split as i32);
-                        (p.srt_for_split as i32, end)
-                    };
-                    for &coord in &p.content_emit_coords {
-                        if dirty_coords.contains(&coord) {
-                            continue;
-                        }
-                        let rect = offset_tile_rect_for_emit(coord, &self.grid, self.grid_offset_y);
-                        if rect.w == 0 || rect.h == 0 {
-                            continue;
-                        }
-                        let tile_top = rect.y as i32;
-                        let tile_bot = tile_top + rect.h as i32;
-                        if tile_bot > exp_start && tile_top < exp_end {
-                            dirty_coords.insert(coord);
-                            all_dirty.push(coord);
-                        }
-                    }
-                }
                 self.scroll_saved_tiles_total = self
                     .scroll_saved_tiles_total
                     .saturating_add(p.saved_tiles as u64);
@@ -203,13 +173,16 @@ impl super::TileCaptureThread {
                     >= scroll_thin_mode_residual_ratio
                     || p.residual_tiles >= residual_tiles_min_for_thin;
                 if sub_tile_scroll && residual_large_for_sub_tile {
-                    let residual_coords = &p.content_emit_coords;
-                    let strip_dirty = build_scroll_exposed_strip_emit_coords(
-                        &self.grid,
-                        self.grid_offset_y,
-                        p.scroll_dy,
-                        residual_coords,
-                    );
+                    let strip_dirty = if p.exposed_strip_coords.is_empty() {
+                        build_scroll_exposed_strip_emit_coords(
+                            &self.grid,
+                            self.grid_offset_y,
+                            p.scroll_dy,
+                            &p.content_emit_coords,
+                        )
+                    } else {
+                        p.exposed_strip_coords.clone()
+                    };
                     if self.scroll_thin_mode_enabled && !strip_dirty.is_empty() {
                         all_dirty = strip_dirty;
                         all_dirty.extend(p.chrome_emit_coords.iter().copied());
