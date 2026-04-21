@@ -1,9 +1,9 @@
-use super::*;
 use super::policy::is_scroll_delta_quantized;
 use super::residual::{
     build_scroll_exposed_strip_emit_coords, build_scroll_residual_emit_coords,
     offset_tile_rect_for_emit, tile_matches_shifted_prev,
 };
+use super::*;
 use crate::tiles;
 
 // ── Residual tests ──────────────────────────────────────────────────

@@ -22,8 +22,13 @@ struct StickyBands {
 }
 
 impl StickyBands {
+    fn is_active(self) -> bool {
+        self.sticky_row_end.is_some() || self.sticky_col_start.is_some()
+    }
+
     fn is_chrome(self, coord: tiles::TileCoord) -> bool {
-        self.sticky_row_end.is_some_and(|row_end| coord.row < row_end)
+        self.sticky_row_end
+            .is_some_and(|row_end| coord.row < row_end)
             || self
                 .sticky_col_start
                 .is_some_and(|col_start| coord.col >= col_start)
@@ -38,11 +43,19 @@ fn trim_sticky_bands(
     grid: &tiles::TileGrid,
 ) -> (Vec<tiles::TileCoord>, Vec<tiles::TileCoord>, StickyBands) {
     if content_emit_coords.len() < STICKY_BAND_MIN_TILES * 4 || residual.is_empty() {
-        return (content_emit_coords, chrome_emit_coords, StickyBands::default());
+        return (
+            content_emit_coords,
+            chrome_emit_coords,
+            StickyBands::default(),
+        );
     }
     let saved_ratio = saved_tiles as f32 / content_emit_coords.len() as f32;
     if saved_ratio < STICKY_BAND_MIN_SAVED_RATIO {
-        return (content_emit_coords, chrome_emit_coords, StickyBands::default());
+        return (
+            content_emit_coords,
+            chrome_emit_coords,
+            StickyBands::default(),
+        );
     }
 
     let mut row_total = vec![0usize; grid.rows as usize];
@@ -65,7 +78,11 @@ fn trim_sticky_bands(
     }
 
     if min_row == u16::MAX {
-        return (content_emit_coords, chrome_emit_coords, StickyBands::default());
+        return (
+            content_emit_coords,
+            chrome_emit_coords,
+            StickyBands::default(),
+        );
     }
 
     let mut sticky_top_rows = 0u16;
@@ -99,7 +116,11 @@ fn trim_sticky_bands(
     }
 
     if sticky_top_rows == 0 && sticky_right_cols == 0 {
-        return (content_emit_coords, chrome_emit_coords, StickyBands::default());
+        return (
+            content_emit_coords,
+            chrome_emit_coords,
+            StickyBands::default(),
+        );
     }
 
     let sticky_bands = StickyBands {
@@ -129,11 +150,14 @@ pub(crate) struct PartitionResult {
     pub residual_tiles: usize,
     pub residual_ratio: f32,
     pub interior_ratio: f32,
+    pub interior_residual_tiles: usize,
     pub quantized_scroll_copy: bool,
     pub saved_tiles: usize,
     pub defer_scroll_repair: bool,
     pub scroll_row_shift: i32,
     pub scroll_dy: i16,
+    pub split_region: bool,
+    pub sticky_band_active: bool,
 }
 
 /// Partition tiles into content/chrome, compute residual, and return
@@ -252,10 +276,13 @@ pub(crate) fn partition_and_compare(
         residual_tiles,
         residual_ratio,
         interior_ratio,
+        interior_residual_tiles: interior_residual,
         quantized_scroll_copy,
         saved_tiles,
         defer_scroll_repair,
         scroll_row_shift,
         scroll_dy,
+        split_region: have_split,
+        sticky_band_active: sticky_bands.is_active(),
     }
 }

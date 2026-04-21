@@ -51,7 +51,16 @@ export type HostScrollHealthSnapshot = {
   hostScrollFallbacksTotal: number;
   hostScrollNonQuantizedFallbacksTotal: number;
   hostScrollResidualFullRepaintsTotal: number;
+  hostScrollResidualInteriorLimitFallbacksTotal: number;
+  hostScrollResidualLowSavedRatioFallbacksTotal: number;
+  hostScrollResidualLargeRowShiftFallbacksTotal: number;
+  hostScrollResidualOtherFallbacksTotal: number;
   hostScrollZeroSavedBatchesTotal: number;
+  hostScrollSplitRegionBatchesTotal: number;
+  hostScrollStickyBandBatchesTotal: number;
+  hostScrollChromeTilesTotal: number;
+  hostScrollExposedStripTilesTotal: number;
+  hostScrollInteriorResidualTilesTotal: number;
   hostSentHashEntries: number;
   hostSentHashEvictionsTotal: number;
   hostCacheMissReportsTotal: number;

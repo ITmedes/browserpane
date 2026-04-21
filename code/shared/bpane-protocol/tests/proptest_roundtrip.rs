@@ -267,19 +267,8 @@ fn arb_tile_message() -> impl Strategy<Value = TileMessage> {
             offset_y: oy
         }),
         any::<bool>().prop_map(|ao| TileMessage::TileDrawMode { apply_offset: ao }),
-        (
-            any::<u32>(),
-            any::<u32>(),
-            any::<u32>(),
-            any::<u32>(),
-            any::<u32>(),
-            any::<u32>(),
-            any::<u32>(),
-            any::<u32>(),
-            any::<u32>(),
-            any::<u32>(),
-        )
-            .prop_map(|(a, b, c, d, e, f, g, h, i, j)| {
+        proptest::array::uniform19(any::<u32>()).prop_map(
+            |[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s]| {
                 TileMessage::ScrollStats {
                     scroll_batches_total: a,
                     scroll_full_fallbacks_total: b,
@@ -287,12 +276,22 @@ fn arb_tile_message() -> impl Strategy<Value = TileMessage> {
                     scroll_saved_tiles_total: d,
                     scroll_non_quantized_fallbacks_total: e,
                     scroll_residual_full_repaints_total: f,
-                    scroll_zero_saved_batches_total: g,
-                    host_sent_hash_entries: h,
-                    host_sent_hash_evictions_total: i,
-                    host_cache_miss_reports_total: j,
+                    scroll_residual_interior_limit_fallbacks_total: g,
+                    scroll_residual_low_saved_ratio_fallbacks_total: h,
+                    scroll_residual_large_row_shift_fallbacks_total: i,
+                    scroll_residual_other_fallbacks_total: j,
+                    scroll_zero_saved_batches_total: k,
+                    scroll_split_region_batches_total: l,
+                    scroll_sticky_band_batches_total: m,
+                    scroll_chrome_tiles_total: n,
+                    scroll_exposed_strip_tiles_total: o,
+                    scroll_interior_residual_tiles_total: p,
+                    host_sent_hash_entries: q,
+                    host_sent_hash_evictions_total: r,
+                    host_cache_miss_reports_total: s,
                 }
-            }),
+            }
+        ),
     ]
 }
 

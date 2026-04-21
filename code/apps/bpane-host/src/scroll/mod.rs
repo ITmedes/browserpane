@@ -21,9 +21,7 @@ pub use policy::{
     next_scroll_active_capture_frames, select_capture_frame_interval, should_defer_scroll_repair,
     should_emit_scroll_copy,
 };
-pub use residual::{
-    analyze_scroll_residual_emit_coords, build_scroll_exposed_strip_emit_coords,
-};
+pub use residual::{analyze_scroll_residual_emit_coords, build_scroll_exposed_strip_emit_coords};
 
 /// Top-level constants shared across scroll submodules.
 pub const CONTENT_SCROLL_SEARCH_MAX_PX: usize = 384;

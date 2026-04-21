@@ -256,7 +256,16 @@ describe('SessionFrameRouterRuntime', () => {
         scrollSavedTilesTotal: 80,
         scrollNonQuantizedFallbacksTotal: 1,
         scrollResidualFullRepaintsTotal: 1,
+        scrollResidualInteriorLimitFallbacksTotal: 1,
+        scrollResidualLowSavedRatioFallbacksTotal: 0,
+        scrollResidualLargeRowShiftFallbacksTotal: 0,
+        scrollResidualOtherFallbacksTotal: 0,
         scrollZeroSavedBatchesTotal: 3,
+        scrollSplitRegionBatchesTotal: 2,
+        scrollStickyBandBatchesTotal: 1,
+        scrollChromeTilesTotal: 12,
+        scrollExposedStripTilesTotal: 4,
+        scrollInteriorResidualTilesTotal: 8,
         hostSentHashEntries: 64,
         hostSentHashEvictionsTotal: 5,
         hostCacheMissReportsTotal: 4,
@@ -288,7 +297,27 @@ describe('SessionFrameRouterRuntime', () => {
     expect(stats.tileCommandCounts.gridOffset).toBe(2);
     expect(stats.pendingTileBatch.gridOffsetY).toBe(12);
     expect(stats.tileCommandCounts.scrollStats).toBe(1);
-    expect(stats.recordHostScrollStats).toHaveBeenCalledWith(10, 2, 100, 80, 1, 1, 3, 64, 5, 4);
+    expect(stats.recordHostScrollStats).toHaveBeenCalledWith(
+      10,
+      2,
+      100,
+      80,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      3,
+      2,
+      1,
+      12,
+      4,
+      8,
+      64,
+      5,
+      4,
+    );
     expect(clearVideoOverlay).toHaveBeenCalledTimes(2);
   });
 });

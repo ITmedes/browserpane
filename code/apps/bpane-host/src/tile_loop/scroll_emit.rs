@@ -84,7 +84,10 @@ mod tests {
 
     #[test]
     fn builds_dirty_set_when_scroll_analysis_cannot_run() {
-        assert!(should_build_dirty_set_for_frame(false, &Some(detected_scroll_frame())));
+        assert!(should_build_dirty_set_for_frame(
+            false,
+            &Some(detected_scroll_frame())
+        ));
         assert!(should_build_dirty_set_for_frame(true, &None));
     }
 

@@ -17,9 +17,9 @@ describe('SessionStats host scroll health', () => {
   it('reports rolling host fallback windows from cumulative totals', () => {
     const stats = new SessionStats();
 
-    stats.recordHostScrollStats(0, 0, 0, 0, 0, 0, 0);
-    stats.recordHostScrollStats(10, 2, 100, 80, 1, 1, 2);
-    stats.recordHostScrollStats(30, 8, 300, 210, 3, 5, 4);
+    stats.recordHostScrollStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    stats.recordHostScrollStats(10, 2, 100, 80, 1, 1, 1, 0, 0, 0, 2, 3, 1, 12, 4, 8);
+    stats.recordHostScrollStats(30, 8, 300, 210, 3, 5, 2, 1, 1, 1, 4, 8, 3, 30, 10, 18);
 
     const snapshot = stats.getSessionStats(tileCacheRuntime);
     const health = snapshot.tiles.scrollHealth;
@@ -31,15 +31,19 @@ describe('SessionStats host scroll health', () => {
     expect(health.hostFallbackRateRecent50).toBeCloseTo((8 / 30) * 100, 5);
     expect(health.hostScrollNonQuantizedFallbacksTotal).toBe(3);
     expect(health.hostScrollResidualFullRepaintsTotal).toBe(5);
+    expect(health.hostScrollResidualInteriorLimitFallbacksTotal).toBe(2);
+    expect(health.hostScrollResidualLowSavedRatioFallbacksTotal).toBe(1);
+    expect(health.hostScrollResidualLargeRowShiftFallbacksTotal).toBe(1);
+    expect(health.hostScrollResidualOtherFallbacksTotal).toBe(1);
     expect(health.hostScrollZeroSavedBatchesTotal).toBe(4);
   });
 
   it('clears rolling history when host counters reset', () => {
     const stats = new SessionStats();
 
-    stats.recordHostScrollStats(0, 0, 0, 0, 0, 0, 0);
-    stats.recordHostScrollStats(12, 3, 120, 90, 1, 2, 3);
-    stats.recordHostScrollStats(1, 0, 10, 10, 0, 0, 1);
+    stats.recordHostScrollStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    stats.recordHostScrollStats(12, 3, 120, 90, 1, 2, 1, 1, 0, 0, 3, 4, 2, 18, 6, 11);
+    stats.recordHostScrollStats(1, 0, 10, 10, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0);
 
     const snapshot = stats.getSessionStats(tileCacheRuntime);
     const health = snapshot.tiles.scrollHealth;
@@ -48,6 +52,10 @@ describe('SessionStats host scroll health', () => {
     expect(health.hostScrollFallbacksTotal).toBe(0);
     expect(health.hostScrollNonQuantizedFallbacksTotal).toBe(0);
     expect(health.hostScrollResidualFullRepaintsTotal).toBe(0);
+    expect(health.hostScrollResidualInteriorLimitFallbacksTotal).toBe(0);
+    expect(health.hostScrollResidualLowSavedRatioFallbacksTotal).toBe(0);
+    expect(health.hostScrollResidualLargeRowShiftFallbacksTotal).toBe(0);
+    expect(health.hostScrollResidualOtherFallbacksTotal).toBe(0);
     expect(health.hostScrollZeroSavedBatchesTotal).toBe(1);
     expect(health.hostFallbackRateRecent20Batches).toBe(0);
     expect(health.hostFallbackRateRecent20).toBe(0);

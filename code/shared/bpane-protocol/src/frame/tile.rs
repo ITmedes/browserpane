@@ -130,7 +130,16 @@ impl TileMessage {
                 scroll_saved_tiles_total,
                 scroll_non_quantized_fallbacks_total,
                 scroll_residual_full_repaints_total,
+                scroll_residual_interior_limit_fallbacks_total,
+                scroll_residual_low_saved_ratio_fallbacks_total,
+                scroll_residual_large_row_shift_fallbacks_total,
+                scroll_residual_other_fallbacks_total,
                 scroll_zero_saved_batches_total,
+                scroll_split_region_batches_total,
+                scroll_sticky_band_batches_total,
+                scroll_chrome_tiles_total,
+                scroll_exposed_strip_tiles_total,
+                scroll_interior_residual_tiles_total,
                 host_sent_hash_entries,
                 host_sent_hash_evictions_total,
                 host_cache_miss_reports_total,
@@ -142,7 +151,16 @@ impl TileMessage {
                 w.write_u32(*scroll_saved_tiles_total);
                 w.write_u32(*scroll_non_quantized_fallbacks_total);
                 w.write_u32(*scroll_residual_full_repaints_total);
+                w.write_u32(*scroll_residual_interior_limit_fallbacks_total);
+                w.write_u32(*scroll_residual_low_saved_ratio_fallbacks_total);
+                w.write_u32(*scroll_residual_large_row_shift_fallbacks_total);
+                w.write_u32(*scroll_residual_other_fallbacks_total);
                 w.write_u32(*scroll_zero_saved_batches_total);
+                w.write_u32(*scroll_split_region_batches_total);
+                w.write_u32(*scroll_sticky_band_batches_total);
+                w.write_u32(*scroll_chrome_tiles_total);
+                w.write_u32(*scroll_exposed_strip_tiles_total);
+                w.write_u32(*scroll_interior_residual_tiles_total);
                 w.write_u32(*host_sent_hash_entries);
                 w.write_u32(*host_sent_hash_evictions_total);
                 w.write_u32(*host_cache_miss_reports_total);
