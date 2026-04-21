@@ -521,6 +521,10 @@ impl TileEmitter {
     /// edge. QOI hashes for that column are NOT tracked in `sent_hashes` because
     /// the mixed content+scrollbar pixels produce a unique hash per scroll position,
     /// polluting the LRU cache with never-reused entries.
+    ///
+    /// Boundary tiles also emit a zero hash to tell the client not to cache them.
+    /// That keeps low-value chrome/content blend tiles out of the client tile cache,
+    /// matching the sender-side decision to never reuse them via CacheHit.
     pub fn emit_static_tiles(
         &mut self,
         frame_pixels: &[u8],
@@ -606,6 +610,7 @@ impl TileEmitter {
                 } else {
                     self.codec
                 };
+                let cache_hash = if is_boundary { 0 } else { hash };
                 if let Some(msg) = encode_tile(
                     codec,
                     &self.tile_scratch,
@@ -613,7 +618,7 @@ impl TileEmitter {
                     rect.h as u32,
                     coord.col,
                     coord.row,
-                    hash,
+                    cache_hash,
                 ) {
                     frames.push(msg.to_frame());
                     // Don't track boundary column hashes - they change every
@@ -1307,6 +1312,45 @@ mod tests {
                 Some(TileMessage::Fill { .. }) | Some(TileMessage::Qoi { .. })
             )
         }));
+    }
+
+    #[test]
+    fn static_boundary_tiles_emit_zero_hash_to_disable_client_caching() {
+        let grid = TileGrid::new(128, 64, 64);
+        let stride = 128 * 4;
+        let mut frame_data = vec![0u8; stride * 64];
+        for y in 0..64 {
+            for x in 0..128 {
+                let offset = y * stride + x * 4;
+                frame_data[offset] = (x * 5) as u8;
+                frame_data[offset + 1] = (y * 7) as u8;
+                frame_data[offset + 2] = x.wrapping_add(y as usize) as u8;
+                frame_data[offset + 3] = 0xFF;
+            }
+        }
+
+        let mut emitter = TileEmitter::new(grid.cols, grid.rows);
+        let frames = emitter.emit_static_tiles(
+            &frame_data,
+            stride,
+            &[TileCoord::new(1, 0)],
+            &grid,
+            Some(1),
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let qoi_hash = frames
+            .iter()
+            .find_map(|f| match TileMessage::decode(&f.payload).ok() {
+                Some(TileMessage::Qoi { hash, .. }) => Some(hash),
+                Some(TileMessage::Zstd { hash, .. }) => Some(hash),
+                _ => None,
+            })
+            .expect("expected hash-bearing static tile frame");
+        assert_eq!(qoi_hash, 0);
     }
 
     #[test]
