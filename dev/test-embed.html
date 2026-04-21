@@ -419,7 +419,14 @@
         `hostFallback=${summary.scroll.hostFallbackRate.toFixed(1)}% ` +
         `reasons=nq:${summary.scroll.hostFallbackReasons.nonQuantizedFallbacks} ` +
         `repaint:${summary.scroll.hostFallbackReasons.residualFullRepaints} ` +
+        `[int:${summary.scroll.hostFallbackReasons.residualInteriorLimitFallbacks} ` +
+        `saved:${summary.scroll.hostFallbackReasons.residualLowSavedRatioFallbacks} ` +
+        `shift:${summary.scroll.hostFallbackReasons.residualLargeRowShiftFallbacks} ` +
+        `other:${summary.scroll.hostFallbackReasons.residualOtherFallbacks}] ` +
         `zero:${summary.scroll.hostFallbackReasons.zeroSavedBatches} ` +
+        `split:${summary.scroll.hostSplitRegionBatches} sticky:${summary.scroll.hostStickyBandBatches} ` +
+        `chromeTiles:${summary.scroll.hostChromeTiles} strip:${summary.scroll.hostExposedStripTiles} ` +
+        `interior:${summary.scroll.hostInteriorResidualTiles} ` +
         `sent=${summary.scroll.hostSentHashEntries} evict=${summary.scroll.hostSentHashEvictions} ` +
         `miss=${summary.scroll.hostCacheMissReports} ` +
         `dom=${summary.scroll.dominantHostFallbackReason} ` +
@@ -449,7 +456,10 @@
     function dominantHostScrollReason(reasonCounts) {
       const entries = [
         ['non-quantized', reasonCounts.nonQuantizedFallbacks],
-        ['residual-full-repaint', reasonCounts.residualFullRepaints],
+        ['residual-interior-limit', reasonCounts.residualInteriorLimitFallbacks],
+        ['residual-low-saved-ratio', reasonCounts.residualLowSavedRatioFallbacks],
+        ['residual-large-row-shift', reasonCounts.residualLargeRowShiftFallbacks],
+        ['residual-other', reasonCounts.residualOtherFallbacks],
         ['zero-saved', reasonCounts.zeroSavedBatches],
       ];
       let bestLabel = 'none';
@@ -484,7 +494,21 @@
         hostScrollBatches: sessionStats.tiles.scrollHealth.hostScrollBatchesTotal,
         hostNonQuantizedFallbacks: sessionStats.tiles.scrollHealth.hostScrollNonQuantizedFallbacksTotal,
         hostResidualFullRepaints: sessionStats.tiles.scrollHealth.hostScrollResidualFullRepaintsTotal,
+        hostResidualInteriorLimitFallbacks:
+          sessionStats.tiles.scrollHealth.hostScrollResidualInteriorLimitFallbacksTotal,
+        hostResidualLowSavedRatioFallbacks:
+          sessionStats.tiles.scrollHealth.hostScrollResidualLowSavedRatioFallbacksTotal,
+        hostResidualLargeRowShiftFallbacks:
+          sessionStats.tiles.scrollHealth.hostScrollResidualLargeRowShiftFallbacksTotal,
+        hostResidualOtherFallbacks:
+          sessionStats.tiles.scrollHealth.hostScrollResidualOtherFallbacksTotal,
         hostZeroSavedBatches: sessionStats.tiles.scrollHealth.hostScrollZeroSavedBatchesTotal,
+        hostSplitRegionBatches: sessionStats.tiles.scrollHealth.hostScrollSplitRegionBatchesTotal,
+        hostStickyBandBatches: sessionStats.tiles.scrollHealth.hostScrollStickyBandBatchesTotal,
+        hostChromeTiles: sessionStats.tiles.scrollHealth.hostScrollChromeTilesTotal,
+        hostExposedStripTiles: sessionStats.tiles.scrollHealth.hostScrollExposedStripTilesTotal,
+        hostInteriorResidualTiles:
+          sessionStats.tiles.scrollHealth.hostScrollInteriorResidualTilesTotal,
         hostSentHashEvictions: sessionStats.tiles.scrollHealth.hostSentHashEvictionsTotal,
         hostCacheMissReports: sessionStats.tiles.scrollHealth.hostCacheMissReportsTotal,
         resolution: makeResolutionLabel().replace(/^Resolution:\s*/, ''),
@@ -545,9 +569,48 @@
         0,
         scrollHealth.hostScrollResidualFullRepaintsTotal - baseline.hostResidualFullRepaints,
       );
+      const hostResidualInteriorLimitFallbacks = Math.max(
+        0,
+        scrollHealth.hostScrollResidualInteriorLimitFallbacksTotal
+          - baseline.hostResidualInteriorLimitFallbacks,
+      );
+      const hostResidualLowSavedRatioFallbacks = Math.max(
+        0,
+        scrollHealth.hostScrollResidualLowSavedRatioFallbacksTotal
+          - baseline.hostResidualLowSavedRatioFallbacks,
+      );
+      const hostResidualLargeRowShiftFallbacks = Math.max(
+        0,
+        scrollHealth.hostScrollResidualLargeRowShiftFallbacksTotal
+          - baseline.hostResidualLargeRowShiftFallbacks,
+      );
+      const hostResidualOtherFallbacks = Math.max(
+        0,
+        scrollHealth.hostScrollResidualOtherFallbacksTotal - baseline.hostResidualOtherFallbacks,
+      );
       const hostZeroSavedBatches = Math.max(
         0,
         scrollHealth.hostScrollZeroSavedBatchesTotal - baseline.hostZeroSavedBatches,
+      );
+      const hostSplitRegionBatches = Math.max(
+        0,
+        scrollHealth.hostScrollSplitRegionBatchesTotal - baseline.hostSplitRegionBatches,
+      );
+      const hostStickyBandBatches = Math.max(
+        0,
+        scrollHealth.hostScrollStickyBandBatchesTotal - baseline.hostStickyBandBatches,
+      );
+      const hostChromeTiles = Math.max(
+        0,
+        scrollHealth.hostScrollChromeTilesTotal - baseline.hostChromeTiles,
+      );
+      const hostExposedStripTiles = Math.max(
+        0,
+        scrollHealth.hostScrollExposedStripTilesTotal - baseline.hostExposedStripTiles,
+      );
+      const hostInteriorResidualTiles = Math.max(
+        0,
+        scrollHealth.hostScrollInteriorResidualTilesTotal - baseline.hostInteriorResidualTiles,
       );
       const hostSentHashEvictions = Math.max(
         0,
@@ -560,6 +623,10 @@
       const hostFallbackReasons = {
         nonQuantizedFallbacks: hostNonQuantizedFallbacks,
         residualFullRepaints: hostResidualFullRepaints,
+        residualInteriorLimitFallbacks: hostResidualInteriorLimitFallbacks,
+        residualLowSavedRatioFallbacks: hostResidualLowSavedRatioFallbacks,
+        residualLargeRowShiftFallbacks: hostResidualLargeRowShiftFallbacks,
+        residualOtherFallbacks: hostResidualOtherFallbacks,
         zeroSavedBatches: hostZeroSavedBatches,
       };
 
@@ -621,6 +688,11 @@
           dominantHostFallbackReason: dominantHostScrollReason(hostFallbackReasons),
           hostFallbackRateRecent20: scrollHealth.hostFallbackRateRecent20,
           hostFallbackRateRecent50: scrollHealth.hostFallbackRateRecent50,
+          hostSplitRegionBatches,
+          hostStickyBandBatches,
+          hostChromeTiles,
+          hostExposedStripTiles,
+          hostInteriorResidualTiles,
           hostSentHashEntries: scrollHealth.hostSentHashEntries,
           hostSentHashEvictions,
           hostCacheMissReports,
@@ -843,7 +915,14 @@
                   `(${sh.hostScrollFallbacksTotal}/${sh.hostScrollBatchesTotal}) ` +
                   `reasons=nq:${sh.hostScrollNonQuantizedFallbacksTotal} ` +
                   `repaint:${sh.hostScrollResidualFullRepaintsTotal} ` +
+                  `[int:${sh.hostScrollResidualInteriorLimitFallbacksTotal} ` +
+                  `saved:${sh.hostScrollResidualLowSavedRatioFallbacksTotal} ` +
+                  `shift:${sh.hostScrollResidualLargeRowShiftFallbacksTotal} ` +
+                  `other:${sh.hostScrollResidualOtherFallbacksTotal}] ` +
                   `zero:${sh.hostScrollZeroSavedBatchesTotal} ` +
+                  `split:${sh.hostScrollSplitRegionBatchesTotal} sticky:${sh.hostScrollStickyBandBatchesTotal} ` +
+                  `chrome:${sh.hostScrollChromeTilesTotal} strip:${sh.hostScrollExposedStripTilesTotal} ` +
+                  `interior:${sh.hostScrollInteriorResidualTilesTotal} ` +
                   `saved=${sh.hostScrollSavedRate.toFixed(1)}%`;
               } else {
                 scrollHealthStatsEl.textContent = 'Scroll Health: waiting for scroll telemetry';

@@ -99,7 +99,16 @@ fn analyze_scroll_residual_row_bands(
                 .saturating_sub(x)
                 .saturating_mul(4);
             row_bytes > 0
-                && band_matches_shifted_prev(current, previous, stride, y, h, x * 4, row_bytes, scroll_dy)
+                && band_matches_shifted_prev(
+                    current,
+                    previous,
+                    stride,
+                    y,
+                    h,
+                    x * 4,
+                    row_bytes,
+                    scroll_dy,
+                )
         });
         if row_matches {
             continue;

@@ -42,7 +42,16 @@ export type TileCommand =
     scrollSavedTilesTotal: number;
     scrollNonQuantizedFallbacksTotal: number;
     scrollResidualFullRepaintsTotal: number;
+    scrollResidualInteriorLimitFallbacksTotal: number;
+    scrollResidualLowSavedRatioFallbacksTotal: number;
+    scrollResidualLargeRowShiftFallbacksTotal: number;
+    scrollResidualOtherFallbacksTotal: number;
     scrollZeroSavedBatchesTotal: number;
+    scrollSplitRegionBatchesTotal: number;
+    scrollStickyBandBatchesTotal: number;
+    scrollChromeTilesTotal: number;
+    scrollExposedStripTilesTotal: number;
+    scrollInteriorResidualTilesTotal: number;
     hostSentHashEntries: number;
     hostSentHashEvictionsTotal: number;
     hostCacheMissReportsTotal: number;

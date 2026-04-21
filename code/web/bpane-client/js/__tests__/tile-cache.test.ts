@@ -95,12 +95,21 @@ function buildScrollStats(
   savedTiles: number,
   nonQuantizedFallbacks = 0,
   residualFullRepaints = 0,
+  residualInteriorLimitFallbacks = 0,
+  residualLowSavedRatioFallbacks = 0,
+  residualLargeRowShiftFallbacks = 0,
+  residualOtherFallbacks = 0,
   zeroSavedBatches = 0,
+  splitRegionBatches = 0,
+  stickyBandBatches = 0,
+  chromeTiles = 0,
+  exposedStripTiles = 0,
+  interiorResidualTiles = 0,
   hostSentHashEntries = 0,
   hostSentHashEvictionsTotal = 0,
   hostCacheMissReportsTotal = 0,
 ): Uint8Array {
-  const buf = new Uint8Array(41);
+  const buf = new Uint8Array(77);
   const view = new DataView(buf.buffer);
   buf[0] = 0x0A; // TILE_SCROLL_STATS
   view.setUint32(1, batches, true);
@@ -109,10 +118,19 @@ function buildScrollStats(
   view.setUint32(13, savedTiles, true);
   view.setUint32(17, nonQuantizedFallbacks, true);
   view.setUint32(21, residualFullRepaints, true);
-  view.setUint32(25, zeroSavedBatches, true);
-  view.setUint32(29, hostSentHashEntries, true);
-  view.setUint32(33, hostSentHashEvictionsTotal, true);
-  view.setUint32(37, hostCacheMissReportsTotal, true);
+  view.setUint32(25, residualInteriorLimitFallbacks, true);
+  view.setUint32(29, residualLowSavedRatioFallbacks, true);
+  view.setUint32(33, residualLargeRowShiftFallbacks, true);
+  view.setUint32(37, residualOtherFallbacks, true);
+  view.setUint32(41, zeroSavedBatches, true);
+  view.setUint32(45, splitRegionBatches, true);
+  view.setUint32(49, stickyBandBatches, true);
+  view.setUint32(53, chromeTiles, true);
+  view.setUint32(57, exposedStripTiles, true);
+  view.setUint32(61, interiorResidualTiles, true);
+  view.setUint32(65, hostSentHashEntries, true);
+  view.setUint32(69, hostSentHashEvictionsTotal, true);
+  view.setUint32(73, hostCacheMissReportsTotal, true);
   return buf;
 }
 
@@ -430,7 +448,7 @@ describe('parseTileMessage', () => {
   });
 
   it('parses scroll-stats', () => {
-    const msg = parseTileMessage(buildScrollStats(11, 2, 1000, 730, 1, 1, 3, 128, 9, 7));
+    const msg = parseTileMessage(buildScrollStats(11, 2, 1000, 730, 1, 1, 3, 4, 5, 6, 7, 8, 9, 640, 128, 96, 128, 9, 7));
     expect(msg).not.toBeNull();
     expect(msg!.type).toBe('scroll-stats');
     if (msg!.type === 'scroll-stats') {
@@ -440,7 +458,16 @@ describe('parseTileMessage', () => {
       expect(msg!.scrollSavedTilesTotal).toBe(730);
       expect(msg!.scrollNonQuantizedFallbacksTotal).toBe(1);
       expect(msg!.scrollResidualFullRepaintsTotal).toBe(1);
-      expect(msg!.scrollZeroSavedBatchesTotal).toBe(3);
+      expect(msg!.scrollResidualInteriorLimitFallbacksTotal).toBe(3);
+      expect(msg!.scrollResidualLowSavedRatioFallbacksTotal).toBe(4);
+      expect(msg!.scrollResidualLargeRowShiftFallbacksTotal).toBe(5);
+      expect(msg!.scrollResidualOtherFallbacksTotal).toBe(6);
+      expect(msg!.scrollZeroSavedBatchesTotal).toBe(7);
+      expect(msg!.scrollSplitRegionBatchesTotal).toBe(8);
+      expect(msg!.scrollStickyBandBatchesTotal).toBe(9);
+      expect(msg!.scrollChromeTilesTotal).toBe(640);
+      expect(msg!.scrollExposedStripTilesTotal).toBe(128);
+      expect(msg!.scrollInteriorResidualTilesTotal).toBe(96);
       expect(msg!.hostSentHashEntries).toBe(128);
       expect(msg!.hostSentHashEvictionsTotal).toBe(9);
       expect(msg!.hostCacheMissReportsTotal).toBe(7);
@@ -559,7 +586,16 @@ describe('parseTileMessage', () => {
       scrollSavedTilesTotal: 730,
       scrollNonQuantizedFallbacksTotal: 1,
       scrollResidualFullRepaintsTotal: 1,
+      scrollResidualInteriorLimitFallbacksTotal: 1,
+      scrollResidualLowSavedRatioFallbacksTotal: 0,
+      scrollResidualLargeRowShiftFallbacksTotal: 0,
+      scrollResidualOtherFallbacksTotal: 0,
       scrollZeroSavedBatchesTotal: 3,
+      scrollSplitRegionBatchesTotal: 7,
+      scrollStickyBandBatchesTotal: 5,
+      scrollChromeTilesTotal: 640,
+      scrollExposedStripTilesTotal: 128,
+      scrollInteriorResidualTilesTotal: 96,
       hostSentHashEntries: 0,
       hostSentHashEvictionsTotal: 0,
       hostCacheMissReportsTotal: 0,

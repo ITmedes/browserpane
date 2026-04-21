@@ -3,7 +3,10 @@
 
 use tracing::trace;
 
-use crate::scroll::build_scroll_exposed_strip_emit_coords;
+use crate::scroll::{
+    build_scroll_exposed_strip_emit_coords, SCROLL_DEFER_REPAIR_MAX_INTERIOR_RATIO,
+    SCROLL_DEFER_REPAIR_MAX_ROW_SHIFT, SCROLL_DEFER_REPAIR_MIN_SAVED_RATIO,
+};
 use crate::tiles;
 
 use super::frame_types::DetectedScrollFrame;
@@ -12,7 +15,10 @@ use super::scroll_partition::partition_and_compare;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ScrollFallbackKind {
     NonQuantized,
-    ResidualFullRepaint,
+    ResidualInteriorLimit,
+    ResidualLowSavedRatio,
+    ResidualLargeRowShift,
+    ResidualOther,
 }
 
 fn classify_scroll_fallback(
@@ -20,14 +26,30 @@ fn classify_scroll_fallback(
     interior_ratio: f32,
     defer_scroll_repair: bool,
     full_repaint_ratio: f32,
+    saved_tiles: usize,
+    potential_tiles: usize,
+    row_shift: i32,
 ) -> Option<ScrollFallbackKind> {
     if !quantized_scroll_copy {
         return Some(ScrollFallbackKind::NonQuantized);
     }
-    if interior_ratio > full_repaint_ratio && !defer_scroll_repair {
-        return Some(ScrollFallbackKind::ResidualFullRepaint);
+    if interior_ratio <= full_repaint_ratio || defer_scroll_repair {
+        return None;
     }
-    None
+    if interior_ratio > SCROLL_DEFER_REPAIR_MAX_INTERIOR_RATIO {
+        return Some(ScrollFallbackKind::ResidualInteriorLimit);
+    }
+    if potential_tiles == 0 {
+        return Some(ScrollFallbackKind::ResidualOther);
+    }
+    let saved_ratio = saved_tiles as f32 / potential_tiles as f32;
+    if saved_ratio < SCROLL_DEFER_REPAIR_MIN_SAVED_RATIO {
+        return Some(ScrollFallbackKind::ResidualLowSavedRatio);
+    }
+    if row_shift.abs() > SCROLL_DEFER_REPAIR_MAX_ROW_SHIFT {
+        return Some(ScrollFallbackKind::ResidualLargeRowShift);
+    }
+    Some(ScrollFallbackKind::ResidualOther)
 }
 
 /// Intermediate result from scroll residual analysis.
@@ -95,6 +117,24 @@ impl super::TileCaptureThread {
             self.scroll_residual_tiles_total = self
                 .scroll_residual_tiles_total
                 .saturating_add(p.residual_tiles as u64);
+            self.scroll_chrome_tiles_total = self
+                .scroll_chrome_tiles_total
+                .saturating_add(p.chrome_emit_coords.len() as u64);
+            self.scroll_exposed_strip_tiles_total = self
+                .scroll_exposed_strip_tiles_total
+                .saturating_add(p.exposed_strip_coords.len() as u64);
+            self.scroll_interior_residual_tiles_total = self
+                .scroll_interior_residual_tiles_total
+                .saturating_add(p.interior_residual_tiles as u64);
+            if p.split_region {
+                self.scroll_partition_split_batches_total =
+                    self.scroll_partition_split_batches_total.saturating_add(1);
+            }
+            if p.sticky_band_active {
+                self.scroll_partition_sticky_band_batches_total = self
+                    .scroll_partition_sticky_band_batches_total
+                    .saturating_add(1);
+            }
             scroll_residual_tiles_frame = Some(p.residual_tiles);
             scroll_potential_tiles_frame = Some(p.potential_tiles);
             scroll_residual_ratio = Some(p.residual_ratio);
@@ -104,6 +144,9 @@ impl super::TileCaptureThread {
                 p.interior_ratio,
                 p.defer_scroll_repair,
                 scroll_residual_full_repaint_ratio,
+                p.saved_tiles,
+                p.potential_tiles,
+                p.scroll_row_shift,
             ) {
                 match fallback_kind {
                     ScrollFallbackKind::NonQuantized => {
@@ -115,18 +158,68 @@ impl super::TileCaptureThread {
                         self.scroll_fallback_non_quantized_total =
                             self.scroll_fallback_non_quantized_total.saturating_add(1);
                     }
-                    ScrollFallbackKind::ResidualFullRepaint => {
+                    ScrollFallbackKind::ResidualInteriorLimit => {
                         trace!(
                             dy = p.scroll_dy,
                             row_shift = p.scroll_row_shift,
                             interior_ratio = format!("{:.2}", p.interior_ratio),
                             saved_tiles = p.saved_tiles,
                             potential_tiles = p.potential_tiles,
-                            "scroll copy suppressed by residual full repaint threshold"
+                            "scroll copy suppressed by interior residual limit"
                         );
                         self.scroll_fallback_residual_full_repaint_total = self
                             .scroll_fallback_residual_full_repaint_total
                             .saturating_add(1);
+                        self.scroll_fallback_residual_interior_limit_total = self
+                            .scroll_fallback_residual_interior_limit_total
+                            .saturating_add(1);
+                    }
+                    ScrollFallbackKind::ResidualLowSavedRatio => {
+                        trace!(
+                            dy = p.scroll_dy,
+                            row_shift = p.scroll_row_shift,
+                            interior_ratio = format!("{:.2}", p.interior_ratio),
+                            saved_tiles = p.saved_tiles,
+                            potential_tiles = p.potential_tiles,
+                            "scroll copy suppressed by low saved ratio"
+                        );
+                        self.scroll_fallback_residual_full_repaint_total = self
+                            .scroll_fallback_residual_full_repaint_total
+                            .saturating_add(1);
+                        self.scroll_fallback_residual_low_saved_ratio_total = self
+                            .scroll_fallback_residual_low_saved_ratio_total
+                            .saturating_add(1);
+                    }
+                    ScrollFallbackKind::ResidualLargeRowShift => {
+                        trace!(
+                            dy = p.scroll_dy,
+                            row_shift = p.scroll_row_shift,
+                            interior_ratio = format!("{:.2}", p.interior_ratio),
+                            saved_tiles = p.saved_tiles,
+                            potential_tiles = p.potential_tiles,
+                            "scroll copy suppressed by large row shift"
+                        );
+                        self.scroll_fallback_residual_full_repaint_total = self
+                            .scroll_fallback_residual_full_repaint_total
+                            .saturating_add(1);
+                        self.scroll_fallback_residual_large_row_shift_total = self
+                            .scroll_fallback_residual_large_row_shift_total
+                            .saturating_add(1);
+                    }
+                    ScrollFallbackKind::ResidualOther => {
+                        trace!(
+                            dy = p.scroll_dy,
+                            row_shift = p.scroll_row_shift,
+                            interior_ratio = format!("{:.2}", p.interior_ratio),
+                            saved_tiles = p.saved_tiles,
+                            potential_tiles = p.potential_tiles,
+                            "scroll copy suppressed by residual full repaint fallback"
+                        );
+                        self.scroll_fallback_residual_full_repaint_total = self
+                            .scroll_fallback_residual_full_repaint_total
+                            .saturating_add(1);
+                        self.scroll_fallback_residual_other_total =
+                            self.scroll_fallback_residual_other_total.saturating_add(1);
                     }
                 }
                 scroll_residual_fallback_full = true;
@@ -228,21 +321,48 @@ mod tests {
     #[test]
     fn classifies_non_quantized_scroll_as_fallback() {
         assert_eq!(
-            classify_scroll_fallback(false, 0.10, false, 0.35),
+            classify_scroll_fallback(false, 0.10, false, 0.35, 20, 100, 1),
             Some(ScrollFallbackKind::NonQuantized)
         );
     }
 
     #[test]
-    fn classifies_large_interior_residual_as_full_repaint_fallback() {
+    fn classifies_large_interior_residual_as_interior_limit_fallback() {
         assert_eq!(
-            classify_scroll_fallback(true, 0.80, false, 0.35),
-            Some(ScrollFallbackKind::ResidualFullRepaint)
+            classify_scroll_fallback(true, 0.90, false, 0.70, 60, 100, 1),
+            Some(ScrollFallbackKind::ResidualInteriorLimit)
+        );
+    }
+
+    #[test]
+    fn classifies_low_saved_ratio_as_full_repaint_fallback() {
+        assert_eq!(
+            classify_scroll_fallback(true, 0.76, false, 0.70, 10, 100, 1),
+            Some(ScrollFallbackKind::ResidualLowSavedRatio)
+        );
+    }
+
+    #[test]
+    fn classifies_large_row_shift_as_full_repaint_fallback() {
+        assert_eq!(
+            classify_scroll_fallback(true, 0.76, false, 0.70, 40, 100, 3),
+            Some(ScrollFallbackKind::ResidualLargeRowShift)
         );
     }
 
     #[test]
     fn suppresses_full_repaint_fallback_when_repair_is_deferred() {
-        assert_eq!(classify_scroll_fallback(true, 0.50, true, 0.35), None);
+        assert_eq!(
+            classify_scroll_fallback(true, 0.76, true, 0.70, 40, 100, 1),
+            None
+        );
+    }
+
+    #[test]
+    fn classifies_unexpected_non_deferred_case_as_other() {
+        assert_eq!(
+            classify_scroll_fallback(true, 0.76, false, 0.70, 40, 100, 1),
+            Some(ScrollFallbackKind::ResidualOther)
+        );
     }
 }
