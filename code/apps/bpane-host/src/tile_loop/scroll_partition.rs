@@ -1,6 +1,7 @@
 //! Scroll tile partitioning and residual comparison: split tiles into
 //! content/chrome regions and compute residual dirty set.
 
+use crate::scroll::residual::offset_tile_rect_for_emit;
 use crate::scroll::{
     analyze_scroll_residual_emit_coords, can_emit_scroll_copy, has_scroll_region_split,
     is_content_tile_in_scroll_region, should_defer_scroll_repair,
@@ -230,6 +231,22 @@ pub(crate) fn partition_and_compare(
         saved_tiles,
         grid,
     );
+    let emit_area_px = |coord: tiles::TileCoord| {
+        let rect = offset_tile_rect_for_emit(coord, grid, grid_offset_y);
+        rect.w as usize * rect.h as usize
+    };
+    let chrome_residual_area_px = initial_analysis
+        .residual
+        .iter()
+        .filter(|coord| sticky_bands.is_chrome(**coord))
+        .map(|coord| emit_area_px(*coord))
+        .sum::<usize>();
+    let chrome_exposed_strip_area_px = initial_analysis
+        .exposed_strip
+        .iter()
+        .filter(|coord| sticky_bands.is_chrome(**coord))
+        .map(|coord| emit_area_px(*coord))
+        .sum::<usize>();
     let residual: Vec<_> = initial_analysis
         .residual
         .into_iter()
@@ -240,6 +257,12 @@ pub(crate) fn partition_and_compare(
         .into_iter()
         .filter(|coord| !sticky_bands.is_chrome(*coord))
         .collect();
+    let residual_area_px = initial_analysis
+        .residual_area_px
+        .saturating_sub(chrome_residual_area_px);
+    let exposed_strip_area_px = initial_analysis
+        .exposed_strip_area_px
+        .saturating_sub(chrome_exposed_strip_area_px);
 
     let potential_tiles = content_emit_coords.len();
     let residual_tiles = residual.len();
@@ -251,11 +274,15 @@ pub(crate) fn partition_and_compare(
 
     let exposed_strip_count = exposed_strip_coords.len();
     let interior_residual = residual_tiles.saturating_sub(exposed_strip_count);
-    let interior_total = potential_tiles.saturating_sub(exposed_strip_count);
-    let interior_ratio = if interior_total == 0 {
+    let potential_area_px = content_emit_coords
+        .iter()
+        .map(|coord| emit_area_px(*coord))
+        .sum::<usize>();
+    let interior_area_px = potential_area_px.saturating_sub(exposed_strip_area_px);
+    let interior_ratio = if interior_area_px == 0 {
         0.0
     } else {
-        interior_residual as f32 / interior_total as f32
+        residual_area_px.saturating_sub(exposed_strip_area_px) as f32 / interior_area_px as f32
     };
     let quantized_scroll_copy = can_emit_scroll_copy(scroll_dy, scroll_copy_quantum_px, tile_size);
     let saved_tiles = potential_tiles.saturating_sub(residual_tiles);

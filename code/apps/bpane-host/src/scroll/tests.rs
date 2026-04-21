@@ -174,6 +174,58 @@ fn row_band_fast_path_falls_back_to_single_tile_residuals() {
     );
 }
 
+#[test]
+fn scroll_residual_tracks_partial_row_change_area() {
+    let width = 128usize;
+    let height = 192usize;
+    let stride = width * 4;
+    let grid = tiles::TileGrid::new(width as u16, height as u16, 64);
+    let prev = make_patterned_frame(width, height);
+
+    let mut curr = vec![0u8; stride * height];
+    let dy = 64usize;
+    for y in 0..(height - dy) {
+        let dst = y * stride;
+        let src = (y + dy) * stride;
+        curr[dst..dst + stride].copy_from_slice(&prev[src..src + stride]);
+    }
+    for y in (height - dy)..height {
+        for x in 0..width {
+            let off = y * stride + x * 4;
+            curr[off] = 0xDD;
+            curr[off + 1] = 0xEE;
+            curr[off + 2] = 0xFF;
+            curr[off + 3] = 255;
+        }
+    }
+
+    for y in 0..4usize {
+        for x in 0..64usize {
+            let off = y * stride + x * 4;
+            curr[off] ^= 0x7F;
+        }
+    }
+
+    let emit_coords: Vec<tiles::TileCoord> = (0..grid.rows)
+        .flat_map(|r| (0..grid.cols).map(move |c| tiles::TileCoord::new(c, r)))
+        .collect();
+    let combined =
+        analyze_scroll_residual_emit_coords(&curr, &prev, stride, &grid, 0, 64, &emit_coords);
+
+    assert!(combined.residual.contains(&tiles::TileCoord::new(0, 0)));
+    assert!(!combined.residual.contains(&tiles::TileCoord::new(1, 0)));
+    assert_eq!(
+        combined.exposed_strip_area_px,
+        2 * 64 * 64,
+        "bottom exposed strip should still count as two full tiles",
+    );
+    assert_eq!(
+        combined.residual_area_px,
+        combined.exposed_strip_area_px + 4 * 64,
+        "only the changed rows in the mismatched interior tile should contribute extra area",
+    );
+}
+
 // ── Policy tests ────────────────────────────────────────────────────
 
 #[test]
