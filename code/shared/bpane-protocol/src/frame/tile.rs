@@ -140,6 +140,10 @@ impl TileMessage {
                 scroll_chrome_tiles_total,
                 scroll_exposed_strip_tiles_total,
                 scroll_interior_residual_tiles_total,
+                scroll_edge_strip_residual_tiles_total,
+                scroll_small_edge_strip_residual_tiles_total,
+                scroll_small_edge_strip_residual_rows_total,
+                scroll_small_edge_strip_residual_area_px_total,
                 host_sent_hash_entries,
                 host_sent_hash_evictions_total,
                 host_cache_miss_reports_total,
@@ -161,6 +165,10 @@ impl TileMessage {
                 w.write_u32(*scroll_chrome_tiles_total);
                 w.write_u32(*scroll_exposed_strip_tiles_total);
                 w.write_u32(*scroll_interior_residual_tiles_total);
+                w.write_u32(*scroll_edge_strip_residual_tiles_total);
+                w.write_u32(*scroll_small_edge_strip_residual_tiles_total);
+                w.write_u32(*scroll_small_edge_strip_residual_rows_total);
+                w.write_u32(*scroll_small_edge_strip_residual_area_px_total);
                 w.write_u32(*host_sent_hash_entries);
                 w.write_u32(*host_sent_hash_evictions_total);
                 w.write_u32(*host_cache_miss_reports_total);

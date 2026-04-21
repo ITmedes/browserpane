@@ -145,6 +145,18 @@ impl super::TileCaptureThread {
             scroll_interior_residual_tiles_total: to_u32_sat(
                 self.scroll_interior_residual_tiles_total,
             ),
+            scroll_edge_strip_residual_tiles_total: to_u32_sat(
+                self.scroll_edge_strip_residual_tiles_total,
+            ),
+            scroll_small_edge_strip_residual_tiles_total: to_u32_sat(
+                self.scroll_small_edge_strip_residual_tiles_total,
+            ),
+            scroll_small_edge_strip_residual_rows_total: to_u32_sat(
+                self.scroll_small_edge_strip_residual_rows_total,
+            ),
+            scroll_small_edge_strip_residual_area_px_total: to_u32_sat(
+                self.scroll_small_edge_strip_residual_area_px_total,
+            ),
             host_sent_hash_entries: to_u32_sat(self.emitter.sent_hash_entries() as u64),
             host_sent_hash_evictions_total: to_u32_sat(self.emitter.sent_hash_evictions_total()),
             host_cache_miss_reports_total: to_u32_sat(self.client_cache_miss_reports_total),

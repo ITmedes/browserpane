@@ -427,6 +427,10 @@
         `split:${summary.scroll.hostSplitRegionBatches} sticky:${summary.scroll.hostStickyBandBatches} ` +
         `chromeTiles:${summary.scroll.hostChromeTiles} strip:${summary.scroll.hostExposedStripTiles} ` +
         `interior:${summary.scroll.hostInteriorResidualTiles} ` +
+        `edge:${summary.scroll.hostEdgeStripResidualTiles} ` +
+        `smallEdge:${summary.scroll.hostSmallEdgeStripResidualTiles}/${summary.scroll.hostSmallEdgeStripResidualRows}r ` +
+        `area=${summary.scroll.hostSmallEdgeStripResidualAreaPx}px ` +
+        `share=${summary.scroll.smallEdgeStripResidualShare.toFixed(1)}% ` +
         `sent=${summary.scroll.hostSentHashEntries} evict=${summary.scroll.hostSentHashEvictions} ` +
         `miss=${summary.scroll.hostCacheMissReports} ` +
         `dom=${summary.scroll.dominantHostFallbackReason} ` +
@@ -509,6 +513,14 @@
         hostExposedStripTiles: sessionStats.tiles.scrollHealth.hostScrollExposedStripTilesTotal,
         hostInteriorResidualTiles:
           sessionStats.tiles.scrollHealth.hostScrollInteriorResidualTilesTotal,
+        hostEdgeStripResidualTiles:
+          sessionStats.tiles.scrollHealth.hostScrollEdgeStripResidualTilesTotal,
+        hostSmallEdgeStripResidualTiles:
+          sessionStats.tiles.scrollHealth.hostScrollSmallEdgeStripResidualTilesTotal,
+        hostSmallEdgeStripResidualRows:
+          sessionStats.tiles.scrollHealth.hostScrollSmallEdgeStripResidualRowsTotal,
+        hostSmallEdgeStripResidualAreaPx:
+          sessionStats.tiles.scrollHealth.hostScrollSmallEdgeStripResidualAreaPxTotal,
         hostSentHashEvictions: sessionStats.tiles.scrollHealth.hostSentHashEvictionsTotal,
         hostCacheMissReports: sessionStats.tiles.scrollHealth.hostCacheMissReportsTotal,
         resolution: makeResolutionLabel().replace(/^Resolution:\s*/, ''),
@@ -612,6 +624,25 @@
         0,
         scrollHealth.hostScrollInteriorResidualTilesTotal - baseline.hostInteriorResidualTiles,
       );
+      const hostEdgeStripResidualTiles = Math.max(
+        0,
+        scrollHealth.hostScrollEdgeStripResidualTilesTotal - baseline.hostEdgeStripResidualTiles,
+      );
+      const hostSmallEdgeStripResidualTiles = Math.max(
+        0,
+        scrollHealth.hostScrollSmallEdgeStripResidualTilesTotal
+          - baseline.hostSmallEdgeStripResidualTiles,
+      );
+      const hostSmallEdgeStripResidualRows = Math.max(
+        0,
+        scrollHealth.hostScrollSmallEdgeStripResidualRowsTotal
+          - baseline.hostSmallEdgeStripResidualRows,
+      );
+      const hostSmallEdgeStripResidualAreaPx = Math.max(
+        0,
+        scrollHealth.hostScrollSmallEdgeStripResidualAreaPxTotal
+          - baseline.hostSmallEdgeStripResidualAreaPx,
+      );
       const hostSentHashEvictions = Math.max(
         0,
         scrollHealth.hostSentHashEvictionsTotal - baseline.hostSentHashEvictions,
@@ -693,6 +724,13 @@
           hostChromeTiles,
           hostExposedStripTiles,
           hostInteriorResidualTiles,
+          hostEdgeStripResidualTiles,
+          hostSmallEdgeStripResidualTiles,
+          hostSmallEdgeStripResidualRows,
+          hostSmallEdgeStripResidualAreaPx,
+          smallEdgeStripResidualShare: hostInteriorResidualTiles > 0
+            ? (hostSmallEdgeStripResidualTiles / hostInteriorResidualTiles) * 100
+            : 0,
           hostSentHashEntries: scrollHealth.hostSentHashEntries,
           hostSentHashEvictions,
           hostCacheMissReports,
@@ -923,6 +961,9 @@
                   `split:${sh.hostScrollSplitRegionBatchesTotal} sticky:${sh.hostScrollStickyBandBatchesTotal} ` +
                   `chrome:${sh.hostScrollChromeTilesTotal} strip:${sh.hostScrollExposedStripTilesTotal} ` +
                   `interior:${sh.hostScrollInteriorResidualTilesTotal} ` +
+                  `edge:${sh.hostScrollEdgeStripResidualTilesTotal} ` +
+                  `smallEdge:${sh.hostScrollSmallEdgeStripResidualTilesTotal}/${sh.hostScrollSmallEdgeStripResidualRowsTotal}r ` +
+                  `area=${sh.hostScrollSmallEdgeStripResidualAreaPxTotal}px ` +
                   `saved=${sh.hostScrollSavedRate.toFixed(1)}%`;
               } else {
                 scrollHealthStatsEl.textContent = 'Scroll Health: waiting for scroll telemetry';

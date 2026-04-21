@@ -195,7 +195,7 @@ export class TileMessageParser {
   }
 
   private static parseScrollStats(payload: Uint8Array, view: DataView): TileCommand | null {
-    if (payload.length < 77) {
+    if (payload.length < 93) {
       return null;
     }
 
@@ -217,9 +217,13 @@ export class TileMessageParser {
       scrollChromeTilesTotal: view.getUint32(53, true),
       scrollExposedStripTilesTotal: view.getUint32(57, true),
       scrollInteriorResidualTilesTotal: view.getUint32(61, true),
-      hostSentHashEntries: view.getUint32(65, true),
-      hostSentHashEvictionsTotal: view.getUint32(69, true),
-      hostCacheMissReportsTotal: view.getUint32(73, true),
+      scrollEdgeStripResidualTilesTotal: view.getUint32(65, true),
+      scrollSmallEdgeStripResidualTilesTotal: view.getUint32(69, true),
+      scrollSmallEdgeStripResidualRowsTotal: view.getUint32(73, true),
+      scrollSmallEdgeStripResidualAreaPxTotal: view.getUint32(77, true),
+      hostSentHashEntries: view.getUint32(81, true),
+      hostSentHashEvictionsTotal: view.getUint32(85, true),
+      hostCacheMissReportsTotal: view.getUint32(89, true),
     };
   }
 }

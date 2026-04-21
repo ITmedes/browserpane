@@ -267,8 +267,8 @@ fn arb_tile_message() -> impl Strategy<Value = TileMessage> {
             offset_y: oy
         }),
         any::<bool>().prop_map(|ao| TileMessage::TileDrawMode { apply_offset: ao }),
-        proptest::array::uniform19(any::<u32>()).prop_map(
-            |[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s]| {
+        proptest::array::uniform23(any::<u32>()).prop_map(
+            |[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w]| {
                 TileMessage::ScrollStats {
                     scroll_batches_total: a,
                     scroll_full_fallbacks_total: b,
@@ -286,9 +286,13 @@ fn arb_tile_message() -> impl Strategy<Value = TileMessage> {
                     scroll_chrome_tiles_total: n,
                     scroll_exposed_strip_tiles_total: o,
                     scroll_interior_residual_tiles_total: p,
-                    host_sent_hash_entries: q,
-                    host_sent_hash_evictions_total: r,
-                    host_cache_miss_reports_total: s,
+                    scroll_edge_strip_residual_tiles_total: q,
+                    scroll_small_edge_strip_residual_tiles_total: r,
+                    scroll_small_edge_strip_residual_rows_total: s,
+                    scroll_small_edge_strip_residual_area_px_total: t,
+                    host_sent_hash_entries: u,
+                    host_sent_hash_evictions_total: v,
+                    host_cache_miss_reports_total: w,
                 }
             }
         ),
