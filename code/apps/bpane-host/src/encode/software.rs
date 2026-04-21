@@ -89,9 +89,8 @@ mod libav_encoder {
             use ffmpeg_next::frame::Video as VideoFrame;
             use ffmpeg_next::Packet;
 
-            // Create input frame from BGRA data
-            // Note: CapturedFrame data is RGBA after the backend's swap,
-            // but our scaler expects BGRA. The caller should handle this.
+            // CapturedFrame data is already in BGRA order, which matches
+            // the scaler input format directly.
             let mut input = VideoFrame::new(Pixel::BGRA, frame.width, frame.height);
             let stride = input.stride(0);
             let data = input.data_mut(0);

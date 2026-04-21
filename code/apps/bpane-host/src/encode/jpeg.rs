@@ -6,7 +6,7 @@ use std::io::Cursor;
 
 /// JPEG encoder backend.
 ///
-/// Encodes raw RGBA frames to JPEG. This is a pragmatic interim solution
+/// Encodes raw BGRA frames to JPEG. This is a pragmatic interim solution
 /// while the full H.264 pipeline (VAAPI/libx264) is being built out.
 /// Every frame is a keyframe (JPEG has no inter-frame compression).
 pub struct JpegEncoderBackend {
@@ -36,13 +36,13 @@ impl EncodeBackend for JpegEncoderBackend {
 
         let pixel_count = (frame.width * frame.height) as usize;
 
-        // Convert RGBA -> RGB (JPEG doesn't support alpha)
+        // Convert BGRA -> RGB (JPEG doesn't support alpha)
         self.rgb_buf.clear();
         self.rgb_buf.reserve(pixel_count * 3);
         for pixel in frame.data.chunks_exact(4) {
-            self.rgb_buf.push(pixel[0]); // R
+            self.rgb_buf.push(pixel[2]); // R
             self.rgb_buf.push(pixel[1]); // G
-            self.rgb_buf.push(pixel[2]); // B
+            self.rgb_buf.push(pixel[0]); // B
         }
 
         let mut buf = Cursor::new(Vec::with_capacity(pixel_count / 4));
@@ -83,7 +83,7 @@ mod tests {
         let frame = CapturedFrame {
             width: 64,
             height: 64,
-            data: vec![0xFF; 64 * 64 * 4], // white RGBA pixels
+            data: vec![0xFF; 64 * 64 * 4], // white BGRA pixels
             timestamp_us: 1000,
         };
         let mut enc = JpegEncoderBackend::new(64, 64, 50);
@@ -110,5 +110,28 @@ mod tests {
         // Both should produce valid JPEG
         assert_eq!(e1.data[0..2], [0xFF, 0xD8]);
         assert_eq!(e2.data[0..2], [0xFF, 0xD8]);
+    }
+
+    #[test]
+    fn jpeg_encode_converts_bgra_channel_order() {
+        let mut data = Vec::with_capacity(16 * 16 * 4);
+        for _ in 0..(16 * 16) {
+            data.extend_from_slice(&[0x00, 0x00, 0xFF, 0xFF]); // solid red in BGRA
+        }
+        let frame = CapturedFrame {
+            width: 16,
+            height: 16,
+            data,
+            timestamp_us: 0,
+        };
+
+        let mut enc = JpegEncoderBackend::new(16, 16, 100);
+        let encoded = enc.encode_frame(&frame).unwrap();
+        let decoded = image::load_from_memory(&encoded.data).unwrap().to_rgb8();
+        let pixel = decoded.get_pixel(8, 8);
+
+        assert!(pixel[0] > 200, "expected strong red channel");
+        assert!(pixel[1] < 80, "expected weak green channel");
+        assert!(pixel[2] < 80, "expected weak blue channel");
     }
 }
