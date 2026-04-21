@@ -67,6 +67,7 @@ pub struct TileCaptureThread {
     // ── Grid & emitter ───────────────────────────────────────────────
     pub(crate) grid: tiles::TileGrid,
     pub(crate) emitter: tiles::emitter::TileEmitter,
+    pub(crate) full_emit_coords: Vec<tiles::TileCoord>,
 
     // ── Scroll state ─────────────────────────────────────────────────
     pub(crate) prev_frame: Option<Vec<u8>>,
@@ -184,6 +185,9 @@ impl TileCaptureThread {
         let grid = tiles::TileGrid::new(screen_w, screen_h, tile_size);
         let emitter = tiles::emitter::TileEmitter::with_codec(grid.cols, grid.rows, tile_codec);
         let total_tiles = grid.cols as usize * grid.rows as usize;
+        let full_emit_coords: Vec<tiles::TileCoord> = (0..grid.rows)
+            .flat_map(|r| (0..grid.cols).map(move |c| tiles::TileCoord::new(c, r)))
+            .collect();
 
         let damage = capture::x11::DamageTracker::with_options(
             display,
@@ -218,6 +222,7 @@ impl TileCaptureThread {
             screen_h,
             grid,
             emitter,
+            full_emit_coords,
             prev_frame: None,
             content_origin_y: 0,
             grid_offset_y: 0,

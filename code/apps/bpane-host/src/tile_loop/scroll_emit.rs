@@ -25,13 +25,12 @@ impl super::TileCaptureThread {
         scroll_thin_repair_quiet_frames: u8,
     ) -> ScrollEmitResult {
         // Phase 1: Build dirty set from XDamage
-        let (full_emit_coords, all_dirty) = self.build_dirty_set(force_refresh);
+        let all_dirty = self.build_dirty_set(force_refresh);
 
         // Phase 2: Analyze scroll residual
         let residual = self.analyze_scroll_residual(
             rgba,
             stride,
-            &full_emit_coords,
             all_dirty,
             &detected_scroll_frame,
             scroll_residual_full_repaint_ratio,

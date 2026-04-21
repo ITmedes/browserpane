@@ -52,7 +52,6 @@ impl super::TileCaptureThread {
         &mut self,
         rgba: &[u8],
         stride: usize,
-        full_emit_coords: &[tiles::TileCoord],
         mut all_dirty: Vec<tiles::TileCoord>,
         detected_scroll_frame: &Option<DetectedScrollFrame>,
         scroll_residual_full_repaint_ratio: f32,
@@ -81,7 +80,7 @@ impl super::TileCaptureThread {
                 self.tile_size,
                 self.scroll_copy_quantum_px,
                 dsf.dy,
-                full_emit_coords,
+                &self.full_emit_coords,
                 dsf,
                 self.last_scroll_region_top,
                 self.screen_h,
@@ -138,7 +137,7 @@ impl super::TileCaptureThread {
                 scroll_emit_ratio_frame = Some(1.0);
                 self.scroll_thin_mode_active = false;
                 self.scroll_residual_was_active = false;
-                all_dirty = full_emit_coords.to_vec();
+                all_dirty = self.full_emit_coords.clone();
             } else {
                 all_dirty = p.residual;
                 all_dirty.extend(p.chrome_emit_coords.iter().copied());
@@ -200,7 +199,7 @@ impl super::TileCaptureThread {
         } else if (self.scroll_thin_mode_active || self.scroll_residual_was_active)
             && self.scroll_quiet_frames >= scroll_thin_repair_quiet_frames
         {
-            all_dirty = full_emit_coords.to_vec();
+            all_dirty = self.full_emit_coords.clone();
             self.scroll_thin_mode_active = false;
             self.scroll_residual_was_active = false;
             scroll_thin_repair_frame = true;

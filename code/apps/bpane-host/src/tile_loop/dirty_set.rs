@@ -4,24 +4,25 @@
 use crate::tiles;
 
 impl super::TileCaptureThread {
-    /// Build the full set of emit coordinates and narrow it via XDamage
-    /// bounding box filtering.
-    ///
-    /// Returns `(full_emit_coords, initial_all_dirty)`.
-    pub(crate) fn build_dirty_set(
-        &self,
-        force_refresh: bool,
-    ) -> (Vec<tiles::TileCoord>, Vec<tiles::TileCoord>) {
-        // Emit tiles for all positions, including extra bottom row when
-        // grid offset is active (partial tile at bottom edge).
+    fn refresh_full_emit_coords(&mut self) {
         let emit_rows = if self.grid_offset_y > 0 {
             self.grid.rows + 1
         } else {
             self.grid.rows
         };
-        let full_emit_coords: Vec<tiles::TileCoord> = (0..emit_rows)
+        let expected = emit_rows as usize * self.grid.cols as usize;
+        if self.full_emit_coords.len() == expected {
+            return;
+        }
+        self.full_emit_coords = (0..emit_rows)
             .flat_map(|r| (0..self.grid.cols).map(move |c| tiles::TileCoord::new(c, r)))
             .collect();
+    }
+
+    /// Build the full set of emit coordinates and narrow it via XDamage
+    /// bounding box filtering.
+    pub(crate) fn build_dirty_set(&mut self, force_refresh: bool) -> Vec<tiles::TileCoord> {
+        self.refresh_full_emit_coords();
         // Narrow dirty set to tiles overlapping XDamage bounding box.
         let all_dirty: Vec<tiles::TileCoord> = if !force_refresh {
             if let Some(ref dt) = self.damage {
@@ -29,7 +30,7 @@ impl super::TileCaptureThread {
                     let ts = self.tile_size as u16;
                     let dx2 = dx.saturating_add(dw);
                     let dy2 = dy.saturating_add(dh);
-                    full_emit_coords
+                    self.full_emit_coords
                         .iter()
                         .copied()
                         .filter(|coord| {
@@ -42,14 +43,14 @@ impl super::TileCaptureThread {
                         })
                         .collect()
                 } else {
-                    full_emit_coords.clone()
+                    self.full_emit_coords.clone()
                 }
             } else {
-                full_emit_coords.clone()
+                self.full_emit_coords.clone()
             }
         } else {
-            full_emit_coords.clone()
+            self.full_emit_coords.clone()
         };
-        (full_emit_coords, all_dirty)
+        all_dirty
     }
 }
