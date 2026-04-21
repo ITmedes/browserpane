@@ -1,8 +1,6 @@
 //! Scroll tile partitioning and residual comparison: split tiles into
 //! content/chrome regions and compute residual dirty set.
 
-use std::collections::HashSet;
-
 use crate::scroll::{
     analyze_scroll_residual_emit_coords, can_emit_scroll_copy, has_scroll_region_split,
     is_content_tile_in_scroll_region, should_defer_scroll_repair,
@@ -17,22 +15,36 @@ const STICKY_TOP_ROWS_MAX: u16 = 3;
 const STICKY_RIGHT_COLS_MAX: u16 = 6;
 const STICKY_BAND_MIN_SAVED_RATIO: f32 = 0.20;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct StickyBands {
+    sticky_row_end: Option<u16>,
+    sticky_col_start: Option<u16>,
+}
+
+impl StickyBands {
+    fn is_chrome(self, coord: tiles::TileCoord) -> bool {
+        self.sticky_row_end.is_some_and(|row_end| coord.row < row_end)
+            || self
+                .sticky_col_start
+                .is_some_and(|col_start| coord.col >= col_start)
+    }
+}
+
 fn trim_sticky_bands(
     content_emit_coords: Vec<tiles::TileCoord>,
     mut chrome_emit_coords: Vec<tiles::TileCoord>,
     residual: &[tiles::TileCoord],
     saved_tiles: usize,
     grid: &tiles::TileGrid,
-) -> (Vec<tiles::TileCoord>, Vec<tiles::TileCoord>) {
+) -> (Vec<tiles::TileCoord>, Vec<tiles::TileCoord>, StickyBands) {
     if content_emit_coords.len() < STICKY_BAND_MIN_TILES * 4 || residual.is_empty() {
-        return (content_emit_coords, chrome_emit_coords);
+        return (content_emit_coords, chrome_emit_coords, StickyBands::default());
     }
     let saved_ratio = saved_tiles as f32 / content_emit_coords.len() as f32;
     if saved_ratio < STICKY_BAND_MIN_SAVED_RATIO {
-        return (content_emit_coords, chrome_emit_coords);
+        return (content_emit_coords, chrome_emit_coords, StickyBands::default());
     }
 
-    let residual_set: HashSet<_> = residual.iter().copied().collect();
     let mut row_total = vec![0usize; grid.rows as usize];
     let mut row_residual = vec![0usize; grid.rows as usize];
     let mut col_total = vec![0usize; grid.cols as usize];
@@ -45,14 +57,15 @@ fn trim_sticky_bands(
         max_col = max_col.max(coord.col);
         row_total[coord.row as usize] += 1;
         col_total[coord.col as usize] += 1;
-        if residual_set.contains(&coord) {
-            row_residual[coord.row as usize] += 1;
-            col_residual[coord.col as usize] += 1;
-        }
+    }
+
+    for &coord in residual {
+        row_residual[coord.row as usize] += 1;
+        col_residual[coord.col as usize] += 1;
     }
 
     if min_row == u16::MAX {
-        return (content_emit_coords, chrome_emit_coords);
+        return (content_emit_coords, chrome_emit_coords, StickyBands::default());
     }
 
     let mut sticky_top_rows = 0u16;
@@ -86,23 +99,24 @@ fn trim_sticky_bands(
     }
 
     if sticky_top_rows == 0 && sticky_right_cols == 0 {
-        return (content_emit_coords, chrome_emit_coords);
+        return (content_emit_coords, chrome_emit_coords, StickyBands::default());
     }
 
-    let sticky_row_end = min_row.saturating_add(sticky_top_rows);
-    let sticky_col_start = max_col.saturating_sub(sticky_right_cols.saturating_sub(1));
+    let sticky_bands = StickyBands {
+        sticky_row_end: (sticky_top_rows > 0).then_some(min_row.saturating_add(sticky_top_rows)),
+        sticky_col_start: (sticky_right_cols > 0)
+            .then_some(max_col.saturating_sub(sticky_right_cols.saturating_sub(1))),
+    };
     let mut trimmed_content = Vec::with_capacity(content_emit_coords.len());
     for coord in content_emit_coords {
-        let in_sticky_top = sticky_top_rows > 0 && coord.row < sticky_row_end;
-        let in_sticky_right = sticky_right_cols > 0 && coord.col >= sticky_col_start;
-        if in_sticky_top || in_sticky_right {
+        if sticky_bands.is_chrome(coord) {
             chrome_emit_coords.push(coord);
         } else {
             trimmed_content.push(coord);
         }
     }
 
-    (trimmed_content, chrome_emit_coords)
+    (trimmed_content, chrome_emit_coords, sticky_bands)
 }
 
 /// Result of tile partitioning and residual comparison.
@@ -184,23 +198,23 @@ pub(crate) fn partition_and_compare(
     let saved_tiles = content_emit_coords
         .len()
         .saturating_sub(initial_analysis.residual.len());
-    (content_emit_coords, chrome_emit_coords) = trim_sticky_bands(
+    let sticky_bands;
+    (content_emit_coords, chrome_emit_coords, sticky_bands) = trim_sticky_bands(
         content_emit_coords,
         chrome_emit_coords,
         &initial_analysis.residual,
         saved_tiles,
         grid,
     );
-    let content_set: std::collections::HashSet<_> = content_emit_coords.iter().copied().collect();
     let residual: Vec<_> = initial_analysis
         .residual
         .into_iter()
-        .filter(|coord| content_set.contains(coord))
+        .filter(|coord| !sticky_bands.is_chrome(*coord))
         .collect();
     let exposed_strip_coords: Vec<_> = initial_analysis
         .exposed_strip
         .into_iter()
-        .filter(|coord| content_set.contains(coord))
+        .filter(|coord| !sticky_bands.is_chrome(*coord))
         .collect();
 
     let potential_tiles = content_emit_coords.len();
