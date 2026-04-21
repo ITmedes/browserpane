@@ -1,4 +1,9 @@
 use super::*;
+use super::policy::is_scroll_delta_quantized;
+use super::residual::{
+    build_scroll_exposed_strip_emit_coords, build_scroll_residual_emit_coords,
+    offset_tile_rect_for_emit, tile_matches_shifted_prev,
+};
 use crate::tiles;
 
 // ── Residual tests ──────────────────────────────────────────────────
@@ -86,6 +91,36 @@ fn scroll_exposed_strip_marks_only_exposed_rows() {
     assert!(up.contains(&tiles::TileCoord::new(1, 0)));
     assert!(!up.contains(&tiles::TileCoord::new(0, 1)));
     assert!(!up.contains(&tiles::TileCoord::new(1, 1)));
+}
+
+#[test]
+fn combined_scroll_analysis_matches_residual_and_exposed_strip_helpers() {
+    let grid = tiles::TileGrid::new(128, 128, 64);
+    let stride = 128usize * 4;
+    let prev = vec![0u8; stride * 128usize];
+    let curr = vec![0u8; stride * 128usize];
+    let emit_coords: Vec<tiles::TileCoord> = (0..grid.rows)
+        .flat_map(|r| (0..grid.cols).map(move |c| tiles::TileCoord::new(c, r)))
+        .collect();
+
+    let combined =
+        analyze_scroll_residual_emit_coords(&curr, &prev, stride, &grid, 0, 1, &emit_coords);
+
+    assert_eq!(
+        combined.residual,
+        build_scroll_residual_emit_coords(&curr, &prev, stride, &grid, 0, 1, &emit_coords)
+    );
+    assert_eq!(
+        combined.exposed_strip,
+        build_scroll_exposed_strip_emit_coords(&grid, 0, 1, &emit_coords)
+    );
+    assert!(
+        combined
+            .residual
+            .iter()
+            .all(|coord| combined.exposed_strip.contains(coord)),
+        "for identical frames, the exposed strip should be the entire residual set",
+    );
 }
 
 // ── Policy tests ────────────────────────────────────────────────────
