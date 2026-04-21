@@ -1,15 +1,56 @@
 //! Scroll residual analysis: apply partition results, manage fallback,
 //! thin mode, and repair scheduling.
 
-use std::collections::HashSet;
-
 use tracing::trace;
 
-use crate::scroll::{build_scroll_exposed_strip_emit_coords, offset_tile_rect_for_emit};
+use crate::scroll::{
+    build_scroll_exposed_strip_emit_coords, SCROLL_DEFER_REPAIR_MAX_INTERIOR_RATIO,
+    SCROLL_DEFER_REPAIR_MAX_ROW_SHIFT, SCROLL_DEFER_REPAIR_MIN_SAVED_RATIO,
+};
 use crate::tiles;
 
 use super::frame_types::DetectedScrollFrame;
 use super::scroll_partition::partition_and_compare;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScrollFallbackKind {
+    NonQuantized,
+    ResidualInteriorLimit,
+    ResidualLowSavedRatio,
+    ResidualLargeRowShift,
+    ResidualOther,
+}
+
+fn classify_scroll_fallback(
+    quantized_scroll_copy: bool,
+    interior_ratio: f32,
+    defer_scroll_repair: bool,
+    full_repaint_ratio: f32,
+    saved_tiles: usize,
+    potential_tiles: usize,
+    row_shift: i32,
+) -> Option<ScrollFallbackKind> {
+    if !quantized_scroll_copy {
+        return Some(ScrollFallbackKind::NonQuantized);
+    }
+    if interior_ratio <= full_repaint_ratio || defer_scroll_repair {
+        return None;
+    }
+    if interior_ratio > SCROLL_DEFER_REPAIR_MAX_INTERIOR_RATIO {
+        return Some(ScrollFallbackKind::ResidualInteriorLimit);
+    }
+    if potential_tiles == 0 {
+        return Some(ScrollFallbackKind::ResidualOther);
+    }
+    let saved_ratio = saved_tiles as f32 / potential_tiles as f32;
+    if saved_ratio < SCROLL_DEFER_REPAIR_MIN_SAVED_RATIO {
+        return Some(ScrollFallbackKind::ResidualLowSavedRatio);
+    }
+    if row_shift.abs() > SCROLL_DEFER_REPAIR_MAX_ROW_SHIFT {
+        return Some(ScrollFallbackKind::ResidualLargeRowShift);
+    }
+    Some(ScrollFallbackKind::ResidualOther)
+}
 
 /// Intermediate result from scroll residual analysis.
 pub(crate) struct ScrollResidualResult {
@@ -33,7 +74,6 @@ impl super::TileCaptureThread {
         &mut self,
         rgba: &[u8],
         stride: usize,
-        full_emit_coords: &[tiles::TileCoord],
         mut all_dirty: Vec<tiles::TileCoord>,
         detected_scroll_frame: &Option<DetectedScrollFrame>,
         scroll_residual_full_repaint_ratio: f32,
@@ -62,7 +102,7 @@ impl super::TileCaptureThread {
                 self.tile_size,
                 self.scroll_copy_quantum_px,
                 dsf.dy,
-                full_emit_coords,
+                &self.full_emit_coords,
                 dsf,
                 self.last_scroll_region_top,
                 self.screen_h,
@@ -77,16 +117,123 @@ impl super::TileCaptureThread {
             self.scroll_residual_tiles_total = self
                 .scroll_residual_tiles_total
                 .saturating_add(p.residual_tiles as u64);
+            self.scroll_chrome_tiles_total = self
+                .scroll_chrome_tiles_total
+                .saturating_add(p.chrome_emit_coords.len() as u64);
+            self.scroll_exposed_strip_tiles_total = self
+                .scroll_exposed_strip_tiles_total
+                .saturating_add(p.exposed_strip_coords.len() as u64);
+            self.scroll_interior_residual_tiles_total = self
+                .scroll_interior_residual_tiles_total
+                .saturating_add(p.interior_residual_tiles as u64);
+            self.scroll_edge_strip_residual_tiles_total = self
+                .scroll_edge_strip_residual_tiles_total
+                .saturating_add(p.edge_strip_residual_tiles as u64);
+            self.scroll_small_edge_strip_residual_tiles_total = self
+                .scroll_small_edge_strip_residual_tiles_total
+                .saturating_add(p.small_edge_strip_residual_tiles as u64);
+            self.scroll_small_edge_strip_residual_rows_total = self
+                .scroll_small_edge_strip_residual_rows_total
+                .saturating_add(p.small_edge_strip_residual_rows as u64);
+            self.scroll_small_edge_strip_residual_area_px_total = self
+                .scroll_small_edge_strip_residual_area_px_total
+                .saturating_add(p.small_edge_strip_residual_area_px as u64);
+            if p.split_region {
+                self.scroll_partition_split_batches_total =
+                    self.scroll_partition_split_batches_total.saturating_add(1);
+            }
+            if p.sticky_band_active {
+                self.scroll_partition_sticky_band_batches_total = self
+                    .scroll_partition_sticky_band_batches_total
+                    .saturating_add(1);
+            }
             scroll_residual_tiles_frame = Some(p.residual_tiles);
             scroll_potential_tiles_frame = Some(p.potential_tiles);
             scroll_residual_ratio = Some(p.residual_ratio);
 
-            if !p.quantized_scroll_copy {
-                trace!(
-                    dy = p.scroll_dy,
-                    scroll_copy_quantum_px = self.scroll_copy_quantum_px,
-                    "scroll copy suppressed for non-quantized delta"
-                );
+            if let Some(fallback_kind) = classify_scroll_fallback(
+                p.quantized_scroll_copy,
+                p.interior_ratio,
+                p.defer_scroll_repair,
+                scroll_residual_full_repaint_ratio,
+                p.saved_tiles,
+                p.potential_tiles,
+                p.scroll_row_shift,
+            ) {
+                match fallback_kind {
+                    ScrollFallbackKind::NonQuantized => {
+                        trace!(
+                            dy = p.scroll_dy,
+                            scroll_copy_quantum_px = self.scroll_copy_quantum_px,
+                            "scroll copy suppressed for non-quantized delta"
+                        );
+                        self.scroll_fallback_non_quantized_total =
+                            self.scroll_fallback_non_quantized_total.saturating_add(1);
+                    }
+                    ScrollFallbackKind::ResidualInteriorLimit => {
+                        trace!(
+                            dy = p.scroll_dy,
+                            row_shift = p.scroll_row_shift,
+                            interior_ratio = format!("{:.2}", p.interior_ratio),
+                            saved_tiles = p.saved_tiles,
+                            potential_tiles = p.potential_tiles,
+                            "scroll copy suppressed by interior residual limit"
+                        );
+                        self.scroll_fallback_residual_full_repaint_total = self
+                            .scroll_fallback_residual_full_repaint_total
+                            .saturating_add(1);
+                        self.scroll_fallback_residual_interior_limit_total = self
+                            .scroll_fallback_residual_interior_limit_total
+                            .saturating_add(1);
+                    }
+                    ScrollFallbackKind::ResidualLowSavedRatio => {
+                        trace!(
+                            dy = p.scroll_dy,
+                            row_shift = p.scroll_row_shift,
+                            interior_ratio = format!("{:.2}", p.interior_ratio),
+                            saved_tiles = p.saved_tiles,
+                            potential_tiles = p.potential_tiles,
+                            "scroll copy suppressed by low saved ratio"
+                        );
+                        self.scroll_fallback_residual_full_repaint_total = self
+                            .scroll_fallback_residual_full_repaint_total
+                            .saturating_add(1);
+                        self.scroll_fallback_residual_low_saved_ratio_total = self
+                            .scroll_fallback_residual_low_saved_ratio_total
+                            .saturating_add(1);
+                    }
+                    ScrollFallbackKind::ResidualLargeRowShift => {
+                        trace!(
+                            dy = p.scroll_dy,
+                            row_shift = p.scroll_row_shift,
+                            interior_ratio = format!("{:.2}", p.interior_ratio),
+                            saved_tiles = p.saved_tiles,
+                            potential_tiles = p.potential_tiles,
+                            "scroll copy suppressed by large row shift"
+                        );
+                        self.scroll_fallback_residual_full_repaint_total = self
+                            .scroll_fallback_residual_full_repaint_total
+                            .saturating_add(1);
+                        self.scroll_fallback_residual_large_row_shift_total = self
+                            .scroll_fallback_residual_large_row_shift_total
+                            .saturating_add(1);
+                    }
+                    ScrollFallbackKind::ResidualOther => {
+                        trace!(
+                            dy = p.scroll_dy,
+                            row_shift = p.scroll_row_shift,
+                            interior_ratio = format!("{:.2}", p.interior_ratio),
+                            saved_tiles = p.saved_tiles,
+                            potential_tiles = p.potential_tiles,
+                            "scroll copy suppressed by residual full repaint fallback"
+                        );
+                        self.scroll_fallback_residual_full_repaint_total = self
+                            .scroll_fallback_residual_full_repaint_total
+                            .saturating_add(1);
+                        self.scroll_fallback_residual_other_total =
+                            self.scroll_fallback_residual_other_total.saturating_add(1);
+                    }
+                }
                 scroll_residual_fallback_full = true;
                 self.scroll_residual_fallback_full_total =
                     self.scroll_residual_fallback_full_total.saturating_add(1);
@@ -95,58 +242,10 @@ impl super::TileCaptureThread {
                 scroll_emit_ratio_frame = Some(1.0);
                 self.scroll_thin_mode_active = false;
                 self.scroll_residual_was_active = false;
-                all_dirty = full_emit_coords.to_vec();
-            } else if p.interior_ratio > scroll_residual_full_repaint_ratio
-                && !p.defer_scroll_repair
-            {
-                trace!(
-                    dy = p.scroll_dy,
-                    row_shift = p.scroll_row_shift,
-                    interior_ratio = format!("{:.2}", p.interior_ratio),
-                    saved_tiles = p.saved_tiles,
-                    potential_tiles = p.potential_tiles,
-                    "scroll copy suppressed by residual full repaint threshold"
-                );
-                scroll_residual_fallback_full = true;
-                self.scroll_residual_fallback_full_total =
-                    self.scroll_residual_fallback_full_total.saturating_add(1);
-                scroll_saved_tiles_frame = Some(0);
-                scroll_saved_ratio_frame = Some(0.0);
-                scroll_emit_ratio_frame = Some(1.0);
-                self.scroll_thin_mode_active = false;
-                self.scroll_residual_was_active = false;
-                all_dirty = full_emit_coords.to_vec();
+                all_dirty = self.full_emit_coords.clone();
             } else {
                 all_dirty = p.residual;
                 all_dirty.extend(p.chrome_emit_coords.iter().copied());
-                // Force content tiles overlapping the exposed strip into dirty set.
-                {
-                    let mut dirty_coords: HashSet<_> = all_dirty.iter().copied().collect();
-                    let (exp_start, exp_end) = if p.scroll_dy > 0 {
-                        let start = (p.srb_for_split as i32 - p.scroll_dy as i32)
-                            .max(p.srt_for_split as i32);
-                        (start, p.srb_for_split as i32)
-                    } else {
-                        let end = (p.srt_for_split as i32 + (-p.scroll_dy) as i32)
-                            .min(p.srb_for_split as i32);
-                        (p.srt_for_split as i32, end)
-                    };
-                    for &coord in &p.content_emit_coords {
-                        if dirty_coords.contains(&coord) {
-                            continue;
-                        }
-                        let rect = offset_tile_rect_for_emit(coord, &self.grid, self.grid_offset_y);
-                        if rect.w == 0 || rect.h == 0 {
-                            continue;
-                        }
-                        let tile_top = rect.y as i32;
-                        let tile_bot = tile_top + rect.h as i32;
-                        if tile_bot > exp_start && tile_top < exp_end {
-                            dirty_coords.insert(coord);
-                            all_dirty.push(coord);
-                        }
-                    }
-                }
                 self.scroll_saved_tiles_total = self
                     .scroll_saved_tiles_total
                     .saturating_add(p.saved_tiles as u64);
@@ -178,13 +277,16 @@ impl super::TileCaptureThread {
                     >= scroll_thin_mode_residual_ratio
                     || p.residual_tiles >= residual_tiles_min_for_thin;
                 if sub_tile_scroll && residual_large_for_sub_tile {
-                    let residual_coords = &p.content_emit_coords;
-                    let strip_dirty = build_scroll_exposed_strip_emit_coords(
-                        &self.grid,
-                        self.grid_offset_y,
-                        p.scroll_dy,
-                        residual_coords,
-                    );
+                    let strip_dirty = if p.exposed_strip_coords.is_empty() {
+                        build_scroll_exposed_strip_emit_coords(
+                            &self.grid,
+                            self.grid_offset_y,
+                            p.scroll_dy,
+                            &p.content_emit_coords,
+                        )
+                    } else {
+                        p.exposed_strip_coords.clone()
+                    };
                     if self.scroll_thin_mode_enabled && !strip_dirty.is_empty() {
                         all_dirty = strip_dirty;
                         all_dirty.extend(p.chrome_emit_coords.iter().copied());
@@ -202,7 +304,7 @@ impl super::TileCaptureThread {
         } else if (self.scroll_thin_mode_active || self.scroll_residual_was_active)
             && self.scroll_quiet_frames >= scroll_thin_repair_quiet_frames
         {
-            all_dirty = full_emit_coords.to_vec();
+            all_dirty = self.full_emit_coords.clone();
             self.scroll_thin_mode_active = false;
             self.scroll_residual_was_active = false;
             scroll_thin_repair_frame = true;
@@ -221,5 +323,58 @@ impl super::TileCaptureThread {
             scroll_thin_mode_frame,
             scroll_thin_repair_frame,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_scroll_fallback, ScrollFallbackKind};
+
+    #[test]
+    fn classifies_non_quantized_scroll_as_fallback() {
+        assert_eq!(
+            classify_scroll_fallback(false, 0.10, false, 0.35, 20, 100, 1),
+            Some(ScrollFallbackKind::NonQuantized)
+        );
+    }
+
+    #[test]
+    fn classifies_large_interior_residual_as_interior_limit_fallback() {
+        assert_eq!(
+            classify_scroll_fallback(true, 0.90, false, 0.70, 60, 100, 1),
+            Some(ScrollFallbackKind::ResidualInteriorLimit)
+        );
+    }
+
+    #[test]
+    fn classifies_low_saved_ratio_as_full_repaint_fallback() {
+        assert_eq!(
+            classify_scroll_fallback(true, 0.76, false, 0.70, 10, 100, 1),
+            Some(ScrollFallbackKind::ResidualLowSavedRatio)
+        );
+    }
+
+    #[test]
+    fn classifies_large_row_shift_as_full_repaint_fallback() {
+        assert_eq!(
+            classify_scroll_fallback(true, 0.76, false, 0.70, 40, 100, 3),
+            Some(ScrollFallbackKind::ResidualLargeRowShift)
+        );
+    }
+
+    #[test]
+    fn suppresses_full_repaint_fallback_when_repair_is_deferred() {
+        assert_eq!(
+            classify_scroll_fallback(true, 0.76, true, 0.70, 40, 100, 1),
+            None
+        );
+    }
+
+    #[test]
+    fn classifies_unexpected_non_deferred_case_as_other() {
+        assert_eq!(
+            classify_scroll_fallback(true, 0.76, false, 0.70, 40, 100, 1),
+            Some(ScrollFallbackKind::ResidualOther)
+        );
     }
 }

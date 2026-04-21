@@ -23,6 +23,13 @@ impl super::TileCaptureThread {
             residual.scroll_residual_fallback_full,
             residual.scroll_saved_tiles_frame,
         );
+        if detected_scroll_frame.is_some()
+            && !residual.scroll_residual_fallback_full
+            && matches!(residual.scroll_saved_tiles_frame, Some(0))
+        {
+            self.scroll_zero_saved_batches_total =
+                self.scroll_zero_saved_batches_total.saturating_add(1);
+        }
         if let Some(ref dsf) = detected_scroll_frame {
             if emit_scroll_copy {
                 if dsf.row_shift != 0 {
@@ -108,6 +115,51 @@ impl super::TileCaptureThread {
             scroll_full_fallbacks_total: to_u32_sat(self.scroll_residual_fallback_full_total),
             scroll_potential_tiles_total: to_u32_sat(self.scroll_potential_tiles_total),
             scroll_saved_tiles_total: to_u32_sat(self.scroll_saved_tiles_total),
+            scroll_non_quantized_fallbacks_total: to_u32_sat(
+                self.scroll_fallback_non_quantized_total,
+            ),
+            scroll_residual_full_repaints_total: to_u32_sat(
+                self.scroll_fallback_residual_full_repaint_total,
+            ),
+            scroll_residual_interior_limit_fallbacks_total: to_u32_sat(
+                self.scroll_fallback_residual_interior_limit_total,
+            ),
+            scroll_residual_low_saved_ratio_fallbacks_total: to_u32_sat(
+                self.scroll_fallback_residual_low_saved_ratio_total,
+            ),
+            scroll_residual_large_row_shift_fallbacks_total: to_u32_sat(
+                self.scroll_fallback_residual_large_row_shift_total,
+            ),
+            scroll_residual_other_fallbacks_total: to_u32_sat(
+                self.scroll_fallback_residual_other_total,
+            ),
+            scroll_zero_saved_batches_total: to_u32_sat(self.scroll_zero_saved_batches_total),
+            scroll_split_region_batches_total: to_u32_sat(
+                self.scroll_partition_split_batches_total,
+            ),
+            scroll_sticky_band_batches_total: to_u32_sat(
+                self.scroll_partition_sticky_band_batches_total,
+            ),
+            scroll_chrome_tiles_total: to_u32_sat(self.scroll_chrome_tiles_total),
+            scroll_exposed_strip_tiles_total: to_u32_sat(self.scroll_exposed_strip_tiles_total),
+            scroll_interior_residual_tiles_total: to_u32_sat(
+                self.scroll_interior_residual_tiles_total,
+            ),
+            scroll_edge_strip_residual_tiles_total: to_u32_sat(
+                self.scroll_edge_strip_residual_tiles_total,
+            ),
+            scroll_small_edge_strip_residual_tiles_total: to_u32_sat(
+                self.scroll_small_edge_strip_residual_tiles_total,
+            ),
+            scroll_small_edge_strip_residual_rows_total: to_u32_sat(
+                self.scroll_small_edge_strip_residual_rows_total,
+            ),
+            scroll_small_edge_strip_residual_area_px_total: to_u32_sat(
+                self.scroll_small_edge_strip_residual_area_px_total,
+            ),
+            host_sent_hash_entries: to_u32_sat(self.emitter.sent_hash_entries() as u64),
+            host_sent_hash_evictions_total: to_u32_sat(self.emitter.sent_hash_evictions_total()),
+            host_cache_miss_reports_total: to_u32_sat(self.client_cache_miss_reports_total),
         }
         .to_frame();
         if self.tile_tx.blocking_send(scroll_stats_frame).is_err() {

@@ -119,6 +119,49 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .metrics-panel {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border: 1px solid #222;
+      border-radius: 8px;
+      background: #10182a;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .metrics-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .metrics-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #d8def2;
+    }
+    .metrics-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 8px 16px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      color: #a9b3d0;
+    }
+    .metrics-grid > span {
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   </style>
 </head>
 <body>
@@ -175,6 +218,26 @@
     <span id="transfer-rate">Rate: --</span>
   </div>
 
+  <section class="metrics-panel">
+    <div class="metrics-header">
+      <span class="metrics-title">Benchmark Metrics</span>
+      <div class="metrics-controls">
+        <button id="btn-metrics-start">Start Sample</button>
+        <button id="btn-metrics-stop" disabled>Stop Sample</button>
+        <button id="btn-metrics-copy" disabled>Copy Metrics</button>
+        <button id="btn-metrics-reset">Reset Metrics</button>
+      </div>
+    </div>
+    <div class="metrics-grid">
+      <span id="metrics-sample">Sample: idle</span>
+      <span id="metrics-render">Surface: --</span>
+      <span id="metrics-throughput">Throughput: --</span>
+      <span id="metrics-tiles">Tiles: --</span>
+      <span id="metrics-scroll">Scroll: --</span>
+      <span id="metrics-video">Video: --</span>
+    </div>
+  </section>
+
   <div class="log-panel" id="log-panel" style="display:none;"></div>
 
   <script type="module">
@@ -204,8 +267,18 @@
     const scrollHealthStatsEl = document.getElementById('scroll-health-stats');
     const transferStatsEl = document.getElementById('transfer-stats');
     const transferRateEl = document.getElementById('transfer-rate');
+    const metricsSampleEl = document.getElementById('metrics-sample');
+    const metricsRenderEl = document.getElementById('metrics-render');
+    const metricsThroughputEl = document.getElementById('metrics-throughput');
+    const metricsTilesEl = document.getElementById('metrics-tiles');
+    const metricsScrollEl = document.getElementById('metrics-scroll');
+    const metricsVideoEl = document.getElementById('metrics-video');
     const connectBtn = document.getElementById('btn-connect');
     const disconnectBtn = document.getElementById('btn-disconnect');
+    const metricsStartBtn = document.getElementById('btn-metrics-start');
+    const metricsStopBtn = document.getElementById('btn-metrics-stop');
+    const metricsCopyBtn = document.getElementById('btn-metrics-copy');
+    const metricsResetBtn = document.getElementById('btn-metrics-reset');
     const renderBackendSelect = document.getElementById('render-backend-select');
     const hidpiToggle = document.getElementById('hidpi-toggle');
     const scrollCopyToggle = document.getElementById('scroll-copy-toggle');
@@ -258,6 +331,11 @@
       return `${s}s`;
     }
 
+    function formatRate(bytesPerSec) {
+      if (!Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return '0 B/s';
+      return `${formatBytes(bytesPerSec)}/s`;
+    }
+
     function topChannelRates(curr, prev, dtSec) {
       if (!curr || !prev || !Number.isFinite(dtSec) || dtSec <= 0) return '--';
       const names = new Set([
@@ -291,6 +369,449 @@
       return `Render: ${diagnostics.backend} (${diagnostics.reason})${renderer ? ` ${renderer}` : ''}`;
     }
 
+    function cloneSummary(summary) {
+      return summary ? JSON.parse(JSON.stringify(summary)) : null;
+    }
+
+    function makeResolutionLabel() {
+      if (!liveState.resolution.width || !liveState.resolution.height) {
+        return 'Resolution: --';
+      }
+      return `Resolution: ${liveState.resolution.width}x${liveState.resolution.height}`;
+    }
+
+    function setMetricsButtons() {
+      metricsStartBtn.disabled = !session || benchmarkState.active;
+      metricsStopBtn.disabled = !benchmarkState.active;
+      metricsCopyBtn.disabled = !benchmarkState.summary;
+    }
+
+    function renderBenchmarkMetrics() {
+      const summary = benchmarkState.summary;
+      if (!summary) {
+        metricsSampleEl.textContent = 'Sample: idle';
+        metricsRenderEl.textContent = 'Surface: --';
+        metricsThroughputEl.textContent = 'Throughput: --';
+        metricsTilesEl.textContent = 'Tiles: --';
+        metricsScrollEl.textContent = 'Scroll: --';
+        metricsVideoEl.textContent = 'Video: --';
+        setMetricsButtons();
+        return;
+      }
+
+      const stateLabel = benchmarkState.active ? 'running' : 'stopped';
+      metricsSampleEl.textContent =
+        `Sample: ${stateLabel} ${formatDuration(summary.durationMs)} avg=${summary.averageFps.toFixed(1)} fps frames=${summary.frameCount}`;
+      metricsRenderEl.textContent =
+        `Surface: ${summary.resolution} ${summary.render.label}`;
+      metricsThroughputEl.textContent =
+        `Throughput: down=${formatRate(summary.transfer.avgRxRate)} peak=${formatRate(summary.transfer.peakRxRate)} ` +
+        `up=${formatRate(summary.transfer.avgTxRate)} peak=${formatRate(summary.transfer.peakTxRate)} ` +
+        `tile=${formatRate(summary.transfer.avgTileRate)} video=${formatRate(summary.transfer.avgVideoRate)}`;
+      metricsTilesEl.textContent =
+        `Tiles: total=${summary.tiles.totalCommands} image=${summary.tiles.imageCommands} ` +
+        `video=${summary.tiles.videoCommands} draw=${summary.tiles.drawCommands} ` +
+        `cache=${summary.tiles.cacheHitRateObserved.toFixed(1)}% size=${summary.tiles.cacheSizeObserved} ` +
+        `evict=${summary.tiles.cacheEvictions} bytes=${formatBytes(summary.tiles.cacheBytesObserved)} ` +
+        `batchMax=${summary.tiles.maxBatchCommands} pendMax=${summary.tiles.maxPendingCommands}`;
+      metricsScrollEl.textContent =
+        `Scroll: batches=${summary.scroll.scrollBatches} saved=${summary.scroll.scrollSavedRate.toFixed(1)}% ` +
+        `hostFallback=${summary.scroll.hostFallbackRate.toFixed(1)}% ` +
+        `reasons=nq:${summary.scroll.hostFallbackReasons.nonQuantizedFallbacks} ` +
+        `repaint:${summary.scroll.hostFallbackReasons.residualFullRepaints} ` +
+        `[int:${summary.scroll.hostFallbackReasons.residualInteriorLimitFallbacks} ` +
+        `saved:${summary.scroll.hostFallbackReasons.residualLowSavedRatioFallbacks} ` +
+        `shift:${summary.scroll.hostFallbackReasons.residualLargeRowShiftFallbacks} ` +
+        `other:${summary.scroll.hostFallbackReasons.residualOtherFallbacks}] ` +
+        `zero:${summary.scroll.hostFallbackReasons.zeroSavedBatches} ` +
+        `split:${summary.scroll.hostSplitRegionBatches} sticky:${summary.scroll.hostStickyBandBatches} ` +
+        `chromeTiles:${summary.scroll.hostChromeTiles} strip:${summary.scroll.hostExposedStripTiles} ` +
+        `interior:${summary.scroll.hostInteriorResidualTiles} ` +
+        `edge:${summary.scroll.hostEdgeStripResidualTiles} ` +
+        `smallEdge:${summary.scroll.hostSmallEdgeStripResidualTiles}/${summary.scroll.hostSmallEdgeStripResidualRows}r ` +
+        `area=${summary.scroll.hostSmallEdgeStripResidualAreaPx}px ` +
+        `share=${summary.scroll.smallEdgeStripResidualShare.toFixed(1)}% ` +
+        `sent=${summary.scroll.hostSentHashEntries} evict=${summary.scroll.hostSentHashEvictions} ` +
+        `miss=${summary.scroll.hostCacheMissReports} ` +
+        `dom=${summary.scroll.dominantHostFallbackReason} ` +
+        `r20=${summary.scroll.hostFallbackRateRecent20.toFixed(1)}% ` +
+        `r50=${summary.scroll.hostFallbackRateRecent50.toFixed(1)}%`;
+      metricsVideoEl.textContent =
+        `Video: datagrams=${summary.video.datagrams} dropped=${summary.video.droppedFrames} ` +
+        `tileBytes=${formatBytes(summary.transfer.tileBytes)} videoBytes=${formatBytes(summary.transfer.videoBytes)}`;
+      setMetricsButtons();
+    }
+
+    function resetBenchmarkMetrics() {
+      benchmarkState.active = false;
+      benchmarkState.startedAtMs = 0;
+      benchmarkState.baseline = null;
+      benchmarkState.summary = null;
+      benchmarkState.peakRxRate = 0;
+      benchmarkState.peakTxRate = 0;
+      benchmarkState.peakTileRate = 0;
+      benchmarkState.peakVideoRate = 0;
+      benchmarkState.maxPendingCommands = 0;
+      benchmarkState.maxBatchCommands = 0;
+      benchmarkState.lastObservedBatchCount = 0;
+      renderBenchmarkMetrics();
+    }
+
+    function dominantHostScrollReason(reasonCounts) {
+      const entries = [
+        ['non-quantized', reasonCounts.nonQuantizedFallbacks],
+        ['residual-interior-limit', reasonCounts.residualInteriorLimitFallbacks],
+        ['residual-low-saved-ratio', reasonCounts.residualLowSavedRatioFallbacks],
+        ['residual-large-row-shift', reasonCounts.residualLargeRowShiftFallbacks],
+        ['residual-other', reasonCounts.residualOtherFallbacks],
+        ['zero-saved', reasonCounts.zeroSavedBatches],
+      ];
+      let bestLabel = 'none';
+      let bestValue = 0;
+      for (const [label, value] of entries) {
+        if (value > bestValue) {
+          bestLabel = label;
+          bestValue = value;
+        }
+      }
+      return bestLabel;
+    }
+
+    function buildBenchmarkBaseline(now, frameCount, diagnostics, tileRuntime, sessionStats) {
+      return {
+        capturedAtMs: now,
+        frameCount,
+        rxBytes: sessionStats.transfer.rxBytes,
+        txBytes: sessionStats.transfer.txBytes,
+        tileBytes: sessionStats.tiles.commandBytes,
+        videoBytes: sessionStats.video.datagramBytes,
+        droppedFrames: sessionStats.video.droppedFrames,
+        datagrams: sessionStats.video.datagrams,
+        imageCommands: sessionStats.tiles.imageCommands,
+        videoCommands: sessionStats.tiles.videoCommands,
+        drawCommands: sessionStats.tiles.drawCommands,
+        totalCommands: sessionStats.tiles.totalCommands,
+        scrollBatches: sessionStats.tiles.scrollComposition.scrollBatches,
+        scrollPotentialTiles: sessionStats.tiles.scrollComposition.scrollPotentialTiles,
+        scrollSavedTiles: sessionStats.tiles.scrollComposition.scrollSavedTiles,
+        hostFallbacks: sessionStats.tiles.scrollHealth.hostScrollFallbacksTotal,
+        hostScrollBatches: sessionStats.tiles.scrollHealth.hostScrollBatchesTotal,
+        hostNonQuantizedFallbacks: sessionStats.tiles.scrollHealth.hostScrollNonQuantizedFallbacksTotal,
+        hostResidualFullRepaints: sessionStats.tiles.scrollHealth.hostScrollResidualFullRepaintsTotal,
+        hostResidualInteriorLimitFallbacks:
+          sessionStats.tiles.scrollHealth.hostScrollResidualInteriorLimitFallbacksTotal,
+        hostResidualLowSavedRatioFallbacks:
+          sessionStats.tiles.scrollHealth.hostScrollResidualLowSavedRatioFallbacksTotal,
+        hostResidualLargeRowShiftFallbacks:
+          sessionStats.tiles.scrollHealth.hostScrollResidualLargeRowShiftFallbacksTotal,
+        hostResidualOtherFallbacks:
+          sessionStats.tiles.scrollHealth.hostScrollResidualOtherFallbacksTotal,
+        hostZeroSavedBatches: sessionStats.tiles.scrollHealth.hostScrollZeroSavedBatchesTotal,
+        hostSplitRegionBatches: sessionStats.tiles.scrollHealth.hostScrollSplitRegionBatchesTotal,
+        hostStickyBandBatches: sessionStats.tiles.scrollHealth.hostScrollStickyBandBatchesTotal,
+        hostChromeTiles: sessionStats.tiles.scrollHealth.hostScrollChromeTilesTotal,
+        hostExposedStripTiles: sessionStats.tiles.scrollHealth.hostScrollExposedStripTilesTotal,
+        hostInteriorResidualTiles:
+          sessionStats.tiles.scrollHealth.hostScrollInteriorResidualTilesTotal,
+        hostEdgeStripResidualTiles:
+          sessionStats.tiles.scrollHealth.hostScrollEdgeStripResidualTilesTotal,
+        hostSmallEdgeStripResidualTiles:
+          sessionStats.tiles.scrollHealth.hostScrollSmallEdgeStripResidualTilesTotal,
+        hostSmallEdgeStripResidualRows:
+          sessionStats.tiles.scrollHealth.hostScrollSmallEdgeStripResidualRowsTotal,
+        hostSmallEdgeStripResidualAreaPx:
+          sessionStats.tiles.scrollHealth.hostScrollSmallEdgeStripResidualAreaPxTotal,
+        hostSentHashEvictions: sessionStats.tiles.scrollHealth.hostSentHashEvictionsTotal,
+        hostCacheMissReports: sessionStats.tiles.scrollHealth.hostCacheMissReportsTotal,
+        resolution: makeResolutionLabel().replace(/^Resolution:\s*/, ''),
+        render: diagnostics ? {
+          backend: diagnostics.backend,
+          reason: diagnostics.reason,
+          renderer: diagnostics.renderer ?? '',
+        } : {
+          backend: '--',
+          reason: '--',
+          renderer: '',
+        },
+        cacheSizeObserved: tileRuntime.size,
+        cacheBytesObserved: tileRuntime.bytes,
+        cacheHits: tileRuntime.hits,
+        cacheMisses: tileRuntime.misses,
+        cacheEvictions: tileRuntime.evictions,
+        batchesQueued: tileRuntime.batchesQueued,
+        totalBatchCommands: tileRuntime.totalBatchCommands,
+      };
+    }
+
+    function updateBenchmarkMetrics(now, frameCount, diagnostics, tileRuntime, sessionStats, rates) {
+      if (!benchmarkState.active || !benchmarkState.baseline) {
+        return;
+      }
+
+      benchmarkState.peakRxRate = Math.max(benchmarkState.peakRxRate, rates.rxRate);
+      benchmarkState.peakTxRate = Math.max(benchmarkState.peakTxRate, rates.txRate);
+      benchmarkState.peakTileRate = Math.max(benchmarkState.peakTileRate, rates.tileRate);
+      benchmarkState.peakVideoRate = Math.max(benchmarkState.peakVideoRate, rates.videoRate);
+      benchmarkState.maxPendingCommands = Math.max(
+        benchmarkState.maxPendingCommands,
+        tileRuntime.currentPendingCommands,
+      );
+      if (tileRuntime.batchesQueued > benchmarkState.lastObservedBatchCount) {
+        benchmarkState.maxBatchCommands = Math.max(
+          benchmarkState.maxBatchCommands,
+          tileRuntime.lastBatchCommands,
+        );
+        benchmarkState.lastObservedBatchCount = tileRuntime.batchesQueued;
+      }
+
+      const baseline = benchmarkState.baseline;
+      const durationMs = Math.max(0, now - baseline.capturedAtMs);
+      const durationSec = Math.max(durationMs / 1000, 0.001);
+      const scrollComposition = sessionStats.tiles.scrollComposition;
+      const scrollHealth = sessionStats.tiles.scrollHealth;
+      const scrollPotentialTiles = Math.max(0, scrollComposition.scrollPotentialTiles - baseline.scrollPotentialTiles);
+      const scrollSavedTiles = Math.max(0, scrollComposition.scrollSavedTiles - baseline.scrollSavedTiles);
+      const hostScrollBatches = Math.max(0, scrollHealth.hostScrollBatchesTotal - baseline.hostScrollBatches);
+      const hostFallbacks = Math.max(0, scrollHealth.hostScrollFallbacksTotal - baseline.hostFallbacks);
+      const hostNonQuantizedFallbacks = Math.max(
+        0,
+        scrollHealth.hostScrollNonQuantizedFallbacksTotal - baseline.hostNonQuantizedFallbacks,
+      );
+      const hostResidualFullRepaints = Math.max(
+        0,
+        scrollHealth.hostScrollResidualFullRepaintsTotal - baseline.hostResidualFullRepaints,
+      );
+      const hostResidualInteriorLimitFallbacks = Math.max(
+        0,
+        scrollHealth.hostScrollResidualInteriorLimitFallbacksTotal
+          - baseline.hostResidualInteriorLimitFallbacks,
+      );
+      const hostResidualLowSavedRatioFallbacks = Math.max(
+        0,
+        scrollHealth.hostScrollResidualLowSavedRatioFallbacksTotal
+          - baseline.hostResidualLowSavedRatioFallbacks,
+      );
+      const hostResidualLargeRowShiftFallbacks = Math.max(
+        0,
+        scrollHealth.hostScrollResidualLargeRowShiftFallbacksTotal
+          - baseline.hostResidualLargeRowShiftFallbacks,
+      );
+      const hostResidualOtherFallbacks = Math.max(
+        0,
+        scrollHealth.hostScrollResidualOtherFallbacksTotal - baseline.hostResidualOtherFallbacks,
+      );
+      const hostZeroSavedBatches = Math.max(
+        0,
+        scrollHealth.hostScrollZeroSavedBatchesTotal - baseline.hostZeroSavedBatches,
+      );
+      const hostSplitRegionBatches = Math.max(
+        0,
+        scrollHealth.hostScrollSplitRegionBatchesTotal - baseline.hostSplitRegionBatches,
+      );
+      const hostStickyBandBatches = Math.max(
+        0,
+        scrollHealth.hostScrollStickyBandBatchesTotal - baseline.hostStickyBandBatches,
+      );
+      const hostChromeTiles = Math.max(
+        0,
+        scrollHealth.hostScrollChromeTilesTotal - baseline.hostChromeTiles,
+      );
+      const hostExposedStripTiles = Math.max(
+        0,
+        scrollHealth.hostScrollExposedStripTilesTotal - baseline.hostExposedStripTiles,
+      );
+      const hostInteriorResidualTiles = Math.max(
+        0,
+        scrollHealth.hostScrollInteriorResidualTilesTotal - baseline.hostInteriorResidualTiles,
+      );
+      const hostEdgeStripResidualTiles = Math.max(
+        0,
+        scrollHealth.hostScrollEdgeStripResidualTilesTotal - baseline.hostEdgeStripResidualTiles,
+      );
+      const hostSmallEdgeStripResidualTiles = Math.max(
+        0,
+        scrollHealth.hostScrollSmallEdgeStripResidualTilesTotal
+          - baseline.hostSmallEdgeStripResidualTiles,
+      );
+      const hostSmallEdgeStripResidualRows = Math.max(
+        0,
+        scrollHealth.hostScrollSmallEdgeStripResidualRowsTotal
+          - baseline.hostSmallEdgeStripResidualRows,
+      );
+      const hostSmallEdgeStripResidualAreaPx = Math.max(
+        0,
+        scrollHealth.hostScrollSmallEdgeStripResidualAreaPxTotal
+          - baseline.hostSmallEdgeStripResidualAreaPx,
+      );
+      const hostSentHashEvictions = Math.max(
+        0,
+        scrollHealth.hostSentHashEvictionsTotal - baseline.hostSentHashEvictions,
+      );
+      const hostCacheMissReports = Math.max(
+        0,
+        scrollHealth.hostCacheMissReportsTotal - baseline.hostCacheMissReports,
+      );
+      const hostFallbackReasons = {
+        nonQuantizedFallbacks: hostNonQuantizedFallbacks,
+        residualFullRepaints: hostResidualFullRepaints,
+        residualInteriorLimitFallbacks: hostResidualInteriorLimitFallbacks,
+        residualLowSavedRatioFallbacks: hostResidualLowSavedRatioFallbacks,
+        residualLargeRowShiftFallbacks: hostResidualLargeRowShiftFallbacks,
+        residualOtherFallbacks: hostResidualOtherFallbacks,
+        zeroSavedBatches: hostZeroSavedBatches,
+      };
+
+      benchmarkState.summary = {
+        durationMs,
+        frameCount: Math.max(0, frameCount - baseline.frameCount),
+        averageFps: Math.max(0, frameCount - baseline.frameCount) / durationSec,
+        resolution: makeResolutionLabel().replace(/^Resolution:\s*/, ''),
+        render: {
+          backend: diagnostics?.backend ?? baseline.render.backend,
+          reason: diagnostics?.reason ?? baseline.render.reason,
+          renderer: diagnostics?.renderer ?? baseline.render.renderer,
+          label: formatRenderDiagnostics(diagnostics ?? baseline.render),
+        },
+        transfer: {
+          rxBytes: Math.max(0, sessionStats.transfer.rxBytes - baseline.rxBytes),
+          txBytes: Math.max(0, sessionStats.transfer.txBytes - baseline.txBytes),
+          tileBytes: Math.max(0, sessionStats.tiles.commandBytes - baseline.tileBytes),
+          videoBytes: Math.max(0, sessionStats.video.datagramBytes - baseline.videoBytes),
+          avgRxRate: Math.max(0, sessionStats.transfer.rxBytes - baseline.rxBytes) / durationSec,
+          avgTxRate: Math.max(0, sessionStats.transfer.txBytes - baseline.txBytes) / durationSec,
+          avgTileRate: Math.max(0, sessionStats.tiles.commandBytes - baseline.tileBytes) / durationSec,
+          avgVideoRate: Math.max(0, sessionStats.video.datagramBytes - baseline.videoBytes) / durationSec,
+          peakRxRate: benchmarkState.peakRxRate,
+          peakTxRate: benchmarkState.peakTxRate,
+          peakTileRate: benchmarkState.peakTileRate,
+          peakVideoRate: benchmarkState.peakVideoRate,
+        },
+        tiles: {
+          imageCommands: Math.max(0, sessionStats.tiles.imageCommands - baseline.imageCommands),
+          videoCommands: Math.max(0, sessionStats.tiles.videoCommands - baseline.videoCommands),
+          drawCommands: Math.max(0, sessionStats.tiles.drawCommands - baseline.drawCommands),
+          totalCommands: Math.max(0, sessionStats.tiles.totalCommands - baseline.totalCommands),
+          cacheHitRateObserved: sessionStats.tiles.cacheHitRateObserved,
+          cacheSizeObserved: tileRuntime.size,
+          cacheBytesObserved: tileRuntime.bytes,
+          cacheHits: Math.max(0, tileRuntime.hits - baseline.cacheHits),
+          cacheMisses: Math.max(0, tileRuntime.misses - baseline.cacheMisses),
+          cacheEvictions: Math.max(0, tileRuntime.evictions - baseline.cacheEvictions),
+          redundantQoiBytes: sessionStats.tiles.redundantQoiBytes,
+          batchesQueued: Math.max(0, tileRuntime.batchesQueued - baseline.batchesQueued),
+          totalBatchCommands: Math.max(0, tileRuntime.totalBatchCommands - baseline.totalBatchCommands),
+          averageBatchCommands: Math.max(0, tileRuntime.batchesQueued - baseline.batchesQueued) > 0
+            ? Math.max(0, tileRuntime.totalBatchCommands - baseline.totalBatchCommands)
+              / Math.max(1, tileRuntime.batchesQueued - baseline.batchesQueued)
+            : 0,
+          maxBatchCommands: benchmarkState.maxBatchCommands,
+          maxPendingCommands: benchmarkState.maxPendingCommands,
+        },
+        scroll: {
+          scrollBatches: Math.max(0, scrollComposition.scrollBatches - baseline.scrollBatches),
+          scrollPotentialTiles,
+          scrollSavedTiles,
+          scrollSavedRate: scrollPotentialTiles > 0 ? (scrollSavedTiles / scrollPotentialTiles) * 100 : 0,
+          hostScrollBatches,
+          hostFallbacks,
+          hostFallbackRate: hostScrollBatches > 0 ? (hostFallbacks / hostScrollBatches) * 100 : 0,
+          hostFallbackReasons,
+          dominantHostFallbackReason: dominantHostScrollReason(hostFallbackReasons),
+          hostFallbackRateRecent20: scrollHealth.hostFallbackRateRecent20,
+          hostFallbackRateRecent50: scrollHealth.hostFallbackRateRecent50,
+          hostSplitRegionBatches,
+          hostStickyBandBatches,
+          hostChromeTiles,
+          hostExposedStripTiles,
+          hostInteriorResidualTiles,
+          hostEdgeStripResidualTiles,
+          hostSmallEdgeStripResidualTiles,
+          hostSmallEdgeStripResidualRows,
+          hostSmallEdgeStripResidualAreaPx,
+          smallEdgeStripResidualShare: hostInteriorResidualTiles > 0
+            ? (hostSmallEdgeStripResidualTiles / hostInteriorResidualTiles) * 100
+            : 0,
+          hostSentHashEntries: scrollHealth.hostSentHashEntries,
+          hostSentHashEvictions,
+          hostCacheMissReports,
+        },
+        video: {
+          datagrams: Math.max(0, sessionStats.video.datagrams - baseline.datagrams),
+          droppedFrames: Math.max(0, sessionStats.video.droppedFrames - baseline.droppedFrames),
+        },
+      };
+
+      renderBenchmarkMetrics();
+    }
+
+    function startBenchmarkSample() {
+      if (!session) {
+        log('Cannot start metrics sample: connect first.', 'warn');
+        return;
+      }
+      const now = performance.now();
+      const diagnostics = session.getRenderDiagnostics();
+      const tileRuntime = session.getTileCacheStats();
+      const sessionStats = session.getSessionStats();
+      benchmarkState.active = true;
+      benchmarkState.startedAtMs = now;
+      benchmarkState.peakRxRate = 0;
+      benchmarkState.peakTxRate = 0;
+      benchmarkState.peakTileRate = 0;
+      benchmarkState.peakVideoRate = 0;
+      benchmarkState.maxPendingCommands = 0;
+      benchmarkState.maxBatchCommands = 0;
+      benchmarkState.baseline = buildBenchmarkBaseline(
+        now,
+        session.getFrameCount(),
+        diagnostics,
+        tileRuntime,
+        sessionStats,
+      );
+      benchmarkState.summary = null;
+      benchmarkState.lastObservedBatchCount = benchmarkState.baseline.batchesQueued;
+      renderBenchmarkMetrics();
+      log('Benchmark sample started', 'info');
+    }
+
+    function stopBenchmarkSample(reason = 'manual') {
+      if (!benchmarkState.active) {
+        return;
+      }
+      if (session) {
+        updateBenchmarkMetrics(
+          performance.now(),
+          session.getFrameCount(),
+          session.getRenderDiagnostics(),
+          session.getTileCacheStats(),
+          session.getSessionStats(),
+          {
+            rxRate: 0,
+            txRate: 0,
+            tileRate: 0,
+            videoRate: 0,
+          },
+        );
+      }
+      benchmarkState.active = false;
+      renderBenchmarkMetrics();
+      log(`Benchmark sample stopped (${reason})`, reason === 'disconnect' ? 'warn' : 'info');
+    }
+
+    async function copyBenchmarkSummary() {
+      if (!benchmarkState.summary) {
+        log('No benchmark metrics available to copy yet.', 'warn');
+        return;
+      }
+      const payload = JSON.stringify(cloneSummary(benchmarkState.summary), null, 2);
+      try {
+        await navigator.clipboard.writeText(payload);
+        log('Benchmark metrics copied to clipboard', 'ok');
+      } catch (error) {
+        log(`Failed to copy benchmark metrics: ${error.message}`, 'error');
+      }
+    }
+
     // ── Token fetch ─────────────────────────────────────────────────
     async function fetchToken() {
       try {
@@ -317,6 +838,30 @@
 
     // ── Session state ───────────────────────────────────────────────
     let session = null;
+    const liveState = {
+      frameInterval: null,
+      lastFrameCount: 0,
+      lastFpsTime: 0,
+      currentFps: 0,
+      lastTransferSample: null,
+      resolution: {
+        width: 0,
+        height: 0,
+      },
+    };
+    const benchmarkState = {
+      active: false,
+      startedAtMs: 0,
+      baseline: null,
+      summary: null,
+      peakRxRate: 0,
+      peakTxRate: 0,
+      peakTileRate: 0,
+      peakVideoRate: 0,
+      maxPendingCommands: 0,
+      maxBatchCommands: 0,
+      lastObservedBatchCount: 0,
+    };
 
     async function connect() {
       setStatus('Fetching token...', 'connecting');
@@ -358,23 +903,29 @@
             uploadBtn.disabled = false;
             log('File transfer ready: drag/drop files onto the session or use Upload File.', 'info');
             // Poll frame counter + compute FPS
-            window._lastFrameCount = 0;
-            window._lastFpsTime = performance.now();
-            window._currentFps = 0;
-            window._lastTransferSample = null;
-            if (window._frameCountInterval) clearInterval(window._frameCountInterval);
-            window._frameCountInterval = setInterval(() => {
+            liveState.lastFrameCount = 0;
+            liveState.lastFpsTime = performance.now();
+            liveState.currentFps = 0;
+            liveState.lastTransferSample = null;
+            if (liveState.frameInterval) clearInterval(liveState.frameInterval);
+            if (!benchmarkState.summary) {
+              renderBenchmarkMetrics();
+            } else {
+              setMetricsButtons();
+            }
+            liveState.frameInterval = setInterval(() => {
               if (!session) return;
               const now = performance.now();
               const count = session.getFrameCount();
-              const dt = (now - window._lastFpsTime) / 1000;
+              const dt = (now - liveState.lastFpsTime) / 1000;
               if (dt >= 1.0) {
-                window._currentFps = ((count - window._lastFrameCount) / dt).toFixed(1);
-                window._lastFrameCount = count;
-                window._lastFpsTime = now;
+                liveState.currentFps = Number(((count - liveState.lastFrameCount) / dt).toFixed(1));
+                liveState.lastFrameCount = count;
+                liveState.lastFpsTime = now;
               }
-              framesEl.textContent = `Frames: ${count}  (${window._currentFps} fps)`;
-              renderBackendEl.textContent = formatRenderDiagnostics(session.getRenderDiagnostics());
+              framesEl.textContent = `Frames: ${count}  (${liveState.currentFps.toFixed(1)} fps)`;
+              const renderDiagnostics = session.getRenderDiagnostics();
+              renderBackendEl.textContent = formatRenderDiagnostics(renderDiagnostics);
               // Tile cache stats
               const ts = session.getTileCacheStats();
               tileStatsEl.textContent =
@@ -400,6 +951,19 @@
                   `r20=${sh.hostFallbackRateRecent20.toFixed(1)}%/${sh.hostFallbackRateRecent20Batches} ` +
                   `r50=${sh.hostFallbackRateRecent50.toFixed(1)}%/${sh.hostFallbackRateRecent50Batches} ` +
                   `(${sh.hostScrollFallbacksTotal}/${sh.hostScrollBatchesTotal}) ` +
+                  `reasons=nq:${sh.hostScrollNonQuantizedFallbacksTotal} ` +
+                  `repaint:${sh.hostScrollResidualFullRepaintsTotal} ` +
+                  `[int:${sh.hostScrollResidualInteriorLimitFallbacksTotal} ` +
+                  `saved:${sh.hostScrollResidualLowSavedRatioFallbacksTotal} ` +
+                  `shift:${sh.hostScrollResidualLargeRowShiftFallbacksTotal} ` +
+                  `other:${sh.hostScrollResidualOtherFallbacksTotal}] ` +
+                  `zero:${sh.hostScrollZeroSavedBatchesTotal} ` +
+                  `split:${sh.hostScrollSplitRegionBatchesTotal} sticky:${sh.hostScrollStickyBandBatchesTotal} ` +
+                  `chrome:${sh.hostScrollChromeTilesTotal} strip:${sh.hostScrollExposedStripTilesTotal} ` +
+                  `interior:${sh.hostScrollInteriorResidualTilesTotal} ` +
+                  `edge:${sh.hostScrollEdgeStripResidualTilesTotal} ` +
+                  `smallEdge:${sh.hostScrollSmallEdgeStripResidualTilesTotal}/${sh.hostScrollSmallEdgeStripResidualRowsTotal}r ` +
+                  `area=${sh.hostScrollSmallEdgeStripResidualAreaPxTotal}px ` +
                   `saved=${sh.hostScrollSavedRate.toFixed(1)}%`;
               } else {
                 scrollHealthStatsEl.textContent = 'Scroll Health: waiting for scroll telemetry';
@@ -412,14 +976,22 @@
                 t: now,
                 rx: ss.transfer.rxBytes,
                 tx: ss.transfer.txBytes,
+                tileBytes: ss.tiles.commandBytes,
+                videoBytes: ss.video.datagramBytes,
                 rxByChannel: ss.transfer.rxByChannel,
                 txByChannel: ss.transfer.txByChannel,
               };
-              const prevSample = window._lastTransferSample;
+              const prevSample = liveState.lastTransferSample;
+              let rxRate = 0;
+              let txRate = 0;
+              let tileRate = 0;
+              let videoRate = 0;
               if (prevSample) {
                 const dt = (sampleNow.t - prevSample.t) / 1000;
-                const rxRate = Math.max(0, sampleNow.rx - prevSample.rx) / Math.max(dt, 0.001);
-                const txRate = Math.max(0, sampleNow.tx - prevSample.tx) / Math.max(dt, 0.001);
+                rxRate = Math.max(0, sampleNow.rx - prevSample.rx) / Math.max(dt, 0.001);
+                txRate = Math.max(0, sampleNow.tx - prevSample.tx) / Math.max(dt, 0.001);
+                tileRate = Math.max(0, sampleNow.tileBytes - prevSample.tileBytes) / Math.max(dt, 0.001);
+                videoRate = Math.max(0, sampleNow.videoBytes - prevSample.videoBytes) / Math.max(dt, 0.001);
                 const rxTop = topChannelRates(sampleNow.rxByChannel, prevSample.rxByChannel, dt);
                 const txTop = topChannelRates(sampleNow.txByChannel, prevSample.txByChannel, dt);
                 transferRateEl.textContent =
@@ -428,14 +1000,21 @@
               } else {
                 transferRateEl.textContent = 'Rate: collecting...';
               }
-              window._lastTransferSample = sampleNow;
+              liveState.lastTransferSample = sampleNow;
+              updateBenchmarkMetrics(now, count, renderDiagnostics, ts, ss, {
+                rxRate,
+                txRate,
+                tileRate,
+                videoRate,
+              });
             }, 200);
           },
           onDisconnect: (reason) => {
             log(`Disconnected: ${reason}`, 'warn');
             // Don't call session.disconnect() here — it's already disconnecting.
             // Just update the UI state.
-            if (window._frameCountInterval) { clearInterval(window._frameCountInterval); window._frameCountInterval = null; }
+            if (liveState.frameInterval) { clearInterval(liveState.frameInterval); liveState.frameInterval = null; }
+            stopBenchmarkSample('disconnect');
             session = null;
             if (overlay) overlay.style.display = '';
             setStatus('Disconnected', 'disconnected');
@@ -459,6 +1038,10 @@
             scrollHealthStatsEl.textContent = 'Scroll Health: --';
             transferStatsEl.textContent = 'Transfer: --';
             transferRateEl.textContent = 'Rate: --';
+            liveState.lastTransferSample = null;
+            liveState.resolution.width = 0;
+            liveState.resolution.height = 0;
+            setMetricsButtons();
           },
           onError: (error) => {
             log(`Error: ${error.message}`, 'error');
@@ -475,6 +1058,8 @@
             }
           },
           onResolutionChange: (w, h) => {
+            liveState.resolution.width = w;
+            liveState.resolution.height = h;
             resolutionEl.textContent = `Resolution: ${w}x${h}`;
             log(`Resolution: ${w}x${h}`, 'ok');
           },
@@ -491,7 +1076,8 @@
     }
 
     function doDisconnect() {
-      if (window._frameCountInterval) { clearInterval(window._frameCountInterval); window._frameCountInterval = null; }
+      if (liveState.frameInterval) { clearInterval(liveState.frameInterval); liveState.frameInterval = null; }
+      stopBenchmarkSample('disconnect');
       if (session) {
         session.disconnect();
         session = null;
@@ -518,7 +1104,10 @@
       scrollHealthStatsEl.textContent = 'Scroll Health: --';
       transferStatsEl.textContent = 'Transfer: --';
       transferRateEl.textContent = 'Rate: --';
-      window._lastTransferSample = null;
+      liveState.lastTransferSample = null;
+      liveState.resolution.width = 0;
+      liveState.resolution.height = 0;
+      setMetricsButtons();
     }
 
     // ── Camera toggle ───────────────────────────────────────────────
@@ -566,6 +1155,10 @@
     // ── Button handlers ─────────────────────────────────────────────
     connectBtn.addEventListener('click', connect);
     disconnectBtn.addEventListener('click', () => doDisconnect());
+    metricsStartBtn.addEventListener('click', startBenchmarkSample);
+    metricsStopBtn.addEventListener('click', () => stopBenchmarkSample('manual'));
+    metricsCopyBtn.addEventListener('click', () => void copyBenchmarkSummary());
+    metricsResetBtn.addEventListener('click', resetBenchmarkMetrics);
     cameraBtn.addEventListener('click', () => void toggleCamera());
     micBtn.addEventListener('click', toggleMic);
     uploadBtn.addEventListener('click', () => {
@@ -582,8 +1175,17 @@
       // HiDPI changes take effect on next connect
     });
 
+    window.__bpaneBenchmarkMetrics = {
+      startSample: startBenchmarkSample,
+      stopSample: () => stopBenchmarkSample('api'),
+      resetSample: resetBenchmarkMetrics,
+      getSummary: () => cloneSummary(benchmarkState.summary),
+    };
+
     // ── Startup ─────────────────────────────────────────────────────
+    renderBenchmarkMetrics();
     log(`Gateway target: ${GATEWAY_URL}`);
+    log('Benchmark metrics API: window.__bpaneBenchmarkMetrics.{startSample,stopSample,resetSample,getSummary}', 'info');
     log('Ready. Click "Connect" to start.');
   </script>
 </body>

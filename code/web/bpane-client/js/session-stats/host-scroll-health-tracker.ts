@@ -17,12 +17,50 @@ export class HostScrollHealthTracker {
     hostScrollFallbacksTotal: number;
     hostScrollPotentialTilesTotal: number;
     hostScrollSavedTilesTotal: number;
+    hostScrollNonQuantizedFallbacksTotal: number;
+    hostScrollResidualFullRepaintsTotal: number;
+    hostScrollResidualInteriorLimitFallbacksTotal: number;
+    hostScrollResidualLowSavedRatioFallbacksTotal: number;
+    hostScrollResidualLargeRowShiftFallbacksTotal: number;
+    hostScrollResidualOtherFallbacksTotal: number;
+    hostScrollZeroSavedBatchesTotal: number;
+    hostScrollSplitRegionBatchesTotal: number;
+    hostScrollStickyBandBatchesTotal: number;
+    hostScrollChromeTilesTotal: number;
+    hostScrollExposedStripTilesTotal: number;
+    hostScrollInteriorResidualTilesTotal: number;
+    hostScrollEdgeStripResidualTilesTotal: number;
+    hostScrollSmallEdgeStripResidualTilesTotal: number;
+    hostScrollSmallEdgeStripResidualRowsTotal: number;
+    hostScrollSmallEdgeStripResidualAreaPxTotal: number;
+    hostSentHashEntries: number;
+    hostSentHashEvictionsTotal: number;
+    hostCacheMissReportsTotal: number;
     lastHostScrollStatsAtMs: number;
   } = {
     hostScrollBatchesTotal: 0,
     hostScrollFallbacksTotal: 0,
     hostScrollPotentialTilesTotal: 0,
     hostScrollSavedTilesTotal: 0,
+    hostScrollNonQuantizedFallbacksTotal: 0,
+    hostScrollResidualFullRepaintsTotal: 0,
+    hostScrollResidualInteriorLimitFallbacksTotal: 0,
+    hostScrollResidualLowSavedRatioFallbacksTotal: 0,
+    hostScrollResidualLargeRowShiftFallbacksTotal: 0,
+    hostScrollResidualOtherFallbacksTotal: 0,
+    hostScrollZeroSavedBatchesTotal: 0,
+    hostScrollSplitRegionBatchesTotal: 0,
+    hostScrollStickyBandBatchesTotal: 0,
+    hostScrollChromeTilesTotal: 0,
+    hostScrollExposedStripTilesTotal: 0,
+    hostScrollInteriorResidualTilesTotal: 0,
+    hostScrollEdgeStripResidualTilesTotal: 0,
+    hostScrollSmallEdgeStripResidualTilesTotal: 0,
+    hostScrollSmallEdgeStripResidualRowsTotal: 0,
+    hostScrollSmallEdgeStripResidualAreaPxTotal: 0,
+    hostSentHashEntries: 0,
+    hostSentHashEvictionsTotal: 0,
+    hostCacheMissReportsTotal: 0,
     lastHostScrollStatsAtMs: 0,
   };
 
@@ -37,11 +75,49 @@ export class HostScrollHealthTracker {
     hostScrollFallbacksTotal: number,
     hostScrollPotentialTilesTotal: number,
     hostScrollSavedTilesTotal: number,
+    hostScrollNonQuantizedFallbacksTotal: number,
+    hostScrollResidualFullRepaintsTotal: number,
+    hostScrollResidualInteriorLimitFallbacksTotal: number,
+    hostScrollResidualLowSavedRatioFallbacksTotal: number,
+    hostScrollResidualLargeRowShiftFallbacksTotal: number,
+    hostScrollResidualOtherFallbacksTotal: number,
+    hostScrollZeroSavedBatchesTotal: number,
+    hostScrollSplitRegionBatchesTotal: number,
+    hostScrollStickyBandBatchesTotal: number,
+    hostScrollChromeTilesTotal: number,
+    hostScrollExposedStripTilesTotal: number,
+    hostScrollInteriorResidualTilesTotal: number,
+    hostScrollEdgeStripResidualTilesTotal = 0,
+    hostScrollSmallEdgeStripResidualTilesTotal = 0,
+    hostScrollSmallEdgeStripResidualRowsTotal = 0,
+    hostScrollSmallEdgeStripResidualAreaPxTotal = 0,
+    hostSentHashEntries = 0,
+    hostSentHashEvictionsTotal = 0,
+    hostCacheMissReportsTotal = 0,
   ): void {
     const prevBatches = this.totals.hostScrollBatchesTotal;
     const prevFallbacks = this.totals.hostScrollFallbacksTotal;
     const prevPotential = this.totals.hostScrollPotentialTilesTotal;
     const prevSaved = this.totals.hostScrollSavedTilesTotal;
+    const prevNonQuantized = this.totals.hostScrollNonQuantizedFallbacksTotal;
+    const prevResidualFullRepaints = this.totals.hostScrollResidualFullRepaintsTotal;
+    const prevResidualInteriorLimit = this.totals.hostScrollResidualInteriorLimitFallbacksTotal;
+    const prevResidualLowSavedRatio = this.totals.hostScrollResidualLowSavedRatioFallbacksTotal;
+    const prevResidualLargeRowShift = this.totals.hostScrollResidualLargeRowShiftFallbacksTotal;
+    const prevResidualOther = this.totals.hostScrollResidualOtherFallbacksTotal;
+    const prevZeroSaved = this.totals.hostScrollZeroSavedBatchesTotal;
+    const prevSplitRegionBatches = this.totals.hostScrollSplitRegionBatchesTotal;
+    const prevStickyBandBatches = this.totals.hostScrollStickyBandBatchesTotal;
+    const prevChromeTiles = this.totals.hostScrollChromeTilesTotal;
+    const prevExposedStripTiles = this.totals.hostScrollExposedStripTilesTotal;
+    const prevInteriorResidualTiles = this.totals.hostScrollInteriorResidualTilesTotal;
+    const prevEdgeStripResidualTiles = this.totals.hostScrollEdgeStripResidualTilesTotal;
+    const prevSmallEdgeStripResidualTiles = this.totals.hostScrollSmallEdgeStripResidualTilesTotal;
+    const prevSmallEdgeStripResidualRows = this.totals.hostScrollSmallEdgeStripResidualRowsTotal;
+    const prevSmallEdgeStripResidualAreaPx =
+      this.totals.hostScrollSmallEdgeStripResidualAreaPxTotal;
+    const prevSentHashEvictions = this.totals.hostSentHashEvictionsTotal;
+    const prevCacheMissReports = this.totals.hostCacheMissReportsTotal;
 
     if (
       !this.initialized
@@ -49,6 +125,24 @@ export class HostScrollHealthTracker {
       || hostScrollFallbacksTotal < prevFallbacks
       || hostScrollPotentialTilesTotal < prevPotential
       || hostScrollSavedTilesTotal < prevSaved
+      || hostScrollNonQuantizedFallbacksTotal < prevNonQuantized
+      || hostScrollResidualFullRepaintsTotal < prevResidualFullRepaints
+      || hostScrollResidualInteriorLimitFallbacksTotal < prevResidualInteriorLimit
+      || hostScrollResidualLowSavedRatioFallbacksTotal < prevResidualLowSavedRatio
+      || hostScrollResidualLargeRowShiftFallbacksTotal < prevResidualLargeRowShift
+      || hostScrollResidualOtherFallbacksTotal < prevResidualOther
+      || hostScrollZeroSavedBatchesTotal < prevZeroSaved
+      || hostScrollSplitRegionBatchesTotal < prevSplitRegionBatches
+      || hostScrollStickyBandBatchesTotal < prevStickyBandBatches
+      || hostScrollChromeTilesTotal < prevChromeTiles
+      || hostScrollExposedStripTilesTotal < prevExposedStripTiles
+      || hostScrollInteriorResidualTilesTotal < prevInteriorResidualTiles
+      || hostScrollEdgeStripResidualTilesTotal < prevEdgeStripResidualTiles
+      || hostScrollSmallEdgeStripResidualTilesTotal < prevSmallEdgeStripResidualTiles
+      || hostScrollSmallEdgeStripResidualRowsTotal < prevSmallEdgeStripResidualRows
+      || hostScrollSmallEdgeStripResidualAreaPxTotal < prevSmallEdgeStripResidualAreaPx
+      || hostSentHashEvictionsTotal < prevSentHashEvictions
+      || hostCacheMissReportsTotal < prevCacheMissReports
     ) {
       this.recentHistory = [];
       this.initialized = true;
@@ -68,6 +162,31 @@ export class HostScrollHealthTracker {
     this.totals.hostScrollFallbacksTotal = hostScrollFallbacksTotal;
     this.totals.hostScrollPotentialTilesTotal = hostScrollPotentialTilesTotal;
     this.totals.hostScrollSavedTilesTotal = hostScrollSavedTilesTotal;
+    this.totals.hostScrollNonQuantizedFallbacksTotal = hostScrollNonQuantizedFallbacksTotal;
+    this.totals.hostScrollResidualFullRepaintsTotal = hostScrollResidualFullRepaintsTotal;
+    this.totals.hostScrollResidualInteriorLimitFallbacksTotal =
+      hostScrollResidualInteriorLimitFallbacksTotal;
+    this.totals.hostScrollResidualLowSavedRatioFallbacksTotal =
+      hostScrollResidualLowSavedRatioFallbacksTotal;
+    this.totals.hostScrollResidualLargeRowShiftFallbacksTotal =
+      hostScrollResidualLargeRowShiftFallbacksTotal;
+    this.totals.hostScrollResidualOtherFallbacksTotal = hostScrollResidualOtherFallbacksTotal;
+    this.totals.hostScrollZeroSavedBatchesTotal = hostScrollZeroSavedBatchesTotal;
+    this.totals.hostScrollSplitRegionBatchesTotal = hostScrollSplitRegionBatchesTotal;
+    this.totals.hostScrollStickyBandBatchesTotal = hostScrollStickyBandBatchesTotal;
+    this.totals.hostScrollChromeTilesTotal = hostScrollChromeTilesTotal;
+    this.totals.hostScrollExposedStripTilesTotal = hostScrollExposedStripTilesTotal;
+    this.totals.hostScrollInteriorResidualTilesTotal = hostScrollInteriorResidualTilesTotal;
+    this.totals.hostScrollEdgeStripResidualTilesTotal = hostScrollEdgeStripResidualTilesTotal;
+    this.totals.hostScrollSmallEdgeStripResidualTilesTotal =
+      hostScrollSmallEdgeStripResidualTilesTotal;
+    this.totals.hostScrollSmallEdgeStripResidualRowsTotal =
+      hostScrollSmallEdgeStripResidualRowsTotal;
+    this.totals.hostScrollSmallEdgeStripResidualAreaPxTotal =
+      hostScrollSmallEdgeStripResidualAreaPxTotal;
+    this.totals.hostSentHashEntries = hostSentHashEntries;
+    this.totals.hostSentHashEvictionsTotal = hostSentHashEvictionsTotal;
+    this.totals.hostCacheMissReportsTotal = hostCacheMissReportsTotal;
     this.totals.lastHostScrollStatsAtMs = this.nowProvider();
   }
 
@@ -84,6 +203,31 @@ export class HostScrollHealthTracker {
     return {
       hostScrollBatchesTotal: this.totals.hostScrollBatchesTotal,
       hostScrollFallbacksTotal: this.totals.hostScrollFallbacksTotal,
+      hostScrollNonQuantizedFallbacksTotal: this.totals.hostScrollNonQuantizedFallbacksTotal,
+      hostScrollResidualFullRepaintsTotal: this.totals.hostScrollResidualFullRepaintsTotal,
+      hostScrollResidualInteriorLimitFallbacksTotal:
+        this.totals.hostScrollResidualInteriorLimitFallbacksTotal,
+      hostScrollResidualLowSavedRatioFallbacksTotal:
+        this.totals.hostScrollResidualLowSavedRatioFallbacksTotal,
+      hostScrollResidualLargeRowShiftFallbacksTotal:
+        this.totals.hostScrollResidualLargeRowShiftFallbacksTotal,
+      hostScrollResidualOtherFallbacksTotal: this.totals.hostScrollResidualOtherFallbacksTotal,
+      hostScrollZeroSavedBatchesTotal: this.totals.hostScrollZeroSavedBatchesTotal,
+      hostScrollSplitRegionBatchesTotal: this.totals.hostScrollSplitRegionBatchesTotal,
+      hostScrollStickyBandBatchesTotal: this.totals.hostScrollStickyBandBatchesTotal,
+      hostScrollChromeTilesTotal: this.totals.hostScrollChromeTilesTotal,
+      hostScrollExposedStripTilesTotal: this.totals.hostScrollExposedStripTilesTotal,
+      hostScrollInteriorResidualTilesTotal: this.totals.hostScrollInteriorResidualTilesTotal,
+      hostScrollEdgeStripResidualTilesTotal: this.totals.hostScrollEdgeStripResidualTilesTotal,
+      hostScrollSmallEdgeStripResidualTilesTotal:
+        this.totals.hostScrollSmallEdgeStripResidualTilesTotal,
+      hostScrollSmallEdgeStripResidualRowsTotal:
+        this.totals.hostScrollSmallEdgeStripResidualRowsTotal,
+      hostScrollSmallEdgeStripResidualAreaPxTotal:
+        this.totals.hostScrollSmallEdgeStripResidualAreaPxTotal,
+      hostSentHashEntries: this.totals.hostSentHashEntries,
+      hostSentHashEvictionsTotal: this.totals.hostSentHashEvictionsTotal,
+      hostCacheMissReportsTotal: this.totals.hostCacheMissReportsTotal,
       hostFallbackRate,
       hostFallbackRateRecent20: recent20.rate,
       hostFallbackRateRecent50: recent50.rate,

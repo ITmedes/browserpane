@@ -29,6 +29,9 @@ impl super::TileCaptureThread {
             self.grid.rows,
             self.tile_codec,
         );
+        self.full_emit_coords = (0..self.grid.rows)
+            .flat_map(|r| (0..self.grid.cols).map(move |c| tiles::TileCoord::new(c, r)))
+            .collect();
 
         let new_total = self.grid.cols as usize * self.grid.rows as usize;
         self.prev_hashes = vec![0; new_total];

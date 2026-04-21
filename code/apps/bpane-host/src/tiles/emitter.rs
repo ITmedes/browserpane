@@ -86,6 +86,7 @@ pub struct TileEmitter {
     /// IndexSet provides O(1) lookup, O(1) insert, and preserves insertion
     /// order for bounded eviction (oldest = index 0).
     sent_hashes: IndexSet<u64>,
+    sent_hash_evictions_total: u64,
     /// Last video region sideband sent to the client.
     /// Used to send updates and a clearing VideoRegion(0,0,0,0) on exit.
     last_video_region: Option<Rect>,
@@ -109,6 +110,7 @@ impl TileEmitter {
             static_last_hashes: vec![0; count],
             cols,
             sent_hashes: IndexSet::with_capacity(MAX_SENT_HASHES),
+            sent_hash_evictions_total: 0,
             last_video_region: None,
             tile_scratch: Vec::new(),
             codec,
@@ -122,6 +124,7 @@ impl TileEmitter {
         self.static_last_hashes = vec![0; count];
         self.cols = cols;
         self.sent_hashes.clear();
+        self.sent_hash_evictions_total = 0;
         self.last_video_region = None;
         self.tile_scratch.clear();
     }
@@ -253,8 +256,17 @@ impl TileEmitter {
         // Evict oldest (index 0) if at capacity
         while self.sent_hashes.len() >= MAX_SENT_HASHES {
             self.sent_hashes.shift_remove_index(0);
+            self.sent_hash_evictions_total = self.sent_hash_evictions_total.saturating_add(1);
         }
         self.sent_hashes.insert(hash);
+    }
+
+    pub fn sent_hash_entries(&self) -> usize {
+        self.sent_hashes.len()
+    }
+
+    pub fn sent_hash_evictions_total(&self) -> u64 {
+        self.sent_hash_evictions_total
     }
 
     /// Update `last_hashes` for tiles verified correct by scroll residual analysis.
@@ -509,6 +521,10 @@ impl TileEmitter {
     /// edge. QOI hashes for that column are NOT tracked in `sent_hashes` because
     /// the mixed content+scrollbar pixels produce a unique hash per scroll position,
     /// polluting the LRU cache with never-reused entries.
+    ///
+    /// Boundary tiles also emit a zero hash to tell the client not to cache them.
+    /// That keeps low-value chrome/content blend tiles out of the client tile cache,
+    /// matching the sender-side decision to never reuse them via CacheHit.
     pub fn emit_static_tiles(
         &mut self,
         frame_pixels: &[u8],
@@ -594,6 +610,7 @@ impl TileEmitter {
                 } else {
                     self.codec
                 };
+                let cache_hash = if is_boundary { 0 } else { hash };
                 if let Some(msg) = encode_tile(
                     codec,
                     &self.tile_scratch,
@@ -601,7 +618,7 @@ impl TileEmitter {
                     rect.h as u32,
                     coord.col,
                     coord.row,
-                    hash,
+                    cache_hash,
                 ) {
                     frames.push(msg.to_frame());
                     // Don't track boundary column hashes - they change every
@@ -1295,6 +1312,45 @@ mod tests {
                 Some(TileMessage::Fill { .. }) | Some(TileMessage::Qoi { .. })
             )
         }));
+    }
+
+    #[test]
+    fn static_boundary_tiles_emit_zero_hash_to_disable_client_caching() {
+        let grid = TileGrid::new(128, 64, 64);
+        let stride = 128 * 4;
+        let mut frame_data = vec![0u8; stride * 64];
+        for y in 0..64 {
+            for x in 0..128 {
+                let offset = y * stride + x * 4;
+                frame_data[offset] = (x * 5) as u8;
+                frame_data[offset + 1] = (y * 7) as u8;
+                frame_data[offset + 2] = x.wrapping_add(y as usize) as u8;
+                frame_data[offset + 3] = 0xFF;
+            }
+        }
+
+        let mut emitter = TileEmitter::new(grid.cols, grid.rows);
+        let frames = emitter.emit_static_tiles(
+            &frame_data,
+            stride,
+            &[TileCoord::new(1, 0)],
+            &grid,
+            Some(1),
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let qoi_hash = frames
+            .iter()
+            .find_map(|f| match TileMessage::decode(&f.payload).ok() {
+                Some(TileMessage::Qoi { hash, .. }) => Some(hash),
+                Some(TileMessage::Zstd { hash, .. }) => Some(hash),
+                _ => None,
+            })
+            .expect("expected hash-bearing static tile frame");
+        assert_eq!(qoi_hash, 0);
     }
 
     #[test]

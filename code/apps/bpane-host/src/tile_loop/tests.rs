@@ -376,3 +376,182 @@ fn partition_identical_frames_have_zero_residual() {
     // dy=0 → residual == full set (no scroll optimization)
     assert_eq!(result.residual.len(), result.content_emit_coords.len());
 }
+
+#[test]
+fn partition_promotes_sticky_top_and_right_bands_to_chrome() {
+    let grid = tiles::TileGrid::new(256, 256, 64);
+    let stride = 256usize * 4;
+    let mut prev = vec![0u8; stride * 256usize];
+    for y in 0..256usize {
+        for x in 0..256usize {
+            let off = y * stride + x * 4;
+            prev[off] = y as u8;
+            prev[off + 1] = x as u8;
+            prev[off + 2] = (x ^ y) as u8;
+            prev[off + 3] = 255;
+        }
+    }
+    let mut curr = vec![0u8; stride * 256usize];
+    for y in 0..256usize {
+        for x in 0..256usize {
+            let off = y * stride + x * 4;
+            let sticky_top = y < 64;
+            let sticky_right = x >= 192;
+            if sticky_top || sticky_right {
+                curr[off] = 0xEE;
+                curr[off + 1] = 0xAA;
+                curr[off + 2] = 0x44;
+                curr[off + 3] = 255;
+                continue;
+            }
+            if y + 64 < 256 {
+                let src = (y + 64) * stride + x * 4;
+                curr[off..off + 4].copy_from_slice(&prev[src..src + 4]);
+            } else {
+                curr[off] = 0x11;
+                curr[off + 1] = 0x22;
+                curr[off + 2] = 0x33;
+                curr[off + 3] = 255;
+            }
+        }
+    }
+
+    let emit_coords: Vec<tiles::TileCoord> = (0..grid.rows)
+        .flat_map(|r| (0..grid.cols).map(move |c| tiles::TileCoord::new(c, r)))
+        .collect();
+    let dsf = DetectedScrollFrame {
+        dy: 64,
+        confidence: 0.95,
+        source: "content",
+        direction_matches: true,
+        min_confidence: Some(0.80),
+        row_shift: 1,
+        region_top: 0,
+        region_bottom: 256,
+        region_right: 256,
+    };
+
+    let result = super::scroll_partition::partition_and_compare(
+        &curr,
+        &prev,
+        stride,
+        &grid,
+        0,
+        64,
+        64,
+        64,
+        &emit_coords,
+        &dsf,
+        0,
+        256,
+        256,
+        256,
+    );
+
+    for col in 0..grid.cols {
+        assert!(
+            result
+                .chrome_emit_coords
+                .contains(&tiles::TileCoord::new(col, 0)),
+            "top sticky row should be emitted as chrome"
+        );
+    }
+    for row in 0..grid.rows {
+        assert!(
+            result
+                .chrome_emit_coords
+                .contains(&tiles::TileCoord::new(grid.cols - 1, row)),
+            "right sticky rail should be emitted as chrome"
+        );
+    }
+    assert_eq!(result.content_emit_coords.len(), 9);
+    assert!(
+        !result
+            .residual
+            .contains(&tiles::TileCoord::new(grid.cols - 1, 1)),
+        "sticky right rail should not stay in content residual"
+    );
+    assert!(
+        !result.residual.contains(&tiles::TileCoord::new(0, 0)),
+        "sticky top row should not stay in content residual"
+    );
+}
+
+#[test]
+fn partition_uses_area_weighted_interior_ratio_for_partial_tile_changes() {
+    let width = 128usize;
+    let height = 192usize;
+    let stride = width * 4;
+    let grid = tiles::TileGrid::new(width as u16, height as u16, 64);
+    let mut prev = vec![0u8; stride * height];
+    for y in 0..height {
+        for x in 0..width {
+            let off = y * stride + x * 4;
+            prev[off] = y as u8;
+            prev[off + 1] = x as u8;
+            prev[off + 2] = (x ^ y) as u8;
+            prev[off + 3] = 255;
+        }
+    }
+    let mut curr = vec![0u8; stride * height];
+    let dy = 64usize;
+    for y in 0..(height - dy) {
+        let dst = y * stride;
+        let src = (y + dy) * stride;
+        curr[dst..dst + stride].copy_from_slice(&prev[src..src + stride]);
+    }
+    for y in (height - dy)..height {
+        for x in 0..width {
+            let off = y * stride + x * 4;
+            curr[off] = 0x11;
+            curr[off + 1] = 0x22;
+            curr[off + 2] = 0x33;
+            curr[off + 3] = 255;
+        }
+    }
+    for y in 0..4usize {
+        for x in 0..64usize {
+            let off = y * stride + x * 4;
+            curr[off] ^= 0x5A;
+        }
+    }
+
+    let emit_coords: Vec<tiles::TileCoord> = (0..grid.rows)
+        .flat_map(|r| (0..grid.cols).map(move |c| tiles::TileCoord::new(c, r)))
+        .collect();
+    let dsf = DetectedScrollFrame {
+        dy: 64,
+        confidence: 0.95,
+        source: "content",
+        direction_matches: true,
+        min_confidence: Some(0.80),
+        row_shift: 1,
+        region_top: 0,
+        region_bottom: 192,
+        region_right: 128,
+    };
+
+    let result = super::scroll_partition::partition_and_compare(
+        &curr,
+        &prev,
+        stride,
+        &grid,
+        0,
+        64,
+        64,
+        64,
+        &emit_coords,
+        &dsf,
+        0,
+        192,
+        128,
+        128,
+    );
+
+    assert!(result.residual.contains(&tiles::TileCoord::new(0, 0)));
+    assert!(!result.residual.contains(&tiles::TileCoord::new(1, 0)));
+    assert!(
+        (result.interior_ratio - 0.015625).abs() < 0.0001,
+        "interior ratio should be area-weighted, not full-tile weighted"
+    );
+}

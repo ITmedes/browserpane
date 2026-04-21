@@ -84,6 +84,8 @@ impl super::TileCaptureThread {
             let mut force_refresh = false;
             while let Ok((frame_seq, col, row, hash)) = self.cache_miss_rx.try_recv() {
                 self.emitter.handle_cache_miss(col, row, hash);
+                self.client_cache_miss_reports_total =
+                    self.client_cache_miss_reports_total.saturating_add(1);
                 force_refresh = true;
                 tracing::trace!(
                     frame_seq,

@@ -35,8 +35,11 @@ export class QoiTileRenderer {
     }
 
     const imageData = new ImageData(decoded.pixels, decoded.width, decoded.height);
-    const redundant = cache.has(hash);
-    cache.set(hash, imageData);
+    const cacheable = hash !== 0n;
+    const redundant = cacheable && cache.has(hash);
+    if (cacheable) {
+      cache.set(hash, imageData);
+    }
 
     if (shouldDraw && !shouldDraw()) {
       return {

@@ -93,14 +93,52 @@ function buildScrollStats(
   fallbacks: number,
   potentialTiles: number,
   savedTiles: number,
+  nonQuantizedFallbacks = 0,
+  residualFullRepaints = 0,
+  residualInteriorLimitFallbacks = 0,
+  residualLowSavedRatioFallbacks = 0,
+  residualLargeRowShiftFallbacks = 0,
+  residualOtherFallbacks = 0,
+  zeroSavedBatches = 0,
+  splitRegionBatches = 0,
+  stickyBandBatches = 0,
+  chromeTiles = 0,
+  exposedStripTiles = 0,
+  interiorResidualTiles = 0,
+  edgeStripResidualTiles = 0,
+  smallEdgeStripResidualTiles = 0,
+  smallEdgeStripResidualRows = 0,
+  smallEdgeStripResidualAreaPx = 0,
+  hostSentHashEntries = 0,
+  hostSentHashEvictionsTotal = 0,
+  hostCacheMissReportsTotal = 0,
 ): Uint8Array {
-  const buf = new Uint8Array(17);
+  const buf = new Uint8Array(93);
   const view = new DataView(buf.buffer);
   buf[0] = 0x0A; // TILE_SCROLL_STATS
   view.setUint32(1, batches, true);
   view.setUint32(5, fallbacks, true);
   view.setUint32(9, potentialTiles, true);
   view.setUint32(13, savedTiles, true);
+  view.setUint32(17, nonQuantizedFallbacks, true);
+  view.setUint32(21, residualFullRepaints, true);
+  view.setUint32(25, residualInteriorLimitFallbacks, true);
+  view.setUint32(29, residualLowSavedRatioFallbacks, true);
+  view.setUint32(33, residualLargeRowShiftFallbacks, true);
+  view.setUint32(37, residualOtherFallbacks, true);
+  view.setUint32(41, zeroSavedBatches, true);
+  view.setUint32(45, splitRegionBatches, true);
+  view.setUint32(49, stickyBandBatches, true);
+  view.setUint32(53, chromeTiles, true);
+  view.setUint32(57, exposedStripTiles, true);
+  view.setUint32(61, interiorResidualTiles, true);
+  view.setUint32(65, edgeStripResidualTiles, true);
+  view.setUint32(69, smallEdgeStripResidualTiles, true);
+  view.setUint32(73, smallEdgeStripResidualRows, true);
+  view.setUint32(77, smallEdgeStripResidualAreaPx, true);
+  view.setUint32(81, hostSentHashEntries, true);
+  view.setUint32(85, hostSentHashEvictionsTotal, true);
+  view.setUint32(89, hostCacheMissReportsTotal, true);
   return buf;
 }
 
@@ -418,7 +456,9 @@ describe('parseTileMessage', () => {
   });
 
   it('parses scroll-stats', () => {
-    const msg = parseTileMessage(buildScrollStats(11, 2, 1000, 730));
+    const msg = parseTileMessage(
+      buildScrollStats(11, 2, 1000, 730, 1, 1, 3, 4, 5, 6, 7, 8, 9, 640, 128, 96, 48, 24, 60, 1536, 128, 9, 7),
+    );
     expect(msg).not.toBeNull();
     expect(msg!.type).toBe('scroll-stats');
     if (msg!.type === 'scroll-stats') {
@@ -426,6 +466,25 @@ describe('parseTileMessage', () => {
       expect(msg!.scrollFullFallbacksTotal).toBe(2);
       expect(msg!.scrollPotentialTilesTotal).toBe(1000);
       expect(msg!.scrollSavedTilesTotal).toBe(730);
+      expect(msg!.scrollNonQuantizedFallbacksTotal).toBe(1);
+      expect(msg!.scrollResidualFullRepaintsTotal).toBe(1);
+      expect(msg!.scrollResidualInteriorLimitFallbacksTotal).toBe(3);
+      expect(msg!.scrollResidualLowSavedRatioFallbacksTotal).toBe(4);
+      expect(msg!.scrollResidualLargeRowShiftFallbacksTotal).toBe(5);
+      expect(msg!.scrollResidualOtherFallbacksTotal).toBe(6);
+      expect(msg!.scrollZeroSavedBatchesTotal).toBe(7);
+      expect(msg!.scrollSplitRegionBatchesTotal).toBe(8);
+      expect(msg!.scrollStickyBandBatchesTotal).toBe(9);
+      expect(msg!.scrollChromeTilesTotal).toBe(640);
+      expect(msg!.scrollExposedStripTilesTotal).toBe(128);
+      expect(msg!.scrollInteriorResidualTilesTotal).toBe(96);
+      expect(msg!.scrollEdgeStripResidualTilesTotal).toBe(48);
+      expect(msg!.scrollSmallEdgeStripResidualTilesTotal).toBe(24);
+      expect(msg!.scrollSmallEdgeStripResidualRowsTotal).toBe(60);
+      expect(msg!.scrollSmallEdgeStripResidualAreaPxTotal).toBe(1536);
+      expect(msg!.hostSentHashEntries).toBe(128);
+      expect(msg!.hostSentHashEvictionsTotal).toBe(9);
+      expect(msg!.hostCacheMissReportsTotal).toBe(7);
     }
   });
 
@@ -539,6 +598,25 @@ describe('parseTileMessage', () => {
       scrollFullFallbacksTotal: 2,
       scrollPotentialTilesTotal: 1000,
       scrollSavedTilesTotal: 730,
+      scrollNonQuantizedFallbacksTotal: 1,
+      scrollResidualFullRepaintsTotal: 1,
+      scrollResidualInteriorLimitFallbacksTotal: 1,
+      scrollResidualLowSavedRatioFallbacksTotal: 0,
+      scrollResidualLargeRowShiftFallbacksTotal: 0,
+      scrollResidualOtherFallbacksTotal: 0,
+      scrollZeroSavedBatchesTotal: 3,
+      scrollSplitRegionBatchesTotal: 7,
+      scrollStickyBandBatchesTotal: 5,
+      scrollChromeTilesTotal: 640,
+      scrollExposedStripTilesTotal: 128,
+      scrollInteriorResidualTilesTotal: 96,
+      scrollEdgeStripResidualTilesTotal: 0,
+      scrollSmallEdgeStripResidualTilesTotal: 0,
+      scrollSmallEdgeStripResidualRowsTotal: 0,
+      scrollSmallEdgeStripResidualAreaPxTotal: 0,
+      hostSentHashEntries: 0,
+      hostSentHashEvictionsTotal: 0,
+      hostCacheMissReportsTotal: 0,
     });
 
     const [zstdFrames] = parseFrames(wireFixture('tile_zstd'));

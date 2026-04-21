@@ -54,6 +54,11 @@ pub struct SessionHub {
     full_refresh_tiles_requested: AtomicU64,
     last_full_refresh_tiles: AtomicU64,
     max_full_refresh_tiles: AtomicU64,
+    egress_send_stream_lock_wait_us_total: AtomicU64,
+    egress_send_stream_lock_wait_us_max: AtomicU64,
+    egress_send_stream_lock_acquires_total: AtomicU64,
+    egress_lagged_receives_total: AtomicU64,
+    egress_lagged_frames_total: AtomicU64,
     _relay_handle: tokio::task::JoinHandle<()>,
     _pump_handle: tokio::task::JoinHandle<()>,
 }
@@ -114,6 +119,11 @@ impl SessionHub {
             full_refresh_tiles_requested: AtomicU64::new(0),
             last_full_refresh_tiles: AtomicU64::new(0),
             max_full_refresh_tiles: AtomicU64::new(0),
+            egress_send_stream_lock_wait_us_total: AtomicU64::new(0),
+            egress_send_stream_lock_wait_us_max: AtomicU64::new(0),
+            egress_send_stream_lock_acquires_total: AtomicU64::new(0),
+            egress_lagged_receives_total: AtomicU64::new(0),
+            egress_lagged_frames_total: AtomicU64::new(0),
             _relay_handle: relay_handle,
             _pump_handle: pump_handle,
         })
@@ -192,6 +202,14 @@ impl SessionHub {
 
     fn record_refresh_burst(&self, tiles_requested: u64) {
         telemetry::record_refresh_burst(self, tiles_requested);
+    }
+
+    pub(crate) fn record_egress_send_stream_lock_wait(&self, elapsed: std::time::Duration) {
+        telemetry::record_egress_send_stream_lock_wait(self, elapsed);
+    }
+
+    pub(crate) fn record_egress_lagged(&self, frames: u64) {
+        telemetry::record_egress_lagged(self, frames);
     }
 }
 

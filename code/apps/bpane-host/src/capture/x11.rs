@@ -582,7 +582,7 @@ impl CaptureBackend for X11CaptureBackend {
             let h = self.screen_h;
 
             // Capture pixels via SHM or fallback to GetImage
-            let mut data = if let Some(ref shm_seg) = self.shm {
+            let data = if let Some(ref shm_seg) = self.shm {
                 let reply = self
                     .conn
                     .shm_get_image(
@@ -633,11 +633,6 @@ impl CaptureBackend for X11CaptureBackend {
                     .reply()?;
                 reply.data
             };
-
-            // BGRA -> RGBA swap
-            for pixel in data.chunks_exact_mut(4) {
-                pixel.swap(0, 2);
-            }
 
             // Acknowledge damage so we get notified of the next change.
             // We must flush + drain events after subtract to consume any
@@ -1420,12 +1415,11 @@ mod tests {
         backend.set_resolution(orig_w, orig_h).unwrap();
     }
 
-    /// Verifying that captured frame data has correct RGBA byte order
-    /// (the BGRA→RGBA swap is applied).
+    /// Verifying that captured frame data is returned in native BGRA byte order.
     #[cfg(target_os = "linux")]
     #[test]
     #[ignore]
-    fn captured_frame_data_is_rgba() {
+    fn captured_frame_data_is_bgra() {
         let display = display_or_skip();
         if display.is_empty() {
             return;
