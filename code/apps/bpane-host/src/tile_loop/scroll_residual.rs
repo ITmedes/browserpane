@@ -126,6 +126,18 @@ impl super::TileCaptureThread {
             self.scroll_interior_residual_tiles_total = self
                 .scroll_interior_residual_tiles_total
                 .saturating_add(p.interior_residual_tiles as u64);
+            self.scroll_edge_strip_residual_tiles_total = self
+                .scroll_edge_strip_residual_tiles_total
+                .saturating_add(p.edge_strip_residual_tiles as u64);
+            self.scroll_small_edge_strip_residual_tiles_total = self
+                .scroll_small_edge_strip_residual_tiles_total
+                .saturating_add(p.small_edge_strip_residual_tiles as u64);
+            self.scroll_small_edge_strip_residual_rows_total = self
+                .scroll_small_edge_strip_residual_rows_total
+                .saturating_add(p.small_edge_strip_residual_rows as u64);
+            self.scroll_small_edge_strip_residual_area_px_total = self
+                .scroll_small_edge_strip_residual_area_px_total
+                .saturating_add(p.small_edge_strip_residual_area_px as u64);
             if p.split_region {
                 self.scroll_partition_split_batches_total =
                     self.scroll_partition_split_batches_total.saturating_add(1);

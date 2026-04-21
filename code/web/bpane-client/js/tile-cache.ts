@@ -52,6 +52,10 @@ export type TileCommand =
     scrollChromeTilesTotal: number;
     scrollExposedStripTilesTotal: number;
     scrollInteriorResidualTilesTotal: number;
+    scrollEdgeStripResidualTilesTotal: number;
+    scrollSmallEdgeStripResidualTilesTotal: number;
+    scrollSmallEdgeStripResidualRowsTotal: number;
+    scrollSmallEdgeStripResidualAreaPxTotal: number;
     hostSentHashEntries: number;
     hostSentHashEvictionsTotal: number;
     hostCacheMissReportsTotal: number;

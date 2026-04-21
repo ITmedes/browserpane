@@ -33,6 +33,10 @@ describe('HostScrollHealthTracker', () => {
     expect(snapshot.hostScrollChromeTilesTotal).toBe(30);
     expect(snapshot.hostScrollExposedStripTilesTotal).toBe(10);
     expect(snapshot.hostScrollInteriorResidualTilesTotal).toBe(18);
+    expect(snapshot.hostScrollEdgeStripResidualTilesTotal).toBe(0);
+    expect(snapshot.hostScrollSmallEdgeStripResidualTilesTotal).toBe(0);
+    expect(snapshot.hostScrollSmallEdgeStripResidualRowsTotal).toBe(0);
+    expect(snapshot.hostScrollSmallEdgeStripResidualAreaPxTotal).toBe(0);
     expect(snapshot.hostScrollSavedRate).toBeCloseTo((210 / 300) * 100, 5);
     expect(snapshot.lastHostScrollStatsAtMs).toBe(1_200);
   });
@@ -55,6 +59,10 @@ describe('HostScrollHealthTracker', () => {
     expect(snapshot.hostScrollResidualLargeRowShiftFallbacksTotal).toBe(0);
     expect(snapshot.hostScrollResidualOtherFallbacksTotal).toBe(0);
     expect(snapshot.hostScrollZeroSavedBatchesTotal).toBe(1);
+    expect(snapshot.hostScrollEdgeStripResidualTilesTotal).toBe(0);
+    expect(snapshot.hostScrollSmallEdgeStripResidualTilesTotal).toBe(0);
+    expect(snapshot.hostScrollSmallEdgeStripResidualRowsTotal).toBe(0);
+    expect(snapshot.hostScrollSmallEdgeStripResidualAreaPxTotal).toBe(0);
     expect(snapshot.hostFallbackRateRecent20Batches).toBe(0);
     expect(snapshot.hostFallbackRateRecent20).toBe(0);
     expect(snapshot.hostFallbackRateRecent50Batches).toBe(0);
@@ -79,6 +87,10 @@ describe('HostScrollHealthTracker', () => {
       hostScrollChromeTilesTotal: 0,
       hostScrollExposedStripTilesTotal: 0,
       hostScrollInteriorResidualTilesTotal: 0,
+      hostScrollEdgeStripResidualTilesTotal: 0,
+      hostScrollSmallEdgeStripResidualTilesTotal: 0,
+      hostScrollSmallEdgeStripResidualRowsTotal: 0,
+      hostScrollSmallEdgeStripResidualAreaPxTotal: 0,
       hostSentHashEntries: 0,
       hostSentHashEvictionsTotal: 0,
       hostCacheMissReportsTotal: 0,

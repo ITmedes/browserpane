@@ -10,6 +10,37 @@ pub struct ScrollResidualCoords {
     pub exposed_strip_area_px: usize,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ShiftedTileDiffSummary {
+    pub changed_rows: usize,
+    pub first_changed_row: Option<usize>,
+    pub last_changed_row: Option<usize>,
+}
+
+impl ShiftedTileDiffSummary {
+    pub fn has_changes(self) -> bool {
+        self.changed_rows > 0
+    }
+
+    pub fn changed_area_px(self, tile_width_px: usize) -> usize {
+        self.changed_rows * tile_width_px
+    }
+
+    fn is_contiguous(self) -> bool {
+        match (self.first_changed_row, self.last_changed_row) {
+            (Some(first), Some(last)) => last + 1 - first == self.changed_rows,
+            _ => self.changed_rows == 0,
+        }
+    }
+
+    pub fn is_edge_strip(self, tile_h: usize) -> bool {
+        if !self.has_changes() || !self.is_contiguous() || tile_h == 0 {
+            return false;
+        }
+        self.first_changed_row == Some(0) || self.last_changed_row == Some(tile_h - 1)
+    }
+}
+
 fn band_matches_shifted_prev(
     current: &[u8],
     previous: &[u8],
@@ -55,41 +86,57 @@ fn contiguous_row_span(row_coords: &[tiles::TileCoord]) -> Option<(u16, u16)> {
     Some((first, last))
 }
 
-fn shifted_diff_row_area(
+pub fn summarize_shifted_tile_diff(
     current: &[u8],
     previous: &[u8],
     stride: usize,
     screen_h: usize,
     rect: &tiles::Rect,
     scroll_dy: i16,
-) -> usize {
+) -> ShiftedTileDiffSummary {
     if rect.w == 0 || rect.h == 0 {
-        return 0;
+        return ShiftedTileDiffSummary::default();
     }
     let dy = scroll_dy as i32;
     let x_bytes = rect.x as usize * 4;
     let row_bytes = rect.w as usize * 4;
     let mut changed_rows = 0usize;
+    let mut first_changed_row = None;
+    let mut last_changed_row = None;
 
     for row in 0..rect.h as usize {
         let cy = rect.y as i32 + row as i32;
         let py = cy + dy;
         if py < 0 || py >= screen_h as i32 {
-            return rect.w as usize * rect.h as usize;
+            return ShiftedTileDiffSummary {
+                changed_rows: rect.h as usize,
+                first_changed_row: Some(0),
+                last_changed_row: Some(rect.h as usize - 1),
+            };
         }
         let curr_off = cy as usize * stride + x_bytes;
         let prev_off = py as usize * stride + x_bytes;
         let curr_end = curr_off + row_bytes;
         let prev_end = prev_off + row_bytes;
         if curr_end > current.len() || prev_end > previous.len() {
-            return rect.w as usize * rect.h as usize;
+            return ShiftedTileDiffSummary {
+                changed_rows: rect.h as usize,
+                first_changed_row: Some(0),
+                last_changed_row: Some(rect.h as usize - 1),
+            };
         }
         if current[curr_off..curr_end] != previous[prev_off..prev_end] {
             changed_rows += 1;
+            first_changed_row.get_or_insert(row);
+            last_changed_row = Some(row);
         }
     }
 
-    changed_rows * rect.w as usize
+    ShiftedTileDiffSummary {
+        changed_rows,
+        first_changed_row,
+        last_changed_row,
+    }
 }
 
 fn analyze_scroll_residual_row_bands(
@@ -168,7 +215,7 @@ fn analyze_scroll_residual_row_bands(
             let x = coord.col * ts;
             let w = ts.min(grid.screen_w.saturating_sub(x));
             let rect = tiles::Rect::new(x, row * ts, w, h as u16);
-            let changed_area = shifted_diff_row_area(
+            let diff = summarize_shifted_tile_diff(
                 current,
                 previous,
                 stride,
@@ -176,9 +223,9 @@ fn analyze_scroll_residual_row_bands(
                 &rect,
                 scroll_dy,
             );
-            if changed_area > 0 {
+            if diff.has_changes() {
                 residual.push(coord);
-                residual_area_px += changed_area;
+                residual_area_px += diff.changed_area_px(rect.w as usize);
             }
         }
     }
@@ -310,7 +357,7 @@ pub fn analyze_scroll_residual_emit_coords(
             exposed_strip_area_px += rect_area;
             continue;
         }
-        let changed_area = shifted_diff_row_area(
+        let diff = summarize_shifted_tile_diff(
             current,
             previous,
             stride,
@@ -318,9 +365,9 @@ pub fn analyze_scroll_residual_emit_coords(
             &rect,
             scroll_dy,
         );
-        if changed_area > 0 {
+        if diff.has_changes() {
             residual.push(coord);
-            residual_area_px += changed_area;
+            residual_area_px += diff.changed_area_px(rect.w as usize);
         }
     }
 

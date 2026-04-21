@@ -61,6 +61,10 @@ export type HostScrollHealthSnapshot = {
   hostScrollChromeTilesTotal: number;
   hostScrollExposedStripTilesTotal: number;
   hostScrollInteriorResidualTilesTotal: number;
+  hostScrollEdgeStripResidualTilesTotal: number;
+  hostScrollSmallEdgeStripResidualTilesTotal: number;
+  hostScrollSmallEdgeStripResidualRowsTotal: number;
+  hostScrollSmallEdgeStripResidualAreaPxTotal: number;
   hostSentHashEntries: number;
   hostSentHashEvictionsTotal: number;
   hostCacheMissReportsTotal: number;

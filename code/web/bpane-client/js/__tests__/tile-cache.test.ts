@@ -105,11 +105,15 @@ function buildScrollStats(
   chromeTiles = 0,
   exposedStripTiles = 0,
   interiorResidualTiles = 0,
+  edgeStripResidualTiles = 0,
+  smallEdgeStripResidualTiles = 0,
+  smallEdgeStripResidualRows = 0,
+  smallEdgeStripResidualAreaPx = 0,
   hostSentHashEntries = 0,
   hostSentHashEvictionsTotal = 0,
   hostCacheMissReportsTotal = 0,
 ): Uint8Array {
-  const buf = new Uint8Array(77);
+  const buf = new Uint8Array(93);
   const view = new DataView(buf.buffer);
   buf[0] = 0x0A; // TILE_SCROLL_STATS
   view.setUint32(1, batches, true);
@@ -128,9 +132,13 @@ function buildScrollStats(
   view.setUint32(53, chromeTiles, true);
   view.setUint32(57, exposedStripTiles, true);
   view.setUint32(61, interiorResidualTiles, true);
-  view.setUint32(65, hostSentHashEntries, true);
-  view.setUint32(69, hostSentHashEvictionsTotal, true);
-  view.setUint32(73, hostCacheMissReportsTotal, true);
+  view.setUint32(65, edgeStripResidualTiles, true);
+  view.setUint32(69, smallEdgeStripResidualTiles, true);
+  view.setUint32(73, smallEdgeStripResidualRows, true);
+  view.setUint32(77, smallEdgeStripResidualAreaPx, true);
+  view.setUint32(81, hostSentHashEntries, true);
+  view.setUint32(85, hostSentHashEvictionsTotal, true);
+  view.setUint32(89, hostCacheMissReportsTotal, true);
   return buf;
 }
 
@@ -448,7 +456,9 @@ describe('parseTileMessage', () => {
   });
 
   it('parses scroll-stats', () => {
-    const msg = parseTileMessage(buildScrollStats(11, 2, 1000, 730, 1, 1, 3, 4, 5, 6, 7, 8, 9, 640, 128, 96, 128, 9, 7));
+    const msg = parseTileMessage(
+      buildScrollStats(11, 2, 1000, 730, 1, 1, 3, 4, 5, 6, 7, 8, 9, 640, 128, 96, 48, 24, 60, 1536, 128, 9, 7),
+    );
     expect(msg).not.toBeNull();
     expect(msg!.type).toBe('scroll-stats');
     if (msg!.type === 'scroll-stats') {
@@ -468,6 +478,10 @@ describe('parseTileMessage', () => {
       expect(msg!.scrollChromeTilesTotal).toBe(640);
       expect(msg!.scrollExposedStripTilesTotal).toBe(128);
       expect(msg!.scrollInteriorResidualTilesTotal).toBe(96);
+      expect(msg!.scrollEdgeStripResidualTilesTotal).toBe(48);
+      expect(msg!.scrollSmallEdgeStripResidualTilesTotal).toBe(24);
+      expect(msg!.scrollSmallEdgeStripResidualRowsTotal).toBe(60);
+      expect(msg!.scrollSmallEdgeStripResidualAreaPxTotal).toBe(1536);
       expect(msg!.hostSentHashEntries).toBe(128);
       expect(msg!.hostSentHashEvictionsTotal).toBe(9);
       expect(msg!.hostCacheMissReportsTotal).toBe(7);
@@ -596,6 +610,10 @@ describe('parseTileMessage', () => {
       scrollChromeTilesTotal: 640,
       scrollExposedStripTilesTotal: 128,
       scrollInteriorResidualTilesTotal: 96,
+      scrollEdgeStripResidualTilesTotal: 0,
+      scrollSmallEdgeStripResidualTilesTotal: 0,
+      scrollSmallEdgeStripResidualRowsTotal: 0,
+      scrollSmallEdgeStripResidualAreaPxTotal: 0,
       hostSentHashEntries: 0,
       hostSentHashEvictionsTotal: 0,
       hostCacheMissReportsTotal: 0,

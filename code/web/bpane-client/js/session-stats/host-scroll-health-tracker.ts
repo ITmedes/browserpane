@@ -29,6 +29,10 @@ export class HostScrollHealthTracker {
     hostScrollChromeTilesTotal: number;
     hostScrollExposedStripTilesTotal: number;
     hostScrollInteriorResidualTilesTotal: number;
+    hostScrollEdgeStripResidualTilesTotal: number;
+    hostScrollSmallEdgeStripResidualTilesTotal: number;
+    hostScrollSmallEdgeStripResidualRowsTotal: number;
+    hostScrollSmallEdgeStripResidualAreaPxTotal: number;
     hostSentHashEntries: number;
     hostSentHashEvictionsTotal: number;
     hostCacheMissReportsTotal: number;
@@ -50,6 +54,10 @@ export class HostScrollHealthTracker {
     hostScrollChromeTilesTotal: 0,
     hostScrollExposedStripTilesTotal: 0,
     hostScrollInteriorResidualTilesTotal: 0,
+    hostScrollEdgeStripResidualTilesTotal: 0,
+    hostScrollSmallEdgeStripResidualTilesTotal: 0,
+    hostScrollSmallEdgeStripResidualRowsTotal: 0,
+    hostScrollSmallEdgeStripResidualAreaPxTotal: 0,
     hostSentHashEntries: 0,
     hostSentHashEvictionsTotal: 0,
     hostCacheMissReportsTotal: 0,
@@ -79,6 +87,10 @@ export class HostScrollHealthTracker {
     hostScrollChromeTilesTotal: number,
     hostScrollExposedStripTilesTotal: number,
     hostScrollInteriorResidualTilesTotal: number,
+    hostScrollEdgeStripResidualTilesTotal = 0,
+    hostScrollSmallEdgeStripResidualTilesTotal = 0,
+    hostScrollSmallEdgeStripResidualRowsTotal = 0,
+    hostScrollSmallEdgeStripResidualAreaPxTotal = 0,
     hostSentHashEntries = 0,
     hostSentHashEvictionsTotal = 0,
     hostCacheMissReportsTotal = 0,
@@ -99,6 +111,11 @@ export class HostScrollHealthTracker {
     const prevChromeTiles = this.totals.hostScrollChromeTilesTotal;
     const prevExposedStripTiles = this.totals.hostScrollExposedStripTilesTotal;
     const prevInteriorResidualTiles = this.totals.hostScrollInteriorResidualTilesTotal;
+    const prevEdgeStripResidualTiles = this.totals.hostScrollEdgeStripResidualTilesTotal;
+    const prevSmallEdgeStripResidualTiles = this.totals.hostScrollSmallEdgeStripResidualTilesTotal;
+    const prevSmallEdgeStripResidualRows = this.totals.hostScrollSmallEdgeStripResidualRowsTotal;
+    const prevSmallEdgeStripResidualAreaPx =
+      this.totals.hostScrollSmallEdgeStripResidualAreaPxTotal;
     const prevSentHashEvictions = this.totals.hostSentHashEvictionsTotal;
     const prevCacheMissReports = this.totals.hostCacheMissReportsTotal;
 
@@ -120,6 +137,10 @@ export class HostScrollHealthTracker {
       || hostScrollChromeTilesTotal < prevChromeTiles
       || hostScrollExposedStripTilesTotal < prevExposedStripTiles
       || hostScrollInteriorResidualTilesTotal < prevInteriorResidualTiles
+      || hostScrollEdgeStripResidualTilesTotal < prevEdgeStripResidualTiles
+      || hostScrollSmallEdgeStripResidualTilesTotal < prevSmallEdgeStripResidualTiles
+      || hostScrollSmallEdgeStripResidualRowsTotal < prevSmallEdgeStripResidualRows
+      || hostScrollSmallEdgeStripResidualAreaPxTotal < prevSmallEdgeStripResidualAreaPx
       || hostSentHashEvictionsTotal < prevSentHashEvictions
       || hostCacheMissReportsTotal < prevCacheMissReports
     ) {
@@ -156,6 +177,13 @@ export class HostScrollHealthTracker {
     this.totals.hostScrollChromeTilesTotal = hostScrollChromeTilesTotal;
     this.totals.hostScrollExposedStripTilesTotal = hostScrollExposedStripTilesTotal;
     this.totals.hostScrollInteriorResidualTilesTotal = hostScrollInteriorResidualTilesTotal;
+    this.totals.hostScrollEdgeStripResidualTilesTotal = hostScrollEdgeStripResidualTilesTotal;
+    this.totals.hostScrollSmallEdgeStripResidualTilesTotal =
+      hostScrollSmallEdgeStripResidualTilesTotal;
+    this.totals.hostScrollSmallEdgeStripResidualRowsTotal =
+      hostScrollSmallEdgeStripResidualRowsTotal;
+    this.totals.hostScrollSmallEdgeStripResidualAreaPxTotal =
+      hostScrollSmallEdgeStripResidualAreaPxTotal;
     this.totals.hostSentHashEntries = hostSentHashEntries;
     this.totals.hostSentHashEvictionsTotal = hostSentHashEvictionsTotal;
     this.totals.hostCacheMissReportsTotal = hostCacheMissReportsTotal;
@@ -190,6 +218,13 @@ export class HostScrollHealthTracker {
       hostScrollChromeTilesTotal: this.totals.hostScrollChromeTilesTotal,
       hostScrollExposedStripTilesTotal: this.totals.hostScrollExposedStripTilesTotal,
       hostScrollInteriorResidualTilesTotal: this.totals.hostScrollInteriorResidualTilesTotal,
+      hostScrollEdgeStripResidualTilesTotal: this.totals.hostScrollEdgeStripResidualTilesTotal,
+      hostScrollSmallEdgeStripResidualTilesTotal:
+        this.totals.hostScrollSmallEdgeStripResidualTilesTotal,
+      hostScrollSmallEdgeStripResidualRowsTotal:
+        this.totals.hostScrollSmallEdgeStripResidualRowsTotal,
+      hostScrollSmallEdgeStripResidualAreaPxTotal:
+        this.totals.hostScrollSmallEdgeStripResidualAreaPxTotal,
       hostSentHashEntries: this.totals.hostSentHashEntries,
       hostSentHashEvictionsTotal: this.totals.hostSentHashEvictionsTotal,
       hostCacheMissReportsTotal: this.totals.hostCacheMissReportsTotal,

@@ -36,6 +36,10 @@ describe('SessionStats host scroll health', () => {
     expect(health.hostScrollResidualLargeRowShiftFallbacksTotal).toBe(1);
     expect(health.hostScrollResidualOtherFallbacksTotal).toBe(1);
     expect(health.hostScrollZeroSavedBatchesTotal).toBe(4);
+    expect(health.hostScrollEdgeStripResidualTilesTotal).toBe(0);
+    expect(health.hostScrollSmallEdgeStripResidualTilesTotal).toBe(0);
+    expect(health.hostScrollSmallEdgeStripResidualRowsTotal).toBe(0);
+    expect(health.hostScrollSmallEdgeStripResidualAreaPxTotal).toBe(0);
   });
 
   it('clears rolling history when host counters reset', () => {
@@ -57,6 +61,10 @@ describe('SessionStats host scroll health', () => {
     expect(health.hostScrollResidualLargeRowShiftFallbacksTotal).toBe(0);
     expect(health.hostScrollResidualOtherFallbacksTotal).toBe(0);
     expect(health.hostScrollZeroSavedBatchesTotal).toBe(1);
+    expect(health.hostScrollEdgeStripResidualTilesTotal).toBe(0);
+    expect(health.hostScrollSmallEdgeStripResidualTilesTotal).toBe(0);
+    expect(health.hostScrollSmallEdgeStripResidualRowsTotal).toBe(0);
+    expect(health.hostScrollSmallEdgeStripResidualAreaPxTotal).toBe(0);
     expect(health.hostFallbackRateRecent20Batches).toBe(0);
     expect(health.hostFallbackRateRecent20).toBe(0);
     expect(health.hostFallbackRateRecent50Batches).toBe(0);

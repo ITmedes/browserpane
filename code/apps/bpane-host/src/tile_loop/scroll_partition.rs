@@ -1,7 +1,7 @@
 //! Scroll tile partitioning and residual comparison: split tiles into
 //! content/chrome regions and compute residual dirty set.
 
-use crate::scroll::residual::offset_tile_rect_for_emit;
+use crate::scroll::residual::{offset_tile_rect_for_emit, summarize_shifted_tile_diff};
 use crate::scroll::{
     analyze_scroll_residual_emit_coords, can_emit_scroll_copy, has_scroll_region_split,
     is_content_tile_in_scroll_region, should_defer_scroll_repair,
@@ -15,6 +15,7 @@ const STICKY_BAND_MIN_TILES: usize = 4;
 const STICKY_TOP_ROWS_MAX: u16 = 3;
 const STICKY_RIGHT_COLS_MAX: u16 = 6;
 const STICKY_BAND_MIN_SAVED_RATIO: f32 = 0.20;
+const SMALL_EDGE_STRIP_MAX_ROWS: usize = 8;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct StickyBands {
@@ -152,6 +153,10 @@ pub(crate) struct PartitionResult {
     pub residual_ratio: f32,
     pub interior_ratio: f32,
     pub interior_residual_tiles: usize,
+    pub edge_strip_residual_tiles: usize,
+    pub small_edge_strip_residual_tiles: usize,
+    pub small_edge_strip_residual_rows: usize,
+    pub small_edge_strip_residual_area_px: usize,
     pub quantized_scroll_copy: bool,
     pub saved_tiles: usize,
     pub defer_scroll_repair: bool,
@@ -284,6 +289,36 @@ pub(crate) fn partition_and_compare(
     } else {
         residual_area_px.saturating_sub(exposed_strip_area_px) as f32 / interior_area_px as f32
     };
+    let mut edge_strip_residual_tiles = 0usize;
+    let mut small_edge_strip_residual_tiles = 0usize;
+    let mut small_edge_strip_residual_rows = 0usize;
+    let mut small_edge_strip_residual_area_px = 0usize;
+    for &coord in &residual {
+        if exposed_strip_coords.contains(&coord) {
+            continue;
+        }
+        let rect = offset_tile_rect_for_emit(coord, grid, grid_offset_y);
+        if rect.w == 0 || rect.h == 0 {
+            continue;
+        }
+        let diff = summarize_shifted_tile_diff(
+            rgba,
+            prev,
+            stride,
+            grid.screen_h as usize,
+            &rect,
+            scroll_dy,
+        );
+        if !diff.is_edge_strip(rect.h as usize) {
+            continue;
+        }
+        edge_strip_residual_tiles += 1;
+        if diff.changed_rows <= SMALL_EDGE_STRIP_MAX_ROWS {
+            small_edge_strip_residual_tiles += 1;
+            small_edge_strip_residual_rows += diff.changed_rows;
+            small_edge_strip_residual_area_px += diff.changed_area_px(rect.w as usize);
+        }
+    }
     let quantized_scroll_copy = can_emit_scroll_copy(scroll_dy, scroll_copy_quantum_px, tile_size);
     let saved_tiles = potential_tiles.saturating_sub(residual_tiles);
     let defer_scroll_repair = should_defer_scroll_repair(
@@ -304,6 +339,10 @@ pub(crate) fn partition_and_compare(
         residual_ratio,
         interior_ratio,
         interior_residual_tiles: interior_residual,
+        edge_strip_residual_tiles,
+        small_edge_strip_residual_tiles,
+        small_edge_strip_residual_rows,
+        small_edge_strip_residual_area_px,
         quantized_scroll_copy,
         saved_tiles,
         defer_scroll_repair,
