@@ -15,7 +15,7 @@ use tracing::info;
 use tracing_subscriber::EnvFilter;
 use wtransport::Identity;
 
-use auth::TokenValidator;
+use auth::{AuthValidator, OidcConfig};
 use config::Config;
 use session_registry::SessionRegistry;
 use transport::TransportServer;
@@ -30,34 +30,49 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::parse();
 
-    // Generate or load HMAC secret
-    let hmac_secret = match &config.hmac_secret {
-        Some(hex_secret) => {
-            let decoded = hex::decode(hex_secret)?;
-            if decoded.len() < 16 {
-                anyhow::bail!(
-                    "HMAC secret must be at least 16 bytes (32 hex chars), got {}",
-                    decoded.len()
-                );
-            }
-            decoded
+    let auth_validator = Arc::new(if let Some(issuer) = &config.oidc_issuer {
+        let audience = config.oidc_audience.clone().ok_or_else(|| {
+            anyhow::anyhow!("--oidc-audience is required when --oidc-issuer is set")
+        })?;
+        info!("using OIDC/JWT auth with issuer {}", issuer);
+        if config.token_file.is_some() {
+            info!("ignoring --token-file because OIDC auth is enabled");
         }
-        None => {
-            // Use CSPRNG for secret generation
-            let mut secret = vec![0u8; 32];
-            rand::fill(&mut secret[..]);
-            let token_validator = TokenValidator::new(secret.clone());
-            let token = token_validator.generate_token();
+        AuthValidator::from_oidc(OidcConfig {
+            issuer: issuer.clone(),
+            audience,
+            jwks_url: config.oidc_jwks_url.clone(),
+        })
+        .await?
+    } else {
+        let hmac_secret = match &config.hmac_secret {
+            Some(hex_secret) => {
+                let decoded = hex::decode(hex_secret)?;
+                if decoded.len() < 16 {
+                    anyhow::bail!(
+                        "HMAC secret must be at least 16 bytes (32 hex chars), got {}",
+                        decoded.len()
+                    );
+                }
+                decoded
+            }
+            None => {
+                let mut secret = vec![0u8; 32];
+                rand::fill(&mut secret[..]);
+                secret
+            }
+        };
+
+        let validator = AuthValidator::from_hmac_secret(hmac_secret);
+        if let Some(token) = validator.generate_token() {
             info!("generated dev token: {token}");
             if let Some(path) = &config.token_file {
                 std::fs::write(path, &token)?;
                 info!("wrote token to {}", path.display());
             }
-            secret
         }
-    };
-
-    let token_validator = Arc::new(TokenValidator::new(hmac_secret));
+        validator
+    });
 
     // Load or generate TLS identity
     let identity = match (&config.cert, &config.key) {
@@ -89,7 +104,7 @@ async fn main() -> anyhow::Result<()> {
         bind_addr,
         identity,
         agent_socket_str.clone(),
-        token_validator.clone(),
+        auth_validator.clone(),
         Duration::from_secs(config.heartbeat_timeout_secs),
         registry.clone(),
     );
@@ -106,6 +121,6 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::select! {
         result = server.run() => result,
-        result = api::run_api_server(api_bind_addr, registry, token_validator, agent_socket_str) => result,
+        result = api::run_api_server(api_bind_addr, registry, auth_validator, agent_socket_str) => result,
     }
 }

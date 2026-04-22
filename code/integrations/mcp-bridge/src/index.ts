@@ -19,6 +19,10 @@ const MCP_RESOLUTION = process.env.BPANE_MCP_RESOLUTION ?? "1600x900";
 const CDP_ENDPOINT = process.env.BPANE_CDP_ENDPOINT ?? "http://127.0.0.1:9222";
 const SUPERVISED_DELAY_MS = parseInt(process.env.BPANE_MCP_SUPERVISED_DELAY_MS ?? "1500", 10);
 const POLL_INTERVAL_MS = parseInt(process.env.BPANE_MCP_POLL_INTERVAL_MS ?? "2000", 10);
+const GATEWAY_OIDC_TOKEN_URL = process.env.BPANE_GATEWAY_OIDC_TOKEN_URL ?? "";
+const GATEWAY_OIDC_CLIENT_ID = process.env.BPANE_GATEWAY_OIDC_CLIENT_ID ?? "";
+const GATEWAY_OIDC_CLIENT_SECRET = process.env.BPANE_GATEWAY_OIDC_CLIENT_SECRET ?? "";
+const GATEWAY_OIDC_SCOPES = process.env.BPANE_GATEWAY_OIDC_SCOPES ?? "";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -32,15 +36,77 @@ function parseResolution(s: string): { width: number; height: number } {
   return { width: w, height: h };
 }
 
+class GatewayTokenManager {
+  private accessToken: string | null = null;
+  private expiresAtMs = 0;
+
+  isEnabled(): boolean {
+    return Boolean(GATEWAY_OIDC_TOKEN_URL && GATEWAY_OIDC_CLIENT_ID && GATEWAY_OIDC_CLIENT_SECRET);
+  }
+
+  async getAuthHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
+    if (!this.isEnabled()) {
+      return extra;
+    }
+    const token = await this.getAccessToken();
+    return {
+      ...extra,
+      Authorization: `Bearer ${token}`,
+    };
+  }
+
+  private async getAccessToken(): Promise<string> {
+    const now = Date.now();
+    if (this.accessToken && now < this.expiresAtMs - 30_000) {
+      return this.accessToken;
+    }
+
+    const body = new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: GATEWAY_OIDC_CLIENT_ID,
+      client_secret: GATEWAY_OIDC_CLIENT_SECRET,
+    });
+    if (GATEWAY_OIDC_SCOPES.trim()) {
+      body.set("scope", GATEWAY_OIDC_SCOPES.trim());
+    }
+
+    const response = await fetch(GATEWAY_OIDC_TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    if (!response.ok) {
+      throw new Error(`token endpoint returned ${response.status}`);
+    }
+
+    const payload = (await response.json()) as {
+      access_token?: string;
+      expires_in?: number;
+    };
+    if (!payload.access_token) {
+      throw new Error("token endpoint returned no access_token");
+    }
+
+    this.accessToken = payload.access_token;
+    this.expiresAtMs = now + Math.max(30, payload.expires_in ?? 60) * 1000;
+    return this.accessToken;
+  }
+}
+
+const gatewayTokenManager = new GatewayTokenManager();
+
 // ── Register MCP owner with gateway ──────────────────────────────────
 
 async function registerMcpOwner(width: number, height: number): Promise<void> {
   const maxRetries = 30;
   for (let i = 0; i < maxRetries; i++) {
     try {
+      const headers = await gatewayTokenManager.getAuthHeaders({
+        "Content-Type": "application/json",
+      });
       const resp = await fetch(`${GATEWAY_API_URL}/api/session/mcp-owner`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ width, height }),
       });
       if (resp.ok) {
@@ -58,7 +124,11 @@ async function registerMcpOwner(width: number, height: number): Promise<void> {
 
 async function unregisterMcpOwner(): Promise<void> {
   try {
-    await fetch(`${GATEWAY_API_URL}/api/session/mcp-owner`, { method: "DELETE" });
+    const headers = await gatewayTokenManager.getAuthHeaders();
+    await fetch(`${GATEWAY_API_URL}/api/session/mcp-owner`, {
+      method: "DELETE",
+      headers,
+    });
     console.log("[mcp-bridge] unregistered MCP owner");
   } catch {
     console.warn("[mcp-bridge] failed to unregister MCP owner (gateway unavailable)");
@@ -149,7 +219,11 @@ async function main() {
   //    This avoids locking the resolution when no MCP client is connected.
 
   // 2. Start supervisor monitor
-  const monitor = new SupervisorMonitor(GATEWAY_API_URL, POLL_INTERVAL_MS);
+  const monitor = new SupervisorMonitor(
+    GATEWAY_API_URL,
+    POLL_INTERVAL_MS,
+    () => gatewayTokenManager.getAuthHeaders(),
+  );
   monitor.start();
 
   // 3. Connect to @playwright/mcp subprocess

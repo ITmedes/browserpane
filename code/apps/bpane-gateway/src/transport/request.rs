@@ -1,4 +1,4 @@
-use crate::auth::{AuthError, TokenValidator};
+use crate::auth::{AuthError, AuthValidator};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum RequestValidationError {
@@ -6,19 +6,23 @@ pub(super) enum RequestValidationError {
     InvalidToken(AuthError),
 }
 
-pub(super) fn validate_request_path(
+pub(super) async fn validate_request_path(
     path: &str,
-    token_validator: &TokenValidator,
+    auth_validator: &AuthValidator,
 ) -> Result<(), RequestValidationError> {
     let token = extract_token(path).ok_or(RequestValidationError::MissingToken)?;
-    token_validator
+    auth_validator
         .validate_token(&token)
+        .await
         .map_err(RequestValidationError::InvalidToken)
 }
 
 pub(super) fn extract_token(path: &str) -> Option<String> {
     let query = path.split('?').nth(1)?;
     for param in query.split('&') {
+        if let Some(value) = param.strip_prefix("access_token=") {
+            return Some(value.to_string());
+        }
         if let Some(value) = param.strip_prefix("token=") {
             return Some(value.to_string());
         }

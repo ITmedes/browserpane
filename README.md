@@ -88,8 +88,19 @@ The compose stack starts:
 
 - `host`: Linux host runtime with Xorg dummy, Openbox, Chromium, and `bpane-host`
 - `gateway`: WebTransport relay on `:4433` and HTTP API on `:8932`
+- `keycloak`: local OIDC provider on `:8091`
 - `web`: local frontend on `:8080`
 - `mcp-bridge`: MCP bridge on `:8931`
+
+The default local auth flow is now OIDC-based:
+
+- open `http://localhost:8080`
+- click `Login`
+- authenticate against the local Keycloak realm
+- use the demo account `demo / demo-demo`
+- return to the page and click `Connect`
+
+`test-embed.html` fetches `/auth-config.json` and performs an Authorization Code + PKCE login. The browser client then connects to the gateway with an OIDC access token.
 
 For Chromium, WebTransport still needs trusted TLS on localhost. The SPKI fingerprint is written to:
 
@@ -132,6 +143,14 @@ cd code/tests/e2e && npm test
 - If the gateway runs with exclusive browser ownership, one browser client is interactive and later clients become viewers.
 - MCP ownership also forces browser clients into viewer behavior.
 - Viewers are read-only and do not get interactive capabilities like input, clipboard, upload, download, microphone, camera, or resize.
+
+## Authentication Model
+
+- Browser clients authenticate to `bpane-gateway` with bearer access tokens.
+- In the local compose stack, those tokens come from the Keycloak realm on `:8091`.
+- The gateway supports OIDC/JWT validation with issuer, audience, and JWKS configuration.
+- `mcp-bridge` uses OIDC client-credentials to call the gateway HTTP API.
+- The old shared dev-token file flow is no longer the default local path.
 
 ## Documentation Policy
 

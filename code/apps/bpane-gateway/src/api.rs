@@ -2,21 +2,20 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::auth::TokenValidator;
+use crate::auth::AuthValidator;
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_registry::SessionRegistry;
 
 /// Shared state for the HTTP API.
 struct ApiState {
     registry: Arc<SessionRegistry>,
-    #[allow(dead_code)] // Will be used for auth in production
-    token_validator: Arc<TokenValidator>,
+    auth_validator: Arc<AuthValidator>,
     agent_socket_path: String,
 }
 
@@ -69,8 +68,12 @@ struct ErrorResponse {
 
 /// GET /api/session/status
 async fn session_status(
+    headers: HeaderMap,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<SessionStatus>, StatusCode> {
+    authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
     let hub = state
         .registry
         .ensure_hub(&state.agent_socket_path)
@@ -102,7 +105,8 @@ fn session_status_from_snapshot(snapshot: SessionTelemetrySnapshot) -> SessionSt
             max_full_refresh_tiles: snapshot.max_full_refresh_tiles,
             egress_send_stream_lock_acquires_total: snapshot.egress_send_stream_lock_acquires_total,
             egress_send_stream_lock_wait_us_total: snapshot.egress_send_stream_lock_wait_us_total,
-            egress_send_stream_lock_wait_us_average: snapshot.egress_send_stream_lock_wait_us_average,
+            egress_send_stream_lock_wait_us_average: snapshot
+                .egress_send_stream_lock_wait_us_average,
             egress_send_stream_lock_wait_us_max: snapshot.egress_send_stream_lock_wait_us_max,
             egress_lagged_receives_total: snapshot.egress_lagged_receives_total,
             egress_lagged_frames_total: snapshot.egress_lagged_frames_total,
@@ -112,9 +116,13 @@ fn session_status_from_snapshot(snapshot: SessionTelemetrySnapshot) -> SessionSt
 
 /// POST /api/session/mcp-owner
 async fn set_mcp_owner(
+    headers: HeaderMap,
     State(state): State<Arc<ApiState>>,
     Json(req): Json<McpOwnerRequest>,
 ) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
+    authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
     let hub = state
         .registry
         .ensure_hub(&state.agent_socket_path)
@@ -135,8 +143,12 @@ async fn set_mcp_owner(
 
 /// DELETE /api/session/mcp-owner
 async fn clear_mcp_owner(
+    headers: HeaderMap,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<OkResponse>, StatusCode> {
+    authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
     let hub = state
         .registry
         .ensure_hub(&state.agent_socket_path)
@@ -152,12 +164,12 @@ async fn clear_mcp_owner(
 pub async fn run_api_server(
     bind_addr: SocketAddr,
     registry: Arc<SessionRegistry>,
-    token_validator: Arc<TokenValidator>,
+    auth_validator: Arc<AuthValidator>,
     agent_socket_path: String,
 ) -> anyhow::Result<()> {
     let state = Arc::new(ApiState {
         registry,
-        token_validator,
+        auth_validator,
         agent_socket_path,
     });
 
@@ -173,4 +185,23 @@ pub async fn run_api_server(
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+async fn authorize_api_request(
+    headers: &HeaderMap,
+    auth_validator: &AuthValidator,
+) -> Result<(), String> {
+    let token = extract_bearer_token(headers).ok_or_else(|| "missing bearer token".to_string())?;
+    auth_validator
+        .validate_token(token)
+        .await
+        .map_err(|error| format!("invalid bearer token: {error}"))
+}
+
+fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
+    let value = headers
+        .get(axum::http::header::AUTHORIZATION)?
+        .to_str()
+        .ok()?;
+    value.strip_prefix("Bearer ")
 }

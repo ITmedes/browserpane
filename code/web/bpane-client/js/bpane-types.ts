@@ -3,7 +3,10 @@ export type RenderBackendPreference = 'auto' | 'canvas2d' | 'webgl2';
 export interface BpaneOptions {
   container: HTMLElement;
   gatewayUrl: string;
-  token: string;
+  /** OIDC/JWT access token for the gateway session. */
+  accessToken?: string;
+  /** Legacy dev-token compatibility path. Prefer `accessToken`. */
+  token?: string;
   hiDpi?: boolean;
   audio?: boolean;
   microphone?: boolean;
