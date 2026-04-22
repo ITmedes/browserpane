@@ -178,6 +178,7 @@
     <h1>BrowserPane Test</h1>
     <span id="status" class="status disconnected">Disconnected</span>
     <span id="auth-display" class="auth-display">Auth: --</span>
+    <span id="session-display" class="auth-display">Session: --</span>
     <span id="auth-hint" class="auth-hint"></span>
     <div class="controls">
       <button id="btn-login">Login</button>
@@ -265,6 +266,7 @@
     const GATEWAY_HOST = location.hostname || 'localhost';
     const GATEWAY_PORT = 4433;
     const GATEWAY_URL = `https://${GATEWAY_HOST}:${GATEWAY_PORT}`;
+    const SESSION_API_URL = '/api/v1/sessions';
 
     // ── DOM refs ────────────────────────────────────────────────────
     const container = document.getElementById('desktop-container');
@@ -303,6 +305,7 @@
     const overlay = document.getElementById('overlay');
     const logPanel = document.getElementById('log-panel');
     const authDisplay = document.getElementById('auth-display');
+    const sessionDisplay = document.getElementById('session-display');
     const authHint = document.getElementById('auth-hint');
     let logsVisible = false;
 
@@ -829,7 +832,6 @@
 
     // ── Auth state ──────────────────────────────────────────────────
     const AUTH_CONFIG_URL = '/auth-config.json';
-    const GATEWAY_STATUS_URL = '/api/session/status';
     const AUTH_STORAGE_KEY = 'bpane.auth.tokens.v1';
     const AUTH_PKCE_KEY = 'bpane.auth.pkce.v1';
     const authState = {
@@ -840,6 +842,26 @@
       gatewayPreflightOk: false,
       initialized: false,
     };
+    const controlSessionState = {
+      resource: null,
+    };
+
+    function isRuntimeCandidateSessionState(state) {
+      return ['pending', 'starting', 'ready', 'active', 'idle'].includes(state);
+    }
+
+    function getSessionLabel(resource) {
+      if (!resource?.id) {
+        return 'Session: --';
+      }
+      const shortId = String(resource.id).slice(0, 8);
+      const state = resource.state ?? 'unknown';
+      return `Session: ${shortId} (${state})`;
+    }
+
+    function renderSessionState() {
+      sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
+    }
 
     function buildRedirectUri() {
       return `${window.location.origin}${window.location.pathname}`;
@@ -895,7 +917,9 @@
       authState.tokens = null;
       authState.claims = null;
       authState.gatewayPreflightOk = false;
+      controlSessionState.resource = null;
       sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      renderSessionState();
     }
 
     function loadStoredAuthTokens() {
@@ -951,6 +975,7 @@
       }
       connectBtn.disabled = !canConnect;
       disconnectBtn.disabled = !session;
+      renderSessionState();
     }
 
     async function fetchAuthConfig() {
@@ -1096,35 +1121,114 @@
       return refreshAccessToken();
     }
 
-    async function verifyGatewayAccessToken(accessToken) {
-      try {
-        const response = await fetch(GATEWAY_STATUS_URL, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: 'no-store',
-        });
-        if (!response.ok) {
-          authState.gatewayPreflightOk = false;
-          let detail = '';
-          try {
-            detail = await response.text();
-          } catch {
-            detail = '';
-          }
-          log(
-            `Gateway auth preflight failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`,
-            'error',
-          );
-          return false;
+    async function fetchSessionResources(accessToken) {
+      const response = await fetch(SESSION_API_URL, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
         }
+        throw new Error(
+          `HTTP ${response.status}${detail ? ` ${detail}` : ''}`,
+        );
+      }
+      const payload = await response.json();
+      return Array.isArray(payload?.sessions) ? payload.sessions : [];
+    }
+
+    async function createSessionResource(accessToken) {
+      const response = await fetch(SESSION_API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+        body: JSON.stringify({
+          owner_mode: 'collaborative',
+          integration_context: {
+            source: 'test-embed',
+            origin: window.location.origin,
+          },
+        }),
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        const error = new Error(
+          `HTTP ${response.status}${detail ? ` ${detail}` : ''}`,
+        );
+        error.status = response.status;
+        throw error;
+      }
+      return response.json();
+    }
+
+    async function resolveGatewaySessionResource(accessToken) {
+      try {
+        const existing = (await fetchSessionResources(accessToken)).find((candidate) =>
+          isRuntimeCandidateSessionState(candidate.state),
+        );
+        if (existing) {
+          controlSessionState.resource = existing;
+          authState.gatewayPreflightOk = true;
+          log(
+            `Session control resolved existing session ${existing.id} (${existing.state})`,
+            'ok',
+          );
+          renderSessionState();
+          return existing;
+        }
+
+        const created = await createSessionResource(accessToken);
+        controlSessionState.resource = created;
         authState.gatewayPreflightOk = true;
-        log('Gateway auth preflight succeeded: bearer token accepted by bpane-gateway.', 'ok');
-        return true;
+        log(
+          `Session control created session ${created.id} (${created.state})`,
+          'ok',
+        );
+        renderSessionState();
+        return created;
       } catch (error) {
+        if (error?.status === 409) {
+          try {
+            const retry = (await fetchSessionResources(accessToken)).find((candidate) =>
+              isRuntimeCandidateSessionState(candidate.state),
+            );
+            if (retry) {
+              controlSessionState.resource = retry;
+              authState.gatewayPreflightOk = true;
+              log(
+                `Session control reused conflicting active session ${retry.id} (${retry.state})`,
+                'warn',
+              );
+              renderSessionState();
+              return retry;
+            }
+          } catch {
+            // fall through to the generic error path below
+          }
+        }
         authState.gatewayPreflightOk = false;
-        log(`Gateway auth preflight failed: ${error.message}`, 'error');
-        return false;
+        controlSessionState.resource = null;
+        renderSessionState();
+        log(`Session control preflight failed: ${error.message}`, 'error');
+        return null;
       }
     }
 
@@ -1208,22 +1312,24 @@
 
       if (overlay) overlay.style.display = 'none';
       setStatus('Connecting...', 'connecting');
-      log(`Connecting to ${GATEWAY_URL}...`);
+      log('Resolving control-plane session...', 'info');
 
       try {
-        const gatewayAuthOk = await verifyGatewayAccessToken(accessToken);
-        if (!gatewayAuthOk) {
-          setStatus('Auth rejected', 'error');
+        const controlSession = await resolveGatewaySessionResource(accessToken);
+        if (!controlSession) {
+          setStatus('Session resolution failed', 'error');
           if (overlay) overlay.style.display = '';
           return;
         }
+        const gatewayUrl = `${controlSession.connect.gateway_url}${controlSession.connect.transport_path}`;
+        log(`Connecting to ${gatewayUrl} via session ${controlSession.id}...`);
         log(
           `Connect options: render=${renderBackendSelect.value}, scrollCopy=${scrollCopyToggle.checked ? 'on' : 'off'}, hiDpi=${hidpiToggle.checked}`,
           'info',
         );
         session = await BpaneSession.connect({
           container,
-          gatewayUrl: `${GATEWAY_URL}/session`,
+          gatewayUrl,
           accessToken,
           renderBackend: renderBackendSelect.value,
           hiDpi: hidpiToggle.checked,
@@ -1531,6 +1637,7 @@
     renderBenchmarkMetrics();
     await initializeAuth();
     log(`Gateway target: ${GATEWAY_URL}`);
+    log(`Session control API: ${SESSION_API_URL}`, 'info');
     log('Benchmark metrics API: window.__bpaneBenchmarkMetrics.{startSample,stopSample,resetSample,getSummary}', 'info');
     if (authState.config?.mode === 'oidc') {
       log(`OIDC login configured for issuer ${authState.config.issuer}`, 'info');

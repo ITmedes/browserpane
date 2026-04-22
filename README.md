@@ -102,6 +102,7 @@ The default local auth flow is now OIDC-based:
 - authenticate against the local Keycloak realm
 - use the demo account `demo / demo-demo`
 - return to the page and click `Connect`
+- the page will resolve or create an owner-scoped `/api/v1/sessions` resource before opening WebTransport
 
 `test-embed.html` fetches `/auth-config.json` and performs an Authorization Code + PKCE login. The browser client then connects to the gateway with an OIDC access token.
 
@@ -129,6 +130,7 @@ Current limitation:
 - the public session resource model is now versioned and persistent
 - the actual runtime is still in `legacy_single_runtime` compatibility mode
 - so only one active BrowserPane session can exist at a time until the later multi-session host/gateway phases land
+- the local `mcp-bridge` still uses the legacy global ownership/status endpoints by default; its session-control bootstrap is present but left disabled in compose until session-scoped ownership APIs exist
 
 ### Build And Test Without Running The Full Stack
 

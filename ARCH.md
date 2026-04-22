@@ -321,12 +321,14 @@ The default dev stack no longer uses a shared token file.
 - `web` serves `/auth-config.json`
 - `test-embed.html` discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
+- after login, `test-embed.html` resolves or creates an owner-scoped `/api/v1/sessions` resource and uses its returned connect metadata
 - the resulting access token is sent to `bpane-gateway` as:
   - WebTransport query param: `access_token=...`
   - HTTP API bearer token for authenticated control calls
 - `mcp-bridge` obtains its own bearer token with client credentials
 - the versioned session API is also bearer-protected and owner-scoped
 - the current session resource connect contract still advertises `compatibility_mode: legacy_single_runtime`
+- `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`), but local compose leaves it disabled until session-scoped ownership APIs exist
 
 The default imported local realm contains:
 

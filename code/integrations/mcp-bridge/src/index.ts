@@ -9,6 +9,7 @@ import {
   ListPromptsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import http from "node:http";
+import { SessionControlClient } from "./session-control-client.js";
 import { SupervisorMonitor } from "./supervisor-monitor.js";
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -23,6 +24,10 @@ const GATEWAY_OIDC_TOKEN_URL = process.env.BPANE_GATEWAY_OIDC_TOKEN_URL ?? "";
 const GATEWAY_OIDC_CLIENT_ID = process.env.BPANE_GATEWAY_OIDC_CLIENT_ID ?? "";
 const GATEWAY_OIDC_CLIENT_SECRET = process.env.BPANE_GATEWAY_OIDC_CLIENT_SECRET ?? "";
 const GATEWAY_OIDC_SCOPES = process.env.BPANE_GATEWAY_OIDC_SCOPES ?? "";
+const SESSION_BOOTSTRAP_MODE = (
+  process.env.BPANE_SESSION_BOOTSTRAP_MODE ?? "off"
+).trim().toLowerCase();
+const SESSION_ID = (process.env.BPANE_SESSION_ID ?? "").trim();
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -214,6 +219,19 @@ function createServerForConnection(
 
 async function main() {
   const { width, height } = parseResolution(MCP_RESOLUTION);
+  const sessionControlClient = new SessionControlClient({
+    gatewayApiUrl: GATEWAY_API_URL,
+    getHeaders: (extra) => gatewayTokenManager.getAuthHeaders(extra ?? {}),
+    sessionId: SESSION_ID,
+    bootstrapMode: SESSION_BOOTSTRAP_MODE === "reuse_or_create" ? "reuse_or_create" : "off",
+    ownerMode: "collaborative",
+    displayName: "MCP bridge session",
+    integrationContext: {
+      source: "mcp-bridge",
+      cdp_endpoint: CDP_ENDPOINT,
+    },
+  });
+  const managedSession = await sessionControlClient.resolveManagedSession();
 
   // 1. Do NOT register as MCP owner at startup — wait for first SSE client.
   //    This avoids locking the resolution when no MCP client is connected.
@@ -234,6 +252,15 @@ async function main() {
   );
   await playwrightClient.connect(playwrightTransport);
   console.log("[mcp-bridge] connected to @playwright/mcp subprocess");
+  if (managedSession) {
+    console.log(
+      `[mcp-bridge] resolved control session ${managedSession.id} (${managedSession.state}, ${managedSession.connect.compatibility_mode})`,
+    );
+  } else {
+    console.log(
+      "[mcp-bridge] running without a managed control session; legacy runtime ownership endpoints remain in use",
+    );
+  }
 
   // 4. Start HTTP/SSE server for external MCP clients.
   //    Each SSE connection gets its own Server instance to avoid the
@@ -264,6 +291,9 @@ async function main() {
           supervisors: monitor.getBrowserClientCount(),
           resolution: { width, height },
           supervised_delay_ms: SUPERVISED_DELAY_MS,
+          control_session_id: managedSession?.id ?? null,
+          control_session_state: managedSession?.state ?? null,
+          control_session_mode: managedSession?.connect.compatibility_mode ?? null,
         }),
       );
       return;

@@ -221,6 +221,8 @@ Current status:
   - `GET /api/v1/sessions/{id}`
   - `DELETE /api/v1/sessions/{id}`
 - persistence is Postgres-backed in the normal compose/runtime path
+- `test-embed.html` already consumes that API and resolves/creates a session resource before browser connect
+- `mcp-bridge` now has the first session-control client hooks, but local compose keeps its managed-session bootstrap off until session-scoped ownership APIs land
 - the remaining Phase 0 gap is tightening the formal contract surface and expanding downstream integration to consume these resources instead of the older implicit single-session assumptions
 
 Exit criteria:

@@ -67,6 +67,7 @@ Current product shape:
   - TypeScript package. There is no meaningful Rust browser client crate in the current repo.
 - `code/integrations/mcp-bridge`
   - SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
+  - Can resolve an explicit control-plane session via `/api/v1/sessions`, but the local compose default still leaves that bootstrap off until per-session ownership APIs exist.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
@@ -119,8 +120,9 @@ Run these where applicable:
 2. `docker compose -f deploy/compose.yml up --build`
 3. Open `http://localhost:8080` in Chromium.
 4. Log in through the local Keycloak realm if prompted.
-5. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
-6. `keycloak` listens on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
+5. The test page will resolve or create an owner-scoped `/api/v1/sessions` resource before transport connect.
+6. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
+7. `keycloak` listens on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
 
 ## Guardrails for contributors and agents
 
