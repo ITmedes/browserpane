@@ -22,7 +22,7 @@ use wtransport::Identity;
 use auth::{AuthValidator, OidcConfig};
 use config::Config;
 use connect_ticket::SessionConnectTicketManager;
-use runtime_manager::{DockerSingleRuntimeConfig, RuntimeManagerConfig, SessionRuntimeManager};
+use runtime_manager::{DockerRuntimeConfig, RuntimeManagerConfig, SessionRuntimeManager};
 use session_control::{SessionOwnerMode, SessionStore};
 use session_registry::SessionRegistry;
 use transport::TransportServer;
@@ -110,14 +110,6 @@ async fn main() -> anyhow::Result<()> {
         config.exclusive_browser_owner,
     ));
 
-    let session_store = if let Some(database_url) = &config.database_url {
-        info!("using postgres-backed session control store");
-        SessionStore::from_database_url(database_url).await?
-    } else {
-        warn!("no --database-url configured; /api/v1 sessions will use an in-memory store");
-        SessionStore::in_memory()
-    };
-
     let agent_socket_str = config.agent_socket.to_str().unwrap().to_string();
     let runtime_manager = Arc::new(SessionRuntimeManager::new(
         match config.runtime_backend.as_str() {
@@ -125,7 +117,7 @@ async fn main() -> anyhow::Result<()> {
                 agent_socket_path: agent_socket_str,
                 idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
             },
-            "docker_single" => RuntimeManagerConfig::DockerSingle(DockerSingleRuntimeConfig {
+            "docker_single" => RuntimeManagerConfig::DockerSingle(DockerRuntimeConfig {
                 docker_bin: config.docker_runtime_bin.clone(),
                 image: config.docker_runtime_image.clone().ok_or_else(|| {
                     anyhow::anyhow!(
@@ -142,17 +134,55 @@ async fn main() -> anyhow::Result<()> {
                         "--docker-runtime-volume is required for --runtime-backend docker_single"
                     )
                 })?,
-                container_name: config.docker_runtime_container_name.clone(),
+                container_name_prefix: config.docker_runtime_container_name_prefix.clone(),
                 socket_root: config.docker_runtime_socket_root.clone(),
                 shm_size: config.docker_runtime_shm_size.clone(),
                 start_timeout: Duration::from_secs(config.docker_runtime_start_timeout_secs),
                 idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
+                max_active_runtimes: 1,
+                max_starting_runtimes: 1,
+                seccomp_unconfined: config.docker_runtime_seccomp_unconfined,
+                env_file: config.docker_runtime_env_file.clone(),
+            }),
+            "docker_pool" => RuntimeManagerConfig::DockerPool(DockerRuntimeConfig {
+                docker_bin: config.docker_runtime_bin.clone(),
+                image: config.docker_runtime_image.clone().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--docker-runtime-image is required for --runtime-backend docker_pool"
+                    )
+                })?,
+                network: config.docker_runtime_network.clone().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--docker-runtime-network is required for --runtime-backend docker_pool"
+                    )
+                })?,
+                shared_run_volume: config.docker_runtime_volume.clone().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--docker-runtime-volume is required for --runtime-backend docker_pool"
+                    )
+                })?,
+                container_name_prefix: config.docker_runtime_container_name_prefix.clone(),
+                socket_root: config.docker_runtime_socket_root.clone(),
+                shm_size: config.docker_runtime_shm_size.clone(),
+                start_timeout: Duration::from_secs(config.docker_runtime_start_timeout_secs),
+                idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
+                max_active_runtimes: config.max_active_runtimes,
+                max_starting_runtimes: config.max_starting_runtimes,
                 seccomp_unconfined: config.docker_runtime_seccomp_unconfined,
                 env_file: config.docker_runtime_env_file.clone(),
             }),
             other => anyhow::bail!("unknown --runtime-backend value: {other}"),
         },
     )?);
+
+    let session_store = if let Some(database_url) = &config.database_url {
+        info!("using postgres-backed session control store");
+        SessionStore::from_database_url_with_config(database_url, runtime_manager.profile().clone())
+            .await?
+    } else {
+        warn!("no --database-url configured; /api/v1 sessions will use an in-memory store");
+        SessionStore::in_memory_with_config(runtime_manager.profile().clone())
+    };
 
     let server = TransportServer::new(
         bind_addr,

@@ -53,8 +53,9 @@ The main blockers are outside that abstraction:
   - this seam now exists and currently supports:
     - `static_single`: one shared host socket
     - `docker_single`: one start-on-demand runtime container with idle shutdown
-  - both current backends still enforce one active runtime at a time
-  - the remaining work is replacing those single-runtime backends with real per-session runtime assignment, configurable capacity limits, and runtime metadata persistence
+    - `docker_pool`: multiple start-on-demand runtime containers with explicit active/startup caps
+  - `docker_single` still enforces one active runtime at a time; `docker_pool` is the first backend that can run multiple session workers in parallel
+  - the remaining work is runtime metadata persistence, stronger worker lifecycle/recovery semantics, and promoting the worker-pool backend from opt-in infrastructure to the default tested path
 - `code/apps/bpane-gateway/src/main.rs` and `config.rs`
   - one `--agent-socket`, one host endpoint
 - `code/integrations/mcp-bridge/src/index.ts`
@@ -65,7 +66,7 @@ The main blockers are outside that abstraction:
   - local stack is still hard-wired to one host worker and one socket volume by default
   - the opt-in Docker backend is not wired into the default compose path yet
 
-`SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is host/runtime lifecycle, runtime capacity policy, and mapping multiple runtime workers behind those session IDs through `runtime_manager.rs`.
+`SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is host/runtime lifecycle, runtime metadata persistence, and promoting the worker-pool backend from opt-in infrastructure to the default tested path.
 
 ## Industry Patterns Worth Copying
 

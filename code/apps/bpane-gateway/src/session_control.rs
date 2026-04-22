@@ -12,6 +12,7 @@ use tokio_postgres::{Client, Connection, NoTls, Row, Socket};
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
+use crate::runtime_manager::RuntimeProfile;
 
 const DEFAULT_VIEWPORT_WIDTH: u16 = 1600;
 const DEFAULT_VIEWPORT_HEIGHT: u16 = 900;
@@ -233,6 +234,7 @@ impl StoredSession {
     pub fn to_resource(
         &self,
         public_gateway_url: &str,
+        compatibility_mode: &str,
         state_override: Option<SessionLifecycleState>,
     ) -> SessionResource {
         SessionResource {
@@ -252,7 +254,7 @@ impl StoredSession {
                 transport_path: "/session".to_string(),
                 auth_type: "session_connect_ticket".to_string(),
                 ticket_path: Some(format!("/api/v1/sessions/{}/access-tokens", self.id)),
-                compatibility_mode: "legacy_single_runtime".to_string(),
+                compatibility_mode: compatibility_mode.to_string(),
             },
             created_at: self.created_at,
             updated_at: self.updated_at,
@@ -263,7 +265,7 @@ impl StoredSession {
 
 #[derive(Debug, Clone)]
 pub enum SessionStoreError {
-    ActiveSessionConflict,
+    ActiveSessionConflict { max_runtime_sessions: usize },
     InvalidRequest(String),
     Backend(String),
 }
@@ -271,10 +273,14 @@ pub enum SessionStoreError {
 impl std::fmt::Display for SessionStoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ActiveSessionConflict => {
+            Self::ActiveSessionConflict {
+                max_runtime_sessions,
+            } => {
                 write!(
                     f,
-                    "the current gateway runtime only supports one active session"
+                    "the current gateway runtime only supports {} active runtime-backed session{}",
+                    max_runtime_sessions,
+                    if *max_runtime_sessions == 1 { "" } else { "s" }
                 )
             }
             Self::InvalidRequest(message) => write!(f, "{message}"),
@@ -290,20 +296,58 @@ pub struct SessionStore {
     backend: SessionStoreBackend,
 }
 
+#[derive(Debug, Clone)]
+struct SessionStoreConfig {
+    runtime_binding: String,
+    compatibility_mode: String,
+    max_runtime_candidates: usize,
+}
+
 #[derive(Clone)]
 enum SessionStoreBackend {
     InMemory(Arc<InMemorySessionStore>),
     Postgres(Arc<PostgresSessionStore>),
 }
 
-impl SessionStore {
-    pub fn in_memory() -> Self {
+impl From<RuntimeProfile> for SessionStoreConfig {
+    fn from(runtime_profile: RuntimeProfile) -> Self {
         Self {
-            backend: SessionStoreBackend::InMemory(Arc::new(InMemorySessionStore::default())),
+            runtime_binding: runtime_profile.runtime_binding,
+            compatibility_mode: runtime_profile.compatibility_mode,
+            max_runtime_candidates: runtime_profile.max_runtime_sessions,
+        }
+    }
+}
+
+#[cfg(test)]
+fn legacy_runtime_profile() -> RuntimeProfile {
+    RuntimeProfile {
+        runtime_binding: "legacy_single_session".to_string(),
+        compatibility_mode: "legacy_single_runtime".to_string(),
+        max_runtime_sessions: 1,
+        supports_legacy_global_routes: true,
+    }
+}
+
+impl SessionStore {
+    #[cfg(test)]
+    pub fn in_memory() -> Self {
+        Self::in_memory_with_config(legacy_runtime_profile())
+    }
+
+    pub fn in_memory_with_config(runtime_profile: RuntimeProfile) -> Self {
+        Self {
+            backend: SessionStoreBackend::InMemory(Arc::new(InMemorySessionStore {
+                sessions: Mutex::new(Vec::new()),
+                config: SessionStoreConfig::from(runtime_profile),
+            })),
         }
     }
 
-    pub async fn from_database_url(database_url: &str) -> Result<Self, SessionStoreError> {
+    pub async fn from_database_url_with_config(
+        database_url: &str,
+        runtime_profile: RuntimeProfile,
+    ) -> Result<Self, SessionStoreError> {
         let (client, connection) = connect_to_postgres_with_retry(database_url).await?;
         tokio::spawn(async move {
             if let Err(error) = connection.await {
@@ -312,11 +356,19 @@ impl SessionStore {
         });
         let store = PostgresSessionStore {
             client: Mutex::new(client),
+            config: SessionStoreConfig::from(runtime_profile),
         };
         store.migrate().await?;
         Ok(Self {
             backend: SessionStoreBackend::Postgres(Arc::new(store)),
         })
+    }
+
+    pub fn compatibility_mode(&self) -> &str {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => &store.config.compatibility_mode,
+            SessionStoreBackend::Postgres(store) => &store.config.compatibility_mode,
+        }
     }
 
     pub async fn create_session(
@@ -506,9 +558,9 @@ fn validate_automation_delegate_request(
     Ok(())
 }
 
-#[derive(Default)]
 struct InMemorySessionStore {
     sessions: Mutex<Vec<StoredSession>>,
+    config: SessionStoreConfig,
 }
 
 impl InMemorySessionStore {
@@ -519,11 +571,14 @@ impl InMemorySessionStore {
         owner_mode: SessionOwnerMode,
     ) -> Result<StoredSession, SessionStoreError> {
         let mut sessions = self.sessions.lock().await;
-        if sessions
+        let active_runtime_candidates = sessions
             .iter()
-            .any(|session| session.state.is_runtime_candidate())
-        {
-            return Err(SessionStoreError::ActiveSessionConflict);
+            .filter(|session| session.state.is_runtime_candidate())
+            .count();
+        if active_runtime_candidates >= self.config.max_runtime_candidates {
+            return Err(SessionStoreError::ActiveSessionConflict {
+                max_runtime_sessions: self.config.max_runtime_candidates,
+            });
         }
 
         let now = Utc::now();
@@ -688,6 +743,7 @@ impl InMemorySessionStore {
 
 struct PostgresSessionStore {
     client: Mutex<Client>,
+    config: SessionStoreConfig,
 }
 
 impl PostgresSessionStore {
@@ -751,20 +807,25 @@ impl PostgresSessionStore {
         let existing = transaction
             .query_opt(
                 r#"
-                SELECT id
+                SELECT COUNT(*)::BIGINT AS session_count
                 FROM control_sessions
-                WHERE runtime_binding = 'legacy_single_session'
+                WHERE runtime_binding = $1
                   AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
-                LIMIT 1
                 "#,
-                &[],
+                &[&self.config.runtime_binding],
             )
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to check active sessions: {error}"))
             })?;
-        if existing.is_some() {
-            return Err(SessionStoreError::ActiveSessionConflict);
+        let active_runtime_candidates = existing
+            .as_ref()
+            .map(|row| row.get::<_, i64>("session_count"))
+            .unwrap_or(0);
+        if active_runtime_candidates >= self.config.max_runtime_candidates as i64 {
+            return Err(SessionStoreError::ActiveSessionConflict {
+                max_runtime_sessions: self.config.max_runtime_candidates,
+            });
         }
 
         let viewport = request.viewport.unwrap_or_default();
@@ -791,7 +852,7 @@ impl PostgresSessionStore {
                     created_at,
                     updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, 'legacy_single_session', $13, $13)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13, $14, $14)
                 RETURNING
                     id,
                     owner_subject,
@@ -825,6 +886,7 @@ impl PostgresSessionStore {
                     &request.idle_timeout_sec.map(|value| value as i32),
                     &labels_value,
                     &request.integration_context,
+                    &self.config.runtime_binding,
                     &now,
                 ],
             )
@@ -1007,11 +1069,12 @@ impl PostgresSessionStore {
                     updated_at,
                     stopped_at
                 FROM control_sessions
-                WHERE state IN ('pending', 'starting', 'ready', 'active', 'idle')
+                WHERE runtime_binding = $1
+                  AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
                 ORDER BY updated_at DESC
                 LIMIT 1
                 "#,
-                &[],
+                &[&self.config.runtime_binding],
             )
             .await
             .map_err(|error| {
@@ -1364,7 +1427,64 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert!(matches!(error, SessionStoreError::ActiveSessionConflict));
+        assert!(matches!(
+            error,
+            SessionStoreError::ActiveSessionConflict {
+                max_runtime_sessions: 1
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_respects_runtime_pool_capacity() {
+        let store = SessionStore::in_memory_with_config(RuntimeProfile {
+            runtime_binding: "docker_runtime_pool".to_string(),
+            compatibility_mode: "session_runtime_pool".to_string(),
+            max_runtime_sessions: 2,
+            supports_legacy_global_routes: false,
+        });
+        let alpha = principal("alpha");
+
+        for _ in 0..2 {
+            store
+                .create_session(
+                    &alpha,
+                    CreateSessionRequest {
+                        template_id: None,
+                        owner_mode: None,
+                        viewport: None,
+                        idle_timeout_sec: None,
+                        labels: HashMap::new(),
+                        integration_context: None,
+                    },
+                    SessionOwnerMode::Collaborative,
+                )
+                .await
+                .unwrap();
+        }
+
+        let error = store
+            .create_session(
+                &alpha,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            SessionStoreError::ActiveSessionConflict {
+                max_runtime_sessions: 2
+            }
+        ));
     }
 
     #[tokio::test]
