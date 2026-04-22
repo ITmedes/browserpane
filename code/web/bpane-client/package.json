@@ -8,6 +8,7 @@
     "benchmark:scroll": "node scripts/run-scroll-benchmark.mjs",
     "benchmark:stress": "node scripts/run-scroll-benchmark.mjs --profile stress",
     "benchmark:realistic": "node scripts/run-scroll-benchmark.mjs --profile realistic",
+    "smoke:multisession": "node scripts/run-multi-session-smoke.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"

@@ -5,252 +5,828 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BrowserPane Test Embed</title>
   <style>
+    :root {
+      --bg: #0d1522;
+      --panel: rgba(14, 24, 41, 0.88);
+      --panel-strong: rgba(10, 19, 34, 0.96);
+      --panel-soft: rgba(17, 30, 50, 0.82);
+      --line: rgba(144, 166, 204, 0.18);
+      --line-strong: rgba(144, 166, 204, 0.28);
+      --text: #eef3ff;
+      --muted: #9fb1cf;
+      --muted-strong: #c1d0e8;
+      --accent: #4fd1a8;
+      --accent-soft: rgba(79, 209, 168, 0.14);
+      --warn: #ffd166;
+      --danger: #ff7d7d;
+      --shadow: 0 24px 64px rgba(0, 0, 0, 0.34);
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      min-height: 100%;
+    }
+
     body {
-      font-family: system-ui, -apple-system, sans-serif;
-      background: #1a1a2e;
-      color: #e0e0e0;
-      display: flex;
-      flex-direction: column;
+      font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(79, 209, 168, 0.12), transparent 32%),
+        radial-gradient(circle at top right, rgba(255, 209, 102, 0.08), transparent 30%),
+        linear-gradient(180deg, #132238 0%, #0b131f 100%);
+      color: var(--text);
       height: 100vh;
-      padding: 16px;
+      padding: 18px;
       overflow: hidden;
     }
-    header {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
+
+    button,
+    select,
+    input {
+      font: inherit;
     }
-    h1 { font-size: 18px; font-weight: 500; }
-    .status {
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 12px;
-      font-weight: 600;
+
+    button,
+    select {
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(22, 36, 60, 0.94);
+      color: var(--text);
+      transition:
+        transform 120ms ease,
+        border-color 120ms ease,
+        background 120ms ease,
+        box-shadow 120ms ease;
     }
-    .status.disconnected { background: #4a1c1c; color: #ff6b6b; }
-    .status.connecting { background: #4a3c1c; color: #ffd93d; }
-    .status.connected { background: #1c4a1c; color: #6bff6b; }
-    .status.error { background: #4a1c1c; color: #ff6b6b; }
-    .controls {
-      display: flex;
-      gap: 8px;
-      margin-left: auto;
-    }
+
     button {
-      padding: 6px 16px;
-      border: 1px solid #444;
-      border-radius: 6px;
-      background: #2a2a4e;
-      color: #e0e0e0;
+      padding: 10px 14px;
       cursor: pointer;
       font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
     }
-    button:hover { background: #3a3a6e; }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    button:hover:not(:disabled),
+    select:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: var(--line-strong);
+      background: rgba(29, 46, 75, 0.98);
+    }
+
+    button:disabled,
+    select:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(360px, 1fr);
+      gap: 18px;
+      height: calc(100vh - 36px);
+    }
+
+    .workspace {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .workspace-header,
+    .panel,
+    .control-nav {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .workspace-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+      padding: 20px 22px;
+      border-radius: 26px;
+    }
+
+    .workspace-heading {
+      max-width: 780px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .eyebrow,
+    .panel-title {
+      font-size: 11px;
+      line-height: 1;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    h1 {
+      font-size: clamp(22px, 2vw, 32px);
+      line-height: 1.05;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+
+    .workspace-heading p,
+    .panel-copy {
+      color: var(--muted-strong);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .workspace-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 10px;
+      max-width: 420px;
+    }
+
+    .meta-chip,
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .status {
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .status.disconnected {
+      color: #ffc1c1;
+      background: rgba(96, 35, 44, 0.72);
+    }
+
+    .status.connecting {
+      color: #ffe39a;
+      background: rgba(91, 67, 26, 0.72);
+    }
+
+    .status.connected {
+      color: #bff4df;
+      background: rgba(22, 87, 62, 0.72);
+    }
+
+    .status.error {
+      color: #ffd1d1;
+      background: rgba(103, 34, 42, 0.82);
+    }
+
+    .meta-chip {
+      max-width: 100%;
+      color: var(--muted-strong);
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .meta-chip.mcp-active {
+      border-color: rgba(79, 209, 168, 0.42);
+      background: rgba(21, 83, 63, 0.48);
+      color: #d7fff0;
+    }
+
+    .meta-chip.mcp-inactive {
+      border-color: rgba(137, 161, 201, 0.18);
+      color: var(--muted);
+    }
+
+    .meta-chip.mcp-warning {
+      border-color: rgba(255, 209, 102, 0.32);
+      background: rgba(87, 65, 24, 0.34);
+      color: #ffe1a1;
+    }
+
+    .browser-panel {
+      min-height: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 30px;
+      border: 1px solid var(--line);
+      background: rgba(8, 14, 24, 0.82);
+      box-shadow: var(--shadow);
+    }
+
     #desktop-container {
       flex: 1;
-      border: 1px solid #333;
-      border-radius: 8px;
+      min-height: 420px;
+      border-radius: 22px;
       overflow: hidden;
-      background: #000;
+      background:
+        linear-gradient(180deg, rgba(19, 31, 49, 0.98), rgba(4, 8, 15, 0.98)),
+        #000;
+      border: 1px solid rgba(196, 213, 244, 0.08);
       position: relative;
-      min-height: 200px;
     }
+
     #desktop-container canvas {
       display: block;
       cursor: none;
     }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      text-align: center;
+      color: #8ea5c7;
+      background:
+        radial-gradient(circle at top, rgba(79, 209, 168, 0.08), transparent 34%),
+        linear-gradient(180deg, rgba(14, 24, 41, 0.24), rgba(7, 12, 21, 0.56));
+    }
+
+    .overlay h2 {
+      font-size: clamp(24px, 2.1vw, 34px);
+      line-height: 1.02;
+      margin-bottom: 10px;
+      color: #f3f7ff;
+      letter-spacing: -0.05em;
+    }
+
+    .overlay p {
+      font-size: 14px;
+      line-height: 1.55;
+      margin-bottom: 4px;
+    }
+
     .info-bar {
       display: flex;
       align-items: center;
-      flex-wrap: nowrap;
       gap: 14px;
-      padding: 8px 0;
-      font-size: 12px;
-      color: #888;
-      height: 30px;
-      flex: 0 0 30px;
+      padding: 10px 12px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(11, 18, 31, 0.84);
+      font-size: 11px;
+      color: var(--muted);
       white-space: nowrap;
       overflow-x: auto;
       overflow-y: hidden;
       scrollbar-width: thin;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
       font-variant-numeric: tabular-nums;
     }
+
     .info-bar > span {
       flex: 0 0 auto;
       white-space: nowrap;
     }
-    .overlay {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      text-align: center;
-      color: #666;
-    }
-    .overlay h2 { font-size: 24px; margin-bottom: 8px; }
-    .overlay p { font-size: 14px; margin-bottom: 4px; }
-    .log-panel {
-      margin-top: 8px;
-      max-height: 120px;
+
+    .sidebar {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
       overflow-y: auto;
-      font-family: monospace;
-      font-size: 11px;
-      background: #0d0d1a;
-      border: 1px solid #222;
-      border-radius: 6px;
-      padding: 8px;
+      padding-right: 4px;
+      scroll-behavior: smooth;
     }
-    .log-panel .log-line { margin-bottom: 2px; }
-    .log-panel .log-info { color: #6b9bff; }
-    .log-panel .log-error { color: #ff6b6b; }
-    .log-panel .log-warn { color: #ffd93d; }
-    .log-panel .log-ok { color: #6bff6b; }
-    .auth-display {
-      font-family: monospace;
-      font-size: 11px;
-      color: #888;
-      max-width: 320px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+
+    .control-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px;
+      border-radius: 22px;
     }
-    .auth-hint {
-      font-family: monospace;
-      font-size: 11px;
-      color: #8fa3d1;
-      max-width: 360px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(17, 27, 46, 0.84);
+      color: var(--muted-strong);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-decoration: none;
+      text-transform: uppercase;
     }
-    .metrics-panel {
-      margin-top: 8px;
-      padding: 10px 12px;
-      border: 1px solid #222;
-      border-radius: 8px;
-      background: #10182a;
+
+    .nav-link:hover {
+      border-color: var(--line-strong);
+      background: rgba(27, 41, 69, 0.96);
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px;
+      border-radius: 24px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .panel-heading {
       display: flex;
       flex-direction: column;
       gap: 8px;
+      min-width: 0;
     }
-    .metrics-header {
+
+    .panel-heading h2,
+    .metrics-title {
+      font-size: 18px;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .field select {
+      max-width: none;
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .action-grid button,
+    .form-row button {
+      width: 100%;
+    }
+
+    .toggle-strip {
+      display: grid;
+      gap: 10px;
+    }
+
+    .toggle-card {
+      display: block;
+      cursor: pointer;
+    }
+
+    .toggle-card input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .toggle-body {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
+      gap: 16px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(16, 27, 46, 0.74);
+      transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
     }
-    .metrics-title {
-      font-size: 13px;
+
+    .toggle-card:hover .toggle-body {
+      transform: translateY(-1px);
+      border-color: var(--line-strong);
+      background: rgba(21, 34, 58, 0.92);
+    }
+
+    .toggle-text {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .toggle-text strong {
+      font-size: 14px;
       font-weight: 600;
-      color: #d8def2;
     }
+
+    .toggle-text small {
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .toggle-visual {
+      flex: 0 0 auto;
+      width: 54px;
+      height: 30px;
+      border-radius: 999px;
+      background: rgba(101, 120, 151, 0.35);
+      position: relative;
+      transition: background 120ms ease;
+    }
+
+    .toggle-visual::after {
+      content: "";
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #f6fbff;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+      transition: transform 120ms ease;
+    }
+
+    .toggle-card input:checked + .toggle-body {
+      border-color: rgba(79, 209, 168, 0.48);
+      background: rgba(22, 61, 58, 0.55);
+    }
+
+    .toggle-card input:checked + .toggle-body .toggle-visual {
+      background: rgba(79, 209, 168, 0.94);
+    }
+
+    .toggle-card input:checked + .toggle-body .toggle-visual::after {
+      transform: translateX(24px);
+    }
+
+    .toggle-button[aria-pressed="true"] {
+      border-color: rgba(79, 209, 168, 0.52);
+      background: rgba(24, 88, 67, 0.84);
+      color: #dffff2;
+    }
+
+    .tool-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .helper-note {
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 209, 102, 0.18);
+      background: rgba(78, 61, 24, 0.22);
+      color: #f0ddb0;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .helper-note code {
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+    }
+
+    .helper-note.info {
+      border-color: rgba(137, 161, 201, 0.22);
+      background: rgba(19, 33, 55, 0.56);
+      color: #d3dff1;
+    }
+
+    .helper-note.ok {
+      border-color: rgba(79, 209, 168, 0.34);
+      background: rgba(18, 68, 54, 0.44);
+      color: #d6fff1;
+    }
+
+    .helper-note.warn {
+      border-color: rgba(255, 209, 102, 0.28);
+      background: rgba(87, 65, 24, 0.34);
+      color: #ffe1a1;
+    }
+
+    .metrics-panel {
+      gap: 12px;
+      background: rgba(11, 23, 40, 0.92);
+    }
+
     .metrics-controls {
       display: flex;
-      align-items: center;
-      gap: 8px;
       flex-wrap: wrap;
+      gap: 8px;
     }
+
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 8px 16px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      gap: 8px;
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
       font-size: 12px;
       font-variant-numeric: tabular-nums;
-      color: #a9b3d0;
+      color: #b9c7e1;
     }
+
     .metrics-grid > span {
       min-width: 0;
-      white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 9px 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(137, 161, 201, 0.12);
+      background: rgba(18, 31, 54, 0.76);
+    }
+
+    .panel-logs {
+      min-height: 300px;
+      flex: 1;
+    }
+
+    .log-panel {
+      flex: 1;
+      min-height: 220px;
+      overflow-y: auto;
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.55;
+      background: rgba(9, 15, 27, 0.92);
+      border: 1px solid rgba(137, 161, 201, 0.12);
+      border-radius: 18px;
+      padding: 12px;
+    }
+
+    .log-panel .log-line { margin-bottom: 4px; }
+    .log-panel .log-info { color: #7bb3ff; }
+    .log-panel .log-error { color: #ff8f8f; }
+    .log-panel .log-warn { color: #ffd98a; }
+    .log-panel .log-ok { color: #84f2c8; }
+
+    @media (max-width: 1220px) {
+      body {
+        height: auto;
+        min-height: 100vh;
+        overflow: auto;
+      }
+
+      .app-shell {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+
+      .sidebar {
+        overflow: visible;
+      }
+
+      .tool-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 12px;
+      }
+
+      .workspace-header,
+      .panel,
+      .control-nav,
+      .browser-panel {
+        border-radius: 20px;
+      }
+
+      .workspace-header {
+        padding: 16px;
+      }
+
+      .action-grid,
+      .tool-grid {
+        grid-template-columns: 1fr;
+      }
+
+      #desktop-container {
+        min-height: 300px;
+      }
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>BrowserPane Test</h1>
-    <span id="status" class="status disconnected">Disconnected</span>
-    <span id="auth-display" class="auth-display">Auth: --</span>
-    <span id="auth-hint" class="auth-hint"></span>
-    <div class="controls">
-      <button id="btn-login">Login</button>
-      <button id="btn-logout" disabled>Logout</button>
-      <button id="btn-connect">Connect</button>
-      <button id="btn-disconnect" disabled>Disconnect</button>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
-        Render
-        <select id="render-backend-select">
-          <option value="auto" selected>Auto</option>
-          <option value="webgl2">WebGL2</option>
-          <option value="canvas2d">Canvas2D</option>
-        </select>
-      </label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
-        <input type="checkbox" id="hidpi-toggle" checked>
-        HiDPI (use devicePixelRatio)
-      </label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
-        <input type="checkbox" id="scroll-copy-toggle" checked>
-        Scroll Copy
-      </label>
-      <button id="btn-camera" disabled>Cam Off</button>
-      <button id="btn-mic" disabled>Mic Off</button>
-      <button id="btn-upload" disabled>Upload File</button>
-      <button id="btn-logs">Show Logs</button>
-    </div>
-  </header>
+  <div class="app-shell">
+    <main class="workspace">
+      <header class="workspace-header">
+        <div class="workspace-heading">
+          <span class="eyebrow">Local Control Console</span>
+          <h1>BrowserPane Session Console</h1>
+          <p>
+            Start a fresh browser, reconnect an older session, or reopen the same live
+            session from another signed-in browser so multiple people can observe and drive
+            the same workspace collaboratively.
+          </p>
+        </div>
+        <div class="workspace-meta">
+          <span id="status" class="status disconnected">Disconnected</span>
+          <span id="auth-display" class="meta-chip">Auth: --</span>
+          <span id="session-display" class="meta-chip">Session: --</span>
+          <span id="mcp-display" class="meta-chip mcp-inactive">MCP: --</span>
+        </div>
+      </header>
 
-  <div id="desktop-container">
-    <div class="overlay" id="overlay">
-      <h2>BrowserPane Remote Desktop</h2>
-      <p>Click "Connect" to start a session</p>
-      <p style="font-size:12px; margin-top:12px; color:#555;">
-        Served by Docker Compose &mdash; gateway on port 4433
-      </p>
-    </div>
+      <section class="browser-panel">
+        <div id="desktop-container">
+          <div class="overlay" id="overlay">
+            <div>
+              <h2>BrowserPane Remote Desktop</h2>
+              <p>Use the session controls on the right to start or rejoin a browser session.</p>
+              <p style="font-size:12px; margin-top:12px; color:#7e93b3;">
+                Served by Docker Compose &mdash; gateway on port 4433
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-bar">
+          <span id="resolution">Resolution: --</span>
+          <span id="frames">Frames: --</span>
+          <span id="latency">RTT: --</span>
+          <span id="render-backend">Render: --</span>
+          <span id="tile-stats">Tiles: --</span>
+          <span id="tile-types">Tile Types: --</span>
+          <span id="scroll-comp-stats">Scroll Compose: --</span>
+          <span id="scroll-health-stats">Scroll Health: --</span>
+          <span id="transfer-stats">Transfer: --</span>
+          <span id="transfer-rate">Rate: --</span>
+        </div>
+      </section>
+    </main>
+
+    <aside class="sidebar">
+      <nav class="control-nav" aria-label="Console navigation">
+        <a class="nav-link" href="#panel-sessions">Sessions</a>
+        <a class="nav-link" href="#panel-display">Display</a>
+        <a class="nav-link" href="#panel-metrics">Metrics</a>
+        <a class="nav-link" href="#panel-logs">Logs</a>
+      </nav>
+
+      <section class="panel" id="panel-sessions">
+        <div class="panel-header">
+          <div class="panel-heading">
+            <span class="panel-title">Session Control</span>
+            <h2>Login, start, reconnect, share</h2>
+            <p class="panel-copy" id="auth-hint"></p>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <button id="btn-login">Login</button>
+          <button id="btn-logout" disabled>Logout</button>
+          <button id="btn-refresh-sessions" disabled>Refresh Sessions</button>
+        </div>
+
+        <div class="field">
+          <label for="session-select">Existing Sessions</label>
+          <select id="session-select" disabled>
+            <option value="">Login first</option>
+          </select>
+        </div>
+
+        <div class="helper-note">
+          Start a fresh browser with <code>Start New Session</code>, reconnect a stopped
+          session with <code>Join / Reconnect</code>, or open the same selected session from
+          another signed-in browser to share the live workspace.
+        </div>
+
+        <div id="mcp-delegation-note" class="helper-note info">
+          MCP delegation: log in to see whether the selected session is attached to the local bridge.
+        </div>
+
+        <div class="action-grid">
+          <button id="btn-new-session" disabled>Start New Session</button>
+          <button id="btn-connect">Join / Reconnect</button>
+          <button id="btn-delegate-mcp" disabled>Delegate MCP</button>
+          <button id="btn-disconnect" disabled>Disconnect</button>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-display">
+        <div class="panel-header">
+          <div class="panel-heading">
+            <span class="panel-title">Configuration</span>
+            <h2>Display, transport, media</h2>
+            <p class="panel-copy">
+              Adjust rendering and behavior before connecting. Live media controls stay in this
+              same menu so the browser view can stay dominant.
+            </p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="render-backend-select">Render Backend</label>
+          <select id="render-backend-select">
+            <option value="auto" selected>Auto</option>
+            <option value="webgl2">WebGL2</option>
+            <option value="canvas2d">Canvas2D</option>
+          </select>
+        </div>
+
+        <div class="toggle-strip">
+          <label class="toggle-card">
+            <input type="checkbox" id="hidpi-toggle" checked>
+            <span class="toggle-body">
+              <span class="toggle-text">
+                <strong>HiDPI</strong>
+                <small>Use the device pixel ratio on the next session connect.</small>
+              </span>
+              <span class="toggle-visual" aria-hidden="true"></span>
+            </span>
+          </label>
+
+          <label class="toggle-card">
+            <input type="checkbox" id="scroll-copy-toggle" checked>
+            <span class="toggle-body">
+              <span class="toggle-text">
+                <strong>Scroll Copy</strong>
+                <small>Reuse local pixels during scroll and let repair tiles fill the gaps.</small>
+              </span>
+              <span class="toggle-visual" aria-hidden="true"></span>
+            </span>
+          </label>
+        </div>
+
+        <div class="action-grid tool-grid">
+          <button id="btn-camera" class="toggle-button" aria-pressed="false" disabled>Camera Off</button>
+          <button id="btn-mic" class="toggle-button" aria-pressed="false" disabled>Mic Off</button>
+          <button id="btn-upload" disabled>Upload File</button>
+        </div>
+      </section>
+
+      <section class="panel metrics-panel" id="panel-metrics">
+        <div class="metrics-header">
+          <div class="panel-heading">
+            <span class="panel-title">Benchmark Metrics</span>
+            <h2 class="metrics-title">Live runtime sample</h2>
+          </div>
+          <div class="metrics-controls">
+            <button id="btn-metrics-start">Start Sample</button>
+            <button id="btn-metrics-stop" disabled>Stop Sample</button>
+            <button id="btn-metrics-copy" disabled>Copy Metrics</button>
+            <button id="btn-metrics-reset">Reset Metrics</button>
+          </div>
+        </div>
+        <div class="metrics-grid">
+          <span id="metrics-sample">Sample: idle</span>
+          <span id="metrics-render">Surface: --</span>
+          <span id="metrics-throughput">Throughput: --</span>
+          <span id="metrics-tiles">Tiles: --</span>
+          <span id="metrics-scroll">Scroll: --</span>
+          <span id="metrics-video">Video: --</span>
+        </div>
+      </section>
+
+      <section class="panel panel-logs" id="panel-logs">
+        <div class="panel-header">
+          <div class="panel-heading">
+            <span class="panel-title">Logs</span>
+            <h2>Session and transport events</h2>
+            <p class="panel-copy">
+              Login, session creation, reconnects, delegation, and transport diagnostics are
+              collected here continuously.
+            </p>
+          </div>
+          <button id="btn-logs">Clear Logs</button>
+        </div>
+        <div class="log-panel" id="log-panel"></div>
+      </section>
+    </aside>
   </div>
-
-  <div class="info-bar">
-    <span id="resolution">Resolution: --</span>
-    <span id="frames">Frames: --</span>
-    <span id="latency">RTT: --</span>
-    <span id="render-backend">Render: --</span>
-    <span id="tile-stats">Tiles: --</span>
-    <span id="tile-types">Tile Types: --</span>
-    <span id="scroll-comp-stats">Scroll Compose: --</span>
-    <span id="scroll-health-stats">Scroll Health: --</span>
-    <span id="transfer-stats">Transfer: --</span>
-    <span id="transfer-rate">Rate: --</span>
-  </div>
-
-  <section class="metrics-panel">
-    <div class="metrics-header">
-      <span class="metrics-title">Benchmark Metrics</span>
-      <div class="metrics-controls">
-        <button id="btn-metrics-start">Start Sample</button>
-        <button id="btn-metrics-stop" disabled>Stop Sample</button>
-        <button id="btn-metrics-copy" disabled>Copy Metrics</button>
-        <button id="btn-metrics-reset">Reset Metrics</button>
-      </div>
-    </div>
-    <div class="metrics-grid">
-      <span id="metrics-sample">Sample: idle</span>
-      <span id="metrics-render">Surface: --</span>
-      <span id="metrics-throughput">Throughput: --</span>
-      <span id="metrics-tiles">Tiles: --</span>
-      <span id="metrics-scroll">Scroll: --</span>
-      <span id="metrics-video">Video: --</span>
-    </div>
-  </section>
-
-  <div class="log-panel" id="log-panel" style="display:none;"></div>
 
   <script type="module">
     // Import the BpaneSession SDK from the built bundle.
@@ -265,6 +841,7 @@
     const GATEWAY_HOST = location.hostname || 'localhost';
     const GATEWAY_PORT = 4433;
     const GATEWAY_URL = `https://${GATEWAY_HOST}:${GATEWAY_PORT}`;
+    const SESSION_API_URL = '/api/v1/sessions';
 
     // ── DOM refs ────────────────────────────────────────────────────
     const container = document.getElementById('desktop-container');
@@ -285,7 +862,11 @@
     const metricsTilesEl = document.getElementById('metrics-tiles');
     const metricsScrollEl = document.getElementById('metrics-scroll');
     const metricsVideoEl = document.getElementById('metrics-video');
+    const sessionSelect = document.getElementById('session-select');
+    const refreshSessionsBtn = document.getElementById('btn-refresh-sessions');
+    const newSessionBtn = document.getElementById('btn-new-session');
     const connectBtn = document.getElementById('btn-connect');
+    const delegateMcpBtn = document.getElementById('btn-delegate-mcp');
     const disconnectBtn = document.getElementById('btn-disconnect');
     const metricsStartBtn = document.getElementById('btn-metrics-start');
     const metricsStopBtn = document.getElementById('btn-metrics-stop');
@@ -303,8 +884,11 @@
     const overlay = document.getElementById('overlay');
     const logPanel = document.getElementById('log-panel');
     const authDisplay = document.getElementById('auth-display');
+    const sessionDisplay = document.getElementById('session-display');
+    const mcpDisplay = document.getElementById('mcp-display');
+    const mcpDelegationNote = document.getElementById('mcp-delegation-note');
     const authHint = document.getElementById('auth-hint');
-    let logsVisible = false;
+    const navLinks = Array.from(document.querySelectorAll('.nav-link'));
 
     // ── Logging ─────────────────────────────────────────────────────
     function log(msg, level = 'info') {
@@ -320,6 +904,11 @@
     function setStatus(text, cls) {
       statusEl.textContent = text;
       statusEl.className = `status ${cls}`;
+    }
+
+    function setToggleButtonState(button, isOn, onLabel, offLabel) {
+      button.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+      button.textContent = isOn ? onLabel : offLabel;
     }
 
     function formatBytes(bytes) {
@@ -829,7 +1418,6 @@
 
     // ── Auth state ──────────────────────────────────────────────────
     const AUTH_CONFIG_URL = '/auth-config.json';
-    const GATEWAY_STATUS_URL = '/api/session/status';
     const AUTH_STORAGE_KEY = 'bpane.auth.tokens.v1';
     const AUTH_PKCE_KEY = 'bpane.auth.pkce.v1';
     const authState = {
@@ -840,6 +1428,260 @@
       gatewayPreflightOk: false,
       initialized: false,
     };
+    const controlSessionState = {
+      resource: null,
+      resources: [],
+      selectedSessionId: '',
+    };
+    const mcpBridgeState = {
+      controlSessionId: '',
+      controlSessionState: '',
+      available: false,
+      lastError: '',
+      pollInterval: null,
+    };
+
+    function isRuntimeCandidateSessionState(state) {
+      return ['pending', 'starting', 'ready', 'active', 'idle', 'stopped'].includes(state);
+    }
+
+    function getShortSessionId(sessionId) {
+      return sessionId ? String(sessionId).slice(0, 8) : '--';
+    }
+
+    function getSessionLabel(resource) {
+      if (!resource?.id) {
+        return 'Session: --';
+      }
+      const shortId = getShortSessionId(resource.id);
+      const state = resource.state ?? 'unknown';
+      const suffix = resource.id === mcpBridgeState.controlSessionId ? ' · MCP delegated' : '';
+      return `Session: ${shortId} (${state})${suffix}`;
+    }
+
+    function supportsLocalMcpDelegation(resource) {
+      return Boolean(resource?.id);
+    }
+
+    function renderSessionState() {
+      sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
+      renderMcpDelegationState();
+    }
+
+    function isJoinableSession(resource) {
+      return Boolean(resource?.id) && isRuntimeCandidateSessionState(resource.state);
+    }
+
+    function getSessionOptionLabel(resource) {
+      const shortId = getShortSessionId(resource.id);
+      const state = resource.state ?? 'unknown';
+      const viewport = resource?.viewport?.width && resource?.viewport?.height
+        ? `${resource.viewport.width}x${resource.viewport.height}`
+        : '--';
+      const delegated = resource.id === mcpBridgeState.controlSessionId ? ' · MCP' : '';
+      return `${shortId} · ${state} · ${viewport}${delegated}`;
+    }
+
+    function syncSelectedSessionResource() {
+      const selected = controlSessionState.resources.find(
+        (resource) => resource.id === controlSessionState.selectedSessionId,
+      ) ?? null;
+      controlSessionState.resource = selected;
+      renderSessionState();
+      return selected;
+    }
+
+    function renderSessionPicker() {
+      const canManageSessions = authState.config?.mode === 'oidc' && Boolean(authState.tokens?.access_token);
+      const resources = controlSessionState.resources ?? [];
+      const previousValue = controlSessionState.selectedSessionId;
+
+      sessionSelect.innerHTML = '';
+
+      if (!canManageSessions) {
+        sessionSelect.appendChild(new Option('Login first', ''));
+        sessionSelect.disabled = true;
+      } else if (resources.length === 0) {
+        sessionSelect.appendChild(new Option('No sessions available', ''));
+        sessionSelect.disabled = true;
+        controlSessionState.selectedSessionId = '';
+      } else {
+        for (const resource of resources) {
+          const option = new Option(getSessionOptionLabel(resource), resource.id);
+          option.disabled = !isJoinableSession(resource);
+          sessionSelect.appendChild(option);
+        }
+        const selectedValue = resources.some((resource) => resource.id === previousValue)
+          ? previousValue
+          : (resources.find((resource) => isJoinableSession(resource))?.id ?? resources[0].id);
+        sessionSelect.disabled = Boolean(session);
+        controlSessionState.selectedSessionId = selectedValue;
+        sessionSelect.value = selectedValue;
+      }
+
+      if (sessionSelect.value !== controlSessionState.selectedSessionId) {
+        sessionSelect.value = controlSessionState.selectedSessionId || '';
+      }
+      syncSelectedSessionResource();
+    }
+
+    function getMcpBridgeDisplayName() {
+      return authState.config?.mcpBridge?.displayName
+        ?? authState.config?.mcpBridge?.clientId
+        ?? 'BrowserPane MCP bridge';
+    }
+
+    function getMcpBridgeHealthUrl() {
+      const controlUrl = authState.config?.mcpBridge?.controlUrl;
+      if (!controlUrl) {
+        return '';
+      }
+      try {
+        const url = new URL(controlUrl, window.location.href);
+        url.pathname = '/health';
+        url.search = '';
+        url.hash = '';
+        return url.toString();
+      } catch {
+        return '';
+      }
+    }
+
+    function stopMcpBridgePolling({ clearState = false } = {}) {
+      if (mcpBridgeState.pollInterval) {
+        clearInterval(mcpBridgeState.pollInterval);
+        mcpBridgeState.pollInterval = null;
+      }
+      if (clearState) {
+        mcpBridgeState.controlSessionId = '';
+        mcpBridgeState.controlSessionState = '';
+        mcpBridgeState.available = false;
+        mcpBridgeState.lastError = '';
+      }
+    }
+
+    function setMcpDisplayState(text, className) {
+      mcpDisplay.textContent = text;
+      mcpDisplay.className = `meta-chip ${className}`;
+    }
+
+    function renderMcpDelegationState() {
+      const selectedSessionId = controlSessionState.resource?.id ?? '';
+      const controlSessionId = mcpBridgeState.controlSessionId;
+      const bridgeName = getMcpBridgeDisplayName();
+
+      if (!authState.config?.mcpBridge?.clientId) {
+        setMcpDisplayState('MCP: unavailable', 'mcp-warning');
+        mcpDelegationNote.className = 'helper-note warn';
+        mcpDelegationNote.textContent = 'MCP bridge delegation is not configured for this page.';
+        return;
+      }
+
+      if (!authState.tokens?.access_token) {
+        setMcpDisplayState('MCP: login required', 'mcp-inactive');
+        mcpDelegationNote.className = 'helper-note info';
+        mcpDelegationNote.textContent =
+          'Log in to see whether the selected session is currently delegated to the local MCP bridge.';
+        return;
+      }
+
+      if (!mcpBridgeState.available && mcpBridgeState.lastError) {
+        setMcpDisplayState('MCP: bridge unavailable', 'mcp-warning');
+        mcpDelegationNote.className = 'helper-note warn';
+        mcpDelegationNote.textContent =
+          `${bridgeName} status could not be loaded right now. Delegation state may be stale until the bridge becomes reachable again.`;
+        return;
+      }
+
+      if (!controlSessionId) {
+        setMcpDisplayState('MCP: no delegated session', 'mcp-inactive');
+        mcpDelegationNote.className = 'helper-note info';
+        mcpDelegationNote.textContent = selectedSessionId
+          ? `The selected session ${getShortSessionId(selectedSessionId)} is not delegated to ${bridgeName}. Use "Delegate MCP" if you want the bridge to drive this exact browser.`
+          : `No session is currently delegated to ${bridgeName}. Select a session and use "Delegate MCP" to attach the bridge to it.`;
+        return;
+      }
+
+      if (selectedSessionId && selectedSessionId === controlSessionId) {
+        setMcpDisplayState('MCP: this session delegated', 'mcp-active');
+        mcpDelegationNote.className = 'helper-note ok';
+        mcpDelegationNote.textContent =
+          `${bridgeName} is currently attached to session ${getShortSessionId(controlSessionId)}. Actions from the bridge will drive the exact browser shown in this console.`;
+        return;
+      }
+
+      setMcpDisplayState(`MCP: session ${getShortSessionId(controlSessionId)}`, 'mcp-warning');
+      mcpDelegationNote.className = 'helper-note warn';
+      mcpDelegationNote.textContent = selectedSessionId
+        ? `${bridgeName} is attached to session ${getShortSessionId(controlSessionId)}, not the currently selected session ${getShortSessionId(selectedSessionId)}.`
+        : `${bridgeName} is currently attached to session ${getShortSessionId(controlSessionId)}. Select that session if you want to inspect or share the exact delegated browser.`;
+    }
+
+    async function refreshMcpBridgeState({ silent = true } = {}) {
+      const healthUrl = getMcpBridgeHealthUrl();
+      if (!healthUrl || !authState.tokens?.access_token) {
+        stopMcpBridgePolling({ clearState: true });
+        renderSessionPicker();
+        renderSessionState();
+        return null;
+      }
+
+      try {
+        const response = await fetch(`${healthUrl}?_=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        mcpBridgeState.controlSessionId = typeof payload?.control_session_id === 'string'
+          ? payload.control_session_id
+          : '';
+        mcpBridgeState.controlSessionState = typeof payload?.control_session_state === 'string'
+          ? payload.control_session_state
+          : '';
+        mcpBridgeState.available = true;
+        mcpBridgeState.lastError = '';
+        renderSessionPicker();
+        renderSessionState();
+        if (!silent && mcpBridgeState.controlSessionId) {
+          log(`MCP bridge currently controls session ${mcpBridgeState.controlSessionId}`, 'info');
+        }
+        return payload;
+      } catch (error) {
+        mcpBridgeState.available = false;
+        mcpBridgeState.lastError = error.message;
+        renderSessionPicker();
+        renderSessionState();
+        if (!silent) {
+          log(`MCP bridge status check failed: ${error.message}`, 'warn');
+        }
+        return null;
+      }
+    }
+
+    function syncMcpBridgePolling() {
+      const shouldPoll = authState.config?.mode === 'oidc'
+        && Boolean(authState.tokens?.access_token)
+        && Boolean(authState.config?.mcpBridge?.controlUrl);
+
+      if (!shouldPoll) {
+        stopMcpBridgePolling({ clearState: true });
+        renderSessionPicker();
+        renderSessionState();
+        return;
+      }
+
+      if (mcpBridgeState.pollInterval) {
+        return;
+      }
+
+      void refreshMcpBridgeState({ silent: true });
+      mcpBridgeState.pollInterval = setInterval(() => {
+        if (document.visibilityState === 'hidden') {
+          return;
+        }
+        void refreshMcpBridgeState({ silent: true });
+      }, 5000);
+    }
 
     function buildRedirectUri() {
       return `${window.location.origin}${window.location.pathname}`;
@@ -895,7 +1737,12 @@
       authState.tokens = null;
       authState.claims = null;
       authState.gatewayPreflightOk = false;
+      controlSessionState.resource = null;
+      controlSessionState.resources = [];
+      controlSessionState.selectedSessionId = '';
+      stopMcpBridgePolling({ clearState: true });
       sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      renderSessionState();
     }
 
     function loadStoredAuthTokens() {
@@ -925,6 +1772,8 @@
     function renderAuthState() {
       const claims = authState.claims;
       const config = authState.config;
+      const hasAccessToken = Boolean(authState.tokens?.access_token);
+      const selectedJoinableSession = isJoinableSession(controlSessionState.resource);
       const username =
         claims?.preferred_username ??
         claims?.email ??
@@ -932,25 +1781,46 @@
         claims?.sub ??
         '--';
       const canConnect = config?.mode === 'oidc'
-        ? Boolean(authState.tokens?.access_token) && !session
+        ? hasAccessToken && !session && selectedJoinableSession
         : false;
+      const canStartSession = config?.mode === 'oidc'
+        ? hasAccessToken && !session
+        : false;
+      const canRefreshSessions = config?.mode === 'oidc'
+        ? hasAccessToken && !session
+        : false;
+      const selectedState = controlSessionState.resource?.state ?? '';
       if (config?.mode === 'oidc') {
-        if (authState.tokens?.access_token) {
+        if (hasAccessToken) {
           authDisplay.textContent = `Auth: logged in as ${username}`;
         } else {
           authDisplay.textContent = 'Auth: login required';
         }
         authHint.textContent = getExampleUserLabel();
-        loginBtn.disabled = Boolean(authState.tokens?.access_token);
-        logoutBtn.disabled = !authState.tokens?.access_token;
+        loginBtn.disabled = hasAccessToken;
+        logoutBtn.disabled = !hasAccessToken;
       } else {
         authDisplay.textContent = 'Auth: disabled';
         authHint.textContent = '';
         loginBtn.disabled = true;
         logoutBtn.disabled = true;
       }
+      refreshSessionsBtn.disabled = !canRefreshSessions;
+      newSessionBtn.disabled = !canStartSession;
       connectBtn.disabled = !canConnect;
+      connectBtn.textContent = selectedState === 'stopped' ? 'Reconnect Selected' : 'Join / Reconnect';
+      sessionSelect.disabled = !canRefreshSessions || controlSessionState.resources.length === 0;
+      delegateMcpBtn.disabled = !(
+        config?.mode === 'oidc'
+        && hasAccessToken
+        && config?.mcpBridge?.clientId
+        && controlSessionState.resource?.id
+        && supportsLocalMcpDelegation(controlSessionState.resource)
+      );
       disconnectBtn.disabled = !session;
+      renderSessionPicker();
+      renderSessionState();
+      syncMcpBridgePolling();
     }
 
     async function fetchAuthConfig() {
@@ -1096,36 +1966,278 @@
       return refreshAccessToken();
     }
 
-    async function verifyGatewayAccessToken(accessToken) {
-      try {
-        const response = await fetch(GATEWAY_STATUS_URL, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          cache: 'no-store',
-        });
-        if (!response.ok) {
-          authState.gatewayPreflightOk = false;
-          let detail = '';
-          try {
-            detail = await response.text();
-          } catch {
-            detail = '';
-          }
-          log(
-            `Gateway auth preflight failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`,
-            'error',
-          );
-          return false;
+    async function fetchSessionResources(accessToken) {
+      const response = await fetch(SESSION_API_URL, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
         }
+        throw new Error(
+          `HTTP ${response.status}${detail ? ` ${detail}` : ''}`,
+        );
+      }
+      const payload = await response.json();
+      return Array.isArray(payload?.sessions) ? payload.sessions : [];
+    }
+
+    async function refreshSessionResources(accessToken, { preserveSelection = true, silent = false } = {}) {
+      const sessions = await fetchSessionResources(accessToken);
+      const previousSelection = preserveSelection
+        ? (controlSessionState.selectedSessionId || controlSessionState.resource?.id || '')
+        : '';
+      controlSessionState.resources = sessions;
+      controlSessionState.selectedSessionId = sessions.some((resource) => resource.id === previousSelection)
+        ? previousSelection
+        : (sessions.find((resource) => isJoinableSession(resource))?.id ?? sessions[0]?.id ?? '');
+      renderSessionPicker();
+      if (!silent) {
+        log(`Loaded ${sessions.length} session${sessions.length === 1 ? '' : 's'} from control plane`, 'info');
+      }
+      return sessions;
+    }
+
+    async function createSessionResource(accessToken) {
+      const response = await fetch(SESSION_API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+        body: JSON.stringify({
+          owner_mode: 'collaborative',
+          idle_timeout_sec: 300,
+          integration_context: {
+            source: 'test-embed',
+            origin: window.location.origin,
+          },
+        }),
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        const error = new Error(
+          `HTTP ${response.status}${detail ? ` ${detail}` : ''}`,
+        );
+        error.status = response.status;
+        throw error;
+      }
+      return response.json();
+    }
+
+    async function createAndSelectSessionResource(accessToken) {
+      try {
+        const created = await createSessionResource(accessToken);
+        controlSessionState.resources = [
+          created,
+          ...controlSessionState.resources.filter((resource) => resource.id !== created.id),
+        ];
+        controlSessionState.selectedSessionId = created.id;
+        controlSessionState.resource = created;
         authState.gatewayPreflightOk = true;
-        log('Gateway auth preflight succeeded: bearer token accepted by bpane-gateway.', 'ok');
-        return true;
+        renderSessionPicker();
+        log(
+          `Session control created session ${created.id} (${created.state})`,
+          'ok',
+        );
+        return created;
       } catch (error) {
         authState.gatewayPreflightOk = false;
-        log(`Gateway auth preflight failed: ${error.message}`, 'error');
-        return false;
+        if (error?.status === 409) {
+          try {
+            await refreshSessionResources(accessToken, { preserveSelection: false, silent: true });
+          } catch {
+            // keep the original conflict error
+          }
+        }
+        log(`Session control preflight failed: ${error.message}`, 'error');
+        return null;
       }
+    }
+
+    async function resolveSelectedSessionResource(accessToken) {
+      try {
+        if (!controlSessionState.resources.length) {
+          await refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+        }
+        const selected = controlSessionState.resources.find(
+          (resource) => resource.id === controlSessionState.selectedSessionId,
+        );
+        if (!selected) {
+          log('Select an existing session first, or click "Start New Session".', 'warn');
+          return null;
+        }
+        if (!isJoinableSession(selected)) {
+          log(`Selected session ${selected.id} is not joinable in state ${selected.state}.`, 'warn');
+          return null;
+        }
+        controlSessionState.resource = selected;
+        authState.gatewayPreflightOk = true;
+        renderSessionState();
+        if (selected.state === 'stopped') {
+          log(`Selected stopped session ${selected.id}; connect will restart it with its persisted browser profile.`, 'ok');
+        } else {
+          log(`Selected existing session ${selected.id} (${selected.state})`, 'ok');
+        }
+        return selected;
+      } catch (error) {
+        authState.gatewayPreflightOk = false;
+        log(`Session control refresh failed: ${error.message}`, 'error');
+        return null;
+      }
+    }
+
+    async function mintSessionConnectTicket(accessToken, controlSession) {
+      const ticketPath = controlSession?.connect?.ticket_path;
+      if (!ticketPath) {
+        return null;
+      }
+
+      const response = await fetch(ticketPath, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`session ticket mint failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      const payload = await response.json();
+      if (typeof payload?.token !== 'string' || payload.token.trim() === '') {
+        throw new Error('session ticket response did not include a token');
+      }
+      log(`Minted short-lived session connect ticket for ${controlSession.id}`, 'ok');
+      return payload.token;
+    }
+
+    async function resolveSessionConnectCredential(accessToken, controlSession) {
+      if (controlSession?.connect?.auth_type === 'session_connect_ticket') {
+        const connectTicket = await mintSessionConnectTicket(accessToken, controlSession);
+        if (connectTicket) {
+          return {
+            connectTicket,
+            accessToken: null,
+          };
+        }
+      }
+      return {
+        connectTicket: null,
+        accessToken,
+      };
+    }
+
+    function buildMcpBridgeDelegatePayload() {
+      const bridge = authState.config?.mcpBridge;
+      if (!bridge?.clientId) {
+        throw new Error('MCP bridge delegation is not configured for this page');
+      }
+      return {
+        client_id: bridge.clientId,
+        issuer: bridge.issuer || authState.config?.issuer,
+        display_name: bridge.displayName || bridge.clientId,
+      };
+    }
+
+    async function assignMcpBridgeControlSession(sessionId) {
+      const controlUrl = authState.config?.mcpBridge?.controlUrl;
+      if (!controlUrl) {
+        log(`MCP delegation created. Configure the bridge with BPANE_SESSION_ID=${sessionId} to attach manually.`, 'warn');
+        return;
+      }
+
+      const response = await fetch(controlUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`bridge control session update failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      log(`MCP bridge control session set to ${sessionId}`, 'ok');
+    }
+
+    async function delegateCurrentSessionToMcp() {
+      const accessToken = await getValidAccessToken();
+      if (!accessToken) {
+        setStatus('Login required', 'error');
+        log('MCP delegation cancelled: no access token available', 'error');
+        return;
+      }
+
+      let controlSession = controlSessionState.resource;
+      if (!controlSession?.id) {
+        log('Resolving selected control-plane session for MCP delegation...', 'info');
+        controlSession = await resolveSelectedSessionResource(accessToken);
+      }
+      if (!controlSession) {
+        setStatus('Session selection required', 'error');
+        return;
+      }
+      if (!supportsLocalMcpDelegation(controlSession)) {
+        throw new Error(
+          'The selected session cannot be delegated to the local MCP bridge.',
+        );
+      }
+
+      const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(controlSession.id)}/automation-owner`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+        body: JSON.stringify(buildMcpBridgeDelegatePayload()),
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`session delegation failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+
+      controlSessionState.resource = await response.json();
+      renderSessionState();
+      log(`Delegated session ${controlSession.id} to ${authState.config.mcpBridge.clientId}`, 'ok');
+      await assignMcpBridgeControlSession(controlSession.id);
     }
 
     async function logout() {
@@ -1163,6 +2275,15 @@
       });
       renderAuthState();
       authState.initialized = true;
+      if (authState.tokens?.access_token) {
+        const accessToken = await getValidAccessToken();
+        if (accessToken) {
+          await refreshSessionResources(accessToken, { preserveSelection: true, silent: true }).catch((error) => {
+            log(`Session list refresh failed: ${error.message}`, 'error');
+          });
+          await refreshMcpBridgeState({ silent: true });
+        }
+      }
       window.__bpaneAuth = {
         isConfigured: () => authState.config?.mode === 'oidc',
         isAuthenticated: () => Boolean(authState.tokens?.access_token),
@@ -1198,7 +2319,7 @@
       lastObservedBatchCount: 0,
     };
 
-    async function connect() {
+    async function connect(mode = 'selected') {
       const accessToken = await getValidAccessToken();
       if (!accessToken) {
         setStatus('Login required', 'error');
@@ -1208,23 +2329,29 @@
 
       if (overlay) overlay.style.display = 'none';
       setStatus('Connecting...', 'connecting');
-      log(`Connecting to ${GATEWAY_URL}...`);
+      log('Resolving control-plane session...', 'info');
 
       try {
-        const gatewayAuthOk = await verifyGatewayAccessToken(accessToken);
-        if (!gatewayAuthOk) {
-          setStatus('Auth rejected', 'error');
+        const controlSession = mode === 'new'
+          ? await createAndSelectSessionResource(accessToken)
+          : await resolveSelectedSessionResource(accessToken);
+        if (!controlSession) {
+          setStatus(mode === 'new' ? 'Session creation failed' : 'Session selection required', 'error');
           if (overlay) overlay.style.display = '';
           return;
         }
+        const connectCredential = await resolveSessionConnectCredential(accessToken, controlSession);
+        const gatewayUrl = `${controlSession.connect.gateway_url}${controlSession.connect.transport_path}`;
+        log(`Connecting to ${gatewayUrl} via session ${controlSession.id}...`);
         log(
           `Connect options: render=${renderBackendSelect.value}, scrollCopy=${scrollCopyToggle.checked ? 'on' : 'off'}, hiDpi=${hidpiToggle.checked}`,
           'info',
         );
         session = await BpaneSession.connect({
           container,
-          gatewayUrl: `${GATEWAY_URL}/session`,
-          accessToken,
+          gatewayUrl,
+          connectTicket: connectCredential.connectTicket ?? undefined,
+          accessToken: connectCredential.accessToken ?? undefined,
           renderBackend: renderBackendSelect.value,
           hiDpi: hidpiToggle.checked,
           scrollCopy: scrollCopyToggle.checked,
@@ -1236,10 +2363,19 @@
           onConnect: () => {
             log('Connected', 'ok');
             setStatus('Connected', 'connected');
+            if (controlSessionState.resource) {
+              controlSessionState.resource = {
+                ...controlSessionState.resource,
+                state: 'active',
+              };
+              renderSessionPicker();
+            }
             renderAuthState();
             cameraBtn.disabled = true;
             micBtn.disabled = false;
             uploadBtn.disabled = false;
+            setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
+            setToggleButtonState(micBtn, false, 'Mic On', 'Mic Off');
             log('File transfer ready: drag/drop files onto the session or use Upload File.', 'info');
             // Poll frame counter + compute FPS
             liveState.lastFrameCount = 0;
@@ -1357,15 +2493,20 @@
             session = null;
             if (overlay) overlay.style.display = '';
             setStatus('Disconnected', 'disconnected');
+            if (controlSessionState.resource && isRuntimeCandidateSessionState(controlSessionState.resource.state)) {
+              controlSessionState.resource = {
+                ...controlSessionState.resource,
+                state: 'idle',
+              };
+              renderSessionPicker();
+            }
             renderAuthState();
             cameraBtn.disabled = true;
             micBtn.disabled = true;
             uploadBtn.disabled = true;
             cameraActive = false;
-            cameraBtn.textContent = 'Cam Off';
-            cameraBtn.style.background = '';
-            micBtn.textContent = 'Mic Off';
-            micBtn.style.background = '';
+            setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
+            setToggleButtonState(micBtn, false, 'Mic On', 'Mic Off');
             resolutionEl.textContent = 'Resolution: --';
             framesEl.textContent = 'Frames: --';
             latencyEl.textContent = 'RTT: --';
@@ -1380,6 +2521,12 @@
             liveState.resolution.width = 0;
             liveState.resolution.height = 0;
             setMetricsButtons();
+            void getValidAccessToken().then((accessToken) => {
+              if (accessToken) {
+                return refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+              }
+              return null;
+            });
           },
           onError: (error) => {
             log(`Error: ${error.message}`, 'error');
@@ -1387,11 +2534,11 @@
           onCapabilitiesChange: (capabilities) => {
             cameraBtn.disabled = !capabilities.camera;
             if (capabilities.camera) {
+              setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
               log('Camera relay ready.', 'info');
             } else {
               cameraActive = false;
-              cameraBtn.textContent = 'Cam Off';
-              cameraBtn.style.background = '';
+              setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
               log('Camera unavailable: host did not advertise a video device.', 'warn');
             }
           },
@@ -1404,6 +2551,7 @@
         });
         renderBackendEl.textContent = formatRenderDiagnostics(session.getRenderDiagnostics());
         log(formatRenderDiagnostics(session.getRenderDiagnostics()), 'info');
+        renderAuthState();
       } catch (e) {
         log(`Connection failed: ${e.message}`, 'error');
         setStatus('Connection failed', 'error');
@@ -1428,15 +2576,20 @@
       }
       if (overlay) overlay.style.display = '';
       setStatus('Disconnected', 'disconnected');
+      if (controlSessionState.resource && isRuntimeCandidateSessionState(controlSessionState.resource.state)) {
+        controlSessionState.resource = {
+          ...controlSessionState.resource,
+          state: 'idle',
+        };
+        renderSessionPicker();
+      }
       renderAuthState();
       cameraBtn.disabled = true;
       micBtn.disabled = true;
       uploadBtn.disabled = true;
       cameraActive = false;
-      cameraBtn.textContent = 'Cam Off';
-      cameraBtn.style.background = '';
-      micBtn.textContent = 'Mic Off';
-      micBtn.style.background = '';
+      setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
+      setToggleButtonState(micBtn, false, 'Mic On', 'Mic Off');
       resolutionEl.textContent = 'Resolution: --';
       framesEl.textContent = 'Frames: --';
       latencyEl.textContent = 'RTT: --';
@@ -1451,6 +2604,12 @@
       liveState.resolution.width = 0;
       liveState.resolution.height = 0;
       setMetricsButtons();
+      void getValidAccessToken().then((accessToken) => {
+        if (accessToken) {
+          return refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+        }
+        return null;
+      });
     }
 
     // ── Camera toggle ───────────────────────────────────────────────
@@ -1461,14 +2620,12 @@
         if (cameraActive) {
           session.stopCamera();
           cameraActive = false;
-          cameraBtn.textContent = 'Cam Off';
-          cameraBtn.style.background = '';
+          setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
           log('Camera stopped', 'info');
         } else {
           await session.startCamera();
           cameraActive = true;
-          cameraBtn.textContent = 'Cam On';
-          cameraBtn.style.background = '#1c4a1c';
+          setToggleButtonState(cameraBtn, true, 'Camera On', 'Camera Off');
           log('Camera started', 'ok');
         }
       } catch (e) {
@@ -1483,14 +2640,12 @@
       if (micActive) {
         session.stopMicrophone();
         micActive = false;
-        micBtn.textContent = 'Mic Off';
-        micBtn.style.background = '';
+        setToggleButtonState(micBtn, false, 'Mic On', 'Mic Off');
         log('Microphone stopped', 'info');
       } else {
         await session.startMicrophone();
         micActive = true;
-        micBtn.textContent = 'Mic On';
-        micBtn.style.background = '#1c4a1c';
+        setToggleButtonState(micBtn, true, 'Mic On', 'Mic Off');
         log('Microphone started', 'ok');
       }
     }
@@ -1498,7 +2653,25 @@
     // ── Button handlers ─────────────────────────────────────────────
     loginBtn.addEventListener('click', () => void beginLogin());
     logoutBtn.addEventListener('click', () => void logout());
-    connectBtn.addEventListener('click', connect);
+    delegateMcpBtn.addEventListener('click', () => void delegateCurrentSessionToMcp().catch((error) => {
+      log(`MCP delegation failed: ${error.message}`, 'error');
+    }));
+    sessionSelect.addEventListener('change', () => {
+      controlSessionState.selectedSessionId = sessionSelect.value;
+      syncSelectedSessionResource();
+      renderAuthState();
+    });
+    refreshSessionsBtn.addEventListener('click', () => void getValidAccessToken().then((accessToken) => {
+      if (!accessToken) {
+        setStatus('Login required', 'error');
+        return null;
+      }
+      return refreshSessionResources(accessToken, { preserveSelection: true, silent: false });
+    }).catch((error) => {
+      log(`Session refresh failed: ${error.message}`, 'error');
+    }));
+    newSessionBtn.addEventListener('click', () => void connect('new'));
+    connectBtn.addEventListener('click', () => void connect('selected'));
     disconnectBtn.addEventListener('click', () => doDisconnect());
     metricsStartBtn.addEventListener('click', startBenchmarkSample);
     metricsStopBtn.addEventListener('click', () => stopBenchmarkSample('manual'));
@@ -1511,13 +2684,20 @@
       session.promptFileUpload();
     });
     logsBtn.addEventListener('click', () => {
-      logsVisible = !logsVisible;
-      logPanel.style.display = logsVisible ? 'block' : 'none';
-      logsBtn.textContent = logsVisible ? 'Hide Logs' : 'Show Logs';
+      logPanel.innerHTML = '';
+      log('Log panel cleared', 'info');
     });
     hidpiToggle.addEventListener('change', () => {
       log(`HiDPI ${hidpiToggle.checked ? 'enabled' : 'disabled'}`, 'info');
       // HiDPI changes take effect on next connect
+    });
+    navLinks.forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const href = link.getAttribute('href');
+        if (!href?.startsWith('#')) return;
+        document.querySelector(href)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     });
 
     window.__bpaneBenchmarkMetrics = {
@@ -1530,13 +2710,16 @@
     // ── Startup ─────────────────────────────────────────────────────
     renderBenchmarkMetrics();
     await initializeAuth();
+    setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
+    setToggleButtonState(micBtn, false, 'Mic On', 'Mic Off');
     log(`Gateway target: ${GATEWAY_URL}`);
+    log(`Session control API: ${SESSION_API_URL}`, 'info');
     log('Benchmark metrics API: window.__bpaneBenchmarkMetrics.{startSample,stopSample,resetSample,getSummary}', 'info');
     if (authState.config?.mode === 'oidc') {
       log(`OIDC login configured for issuer ${authState.config.issuer}`, 'info');
       log(`Example user: ${getExampleUserLabel() || 'none configured'}`, 'info');
     }
-    log('Ready. Login, then click "Connect" to start.');
+    log('Ready. Login, then join an existing session or start a new one.');
   </script>
 </body>
 </html>

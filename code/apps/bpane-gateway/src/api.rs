@@ -1,14 +1,22 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tracing::info;
+use uuid::Uuid;
 
-use crate::auth::AuthValidator;
+use crate::auth::{AuthValidator, AuthenticatedPrincipal};
+use crate::connect_ticket::SessionConnectTicketManager;
+use crate::idle_stop::schedule_idle_session_stop;
+use crate::runtime_manager::{ResolvedSessionRuntime, RuntimeManagerError, SessionRuntimeManager};
+use crate::session_control::{
+    CreateSessionRequest, SessionLifecycleState, SessionListResponse, SessionOwnerMode,
+    SessionResource, SessionStore, SessionStoreError, SetAutomationDelegateRequest, StoredSession,
+};
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_registry::SessionRegistry;
 
@@ -16,7 +24,12 @@ use crate::session_registry::SessionRegistry;
 struct ApiState {
     registry: Arc<SessionRegistry>,
     auth_validator: Arc<AuthValidator>,
-    agent_socket_path: String,
+    connect_ticket_manager: Arc<SessionConnectTicketManager>,
+    session_store: SessionStore,
+    runtime_manager: Arc<SessionRuntimeManager>,
+    idle_stop_timeout: std::time::Duration,
+    public_gateway_url: String,
+    default_owner_mode: SessionOwnerMode,
 }
 
 #[derive(Serialize)]
@@ -66,19 +79,321 @@ struct ErrorResponse {
     error: String,
 }
 
+#[derive(Serialize)]
+struct SessionAccessTokenResponse {
+    session_id: Uuid,
+    token_type: String,
+    token: String,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    connect: crate::session_control::SessionConnectInfo,
+}
+
+async fn create_session(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateSessionRequest>,
+) -> Result<(StatusCode, Json<SessionResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let owner_mode = resolve_owner_mode(&state, request.owner_mode)?;
+    let stored = state
+        .session_store
+        .create_session(&principal, request, owner_mode)
+        .await
+        .map_err(map_session_store_error)?;
+
+    schedule_idle_session_stop(
+        stored.id,
+        state.idle_stop_timeout,
+        state.registry.clone(),
+        state.session_store.clone(),
+        state.runtime_manager.clone(),
+    );
+
+    Ok((
+        StatusCode::CREATED,
+        Json(session_resource(&state, &stored, None)),
+    ))
+}
+
+async fn list_sessions(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let sessions = state
+        .session_store
+        .list_sessions_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|session| session_resource(&state, &session, None))
+        .collect();
+
+    Ok(Json(SessionListResponse { sessions }))
+}
+
+async fn get_session(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let stored = authorize_visible_session_request(&headers, &state, session_id).await?;
+
+    Ok(Json(session_resource(&state, &stored, None)))
+}
+
+async fn set_automation_owner(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<SetAutomationDelegateRequest>,
+) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let stored = state
+        .session_store
+        .set_automation_delegate_for_owner(&principal, session_id, request)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    Ok(Json(session_resource(&state, &stored, None)))
+}
+
+async fn clear_automation_owner(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let stored = state
+        .session_store
+        .clear_automation_delegate_for_owner(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    Ok(Json(session_resource(&state, &stored, None)))
+}
+
+async fn issue_session_access_token(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionAccessTokenResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let stored = state
+        .session_store
+        .get_session_for_principal(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    let connectable = if stored.state == SessionLifecycleState::Stopped {
+        let prepared = state
+            .session_store
+            .prepare_session_for_connect(session_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("session {session_id} not found"),
+                    }),
+                )
+            })?;
+        schedule_idle_session_stop(
+            session_id,
+            state.idle_stop_timeout,
+            state.registry.clone(),
+            state.session_store.clone(),
+            state.runtime_manager.clone(),
+        );
+        prepared
+    } else {
+        stored
+    };
+
+    if !connectable.state.is_runtime_candidate() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "session {session_id} is not connectable in state {}",
+                    connectable.state.as_str()
+                ),
+            }),
+        ));
+    }
+
+    let issued = state
+        .connect_ticket_manager
+        .issue_ticket(session_id, &principal)
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to issue session connect ticket: {error}"),
+                }),
+            )
+        })?;
+    let resource = session_resource(&state, &connectable, None);
+
+    Ok(Json(SessionAccessTokenResponse {
+        session_id,
+        token_type: "session_connect_ticket".to_string(),
+        token: issued.token,
+        expires_at: issued.expires_at,
+        connect: resource.connect,
+    }))
+}
+
+async fn get_session_status(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionStatus>, (StatusCode, Json<ErrorResponse>)> {
+    let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let hub = state
+        .registry
+        .ensure_hub_for_session(
+            session_id,
+            &resolve_runtime(&state, session_id).await?.agent_socket_path,
+        )
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to connect to host agent: {error}"),
+                }),
+            )
+        })?;
+    let snapshot = hub.telemetry_snapshot().await;
+
+    Ok(Json(session_status_from_snapshot(snapshot)))
+}
+
+async fn delete_session(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+
+    let stored = state
+        .session_store
+        .get_session_for_owner(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    if should_block_session_stop(
+        stored.state,
+        state.runtime_manager.profile().supports_legacy_global_routes,
+        runtime_is_currently_in_use(&state).await,
+    ) {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "cannot stop the legacy single-session runtime while it is in use"
+                    .to_string(),
+            }),
+        ));
+    }
+
+    let stopped = state
+        .session_store
+        .stop_session_for_owner(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    state.runtime_manager.release(session_id).await;
+    state.registry.remove_session(session_id).await;
+
+    Ok(Json(session_resource(&state, &stopped, None)))
+}
+
 /// GET /api/session/status
 async fn session_status(
     headers: HeaderMap,
     State(state): State<Arc<ApiState>>,
-) -> Result<Json<SessionStatus>, StatusCode> {
+) -> Result<Json<SessionStatus>, (StatusCode, Json<ErrorResponse>)> {
     authorize_api_request(&headers, &state.auth_validator)
         .await
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    ensure_legacy_runtime_routes_supported(&state)?;
+    let Some(session_id) = legacy_runtime_session_id(&state).await else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "no runtime-backed session is available".to_string(),
+            }),
+        ));
+    };
+    let runtime = resolve_runtime_compat(&state, session_id)
+        .await
+        .map_err(map_runtime_compat_status)?;
     let hub = state
         .registry
-        .ensure_hub(&state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
         .await
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to connect to host agent: {error}"),
+                }),
+            )
+        })?;
     let snapshot = hub.telemetry_snapshot().await;
 
     Ok(Json(session_status_from_snapshot(snapshot)))
@@ -123,9 +438,19 @@ async fn set_mcp_owner(
     authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    ensure_legacy_runtime_routes_supported(&state)?;
+    let Some(session_id) = legacy_runtime_session_id(&state).await else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "no runtime-backed session is available".to_string(),
+            }),
+        ));
+    };
+    let runtime = resolve_runtime(&state, session_id).await?;
     let hub = state
         .registry
-        .ensure_hub(&state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
         .await
         .map_err(|e| {
             (
@@ -137,6 +462,36 @@ async fn set_mcp_owner(
         })?;
 
     hub.set_mcp_owner(req.width, req.height).await;
+    state.runtime_manager.mark_session_active(session_id).await;
+    let _ = state.session_store.mark_session_active(session_id).await;
+
+    Ok(Json(OkResponse { ok: true }))
+}
+
+async fn set_session_mcp_owner(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(req): Json<McpOwnerRequest>,
+) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let runtime = resolve_runtime(&state, session_id).await?;
+    let hub = state
+        .registry
+        .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to connect to host agent: {error}"),
+                }),
+            )
+        })?;
+
+    hub.set_mcp_owner(req.width, req.height).await;
+    state.runtime_manager.mark_session_active(session_id).await;
+    let _ = state.session_store.mark_session_active(session_id).await;
 
     Ok(Json(OkResponse { ok: true }))
 }
@@ -149,13 +504,75 @@ async fn clear_mcp_owner(
     authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    if !state
+        .runtime_manager
+        .profile()
+        .supports_legacy_global_routes
+    {
+        return Err(StatusCode::CONFLICT);
+    }
+    let Some(session_id) = legacy_runtime_session_id(&state).await else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+    let runtime = resolve_runtime_compat(&state, session_id)
+        .await
+        .map_err(|status| status)?;
     let hub = state
         .registry
-        .ensure_hub(&state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
         .await
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
 
     hub.clear_mcp_owner().await;
+    let snapshot = hub.telemetry_snapshot().await;
+    if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
+        let _ = state.session_store.mark_session_idle(session_id).await;
+        state.runtime_manager.mark_session_idle(session_id).await;
+        schedule_idle_session_stop(
+            session_id,
+            state.idle_stop_timeout,
+            state.registry.clone(),
+            state.session_store.clone(),
+            state.runtime_manager.clone(),
+        );
+    }
+
+    Ok(Json(OkResponse { ok: true }))
+}
+
+async fn clear_session_mcp_owner(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let runtime = resolve_runtime(&state, session_id).await?;
+    let hub = state
+        .registry
+        .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to connect to host agent: {error}"),
+                }),
+            )
+        })?;
+
+    hub.clear_mcp_owner().await;
+    let snapshot = hub.telemetry_snapshot().await;
+    if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
+        let _ = state.session_store.mark_session_idle(session_id).await;
+        state.runtime_manager.mark_session_idle(session_id).await;
+        schedule_idle_session_stop(
+            session_id,
+            state.idle_stop_timeout,
+            state.registry.clone(),
+            state.session_store.clone(),
+            state.runtime_manager.clone(),
+        );
+    }
 
     Ok(Json(OkResponse { ok: true }))
 }
@@ -165,19 +582,25 @@ pub async fn run_api_server(
     bind_addr: SocketAddr,
     registry: Arc<SessionRegistry>,
     auth_validator: Arc<AuthValidator>,
-    agent_socket_path: String,
+    connect_ticket_manager: Arc<SessionConnectTicketManager>,
+    session_store: SessionStore,
+    runtime_manager: Arc<SessionRuntimeManager>,
+    idle_stop_timeout: std::time::Duration,
+    public_gateway_url: String,
+    default_owner_mode: SessionOwnerMode,
 ) -> anyhow::Result<()> {
     let state = Arc::new(ApiState {
         registry,
         auth_validator,
-        agent_socket_path,
+        connect_ticket_manager,
+        session_store,
+        runtime_manager,
+        idle_stop_timeout,
+        public_gateway_url,
+        default_owner_mode,
     });
 
-    let app = Router::new()
-        .route("/api/session/status", get(session_status))
-        .route("/api/session/mcp-owner", post(set_mcp_owner))
-        .route("/api/session/mcp-owner", delete(clear_mcp_owner))
-        .with_state(state);
+    let app = build_api_router(state);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     info!("HTTP API listening on {bind_addr}");
@@ -190,12 +613,27 @@ pub async fn run_api_server(
 async fn authorize_api_request(
     headers: &HeaderMap,
     auth_validator: &AuthValidator,
-) -> Result<(), String> {
+) -> Result<AuthenticatedPrincipal, String> {
     let token = extract_bearer_token(headers).ok_or_else(|| "missing bearer token".to_string())?;
     auth_validator
-        .validate_token(token)
+        .authenticate(token)
         .await
         .map_err(|error| format!("invalid bearer token: {error}"))
+}
+
+fn session_resource(
+    state: &ApiState,
+    stored: &StoredSession,
+    state_override: Option<SessionLifecycleState>,
+) -> SessionResource {
+    stored.to_resource(
+        &state.public_gateway_url,
+        state
+            .runtime_manager
+            .describe_session_runtime(stored.id)
+            .into(),
+        state_override,
+    )
 }
 
 fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
@@ -205,3 +643,222 @@ fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
         .ok()?;
     value.strip_prefix("Bearer ")
 }
+
+fn build_api_router(state: Arc<ApiState>) -> Router {
+    Router::new()
+        .route("/api/v1/sessions", post(create_session).get(list_sessions))
+        .route(
+            "/api/v1/sessions/{session_id}",
+            get(get_session).delete(delete_session),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/access-tokens",
+            post(issue_session_access_token),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/automation-owner",
+            post(set_automation_owner).delete(clear_automation_owner),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/status",
+            get(get_session_status),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/mcp-owner",
+            post(set_session_mcp_owner).delete(clear_session_mcp_owner),
+        )
+        .route("/api/session/status", get(session_status))
+        .route("/api/session/mcp-owner", post(set_mcp_owner))
+        .route("/api/session/mcp-owner", delete(clear_mcp_owner))
+        .with_state(state)
+}
+
+fn resolve_owner_mode(
+    state: &ApiState,
+    requested: Option<SessionOwnerMode>,
+) -> Result<SessionOwnerMode, (StatusCode, Json<ErrorResponse>)> {
+    let resolved = requested.unwrap_or(state.default_owner_mode);
+    if resolved != state.default_owner_mode {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "owner_mode {} is not supported by the current gateway runtime",
+                    resolved.as_str()
+                ),
+            }),
+        ));
+    }
+    Ok(resolved)
+}
+
+fn map_session_store_error(error: SessionStoreError) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        SessionStoreError::ActiveSessionConflict { .. } => (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+        SessionStoreError::InvalidRequest(_) => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+        SessionStoreError::Backend(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+    }
+}
+
+async fn authorize_runtime_session_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    let session = authorize_visible_session_request(headers, state, session_id).await?;
+
+    if !matches!(
+        session.state,
+        SessionLifecycleState::Pending
+            | SessionLifecycleState::Starting
+            | SessionLifecycleState::Ready
+            | SessionLifecycleState::Active
+            | SessionLifecycleState::Idle
+    ) {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "session {session_id} is not attached to a runtime-compatible state"
+                ),
+            }),
+        ));
+    }
+
+    Ok(session)
+}
+
+async fn authorize_visible_session_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let session = state
+        .session_store
+        .get_session_for_principal(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    Ok(session)
+}
+
+async fn runtime_is_currently_in_use(state: &ApiState) -> bool {
+    let Some(session_id) = legacy_runtime_session_id(state).await else {
+        return false;
+    };
+    let Some(snapshot) = state.registry.telemetry_snapshot_if_live(session_id).await else {
+        return false;
+    };
+    snapshot.browser_clients > 0 || snapshot.viewer_clients > 0 || snapshot.mcp_owner
+}
+
+fn should_block_session_stop(
+    state: SessionLifecycleState,
+    supports_legacy_global_routes: bool,
+    runtime_in_use: bool,
+) -> bool {
+    supports_legacy_global_routes && state.is_runtime_candidate() && runtime_in_use
+}
+
+async fn resolve_runtime(
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<ResolvedSessionRuntime, (StatusCode, Json<ErrorResponse>)> {
+    state
+        .runtime_manager
+        .resolve(session_id)
+        .await
+        .map_err(map_runtime_manager_error)
+}
+
+async fn resolve_runtime_compat(
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<ResolvedSessionRuntime, StatusCode> {
+    state
+        .runtime_manager
+        .resolve(session_id)
+        .await
+        .map_err(|_| StatusCode::CONFLICT)
+}
+
+fn map_runtime_manager_error(error: RuntimeManagerError) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::CONFLICT,
+        Json(ErrorResponse {
+            error: error.to_string(),
+        }),
+    )
+}
+
+fn map_runtime_compat_status(status: StatusCode) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        status,
+        Json(ErrorResponse {
+            error: if status == StatusCode::CONFLICT {
+                "runtime is not currently available for the requested compatibility route"
+                    .to_string()
+            } else {
+                "compatibility route failed".to_string()
+            },
+        }),
+    )
+}
+
+fn ensure_legacy_runtime_routes_supported(
+    state: &ApiState,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    if state
+        .runtime_manager
+        .profile()
+        .supports_legacy_global_routes
+    {
+        return Ok(());
+    }
+
+    Err((
+        StatusCode::CONFLICT,
+        Json(ErrorResponse {
+            error: "global compatibility routes are disabled for the current runtime backend; use /api/v1/sessions/{id}/status and /api/v1/sessions/{id}/mcp-owner instead".to_string(),
+        }),
+    ))
+}
+
+async fn legacy_runtime_session_id(state: &ApiState) -> Option<Uuid> {
+    state
+        .session_store
+        .get_runtime_candidate_session()
+        .await
+        .ok()
+        .flatten()
+        .map(|session| session.id)
+}
+
+#[cfg(test)]
+mod tests;

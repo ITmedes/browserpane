@@ -23,6 +23,18 @@ Completed baseline for that pre-phase:
 - local compose runs Keycloak for dev/testing
 - `mcp-bridge` uses client-credentials for gateway API access
 
+Completed baseline for the first Phase 0 control-plane slice:
+
+- `bpane-gateway` exposes owner-scoped `POST/GET/DELETE /api/v1/sessions`
+- those session resources are persisted in Postgres
+- the current resource contract returns session-scoped connect metadata
+- browser transport routing is now keyed by public `session_id` through short-lived connect tickets
+- optional docker-backed runtime selection now exists, including `docker_pool` for multiple parallel runtime-backed sessions within configured caps
+- Docker-backed runtime assignment metadata is now persisted and reconciled on gateway restart
+- `mcp-bridge` can now adopt a delegated session and resolve its runtime-specific CDP endpoint through the session resource, but each bridge instance still manages one control session at a time
+- there is now a compose-driven smoke harness for local `docker_pool` validation
+- the owner-scoped v1 contract is now frozen in `openapi/bpane-control-v1.yaml`
+
 Implication for issue #6:
 
 - the control plane should assume an external IDP-compatible auth model from the start
@@ -35,17 +47,36 @@ The current repo already has one strong building block: `SessionHub` is the righ
 The main blockers are outside that abstraction:
 
 - `code/apps/bpane-gateway/src/api.rs`
-  - public API is still global and single-session: `/api/session/status`, `/api/session/mcp-owner`
+  - public API now has both legacy global compatibility routes and owner-scoped `/api/v1/sessions` plus session-scoped `status` / `mcp-owner`
+  - formal delegation and access-ticket flows across mixed principals now exist
+  - the remaining gap is real runtime selection and worker lifecycle behind those session resources
 - `code/apps/bpane-gateway/src/transport.rs`
-  - WebTransport still validates one global token and routes every browser connection through one implicit session
+  - WebTransport now resolves a session-scoped connect ticket and routes browser connections through the public `session_id`
+  - the remaining compatibility limit is that session routing still resolves to one active host runtime candidate
+- `code/apps/bpane-gateway/src/runtime_manager.rs`
+  - this seam now exists and currently supports:
+    - `static_single`: one shared host socket
+    - `docker_single`: one start-on-demand runtime container with idle shutdown
+    - `docker_pool`: multiple start-on-demand runtime containers with explicit active/startup caps
+  - `docker_single` still enforces one active runtime at a time; `docker_pool` is the first backend that can run multiple session workers in parallel
+  - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions
+  - runtime assignment metadata is now persisted and reconciled on gateway restart
+  - stopped sessions can now restart against the same persisted Chromium profile in Docker-backed modes
+  - the remaining work is hardening and broader operational policy, not first-pass runtime identity/routing
 - `code/apps/bpane-gateway/src/main.rs` and `config.rs`
   - one `--agent-socket`, one host endpoint
 - `code/integrations/mcp-bridge/src/index.ts`
-  - assumes one BrowserPane session, one gateway API URL, one CDP endpoint, one resolution policy
+  - can now resolve a control session, use session-scoped ownership/status APIs, and bind to the delegated session's runtime-specific CDP endpoint
+  - still limits one managed control session per bridge instance
 - `deploy/compose.yml`
-  - local stack is still hard-wired to one host worker and one socket volume
+  - local stack is still hard-wired to one host worker and one socket volume by default
+  - the opt-in Docker backend is not wired into the default compose path yet
 
-`SessionRegistry` is already closer to the target shape than the public API is. It can hold multiple hubs internally, but it is still keyed by agent socket path instead of a public logical session ID.
+`SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is mostly operational hardening and turning the worker-pool path into the default-tested path instead of an advanced opt-in mode.
+
+The public Phase 0 contract is now frozen and versioned at:
+
+- `openapi/bpane-control-v1.yaml`
 
 ## Industry Patterns Worth Copying
 
@@ -98,6 +129,35 @@ Common pattern:
 
 BrowserPane already has the shared-session side of this. The missing part is making session selection explicit at the control-plane boundary.
 
+### 6. Delegation across principals is explicit
+
+Common pattern:
+
+- one actor creates or owns a session
+- another actor is explicitly allowed to attach, observe, or automate that session
+- the attach path is deliberate, scoped, and revocable
+
+BrowserPane needs this because its browser user and `mcp-bridge` service principal are currently different identities.
+
+### 7. Reconnect / resume is expected
+
+Common pattern:
+
+- session connections can drop and reconnect
+- the session resource remains the stable handle
+- reconnect and explicit release are normal parts of the lifecycle
+
+BrowserPane should plan for reconnect-friendly attach semantics early, even before persistent cross-worker resurrection exists.
+
+### 8. Recordings / artifacts / replay are normal companion features
+
+Common pattern:
+
+- recordings, live views, and artifacts are attached to a session resource
+- these are not necessarily phase-1 requirements, but the session model should leave space for them
+
+BrowserPane should keep recordings out of the immediate critical path, but the session resource should not paint us into a corner.
+
 ## Industry Patterns We Should Not Copy Directly
 
 ### 1. Account/project/billing model as part of the first rollout
@@ -112,9 +172,17 @@ BrowserPane should not block issue #6 on:
 
 Those can stay out of scope for the first multi-session control plane.
 
-### 2. Persistent profile reuse across disconnected sessions as a first requirement
+### 2. Persistent profile reuse across disconnected sessions as an early baseline
 
-Browserless leans heavily on persistent session state and reconnect workflows. BrowserPane should support reconnect-friendly connect tickets, but the first milestone should focus on isolated parallel sessions, not long-lived session resurrection across arbitrary worker restarts.
+Browserless leans heavily on persistent session state and reconnect workflows. BrowserPane now needs the same practical baseline for local multi-session work:
+
+- session-specific Chromium profile reuse across worker restarts
+- reconnectable stopped session resources
+- explicit distinction between:
+  - exact live state while the worker is still running
+  - profile-backed restoration after idle-stop
+
+That does **not** require true container checkpoint/suspend in the first implementation. Cookies, cache, downloads, and Chromium session-restore state should survive; arbitrary in-memory renderer state does not have to.
 
 ### 3. Large hosted-platform feature surface
 
@@ -179,6 +247,8 @@ Start with `/api/v1` and a small stable core:
 - `POST /api/v1/sessions/{id}/automation-owner`
 - `DELETE /api/v1/sessions/{id}/automation-owner`
 
+For BrowserPane specifically, the next practical addition after the current Phase 0 slice should be explicit delegation or attach semantics for mixed principals, not more global compatibility endpoints.
+
 `GET /api/v1/sessions` should be included early even if filtering is basic at first, because session listing is one of the most standard and integration-friendly control-plane expectations.
 
 ### Internal boundary
@@ -204,6 +274,29 @@ Deliverables:
 - session state machine definition
 - auth model definition
 - compatibility story for current single-session mode
+
+Current status:
+
+- the gateway now has the first versioned resource model and owner-scoped storage
+- the implemented Phase 0 API is:
+  - `POST /api/v1/sessions`
+  - `GET /api/v1/sessions`
+  - `GET /api/v1/sessions/{id}`
+  - `DELETE /api/v1/sessions/{id}`
+- Phase 0 also now includes session-scoped compatibility routes:
+  - `POST /api/v1/sessions/{id}/access-tokens`
+  - `POST /api/v1/sessions/{id}/automation-owner`
+  - `DELETE /api/v1/sessions/{id}/automation-owner`
+  - `GET /api/v1/sessions/{id}/status`
+  - `POST /api/v1/sessions/{id}/mcp-owner`
+  - `DELETE /api/v1/sessions/{id}/mcp-owner`
+- persistence is Postgres-backed in the normal compose/runtime path
+- `test-embed.html` already consumes that API, lets the user join an existing session or start a new one, and uses the selected session resource before browser connect
+- the local test integration currently creates sessions with `idle_timeout_sec = 300`, and the gateway now stops those sessions automatically after 5 minutes of non-use
+- browser transport now uses a short-lived session-scoped connect ticket minted from `/api/v1/sessions/{id}/access-tokens`
+- `test-embed.html` can now explicitly delegate the current session to the local `bpane-mcp-bridge` principal and assign that same session through `mcp-bridge`'s local `/control-session` API
+- `mcp-bridge` now has the first session-control client hooks and can use session-scoped ownership APIs for an explicit managed session without relying on implicit bootstrap
+- the remaining Phase 0 gap is tightening the formal contract surface and expanding downstream integration to consume these resources instead of the older implicit single-session assumptions
 
 Exit criteria:
 
@@ -236,13 +329,14 @@ Deliverables:
 
 - session-scoped WebTransport request parsing
 - registry keyed by logical session ID
-- gateway lookup from session ID to host manager runtime endpoint
 - session-scoped status and ownership APIs
+- gateway lookup from session ID to host manager runtime endpoint
 
 Exit criteria:
 
-- one gateway serves multiple active sessions
+- completed in the current branch for the single-runtime compatibility model
 - browser clients for session A cannot attach to session B accidentally
+- remaining follow-up: replace the legacy single-runtime lookup with true per-session host runtime resolution
 
 ### Phase 3: Ship the public control plane
 
@@ -268,6 +362,7 @@ Deliverables:
   - session ID required
   - session-scoped ownership calls
   - per-session CDP endpoint resolution
+  - explicit delegated attach model for mixed browser-user and service-account principals
 
 Exit criteria:
 
@@ -302,8 +397,15 @@ What exists now:
 
 What does not really exist yet:
 
-- a dedicated repo-level multi-session end-to-end harness
 - `mcp-bridge` automated tests
+
+What now exists:
+
+- a compose-driven local multi-session smoke harness in `code/web/bpane-client/scripts/run-multi-session-smoke.mjs`
+  - creates two independent pool-mode sessions
+  - joins an existing session from a second browser page
+  - delegates MCP and verifies bridge runtime switching
+  - verifies clean teardown back to zero active runtime assignments
 
 That means issue #6 should extend the existing subsystem test seams first, then add a focused multi-session integration layer.
 
@@ -363,29 +465,60 @@ Recommended first step:
 
 ### Test layer 6: compose-driven multi-session smoke test
 
-After Phases 2-4 are stable, add one compose-driven smoke path that proves:
+This layer now exists as a narrow orchestrated smoke harness instead of a full browser-heavy suite.
+
+Current coverage:
 
 - create session A
 - create session B
 - connect browser client to A
 - connect browser client to B
-- verify isolation
-- claim automation owner on one session without affecting the other
+- join an existing session from a third browser page
+- verify session isolation
+- delegate MCP to session A, then switch to session B
+- verify runtime pool teardown returns to zero active runtime assignments
 
-This does not need to start as a full browser-heavy E2E suite. A narrow orchestrated smoke harness is enough initially.
+Remaining expansion opportunities:
 
-## Recommended First Implementation Slice
+- gateway restart recovery as an automated smoke step
+- explicit reconnect-to-stopped-session coverage
+- multiple bridge instance coordination
 
-Start with Phase 0 only.
+## Phase 0 Result
 
-Concrete first PR target:
+Phase 0 is now effectively complete for the core control-plane boundary:
 
-1. Add `/api/v1` resource shapes and OpenAPI draft.
-2. Define session IDs and access-ticket response types in Rust and TypeScript.
-3. Introduce session-aware gateway route parsing without switching runtime routing yet.
-4. Add tests for the new public contract and compatibility behavior.
+1. `/api/v1` resource shapes exist
+2. session IDs and connect-ticket response types are live in Rust and TypeScript
+3. gateway routing is session-aware
+4. contract-oriented gateway tests exist for the frozen surface
+5. the canonical public spec is `openapi/bpane-control-v1.yaml`
 
-This is the lowest-risk way to start because it freezes the product boundary before runtime refactors begin.
+That freeze now becomes the boundary future phases should build on rather than reshape.
+
+## MCP / Automation Use Cases To Design For
+
+These are the MCP-adjacent use cases that match the way modern browser-session platforms are typically used:
+
+1. Human-supervised automation on one live session
+   - human watches or intervenes while automation drives
+2. Attach automation to an existing user-owned session by explicit delegation
+   - this is the most important missing capability for BrowserPane right now
+3. Create a session for automation first, then let humans join later
+4. Temporary ownership handoff between human and automation
+5. Reconnect or resume the same session after disconnect
+6. Embed a live session view inside another product or dashboard
+7. Query or resolve sessions by metadata, labels, or integration context
+8. Record or replay a session later for debugging, support, or audit
+9. Reuse auth or context where the product needs session continuity
+10. Run multiple isolated automation sessions in parallel
+
+What this implies for BrowserPane:
+
+- the next important control-plane feature is explicit delegation, not more implicit bootstrap
+- reconnect-friendly semantics matter early
+- metadata and integration context should remain first-class
+- recordings should stay out of the critical path for now, but the session model should leave room for them
 
 ## Decision Summary
 
@@ -416,6 +549,17 @@ Issue #6 is done when:
 - `bpane-client` and `mcp-bridge` can target one explicit session
 - auth is split cleanly between control-plane and data-plane access
 - the new flow is covered by automated tests, not just manual verification
+
+Current status against those criteria:
+
+- sessions are first-class public resources: done
+- gateway routing is session-scoped: done
+- the host can run at least two isolated sessions in parallel: done in `docker_pool`
+- `bpane-client` and `mcp-bridge` can target one explicit session: done
+- auth is split cleanly between control-plane and data-plane access: done
+- the new flow is covered by automated tests: done for the current local scope
+
+What remains belongs more naturally to later operational or cluster-readiness work, not to the core Phase 0 control-plane milestone.
 
 ## External Reference Points
 

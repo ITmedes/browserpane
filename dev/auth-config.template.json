@@ -7,5 +7,11 @@
   "exampleUser": {
     "username": "${BPANE_OIDC_EXAMPLE_USERNAME}",
     "password": "${BPANE_OIDC_EXAMPLE_PASSWORD}"
+  },
+  "mcpBridge": {
+    "controlUrl": "${BPANE_MCP_BRIDGE_CONTROL_URL}",
+    "clientId": "${BPANE_MCP_BRIDGE_CLIENT_ID}",
+    "issuer": "${BPANE_MCP_BRIDGE_ISSUER}",
+    "displayName": "${BPANE_MCP_BRIDGE_DISPLAY_NAME}"
   }
 }
