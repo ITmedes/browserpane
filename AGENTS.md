@@ -116,7 +116,7 @@ Run these where applicable:
 2. `docker compose -f deploy/compose.yml up --build`
 3. Open `http://localhost:8080` in Chromium.
 4. Log in through the local Keycloak realm if prompted.
-5. If needed, use the SPKI fingerprint in `dev/certs/cert-fingerprint.txt` so Chromium trusts the local gateway cert.
+5. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
 6. `keycloak` listens on `:8091`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
 
 ## Guardrails for contributors and agents
