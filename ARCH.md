@@ -212,6 +212,7 @@ Stateless relay between host agent and browser clients.
     - `docker_single`: opt-in Docker-backed worker startup/shutdown for the active session, with idle timeout and one active runtime at a time
     - `docker_pool`: opt-in Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`
   - session resources, runtime capacity, and compatibility routing now derive from this runtime profile
+  - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions via the Docker socket, shared `/run/bpane` volume, and a shared host-worker env profile
 - **MCP ownership**: atomic flag that locks resolution for browser clients
   when an MCP agent owns the session
 - **Auth** (`auth.rs`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
@@ -340,6 +341,7 @@ The default dev stack no longer uses a shared token file.
 - the page then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
 - test-page-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via `PUT /control-session`
+- the local page intentionally only exposes `Delegate MCP` for `legacy_single_runtime` sessions, because the bridge still targets one fixed CDP endpoint today
 - the resulting access token is sent to `bpane-gateway` as:
   - HTTP API bearer token for authenticated control calls
 - the browser transport then uses the minted ticket as:

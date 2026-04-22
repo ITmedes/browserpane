@@ -894,6 +894,10 @@
       return `Session: ${shortId} (${state})`;
     }
 
+    function supportsLocalMcpDelegation(resource) {
+      return resource?.connect?.compatibility_mode === 'legacy_single_runtime';
+    }
+
     function renderSessionState() {
       sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
     }
@@ -1078,7 +1082,13 @@
       newSessionBtn.disabled = !canStartSession;
       connectBtn.disabled = !canConnect;
       sessionSelect.disabled = !canRefreshSessions || controlSessionState.resources.length === 0;
-      delegateMcpBtn.disabled = !(config?.mode === 'oidc' && hasAccessToken && config?.mcpBridge?.clientId && controlSessionState.resource?.id);
+      delegateMcpBtn.disabled = !(
+        config?.mode === 'oidc'
+        && hasAccessToken
+        && config?.mcpBridge?.clientId
+        && controlSessionState.resource?.id
+        && supportsLocalMcpDelegation(controlSessionState.resource)
+      );
       disconnectBtn.disabled = !session;
       renderSessionPicker();
       renderSessionState();
@@ -1463,6 +1473,11 @@
       if (!controlSession) {
         setStatus('Session selection required', 'error');
         return;
+      }
+      if (!supportsLocalMcpDelegation(controlSession)) {
+        throw new Error(
+          'Local MCP bridge delegation is only supported in legacy single-runtime mode right now.',
+        );
       }
 
       const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(controlSession.id)}/automation-owner`, {
