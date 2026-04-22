@@ -443,6 +443,16 @@ impl SessionStore {
         }
     }
 
+    pub async fn get_session_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.get_session_by_id(id).await,
+            SessionStoreBackend::Postgres(store) => store.get_session_by_id(id).await,
+        }
+    }
+
     pub async fn get_runtime_candidate_session(
         &self,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
@@ -489,6 +499,52 @@ impl SessionStore {
                     .clear_automation_delegate_for_owner(principal, id)
                     .await
             }
+        }
+    }
+
+    pub async fn mark_session_active(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .mark_session_state(id, SessionLifecycleState::Active)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .mark_session_state(id, SessionLifecycleState::Active)
+                    .await
+            }
+        }
+    }
+
+    pub async fn mark_session_idle(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .mark_session_state(id, SessionLifecycleState::Idle)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .mark_session_state(id, SessionLifecycleState::Idle)
+                    .await
+            }
+        }
+    }
+
+    pub async fn stop_session_if_idle(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.stop_session_if_idle(id).await,
+            SessionStoreBackend::Postgres(store) => store.stop_session_if_idle(id).await,
         }
     }
 }
@@ -564,6 +620,20 @@ struct InMemorySessionStore {
 }
 
 impl InMemorySessionStore {
+    async fn get_session_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let session = self
+            .sessions
+            .lock()
+            .await
+            .iter()
+            .find(|session| session.id == id)
+            .cloned();
+        Ok(session)
+    }
+
     async fn create_session(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -692,6 +762,47 @@ impl InMemorySessionStore {
             session.stopped_at = Some(session.updated_at);
         }
 
+        Ok(Some(session.clone()))
+    }
+
+    async fn mark_session_state(
+        &self,
+        id: Uuid,
+        state: SessionLifecycleState,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| session.id == id) else {
+            return Ok(None);
+        };
+
+        if !session.state.is_runtime_candidate() {
+            return Ok(Some(session.clone()));
+        }
+
+        session.state = state;
+        session.updated_at = Utc::now();
+        Ok(Some(session.clone()))
+    }
+
+    async fn stop_session_if_idle(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| session.id == id) else {
+            return Ok(None);
+        };
+
+        if !matches!(
+            session.state,
+            SessionLifecycleState::Ready | SessionLifecycleState::Idle
+        ) {
+            return Ok(Some(session.clone()));
+        }
+
+        session.state = SessionLifecycleState::Stopped;
+        session.updated_at = Utc::now();
+        session.stopped_at = Some(session.updated_at);
         Ok(Some(session.clone()))
     }
 
@@ -985,6 +1096,47 @@ impl PostgresSessionStore {
         row.as_ref().map(row_to_stored_session).transpose()
     }
 
+    async fn get_session_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
+                    state,
+                    template_id,
+                    owner_mode,
+                    viewport_width,
+                    viewport_height,
+                    idle_timeout_sec,
+                    labels,
+                    integration_context,
+                    created_at,
+                    updated_at,
+                    stopped_at
+                FROM control_sessions
+                WHERE id = $1
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to load session by id: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_session).transpose()
+    }
+
     async fn get_session_for_principal(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -1129,6 +1281,98 @@ impl PostgresSessionStore {
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to stop session: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_session).transpose()
+    }
+
+    async fn mark_session_state(
+        &self,
+        id: Uuid,
+        state: SessionLifecycleState,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                UPDATE control_sessions
+                SET
+                    state = $2,
+                    updated_at = NOW()
+                WHERE id = $1
+                  AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
+                    state,
+                    template_id,
+                    owner_mode,
+                    viewport_width,
+                    viewport_height,
+                    idle_timeout_sec,
+                    labels,
+                    integration_context,
+                    created_at,
+                    updated_at,
+                    stopped_at
+                "#,
+                &[&id, &state.as_str()],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to update session state: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_session).transpose()
+    }
+
+    async fn stop_session_if_idle(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                UPDATE control_sessions
+                SET
+                    state = 'stopped',
+                    updated_at = NOW(),
+                    stopped_at = COALESCE(stopped_at, NOW())
+                WHERE id = $1
+                  AND state IN ('ready', 'idle')
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
+                    state,
+                    template_id,
+                    owner_mode,
+                    viewport_width,
+                    viewport_height,
+                    idle_timeout_sec,
+                    labels,
+                    integration_context,
+                    created_at,
+                    updated_at,
+                    stopped_at
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to stop idle session: {error}"))
             })?;
         row.as_ref().map(row_to_stored_session).transpose()
     }
@@ -1533,6 +1777,74 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(visible.id, created.id);
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_stops_unused_ready_sessions_and_idle_sessions() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let created = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: Some(300),
+                    labels: HashMap::new(),
+                    integration_context: None,
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+
+        let stopped_ready = store
+            .stop_session_if_idle(created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stopped_ready.state, SessionLifecycleState::Stopped);
+
+        let created = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+
+        let active = store
+            .mark_session_active(created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(active.state, SessionLifecycleState::Active);
+
+        let idle = store.mark_session_idle(created.id).await.unwrap().unwrap();
+        assert_eq!(idle.state, SessionLifecycleState::Idle);
+
+        let stopped = store
+            .stop_session_if_idle(created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stopped.state, SessionLifecycleState::Stopped);
+
+        let after = store
+            .mark_session_active(created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(after.state, SessionLifecycleState::Stopped);
     }
 
     #[test]

@@ -33,6 +33,7 @@ pub struct TransportServer {
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
+    idle_stop_timeout: Duration,
     heartbeat_timeout: Duration,
     registry: Arc<SessionRegistry>,
 }
@@ -45,6 +46,7 @@ impl TransportServer {
         auth_validator: Arc<AuthValidator>,
         connect_ticket_manager: Arc<SessionConnectTicketManager>,
         session_store: SessionStore,
+        idle_stop_timeout: Duration,
         heartbeat_timeout: Duration,
         registry: Arc<SessionRegistry>,
     ) -> Self {
@@ -55,6 +57,7 @@ impl TransportServer {
             auth_validator,
             connect_ticket_manager,
             session_store,
+            idle_stop_timeout,
             heartbeat_timeout,
             registry,
         }
@@ -150,6 +153,16 @@ impl TransportServer {
             self.runtime_manager
                 .mark_session_active(validated_request.session_id)
                 .await;
+            if let Err(error) = self
+                .session_store
+                .mark_session_active(validated_request.session_id)
+                .await
+            {
+                warn!(
+                    session_id = %validated_request.session_id,
+                    "failed to mark session active in store: {error}"
+                );
+            }
 
             let connection = match session_request.accept().await {
                 Ok(conn) => conn,
@@ -166,6 +179,8 @@ impl TransportServer {
             let active_sessions_clone = active_sessions.clone();
             let registry = self.registry.clone();
             let runtime_manager = self.runtime_manager.clone();
+            let session_store = self.session_store.clone();
+            let idle_stop_timeout = self.idle_stop_timeout;
             active_sessions.fetch_add(1, Ordering::Relaxed);
 
             info!(
@@ -180,6 +195,8 @@ impl TransportServer {
                     session_id,
                     validated_request,
                     runtime_manager,
+                    session_store,
+                    idle_stop_timeout,
                     &agent_path,
                     heartbeat_timeout,
                     registry.clone(),
