@@ -46,6 +46,14 @@ pub struct Config {
     #[arg(long)]
     pub oidc_jwks_url: Option<String>,
 
+    /// Optional Postgres connection string for the versioned session control plane.
+    #[arg(long)]
+    pub database_url: Option<String>,
+
+    /// Public browser-facing gateway URL returned in session connect metadata.
+    #[arg(long, default_value = "https://localhost:4433")]
+    pub public_gateway_url: String,
+
     /// Session heartbeat timeout in seconds.
     #[arg(long, default_value_t = 15)]
     pub heartbeat_timeout_secs: u64,

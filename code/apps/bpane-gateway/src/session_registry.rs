@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
+use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_hub::{ClientHandle, SessionHub};
 
 /// Maps agent socket paths to active SessionHubs.
@@ -40,6 +41,14 @@ impl SessionRegistry {
         let mut hubs = self.hubs.lock().await;
         Self::prune_inactive_hubs(&mut hubs);
         hubs.get(agent_socket_path).cloned()
+    }
+
+    pub async fn telemetry_snapshot_if_live(
+        &self,
+        agent_socket_path: &str,
+    ) -> Option<SessionTelemetrySnapshot> {
+        let hub = self.lookup_live_hub(agent_socket_path).await?;
+        Some(hub.telemetry_snapshot().await)
     }
 
     async fn insert_or_get_live_hub(

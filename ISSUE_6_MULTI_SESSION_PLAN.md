@@ -23,6 +23,13 @@ Completed baseline for that pre-phase:
 - local compose runs Keycloak for dev/testing
 - `mcp-bridge` uses client-credentials for gateway API access
 
+Completed baseline for the first Phase 0 control-plane slice:
+
+- `bpane-gateway` exposes owner-scoped `POST/GET/DELETE /api/v1/sessions`
+- those session resources are persisted in Postgres
+- the current resource contract returns session-scoped connect metadata
+- the actual runtime remains in `legacy_single_runtime` compatibility mode, so only one active runtime-backed session is allowed for now
+
 Implication for issue #6:
 
 - the control plane should assume an external IDP-compatible auth model from the start
@@ -204,6 +211,17 @@ Deliverables:
 - session state machine definition
 - auth model definition
 - compatibility story for current single-session mode
+
+Current status:
+
+- the gateway now has the first versioned resource model and owner-scoped storage
+- the implemented Phase 0 API is:
+  - `POST /api/v1/sessions`
+  - `GET /api/v1/sessions`
+  - `GET /api/v1/sessions/{id}`
+  - `DELETE /api/v1/sessions/{id}`
+- persistence is Postgres-backed in the normal compose/runtime path
+- the remaining Phase 0 gap is tightening the formal contract surface and expanding downstream integration to consume these resources instead of the older implicit single-session assumptions
 
 Exit criteria:
 

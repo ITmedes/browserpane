@@ -3,6 +3,7 @@ mod auth;
 mod config;
 mod relay;
 mod session;
+mod session_control;
 mod session_hub;
 mod session_registry;
 mod transport;
@@ -12,11 +13,13 @@ use std::time::Duration;
 
 use clap::Parser;
 use tracing::info;
+use tracing::warn;
 use tracing_subscriber::EnvFilter;
 use wtransport::Identity;
 
 use auth::{AuthValidator, OidcConfig};
 use config::Config;
+use session_control::{SessionOwnerMode, SessionStore};
 use session_registry::SessionRegistry;
 use transport::TransportServer;
 
@@ -98,6 +101,14 @@ async fn main() -> anyhow::Result<()> {
         config.exclusive_browser_owner,
     ));
 
+    let session_store = if let Some(database_url) = &config.database_url {
+        info!("using postgres-backed session control store");
+        SessionStore::from_database_url(database_url).await?
+    } else {
+        warn!("no --database-url configured; /api/v1 sessions will use an in-memory store");
+        SessionStore::in_memory()
+    };
+
     let agent_socket_str = config.agent_socket.to_str().unwrap().to_string();
 
     let server = TransportServer::new(
@@ -121,6 +132,18 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::select! {
         result = server.run() => result,
-        result = api::run_api_server(api_bind_addr, registry, auth_validator, agent_socket_str) => result,
+        result = api::run_api_server(
+            api_bind_addr,
+            registry,
+            auth_validator,
+            session_store,
+            agent_socket_str,
+            config.public_gateway_url,
+            if config.exclusive_browser_owner {
+                SessionOwnerMode::ExclusiveBrowserOwner
+            } else {
+                SessionOwnerMode::Collaborative
+            },
+        ) => result,
     }
 }

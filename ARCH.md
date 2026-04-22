@@ -7,7 +7,7 @@ inside a browser `<div>` using WebTransport, WebCodecs, and WebGL 2 — no
 plugins, no Electron, no VNC viewer. The container size drives the remote
 resolution pixel-for-pixel.
 
-The system has four runtime components connected by two transport layers:
+The system has five runtime components connected by two transport layers plus a persistent control-plane store:
 
 ```
 ┌─────────────┐   Unix Socket   ┌─────────────┐   WebTransport   ┌─────────────┐
@@ -21,6 +21,12 @@ The system has four runtime components connected by two transport layers:
 │  Chromium   │                │ mcp-bridge  │
 │  (headless) │                │  (Node.js)  │
 └─────────────┘                └─────────────┘
+                                      │
+                                      v
+                               ┌─────────────┐
+                               │  Postgres   │
+                               │ control API │
+                               └─────────────┘
 ```
 
 ---
@@ -38,13 +44,14 @@ The system has four runtime components connected by two transport layers:
 | Tile compression | QOI or Zstd (configurable) | QOI: fast decode, good for UI; Zstd: better ratio for complex content |
 | Audio | PipeWire -> FFmpeg -> Opus or IMA-ADPCM | 48 kHz stereo, silence-gated; Opus default (64 kbps CBR), ADPCM fallback |
 | MCP bridge | Node.js + @playwright/mcp | SSE proxy for browser automation with live supervision |
-| Deployment | Docker Compose, 4 containers | Isolated services on a bridge network |
+| Session store | PostgreSQL 16 | Durable owner-scoped `/api/v1/sessions` resources |
+| Deployment | Docker Compose, 6 containers | Isolated services on a bridge network |
 
 ---
 
 ## Deployment Topology
 
-Four containers on a Docker bridge network (`172.28.0.0/24`):
+Six containers on a Docker bridge network (`172.28.0.0/24`):
 
 ```
               Browser / E2E Test
@@ -62,23 +69,23 @@ Four containers on a Docker bridge network (`172.28.0.0/24`):
                     │
            Docker Bridge Network
                     │
-   ┌────────────────┼────────────────┬────────────────┐
-   │                │                │                │
-   v                v                v                v
-┌──────────┐  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐
-│bpane-host│  │bpane-gateway │  │  mcp-bridge   │  │   Keycloak   │
-│ .0.10    │  │ :4433 (QUIC) │  │ :8931 (SSE)   │  │ :8080/.8091  │
-│          │  │ :8932 (HTTP) │  │               │  │ local OIDC   │
-│ Xorg :99 │  │              │  │ @playwright/  │  │ realm        │
-│ OpenBox  │  │ Unix socket  │  │ mcp (STDIO)   │  │              │
-│ Chromium │  │ <-> host IPC │  │               │  │              │
-│ PipeWire │  │              │  │ Supervisor    │  │              │
-│ FFmpeg   │  │ Broadcast    │  │ monitor       │  │              │
-│bpane-host│  │ fan-out      │  │ (polls API)   │  │              │
-│          │  │              │  │               │  │              │
-│ CDP :9222│  │ Max 10       │  │ MCP clients   │  │              │
-│ -> :9223 │  │ viewers      │  │ connect here  │  │              │
-└──────────┘  └──────────────┘  └───────────────┘  └──────────────┘
+   ┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
+   │              │              │              │              │              │
+   v              v              v              v              v              v
+┌──────────┐ ┌──────────────┐ ┌───────────────┐ ┌──────────────┐ ┌──────────────┐
+│bpane-host│ │bpane-gateway │ │  mcp-bridge   │ │   Keycloak   │ │   Postgres   │
+│ .0.10    │ │ :4433 (QUIC) │ │ :8931 (SSE)   │ │ :8080/.8091  │ │ :5432/.5433  │
+│          │ │ :8932 (HTTP) │ │               │ │ local OIDC   │ │ control-plane│
+│ Xorg :99 │ │              │ │ @playwright/  │ │ realm        │ │ state        │
+│ OpenBox  │ │ Unix socket  │ │ mcp (STDIO)   │ │              │ │              │
+│ Chromium │ │ <-> host IPC │ │               │ │              │ │              │
+│ PipeWire │ │              │ │ Supervisor    │ │              │ │              │
+│ FFmpeg   │ │ Session store │ │ monitor       │ │              │ │              │
+│bpane-host│ │ + auth API    │ │ (polls API)   │ │              │ │              │
+│          │ │               │ │               │ │              │ │              │
+│ CDP :9222│ │ Max 10        │ │ MCP clients   │ │              │ │              │
+│ -> :9223 │ │ viewers       │ │ connect here  │ │              │ │              │
+└──────────┘ └──────────────┘ └───────────────┘ └──────────────┘ └──────────────┘
       │               ^
       └───────────────┘
        /run/bpane/agent.sock
@@ -87,8 +94,10 @@ Four containers on a Docker bridge network (`172.28.0.0/24`):
 **Ports exposed to host machine:**
 - `8080/tcp` — nginx (web UI, auth config, cert hash, SDK dist)
 - `4433/tcp+udp` — WebTransport (QUIC)
+- `8932/tcp` — gateway HTTP API
 - `8091/tcp` — local Keycloak realm for dev/testing
 - `8931/tcp` — MCP bridge (SSE)
+- `5433/tcp` — local Postgres for the session control plane
 
 **Host container internals:** Xorg with dummy video driver (3840x2160 virtual
 framebuffer, runtime resizable via xrandr), OpenBox WM (locked down, no
@@ -192,11 +201,19 @@ Stateless relay between host agent and browser clients.
   - Viewer cap: configurable via `--max-viewers` (default 10)
 - **Session registry** (`session_registry.rs`): manages hub lifecycle with
   TOCTOU-safe concurrent join (two-phase lock pattern)
+- **Session control** (`session_control.rs`): owner-scoped versioned session resources with:
+  - Postgres-backed persistence in normal runtime
+  - in-memory backend fallback for tests and dev fallback mode
+  - `legacy_single_runtime` compatibility gating so Phase 0 can expose session resources before true multi-session workers land
 - **MCP ownership**: atomic flag that locks resolution for browser clients
   when an MCP agent owns the session
 - **Auth** (`auth.rs`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
 - **Heartbeat**: disconnects after 15s without CONTROL ping
 - **HTTP API** (`api.rs`, :8932):
+  - `POST /api/v1/sessions` — create a persistent session resource
+  - `GET /api/v1/sessions` — list owner-scoped sessions
+  - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
+  - `DELETE /api/v1/sessions/{id}` — stop one owner-scoped session resource
   - `GET /api/session/status` — client counts, resolution, telemetry
   - `POST /api/session/mcp-owner` — claim session, lock resolution
   - `DELETE /api/session/mcp-owner` — release ownership
@@ -308,6 +325,8 @@ The default dev stack no longer uses a shared token file.
   - WebTransport query param: `access_token=...`
   - HTTP API bearer token for authenticated control calls
 - `mcp-bridge` obtains its own bearer token with client credentials
+- the versioned session API is also bearer-protected and owner-scoped
+- the current session resource connect contract still advertises `compatibility_mode: legacy_single_runtime`
 
 The default imported local realm contains:
 

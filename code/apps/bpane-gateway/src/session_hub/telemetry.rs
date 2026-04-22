@@ -34,10 +34,12 @@ pub(super) fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelem
     let viewer_clients = hub.viewer_count();
     let joins_accepted = hub.joins_accepted.load(Ordering::Relaxed);
     let total_join_latency_ms = hub.total_join_latency_ms.load(Ordering::Relaxed);
-    let egress_send_stream_lock_acquires_total =
-        hub.egress_send_stream_lock_acquires_total.load(Ordering::Relaxed);
-    let egress_send_stream_lock_wait_us_total =
-        hub.egress_send_stream_lock_wait_us_total.load(Ordering::Relaxed);
+    let egress_send_stream_lock_acquires_total = hub
+        .egress_send_stream_lock_acquires_total
+        .load(Ordering::Relaxed);
+    let egress_send_stream_lock_wait_us_total = hub
+        .egress_send_stream_lock_wait_us_total
+        .load(Ordering::Relaxed);
 
     SessionTelemetrySnapshot {
         browser_clients,
@@ -103,7 +105,8 @@ pub(super) fn record_egress_send_stream_lock_wait(hub: &SessionHub, elapsed: Dur
 }
 
 pub(super) fn record_egress_lagged(hub: &SessionHub, frames: u64) {
-    hub.egress_lagged_receives_total.fetch_add(1, Ordering::Relaxed);
+    hub.egress_lagged_receives_total
+        .fetch_add(1, Ordering::Relaxed);
     hub.egress_lagged_frames_total
         .fetch_add(frames, Ordering::Relaxed);
 }

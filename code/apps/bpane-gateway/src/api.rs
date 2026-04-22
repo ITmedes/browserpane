@@ -1,14 +1,19 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tracing::info;
+use uuid::Uuid;
 
-use crate::auth::AuthValidator;
+use crate::auth::{AuthValidator, AuthenticatedPrincipal};
+use crate::session_control::{
+    CreateSessionRequest, SessionListResponse, SessionOwnerMode, SessionResource, SessionStore,
+    SessionStoreError,
+};
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_registry::SessionRegistry;
 
@@ -16,7 +21,10 @@ use crate::session_registry::SessionRegistry;
 struct ApiState {
     registry: Arc<SessionRegistry>,
     auth_validator: Arc<AuthValidator>,
+    session_store: SessionStore,
     agent_socket_path: String,
+    public_gateway_url: String,
+    default_owner_mode: SessionOwnerMode,
 }
 
 #[derive(Serialize)]
@@ -64,6 +72,121 @@ struct OkResponse {
 #[derive(Serialize)]
 struct ErrorResponse {
     error: String,
+}
+
+async fn create_session(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateSessionRequest>,
+) -> Result<(StatusCode, Json<SessionResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let owner_mode = resolve_owner_mode(&state, request.owner_mode)?;
+    let stored = state
+        .session_store
+        .create_session(&principal, request, owner_mode)
+        .await
+        .map_err(map_session_store_error)?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(stored.to_resource(&state.public_gateway_url, None)),
+    ))
+}
+
+async fn list_sessions(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let sessions = state
+        .session_store
+        .list_sessions_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|session| session.to_resource(&state.public_gateway_url, None))
+        .collect();
+
+    Ok(Json(SessionListResponse { sessions }))
+}
+
+async fn get_session(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let stored = state
+        .session_store
+        .get_session_for_owner(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    Ok(Json(stored.to_resource(&state.public_gateway_url, None)))
+}
+
+async fn delete_session(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+
+    let stored = state
+        .session_store
+        .get_session_for_owner(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    if stored.state.is_runtime_candidate() && runtime_is_currently_in_use(&state).await {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "cannot stop the legacy single-session runtime while it is in use"
+                    .to_string(),
+            }),
+        ));
+    }
+
+    let stopped = state
+        .session_store
+        .stop_session_for_owner(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    Ok(Json(stopped.to_resource(&state.public_gateway_url, None)))
 }
 
 /// GET /api/session/status
@@ -165,19 +288,21 @@ pub async fn run_api_server(
     bind_addr: SocketAddr,
     registry: Arc<SessionRegistry>,
     auth_validator: Arc<AuthValidator>,
+    session_store: SessionStore,
     agent_socket_path: String,
+    public_gateway_url: String,
+    default_owner_mode: SessionOwnerMode,
 ) -> anyhow::Result<()> {
     let state = Arc::new(ApiState {
         registry,
         auth_validator,
+        session_store,
         agent_socket_path,
+        public_gateway_url,
+        default_owner_mode,
     });
 
-    let app = Router::new()
-        .route("/api/session/status", get(session_status))
-        .route("/api/session/mcp-owner", post(set_mcp_owner))
-        .route("/api/session/mcp-owner", delete(clear_mcp_owner))
-        .with_state(state);
+    let app = build_api_router(state);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     info!("HTTP API listening on {bind_addr}");
@@ -190,10 +315,10 @@ pub async fn run_api_server(
 async fn authorize_api_request(
     headers: &HeaderMap,
     auth_validator: &AuthValidator,
-) -> Result<(), String> {
+) -> Result<AuthenticatedPrincipal, String> {
     let token = extract_bearer_token(headers).ok_or_else(|| "missing bearer token".to_string())?;
     auth_validator
-        .validate_token(token)
+        .authenticate(token)
         .await
         .map_err(|error| format!("invalid bearer token: {error}"))
 }
@@ -205,3 +330,72 @@ fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
         .ok()?;
     value.strip_prefix("Bearer ")
 }
+
+fn build_api_router(state: Arc<ApiState>) -> Router {
+    Router::new()
+        .route("/api/v1/sessions", post(create_session).get(list_sessions))
+        .route(
+            "/api/v1/sessions/{session_id}",
+            get(get_session).delete(delete_session),
+        )
+        .route("/api/session/status", get(session_status))
+        .route("/api/session/mcp-owner", post(set_mcp_owner))
+        .route("/api/session/mcp-owner", delete(clear_mcp_owner))
+        .with_state(state)
+}
+
+fn resolve_owner_mode(
+    state: &ApiState,
+    requested: Option<SessionOwnerMode>,
+) -> Result<SessionOwnerMode, (StatusCode, Json<ErrorResponse>)> {
+    let resolved = requested.unwrap_or(state.default_owner_mode);
+    if resolved != state.default_owner_mode {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "owner_mode {} is not supported by the current gateway runtime",
+                    resolved.as_str()
+                ),
+            }),
+        ));
+    }
+    Ok(resolved)
+}
+
+fn map_session_store_error(error: SessionStoreError) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        SessionStoreError::ActiveSessionConflict => (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+        SessionStoreError::InvalidRequest(_) => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+        SessionStoreError::Backend(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+    }
+}
+
+async fn runtime_is_currently_in_use(state: &ApiState) -> bool {
+    let Some(snapshot) = state
+        .registry
+        .telemetry_snapshot_if_live(&state.agent_socket_path)
+        .await
+    else {
+        return false;
+    };
+    snapshot.browser_clients > 0 || snapshot.viewer_clients > 0 || snapshot.mcp_owner
+}
+
+#[cfg(test)]
+mod tests;

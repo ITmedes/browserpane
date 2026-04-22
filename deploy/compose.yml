@@ -12,13 +12,32 @@
 #   --ignore-certificate-errors-spki-list=$(curl -fsS http://localhost:8080/cert-fingerprint)
 #
 # Services:
-#   host     - Linux host agent (Xvfb + xterm)
-#   gateway  - WebTransport relay (port 4433)
-#   web      - nginx frontend (port 8080)
-#   keycloak - local OIDC provider for dev/testing (port 8091)
+#   host      - Linux host agent (Xvfb + xterm)
+#   gateway   - WebTransport relay (port 4433)
+#   web       - nginx frontend (port 8080)
+#   keycloak  - local OIDC provider for dev/testing (port 8091)
+#   postgres  - session control-plane database
 #   mcp-bridge - MCP SSE server for Claude Code (port 8931)
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: browserpane
+      POSTGRES_USER: browserpane
+      POSTGRES_PASSWORD: browserpane-dev
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U browserpane -d browserpane"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - bpane-postgres-data:/var/lib/postgresql/data
+    networks:
+      - bpane-internal
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.2
     command:
@@ -109,17 +128,24 @@ services:
       --oidc-issuer http://localhost:8091/realms/browserpane-dev
       --oidc-audience bpane-gateway
       --oidc-jwks-url http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/certs
+      --database-url postgres://browserpane:browserpane-dev@postgres:5432/browserpane
+      --public-gateway-url https://localhost:4433
       --cert /certs/cert.pem
       --key /certs/cert.key
     ports:
       - "4433:4433/udp"
       - "4433:4433/tcp"
+      - "8932:8932/tcp"
     volumes:
       - agent-socket:/run/bpane
       - ../dev/certs:/certs:ro
     depends_on:
-      - host
-      - keycloak
+      host:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     networks:
       - bpane-internal
 
@@ -169,6 +195,7 @@ services:
 
 volumes:
   agent-socket:
+  bpane-postgres-data:
 
 networks:
   bpane-internal:

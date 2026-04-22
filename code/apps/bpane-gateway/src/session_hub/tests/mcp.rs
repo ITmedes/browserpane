@@ -37,12 +37,9 @@ async fn clear_mcp_owner_restores_normal_behavior() {
 
     hub.set_mcp_owner(1920, 1080).await;
     assert_eq!(
-        tokio::time::timeout(
-            std::time::Duration::from_secs(1),
-            browser.control_rx.recv(),
-        )
-        .await
-        .unwrap(),
+        tokio::time::timeout(std::time::Duration::from_secs(1), browser.control_rx.recv(),)
+            .await
+            .unwrap(),
         Some(ControlMessage::ClientAccessState {
             flags: ClientAccessFlags::VIEW_ONLY | ClientAccessFlags::RESIZE_LOCKED,
             width: 1920,

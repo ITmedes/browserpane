@@ -33,6 +33,8 @@ The default local runtime looks like this:
 ```text
 browser client <-> bpane-gateway <-> bpane-host <-> Chromium inside Linux container
                        |
+                       +-> postgres
+                       |
                        +-> mcp-bridge
 ```
 
@@ -87,7 +89,8 @@ Then open `http://localhost:8080` in Chromium.
 The compose stack starts:
 
 - `host`: Linux host runtime with Xorg dummy, Openbox, Chromium, and `bpane-host`
-- `gateway`: WebTransport relay on `:4433` and HTTP API on `:8932`
+- `gateway`: WebTransport relay on `:4433` and HTTP APIs on `:8932`
+- `postgres`: session-control database on `:5433`
 - `keycloak`: local OIDC provider on `:8091`
 - `web`: local frontend on `:8080`
 - `mcp-bridge`: MCP bridge on `:8931`
@@ -109,6 +112,23 @@ http://localhost:8080/cert-fingerprint
 ```
 
 `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem` for CLI use.
+
+### Session Control Plane
+
+The local stack now includes a Phase 0 session control plane in `bpane-gateway`.
+
+- `POST /api/v1/sessions`
+- `GET /api/v1/sessions`
+- `GET /api/v1/sessions/{id}`
+- `DELETE /api/v1/sessions/{id}`
+
+These endpoints are bearer-protected, owner-scoped, and stored in Postgres.
+
+Current limitation:
+
+- the public session resource model is now versioned and persistent
+- the actual runtime is still in `legacy_single_runtime` compatibility mode
+- so only one active BrowserPane session can exist at a time until the later multi-session host/gateway phases land
 
 ### Build And Test Without Running The Full Stack
 
@@ -152,6 +172,7 @@ cd code/tests/e2e && npm test
 - In the local compose stack, those tokens come from the Keycloak realm on `:8091`.
 - The gateway supports OIDC/JWT validation with issuer, audience, and JWKS configuration.
 - `mcp-bridge` uses OIDC client-credentials to call the gateway HTTP API.
+- The versioned session API is owner-scoped off those bearer-token identities.
 - The old shared dev-token file flow is no longer the default local path.
 
 ## Documentation Policy
