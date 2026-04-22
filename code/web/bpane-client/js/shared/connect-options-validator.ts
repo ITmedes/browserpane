@@ -3,6 +3,7 @@ import { ValidationError } from './errors.js';
 interface ConnectOptionsLike {
   container?: unknown;
   gatewayUrl?: unknown;
+  accessToken?: unknown;
   token?: unknown;
 }
 
@@ -20,10 +21,15 @@ export class SessionConnectOptionsValidator {
         'BpaneSession.connect requires a non-empty gatewayUrl',
       );
     }
-    if (typeof options.token !== 'string' || options.token.trim() === '') {
+    const accessToken = typeof options.accessToken === 'string'
+      ? options.accessToken
+      : typeof options.token === 'string'
+        ? options.token
+        : null;
+    if (typeof accessToken !== 'string' || accessToken.trim() === '') {
       throw new ValidationError(
-        'bpane.connect.invalid_token',
-        'BpaneSession.connect requires a non-empty token',
+        'bpane.connect.invalid_access_token',
+        'BpaneSession.connect requires a non-empty accessToken',
       );
     }
   }

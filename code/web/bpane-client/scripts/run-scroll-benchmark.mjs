@@ -32,6 +32,7 @@ const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
   gatewayStatusUrl: 'http://localhost:8932/api/session/status',
   hostCdpUrl: process.env.BPANE_BENCHMARK_HOST_CDP ?? '',
+  certSpki: process.env.BPANE_BENCHMARK_CERT_SPKI ?? '',
   remoteUrl: '',
   hostWindowWidth: 1600,
   hostWindowHeight: 1000,
@@ -76,6 +77,9 @@ function parseArgs(argv) {
       i++;
     } else if (arg === '--host-cdp-url' && next) {
       options.hostCdpUrl = next;
+      i++;
+    } else if (arg === '--cert-spki' && next) {
+      options.certSpki = next;
       i++;
     } else if (arg === '--remote-url' && next) {
       options.remoteUrl = next;
@@ -152,6 +156,7 @@ Options:
   --page-url <url>            Local dev page URL (default: ${DEFAULTS.pageUrl})
   --gateway-status-url <url>  Gateway status API URL (default: ${DEFAULTS.gatewayStatusUrl})
   --host-cdp-url <url>        Host Chromium CDP endpoint
+  --cert-spki <base64>        SPKI pin for the local gateway cert
   --remote-url <url>          Remote page URL to open in host Chromium before the run
   --host-window-width <px>    Host Chromium window width (default: ${DEFAULTS.hostWindowWidth})
   --host-window-height <px>   Host Chromium window height (default: ${DEFAULTS.hostWindowHeight})
@@ -172,6 +177,7 @@ Options:
 Environment:
   BPANE_BENCHMARK_CHROME      Explicit Chrome/Chromium executable path
   BPANE_BENCHMARK_HOST_CDP    Default host Chromium CDP endpoint
+  BPANE_BENCHMARK_CERT_SPKI   Default SPKI pin for the local gateway cert
 
 Notes:
   Profiles:
@@ -194,16 +200,34 @@ async function resolveChromeExecutable() {
   );
 }
 
+async function resolveCertSpki(options) {
+  if (options.certSpki?.trim()) {
+    return options.certSpki.trim();
+  }
+  try {
+    const value = await fs.readFile(
+      new URL('../../../../dev/certs/cert-fingerprint.txt', import.meta.url),
+      'utf8',
+    );
+    return value.trim();
+  } catch {
+    return '';
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchGatewayStatus(options) {
+async function fetchGatewayStatus(options, accessToken = '') {
   if (!options.gatewayStatusUrl) {
     return null;
   }
+  const headers = accessToken
+    ? { Authorization: `Bearer ${accessToken}` }
+    : {};
   try {
-    const response = await fetch(options.gatewayStatusUrl);
+    const response = await fetch(options.gatewayStatusUrl, { headers });
     if (!response.ok) {
       throw new Error(`status ${response.status}`);
     }
@@ -212,7 +236,7 @@ async function fetchGatewayStatus(options) {
     const fallbackUrl = await resolveGatewayContainerStatusUrl(options.gatewayStatusUrl);
     if (fallbackUrl) {
       try {
-        const response = await fetch(fallbackUrl);
+        const response = await fetch(fallbackUrl, { headers });
         if (!response.ok) {
           throw new Error(`status ${response.status}`);
         }
@@ -313,6 +337,54 @@ async function configurePage(page, options) {
   await page.locator('#hidpi-toggle').setChecked(options.hiDpi);
 }
 
+async function fetchAuthConfig(options) {
+  try {
+    const response = await fetch(new URL('/auth-config.json', options.pageUrl));
+    if (!response.ok) {
+      return null;
+    }
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+async function ensureLoggedIn(page, options) {
+  const authConfig = await fetchAuthConfig(options);
+  if (!authConfig || authConfig.mode !== 'oidc') {
+    return null;
+  }
+
+  const state = await page.evaluate(() => ({
+    configured: window.__bpaneAuth?.isConfigured?.() ?? false,
+    authenticated: window.__bpaneAuth?.isAuthenticated?.() ?? false,
+    exampleUser: window.__bpaneAuth?.getExampleUser?.() ?? null,
+  }));
+  if (!state.configured || state.authenticated) {
+    return authConfig;
+  }
+
+  const exampleUser = state.exampleUser;
+  if (!exampleUser?.username || !exampleUser?.password) {
+    throw new Error('OIDC auth is enabled, but no example user is configured for benchmark login.');
+  }
+
+  await page.click('#btn-login');
+  await page.waitForURL(/openid-connect|keycloak|realms/i, { timeout: options.connectTimeoutMs });
+  await page.locator('input[name="username"], #username').fill(exampleUser.username);
+  await page.locator('input[name="password"], #password').fill(exampleUser.password);
+  await page.locator('input[type="submit"], #kc-login').click();
+  const pageUrl = new URL(options.pageUrl);
+  const targetPrefix = `${pageUrl.origin}${pageUrl.pathname}`;
+  await page.waitForURL(new RegExp(`^${targetPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), {
+    timeout: options.connectTimeoutMs,
+  });
+  await page.waitForFunction(() => window.__bpaneAuth?.isAuthenticated?.() === true, {
+    timeout: options.connectTimeoutMs,
+  });
+  return authConfig;
+}
+
 async function connectSession(page, options) {
   await page.click('#btn-connect');
   await page.waitForFunction(
@@ -355,16 +427,21 @@ async function runScrollSequence(page, options) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const executablePath = await resolveChromeExecutable();
+  const certSpki = await resolveCertSpki(options);
   const remotePage = await setRemotePage(options);
+  const chromeArgs = [
+    '--origin-to-force-quic-on=localhost:4433',
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows',
+  ];
+  if (certSpki) {
+    chromeArgs.push(`--ignore-certificate-errors-spki-list=${certSpki}`);
+  }
   const browser = await chromium.launch({
     headless: options.headless,
     executablePath,
-    args: [
-      '--origin-to-force-quic-on=localhost:4433',
-      '--disable-background-timer-throttling',
-      '--disable-renderer-backgrounding',
-      '--disable-backgrounding-occluded-windows',
-    ],
+    args: chromeArgs,
   });
 
   let page;
@@ -382,6 +459,7 @@ async function main() {
     });
 
     await configurePage(page, options);
+    await ensureLoggedIn(page, options);
     await connectSession(page, options);
     await sleep(options.settleMs);
 
@@ -397,7 +475,10 @@ async function main() {
       window.__bpaneBenchmarkMetrics.stopSample();
       return window.__bpaneBenchmarkMetrics.getSummary();
     });
-    const gatewayStatus = await fetchGatewayStatus(options);
+    const gatewayAccessToken = await page.evaluate(
+      async () => await window.__bpaneAuth?.getAccessToken?.(),
+    );
+    const gatewayStatus = await fetchGatewayStatus(options, gatewayAccessToken ?? '');
 
     if (!summary) {
       throw new Error('Benchmark summary was empty.');
@@ -410,6 +491,7 @@ async function main() {
         pageUrl: options.pageUrl,
         gatewayStatusUrl: options.gatewayStatusUrl || null,
         hostCdpUrl: options.hostCdpUrl || null,
+        certSpki: certSpki || null,
         remoteUrl: options.remoteUrl || null,
         hostWindowWidth: options.hostWindowWidth,
         hostWindowHeight: options.hostWindowHeight,

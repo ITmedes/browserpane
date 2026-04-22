@@ -404,7 +404,7 @@ describe('BpaneSession', () => {
       expect(globalThis.WebTransport).toHaveBeenCalledOnce();
       const [url, opts] = (globalThis.WebTransport as ReturnType<typeof vi.fn>).mock.calls[0];
       // URL includes token and a unique nonce to prevent QUIC connection pooling
-      expect(url).toMatch(/^https:\/\/localhost:4433\?token=test-token&_=\d+\.\w+$/);
+      expect(url).toMatch(/^https:\/\/localhost:4433\?access_token=test-token&_=\d+\.\w+$/);
       expect(opts).toEqual({});
     });
 
@@ -1255,8 +1255,8 @@ describe('BpaneSession', () => {
 
       expect(error).toBeInstanceOf(ValidationError);
       expect(error).toMatchObject({
-        code: 'bpane.connect.invalid_token',
-        message: 'BpaneSession.connect requires a non-empty token',
+        code: 'bpane.connect.invalid_access_token',
+        message: 'BpaneSession.connect requires a non-empty accessToken',
       });
     });
 

@@ -20,14 +20,14 @@ const MAX_CONCURRENT_SESSIONS: u64 = 100;
 
 use self::request::{validate_request_path, RequestValidationError};
 use self::session_task::handle_session;
-use crate::auth::TokenValidator;
+use crate::auth::AuthValidator;
 use crate::session_registry::SessionRegistry;
 
 pub struct TransportServer {
     bind_addr: SocketAddr,
     identity: Identity,
     agent_socket_path: String,
-    token_validator: Arc<TokenValidator>,
+    auth_validator: Arc<AuthValidator>,
     heartbeat_timeout: Duration,
     registry: Arc<SessionRegistry>,
 }
@@ -37,7 +37,7 @@ impl TransportServer {
         bind_addr: SocketAddr,
         identity: Identity,
         agent_socket_path: String,
-        token_validator: Arc<TokenValidator>,
+        auth_validator: Arc<AuthValidator>,
         heartbeat_timeout: Duration,
         registry: Arc<SessionRegistry>,
     ) -> Self {
@@ -45,7 +45,7 @@ impl TransportServer {
             bind_addr,
             identity,
             agent_socket_path,
-            token_validator,
+            auth_validator,
             heartbeat_timeout,
             registry,
         }
@@ -82,7 +82,7 @@ impl TransportServer {
             }
 
             let path = session_request.path().to_string();
-            match validate_request_path(&path, &self.token_validator) {
+            match validate_request_path(&path, &self.auth_validator).await {
                 Ok(()) => {}
                 Err(RequestValidationError::InvalidToken(e)) => {
                     warn!("token validation failed: {e}");

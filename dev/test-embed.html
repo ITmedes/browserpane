@@ -110,11 +110,20 @@
     .log-panel .log-error { color: #ff6b6b; }
     .log-panel .log-warn { color: #ffd93d; }
     .log-panel .log-ok { color: #6bff6b; }
-    .token-display {
+    .auth-display {
       font-family: monospace;
       font-size: 11px;
       color: #888;
-      max-width: 200px;
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .auth-hint {
+      font-family: monospace;
+      font-size: 11px;
+      color: #8fa3d1;
+      max-width: 360px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -168,8 +177,11 @@
   <header>
     <h1>BrowserPane Test</h1>
     <span id="status" class="status disconnected">Disconnected</span>
-    <span id="token-display" class="token-display"></span>
+    <span id="auth-display" class="auth-display">Auth: --</span>
+    <span id="auth-hint" class="auth-hint"></span>
     <div class="controls">
+      <button id="btn-login">Login</button>
+      <button id="btn-logout" disabled>Logout</button>
       <button id="btn-connect">Connect</button>
       <button id="btn-disconnect" disabled>Disconnect</button>
       <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
@@ -279,6 +291,8 @@
     const metricsStopBtn = document.getElementById('btn-metrics-stop');
     const metricsCopyBtn = document.getElementById('btn-metrics-copy');
     const metricsResetBtn = document.getElementById('btn-metrics-reset');
+    const loginBtn = document.getElementById('btn-login');
+    const logoutBtn = document.getElementById('btn-logout');
     const renderBackendSelect = document.getElementById('render-backend-select');
     const hidpiToggle = document.getElementById('hidpi-toggle');
     const scrollCopyToggle = document.getElementById('scroll-copy-toggle');
@@ -288,7 +302,8 @@
     const uploadBtn = document.getElementById('btn-upload');
     const overlay = document.getElementById('overlay');
     const logPanel = document.getElementById('log-panel');
-    const tokenDisplay = document.getElementById('token-display');
+    const authDisplay = document.getElementById('auth-display');
+    const authHint = document.getElementById('auth-hint');
     let logsVisible = false;
 
     // ── Logging ─────────────────────────────────────────────────────
@@ -812,28 +827,313 @@
       }
     }
 
-    // ── Token fetch ─────────────────────────────────────────────────
-    async function fetchToken() {
-      try {
-        const resp = await fetch('/token');
-        if (resp.ok) {
-          const token = (await resp.text()).trim();
-          if (token.length > 10) {
-            log(`Token loaded from server (${token.length} chars)`, 'ok');
-            tokenDisplay.textContent = `Token: ${token.slice(0, 20)}...`;
-            return token;
-          }
-        }
-      } catch (e) { /* not available */ }
+    // ── Auth state ──────────────────────────────────────────────────
+    const AUTH_CONFIG_URL = '/auth-config.json';
+    const AUTH_STORAGE_KEY = 'bpane.auth.tokens.v1';
+    const AUTH_PKCE_KEY = 'bpane.auth.pkce.v1';
+    const authState = {
+      config: null,
+      metadata: null,
+      tokens: null,
+      claims: null,
+      initialized: false,
+    };
 
-      log('No server token found, prompting user', 'warn');
-      const token = prompt(
-        'Enter the gateway dev token.\n' +
-        'Find it in the gateway logs:\n' +
-        '  docker compose -f deploy/compose.yml logs gateway | grep "dev token"'
+    function buildRedirectUri() {
+      return `${window.location.origin}${window.location.pathname}`;
+    }
+
+    function base64UrlEncode(bytes) {
+      let binary = '';
+      for (const value of bytes) {
+        binary += String.fromCharCode(value);
+      }
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    }
+
+    function randomString(byteLength = 32) {
+      const bytes = new Uint8Array(byteLength);
+      crypto.getRandomValues(bytes);
+      return base64UrlEncode(bytes);
+    }
+
+    async function sha256Base64Url(input) {
+      const bytes = new TextEncoder().encode(input);
+      const hash = await crypto.subtle.digest('SHA-256', bytes);
+      return base64UrlEncode(new Uint8Array(hash));
+    }
+
+    function parseJwtClaims(token) {
+      if (!token || typeof token !== 'string') {
+        return null;
+      }
+      const parts = token.split('.');
+      if (parts.length < 2) {
+        return null;
+      }
+      try {
+        const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const decoded = atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, '='));
+        return JSON.parse(decoded);
+      } catch {
+        return null;
+      }
+    }
+
+    function saveAuthTokens(tokens) {
+      authState.tokens = {
+        ...tokens,
+        expiresAtMs: Date.now() + Math.max(30, tokens.expires_in ?? 60) * 1000,
+      };
+      authState.claims = parseJwtClaims(authState.tokens.id_token) ?? parseJwtClaims(authState.tokens.access_token);
+      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authState.tokens));
+    }
+
+    function clearAuthTokens() {
+      authState.tokens = null;
+      authState.claims = null;
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+
+    function loadStoredAuthTokens() {
+      try {
+        const raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
+        if (!raw) {
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (parsed?.access_token) {
+          authState.tokens = parsed;
+          authState.claims = parseJwtClaims(parsed.id_token) ?? parseJwtClaims(parsed.access_token);
+        }
+      } catch {
+        clearAuthTokens();
+      }
+    }
+
+    function getExampleUserLabel() {
+      const example = authState.config?.exampleUser;
+      if (!example?.username) {
+        return '';
+      }
+      return `Example user: ${example.username}${example.password ? ` / ${example.password}` : ''}`;
+    }
+
+    function renderAuthState() {
+      const claims = authState.claims;
+      const config = authState.config;
+      const username =
+        claims?.preferred_username ??
+        claims?.email ??
+        config?.exampleUser?.username ??
+        claims?.sub ??
+        '--';
+      const canConnect = config?.mode === 'oidc'
+        ? Boolean(authState.tokens?.access_token) && !session
+        : false;
+      if (config?.mode === 'oidc') {
+        if (authState.tokens?.access_token) {
+          authDisplay.textContent = `Auth: logged in as ${username}`;
+        } else {
+          authDisplay.textContent = 'Auth: login required';
+        }
+        authHint.textContent = getExampleUserLabel();
+        loginBtn.disabled = Boolean(authState.tokens?.access_token);
+        logoutBtn.disabled = !authState.tokens?.access_token;
+      } else {
+        authDisplay.textContent = 'Auth: disabled';
+        authHint.textContent = '';
+        loginBtn.disabled = true;
+        logoutBtn.disabled = true;
+      }
+      connectBtn.disabled = !canConnect;
+      disconnectBtn.disabled = !session;
+    }
+
+    async function fetchAuthConfig() {
+      try {
+        const response = await fetch(`${AUTH_CONFIG_URL}?_=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) {
+          return null;
+        }
+        const config = await response.json();
+        if (!config?.mode || config.mode === 'disabled') {
+          return null;
+        }
+        return config;
+      } catch {
+        return null;
+      }
+    }
+
+    async function fetchOidcMetadata() {
+      if (!authState.config?.issuer) {
+        return null;
+      }
+      if (authState.metadata) {
+        return authState.metadata;
+      }
+      const issuer = authState.config.issuer.replace(/\/$/, '');
+      const response = await fetch(
+        `${issuer}/.well-known/openid-configuration`,
+        { cache: 'no-store' },
       );
-      if (token) tokenDisplay.textContent = `Token: ${token.slice(0, 20)}...`;
-      return token;
+      if (!response.ok) {
+        throw new Error(`OIDC discovery failed with status ${response.status}`);
+      }
+      authState.metadata = await response.json();
+      return authState.metadata;
+    }
+
+    async function beginLogin() {
+      if (!authState.config || authState.config.mode !== 'oidc') {
+        log('OIDC auth is not configured for this page.', 'warn');
+        return;
+      }
+      const metadata = await fetchOidcMetadata();
+      const verifier = randomString(48);
+      const challenge = await sha256Base64Url(verifier);
+      const state = randomString(24);
+      sessionStorage.setItem(AUTH_PKCE_KEY, JSON.stringify({
+        verifier,
+        state,
+        redirectUri: buildRedirectUri(),
+      }));
+      const url = new URL(metadata.authorization_endpoint);
+      url.searchParams.set('client_id', authState.config.clientId);
+      url.searchParams.set('redirect_uri', buildRedirectUri());
+      url.searchParams.set('response_type', 'code');
+      url.searchParams.set('scope', authState.config.scope ?? 'openid');
+      url.searchParams.set('state', state);
+      url.searchParams.set('code_challenge', challenge);
+      url.searchParams.set('code_challenge_method', 'S256');
+      window.location.assign(url.toString());
+    }
+
+    async function completeLoginIfNeeded() {
+      if (!authState.config || authState.config.mode !== 'oidc') {
+        return false;
+      }
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (!code) {
+        return false;
+      }
+      const returnedState = params.get('state');
+      const rawPkce = sessionStorage.getItem(AUTH_PKCE_KEY);
+      if (!rawPkce) {
+        throw new Error('Missing PKCE login state');
+      }
+      const pkce = JSON.parse(rawPkce);
+      if (pkce.state !== returnedState) {
+        throw new Error('OIDC state mismatch');
+      }
+
+      const metadata = await fetchOidcMetadata();
+      const body = new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: authState.config.clientId,
+        code,
+        redirect_uri: pkce.redirectUri,
+        code_verifier: pkce.verifier,
+      });
+      const response = await fetch(metadata.token_endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+      if (!response.ok) {
+        throw new Error(`OIDC code exchange failed with status ${response.status}`);
+      }
+      const tokens = await response.json();
+      saveAuthTokens(tokens);
+      sessionStorage.removeItem(AUTH_PKCE_KEY);
+      history.replaceState({}, '', buildRedirectUri());
+      return true;
+    }
+
+    async function refreshAccessToken() {
+      if (!authState.tokens?.refresh_token) {
+        clearAuthTokens();
+        renderAuthState();
+        return null;
+      }
+      const metadata = await fetchOidcMetadata();
+      const body = new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: authState.config.clientId,
+        refresh_token: authState.tokens.refresh_token,
+      });
+      const response = await fetch(metadata.token_endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+      if (!response.ok) {
+        clearAuthTokens();
+        renderAuthState();
+        return null;
+      }
+      const tokens = await response.json();
+      saveAuthTokens({
+        ...authState.tokens,
+        ...tokens,
+      });
+      renderAuthState();
+      return authState.tokens.access_token;
+    }
+
+    async function getValidAccessToken() {
+      if (!authState.tokens?.access_token) {
+        return null;
+      }
+      if (Date.now() < (authState.tokens.expiresAtMs ?? 0) - 60_000) {
+        return authState.tokens.access_token;
+      }
+      return refreshAccessToken();
+    }
+
+    async function logout() {
+      const idToken = authState.tokens?.id_token ?? '';
+      clearAuthTokens();
+      renderAuthState();
+      if (session) {
+        disconnect();
+      }
+      if (authState.config?.mode !== 'oidc') {
+        return;
+      }
+      const metadata = await fetchOidcMetadata();
+      if (!metadata?.end_session_endpoint) {
+        history.replaceState({}, '', buildRedirectUri());
+        return;
+      }
+      const url = new URL(metadata.end_session_endpoint);
+      url.searchParams.set('post_logout_redirect_uri', buildRedirectUri());
+      if (authState.config.clientId) {
+        url.searchParams.set('client_id', authState.config.clientId);
+      }
+      if (idToken) {
+        url.searchParams.set('id_token_hint', idToken);
+      }
+      window.location.assign(url.toString());
+    }
+
+    async function initializeAuth() {
+      authState.config = await fetchAuthConfig();
+      loadStoredAuthTokens();
+      await completeLoginIfNeeded().catch((error) => {
+        clearAuthTokens();
+        log(`Login failed: ${error.message}`, 'error');
+      });
+      renderAuthState();
+      authState.initialized = true;
+      window.__bpaneAuth = {
+        isConfigured: () => authState.config?.mode === 'oidc',
+        isAuthenticated: () => Boolean(authState.tokens?.access_token),
+        getExampleUser: () => authState.config?.exampleUser ?? null,
+        getAccessToken: () => getValidAccessToken(),
+      };
     }
 
     // ── Session state ───────────────────────────────────────────────
@@ -864,11 +1164,10 @@
     };
 
     async function connect() {
-      setStatus('Fetching token...', 'connecting');
-      const token = await fetchToken();
-      if (!token) {
-        setStatus('No token', 'error');
-        log('Connection cancelled: no token provided', 'error');
+      const accessToken = await getValidAccessToken();
+      if (!accessToken) {
+        setStatus('Login required', 'error');
+        log('Connection cancelled: no access token available', 'error');
         return;
       }
 
@@ -884,7 +1183,7 @@
         session = await BpaneSession.connect({
           container,
           gatewayUrl: `${GATEWAY_URL}/session`,
-          token,
+          accessToken,
           renderBackend: renderBackendSelect.value,
           hiDpi: hidpiToggle.checked,
           scrollCopy: scrollCopyToggle.checked,
@@ -896,8 +1195,7 @@
           onConnect: () => {
             log('Connected', 'ok');
             setStatus('Connected', 'connected');
-            connectBtn.disabled = true;
-            disconnectBtn.disabled = false;
+            renderAuthState();
             cameraBtn.disabled = true;
             micBtn.disabled = false;
             uploadBtn.disabled = false;
@@ -1018,8 +1316,7 @@
             session = null;
             if (overlay) overlay.style.display = '';
             setStatus('Disconnected', 'disconnected');
-            connectBtn.disabled = false;
-            disconnectBtn.disabled = true;
+            renderAuthState();
             cameraBtn.disabled = true;
             micBtn.disabled = true;
             uploadBtn.disabled = true;
@@ -1084,8 +1381,7 @@
       }
       if (overlay) overlay.style.display = '';
       setStatus('Disconnected', 'disconnected');
-      connectBtn.disabled = false;
-      disconnectBtn.disabled = true;
+      renderAuthState();
       cameraBtn.disabled = true;
       micBtn.disabled = true;
       uploadBtn.disabled = true;
@@ -1153,6 +1449,8 @@
     }
 
     // ── Button handlers ─────────────────────────────────────────────
+    loginBtn.addEventListener('click', () => void beginLogin());
+    logoutBtn.addEventListener('click', () => void logout());
     connectBtn.addEventListener('click', connect);
     disconnectBtn.addEventListener('click', () => doDisconnect());
     metricsStartBtn.addEventListener('click', startBenchmarkSample);
@@ -1184,9 +1482,14 @@
 
     // ── Startup ─────────────────────────────────────────────────────
     renderBenchmarkMetrics();
+    await initializeAuth();
     log(`Gateway target: ${GATEWAY_URL}`);
     log('Benchmark metrics API: window.__bpaneBenchmarkMetrics.{startSample,stopSample,resetSample,getSummary}', 'info');
-    log('Ready. Click "Connect" to start.');
+    if (authState.config?.mode === 'oidc') {
+      log(`OIDC login configured for issuer ${authState.config.issuer}`, 'info');
+      log(`Example user: ${getExampleUserLabel() || 'none configured'}`, 'info');
+    }
+    log('Ready. Login, then click "Connect" to start.');
   </script>
 </body>
 </html>

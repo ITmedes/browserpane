@@ -1,0 +1,11 @@
+{
+  "mode": "${BPANE_AUTH_MODE}",
+  "providerHint": "${BPANE_OIDC_PROVIDER_HINT}",
+  "issuer": "${BPANE_OIDC_ISSUER}",
+  "clientId": "${BPANE_OIDC_CLIENT_ID}",
+  "scope": "${BPANE_OIDC_SCOPE}",
+  "exampleUser": {
+    "username": "${BPANE_OIDC_EXAMPLE_USERNAME}",
+    "password": "${BPANE_OIDC_EXAMPLE_PASSWORD}"
+  }
+}

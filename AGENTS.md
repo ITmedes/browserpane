@@ -67,6 +67,7 @@ Current product shape:
   - SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
+  - Local auth in compose is OIDC via Keycloak on `:8091`.
 
 ## Protocol and media facts
 
@@ -114,8 +115,9 @@ Run these where applicable:
 1. `./deploy/gen-dev-cert.sh dev/certs`
 2. `docker compose -f deploy/compose.yml up --build`
 3. Open `http://localhost:8080` in Chromium.
-4. If needed, use the SPKI fingerprint in `dev/certs/cert-fingerprint.txt` so Chromium trusts the local gateway cert.
-5. `mcp-bridge` listens on `:8931`; the gateway HTTP API listens on `:8932`.
+4. Log in through the local Keycloak realm if prompted.
+5. If needed, use the SPKI fingerprint in `dev/certs/cert-fingerprint.txt` so Chromium trusts the local gateway cert.
+6. `keycloak` listens on `:8091`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
 
 ## Guardrails for contributors and agents
 
