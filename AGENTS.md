@@ -68,7 +68,7 @@ Current product shape:
   - TypeScript package. There is no meaningful Rust browser client crate in the current repo.
 - `code/integrations/mcp-bridge`
   - SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
-  - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its local `/control-session` API, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured.
+  - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its local `/control-session` API, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
@@ -125,7 +125,7 @@ Run these where applicable:
 4. Log in through the local Keycloak realm if prompted.
 5. The test page will resolve or create an owner-scoped `/api/v1/sessions` resource before transport connect.
 6. The test page will mint a short-lived session-scoped connect ticket before WebTransport connect.
-7. Use `Delegate MCP` if you want the local `mcp-bridge` to adopt that same session. This is currently only exposed for `legacy_single_runtime` sessions.
+7. Use `Delegate MCP` if you want the local `mcp-bridge` to adopt that same session.
 8. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
 9. `keycloak` listens on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
 

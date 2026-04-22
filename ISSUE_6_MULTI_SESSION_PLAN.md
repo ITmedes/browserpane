@@ -29,7 +29,8 @@ Completed baseline for the first Phase 0 control-plane slice:
 - those session resources are persisted in Postgres
 - the current resource contract returns session-scoped connect metadata
 - browser transport routing is now keyed by public `session_id` through short-lived connect tickets
-- the actual runtime remains in `legacy_single_runtime` compatibility mode, so only one active runtime-backed session is allowed for now
+- optional docker-backed runtime selection now exists, including `docker_pool` for multiple parallel runtime-backed sessions within configured caps
+- `mcp-bridge` can now adopt a delegated session and resolve its runtime-specific CDP endpoint through the session resource, but each bridge instance still manages one control session at a time
 
 Implication for issue #6:
 

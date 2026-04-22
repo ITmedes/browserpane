@@ -27,6 +27,7 @@ fn test_router() -> (Router, String) {
         runtime_manager: Arc::new(
             SessionRuntimeManager::new(RuntimeManagerConfig::StaticSingle {
                 agent_socket_path: "/tmp/test.sock".to_string(),
+                cdp_endpoint: Some("http://host:9223".to_string()),
                 idle_timeout: Duration::from_secs(300),
             })
             .unwrap(),
@@ -106,6 +107,12 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
         created["connect"]["compatibility_mode"],
         "legacy_single_runtime"
     );
+    assert_eq!(created["runtime"]["binding"], "legacy_single_session");
+    assert_eq!(
+        created["runtime"]["compatibility_mode"],
+        "legacy_single_runtime"
+    );
+    assert_eq!(created["runtime"]["cdp_endpoint"], "http://host:9223");
 
     let list_response = app
         .clone()
@@ -307,6 +314,7 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
         runtime_manager: Arc::new(
             SessionRuntimeManager::new(RuntimeManagerConfig::StaticSingle {
                 agent_socket_path: "/tmp/test.sock".to_string(),
+                cdp_endpoint: Some("http://host:9223".to_string()),
                 idle_timeout: Duration::from_secs(300),
             })
             .unwrap(),
@@ -366,6 +374,7 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
         runtime_manager: Arc::new(
             SessionRuntimeManager::new(RuntimeManagerConfig::StaticSingle {
                 agent_socket_path: "/tmp/test.sock".to_string(),
+                cdp_endpoint: Some("http://host:9223".to_string()),
                 idle_timeout: Duration::from_secs(300),
             })
             .unwrap(),

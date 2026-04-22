@@ -116,6 +116,7 @@ async fn main() -> anyhow::Result<()> {
         match config.runtime_backend.as_str() {
             "static_single" => RuntimeManagerConfig::StaticSingle {
                 agent_socket_path: agent_socket_str,
+                cdp_endpoint: config.runtime_cdp_endpoint.clone(),
                 idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
             },
             "docker_single" => RuntimeManagerConfig::DockerSingle(DockerRuntimeConfig {
@@ -137,6 +138,7 @@ async fn main() -> anyhow::Result<()> {
                 })?,
                 container_name_prefix: config.docker_runtime_container_name_prefix.clone(),
                 socket_root: config.docker_runtime_socket_root.clone(),
+                cdp_proxy_port: config.docker_runtime_cdp_proxy_port,
                 shm_size: config.docker_runtime_shm_size.clone(),
                 start_timeout: Duration::from_secs(config.docker_runtime_start_timeout_secs),
                 idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
@@ -164,6 +166,7 @@ async fn main() -> anyhow::Result<()> {
                 })?,
                 container_name_prefix: config.docker_runtime_container_name_prefix.clone(),
                 socket_root: config.docker_runtime_socket_root.clone(),
+                cdp_proxy_port: config.docker_runtime_cdp_proxy_port,
                 shm_size: config.docker_runtime_shm_size.clone(),
                 start_timeout: Duration::from_secs(config.docker_runtime_start_timeout_secs),
                 idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),

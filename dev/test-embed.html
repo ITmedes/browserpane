@@ -895,7 +895,7 @@
     }
 
     function supportsLocalMcpDelegation(resource) {
-      return resource?.connect?.compatibility_mode === 'legacy_single_runtime';
+      return Boolean(resource?.id);
     }
 
     function renderSessionState() {
@@ -1480,7 +1480,7 @@
       }
       if (!supportsLocalMcpDelegation(controlSession)) {
         throw new Error(
-          'Local MCP bridge delegation is only supported in legacy single-runtime mode right now.',
+          'The selected session cannot be delegated to the local MCP bridge.',
         );
       }
 

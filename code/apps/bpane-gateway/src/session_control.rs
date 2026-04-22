@@ -12,7 +12,7 @@ use tokio_postgres::{Client, Connection, NoTls, Row, Socket};
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
-use crate::runtime_manager::RuntimeProfile;
+use crate::runtime_manager::{RuntimeProfile, RuntimeSessionAccessInfo};
 
 const DEFAULT_VIEWPORT_WIDTH: u16 = 1600;
 const DEFAULT_VIEWPORT_HEIGHT: u16 = 900;
@@ -164,6 +164,23 @@ pub struct SessionConnectInfo {
     pub compatibility_mode: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionRuntimeInfo {
+    pub binding: String,
+    pub compatibility_mode: String,
+    pub cdp_endpoint: Option<String>,
+}
+
+impl From<RuntimeSessionAccessInfo> for SessionRuntimeInfo {
+    fn from(value: RuntimeSessionAccessInfo) -> Self {
+        Self {
+            binding: value.binding,
+            compatibility_mode: value.compatibility_mode,
+            cdp_endpoint: value.cdp_endpoint,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SessionResource {
     pub id: Uuid,
@@ -178,6 +195,7 @@ pub struct SessionResource {
     pub labels: HashMap<String, String>,
     pub integration_context: Option<Value>,
     pub connect: SessionConnectInfo,
+    pub runtime: SessionRuntimeInfo,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub stopped_at: Option<DateTime<Utc>>,
@@ -234,7 +252,7 @@ impl StoredSession {
     pub fn to_resource(
         &self,
         public_gateway_url: &str,
-        compatibility_mode: &str,
+        runtime: SessionRuntimeInfo,
         state_override: Option<SessionLifecycleState>,
     ) -> SessionResource {
         SessionResource {
@@ -254,8 +272,9 @@ impl StoredSession {
                 transport_path: "/session".to_string(),
                 auth_type: "session_connect_ticket".to_string(),
                 ticket_path: Some(format!("/api/v1/sessions/{}/access-tokens", self.id)),
-                compatibility_mode: compatibility_mode.to_string(),
+                compatibility_mode: runtime.compatibility_mode.clone(),
             },
+            runtime,
             created_at: self.created_at,
             updated_at: self.updated_at,
             stopped_at: self.stopped_at,
@@ -299,7 +318,6 @@ pub struct SessionStore {
 #[derive(Debug, Clone)]
 struct SessionStoreConfig {
     runtime_binding: String,
-    compatibility_mode: String,
     max_runtime_candidates: usize,
 }
 
@@ -313,7 +331,6 @@ impl From<RuntimeProfile> for SessionStoreConfig {
     fn from(runtime_profile: RuntimeProfile) -> Self {
         Self {
             runtime_binding: runtime_profile.runtime_binding,
-            compatibility_mode: runtime_profile.compatibility_mode,
             max_runtime_candidates: runtime_profile.max_runtime_sessions,
         }
     }
@@ -362,13 +379,6 @@ impl SessionStore {
         Ok(Self {
             backend: SessionStoreBackend::Postgres(Arc::new(store)),
         })
-    }
-
-    pub fn compatibility_mode(&self) -> &str {
-        match &self.backend {
-            SessionStoreBackend::InMemory(store) => &store.config.compatibility_mode,
-            SessionStoreBackend::Postgres(store) => &store.config.compatibility_mode,
-        }
     }
 
     pub async fn create_session(
