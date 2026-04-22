@@ -1,6 +1,7 @@
 mod api;
 mod auth;
 mod config;
+mod connect_ticket;
 mod relay;
 mod session;
 mod session_control;
@@ -19,6 +20,7 @@ use wtransport::Identity;
 
 use auth::{AuthValidator, OidcConfig};
 use config::Config;
+use connect_ticket::SessionConnectTicketManager;
 use session_control::{SessionOwnerMode, SessionStore};
 use session_registry::SessionRegistry;
 use transport::TransportServer;
@@ -32,6 +34,24 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = Config::parse();
+
+    let shared_secret = match &config.hmac_secret {
+        Some(hex_secret) => {
+            let decoded = hex::decode(hex_secret)?;
+            if decoded.len() < 16 {
+                anyhow::bail!(
+                    "HMAC secret must be at least 16 bytes (32 hex chars), got {}",
+                    decoded.len()
+                );
+            }
+            decoded
+        }
+        None => {
+            let mut secret = vec![0u8; 32];
+            rand::fill(&mut secret[..]);
+            secret
+        }
+    };
 
     let auth_validator = Arc::new(if let Some(issuer) = &config.oidc_issuer {
         let audience = config.oidc_audience.clone().ok_or_else(|| {
@@ -48,25 +68,7 @@ async fn main() -> anyhow::Result<()> {
         })
         .await?
     } else {
-        let hmac_secret = match &config.hmac_secret {
-            Some(hex_secret) => {
-                let decoded = hex::decode(hex_secret)?;
-                if decoded.len() < 16 {
-                    anyhow::bail!(
-                        "HMAC secret must be at least 16 bytes (32 hex chars), got {}",
-                        decoded.len()
-                    );
-                }
-                decoded
-            }
-            None => {
-                let mut secret = vec![0u8; 32];
-                rand::fill(&mut secret[..]);
-                secret
-            }
-        };
-
-        let validator = AuthValidator::from_hmac_secret(hmac_secret);
+        let validator = AuthValidator::from_hmac_secret(shared_secret.clone());
         if let Some(token) = validator.generate_token() {
             info!("generated dev token: {token}");
             if let Some(path) = &config.token_file {
@@ -76,6 +78,11 @@ async fn main() -> anyhow::Result<()> {
         }
         validator
     });
+
+    let connect_ticket_manager = Arc::new(SessionConnectTicketManager::new(
+        shared_secret,
+        Duration::from_secs(config.session_ticket_ttl_secs),
+    ));
 
     // Load or generate TLS identity
     let identity = match (&config.cert, &config.key) {
@@ -116,6 +123,7 @@ async fn main() -> anyhow::Result<()> {
         identity,
         agent_socket_str.clone(),
         auth_validator.clone(),
+        connect_ticket_manager.clone(),
         Duration::from_secs(config.heartbeat_timeout_secs),
         registry.clone(),
     );
@@ -136,6 +144,7 @@ async fn main() -> anyhow::Result<()> {
             api_bind_addr,
             registry,
             auth_validator,
+            connect_ticket_manager,
             session_store,
             agent_socket_str,
             config.public_gateway_url,

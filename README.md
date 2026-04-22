@@ -106,6 +106,7 @@ The default local auth flow is now OIDC-based:
 - if you want the local `mcp-bridge` to follow that same session, click `Delegate MCP`
 
 `test-embed.html` fetches `/auth-config.json` and performs an Authorization Code + PKCE login. The browser client then connects to the gateway with an OIDC access token.
+Before WebTransport connect, the page now mints a short-lived session-scoped connect ticket from the session API and uses that ticket on the transport URL instead of the long-lived bearer token.
 
 For Chromium, WebTransport still needs trusted TLS on localhost. The current runtime SPKI fingerprint is served at:
 
@@ -128,6 +129,7 @@ These endpoints are bearer-protected, owner-scoped, and stored in Postgres.
 
 The same API surface now also includes session-scoped runtime compatibility routes:
 
+- `POST /api/v1/sessions/{id}/access-tokens`
 - `GET /api/v1/sessions/{id}/status`
 - `POST /api/v1/sessions/{id}/mcp-owner`
 - `DELETE /api/v1/sessions/{id}/mcp-owner`
@@ -137,6 +139,7 @@ The same API surface now also includes session-scoped runtime compatibility rout
 The local dev flow now uses those routes to bridge browser-owned and automation-owned control:
 
 - `test-embed.html` resolves or creates an owner-scoped session before connect
+- it then mints a short-lived `session_connect_ticket` from `POST /api/v1/sessions/{id}/access-tokens`
 - `Delegate MCP` assigns that session to the local `bpane-mcp-bridge` service principal
 - the page then calls `mcp-bridge` on `:8931/control-session` so the bridge adopts that same session for later ownership/status calls
 
@@ -190,6 +193,7 @@ cd code/tests/e2e && npm test
 - The gateway supports OIDC/JWT validation with issuer, audience, and JWKS configuration.
 - `mcp-bridge` uses OIDC client-credentials to call the gateway HTTP API.
 - The versioned session API is owner-scoped off those bearer-token identities.
+- Session-scoped browser transport now uses short-lived signed connect tickets minted from the session API.
 - The old shared dev-token file flow is no longer the default local path.
 
 ## Documentation Policy

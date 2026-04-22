@@ -21,6 +21,7 @@ const MAX_CONCURRENT_SESSIONS: u64 = 100;
 use self::request::{validate_request_path, RequestValidationError};
 use self::session_task::handle_session;
 use crate::auth::AuthValidator;
+use crate::connect_ticket::SessionConnectTicketManager;
 use crate::session_registry::SessionRegistry;
 
 pub struct TransportServer {
@@ -28,6 +29,7 @@ pub struct TransportServer {
     identity: Identity,
     agent_socket_path: String,
     auth_validator: Arc<AuthValidator>,
+    connect_ticket_manager: Arc<SessionConnectTicketManager>,
     heartbeat_timeout: Duration,
     registry: Arc<SessionRegistry>,
 }
@@ -38,6 +40,7 @@ impl TransportServer {
         identity: Identity,
         agent_socket_path: String,
         auth_validator: Arc<AuthValidator>,
+        connect_ticket_manager: Arc<SessionConnectTicketManager>,
         heartbeat_timeout: Duration,
         registry: Arc<SessionRegistry>,
     ) -> Self {
@@ -46,6 +49,7 @@ impl TransportServer {
             identity,
             agent_socket_path,
             auth_validator,
+            connect_ticket_manager,
             heartbeat_timeout,
             registry,
         }
@@ -82,10 +86,17 @@ impl TransportServer {
             }
 
             let path = session_request.path().to_string();
-            match validate_request_path(&path, &self.auth_validator).await {
+            match validate_request_path(&path, &self.auth_validator, &self.connect_ticket_manager)
+                .await
+            {
                 Ok(()) => {}
                 Err(RequestValidationError::InvalidToken(e)) => {
                     warn!("token validation failed: {e}");
+                    session_request.not_found().await;
+                    continue;
+                }
+                Err(RequestValidationError::InvalidSessionTicket(e)) => {
+                    warn!("session ticket validation failed: {e}");
                     session_request.not_found().await;
                     continue;
                 }

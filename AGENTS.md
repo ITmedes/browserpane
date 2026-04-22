@@ -53,7 +53,7 @@ Current product shape:
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
-  - `api.rs`: legacy compatibility endpoints plus `POST/GET/DELETE /api/v1/sessions` and session-scoped `automation-owner`, `status`, and `mcp-owner` routes.
+  - `api.rs`: legacy compatibility endpoints plus `POST/GET/DELETE /api/v1/sessions` and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`
@@ -121,9 +121,10 @@ Run these where applicable:
 3. Open `http://localhost:8080` in Chromium.
 4. Log in through the local Keycloak realm if prompted.
 5. The test page will resolve or create an owner-scoped `/api/v1/sessions` resource before transport connect.
-6. Use `Delegate MCP` if you want the local `mcp-bridge` to adopt that same session.
-7. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
-8. `keycloak` listens on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
+6. The test page will mint a short-lived session-scoped connect ticket before WebTransport connect.
+7. Use `Delegate MCP` if you want the local `mcp-bridge` to adopt that same session.
+8. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
+9. `keycloak` listens on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
 
 ## Guardrails for contributors and agents
 
