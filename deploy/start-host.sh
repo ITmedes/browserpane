@@ -298,4 +298,6 @@ if [ "${BPANE_CHROMIUM_DEBUG_ENABLE:-1}" != "0" ]; then
 fi
 
 # Start the BrowserPane host agent
-exec /usr/local/bin/bpane-host --socket /run/bpane/agent.sock --fps "${BPANE_FPS:-30}"
+BPANE_SOCKET_PATH="${BPANE_SOCKET_PATH:-/run/bpane/agent.sock}"
+mkdir -p "$(dirname "$BPANE_SOCKET_PATH")"
+exec /usr/local/bin/bpane-host --socket "$BPANE_SOCKET_PATH" --fps "${BPANE_FPS:-30}"

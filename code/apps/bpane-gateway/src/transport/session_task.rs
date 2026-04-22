@@ -9,6 +9,7 @@ use super::egress::{spawn_agent_to_browser_task, EgressTaskContext};
 use super::ingress::spawn_browser_to_agent_task;
 use super::request::ValidatedConnectRequest;
 use super::tasks::{spawn_bitrate_hint_task, spawn_direct_control_task, spawn_gateway_pinger};
+use crate::runtime_manager::SessionRuntimeManager;
 use crate::session::Session;
 use crate::session_registry::SessionRegistry;
 
@@ -16,6 +17,7 @@ pub(super) async fn handle_session(
     connection: wtransport::Connection,
     session_id: u64,
     connect_request: ValidatedConnectRequest,
+    runtime_manager: Arc<SessionRuntimeManager>,
     agent_socket_path: &str,
     heartbeat_timeout: Duration,
     registry: Arc<SessionRegistry>,
@@ -102,6 +104,13 @@ pub(super) async fn handle_session(
 
     session.deactivate();
     registry.leave(routed_session_id, client_id).await;
+    if let Some(snapshot) = registry.telemetry_snapshot_if_live(routed_session_id).await {
+        if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
+            runtime_manager.mark_session_idle(routed_session_id).await;
+        }
+    } else {
+        runtime_manager.mark_session_idle(routed_session_id).await;
+    }
 
     connection.close(wtransport::VarInt::from_u32(0), b"session ended");
 

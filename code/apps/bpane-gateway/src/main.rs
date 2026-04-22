@@ -22,7 +22,7 @@ use wtransport::Identity;
 use auth::{AuthValidator, OidcConfig};
 use config::Config;
 use connect_ticket::SessionConnectTicketManager;
-use runtime_manager::SessionRuntimeManager;
+use runtime_manager::{DockerSingleRuntimeConfig, RuntimeManagerConfig, SessionRuntimeManager};
 use session_control::{SessionOwnerMode, SessionStore};
 use session_registry::SessionRegistry;
 use transport::TransportServer;
@@ -119,7 +119,40 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let agent_socket_str = config.agent_socket.to_str().unwrap().to_string();
-    let runtime_manager = Arc::new(SessionRuntimeManager::static_single(agent_socket_str));
+    let runtime_manager = Arc::new(SessionRuntimeManager::new(
+        match config.runtime_backend.as_str() {
+            "static_single" => RuntimeManagerConfig::StaticSingle {
+                agent_socket_path: agent_socket_str,
+                idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
+            },
+            "docker_single" => RuntimeManagerConfig::DockerSingle(DockerSingleRuntimeConfig {
+                docker_bin: config.docker_runtime_bin.clone(),
+                image: config.docker_runtime_image.clone().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--docker-runtime-image is required for --runtime-backend docker_single"
+                    )
+                })?,
+                network: config.docker_runtime_network.clone().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--docker-runtime-network is required for --runtime-backend docker_single"
+                    )
+                })?,
+                shared_run_volume: config.docker_runtime_volume.clone().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--docker-runtime-volume is required for --runtime-backend docker_single"
+                    )
+                })?,
+                container_name: config.docker_runtime_container_name.clone(),
+                socket_root: config.docker_runtime_socket_root.clone(),
+                shm_size: config.docker_runtime_shm_size.clone(),
+                start_timeout: Duration::from_secs(config.docker_runtime_start_timeout_secs),
+                idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
+                seccomp_unconfined: config.docker_runtime_seccomp_unconfined,
+                env_file: config.docker_runtime_env_file.clone(),
+            }),
+            other => anyhow::bail!("unknown --runtime-backend value: {other}"),
+        },
+    )?);
 
     let server = TransportServer::new(
         bind_addr,

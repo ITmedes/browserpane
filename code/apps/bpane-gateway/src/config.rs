@@ -11,6 +11,14 @@ pub struct Config {
     #[arg(long, default_value = "/tmp/bpane.sock")]
     pub agent_socket: PathBuf,
 
+    /// Runtime backend: "static_single" or "docker_single".
+    #[arg(long, default_value = "static_single")]
+    pub runtime_backend: String,
+
+    /// Idle timeout before an unattached runtime assignment is released or shut down.
+    #[arg(long, default_value_t = 300)]
+    pub runtime_idle_timeout_secs: u64,
+
     /// TLS certificate file (PEM).
     #[arg(long)]
     pub cert: Option<PathBuf>,
@@ -53,6 +61,46 @@ pub struct Config {
     /// Public browser-facing gateway URL returned in session connect metadata.
     #[arg(long, default_value = "https://localhost:4433")]
     pub public_gateway_url: String,
+
+    /// Docker CLI binary used by the optional docker_single runtime backend.
+    #[arg(long, default_value = "docker")]
+    pub docker_runtime_bin: String,
+
+    /// Host worker image used by the optional docker_single runtime backend.
+    #[arg(long)]
+    pub docker_runtime_image: Option<String>,
+
+    /// Docker network used by the optional docker_single runtime backend.
+    #[arg(long)]
+    pub docker_runtime_network: Option<String>,
+
+    /// Docker named volume mounted at /run/bpane for the optional docker_single runtime backend.
+    #[arg(long)]
+    pub docker_runtime_volume: Option<String>,
+
+    /// Stable container name used by the optional docker_single runtime backend.
+    #[arg(long, default_value = "bpane-runtime")]
+    pub docker_runtime_container_name: String,
+
+    /// Session-scoped socket root inside the shared run volume for docker_single.
+    #[arg(long, default_value = "/run/bpane/sessions")]
+    pub docker_runtime_socket_root: String,
+
+    /// shm-size passed to docker run for the optional docker_single runtime backend.
+    #[arg(long, default_value = "128m")]
+    pub docker_runtime_shm_size: String,
+
+    /// Startup timeout for the optional docker_single runtime backend.
+    #[arg(long, default_value_t = 60)]
+    pub docker_runtime_start_timeout_secs: u64,
+
+    /// Optional env-file forwarded to docker run for the optional docker_single runtime backend.
+    #[arg(long)]
+    pub docker_runtime_env_file: Option<PathBuf>,
+
+    /// Apply --security-opt seccomp=unconfined when launching docker runtime workers.
+    #[arg(long, default_value_t = false)]
+    pub docker_runtime_seccomp_unconfined: bool,
 
     /// Lifetime for minted session-scoped connect tickets.
     #[arg(long, default_value_t = 300)]
