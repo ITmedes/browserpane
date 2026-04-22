@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio::fs;
 use tokio::process::Command;
 use tokio::sync::{futures::OwnedNotified, Mutex, Notify};
 use tokio::time::{sleep, Instant};
@@ -473,6 +474,7 @@ impl DockerRuntimeManager {
                             if let Some(container_name) = &lease.container_name {
                                 let _ = self.stop_container(container_name).await;
                             }
+                            let _ = remove_socket_path(&lease.agent_socket_path).await;
                             return Err(error);
                         }
                     };
@@ -481,6 +483,7 @@ impl DockerRuntimeManager {
                     if let Some(container_name) = stop_container {
                         let _ = self.stop_container(&container_name).await;
                     }
+                    let _ = remove_socket_path(&lease.agent_socket_path).await;
                 }
             }
         }
@@ -499,6 +502,7 @@ impl DockerRuntimeManager {
             if let Some(container_name) = state.lease().container_name.as_deref() {
                 let _ = self.stop_container(container_name).await;
             }
+            let _ = remove_socket_path(&state.lease().agent_socket_path).await;
         }
     }
 
@@ -510,7 +514,7 @@ impl DockerRuntimeManager {
     }
 
     async fn mark_session_idle(self: &Arc<Self>, session_id: Uuid) {
-        let (idle_generation, container_name) = {
+        let (idle_generation, container_name, socket_path) = {
             let mut leases = self.leases.lock().await;
             let Some(DockerLeaseState::Ready(lease)) = leases.get_mut(&session_id) else {
                 return;
@@ -519,6 +523,7 @@ impl DockerRuntimeManager {
             (
                 lease.idle_generation,
                 lease.container_name.clone().unwrap_or_default(),
+                lease.agent_socket_path.clone(),
             )
         };
 
@@ -538,6 +543,7 @@ impl DockerRuntimeManager {
             };
             if should_stop {
                 let _ = manager.stop_container(&container_name).await;
+                let _ = remove_socket_path(&socket_path).await;
             }
         });
     }
@@ -566,6 +572,7 @@ impl DockerRuntimeManager {
         })?;
 
         let _ = self.stop_container(container_name).await;
+        let _ = remove_socket_path(&lease.agent_socket_path).await;
 
         let mut command = Command::new(&self.config.docker_bin);
         command.arg("run").arg("-d").arg("--rm");
@@ -582,6 +589,8 @@ impl DockerRuntimeManager {
             .arg(&self.config.shm_size)
             .arg("--label")
             .arg(format!("browserpane.session_id={}", lease.session_id))
+            .arg("-e")
+            .arg(format!("BPANE_SESSION_ID={}", lease.session_id))
             .arg("-e")
             .arg(format!("BPANE_SOCKET_PATH={}", lease.agent_socket_path));
 
@@ -609,9 +618,10 @@ impl DockerRuntimeManager {
     }
 
     async fn stop_container(&self, container_name: &str) -> Result<(), RuntimeManagerError> {
-        let output = Command::new(&self.config.docker_bin)
-            .arg("rm")
-            .arg("-f")
+        let stop_output = Command::new(&self.config.docker_bin)
+            .arg("stop")
+            .arg("-t")
+            .arg("20")
             .arg(container_name)
             .output()
             .await
@@ -620,18 +630,39 @@ impl DockerRuntimeManager {
                     "failed to stop docker runtime: {error}"
                 ))
             })?;
-        if output.status.success() {
+        if stop_output.status.success() {
             return Ok(());
         }
 
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = String::from_utf8_lossy(&stop_output.stderr);
         if stderr.contains("No such container") {
             return Ok(());
         }
 
+        let rm_output = Command::new(&self.config.docker_bin)
+            .arg("rm")
+            .arg("-f")
+            .arg(container_name)
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to force-remove docker runtime: {error}"
+                ))
+            })?;
+        if rm_output.status.success() {
+            return Ok(());
+        }
+
+        let rm_stderr = String::from_utf8_lossy(&rm_output.stderr);
+        if rm_stderr.contains("No such container") {
+            return Ok(());
+        }
+
         Err(RuntimeManagerError::StartupFailed(format!(
-            "docker rm failed: {}",
-            stderr.trim()
+            "docker stop failed: {}; docker rm failed: {}",
+            stderr.trim(),
+            rm_stderr.trim()
         )))
     }
 
@@ -647,6 +678,7 @@ impl DockerRuntimeManager {
             }
             if Instant::now() >= deadline {
                 let _ = self.stop_container(container_name).await;
+                let _ = remove_socket_path(socket_path).await;
                 return Err(RuntimeManagerError::StartupFailed(format!(
                     "docker runtime did not create socket {socket_path} before startup timeout"
                 )));
@@ -673,6 +705,16 @@ fn sorted_active_session_ids(leases: &HashMap<Uuid, DockerLeaseState>) -> Vec<Uu
     let mut ids = leases.keys().copied().collect::<Vec<_>>();
     ids.sort_unstable();
     ids
+}
+
+async fn remove_socket_path(socket_path: &str) -> Result<(), RuntimeManagerError> {
+    match fs::remove_file(socket_path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to remove stale runtime socket {socket_path}: {error}"
+        ))),
+    }
 }
 
 #[cfg(test)]

@@ -177,6 +177,75 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
 }
 
 #[tokio::test]
+async fn stopped_session_can_issue_a_new_connect_ticket_and_resume() {
+    let (app, token) = test_router();
+
+    let created = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "idle_timeout_sec": 300 }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let delete_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/sessions/{session_id}"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete_response.status(), StatusCode::OK);
+
+    let issue_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/access-tokens"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(issue_response.status(), StatusCode::OK);
+    let issued = response_json(issue_response).await;
+    assert_eq!(issued["session_id"], session_id);
+    assert_eq!(issued["token_type"], "session_connect_ticket");
+
+    let get_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let fetched = response_json(get_response).await;
+    assert_eq!(fetched["state"], "ready");
+    assert!(fetched["stopped_at"].is_null());
+}
+
+#[tokio::test]
 async fn rejects_second_active_session_on_legacy_runtime() {
     let (app, token) = test_router();
     let request_body = json!({

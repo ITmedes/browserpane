@@ -123,6 +123,9 @@ The default local auth flow is now OIDC-based:
 - return to the page and either select an existing session or click `Start New Session`
 - the page joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
 - sessions created from the test page use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
+- reconnecting a stopped session now restarts the same session resource instead of creating a new one
+- in Docker-backed runtime modes, BrowserPane reuses a session-specific Chromium profile so cookies, cache, downloads, and Chromium session-restore state survive worker restarts
+- exact in-memory browser process state is only preserved while the worker is still alive; once idle-stop shuts a worker down, reconnect restores the browser from its persisted profile rather than from a true container checkpoint
 - if you want the local `mcp-bridge` to follow that same session, click `Delegate MCP`
 
 `test-embed.html` fetches `/auth-config.json` and performs an Authorization Code + PKCE login. The browser client then connects to the gateway with an OIDC access token.

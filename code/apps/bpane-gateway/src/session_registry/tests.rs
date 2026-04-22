@@ -194,3 +194,28 @@ async fn leave_decrements_count() {
     registry.leave(session_id, c2.client_id).await;
     assert_eq!(hub.client_count(), 0);
 }
+
+#[tokio::test]
+async fn remove_session_drops_stale_hub_and_allows_recreate() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("test.sock");
+    let sock_str = sock.to_str().unwrap();
+
+    let _agent = mock_agent_with_connections(sock_str, 2).await;
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let registry = SessionRegistry::new(10, false);
+    let session_id = session_id();
+
+    let hub1 = registry
+        .ensure_hub_for_session(session_id, sock_str)
+        .await
+        .unwrap();
+    registry.remove_session(session_id).await;
+    let hub2 = registry
+        .ensure_hub_for_session(session_id, sock_str)
+        .await
+        .unwrap();
+
+    assert!(!Arc::ptr_eq(&hub1, &hub2));
+}

@@ -213,6 +213,8 @@ Stateless relay between host agent and browser clients.
     - `docker_pool`: opt-in Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`
   - session resources, runtime capacity, and compatibility routing now derive from this runtime profile
   - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions via the Docker socket, shared `/run/bpane` volume, and a shared host-worker env profile
+  - Docker-backed workers now receive `BPANE_SESSION_ID` and reuse a session-specific Chromium profile rooted under the shared `/run/bpane` volume, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state
+  - this is profile-backed restoration, not true container/process suspension: exact live in-memory browser state only survives while the worker is still running
 - **MCP ownership**: atomic flag that locks resolution for browser clients
   when an MCP agent owns the session
 - **Auth** (`auth.rs`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests

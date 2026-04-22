@@ -163,9 +163,17 @@ BrowserPane should not block issue #6 on:
 
 Those can stay out of scope for the first multi-session control plane.
 
-### 2. Persistent profile reuse across disconnected sessions as a first requirement
+### 2. Persistent profile reuse across disconnected sessions as an early baseline
 
-Browserless leans heavily on persistent session state and reconnect workflows. BrowserPane should support reconnect-friendly connect tickets, but the first milestone should focus on isolated parallel sessions, not long-lived session resurrection across arbitrary worker restarts.
+Browserless leans heavily on persistent session state and reconnect workflows. BrowserPane now needs the same practical baseline for local multi-session work:
+
+- session-specific Chromium profile reuse across worker restarts
+- reconnectable stopped session resources
+- explicit distinction between:
+  - exact live state while the worker is still running
+  - profile-backed restoration after idle-stop
+
+That does **not** require true container checkpoint/suspend in the first implementation. Cookies, cache, downloads, and Chromium session-restore state should survive; arbitrary in-memory renderer state does not have to.
 
 ### 3. Large hosted-platform feature surface
 

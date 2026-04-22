@@ -882,7 +882,7 @@
     };
 
     function isRuntimeCandidateSessionState(state) {
-      return ['pending', 'starting', 'ready', 'active', 'idle'].includes(state);
+      return ['pending', 'starting', 'ready', 'active', 'idle', 'stopped'].includes(state);
     }
 
     function getSessionLabel(resource) {
@@ -1361,7 +1361,11 @@
         controlSessionState.resource = selected;
         authState.gatewayPreflightOk = true;
         renderSessionState();
-        log(`Selected existing session ${selected.id} (${selected.state})`, 'ok');
+        if (selected.state === 'stopped') {
+          log(`Selected stopped session ${selected.id}; connect will restart it with its persisted browser profile.`, 'ok');
+        } else {
+          log(`Selected existing session ${selected.id} (${selected.state})`, 'ok');
+        }
         return selected;
       } catch (error) {
         authState.gatewayPreflightOk = false;

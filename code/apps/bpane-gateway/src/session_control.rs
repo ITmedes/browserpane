@@ -453,6 +453,16 @@ impl SessionStore {
         }
     }
 
+    pub async fn prepare_session_for_connect(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.prepare_session_for_connect(id).await,
+            SessionStoreBackend::Postgres(store) => store.prepare_session_for_connect(id).await,
+        }
+    }
+
     pub async fn get_runtime_candidate_session(
         &self,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
@@ -803,6 +813,37 @@ impl InMemorySessionStore {
         session.state = SessionLifecycleState::Stopped;
         session.updated_at = Utc::now();
         session.stopped_at = Some(session.updated_at);
+        Ok(Some(session.clone()))
+    }
+
+    async fn prepare_session_for_connect(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(index) = sessions.iter().position(|session| session.id == id) else {
+            return Ok(None);
+        };
+
+        let state = sessions[index].state;
+        if state != SessionLifecycleState::Stopped {
+            return Ok(Some(sessions[index].clone()));
+        }
+
+        let active_runtime_candidates = sessions
+            .iter()
+            .filter(|session| session.state.is_runtime_candidate())
+            .count();
+        if active_runtime_candidates >= self.config.max_runtime_candidates {
+            return Err(SessionStoreError::ActiveSessionConflict {
+                max_runtime_sessions: self.config.max_runtime_candidates,
+            });
+        }
+
+        let session = &mut sessions[index];
+        session.state = SessionLifecycleState::Ready;
+        session.updated_at = Utc::now();
+        session.stopped_at = None;
         Ok(Some(session.clone()))
     }
 
@@ -1377,6 +1418,133 @@ impl PostgresSessionStore {
         row.as_ref().map(row_to_stored_session).transpose()
     }
 
+    async fn prepare_session_for_connect(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut client = self.client.lock().await;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+
+        let current_row = transaction
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
+                    state,
+                    template_id,
+                    owner_mode,
+                    viewport_width,
+                    viewport_height,
+                    idle_timeout_sec,
+                    labels,
+                    integration_context,
+                    created_at,
+                    updated_at,
+                    stopped_at
+                FROM control_sessions
+                WHERE id = $1
+                FOR UPDATE
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to lock session for connect prep: {error}"
+                ))
+            })?;
+        let Some(current_row) = current_row else {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Ok(None);
+        };
+
+        let current = row_to_stored_session(&current_row)?;
+        if current.state != SessionLifecycleState::Stopped {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Ok(Some(current));
+        }
+
+        let existing = transaction
+            .query_opt(
+                r#"
+                SELECT COUNT(*)::BIGINT AS session_count
+                FROM control_sessions
+                WHERE runtime_binding = $1
+                  AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
+                "#,
+                &[&self.config.runtime_binding],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to check active sessions: {error}"))
+            })?;
+        let active_runtime_candidates = existing
+            .as_ref()
+            .map(|row| row.get::<_, i64>("session_count"))
+            .unwrap_or(0);
+        if active_runtime_candidates >= self.config.max_runtime_candidates as i64 {
+            return Err(SessionStoreError::ActiveSessionConflict {
+                max_runtime_sessions: self.config.max_runtime_candidates,
+            });
+        }
+
+        let row = transaction
+            .query_one(
+                r#"
+                UPDATE control_sessions
+                SET
+                    state = 'ready',
+                    updated_at = NOW(),
+                    stopped_at = NULL
+                WHERE id = $1
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
+                    state,
+                    template_id,
+                    owner_mode,
+                    viewport_width,
+                    viewport_height,
+                    idle_timeout_sec,
+                    labels,
+                    integration_context,
+                    created_at,
+                    updated_at,
+                    stopped_at
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to prepare stopped session for connect: {error}"
+                ))
+            })?;
+
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+
+        row_to_stored_session(&row).map(Some)
+    }
+
     async fn set_automation_delegate_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -1845,6 +2013,105 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(after.state, SessionLifecycleState::Stopped);
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_can_prepare_a_stopped_session_for_reconnect() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let created = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: Some(300),
+                    labels: HashMap::new(),
+                    integration_context: None,
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+
+        let stopped = store
+            .stop_session_if_idle(created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stopped.state, SessionLifecycleState::Stopped);
+
+        let resumed = store
+            .prepare_session_for_connect(created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(resumed.state, SessionLifecycleState::Ready);
+        assert!(resumed.stopped_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn reconnect_prep_respects_runtime_pool_capacity() {
+        let store = SessionStore::in_memory_with_config(RuntimeProfile {
+            runtime_binding: "docker_runtime_pool".to_string(),
+            compatibility_mode: "session_runtime_pool".to_string(),
+            max_runtime_sessions: 1,
+            supports_legacy_global_routes: false,
+        });
+        let owner = principal("owner");
+
+        let ready = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+        assert_eq!(ready.state, SessionLifecycleState::Ready);
+
+        let stopped = store
+            .stop_session_for_owner(&owner, ready.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stopped.state, SessionLifecycleState::Stopped);
+
+        let replacement = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+        assert_eq!(replacement.state, SessionLifecycleState::Ready);
+
+        let error = store
+            .prepare_session_for_connect(stopped.id)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            SessionStoreError::ActiveSessionConflict {
+                max_runtime_sessions: 1
+            }
+        ));
     }
 
     #[test]
