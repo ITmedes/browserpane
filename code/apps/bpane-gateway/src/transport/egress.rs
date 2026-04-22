@@ -36,24 +36,9 @@ pub(super) fn spawn_agent_to_browser_task(
                         continue;
                     }
 
-                        if frame.channel == ChannelId::Video {
-                            if is_video_keyframe_payload(&frame.payload) {
-                                let encoded = frame.encode();
-                                let lock_started = Instant::now();
-                                let mut stream = ctx.send_stream.lock().await;
-                                ctx.hub
-                                    .record_egress_send_stream_lock_wait(lock_started.elapsed());
-                                if stream.write_all(&encoded).await.is_err() {
-                                    break;
-                                }
-                        } else {
-                            match ctx.connection.send_datagram(&frame.payload) {
-                                Ok(()) => ctx.dgram_stats.record_success(),
-                                Err(_) => ctx.dgram_stats.record_failure(),
-                            };
-                        }
-                        } else {
-                            let encoded = adapt_frame_for_client(&frame, is_owner).encode();
+                    if frame.channel == ChannelId::Video {
+                        if is_video_keyframe_payload(&frame.payload) {
+                            let encoded = frame.encode();
                             let lock_started = Instant::now();
                             let mut stream = ctx.send_stream.lock().await;
                             ctx.hub
@@ -61,8 +46,23 @@ pub(super) fn spawn_agent_to_browser_task(
                             if stream.write_all(&encoded).await.is_err() {
                                 break;
                             }
+                        } else {
+                            match ctx.connection.send_datagram(&frame.payload) {
+                                Ok(()) => ctx.dgram_stats.record_success(),
+                                Err(_) => ctx.dgram_stats.record_failure(),
+                            };
+                        }
+                    } else {
+                        let encoded = adapt_frame_for_client(&frame, is_owner).encode();
+                        let lock_started = Instant::now();
+                        let mut stream = ctx.send_stream.lock().await;
+                        ctx.hub
+                            .record_egress_send_stream_lock_wait(lock_started.elapsed());
+                        if stream.write_all(&encoded).await.is_err() {
+                            break;
                         }
                     }
+                }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     ctx.hub.record_egress_lagged(n as u64);
                     warn!(

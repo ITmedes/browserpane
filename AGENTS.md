@@ -23,7 +23,8 @@ BrowserPane is a browser-native remote browser/desktop stack for a Linux host co
 Current product shape:
 - A Linux container runs Xorg dummy + Openbox + Chromium.
 - `bpane-host` captures and classifies the surface.
-- `bpane-gateway` exposes WebTransport and a small HTTP API.
+- `bpane-gateway` exposes WebTransport plus legacy and versioned HTTP APIs.
+- Phase 0 session resources are persisted in Postgres behind the gateway.
 - The browser client renders a tile-first stream with optional ROI H.264 video.
 - Shared sessions are collaborative by default; optional exclusive-owner mode can lock later browser clients into read-only viewers.
 
@@ -51,7 +52,8 @@ Current product shape:
   - WebTransport gateway and shared-session coordinator.
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
-  - `api.rs`: `GET /api/session/status`, `POST /api/session/mcp-owner`, `DELETE /api/session/mcp-owner`.
+  - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
+  - `api.rs`: legacy session endpoints plus `POST/GET/DELETE /api/v1/sessions`.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`
@@ -68,6 +70,7 @@ Current product shape:
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
+  - Local session-control persistence in compose is Postgres on `:5433`.
 
 ## Protocol and media facts
 
@@ -117,7 +120,7 @@ Run these where applicable:
 3. Open `http://localhost:8080` in Chromium.
 4. Log in through the local Keycloak realm if prompted.
 5. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
-6. `keycloak` listens on `:8091`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
+6. `keycloak` listens on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
 
 ## Guardrails for contributors and agents
 
