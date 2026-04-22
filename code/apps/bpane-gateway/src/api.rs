@@ -103,7 +103,11 @@ async fn create_session(
 
     Ok((
         StatusCode::CREATED,
-        Json(stored.to_resource(&state.public_gateway_url, None)),
+        Json(stored.to_resource(
+            &state.public_gateway_url,
+            state.session_store.compatibility_mode(),
+            None,
+        )),
     ))
 }
 
@@ -120,7 +124,13 @@ async fn list_sessions(
         .await
         .map_err(map_session_store_error)?
         .into_iter()
-        .map(|session| session.to_resource(&state.public_gateway_url, None))
+        .map(|session| {
+            session.to_resource(
+                &state.public_gateway_url,
+                state.session_store.compatibility_mode(),
+                None,
+            )
+        })
         .collect();
 
     Ok(Json(SessionListResponse { sessions }))
@@ -133,7 +143,11 @@ async fn get_session(
 ) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
     let stored = authorize_visible_session_request(&headers, &state, session_id).await?;
 
-    Ok(Json(stored.to_resource(&state.public_gateway_url, None)))
+    Ok(Json(stored.to_resource(
+        &state.public_gateway_url,
+        state.session_store.compatibility_mode(),
+        None,
+    )))
 }
 
 async fn set_automation_owner(
@@ -159,7 +173,11 @@ async fn set_automation_owner(
             )
         })?;
 
-    Ok(Json(stored.to_resource(&state.public_gateway_url, None)))
+    Ok(Json(stored.to_resource(
+        &state.public_gateway_url,
+        state.session_store.compatibility_mode(),
+        None,
+    )))
 }
 
 async fn clear_automation_owner(
@@ -184,7 +202,11 @@ async fn clear_automation_owner(
             )
         })?;
 
-    Ok(Json(stored.to_resource(&state.public_gateway_url, None)))
+    Ok(Json(stored.to_resource(
+        &state.public_gateway_url,
+        state.session_store.compatibility_mode(),
+        None,
+    )))
 }
 
 async fn issue_session_access_token(
@@ -232,7 +254,11 @@ async fn issue_session_access_token(
                 }),
             )
         })?;
-    let resource = stored.to_resource(&state.public_gateway_url, None);
+    let resource = stored.to_resource(
+        &state.public_gateway_url,
+        state.session_store.compatibility_mode(),
+        None,
+    );
 
     Ok(Json(SessionAccessTokenResponse {
         session_id,
@@ -318,28 +344,45 @@ async fn delete_session(
 
     state.runtime_manager.release(session_id).await;
 
-    Ok(Json(stopped.to_resource(&state.public_gateway_url, None)))
+    Ok(Json(stopped.to_resource(
+        &state.public_gateway_url,
+        state.session_store.compatibility_mode(),
+        None,
+    )))
 }
 
 /// GET /api/session/status
 async fn session_status(
     headers: HeaderMap,
     State(state): State<Arc<ApiState>>,
-) -> Result<Json<SessionStatus>, StatusCode> {
+) -> Result<Json<SessionStatus>, (StatusCode, Json<ErrorResponse>)> {
     authorize_api_request(&headers, &state.auth_validator)
         .await
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    ensure_legacy_runtime_routes_supported(&state)?;
     let Some(session_id) = legacy_runtime_session_id(&state).await else {
-        return Err(StatusCode::NOT_FOUND);
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "no runtime-backed session is available".to_string(),
+            }),
+        ));
     };
     let runtime = resolve_runtime_compat(&state, session_id)
         .await
-        .map_err(|status| status)?;
+        .map_err(map_runtime_compat_status)?;
     let hub = state
         .registry
         .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
         .await
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to connect to host agent: {error}"),
+                }),
+            )
+        })?;
     let snapshot = hub.telemetry_snapshot().await;
 
     Ok(Json(session_status_from_snapshot(snapshot)))
@@ -384,6 +427,7 @@ async fn set_mcp_owner(
     authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    ensure_legacy_runtime_routes_supported(&state)?;
     let Some(session_id) = legacy_runtime_session_id(&state).await else {
         return Err((
             StatusCode::NOT_FOUND,
@@ -447,6 +491,13 @@ async fn clear_mcp_owner(
     authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    if !state
+        .runtime_manager
+        .profile()
+        .supports_legacy_global_routes
+    {
+        return Err(StatusCode::CONFLICT);
+    }
     let Some(session_id) = legacy_runtime_session_id(&state).await else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -597,7 +648,7 @@ fn resolve_owner_mode(
 
 fn map_session_store_error(error: SessionStoreError) -> (StatusCode, Json<ErrorResponse>) {
     match error {
-        SessionStoreError::ActiveSessionConflict => (
+        SessionStoreError::ActiveSessionConflict { .. } => (
             StatusCode::CONFLICT,
             Json(ErrorResponse {
                 error: error.to_string(),
@@ -710,6 +761,39 @@ fn map_runtime_manager_error(error: RuntimeManagerError) -> (StatusCode, Json<Er
             error: error.to_string(),
         }),
     )
+}
+
+fn map_runtime_compat_status(status: StatusCode) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        status,
+        Json(ErrorResponse {
+            error: if status == StatusCode::CONFLICT {
+                "runtime is not currently available for the requested compatibility route"
+                    .to_string()
+            } else {
+                "compatibility route failed".to_string()
+            },
+        }),
+    )
+}
+
+fn ensure_legacy_runtime_routes_supported(
+    state: &ApiState,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    if state
+        .runtime_manager
+        .profile()
+        .supports_legacy_global_routes
+    {
+        return Ok(());
+    }
+
+    Err((
+        StatusCode::CONFLICT,
+        Json(ErrorResponse {
+            error: "global compatibility routes are disabled for the current runtime backend; use /api/v1/sessions/{id}/status and /api/v1/sessions/{id}/mcp-owner instead".to_string(),
+        }),
+    ))
 }
 
 async fn legacy_runtime_session_id(state: &ApiState) -> Option<Uuid> {

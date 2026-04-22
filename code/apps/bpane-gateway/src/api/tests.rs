@@ -217,7 +217,7 @@ async fn rejects_second_active_session_on_legacy_runtime() {
     assert!(body["error"]
         .as_str()
         .unwrap()
-        .contains("only supports one active session"));
+        .contains("only supports 1 active runtime-backed session"));
 }
 
 #[tokio::test]

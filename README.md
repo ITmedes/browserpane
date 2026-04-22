@@ -95,9 +95,14 @@ The compose stack starts:
 - `web`: local frontend on `:8080`
 - `mcp-bridge`: MCP bridge on `:8931`
 
-The default local runtime backend is still a single shared host worker. The gateway now also has an opt-in Docker-backed runtime backend that can start and stop a worker container for the currently active session after an idle timeout, but that backend is still single-runtime and is not enabled by default in `deploy/compose.yml`.
+The default local runtime backend is still a single shared host worker. The gateway now also has opt-in Docker-backed runtime backends:
 
-If you enable the Docker-backed runtime backend, the gateway also needs:
+- `docker_single`: one start-on-demand runtime container with idle shutdown
+- `docker_pool`: multiple start-on-demand runtime containers with explicit `max_active_runtimes` and `max_starting_runtimes`
+
+Neither Docker-backed mode is enabled by default in `deploy/compose.yml`.
+
+If you enable a Docker-backed runtime backend, the gateway also needs:
 
 - access to a Docker daemon
 - a shared `/run/bpane`-style volume between gateway and runtime containers
@@ -157,10 +162,11 @@ Current limitation:
 - the public session resource model is now versioned and persistent
 - gateway transport and runtime compatibility APIs are now session-scoped
 - the default runtime backend is still `legacy_single_runtime` compatibility mode
-- the optional `docker_single` backend can now start and stop one runtime container for the active session, but it still allows only one active runtime at a time
-- so only one active BrowserPane session can exist at a time until the later multi-session host/gateway phases land
-- the local `mcp-bridge` can now be pointed at an explicitly delegated session, but only one session can be backed by the host runtime at once
-- a real multi-session rollout still needs configurable runtime caps, worker pooling/allocation, and per-session runtime metadata beyond the current single-runtime backends
+- the optional `docker_single` backend can now start and stop one runtime container for the active session
+- the optional `docker_pool` backend can start multiple runtime containers in parallel, but only up to its configured runtime caps
+- the default compose stack still only runs one active BrowserPane session at a time because it uses the single-runtime backend
+- the local `mcp-bridge` can now be pointed at an explicitly delegated session, but the default compose stack still uses the single-runtime backend
+- global compatibility routes like `/api/session/status` and `/api/session/mcp-owner` are only valid in legacy single-runtime mode; multi-runtime backends should use session-scoped `/api/v1/sessions/{id}/...` routes
 
 ### Build And Test Without Running The Full Stack
 

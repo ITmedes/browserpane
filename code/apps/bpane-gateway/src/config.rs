@@ -11,7 +11,7 @@ pub struct Config {
     #[arg(long, default_value = "/tmp/bpane.sock")]
     pub agent_socket: PathBuf,
 
-    /// Runtime backend: "static_single" or "docker_single".
+    /// Runtime backend: "static_single", "docker_single", or "docker_pool".
     #[arg(long, default_value = "static_single")]
     pub runtime_backend: String,
 
@@ -78,9 +78,9 @@ pub struct Config {
     #[arg(long)]
     pub docker_runtime_volume: Option<String>,
 
-    /// Stable container name used by the optional docker_single runtime backend.
+    /// Container name prefix used by docker-backed runtime workers.
     #[arg(long, default_value = "bpane-runtime")]
-    pub docker_runtime_container_name: String,
+    pub docker_runtime_container_name_prefix: String,
 
     /// Session-scoped socket root inside the shared run volume for docker_single.
     #[arg(long, default_value = "/run/bpane/sessions")]
@@ -93,6 +93,14 @@ pub struct Config {
     /// Startup timeout for the optional docker_single runtime backend.
     #[arg(long, default_value_t = 60)]
     pub docker_runtime_start_timeout_secs: u64,
+
+    /// Maximum number of runtime-backed sessions that can exist in parallel in docker_pool mode.
+    #[arg(long, default_value_t = 1)]
+    pub max_active_runtimes: usize,
+
+    /// Maximum number of runtime workers that may be starting concurrently in docker_pool mode.
+    #[arg(long, default_value_t = 1)]
+    pub max_starting_runtimes: usize,
 
     /// Optional env-file forwarded to docker run for the optional docker_single runtime backend.
     #[arg(long)]

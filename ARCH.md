@@ -210,7 +210,8 @@ Stateless relay between host agent and browser clients.
   - current backends are:
     - `static_single`: one shared host socket, with idle release semantics in the gateway
     - `docker_single`: opt-in Docker-backed worker startup/shutdown for the active session, with idle timeout and one active runtime at a time
-  - this is still the seam where true multi-session worker pooling and runtime caps will land
+    - `docker_pool`: opt-in Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`
+  - session resources, runtime capacity, and compatibility routing now derive from this runtime profile
 - **MCP ownership**: atomic flag that locks resolution for browser clients
   when an MCP agent owns the session
 - **Auth** (`auth.rs`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
@@ -347,7 +348,8 @@ The default dev stack no longer uses a shared token file.
 - the versioned session API is also bearer-protected and owner-scoped
 - the current session resource connect contract advertises `auth_type: session_connect_ticket` and still carries `compatibility_mode: legacy_single_runtime`
 - the default compose stack still runs the `static_single` runtime backend, so that control-plane flow still lands on one active host worker
-- an opt-in `docker_single` runtime backend now exists for start/stop-on-idle worker lifecycle, but it still enforces a single active runtime
+- `docker_single` keeps the old single-runtime compatibility behavior with start/stop-on-idle worker lifecycle
+- `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
 - `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`) and now also supports explicit delegated-session assignment through its local `/control-session` API
 
 The default imported local realm contains:
