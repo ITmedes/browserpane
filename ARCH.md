@@ -54,37 +54,40 @@ Four containers on a Docker bridge network (`172.28.0.0/24`):
        │  nginx (web, :8080)      │
        │  / -> test-embed.html    │
        │  /dist/ -> bpane-client   │
-       │  /token -> shared/token  │
-       │  /cert-hash -> certs     │
+       │  /auth-config.json       │
+       │  /cert-hash -> cert.pem  │
+       │  /cert-fingerprint ->    │
+       │     cert.pem             │
        └────────────┬─────────────┘
                     │
            Docker Bridge Network
                     │
-   ┌────────────────┼────────────────┐
-   │                │                │
-   v                v                v
-┌──────────┐  ┌──────────────┐  ┌───────────────┐
-│bpane-host│  │bpane-gateway │  │  mcp-bridge   │
-│ .0.10    │  │ :4433 (QUIC) │  │ :8931 (SSE)   │
-│          │  │ :8932 (HTTP) │  │               │
-│ Xorg :99 │  │              │  │ @playwright/  │
-│ OpenBox  │  │ Unix socket  │  │ mcp (STDIO)   │
-│ Chromium │  │ <-> host IPC │  │               │
-│ PipeWire │  │              │  │ Supervisor    │
-│ FFmpeg   │  │ Broadcast    │  │ monitor       │
-│bpane-host│  │ fan-out      │  │ (polls API)   │
-│          │  │              │  │               │
-│ CDP :9222│  │ Max 10       │  │ MCP clients   │
-│ -> :9223 │  │ viewers      │  │ connect here  │
-└──────────┘  └──────────────┘  └───────────────┘
+   ┌────────────────┼────────────────┬────────────────┐
+   │                │                │                │
+   v                v                v                v
+┌──────────┐  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐
+│bpane-host│  │bpane-gateway │  │  mcp-bridge   │  │   Keycloak   │
+│ .0.10    │  │ :4433 (QUIC) │  │ :8931 (SSE)   │  │ :8080/.8091  │
+│          │  │ :8932 (HTTP) │  │               │  │ local OIDC   │
+│ Xorg :99 │  │              │  │ @playwright/  │  │ realm        │
+│ OpenBox  │  │ Unix socket  │  │ mcp (STDIO)   │  │              │
+│ Chromium │  │ <-> host IPC │  │               │  │              │
+│ PipeWire │  │              │  │ Supervisor    │  │              │
+│ FFmpeg   │  │ Broadcast    │  │ monitor       │  │              │
+│bpane-host│  │ fan-out      │  │ (polls API)   │  │              │
+│          │  │              │  │               │  │              │
+│ CDP :9222│  │ Max 10       │  │ MCP clients   │  │              │
+│ -> :9223 │  │ viewers      │  │ connect here  │  │              │
+└──────────┘  └──────────────┘  └───────────────┘  └──────────────┘
       │               ^
       └───────────────┘
        /run/bpane/agent.sock
 ```
 
 **Ports exposed to host machine:**
-- `8080/tcp` — nginx (web UI, token, cert hash, SDK dist)
+- `8080/tcp` — nginx (web UI, auth config, cert hash, SDK dist)
 - `4433/tcp+udp` — WebTransport (QUIC)
+- `8091/tcp` — local Keycloak realm for dev/testing
 - `8931/tcp` — MCP bridge (SSE)
 
 **Host container internals:** Xorg with dummy video driver (3840x2160 virtual
@@ -191,12 +194,13 @@ Stateless relay between host agent and browser clients.
   TOCTOU-safe concurrent join (two-phase lock pattern)
 - **MCP ownership**: atomic flag that locks resolution for browser clients
   when an MCP agent owns the session
-- **Auth** (`auth.rs`): HMAC-SHA256 tokens, 30-day TTL, 30-second clock skew tolerance
+- **Auth** (`auth.rs`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
 - **Heartbeat**: disconnects after 15s without CONTROL ping
 - **HTTP API** (`api.rs`, :8932):
   - `GET /api/session/status` — client counts, resolution, telemetry
   - `POST /api/session/mcp-owner` — claim session, lock resolution
   - `DELETE /api/session/mcp-owner` — release ownership
+  - all current endpoints require `Authorization: Bearer <token>`
 - **Relay** (`relay.rs`): bidirectional Unix socket <-> async bridge, 64 KB read
   buffer, zero-copy frame slicing with `Bytes`
 
@@ -207,6 +211,7 @@ decompression.
 
 - **Session lifecycle** (`bpane.ts`, ~1,300 lines):
   - `BpaneSession.connect(options)` factory — probes mic/camera support first
+  - `accessToken`-based connect path (legacy `token` still accepted for compatibility)
   - ResizeObserver -> 150ms debounce -> ResolutionRequest
   - Canvas pixel dimensions = container pixel dimensions (optional HiDPI scaling)
   - WebTransport connection with cert hash fetching for self-signed certs
@@ -287,7 +292,29 @@ running against the Chromium instance inside the host container.
   viewers are watching (polls gateway status every 2s)
 - Lazy registration: only claims MCP ownership on first SSE client connect
 - Registers/clears MCP ownership with gateway (resolution lock)
+- Uses OIDC client-credentials for gateway API access in the local compose stack
 - Graceful shutdown: always releases ownership on SIGINT/SIGTERM
+
+---
+
+## Local Auth Flow
+
+The default dev stack no longer uses a shared token file.
+
+- `web` serves `/auth-config.json`
+- `test-embed.html` discovers the OIDC provider and performs Authorization Code + PKCE
+- local browser users authenticate against Keycloak on `http://localhost:8091`
+- the resulting access token is sent to `bpane-gateway` as:
+  - WebTransport query param: `access_token=...`
+  - HTTP API bearer token for authenticated control calls
+- `mcp-bridge` obtains its own bearer token with client credentials
+
+The default imported local realm contains:
+
+- browser client: `bpane-web`
+- gateway audience client: `bpane-gateway`
+- service-account client: `bpane-mcp-bridge`
+- example user: `demo / demo-demo`
 
 ### Wire Protocol (bpane-protocol, ~2,800 lines Rust)
 

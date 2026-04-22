@@ -1,18 +1,26 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::{AuthError, HmacSha256, TokenValidator};
 use hmac::Mac;
+
+use super::{AuthError, AuthValidator, HmacSha256, HmacTokenValidator};
 
 #[test]
 fn generate_and_validate_token() {
-    let validator = TokenValidator::new(b"test-secret-key".to_vec());
+    let validator = HmacTokenValidator::new(b"test-secret-key".to_vec());
     let token = validator.generate_token();
     assert!(validator.validate_token(&token).is_ok());
 }
 
 #[test]
+fn auth_validator_hmac_mode_generates_token() {
+    let validator = AuthValidator::from_hmac_secret(b"test-secret-key".to_vec());
+    assert!(validator.generate_token().is_some());
+    assert!(!validator.is_oidc());
+}
+
+#[test]
 fn reject_tampered_token() {
-    let validator = TokenValidator::new(b"test-secret-key".to_vec());
+    let validator = HmacTokenValidator::new(b"test-secret-key".to_vec());
     let token = validator.generate_token();
     let mut tampered = token.clone();
     tampered.push('a');
@@ -24,15 +32,15 @@ fn reject_tampered_token() {
 
 #[test]
 fn reject_wrong_secret() {
-    let v1 = TokenValidator::new(b"secret-1".to_vec());
-    let v2 = TokenValidator::new(b"secret-2".to_vec());
+    let v1 = HmacTokenValidator::new(b"secret-1".to_vec());
+    let v2 = HmacTokenValidator::new(b"secret-2".to_vec());
     let token = v1.generate_token();
     assert_eq!(v2.validate_token(&token), Err(AuthError::InvalidSignature));
 }
 
 #[test]
 fn reject_malformed() {
-    let validator = TokenValidator::new(b"secret".to_vec());
+    let validator = HmacTokenValidator::new(b"secret".to_vec());
     assert_eq!(
         validator.validate_token("not-a-token"),
         Err(AuthError::MalformedToken)
@@ -42,7 +50,7 @@ fn reject_malformed() {
 
 #[test]
 fn reject_empty_parts() {
-    let validator = TokenValidator::new(b"secret".to_vec());
+    let validator = HmacTokenValidator::new(b"secret".to_vec());
     assert_eq!(
         validator.validate_token("."),
         Err(AuthError::MalformedToken)
@@ -59,7 +67,7 @@ fn reject_empty_parts() {
 
 #[test]
 fn reject_multiple_dots() {
-    let validator = TokenValidator::new(b"secret".to_vec());
+    let validator = HmacTokenValidator::new(b"secret".to_vec());
     assert_eq!(
         validator.validate_token("aabb.ccdd.eeff"),
         Err(AuthError::MalformedToken)
@@ -68,7 +76,7 @@ fn reject_multiple_dots() {
 
 #[test]
 fn reject_non_hex_characters() {
-    let validator = TokenValidator::new(b"secret".to_vec());
+    let validator = HmacTokenValidator::new(b"secret".to_vec());
     assert_eq!(
         validator.validate_token("zzzzzzzzzzzzzzzz.abcdef1234567890"),
         Err(AuthError::MalformedToken)
@@ -77,7 +85,7 @@ fn reject_non_hex_characters() {
 
 #[test]
 fn token_within_clock_skew_tolerance_accepted() {
-    let validator = TokenValidator::new(b"test-secret-key".to_vec());
+    let validator = HmacTokenValidator::new(b"test-secret-key".to_vec());
     let future_time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -93,8 +101,8 @@ fn token_within_clock_skew_tolerance_accepted() {
 
 #[test]
 fn different_secrets_produce_different_tokens() {
-    let v1 = TokenValidator::new(b"secret-a".to_vec());
-    let v2 = TokenValidator::new(b"secret-b".to_vec());
+    let v1 = HmacTokenValidator::new(b"secret-a".to_vec());
+    let v2 = HmacTokenValidator::new(b"secret-b".to_vec());
     let t1 = v1.generate_token();
     let t2 = v2.generate_token();
     let sig1 = t1.split('.').nth(1).unwrap();
@@ -104,7 +112,7 @@ fn different_secrets_produce_different_tokens() {
 
 #[test]
 fn reject_future_timestamp() {
-    let validator = TokenValidator::new(b"test-secret-key".to_vec());
+    let validator = HmacTokenValidator::new(b"test-secret-key".to_vec());
     let future_time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()

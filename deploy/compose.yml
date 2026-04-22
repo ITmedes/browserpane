@@ -6,16 +6,35 @@
 #
 # Then open http://localhost:8080 in Chrome and click "Connect".
 #
-# The SPKI fingerprint is in dev/certs/cert-fingerprint.txt.
-# For Chrome: --ignore-certificate-errors-spki-list=$(cat dev/certs/cert-fingerprint.txt)
+# The current runtime SPKI fingerprint is also served at:
+#   http://localhost:8080/cert-fingerprint
+# For Chrome:
+#   --ignore-certificate-errors-spki-list=$(curl -fsS http://localhost:8080/cert-fingerprint)
 #
 # Services:
 #   host     - Linux host agent (Xvfb + xterm)
 #   gateway  - WebTransport relay (port 4433)
 #   web      - nginx frontend (port 8080)
+#   keycloak - local OIDC provider for dev/testing (port 8091)
 #   mcp-bridge - MCP SSE server for Claude Code (port 8931)
 
 services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1.2
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8091
+    ports:
+      - "8091:8080"
+    volumes:
+      - ./keycloak/browserpane-dev-realm.json:/opt/keycloak/data/import/browserpane-dev-realm.json:ro
+    networks:
+      - bpane-internal
+
   host:
     build:
       context: ..
@@ -87,18 +106,20 @@ services:
       --agent-socket /run/bpane/agent.sock
       --port 4433
       --max-viewers 10
+      --oidc-issuer http://localhost:8091/realms/browserpane-dev
+      --oidc-audience bpane-gateway
+      --oidc-jwks-url http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/certs
       --cert /certs/cert.pem
       --key /certs/cert.key
-      --token-file /shared/token
     ports:
       - "4433:4433/udp"
       - "4433:4433/tcp"
     volumes:
       - agent-socket:/run/bpane
-      - web-shared:/shared
       - ../dev/certs:/certs:ro
     depends_on:
       - host
+      - keycloak
     networks:
       - bpane-internal
 
@@ -108,11 +129,19 @@ services:
       dockerfile: deploy/Dockerfile.web
     ports:
       - "8080:8080"
+    environment:
+      BPANE_AUTH_MODE: oidc
+      BPANE_OIDC_PROVIDER_HINT: keycloak
+      BPANE_OIDC_ISSUER: http://localhost:8091/realms/browserpane-dev
+      BPANE_OIDC_CLIENT_ID: bpane-web
+      BPANE_OIDC_SCOPE: openid
+      BPANE_OIDC_EXAMPLE_USERNAME: demo
+      BPANE_OIDC_EXAMPLE_PASSWORD: demo-demo
     volumes:
-      - web-shared:/usr/share/nginx/html/shared:ro
       - ../dev/certs:/usr/share/nginx/html/certs:ro
     depends_on:
       - gateway
+      - keycloak
     networks:
       - bpane-internal
 
@@ -125,17 +154,21 @@ services:
       BPANE_CDP_ENDPOINT: "http://172.28.0.10:9223"
       BPANE_MCP_PORT: "8931"
       BPANE_MCP_RESOLUTION: "1600x900"
+      BPANE_GATEWAY_OIDC_TOKEN_URL: "http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token"
+      BPANE_GATEWAY_OIDC_CLIENT_ID: "bpane-mcp-bridge"
+      BPANE_GATEWAY_OIDC_CLIENT_SECRET: "bpane-mcp-bridge-secret"
+      BPANE_GATEWAY_OIDC_SCOPES: ""
     ports:
       - "8931:8931"
     depends_on:
       - gateway
       - host
+      - keycloak
     networks:
       - bpane-internal
 
 volumes:
   agent-socket:
-  web-shared:
 
 networks:
   bpane-internal:
