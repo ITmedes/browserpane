@@ -180,6 +180,7 @@ services:
       BPANE_CDP_ENDPOINT: "http://172.28.0.10:9223"
       BPANE_MCP_PORT: "8931"
       BPANE_MCP_RESOLUTION: "1600x900"
+      BPANE_SESSION_BOOTSTRAP_MODE: "off"
       BPANE_GATEWAY_OIDC_TOKEN_URL: "http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token"
       BPANE_GATEWAY_OIDC_CLIENT_ID: "bpane-mcp-bridge"
       BPANE_GATEWAY_OIDC_CLIENT_SECRET: "bpane-mcp-bridge-secret"

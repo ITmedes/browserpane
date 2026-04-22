@@ -181,6 +181,8 @@ impl OidcTokenValidator {
         let subject = claims
             .get("sub")
             .and_then(Value::as_str)
+            .or_else(|| claims.get("preferred_username").and_then(Value::as_str))
+            .or_else(|| claims.get("email").and_then(Value::as_str))
             .ok_or(AuthError::MalformedToken)?;
         let issuer = claims
             .get("iss")
