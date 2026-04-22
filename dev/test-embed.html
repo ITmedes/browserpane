@@ -829,6 +829,7 @@
 
     // ── Auth state ──────────────────────────────────────────────────
     const AUTH_CONFIG_URL = '/auth-config.json';
+    const GATEWAY_STATUS_URL = '/api/session/status';
     const AUTH_STORAGE_KEY = 'bpane.auth.tokens.v1';
     const AUTH_PKCE_KEY = 'bpane.auth.pkce.v1';
     const authState = {
@@ -836,6 +837,7 @@
       metadata: null,
       tokens: null,
       claims: null,
+      gatewayPreflightOk: false,
       initialized: false,
     };
 
@@ -892,6 +894,7 @@
     function clearAuthTokens() {
       authState.tokens = null;
       authState.claims = null;
+      authState.gatewayPreflightOk = false;
       sessionStorage.removeItem(AUTH_STORAGE_KEY);
     }
 
@@ -1093,6 +1096,38 @@
       return refreshAccessToken();
     }
 
+    async function verifyGatewayAccessToken(accessToken) {
+      try {
+        const response = await fetch(GATEWAY_STATUS_URL, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          authState.gatewayPreflightOk = false;
+          let detail = '';
+          try {
+            detail = await response.text();
+          } catch {
+            detail = '';
+          }
+          log(
+            `Gateway auth preflight failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`,
+            'error',
+          );
+          return false;
+        }
+        authState.gatewayPreflightOk = true;
+        log('Gateway auth preflight succeeded: bearer token accepted by bpane-gateway.', 'ok');
+        return true;
+      } catch (error) {
+        authState.gatewayPreflightOk = false;
+        log(`Gateway auth preflight failed: ${error.message}`, 'error');
+        return false;
+      }
+    }
+
     async function logout() {
       const idToken = authState.tokens?.id_token ?? '';
       clearAuthTokens();
@@ -1176,6 +1211,12 @@
       log(`Connecting to ${GATEWAY_URL}...`);
 
       try {
+        const gatewayAuthOk = await verifyGatewayAccessToken(accessToken);
+        if (!gatewayAuthOk) {
+          setStatus('Auth rejected', 'error');
+          if (overlay) overlay.style.display = '';
+          return;
+        }
         log(
           `Connect options: render=${renderBackendSelect.value}, scrollCopy=${scrollCopyToggle.checked ? 'on' : 'off'}, hiDpi=${hidpiToggle.checked}`,
           'info',
@@ -1366,6 +1407,12 @@
       } catch (e) {
         log(`Connection failed: ${e.message}`, 'error');
         setStatus('Connection failed', 'error');
+        if (authState.gatewayPreflightOk && /Opening handshake failed/i.test(e.message)) {
+          log(
+            'Gateway accepted the bearer token; the failure happened before session auth, typically in local WebTransport TLS/Chrome trust.',
+            'warn',
+          );
+        }
         log('Hint: Chrome requires trusted TLS for WebTransport.', 'warn');
         log(`Launch Chrome with: --origin-to-force-quic-on=${GATEWAY_HOST}:${GATEWAY_PORT}`, 'warn');
         if (overlay) overlay.style.display = '';
