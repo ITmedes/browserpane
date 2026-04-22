@@ -115,6 +115,22 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     let session_id = created["id"].as_str().unwrap().to_string();
     assert_eq!(created["state"], "ready");
     assert_eq!(created["owner_mode"], "collaborative");
+    assert_eq!(created["idle_timeout_sec"], 900);
+    assert_eq!(created["template_id"], "default");
+    assert!(created["automation_delegate"].is_null());
+    assert_eq!(created["viewport"]["width"], 1440);
+    assert_eq!(created["viewport"]["height"], 900);
+    assert_eq!(created["capabilities"]["browser_input"], true);
+    assert_eq!(created["capabilities"]["clipboard"], true);
+    assert_eq!(created["capabilities"]["audio"], true);
+    assert_eq!(created["capabilities"]["microphone"], true);
+    assert_eq!(created["capabilities"]["camera"], true);
+    assert_eq!(created["capabilities"]["file_transfer"], true);
+    assert_eq!(created["capabilities"]["resize"], true);
+    assert!(created["owner"]["subject"].is_string());
+    assert!(created["owner"]["issuer"].is_string());
+    assert_eq!(created["labels"]["suite"], "contract");
+    assert_eq!(created["integration_context"]["ticket"], "BPANE-6");
     assert_eq!(created["connect"]["gateway_url"], "https://localhost:4433");
     assert_eq!(created["connect"]["transport_path"], "/session");
     assert_eq!(created["connect"]["auth_type"], "session_connect_ticket");
@@ -132,6 +148,9 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
         "legacy_single_runtime"
     );
     assert_eq!(created["runtime"]["cdp_endpoint"], "http://host:9223");
+    assert!(created["created_at"].is_string());
+    assert!(created["updated_at"].is_string());
+    assert!(created["stopped_at"].is_null());
 
     let list_response = app
         .clone()
@@ -182,6 +201,18 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     assert_eq!(issued["session_id"], session_id);
     assert_eq!(issued["token_type"], "session_connect_ticket");
     assert!(issued["token"].as_str().unwrap().starts_with("v1."));
+    assert!(issued["expires_at"].is_string());
+    assert_eq!(issued["connect"]["gateway_url"], "https://localhost:4433");
+    assert_eq!(issued["connect"]["transport_path"], "/session");
+    assert_eq!(issued["connect"]["auth_type"], "session_connect_ticket");
+    assert_eq!(
+        issued["connect"]["ticket_path"],
+        format!("/api/v1/sessions/{session_id}/access-tokens")
+    );
+    assert_eq!(
+        issued["connect"]["compatibility_mode"],
+        "legacy_single_runtime"
+    );
 
     let delete_response = app
         .clone()

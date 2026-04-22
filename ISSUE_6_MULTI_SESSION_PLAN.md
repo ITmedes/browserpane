@@ -33,6 +33,7 @@ Completed baseline for the first Phase 0 control-plane slice:
 - Docker-backed runtime assignment metadata is now persisted and reconciled on gateway restart
 - `mcp-bridge` can now adopt a delegated session and resolve its runtime-specific CDP endpoint through the session resource, but each bridge instance still manages one control session at a time
 - there is now a compose-driven smoke harness for local `docker_pool` validation
+- the owner-scoped v1 contract is now frozen in `openapi/bpane-control-v1.yaml`
 
 Implication for issue #6:
 
@@ -72,6 +73,10 @@ The main blockers are outside that abstraction:
   - the opt-in Docker backend is not wired into the default compose path yet
 
 `SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is mostly operational hardening and turning the worker-pool path into the default-tested path instead of an advanced opt-in mode.
+
+The public Phase 0 contract is now frozen and versioned at:
+
+- `openapi/bpane-control-v1.yaml`
 
 ## Industry Patterns Worth Copying
 
@@ -479,18 +484,17 @@ Remaining expansion opportunities:
 - explicit reconnect-to-stopped-session coverage
 - multiple bridge instance coordination
 
-## Recommended First Implementation Slice
+## Phase 0 Result
 
-Start with Phase 0 only.
+Phase 0 is now effectively complete for the core control-plane boundary:
 
-Concrete first PR target:
+1. `/api/v1` resource shapes exist
+2. session IDs and connect-ticket response types are live in Rust and TypeScript
+3. gateway routing is session-aware
+4. contract-oriented gateway tests exist for the frozen surface
+5. the canonical public spec is `openapi/bpane-control-v1.yaml`
 
-1. Add `/api/v1` resource shapes and OpenAPI draft.
-2. Define session IDs and access-ticket response types in Rust and TypeScript.
-3. Introduce session-aware gateway route parsing without switching runtime routing yet.
-4. Add tests for the new public contract and compatibility behavior.
-
-This is the lowest-risk way to start because it freezes the product boundary before runtime refactors begin.
+That freeze now becomes the boundary future phases should build on rather than reshape.
 
 ## MCP / Automation Use Cases To Design For
 
@@ -545,6 +549,17 @@ Issue #6 is done when:
 - `bpane-client` and `mcp-bridge` can target one explicit session
 - auth is split cleanly between control-plane and data-plane access
 - the new flow is covered by automated tests, not just manual verification
+
+Current status against those criteria:
+
+- sessions are first-class public resources: done
+- gateway routing is session-scoped: done
+- the host can run at least two isolated sessions in parallel: done in `docker_pool`
+- `bpane-client` and `mcp-bridge` can target one explicit session: done
+- auth is split cleanly between control-plane and data-plane access: done
+- the new flow is covered by automated tests: done for the current local scope
+
+What remains belongs more naturally to later operational or cluster-readiness work, not to the core Phase 0 control-plane milestone.
 
 ## External Reference Points
 
