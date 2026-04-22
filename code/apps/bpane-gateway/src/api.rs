@@ -241,13 +241,39 @@ async fn issue_session_access_token(
             )
         })?;
 
-    if !stored.state.is_runtime_candidate() {
+    let connectable = if stored.state == SessionLifecycleState::Stopped {
+        let prepared = state
+            .session_store
+            .prepare_session_for_connect(session_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("session {session_id} not found"),
+                    }),
+                )
+            })?;
+        schedule_idle_session_stop(
+            session_id,
+            state.idle_stop_timeout,
+            state.registry.clone(),
+            state.session_store.clone(),
+            state.runtime_manager.clone(),
+        );
+        prepared
+    } else {
+        stored
+    };
+
+    if !connectable.state.is_runtime_candidate() {
         return Err((
             StatusCode::CONFLICT,
             Json(ErrorResponse {
                 error: format!(
                     "session {session_id} is not connectable in state {}",
-                    stored.state.as_str()
+                    connectable.state.as_str()
                 ),
             }),
         ));
@@ -264,7 +290,7 @@ async fn issue_session_access_token(
                 }),
             )
         })?;
-    let resource = stored.to_resource(
+    let resource = connectable.to_resource(
         &state.public_gateway_url,
         state.session_store.compatibility_mode(),
         None,
@@ -353,6 +379,7 @@ async fn delete_session(
         })?;
 
     state.runtime_manager.release(session_id).await;
+    state.registry.remove_session(session_id).await;
 
     Ok(Json(stopped.to_resource(
         &state.public_gateway_url,

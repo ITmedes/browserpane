@@ -100,12 +100,20 @@ gtk-cursor-blink-time=0
 EOF
 done
 
-# Create a dedicated Chromium profile.
-PROFILE_DIR=/home/bpane/.bpane-chromium
-mkdir -p "$PROFILE_DIR"
-BPANE_UPLOAD_DIR=${BPANE_UPLOAD_DIR:-/home/bpane/bpane-uploads}
-BPANE_DOWNLOAD_DIR=${BPANE_DOWNLOAD_DIR:-/home/bpane/bpane-downloads}
-mkdir -p "$BPANE_UPLOAD_DIR" "$BPANE_DOWNLOAD_DIR"
+# Create a dedicated Chromium profile for the current BrowserPane session.
+# Docker-backed runtimes override BPANE_SESSION_ID so stopped sessions can
+# restart against the same persisted Chromium state.
+BPANE_SESSION_ID="${BPANE_SESSION_ID:-static-default}"
+BPANE_PROFILE_ROOT="${BPANE_PROFILE_ROOT:-/home/bpane/.bpane-chromium-sessions}"
+SESSION_STATE_DIR="${BPANE_PROFILE_ROOT%/}/${BPANE_SESSION_ID}"
+PROFILE_DIR="${BPANE_PROFILE_DIR:-${SESSION_STATE_DIR}/chromium}"
+BPANE_UPLOAD_DIR="${BPANE_UPLOAD_DIR:-${SESSION_STATE_DIR}/uploads}"
+BPANE_DOWNLOAD_DIR="${BPANE_DOWNLOAD_DIR:-${SESSION_STATE_DIR}/downloads}"
+mkdir -p "$PROFILE_DIR" "$BPANE_UPLOAD_DIR" "$BPANE_DOWNLOAD_DIR"
+rm -f \
+  "${PROFILE_DIR}/SingletonLock" \
+  "${PROFILE_DIR}/SingletonSocket" \
+  "${PROFILE_DIR}/SingletonCookie"
 
 write_chromium_preferences() {
   local profile_dir="$1"
@@ -129,6 +137,8 @@ if preferences_path.exists():
 browser = data.setdefault("browser", {})
 # Force Chromium onto the native WM frame so Openbox owns the titlebar buttons.
 browser["custom_chrome_frame"] = False
+browser["restore_on_startup"] = 1
+browser["restore_on_startup_migrated"] = True
 download = data.setdefault("download", {})
 download["default_directory"] = download_dir
 download["prompt_for_download"] = False
@@ -165,6 +175,8 @@ CHROMIUM_FLAGS=(
   --force-prefers-reduced-motion
   --metrics-recording-only
   --password-store=basic
+  --restore-last-session
+  --hide-crash-restore-bubble
   --use-gl=swiftshader
   --ozone-platform=x11
   "--user-data-dir=${PROFILE_DIR}"

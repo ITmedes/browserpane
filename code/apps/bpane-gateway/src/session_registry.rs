@@ -159,6 +159,16 @@ impl SessionRegistry {
             warn!(client_id, %session_id, "leave called but no hub found for session");
         }
     }
+
+    pub async fn remove_session(&self, session_id: Uuid) {
+        let removed = {
+            let mut hubs = self.hubs.lock().await;
+            hubs.remove(&session_id)
+        };
+        if removed.is_some() {
+            debug!(%session_id, "removed session hub from registry");
+        }
+    }
 }
 
 #[cfg(test)]

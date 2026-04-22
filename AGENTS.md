@@ -53,7 +53,7 @@ Current product shape:
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
-  - `runtime_manager.rs`: session-id-to-runtime resolution seam; currently supports `static_single`, `docker_single`, and `docker_pool` backends. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions.
+  - `runtime_manager.rs`: session-id-to-runtime resolution seam; currently supports `static_single`, `docker_single`, and `docker_pool` backends. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions. Docker-backed workers now carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile.
   - `api.rs`: legacy compatibility endpoints plus `POST/GET/DELETE /api/v1/sessions` and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
@@ -91,6 +91,7 @@ Current product shape:
 - If `--exclusive-browser-owner` is enabled, one owner drives the session and additional browser clients join as viewers.
 - MCP ownership still locks browser clients into viewer behavior.
 - Late joiners are bootstrapped from cached session state and late-join refreshes are tracked in gateway telemetry.
+- If a worker is still alive, reconnect returns to the exact live runtime. After idle-stop, reconnect restarts from the persisted Chromium profile instead of a true suspended process image.
 - Gateway session status reports:
   - browser and viewer counts
   - `max_viewers` and remaining slots

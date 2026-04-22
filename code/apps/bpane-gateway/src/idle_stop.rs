@@ -39,6 +39,7 @@ pub fn schedule_idle_session_stop(
         match session_store.stop_session_if_idle(session_id).await {
             Ok(Some(session)) if session.state == SessionLifecycleState::Stopped => {
                 runtime_manager.release(session_id).await;
+                registry.remove_session(session_id).await;
                 info!(%session_id, "stopped idle session after {:?}", timeout);
             }
             Ok(_) => {}
