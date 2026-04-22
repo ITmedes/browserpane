@@ -64,6 +64,25 @@ async fn rejects_v1_session_routes_without_bearer_auth() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
+#[test]
+fn blocking_session_stop_only_applies_to_legacy_runtime_backends() {
+    assert!(should_block_session_stop(
+        SessionLifecycleState::Ready,
+        true,
+        true,
+    ));
+    assert!(!should_block_session_stop(
+        SessionLifecycleState::Ready,
+        false,
+        true,
+    ));
+    assert!(!should_block_session_stop(
+        SessionLifecycleState::Stopped,
+        true,
+        true,
+    ));
+}
+
 #[tokio::test]
 async fn creates_lists_gets_and_stops_a_session_resource() {
     let (app, token) = test_router();

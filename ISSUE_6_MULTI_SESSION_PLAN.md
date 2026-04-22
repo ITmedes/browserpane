@@ -30,7 +30,9 @@ Completed baseline for the first Phase 0 control-plane slice:
 - the current resource contract returns session-scoped connect metadata
 - browser transport routing is now keyed by public `session_id` through short-lived connect tickets
 - optional docker-backed runtime selection now exists, including `docker_pool` for multiple parallel runtime-backed sessions within configured caps
+- Docker-backed runtime assignment metadata is now persisted and reconciled on gateway restart
 - `mcp-bridge` can now adopt a delegated session and resolve its runtime-specific CDP endpoint through the session resource, but each bridge instance still manages one control session at a time
+- there is now a compose-driven smoke harness for local `docker_pool` validation
 
 Implication for issue #6:
 
@@ -57,18 +59,19 @@ The main blockers are outside that abstraction:
     - `docker_pool`: multiple start-on-demand runtime containers with explicit active/startup caps
   - `docker_single` still enforces one active runtime at a time; `docker_pool` is the first backend that can run multiple session workers in parallel
   - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions
-  - the remaining work is runtime metadata persistence, stronger worker lifecycle/recovery semantics, and session-specific MCP/CDP wiring for automation in pool mode
+  - runtime assignment metadata is now persisted and reconciled on gateway restart
+  - stopped sessions can now restart against the same persisted Chromium profile in Docker-backed modes
+  - the remaining work is hardening and broader operational policy, not first-pass runtime identity/routing
 - `code/apps/bpane-gateway/src/main.rs` and `config.rs`
   - one `--agent-socket`, one host endpoint
 - `code/integrations/mcp-bridge/src/index.ts`
-  - can now resolve a control session and use session-scoped ownership/status APIs
-  - still assumes one BrowserPane runtime endpoint and one CDP target underneath
-  - still lacks a first-class cross-principal delegation flow
+  - can now resolve a control session, use session-scoped ownership/status APIs, and bind to the delegated session's runtime-specific CDP endpoint
+  - still limits one managed control session per bridge instance
 - `deploy/compose.yml`
   - local stack is still hard-wired to one host worker and one socket volume by default
   - the opt-in Docker backend is not wired into the default compose path yet
 
-`SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is host/runtime lifecycle, runtime metadata persistence, and promoting the worker-pool backend from opt-in infrastructure to the default tested path.
+`SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is mostly operational hardening and turning the worker-pool path into the default-tested path instead of an advanced opt-in mode.
 
 ## Industry Patterns Worth Copying
 
@@ -389,8 +392,15 @@ What exists now:
 
 What does not really exist yet:
 
-- a dedicated repo-level multi-session end-to-end harness
 - `mcp-bridge` automated tests
+
+What now exists:
+
+- a compose-driven local multi-session smoke harness in `code/web/bpane-client/scripts/run-multi-session-smoke.mjs`
+  - creates two independent pool-mode sessions
+  - joins an existing session from a second browser page
+  - delegates MCP and verifies bridge runtime switching
+  - verifies clean teardown back to zero active runtime assignments
 
 That means issue #6 should extend the existing subsystem test seams first, then add a focused multi-session integration layer.
 
@@ -450,16 +460,24 @@ Recommended first step:
 
 ### Test layer 6: compose-driven multi-session smoke test
 
-After Phases 2-4 are stable, add one compose-driven smoke path that proves:
+This layer now exists as a narrow orchestrated smoke harness instead of a full browser-heavy suite.
+
+Current coverage:
 
 - create session A
 - create session B
 - connect browser client to A
 - connect browser client to B
-- verify isolation
-- claim automation owner on one session without affecting the other
+- join an existing session from a third browser page
+- verify session isolation
+- delegate MCP to session A, then switch to session B
+- verify runtime pool teardown returns to zero active runtime assignments
 
-This does not need to start as a full browser-heavy E2E suite. A narrow orchestrated smoke harness is enough initially.
+Remaining expansion opportunities:
+
+- gateway restart recovery as an automated smoke step
+- explicit reconnect-to-stopped-session coverage
+- multiple bridge instance coordination
 
 ## Recommended First Implementation Slice
 

@@ -328,7 +328,11 @@ async fn delete_session(
             )
         })?;
 
-    if stored.state.is_runtime_candidate() && runtime_is_currently_in_use(&state).await {
+    if should_block_session_stop(
+        stored.state,
+        state.runtime_manager.profile().supports_legacy_global_routes,
+        runtime_is_currently_in_use(&state).await,
+    ) {
         return Err((
             StatusCode::CONFLICT,
             Json(ErrorResponse {
@@ -772,6 +776,14 @@ async fn runtime_is_currently_in_use(state: &ApiState) -> bool {
         return false;
     };
     snapshot.browser_clients > 0 || snapshot.viewer_clients > 0 || snapshot.mcp_owner
+}
+
+fn should_block_session_stop(
+    state: SessionLifecycleState,
+    supports_legacy_global_routes: bool,
+    runtime_in_use: bool,
+) -> bool {
+    supports_legacy_global_routes && state.is_runtime_candidate() && runtime_in_use
 }
 
 async fn resolve_runtime(

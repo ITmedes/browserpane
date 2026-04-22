@@ -8,7 +8,10 @@ use tokio::fs;
 use tokio::process::Command;
 use tokio::sync::{futures::OwnedNotified, Mutex, Notify};
 use tokio::time::{sleep, Instant};
+use tracing::{info, warn};
 use uuid::Uuid;
+
+use crate::session_control::{SessionLifecycleState, SessionStore};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedSessionRuntime {
@@ -20,6 +23,43 @@ pub struct ResolvedSessionRuntime {
 pub struct RuntimeSessionAccessInfo {
     pub binding: String,
     pub compatibility_mode: String,
+    pub cdp_endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeAssignmentStatus {
+    Starting,
+    Ready,
+}
+
+impl RuntimeAssignmentStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Starting => "starting",
+            Self::Ready => "ready",
+        }
+    }
+}
+
+impl std::str::FromStr for RuntimeAssignmentStatus {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "starting" => Ok(Self::Starting),
+            "ready" => Ok(Self::Ready),
+            _ => Err("unknown runtime assignment status"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedRuntimeAssignment {
+    pub session_id: Uuid,
+    pub runtime_binding: String,
+    pub status: RuntimeAssignmentStatus,
+    pub agent_socket_path: String,
+    pub container_name: Option<String>,
     pub cdp_endpoint: Option<String>,
 }
 
@@ -45,6 +85,7 @@ pub enum RuntimeManagerError {
     },
     InvalidConfiguration(String),
     StartupFailed(String),
+    PersistenceFailed(String),
 }
 
 impl fmt::Display for RuntimeManagerError {
@@ -76,6 +117,7 @@ impl fmt::Display for RuntimeManagerError {
             ),
             Self::InvalidConfiguration(message) => write!(f, "{message}"),
             Self::StartupFailed(message) => write!(f, "{message}"),
+            Self::PersistenceFailed(message) => write!(f, "{message}"),
         }
     }
 }
@@ -187,6 +229,20 @@ impl SessionRuntimeManager {
 
     pub fn profile(&self) -> &RuntimeProfile {
         &self.profile
+    }
+
+    pub async fn attach_session_store(&self, store: SessionStore) {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => {}
+            RuntimeBackend::Docker(manager) => manager.attach_session_store(store).await,
+        }
+    }
+
+    pub async fn reconcile_persisted_state(&self) -> Result<(), RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => Ok(()),
+            RuntimeBackend::Docker(manager) => manager.reconcile_persisted_state().await,
+        }
     }
 
     pub fn describe_session_runtime(&self, session_id: Uuid) -> RuntimeSessionAccessInfo {
@@ -348,6 +404,7 @@ struct DockerRuntimeManager {
     config: DockerRuntimeConfig,
     profile: RuntimeProfile,
     leases: Mutex<HashMap<Uuid, DockerLeaseState>>,
+    session_store: Mutex<Option<SessionStore>>,
 }
 
 enum DockerLeaseState {
@@ -418,7 +475,16 @@ impl DockerRuntimeManager {
             config,
             profile,
             leases: Mutex::new(HashMap::new()),
+            session_store: Mutex::new(None),
         })
+    }
+
+    async fn attach_session_store(&self, store: SessionStore) {
+        *self.session_store.lock().await = Some(store);
+    }
+
+    async fn session_store(&self) -> Option<SessionStore> {
+        self.session_store.lock().await.clone()
     }
 
     async fn resolve(
@@ -480,6 +546,20 @@ impl DockerRuntimeManager {
                     waiter.await;
                 }
                 ResolveAction::Start { lease, notify } => {
+                    if let Err(error) = self
+                        .persist_assignment(&lease, RuntimeAssignmentStatus::Starting)
+                        .await
+                    {
+                        let mut leases = self.leases.lock().await;
+                        if matches!(
+                            leases.get(&session_id),
+                            Some(DockerLeaseState::Starting { .. })
+                        ) {
+                            leases.remove(&session_id);
+                        }
+                        notify.notify_waiters();
+                        return Err(error);
+                    }
                     let result = self.start_container(&lease).await;
                     let mut leases = self.leases.lock().await;
                     let stop_container = match result {
@@ -488,6 +568,28 @@ impl DockerRuntimeManager {
                                 leases.get(&session_id),
                                 Some(DockerLeaseState::Starting { .. })
                             ) {
+                                drop(leases);
+                                if let Err(error) = self
+                                    .persist_assignment(&lease, RuntimeAssignmentStatus::Ready)
+                                    .await
+                                {
+                                    let mut leases = self.leases.lock().await;
+                                    if matches!(
+                                        leases.get(&session_id),
+                                        Some(DockerLeaseState::Starting { .. })
+                                    ) {
+                                        leases.remove(&session_id);
+                                    }
+                                    notify.notify_waiters();
+                                    drop(leases);
+                                    if let Some(container_name) = &lease.container_name {
+                                        let _ = self.stop_container(container_name).await;
+                                    }
+                                    let _ = remove_socket_path(&lease.agent_socket_path).await;
+                                    let _ = self.clear_assignment(session_id).await;
+                                    return Err(error);
+                                }
+                                let mut leases = self.leases.lock().await;
                                 leases.insert(session_id, DockerLeaseState::Ready(lease.clone()));
                                 notify.notify_waiters();
                                 return Ok(ResolvedSessionRuntime {
@@ -504,6 +606,7 @@ impl DockerRuntimeManager {
                             ) {
                                 leases.remove(&session_id);
                             }
+                            let _ = self.clear_assignment(session_id).await;
                             notify.notify_waiters();
                             drop(leases);
                             if let Some(container_name) = &lease.container_name {
@@ -538,6 +641,7 @@ impl DockerRuntimeManager {
                 let _ = self.stop_container(container_name).await;
             }
             let _ = remove_socket_path(&state.lease().agent_socket_path).await;
+            let _ = self.clear_assignment(session_id).await;
         }
     }
 
@@ -579,8 +683,93 @@ impl DockerRuntimeManager {
             if should_stop {
                 let _ = manager.stop_container(&container_name).await;
                 let _ = remove_socket_path(&socket_path).await;
+                let _ = manager.clear_assignment(session_id).await;
             }
         });
+    }
+
+    async fn reconcile_persisted_state(&self) -> Result<(), RuntimeManagerError> {
+        let Some(store) = self.session_store().await else {
+            return Ok(());
+        };
+
+        let assignments = store
+            .list_runtime_assignments(&self.profile.runtime_binding)
+            .await
+            .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?;
+        if assignments.is_empty() {
+            return Ok(());
+        }
+
+        let mut leases = self.leases.lock().await;
+        for assignment in assignments {
+            let session = store
+                .get_session_by_id(assignment.session_id)
+                .await
+                .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?;
+            let session_state = session.as_ref().map(|stored| stored.state);
+
+            let recoverable = matches!(
+                session_state,
+                Some(
+                    SessionLifecycleState::Pending
+                        | SessionLifecycleState::Starting
+                        | SessionLifecycleState::Ready
+                        | SessionLifecycleState::Active
+                        | SessionLifecycleState::Idle
+                )
+            );
+
+            if !recoverable || leases.len() >= self.profile.max_runtime_sessions {
+                drop(leases);
+                self.cleanup_stale_assignment(&store, &assignment, recoverable)
+                    .await?;
+                leases = self.leases.lock().await;
+                continue;
+            }
+
+            let Some(container_name) = assignment.container_name.as_deref() else {
+                drop(leases);
+                self.cleanup_stale_assignment(&store, &assignment, recoverable)
+                    .await?;
+                leases = self.leases.lock().await;
+                continue;
+            };
+
+            let container_exists = self.container_exists(container_name).await?;
+            if !container_exists {
+                drop(leases);
+                self.cleanup_stale_assignment(&store, &assignment, recoverable)
+                    .await?;
+                leases = self.leases.lock().await;
+                continue;
+            }
+
+            if !std::path::Path::new(&assignment.agent_socket_path).exists() {
+                drop(leases);
+                self.cleanup_stale_assignment(&store, &assignment, recoverable)
+                    .await?;
+                leases = self.leases.lock().await;
+                continue;
+            }
+
+            info!(
+                session_id = %assignment.session_id,
+                container_name,
+                "recovered persisted docker runtime assignment",
+            );
+            leases.insert(
+                assignment.session_id,
+                DockerLeaseState::Ready(RuntimeLease {
+                    session_id: assignment.session_id,
+                    agent_socket_path: assignment.agent_socket_path.clone(),
+                    container_name: Some(container_name.to_string()),
+                    idle_generation: 0,
+                }),
+            );
+        }
+
+        Ok(())
     }
 
     fn socket_path_for_session(&self, session_id: Uuid) -> String {
@@ -736,6 +925,91 @@ impl DockerRuntimeManager {
             }
             sleep(Duration::from_millis(200)).await;
         }
+    }
+
+    async fn container_exists(&self, container_name: &str) -> Result<bool, RuntimeManagerError> {
+        let output = Command::new(&self.config.docker_bin)
+            .arg("inspect")
+            .arg("--type")
+            .arg("container")
+            .arg(container_name)
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to inspect docker runtime {container_name}: {error}"
+                ))
+            })?;
+        if output.status.success() {
+            return Ok(true);
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("No such object") || stderr.contains("No such container") {
+            return Ok(false);
+        }
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "docker inspect failed for {container_name}: {}",
+            stderr.trim()
+        )))
+    }
+
+    async fn persist_assignment(
+        &self,
+        lease: &RuntimeLease,
+        status: RuntimeAssignmentStatus,
+    ) -> Result<(), RuntimeManagerError> {
+        let Some(store) = self.session_store().await else {
+            return Ok(());
+        };
+        store
+            .upsert_runtime_assignment(PersistedRuntimeAssignment {
+                session_id: lease.session_id,
+                runtime_binding: self.profile.runtime_binding.clone(),
+                status,
+                agent_socket_path: lease.agent_socket_path.clone(),
+                container_name: lease.container_name.clone(),
+                cdp_endpoint: Some(self.cdp_endpoint_for_session(lease.session_id)),
+            })
+            .await
+            .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))
+    }
+
+    async fn clear_assignment(&self, session_id: Uuid) -> Result<(), RuntimeManagerError> {
+        let Some(store) = self.session_store().await else {
+            return Ok(());
+        };
+        store
+            .clear_runtime_assignment(session_id)
+            .await
+            .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))
+    }
+
+    async fn cleanup_stale_assignment(
+        &self,
+        store: &SessionStore,
+        assignment: &PersistedRuntimeAssignment,
+        restore_session_ready: bool,
+    ) -> Result<(), RuntimeManagerError> {
+        if let Some(container_name) = assignment.container_name.as_deref() {
+            let _ = self.stop_container(container_name).await;
+        }
+        let _ = remove_socket_path(&assignment.agent_socket_path).await;
+        store
+            .clear_runtime_assignment(assignment.session_id)
+            .await
+            .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?;
+        if restore_session_ready {
+            let _ = store
+                .mark_session_ready_after_runtime_loss(assignment.session_id)
+                .await
+                .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?;
+        }
+        warn!(
+            session_id = %assignment.session_id,
+            container_name = assignment.container_name.as_deref().unwrap_or("unknown"),
+            "cleared stale persisted docker runtime assignment",
+        );
+        Ok(())
     }
 }
 

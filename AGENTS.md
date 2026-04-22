@@ -53,7 +53,7 @@ Current product shape:
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
-  - `runtime_manager.rs`: session-id-to-runtime resolution seam; currently supports `static_single`, `docker_single`, and `docker_pool` backends. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions. Docker-backed workers now carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile.
+  - `runtime_manager.rs`: session-id-to-runtime resolution seam; currently supports `static_single`, `docker_single`, and `docker_pool` backends. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions. Docker-backed workers now carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile, and Docker runtime assignments are now persisted/reconciled through Postgres on gateway restart.
   - `api.rs`: legacy compatibility endpoints plus `POST/GET/DELETE /api/v1/sessions` and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
@@ -68,7 +68,7 @@ Current product shape:
   - TypeScript package. There is no meaningful Rust browser client crate in the current repo.
 - `code/integrations/mcp-bridge`
   - SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
-  - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its local `/control-session` API, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured.
+  - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its local `/control-session` API, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured, including in `docker_pool` mode.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
@@ -109,13 +109,11 @@ Run these in `code/web/bpane-client`:
 - `npx tsc --noEmit`
 - `npm test`
 - `npm run build`
+- `npm run smoke:multisession -- --headless`
 - `npm run test:coverage`
 
 Run these where applicable:
 - `cd code/integrations/mcp-bridge && npm run build`
-- `cd code/tests/e2e && npm test`
-  - Chromium only
-  - expects the dev stack and local cert setup
 
 ## Local development flow
 

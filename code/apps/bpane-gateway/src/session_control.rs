@@ -12,7 +12,9 @@ use tokio_postgres::{Client, Connection, NoTls, Row, Socket};
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
-use crate::runtime_manager::{RuntimeProfile, RuntimeSessionAccessInfo};
+use crate::runtime_manager::{
+    PersistedRuntimeAssignment, RuntimeAssignmentStatus, RuntimeProfile, RuntimeSessionAccessInfo,
+};
 
 const DEFAULT_VIEWPORT_WIDTH: u16 = 1600;
 const DEFAULT_VIEWPORT_HEIGHT: u16 = 900;
@@ -356,6 +358,7 @@ impl SessionStore {
         Self {
             backend: SessionStoreBackend::InMemory(Arc::new(InMemorySessionStore {
                 sessions: Mutex::new(Vec::new()),
+                runtime_assignments: Mutex::new(HashMap::new()),
                 config: SessionStoreConfig::from(runtime_profile),
             })),
         }
@@ -567,6 +570,55 @@ impl SessionStore {
             SessionStoreBackend::Postgres(store) => store.stop_session_if_idle(id).await,
         }
     }
+
+    pub async fn upsert_runtime_assignment(
+        &self,
+        assignment: PersistedRuntimeAssignment,
+    ) -> Result<(), SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.upsert_runtime_assignment(assignment).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.upsert_runtime_assignment(assignment).await
+            }
+        }
+    }
+
+    pub async fn clear_runtime_assignment(&self, id: Uuid) -> Result<(), SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.clear_runtime_assignment(id).await,
+            SessionStoreBackend::Postgres(store) => store.clear_runtime_assignment(id).await,
+        }
+    }
+
+    pub async fn list_runtime_assignments(
+        &self,
+        runtime_binding: &str,
+    ) -> Result<Vec<PersistedRuntimeAssignment>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_runtime_assignments(runtime_binding).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_runtime_assignments(runtime_binding).await
+            }
+        }
+    }
+
+    pub async fn mark_session_ready_after_runtime_loss(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.mark_session_ready_after_runtime_loss(id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.mark_session_ready_after_runtime_loss(id).await
+            }
+        }
+    }
 }
 
 async fn connect_to_postgres_with_retry(
@@ -636,6 +688,7 @@ fn validate_automation_delegate_request(
 
 struct InMemorySessionStore {
     sessions: Mutex<Vec<StoredSession>>,
+    runtime_assignments: Mutex<HashMap<Uuid, PersistedRuntimeAssignment>>,
     config: SessionStoreConfig,
 }
 
@@ -901,6 +954,53 @@ impl InMemorySessionStore {
 
         Ok(Some(session.clone()))
     }
+
+    async fn upsert_runtime_assignment(
+        &self,
+        assignment: PersistedRuntimeAssignment,
+    ) -> Result<(), SessionStoreError> {
+        self.runtime_assignments
+            .lock()
+            .await
+            .insert(assignment.session_id, assignment);
+        Ok(())
+    }
+
+    async fn clear_runtime_assignment(&self, id: Uuid) -> Result<(), SessionStoreError> {
+        self.runtime_assignments.lock().await.remove(&id);
+        Ok(())
+    }
+
+    async fn list_runtime_assignments(
+        &self,
+        runtime_binding: &str,
+    ) -> Result<Vec<PersistedRuntimeAssignment>, SessionStoreError> {
+        let assignments = self.runtime_assignments.lock().await;
+        let mut values = assignments
+            .values()
+            .filter(|assignment| assignment.runtime_binding == runtime_binding)
+            .cloned()
+            .collect::<Vec<_>>();
+        values.sort_by_key(|assignment| assignment.session_id);
+        Ok(values)
+    }
+
+    async fn mark_session_ready_after_runtime_loss(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| session.id == id) else {
+            return Ok(None);
+        };
+
+        if session.state.is_runtime_candidate() {
+            session.state = SessionLifecycleState::Ready;
+            session.updated_at = Utc::now();
+        }
+
+        Ok(Some(session.clone()))
+    }
 }
 
 struct PostgresSessionStore {
@@ -942,6 +1042,20 @@ impl PostgresSessionStore {
 
                 CREATE INDEX IF NOT EXISTS idx_control_sessions_runtime_state
                     ON control_sessions (runtime_binding, state, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS control_session_runtimes (
+                    session_id UUID PRIMARY KEY REFERENCES control_sessions(id) ON DELETE CASCADE,
+                    runtime_binding TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    agent_socket_path TEXT NOT NULL,
+                    container_name TEXT NULL,
+                    cdp_endpoint TEXT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_session_runtimes_binding_updated
+                    ON control_session_runtimes (runtime_binding, updated_at DESC);
 
                 ALTER TABLE control_sessions
                     ADD COLUMN IF NOT EXISTS automation_owner_client_id TEXT NULL;
@@ -1661,6 +1775,144 @@ impl PostgresSessionStore {
             })?;
         row.as_ref().map(row_to_stored_session).transpose()
     }
+
+    async fn upsert_runtime_assignment(
+        &self,
+        assignment: PersistedRuntimeAssignment,
+    ) -> Result<(), SessionStoreError> {
+        self.client
+            .lock()
+            .await
+            .execute(
+                r#"
+                INSERT INTO control_session_runtimes (
+                    session_id,
+                    runtime_binding,
+                    status,
+                    agent_socket_path,
+                    container_name,
+                    cdp_endpoint,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+                ON CONFLICT (session_id)
+                DO UPDATE SET
+                    runtime_binding = EXCLUDED.runtime_binding,
+                    status = EXCLUDED.status,
+                    agent_socket_path = EXCLUDED.agent_socket_path,
+                    container_name = EXCLUDED.container_name,
+                    cdp_endpoint = EXCLUDED.cdp_endpoint,
+                    updated_at = NOW()
+                "#,
+                &[
+                    &assignment.session_id,
+                    &assignment.runtime_binding,
+                    &assignment.status.as_str(),
+                    &assignment.agent_socket_path,
+                    &assignment.container_name,
+                    &assignment.cdp_endpoint,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to upsert runtime assignment: {error}"))
+            })?;
+        Ok(())
+    }
+
+    async fn clear_runtime_assignment(&self, id: Uuid) -> Result<(), SessionStoreError> {
+        self.client
+            .lock()
+            .await
+            .execute(
+                "DELETE FROM control_session_runtimes WHERE session_id = $1",
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to clear runtime assignment: {error}"))
+            })?;
+        Ok(())
+    }
+
+    async fn list_runtime_assignments(
+        &self,
+        runtime_binding: &str,
+    ) -> Result<Vec<PersistedRuntimeAssignment>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    session_id,
+                    runtime_binding,
+                    status,
+                    agent_socket_path,
+                    container_name,
+                    cdp_endpoint
+                FROM control_session_runtimes
+                WHERE runtime_binding = $1
+                ORDER BY updated_at DESC, created_at DESC
+                "#,
+                &[&runtime_binding],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list runtime assignments: {error}"))
+            })?;
+
+        rows.iter().map(row_to_runtime_assignment).collect()
+    }
+
+    async fn mark_session_ready_after_runtime_loss(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                UPDATE control_sessions
+                SET
+                    state = 'ready',
+                    updated_at = NOW()
+                WHERE id = $1
+                  AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
+                    state,
+                    template_id,
+                    owner_mode,
+                    viewport_width,
+                    viewport_height,
+                    idle_timeout_sec,
+                    labels,
+                    integration_context,
+                    created_at,
+                    updated_at,
+                    stopped_at
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to restore session to ready after runtime loss: {error}"
+                ))
+            })?;
+        row.as_ref().map(row_to_stored_session).transpose()
+    }
 }
 
 fn json_labels(labels: &HashMap<String, String>) -> Value {
@@ -1749,6 +2001,21 @@ fn row_to_stored_session(row: &Row) -> Result<StoredSession, SessionStoreError> 
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
         stopped_at: row.get("stopped_at"),
+    })
+}
+
+fn row_to_runtime_assignment(row: &Row) -> Result<PersistedRuntimeAssignment, SessionStoreError> {
+    let status = row
+        .get::<_, String>("status")
+        .parse::<RuntimeAssignmentStatus>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    Ok(PersistedRuntimeAssignment {
+        session_id: row.get("session_id"),
+        runtime_binding: row.get("runtime_binding"),
+        status,
+        agent_socket_path: row.get("agent_socket_path"),
+        container_name: row.get("container_name"),
+        cdp_endpoint: row.get("cdp_endpoint"),
     })
 }
 
@@ -2122,6 +2389,97 @@ mod tests {
                 max_runtime_sessions: 1
             }
         ));
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_persists_runtime_assignments_and_can_clear_them() {
+        let store = SessionStore::in_memory_with_config(RuntimeProfile {
+            runtime_binding: "docker_runtime_pool".to_string(),
+            compatibility_mode: "session_runtime_pool".to_string(),
+            max_runtime_sessions: 2,
+            supports_legacy_global_routes: false,
+        });
+        let owner = principal("owner");
+        let session = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+
+        store
+            .upsert_runtime_assignment(PersistedRuntimeAssignment {
+                session_id: session.id,
+                runtime_binding: "docker_runtime_pool".to_string(),
+                status: RuntimeAssignmentStatus::Ready,
+                agent_socket_path: format!("/run/bpane/sessions/{}.sock", session.id),
+                container_name: Some(format!("bpane-runtime-{}", session.id.as_simple())),
+                cdp_endpoint: Some(format!(
+                    "http://bpane-runtime-{}:9223",
+                    session.id.as_simple()
+                )),
+            })
+            .await
+            .unwrap();
+
+        let assignments = store
+            .list_runtime_assignments("docker_runtime_pool")
+            .await
+            .unwrap();
+        assert_eq!(assignments.len(), 1);
+        assert_eq!(assignments[0].session_id, session.id);
+        assert_eq!(assignments[0].status, RuntimeAssignmentStatus::Ready);
+
+        store.clear_runtime_assignment(session.id).await.unwrap();
+        assert!(store
+            .list_runtime_assignments("docker_runtime_pool")
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_can_restore_runtime_candidate_to_ready_after_runtime_loss() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let session = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+
+        let active = store
+            .mark_session_active(session.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(active.state, SessionLifecycleState::Active);
+
+        let restored = store
+            .mark_session_ready_after_runtime_loss(session.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored.state, SessionLifecycleState::Ready);
     }
 
     #[test]
