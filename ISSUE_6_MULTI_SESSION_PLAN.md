@@ -50,8 +50,11 @@ The main blockers are outside that abstraction:
   - WebTransport now resolves a session-scoped connect ticket and routes browser connections through the public `session_id`
   - the remaining compatibility limit is that session routing still resolves to one active host runtime candidate
 - `code/apps/bpane-gateway/src/runtime_manager.rs`
-  - this seam now exists and currently resolves every active session through the legacy single host socket
-  - the remaining work is replacing that backend with real per-session runtime assignment, idle shutdown, and capacity limits
+  - this seam now exists and currently supports:
+    - `static_single`: one shared host socket
+    - `docker_single`: one start-on-demand runtime container with idle shutdown
+  - both current backends still enforce one active runtime at a time
+  - the remaining work is replacing those single-runtime backends with real per-session runtime assignment, configurable capacity limits, and runtime metadata persistence
 - `code/apps/bpane-gateway/src/main.rs` and `config.rs`
   - one `--agent-socket`, one host endpoint
 - `code/integrations/mcp-bridge/src/index.ts`
@@ -59,9 +62,10 @@ The main blockers are outside that abstraction:
   - still assumes one BrowserPane runtime endpoint and one CDP target underneath
   - still lacks a first-class cross-principal delegation flow
 - `deploy/compose.yml`
-  - local stack is still hard-wired to one host worker and one socket volume
+  - local stack is still hard-wired to one host worker and one socket volume by default
+  - the opt-in Docker backend is not wired into the default compose path yet
 
-`SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is host/runtime lifecycle and mapping multiple runtime workers behind those session IDs through `runtime_manager.rs`.
+`SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is host/runtime lifecycle, runtime capacity policy, and mapping multiple runtime workers behind those session IDs through `runtime_manager.rs`.
 
 ## Industry Patterns Worth Copying
 

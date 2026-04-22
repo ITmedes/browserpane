@@ -147,6 +147,9 @@ impl TransportServer {
                     continue;
                 }
             };
+            self.runtime_manager
+                .mark_session_active(validated_request.session_id)
+                .await;
 
             let connection = match session_request.accept().await {
                 Ok(conn) => conn,
@@ -162,6 +165,7 @@ impl TransportServer {
             let heartbeat_timeout = self.heartbeat_timeout;
             let active_sessions_clone = active_sessions.clone();
             let registry = self.registry.clone();
+            let runtime_manager = self.runtime_manager.clone();
             active_sessions.fetch_add(1, Ordering::Relaxed);
 
             info!(
@@ -175,6 +179,7 @@ impl TransportServer {
                     connection,
                     session_id,
                     validated_request,
+                    runtime_manager,
                     &agent_path,
                     heartbeat_timeout,
                     registry.clone(),

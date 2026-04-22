@@ -95,6 +95,14 @@ The compose stack starts:
 - `web`: local frontend on `:8080`
 - `mcp-bridge`: MCP bridge on `:8931`
 
+The default local runtime backend is still a single shared host worker. The gateway now also has an opt-in Docker-backed runtime backend that can start and stop a worker container for the currently active session after an idle timeout, but that backend is still single-runtime and is not enabled by default in `deploy/compose.yml`.
+
+If you enable the Docker-backed runtime backend, the gateway also needs:
+
+- access to a Docker daemon
+- a shared `/run/bpane`-style volume between gateway and runtime containers
+- a configured worker image, network, and startup timeout
+
 The default local auth flow is now OIDC-based:
 
 - open `http://localhost:8080`
@@ -148,9 +156,11 @@ Current limitation:
 
 - the public session resource model is now versioned and persistent
 - gateway transport and runtime compatibility APIs are now session-scoped
-- the actual host runtime is still in `legacy_single_runtime` compatibility mode
+- the default runtime backend is still `legacy_single_runtime` compatibility mode
+- the optional `docker_single` backend can now start and stop one runtime container for the active session, but it still allows only one active runtime at a time
 - so only one active BrowserPane session can exist at a time until the later multi-session host/gateway phases land
 - the local `mcp-bridge` can now be pointed at an explicitly delegated session, but only one session can be backed by the host runtime at once
+- a real multi-session rollout still needs configurable runtime caps, worker pooling/allocation, and per-session runtime metadata beyond the current single-runtime backends
 
 ### Build And Test Without Running The Full Stack
 

@@ -407,6 +407,7 @@ async fn set_mcp_owner(
         })?;
 
     hub.set_mcp_owner(req.width, req.height).await;
+    state.runtime_manager.mark_session_active(session_id).await;
 
     Ok(Json(OkResponse { ok: true }))
 }
@@ -433,6 +434,7 @@ async fn set_session_mcp_owner(
         })?;
 
     hub.set_mcp_owner(req.width, req.height).await;
+    state.runtime_manager.mark_session_active(session_id).await;
 
     Ok(Json(OkResponse { ok: true }))
 }
@@ -458,6 +460,10 @@ async fn clear_mcp_owner(
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
 
     hub.clear_mcp_owner().await;
+    let snapshot = hub.telemetry_snapshot().await;
+    if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
+        state.runtime_manager.mark_session_idle(session_id).await;
+    }
 
     Ok(Json(OkResponse { ok: true }))
 }
@@ -483,6 +489,10 @@ async fn clear_session_mcp_owner(
         })?;
 
     hub.clear_mcp_owner().await;
+    let snapshot = hub.telemetry_snapshot().await;
+    if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
+        state.runtime_manager.mark_session_idle(session_id).await;
+    }
 
     Ok(Json(OkResponse { ok: true }))
 }

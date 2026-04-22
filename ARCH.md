@@ -207,8 +207,10 @@ Stateless relay between host agent and browser clients.
   - session-scoped connect metadata and routing keyed by public `session_id`
   - `legacy_single_runtime` compatibility gating so Phase 0 can expose session resources before true multi-session workers land
 - **Runtime manager** (`runtime_manager.rs`): resolves `session_id -> runtime endpoint`
-  - current backend is still the single static host socket
-  - this is the seam where per-session worker startup/shutdown and runtime caps will land
+  - current backends are:
+    - `static_single`: one shared host socket, with idle release semantics in the gateway
+    - `docker_single`: opt-in Docker-backed worker startup/shutdown for the active session, with idle timeout and one active runtime at a time
+  - this is still the seam where true multi-session worker pooling and runtime caps will land
 - **MCP ownership**: atomic flag that locks resolution for browser clients
   when an MCP agent owns the session
 - **Auth** (`auth.rs`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
@@ -344,6 +346,8 @@ The default dev stack no longer uses a shared token file.
 - `mcp-bridge` obtains its own bearer token with client credentials
 - the versioned session API is also bearer-protected and owner-scoped
 - the current session resource connect contract advertises `auth_type: session_connect_ticket` and still carries `compatibility_mode: legacy_single_runtime`
+- the default compose stack still runs the `static_single` runtime backend, so that control-plane flow still lands on one active host worker
+- an opt-in `docker_single` runtime backend now exists for start/stop-on-idle worker lifecycle, but it still enforces a single active runtime
 - `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`) and now also supports explicit delegated-session assignment through its local `/control-session` API
 
 The default imported local realm contains:
