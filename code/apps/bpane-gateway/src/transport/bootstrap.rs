@@ -38,8 +38,7 @@ where
             .context("failed to send ClientAccessState")?;
         debug!(
             session_id,
-            client_id,
-            "sent initial client access state to browser client"
+            client_id, "sent initial client access state to browser client"
         );
     }
 

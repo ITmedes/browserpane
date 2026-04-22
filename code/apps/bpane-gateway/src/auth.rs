@@ -30,6 +30,14 @@ pub struct AuthValidator {
     mode: AuthMode,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthenticatedPrincipal {
+    pub subject: String,
+    pub issuer: String,
+    pub display_name: Option<String>,
+    pub client_id: Option<String>,
+}
+
 #[derive(Clone)]
 enum AuthMode {
     Hmac(HmacTokenValidator),
@@ -61,9 +69,13 @@ impl AuthValidator {
     }
 
     pub async fn validate_token(&self, token: &str) -> Result<(), AuthError> {
+        self.authenticate(token).await.map(|_| ())
+    }
+
+    pub async fn authenticate(&self, token: &str) -> Result<AuthenticatedPrincipal, AuthError> {
         match &self.mode {
-            AuthMode::Hmac(validator) => validator.validate_token(token),
-            AuthMode::Oidc(validator) => validator.validate_token(token).await,
+            AuthMode::Hmac(validator) => validator.authenticate(token),
+            AuthMode::Oidc(validator) => validator.authenticate(token).await,
         }
     }
 }
@@ -124,6 +136,17 @@ impl HmacTokenValidator {
 
         Ok(())
     }
+
+    pub fn authenticate(&self, token: &str) -> Result<AuthenticatedPrincipal, AuthError> {
+        self.validate_token(token)?;
+        let subject_suffix = token.split('.').next().unwrap_or(token);
+        Ok(AuthenticatedPrincipal {
+            subject: format!("legacy-dev-token:{subject_suffix}"),
+            issuer: "bpane-gateway".to_string(),
+            display_name: None,
+            client_id: None,
+        })
+    }
 }
 
 struct OidcTokenValidator {
@@ -155,7 +178,40 @@ impl OidcTokenValidator {
         Ok(validator)
     }
 
-    async fn validate_token(&self, token: &str) -> Result<(), AuthError> {
+    async fn authenticate(&self, token: &str) -> Result<AuthenticatedPrincipal, AuthError> {
+        let claims = self.decode_claims(token).await?;
+        let subject = claims
+            .get("sub")
+            .and_then(Value::as_str)
+            .or_else(|| claims.get("preferred_username").and_then(Value::as_str))
+            .or_else(|| claims.get("email").and_then(Value::as_str))
+            .ok_or(AuthError::MalformedToken)?;
+        let issuer = claims
+            .get("iss")
+            .and_then(Value::as_str)
+            .ok_or(AuthError::MalformedToken)?;
+        let display_name = claims
+            .get("preferred_username")
+            .and_then(Value::as_str)
+            .or_else(|| claims.get("email").and_then(Value::as_str))
+            .or_else(|| claims.get("client_id").and_then(Value::as_str))
+            .or_else(|| claims.get("azp").and_then(Value::as_str))
+            .map(ToString::to_string);
+        let client_id = claims
+            .get("client_id")
+            .and_then(Value::as_str)
+            .or_else(|| claims.get("azp").and_then(Value::as_str))
+            .map(ToString::to_string);
+
+        Ok(AuthenticatedPrincipal {
+            subject: subject.to_string(),
+            issuer: issuer.to_string(),
+            display_name,
+            client_id,
+        })
+    }
+
+    async fn decode_claims(&self, token: &str) -> Result<Value, AuthError> {
         let header = decode_header(token).map_err(|_| AuthError::MalformedToken)?;
         let kid = header.kid.ok_or(AuthError::MissingKeyId)?;
         let algorithm = parse_asymmetric_algorithm(header.alg)?;
@@ -174,7 +230,7 @@ impl OidcTokenValidator {
         validation.leeway = JWT_CLOCK_SKEW_SECS;
 
         decode::<Value>(token, &key, &validation)
-            .map(|_| ())
+            .map(|data| data.claims)
             .map_err(map_jwt_error)
     }
 

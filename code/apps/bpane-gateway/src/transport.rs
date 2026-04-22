@@ -21,13 +21,19 @@ const MAX_CONCURRENT_SESSIONS: u64 = 100;
 use self::request::{validate_request_path, RequestValidationError};
 use self::session_task::handle_session;
 use crate::auth::AuthValidator;
+use crate::connect_ticket::SessionConnectTicketManager;
+use crate::runtime_manager::SessionRuntimeManager;
+use crate::session_control::SessionStore;
 use crate::session_registry::SessionRegistry;
 
 pub struct TransportServer {
     bind_addr: SocketAddr,
     identity: Identity,
-    agent_socket_path: String,
+    runtime_manager: Arc<SessionRuntimeManager>,
     auth_validator: Arc<AuthValidator>,
+    connect_ticket_manager: Arc<SessionConnectTicketManager>,
+    session_store: SessionStore,
+    idle_stop_timeout: Duration,
     heartbeat_timeout: Duration,
     registry: Arc<SessionRegistry>,
 }
@@ -36,16 +42,22 @@ impl TransportServer {
     pub fn new(
         bind_addr: SocketAddr,
         identity: Identity,
-        agent_socket_path: String,
+        runtime_manager: Arc<SessionRuntimeManager>,
         auth_validator: Arc<AuthValidator>,
+        connect_ticket_manager: Arc<SessionConnectTicketManager>,
+        session_store: SessionStore,
+        idle_stop_timeout: Duration,
         heartbeat_timeout: Duration,
         registry: Arc<SessionRegistry>,
     ) -> Self {
         Self {
             bind_addr,
             identity,
-            agent_socket_path,
+            runtime_manager,
             auth_validator,
+            connect_ticket_manager,
+            session_store,
+            idle_stop_timeout,
             heartbeat_timeout,
             registry,
         }
@@ -82,18 +94,74 @@ impl TransportServer {
             }
 
             let path = session_request.path().to_string();
-            match validate_request_path(&path, &self.auth_validator).await {
-                Ok(()) => {}
+            let validated_request = match validate_request_path(
+                &path,
+                &self.auth_validator,
+                &self.connect_ticket_manager,
+                &self.session_store,
+            )
+            .await
+            {
+                Ok(request) => request,
                 Err(RequestValidationError::InvalidToken(e)) => {
                     warn!("token validation failed: {e}");
                     session_request.not_found().await;
                     continue;
                 }
-                Err(RequestValidationError::MissingToken) => {
-                    warn!("no token in request path: {path}");
+                Err(RequestValidationError::InvalidSessionTicket(e)) => {
+                    warn!("session ticket validation failed: {e}");
                     session_request.not_found().await;
                     continue;
                 }
+                Err(RequestValidationError::MissingCredential) => {
+                    warn!("no credential in request path: {path}");
+                    session_request.not_found().await;
+                    continue;
+                }
+                Err(RequestValidationError::MissingSessionId) => {
+                    warn!("session_id missing from bearer connect path: {path}");
+                    session_request.not_found().await;
+                    continue;
+                }
+                Err(RequestValidationError::SessionNotVisible) => {
+                    warn!("session not visible or not connectable for path: {path}");
+                    session_request.not_found().await;
+                    continue;
+                }
+                Err(RequestValidationError::SessionLookupFailed) => {
+                    warn!("session lookup failed for path: {path}");
+                    session_request.not_found().await;
+                    continue;
+                }
+            };
+
+            let runtime = match self
+                .runtime_manager
+                .resolve(validated_request.session_id)
+                .await
+            {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    warn!(
+                        session_id = %validated_request.session_id,
+                        "runtime resolution failed: {error}"
+                    );
+                    session_request.not_found().await;
+                    continue;
+                }
+            };
+            self.runtime_manager
+                .mark_session_active(validated_request.session_id)
+                .await;
+            if let Err(error) = self
+                .session_store
+                .mark_session_active(validated_request.session_id)
+                .await
+            {
+                warn!(
+                    session_id = %validated_request.session_id,
+                    "failed to mark session active in store: {error}"
+                );
             }
 
             let connection = match session_request.accept().await {
@@ -106,10 +174,13 @@ impl TransportServer {
 
             session_counter += 1;
             let session_id = session_counter;
-            let agent_path = self.agent_socket_path.clone();
+            let agent_path = runtime.agent_socket_path.clone();
             let heartbeat_timeout = self.heartbeat_timeout;
             let active_sessions_clone = active_sessions.clone();
             let registry = self.registry.clone();
+            let runtime_manager = self.runtime_manager.clone();
+            let session_store = self.session_store.clone();
+            let idle_stop_timeout = self.idle_stop_timeout;
             active_sessions.fetch_add(1, Ordering::Relaxed);
 
             info!(
@@ -122,6 +193,10 @@ impl TransportServer {
                 if let Err(e) = handle_session(
                     connection,
                     session_id,
+                    validated_request,
+                    runtime_manager,
+                    session_store,
+                    idle_stop_timeout,
                     &agent_path,
                     heartbeat_timeout,
                     registry.clone(),

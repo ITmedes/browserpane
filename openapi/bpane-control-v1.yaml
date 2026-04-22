@@ -1,0 +1,652 @@
+openapi: 3.0.3
+info:
+  title: BrowserPane Session Control API
+  version: 1.0.0
+  description: >
+    Frozen v1 session-control contract for BrowserPane. This document covers the
+    canonical owner-scoped `/api/v1/sessions` surface. Legacy global compatibility
+    routes such as `/api/session/status` and `/api/session/mcp-owner` are intentionally
+    excluded from this freeze and remain transitional.
+servers:
+  - url: http://localhost:8932
+    description: Direct local gateway HTTP API
+  - url: http://localhost:8080
+    description: Same-origin local web proxy
+tags:
+  - name: Sessions
+  - name: Session Runtime
+  - name: Session Automation
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/sessions:
+    get:
+      tags: [Sessions]
+      summary: List sessions visible to the authenticated owner or delegated automation principal
+      operationId: listSessions
+      responses:
+        '200':
+          description: Owner-scoped session list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Sessions]
+      summary: Create a new persistent session resource
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Sessions]
+      summary: Fetch one visible session resource
+      operationId: getSession
+      responses:
+        '200':
+          description: Session resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    delete:
+      tags: [Sessions]
+      summary: Stop a session resource
+      operationId: deleteSession
+      responses:
+        '200':
+          description: Session stopped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/access-tokens:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Session Runtime]
+      summary: Mint a short-lived connect ticket for one session
+      operationId: issueSessionAccessToken
+      responses:
+        '200':
+          description: Session-scoped connect ticket issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionAccessTokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/status:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Session Runtime]
+      summary: Get live runtime telemetry for a runtime-compatible session
+      operationId: getSessionStatus
+      responses:
+        '200':
+          description: Live runtime telemetry snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/automation-owner:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Session Automation]
+      summary: Delegate a session to an automation principal
+      operationId: setAutomationOwner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAutomationDelegateRequest'
+      responses:
+        '200':
+          description: Updated session resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    delete:
+      tags: [Session Automation]
+      summary: Clear automation delegation from a session
+      operationId: clearAutomationOwner
+      responses:
+        '200':
+          description: Updated session resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/mcp-owner:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Session Automation]
+      summary: Claim MCP ownership for a runtime-compatible session
+      operationId: setSessionMcpOwner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpOwnerRequest'
+      responses:
+        '200':
+          description: MCP ownership claimed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    delete:
+      tags: [Session Automation]
+      summary: Release MCP ownership for a runtime-compatible session
+      operationId: clearSessionMcpOwner
+      responses:
+        '200':
+          description: MCP ownership released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Session not visible to the caller or does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Runtime or lifecycle conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BackendUnavailable:
+      description: Temporary backend or runtime failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    SessionLifecycleState:
+      type: string
+      enum:
+        - pending
+        - starting
+        - ready
+        - active
+        - idle
+        - stopping
+        - stopped
+        - failed
+        - expired
+    SessionOwnerMode:
+      type: string
+      enum:
+        - collaborative
+        - exclusive_browser_owner
+    SessionViewport:
+      type: object
+      required: [width, height]
+      properties:
+        width:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        height:
+          type: integer
+          minimum: 1
+          maximum: 65535
+    SessionOwner:
+      type: object
+      required: [subject, issuer, display_name]
+      properties:
+        subject:
+          type: string
+        issuer:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+    SessionAutomationDelegate:
+      type: object
+      required: [client_id, issuer, display_name]
+      properties:
+        client_id:
+          type: string
+        issuer:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+    SessionCapabilities:
+      type: object
+      required:
+        - browser_input
+        - clipboard
+        - audio
+        - microphone
+        - camera
+        - file_transfer
+        - resize
+      properties:
+        browser_input:
+          type: boolean
+        clipboard:
+          type: boolean
+        audio:
+          type: boolean
+        microphone:
+          type: boolean
+        camera:
+          type: boolean
+        file_transfer:
+          type: boolean
+        resize:
+          type: boolean
+    SessionConnectInfo:
+      type: object
+      required:
+        - gateway_url
+        - transport_path
+        - auth_type
+        - ticket_path
+        - compatibility_mode
+      properties:
+        gateway_url:
+          type: string
+          format: uri
+        transport_path:
+          type: string
+        auth_type:
+          type: string
+          enum: [session_connect_ticket]
+        ticket_path:
+          type: string
+          nullable: true
+        compatibility_mode:
+          type: string
+          enum:
+            - legacy_single_runtime
+            - session_runtime_pool
+    SessionRuntimeInfo:
+      type: object
+      required: [binding, compatibility_mode, cdp_endpoint]
+      properties:
+        binding:
+          type: string
+          enum:
+            - legacy_single_session
+            - docker_runtime_pool
+        compatibility_mode:
+          type: string
+          enum:
+            - legacy_single_runtime
+            - session_runtime_pool
+        cdp_endpoint:
+          type: string
+          nullable: true
+          format: uri
+    SessionResource:
+      type: object
+      required:
+        - id
+        - state
+        - template_id
+        - owner_mode
+        - viewport
+        - capabilities
+        - owner
+        - automation_delegate
+        - idle_timeout_sec
+        - labels
+        - integration_context
+        - connect
+        - runtime
+        - created_at
+        - updated_at
+        - stopped_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/SessionLifecycleState'
+        template_id:
+          type: string
+          nullable: true
+        owner_mode:
+          $ref: '#/components/schemas/SessionOwnerMode'
+        viewport:
+          $ref: '#/components/schemas/SessionViewport'
+        capabilities:
+          $ref: '#/components/schemas/SessionCapabilities'
+        owner:
+          $ref: '#/components/schemas/SessionOwner'
+        automation_delegate:
+          allOf:
+            - $ref: '#/components/schemas/SessionAutomationDelegate'
+          nullable: true
+        idle_timeout_sec:
+          type: integer
+          nullable: true
+          minimum: 1
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        integration_context:
+          type: object
+          nullable: true
+          additionalProperties: true
+        connect:
+          $ref: '#/components/schemas/SessionConnectInfo'
+        runtime:
+          $ref: '#/components/schemas/SessionRuntimeInfo'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        stopped_at:
+          type: string
+          format: date-time
+          nullable: true
+    CreateSessionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        template_id:
+          type: string
+          nullable: true
+        owner_mode:
+          $ref: '#/components/schemas/SessionOwnerMode'
+        viewport:
+          $ref: '#/components/schemas/SessionViewport'
+        idle_timeout_sec:
+          type: integer
+          minimum: 1
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        integration_context:
+          type: object
+          nullable: true
+          additionalProperties: true
+    SessionListResponse:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionResource'
+    SessionAccessTokenResponse:
+      type: object
+      required: [session_id, token_type, token, expires_at, connect]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        token_type:
+          type: string
+          enum: [session_connect_ticket]
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        connect:
+          $ref: '#/components/schemas/SessionConnectInfo'
+    SessionStatus:
+      type: object
+      required:
+        - browser_clients
+        - viewer_clients
+        - max_viewers
+        - viewer_slots_remaining
+        - exclusive_browser_owner
+        - mcp_owner
+        - resolution
+        - telemetry
+      properties:
+        browser_clients:
+          type: integer
+          minimum: 0
+        viewer_clients:
+          type: integer
+          minimum: 0
+        max_viewers:
+          type: integer
+          minimum: 0
+        viewer_slots_remaining:
+          type: integer
+          minimum: 0
+        exclusive_browser_owner:
+          type: boolean
+        mcp_owner:
+          type: boolean
+        resolution:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: integer
+            minimum: 0
+        telemetry:
+          $ref: '#/components/schemas/SessionTelemetry'
+    SessionTelemetry:
+      type: object
+      required:
+        - joins_accepted
+        - joins_rejected_viewer_cap
+        - last_join_latency_ms
+        - average_join_latency_ms
+        - max_join_latency_ms
+        - full_refresh_requests
+        - full_refresh_tiles_requested
+        - last_full_refresh_tiles
+        - max_full_refresh_tiles
+        - egress_send_stream_lock_acquires_total
+        - egress_send_stream_lock_wait_us_total
+        - egress_send_stream_lock_wait_us_average
+        - egress_send_stream_lock_wait_us_max
+        - egress_lagged_receives_total
+        - egress_lagged_frames_total
+      properties:
+        joins_accepted:
+          type: integer
+          minimum: 0
+        joins_rejected_viewer_cap:
+          type: integer
+          minimum: 0
+        last_join_latency_ms:
+          type: integer
+          minimum: 0
+        average_join_latency_ms:
+          type: number
+        max_join_latency_ms:
+          type: integer
+          minimum: 0
+        full_refresh_requests:
+          type: integer
+          minimum: 0
+        full_refresh_tiles_requested:
+          type: integer
+          minimum: 0
+        last_full_refresh_tiles:
+          type: integer
+          minimum: 0
+        max_full_refresh_tiles:
+          type: integer
+          minimum: 0
+        egress_send_stream_lock_acquires_total:
+          type: integer
+          minimum: 0
+        egress_send_stream_lock_wait_us_total:
+          type: integer
+          minimum: 0
+        egress_send_stream_lock_wait_us_average:
+          type: number
+        egress_send_stream_lock_wait_us_max:
+          type: integer
+          minimum: 0
+        egress_lagged_receives_total:
+          type: integer
+          minimum: 0
+        egress_lagged_frames_total:
+          type: integer
+          minimum: 0
+    SetAutomationDelegateRequest:
+      type: object
+      required: [client_id]
+      additionalProperties: false
+      properties:
+        client_id:
+          type: string
+        issuer:
+          type: string
+          nullable: true
+        display_name:
+          type: string
+          nullable: true
+    McpOwnerRequest:
+      type: object
+      required: [width, height]
+      additionalProperties: false
+      properties:
+        width:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        height:
+          type: integer
+          minimum: 1
+          maximum: 65535
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

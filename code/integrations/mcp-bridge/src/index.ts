@@ -9,6 +9,10 @@ import {
   ListPromptsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import http from "node:http";
+import {
+  GatewaySessionResource,
+  SessionControlClient,
+} from "./session-control-client.js";
 import { SupervisorMonitor } from "./supervisor-monitor.js";
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -16,13 +20,17 @@ import { SupervisorMonitor } from "./supervisor-monitor.js";
 const GATEWAY_API_URL = process.env.BPANE_GATEWAY_API_URL ?? "http://localhost:8932";
 const MCP_PORT = parseInt(process.env.BPANE_MCP_PORT ?? "8931", 10);
 const MCP_RESOLUTION = process.env.BPANE_MCP_RESOLUTION ?? "1600x900";
-const CDP_ENDPOINT = process.env.BPANE_CDP_ENDPOINT ?? "http://127.0.0.1:9222";
+const FALLBACK_CDP_ENDPOINT = (process.env.BPANE_CDP_ENDPOINT ?? "").trim();
 const SUPERVISED_DELAY_MS = parseInt(process.env.BPANE_MCP_SUPERVISED_DELAY_MS ?? "1500", 10);
 const POLL_INTERVAL_MS = parseInt(process.env.BPANE_MCP_POLL_INTERVAL_MS ?? "2000", 10);
 const GATEWAY_OIDC_TOKEN_URL = process.env.BPANE_GATEWAY_OIDC_TOKEN_URL ?? "";
 const GATEWAY_OIDC_CLIENT_ID = process.env.BPANE_GATEWAY_OIDC_CLIENT_ID ?? "";
 const GATEWAY_OIDC_CLIENT_SECRET = process.env.BPANE_GATEWAY_OIDC_CLIENT_SECRET ?? "";
 const GATEWAY_OIDC_SCOPES = process.env.BPANE_GATEWAY_OIDC_SCOPES ?? "";
+const SESSION_BOOTSTRAP_MODE = (
+  process.env.BPANE_SESSION_BOOTSTRAP_MODE ?? "off"
+).trim().toLowerCase();
+const SESSION_ID = (process.env.BPANE_SESSION_ID ?? "").trim();
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -34,6 +42,18 @@ function parseResolution(s: string): { width: number; height: number } {
   const [w, h] = s.split("x").map(Number);
   if (!w || !h) throw new Error(`Invalid resolution: ${s}`);
   return { width: w, height: h };
+}
+
+async function readJsonBody<T>(req: http.IncomingMessage): Promise<T> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) {
+    throw new Error("request body is required");
+  }
+  return JSON.parse(raw) as T;
 }
 
 class GatewayTokenManager {
@@ -97,20 +117,80 @@ const gatewayTokenManager = new GatewayTokenManager();
 
 // ── Register MCP owner with gateway ──────────────────────────────────
 
-async function registerMcpOwner(width: number, height: number): Promise<void> {
+function sessionStatusPath(session: GatewaySessionResource | null): string {
+  return session
+    ? `/api/v1/sessions/${encodeURIComponent(session.id)}/status`
+    : "/api/session/status";
+}
+
+function sessionMcpOwnerPath(session: GatewaySessionResource | null): string {
+  return session
+    ? `/api/v1/sessions/${encodeURIComponent(session.id)}/mcp-owner`
+    : "/api/session/mcp-owner";
+}
+
+function runtimeCdpEndpoint(session: GatewaySessionResource | null): string | null {
+  const runtimeEndpoint = session?.runtime?.cdp_endpoint?.trim();
+  if (runtimeEndpoint) {
+    return runtimeEndpoint;
+  }
+
+  const integrationContextEndpoint = session?.integration_context?.cdp_endpoint;
+  if (typeof integrationContextEndpoint === "string" && integrationContextEndpoint.trim()) {
+    return integrationContextEndpoint.trim();
+  }
+
+  return null;
+}
+
+function resolveManagedCdpEndpoint(session: GatewaySessionResource | null): string {
+  const runtimeEndpoint = runtimeCdpEndpoint(session);
+  if (runtimeEndpoint) {
+    return runtimeEndpoint;
+  }
+  if (FALLBACK_CDP_ENDPOINT) {
+    return FALLBACK_CDP_ENDPOINT;
+  }
+  if (session) {
+    throw new Error(
+      `session ${session.id} does not expose a runtime cdp_endpoint and BPANE_CDP_ENDPOINT is not configured`,
+    );
+  }
+  throw new Error(
+    "no managed session is selected and BPANE_CDP_ENDPOINT is not configured",
+  );
+}
+
+function describeManagedCdpEndpoint(session: GatewaySessionResource | null): string | null {
+  try {
+    return resolveManagedCdpEndpoint(session);
+  } catch {
+    return null;
+  }
+}
+
+async function registerMcpOwner(
+  session: GatewaySessionResource | null,
+  width: number,
+  height: number,
+): Promise<void> {
   const maxRetries = 30;
+  const path = sessionMcpOwnerPath(session);
   for (let i = 0; i < maxRetries; i++) {
     try {
       const headers = await gatewayTokenManager.getAuthHeaders({
         "Content-Type": "application/json",
       });
-      const resp = await fetch(`${GATEWAY_API_URL}/api/session/mcp-owner`, {
+      const resp = await fetch(`${GATEWAY_API_URL}${path}`, {
         method: "POST",
         headers,
         body: JSON.stringify({ width, height }),
       });
       if (resp.ok) {
-        console.log(`[mcp-bridge] registered as MCP owner at ${width}x${height}`);
+        const sessionSuffix = session ? ` for session ${session.id}` : "";
+        console.log(
+          `[mcp-bridge] registered as MCP owner${sessionSuffix} at ${width}x${height}`,
+        );
         return;
       }
       console.warn(`[mcp-bridge] gateway returned ${resp.status}, retrying...`);
@@ -122,14 +202,18 @@ async function registerMcpOwner(width: number, height: number): Promise<void> {
   throw new Error("Failed to register MCP owner with gateway after retries");
 }
 
-async function unregisterMcpOwner(): Promise<void> {
+async function unregisterMcpOwner(session: GatewaySessionResource | null): Promise<void> {
   try {
     const headers = await gatewayTokenManager.getAuthHeaders();
-    await fetch(`${GATEWAY_API_URL}/api/session/mcp-owner`, {
+    await fetch(`${GATEWAY_API_URL}${sessionMcpOwnerPath(session)}`, {
       method: "DELETE",
       headers,
     });
-    console.log("[mcp-bridge] unregistered MCP owner");
+    if (session) {
+      console.log(`[mcp-bridge] unregistered MCP owner for session ${session.id}`);
+    } else {
+      console.log("[mcp-bridge] unregistered MCP owner");
+    }
   } catch {
     console.warn("[mcp-bridge] failed to unregister MCP owner (gateway unavailable)");
   }
@@ -137,11 +221,68 @@ async function unregisterMcpOwner(): Promise<void> {
 
 // ── Spawn @playwright/mcp subprocess (STDIO mode) ───────────────────
 
-function spawnPlaywrightMcp(): StdioClientTransport {
+function spawnPlaywrightMcp(cdpEndpoint: string): StdioClientTransport {
   return new StdioClientTransport({
     command: "npx",
-    args: ["@playwright/mcp@latest", "--cdp-endpoint", CDP_ENDPOINT],
+    args: ["@playwright/mcp@latest", "--cdp-endpoint", cdpEndpoint],
   });
+}
+
+class PlaywrightRuntimeController {
+  private client: Client | null = null;
+  private cdpEndpoint: string | null = null;
+
+  async ensureConnected(session: GatewaySessionResource | null): Promise<Client> {
+    const nextEndpoint = resolveManagedCdpEndpoint(session);
+    if (this.client && this.cdpEndpoint === nextEndpoint) {
+      return this.client;
+    }
+
+    await this.close();
+
+    const transport = spawnPlaywrightMcp(nextEndpoint);
+    const client = new Client(
+      { name: "bpane-mcp-bridge", version: "0.1.0" },
+      { capabilities: {} },
+    );
+    await client.connect(transport);
+    this.client = client;
+    this.cdpEndpoint = nextEndpoint;
+
+    const sessionSuffix = session ? ` for session ${session.id}` : "";
+    console.log(
+      `[mcp-bridge] connected to @playwright/mcp subprocess${sessionSuffix} via ${nextEndpoint}`,
+    );
+
+    return client;
+  }
+
+  async close(): Promise<void> {
+    if (!this.client) {
+      this.cdpEndpoint = null;
+      return;
+    }
+
+    const client = this.client;
+    const previousEndpoint = this.cdpEndpoint;
+    this.client = null;
+    this.cdpEndpoint = null;
+
+    try {
+      await client.close();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[mcp-bridge] failed to close @playwright/mcp subprocess cleanly: ${message}`);
+    }
+
+    if (previousEndpoint) {
+      console.log(`[mcp-bridge] closed @playwright/mcp subprocess for ${previousEndpoint}`);
+    }
+  }
+
+  getCurrentEndpoint(): string | null {
+    return this.cdpEndpoint;
+  }
 }
 
 // ── Per-connection MCP Server factory ────────────────────────────────
@@ -214,6 +355,20 @@ function createServerForConnection(
 
 async function main() {
   const { width, height } = parseResolution(MCP_RESOLUTION);
+  const managedSessionLocked = SESSION_ID.length > 0;
+  const sessionControlClient = new SessionControlClient({
+    gatewayApiUrl: GATEWAY_API_URL,
+    getHeaders: (extra) => gatewayTokenManager.getAuthHeaders(extra ?? {}),
+    sessionId: SESSION_ID,
+    bootstrapMode: SESSION_BOOTSTRAP_MODE === "reuse_or_create" ? "reuse_or_create" : "off",
+    ownerMode: "collaborative",
+    displayName: "MCP bridge session",
+    integrationContext: {
+      source: "mcp-bridge",
+    },
+  });
+  let managedSession = await sessionControlClient.resolveManagedSession();
+  const playwrightRuntime = new PlaywrightRuntimeController();
 
   // 1. Do NOT register as MCP owner at startup — wait for first SSE client.
   //    This avoids locking the resolution when no MCP client is connected.
@@ -223,17 +378,30 @@ async function main() {
     GATEWAY_API_URL,
     POLL_INTERVAL_MS,
     () => gatewayTokenManager.getAuthHeaders(),
+    sessionStatusPath(managedSession),
   );
   monitor.start();
 
-  // 3. Connect to @playwright/mcp subprocess
-  const playwrightTransport = spawnPlaywrightMcp();
-  const playwrightClient = new Client(
-    { name: "bpane-mcp-bridge", version: "0.1.0" },
-    { capabilities: {} },
-  );
-  await playwrightClient.connect(playwrightTransport);
-  console.log("[mcp-bridge] connected to @playwright/mcp subprocess");
+  function setManagedSession(next: GatewaySessionResource | null): void {
+    managedSession = next;
+    monitor.setStatusPath(sessionStatusPath(managedSession));
+  }
+  if (managedSession) {
+    console.log(
+      `[mcp-bridge] resolved control session ${managedSession.id} (${managedSession.state}, ${managedSession.connect.compatibility_mode})`,
+    );
+    const cdpEndpoint = describeManagedCdpEndpoint(managedSession);
+    if (cdpEndpoint) {
+      console.log(`[mcp-bridge] control session runtime endpoint: ${cdpEndpoint}`);
+    }
+  } else {
+    console.log(
+      "[mcp-bridge] running without a managed control session; legacy runtime ownership endpoints remain in use",
+    );
+    if (FALLBACK_CDP_ENDPOINT) {
+      console.log(`[mcp-bridge] fallback CDP endpoint: ${FALLBACK_CDP_ENDPOINT}`);
+    }
+  }
 
   // 4. Start HTTP/SSE server for external MCP clients.
   //    Each SSE connection gets its own Server instance to avoid the
@@ -244,8 +412,8 @@ async function main() {
   const httpServer = http.createServer(async (req, res) => {
     // CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     if (req.method === "OPTIONS") {
       res.writeHead(204);
@@ -264,39 +432,133 @@ async function main() {
           supervisors: monitor.getBrowserClientCount(),
           resolution: { width, height },
           supervised_delay_ms: SUPERVISED_DELAY_MS,
+          control_session_id: managedSession?.id ?? null,
+          control_session_state: managedSession?.state ?? null,
+          control_session_mode: managedSession?.connect.compatibility_mode ?? null,
+          control_session_cdp_endpoint: describeManagedCdpEndpoint(managedSession),
+          playwright_cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
         }),
       );
       return;
     }
 
-    if (url.pathname === "/sse") {
-      const transport = new SSEServerTransport("/messages", res);
-      const sessionId = transport.sessionId;
-      const server = createServerForConnection(playwrightClient, monitor);
+    if (url.pathname === "/control-session" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          locked: managedSessionLocked,
+          session: managedSession,
+          cdp_endpoint: describeManagedCdpEndpoint(managedSession),
+          playwright_cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
+        }),
+      );
+      return;
+    }
 
-      // Re-register MCP ownership when the first client connects after all disconnected
-      if (servers.size === 0) {
-        await registerMcpOwner(width, height);
+    if (url.pathname === "/control-session" && req.method === "PUT") {
+      if (managedSessionLocked) {
+        res.writeHead(409, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "control session is locked by BPANE_SESSION_ID" }));
+        return;
       }
-
-      transports.set(sessionId, transport);
-      servers.set(sessionId, server);
-
-      console.log(`[mcp-bridge] MCP client connected (session=${sessionId}, total=${servers.size})`);
-
-      res.on("close", async () => {
-        transports.delete(sessionId);
-        servers.delete(sessionId);
-        console.log(`[mcp-bridge] MCP client disconnected (session=${sessionId}, remaining=${servers.size})`);
-
-        // When all MCP clients disconnect, clear ownership so resolution unlocks
-        if (servers.size === 0) {
-          console.log("[mcp-bridge] no MCP clients remaining — clearing ownership");
-          await unregisterMcpOwner();
+      if (servers.size > 0) {
+        res.writeHead(409, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({ error: "cannot switch control session while MCP clients are connected" }),
+        );
+        return;
+      }
+      try {
+        const body = await readJsonBody<{ session_id?: string }>(req);
+        const sessionId = (body.session_id ?? "").trim();
+        if (!sessionId) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "session_id is required" }));
+          return;
         }
-      });
+        const resolved = await sessionControlClient.getSession(sessionId);
+        if (!resolved) {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: `session ${sessionId} not found or not delegated` }));
+          return;
+        }
+        const nextCdpEndpoint = resolveManagedCdpEndpoint(resolved);
+        await playwrightRuntime.close();
+        setManagedSession(resolved);
+        console.log(
+          `[mcp-bridge] control session set to ${resolved.id} (${resolved.state}) via ${nextCdpEndpoint}`,
+        );
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ session: managedSession, cdp_endpoint: nextCdpEndpoint }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: message }));
+      }
+      return;
+    }
 
-      await server.connect(transport);
+    if (url.pathname === "/control-session" && req.method === "DELETE") {
+      if (managedSessionLocked) {
+        res.writeHead(409, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "control session is locked by BPANE_SESSION_ID" }));
+        return;
+      }
+      if (servers.size > 0) {
+        res.writeHead(409, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({ error: "cannot clear control session while MCP clients are connected" }),
+        );
+        return;
+      }
+      await playwrightRuntime.close();
+      setManagedSession(null);
+      console.log("[mcp-bridge] cleared control session");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    if (url.pathname === "/sse") {
+      const needsBridgeBootstrap = servers.size === 0;
+      try {
+        if (needsBridgeBootstrap) {
+          await registerMcpOwner(managedSession, width, height);
+        }
+        const playwrightClient = await playwrightRuntime.ensureConnected(managedSession);
+        const transport = new SSEServerTransport("/messages", res);
+        const sessionId = transport.sessionId;
+        const server = createServerForConnection(playwrightClient, monitor);
+
+        transports.set(sessionId, transport);
+        servers.set(sessionId, server);
+
+        console.log(
+          `[mcp-bridge] MCP client connected (session=${sessionId}, total=${servers.size}, cdp=${playwrightRuntime.getCurrentEndpoint() ?? "unknown"})`,
+        );
+
+        res.on("close", async () => {
+          transports.delete(sessionId);
+          servers.delete(sessionId);
+          console.log(`[mcp-bridge] MCP client disconnected (session=${sessionId}, remaining=${servers.size})`);
+
+          // When all MCP clients disconnect, clear ownership so resolution unlocks
+          if (servers.size === 0) {
+            console.log("[mcp-bridge] no MCP clients remaining — clearing ownership");
+            await unregisterMcpOwner(managedSession);
+            await playwrightRuntime.close();
+          }
+        });
+
+        await server.connect(transport);
+      } catch (error) {
+        if (needsBridgeBootstrap) {
+          await unregisterMcpOwner(managedSession);
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: message }));
+      }
       return;
     }
 
@@ -314,9 +576,21 @@ async function main() {
 
     // POST /register — re-register MCP owner (e.g. after reconnect)
     if (url.pathname === "/register" && req.method === "POST") {
-      await registerMcpOwner(width, height);
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: true }));
+      try {
+        await registerMcpOwner(managedSession, width, height);
+        await playwrightRuntime.ensureConnected(managedSession);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
+          }),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: message }));
+      }
       return;
     }
 
@@ -335,8 +609,8 @@ async function main() {
   const shutdown = async () => {
     console.log("\n[mcp-bridge] shutting down...");
     monitor.stop();
-    await unregisterMcpOwner();
-    await playwrightClient.close();
+    await unregisterMcpOwner(managedSession);
+    await playwrightRuntime.close();
     httpServer.close();
     process.exit(0);
   };
@@ -347,19 +621,19 @@ async function main() {
   // Safety net: clear MCP ownership on unexpected crash
   process.on("uncaughtException", async (err) => {
     console.error("[mcp-bridge] uncaught exception:", err);
-    await unregisterMcpOwner();
+    await unregisterMcpOwner(managedSession);
     process.exit(1);
   });
 
   process.on("unhandledRejection", async (reason) => {
     console.error("[mcp-bridge] unhandled rejection:", reason);
-    await unregisterMcpOwner();
+    await unregisterMcpOwner(managedSession);
     process.exit(1);
   });
 }
 
 main().catch(async (err) => {
   console.error("[mcp-bridge] fatal:", err);
-  await unregisterMcpOwner();
+  await unregisterMcpOwner(null);
   process.exit(1);
 });

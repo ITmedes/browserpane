@@ -7,7 +7,9 @@ inside a browser `<div>` using WebTransport, WebCodecs, and WebGL 2 — no
 plugins, no Electron, no VNC viewer. The container size drives the remote
 resolution pixel-for-pixel.
 
-The system has four runtime components connected by two transport layers:
+The canonical frozen v1 session-control contract is [openapi/bpane-control-v1.yaml](/Users/cfinkelstein/workspace/pane/openapi/bpane-control-v1.yaml).
+
+The system has five runtime components connected by two transport layers plus a persistent control-plane store:
 
 ```
 ┌─────────────┐   Unix Socket   ┌─────────────┐   WebTransport   ┌─────────────┐
@@ -21,6 +23,12 @@ The system has four runtime components connected by two transport layers:
 │  Chromium   │                │ mcp-bridge  │
 │  (headless) │                │  (Node.js)  │
 └─────────────┘                └─────────────┘
+                                      │
+                                      v
+                               ┌─────────────┐
+                               │  Postgres   │
+                               │ control API │
+                               └─────────────┘
 ```
 
 ---
@@ -38,13 +46,14 @@ The system has four runtime components connected by two transport layers:
 | Tile compression | QOI or Zstd (configurable) | QOI: fast decode, good for UI; Zstd: better ratio for complex content |
 | Audio | PipeWire -> FFmpeg -> Opus or IMA-ADPCM | 48 kHz stereo, silence-gated; Opus default (64 kbps CBR), ADPCM fallback |
 | MCP bridge | Node.js + @playwright/mcp | SSE proxy for browser automation with live supervision |
-| Deployment | Docker Compose, 4 containers | Isolated services on a bridge network |
+| Session store | PostgreSQL 16 | Durable owner-scoped `/api/v1/sessions` resources |
+| Deployment | Docker Compose, 6 containers | Isolated services on a bridge network |
 
 ---
 
 ## Deployment Topology
 
-Four containers on a Docker bridge network (`172.28.0.0/24`):
+Six containers on a Docker bridge network (`172.28.0.0/24`):
 
 ```
               Browser / E2E Test
@@ -62,23 +71,23 @@ Four containers on a Docker bridge network (`172.28.0.0/24`):
                     │
            Docker Bridge Network
                     │
-   ┌────────────────┼────────────────┬────────────────┐
-   │                │                │                │
-   v                v                v                v
-┌──────────┐  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐
-│bpane-host│  │bpane-gateway │  │  mcp-bridge   │  │   Keycloak   │
-│ .0.10    │  │ :4433 (QUIC) │  │ :8931 (SSE)   │  │ :8080/.8091  │
-│          │  │ :8932 (HTTP) │  │               │  │ local OIDC   │
-│ Xorg :99 │  │              │  │ @playwright/  │  │ realm        │
-│ OpenBox  │  │ Unix socket  │  │ mcp (STDIO)   │  │              │
-│ Chromium │  │ <-> host IPC │  │               │  │              │
-│ PipeWire │  │              │  │ Supervisor    │  │              │
-│ FFmpeg   │  │ Broadcast    │  │ monitor       │  │              │
-│bpane-host│  │ fan-out      │  │ (polls API)   │  │              │
-│          │  │              │  │               │  │              │
-│ CDP :9222│  │ Max 10       │  │ MCP clients   │  │              │
-│ -> :9223 │  │ viewers      │  │ connect here  │  │              │
-└──────────┘  └──────────────┘  └───────────────┘  └──────────────┘
+   ┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
+   │              │              │              │              │              │
+   v              v              v              v              v              v
+┌──────────┐ ┌──────────────┐ ┌───────────────┐ ┌──────────────┐ ┌──────────────┐
+│bpane-host│ │bpane-gateway │ │  mcp-bridge   │ │   Keycloak   │ │   Postgres   │
+│ .0.10    │ │ :4433 (QUIC) │ │ :8931 (SSE)   │ │ :8080/.8091  │ │ :5432/.5433  │
+│          │ │ :8932 (HTTP) │ │               │ │ local OIDC   │ │ control-plane│
+│ Xorg :99 │ │              │ │ @playwright/  │ │ realm        │ │ state        │
+│ OpenBox  │ │ Unix socket  │ │ mcp (STDIO)   │ │              │ │              │
+│ Chromium │ │ <-> host IPC │ │               │ │              │ │              │
+│ PipeWire │ │              │ │ Supervisor    │ │              │ │              │
+│ FFmpeg   │ │ Session store │ │ monitor       │ │              │ │              │
+│bpane-host│ │ + auth API    │ │ (polls API)   │ │              │ │              │
+│          │ │               │ │               │ │              │ │              │
+│ CDP :9222│ │ Max 10        │ │ MCP clients   │ │              │ │              │
+│ -> :9223 │ │ viewers       │ │ connect here  │ │              │ │              │
+└──────────┘ └──────────────┘ └───────────────┘ └──────────────┘ └──────────────┘
       │               ^
       └───────────────┘
        /run/bpane/agent.sock
@@ -87,8 +96,10 @@ Four containers on a Docker bridge network (`172.28.0.0/24`):
 **Ports exposed to host machine:**
 - `8080/tcp` — nginx (web UI, auth config, cert hash, SDK dist)
 - `4433/tcp+udp` — WebTransport (QUIC)
+- `8932/tcp` — gateway HTTP API
 - `8091/tcp` — local Keycloak realm for dev/testing
 - `8931/tcp` — MCP bridge (SSE)
+- `5433/tcp` — local Postgres for the session control plane
 
 **Host container internals:** Xorg with dummy video driver (3840x2160 virtual
 framebuffer, runtime resizable via xrandr), OpenBox WM (locked down, no
@@ -192,15 +203,42 @@ Stateless relay between host agent and browser clients.
   - Viewer cap: configurable via `--max-viewers` (default 10)
 - **Session registry** (`session_registry.rs`): manages hub lifecycle with
   TOCTOU-safe concurrent join (two-phase lock pattern)
+- **Session control** (`session_control.rs`): owner-scoped versioned session resources with:
+  - Postgres-backed persistence in normal runtime
+  - in-memory backend fallback for tests and dev fallback mode
+  - session-scoped connect metadata and routing keyed by public `session_id`
+  - `legacy_single_runtime` compatibility gating so Phase 0 can expose session resources before true multi-session workers land
+- **Runtime manager** (`runtime_manager.rs`): resolves `session_id -> runtime endpoint`
+  - current backends are:
+    - `static_single`: one shared host socket, with idle release semantics in the gateway
+    - `docker_single`: opt-in Docker-backed worker startup/shutdown for the active session, with idle timeout and one active runtime at a time
+    - `docker_pool`: opt-in Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`
+  - session resources, runtime capacity, and compatibility routing now derive from this runtime profile
+  - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions via the Docker socket, shared `/run/bpane` volume, and a shared host-worker env profile
+  - Docker runtime assignment metadata is now persisted in Postgres and reconciled on gateway startup, so an existing pool-mode worker can be rebound after a gateway restart without launching a duplicate runtime
+  - Docker-backed workers now receive `BPANE_SESSION_ID` and reuse a session-specific Chromium profile rooted under the shared `/run/bpane` volume, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state
+  - this is profile-backed restoration, not true container/process suspension: exact live in-memory browser state only survives while the worker is still running
 - **MCP ownership**: atomic flag that locks resolution for browser clients
   when an MCP agent owns the session
 - **Auth** (`auth.rs`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
 - **Heartbeat**: disconnects after 15s without CONTROL ping
 - **HTTP API** (`api.rs`, :8932):
+  - canonical frozen v1 contract: `openapi/bpane-control-v1.yaml`
+  - `POST /api/v1/sessions` — create a persistent session resource
+  - `GET /api/v1/sessions` — list owner-scoped sessions
+  - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
+  - `DELETE /api/v1/sessions/{id}` — stop one owner-scoped session resource
+  - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
+  - `POST /api/v1/sessions/{id}/automation-owner` — delegate one session to an automation principal
+  - `DELETE /api/v1/sessions/{id}/automation-owner` — clear automation delegation
+  - `GET /api/v1/sessions/{id}/status` — session-scoped runtime telemetry for compatibility mode
+  - `POST /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership claim
+  - `DELETE /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership release
   - `GET /api/session/status` — client counts, resolution, telemetry
   - `POST /api/session/mcp-owner` — claim session, lock resolution
   - `DELETE /api/session/mcp-owner` — release ownership
   - all current endpoints require `Authorization: Bearer <token>`
+  - the `/api/session/*` routes are compatibility-only and are intentionally outside the frozen v1 contract
 - **Relay** (`relay.rs`): bidirectional Unix socket <-> async bridge, 64 KB read
   buffer, zero-copy frame slicing with `Bytes`
 
@@ -293,6 +331,8 @@ running against the Chromium instance inside the host container.
 - Lazy registration: only claims MCP ownership on first SSE client connect
 - Registers/clears MCP ownership with gateway (resolution lock)
 - Uses OIDC client-credentials for gateway API access in the local compose stack
+- Exposes a local control-session API on `:8931` so the browser test page can point
+  the bridge at an explicitly delegated session without restarting the service
 - Graceful shutdown: always releases ownership on SIGINT/SIGTERM
 
 ---
@@ -304,10 +344,30 @@ The default dev stack no longer uses a shared token file.
 - `web` serves `/auth-config.json`
 - `test-embed.html` discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
+- the local demo user is `demo / demo-demo`
+- after login, `test-embed.html` lists owner-scoped `/api/v1/sessions`, lets the user join an existing session or start a new one, and then uses the selected session resource's connect metadata
+- the page then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
+- test-page-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
+- `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via `PUT /control-session`
+- the console shows whether the currently selected session is the exact session delegated to `mcp-bridge`
+- `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource and lazily binds Playwright MCP on first client connect
 - the resulting access token is sent to `bpane-gateway` as:
-  - WebTransport query param: `access_token=...`
   - HTTP API bearer token for authenticated control calls
+- the browser transport then uses the minted ticket as:
+  - WebTransport query param: `session_ticket=...`
+- `bpane-gateway` resolves that ticket back to the delegated or owner-visible `session_id` before admitting the transport
 - `mcp-bridge` obtains its own bearer token with client credentials
+- the versioned session API is also bearer-protected and owner-scoped
+- the current session resource connect contract advertises `auth_type: session_connect_ticket` and still carries `compatibility_mode: legacy_single_runtime`
+- the default compose stack still runs the `static_single` runtime backend, so that control-plane flow still lands on one active host worker
+- `docker_single` keeps the old single-runtime compatibility behavior with start/stop-on-idle worker lifecycle
+- `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
+- `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`), explicit delegated-session assignment through its local `/control-session` API, and one active managed runtime per bridge instance
+- the local smoke path for this model now lives in `code/web/bpane-client/scripts/run-multi-session-smoke.mjs` and verifies:
+  - two parallel pool-mode browser sessions
+  - viewer join on an existing session
+  - MCP delegation and bridge runtime switching
+  - clean teardown back to zero active runtime assignments
 
 The default imported local realm contains:
 

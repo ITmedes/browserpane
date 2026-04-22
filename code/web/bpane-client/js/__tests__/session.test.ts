@@ -1256,7 +1256,7 @@ describe('BpaneSession', () => {
       expect(error).toBeInstanceOf(ValidationError);
       expect(error).toMatchObject({
         code: 'bpane.connect.invalid_access_token',
-        message: 'BpaneSession.connect requires a non-empty accessToken',
+        message: 'BpaneSession.connect requires a non-empty connectTicket, accessToken, or token',
       });
     });
 

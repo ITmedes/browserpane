@@ -298,6 +298,7 @@ export class BpaneSession {
   private async setupTransport(): Promise<void> {
     await this.transportRuntime.connect({
       gatewayUrl: this.options.gatewayUrl,
+      connectTicket: this.options.connectTicket,
       accessToken: this.options.accessToken ?? this.options.token,
       certHashUrl: this.options.certHashUrl,
     });

@@ -4,7 +4,12 @@
 #   ./deploy/gen-dev-cert.sh dev/certs   # generate TLS cert (once)
 #   docker compose -f deploy/compose.yml up --build
 #
-# Then open http://localhost:8080 in Chrome and click "Connect".
+# Then open http://localhost:8080 in Chrome and log in.
+#
+# To exercise real multi-session runtime workers locally, start the stack with:
+#   BPANE_GATEWAY_RUNTIME_BACKEND=docker_pool \
+#   BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \
+#   docker compose -f deploy/compose.yml up --build
 #
 # The current runtime SPKI fingerprint is also served at:
 #   http://localhost:8080/cert-fingerprint
@@ -12,13 +17,32 @@
 #   --ignore-certificate-errors-spki-list=$(curl -fsS http://localhost:8080/cert-fingerprint)
 #
 # Services:
-#   host     - Linux host agent (Xvfb + xterm)
-#   gateway  - WebTransport relay (port 4433)
-#   web      - nginx frontend (port 8080)
-#   keycloak - local OIDC provider for dev/testing (port 8091)
+#   host      - Linux host agent (Xvfb + xterm)
+#   gateway   - WebTransport relay (port 4433)
+#   web       - nginx frontend (port 8080)
+#   keycloak  - local OIDC provider for dev/testing (port 8091)
+#   postgres  - session control-plane database
 #   mcp-bridge - MCP SSE server for Claude Code (port 8931)
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: browserpane
+      POSTGRES_USER: browserpane
+      POSTGRES_PASSWORD: browserpane-dev
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U browserpane -d browserpane"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - bpane-postgres-data:/var/lib/postgresql/data
+    networks:
+      - bpane-internal
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.2
     command:
@@ -42,47 +66,8 @@ services:
     security_opt:
       # Allow Chromium sandbox namespace setup inside the container.
       - seccomp=unconfined
-    environment:
-      # H.264 encoder mode:
-      # - off: disable H.264 entirely (tiles only)
-      # - video_tiles: enable only when tile classifier marks video regions
-      # - always: keep encoder process running continuously
-      BPANE_H264_MODE: "video_tiles"
-      # Video quality knobs (H.264 x264)
-      BPANE_H264_BITRATE: "12M"
-      BPANE_H264_MAXRATE: "16M"
-      BPANE_H264_BUFSIZE: "6M"
-      BPANE_H264_PRESET: "ultrafast"   # prioritize latency over compression
-      BPANE_H264_PROFILE: "baseline"
-      BPANE_H264_LEVEL: "4.2"
-      BPANE_H264_TUNE: "zerolatency"
-      BPANE_H264_BFRAMES: "0"          # keep low latency; raise to 2 for better compression if latency allows
-      # GOP_MULT is intentionally omitted — uses the default of 0.25
-      # (keyframe every ~250ms at 60fps = GOP 15). Shorter GOP means faster
-      # artifact recovery at the cost of slightly more bandwidth.
-      # Optional: set BPANE_H264_CRF (e.g., 20) to prefer constant quality over strict bitrate
-      BPANE_FPS: "60"
-      # Require reasonably large video surfaces before enabling ROI video.
-      # This prevents small previews/mini players from triggering H.264.
-      BPANE_CDP_MIN_VIDEO_WIDTH: "480"
-      BPANE_CDP_MIN_VIDEO_HEIGHT: "270"
-      BPANE_CDP_MIN_VIDEO_AREA_RATIO: "0.12"
-      # Pause page videos while scrolling (via CDP Runtime.evaluate hook).
-      BPANE_CDP_PAUSE_VIDEOS_ON_SCROLL: "true"
-      BPANE_CDP_SCROLL_PAUSE_WINDOW_MS: "900"
-      # Only arm ROI video for a short period after a left click inside a detected video region.
-      BPANE_VIDEO_CLICK_ARM_MS: "8000"
-      # Audio codec: "adpcm" (default) or "opus" (24x smaller)
-      BPANE_AUDIO_CODEC: "opus"
-      # Tile compression codec: "qoi" (default) or "zstd"
-      BPANE_TILE_CODEC: "zstd"
-      RUST_LOG: "info,bpane_host=debug"
-      # Load local test page for scroll debugging
-      BPANE_URL: "https://news.google.com/home?hl=en-US&gl=US&ceid=US:en"
-      # UI scaling for readability
-      BPANE_DPI: "150"
-      GDK_SCALE: "3"
-      GDK_DPI_SCALE: "0.8"
+    env_file:
+      - ./host-runtime.env
     # MIT-SHM requires sufficient /dev/shm for framebuffer transfer
     # (3840x2160x4 = ~33MB; 64MB default may be tight with headroom)
     shm_size: '128m'
@@ -103,23 +88,42 @@ services:
       dockerfile: deploy/Dockerfile.gateway
     command: >
       /usr/local/bin/bpane-gateway
-      --agent-socket /run/bpane/agent.sock
+      --agent-socket ${BPANE_GATEWAY_AGENT_SOCKET:-/run/bpane/agent.sock}
+      --runtime-backend ${BPANE_GATEWAY_RUNTIME_BACKEND:-static_single}
       --port 4433
       --max-viewers 10
+      --max-active-runtimes ${BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES:-2}
+      --max-starting-runtimes ${BPANE_GATEWAY_MAX_STARTING_RUNTIMES:-1}
+      --runtime-cdp-endpoint ${BPANE_GATEWAY_RUNTIME_CDP_ENDPOINT:-http://host:9223}
+      --docker-runtime-image ${BPANE_GATEWAY_DOCKER_RUNTIME_IMAGE:-deploy-host}
+      --docker-runtime-network ${BPANE_GATEWAY_DOCKER_RUNTIME_NETWORK:-deploy_bpane-internal}
+      --docker-runtime-volume ${BPANE_GATEWAY_DOCKER_RUNTIME_VOLUME:-deploy_agent-socket}
+      --docker-runtime-env-file ${BPANE_GATEWAY_DOCKER_RUNTIME_ENV_FILE:-/runtime/host-runtime.env}
+      --docker-runtime-cdp-proxy-port ${BPANE_GATEWAY_DOCKER_RUNTIME_CDP_PROXY_PORT:-9223}
+      --docker-runtime-seccomp-unconfined
       --oidc-issuer http://localhost:8091/realms/browserpane-dev
       --oidc-audience bpane-gateway
       --oidc-jwks-url http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/certs
+      --database-url postgres://browserpane:browserpane-dev@postgres:5432/browserpane
+      --public-gateway-url https://localhost:4433
       --cert /certs/cert.pem
       --key /certs/cert.key
     ports:
       - "4433:4433/udp"
       - "4433:4433/tcp"
+      - "8932:8932/tcp"
     volumes:
       - agent-socket:/run/bpane
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./host-runtime.env:/runtime/host-runtime.env:ro
       - ../dev/certs:/certs:ro
     depends_on:
-      - host
-      - keycloak
+      host:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     networks:
       - bpane-internal
 
@@ -137,6 +141,10 @@ services:
       BPANE_OIDC_SCOPE: openid
       BPANE_OIDC_EXAMPLE_USERNAME: demo
       BPANE_OIDC_EXAMPLE_PASSWORD: demo-demo
+      BPANE_MCP_BRIDGE_CONTROL_URL: http://localhost:8931/control-session
+      BPANE_MCP_BRIDGE_CLIENT_ID: bpane-mcp-bridge
+      BPANE_MCP_BRIDGE_ISSUER: http://localhost:8091/realms/browserpane-dev
+      BPANE_MCP_BRIDGE_DISPLAY_NAME: BrowserPane MCP bridge
     volumes:
       - ../dev/certs:/usr/share/nginx/html/certs:ro
     depends_on:
@@ -151,9 +159,10 @@ services:
       dockerfile: deploy/Dockerfile.mcp-bridge
     environment:
       BPANE_GATEWAY_API_URL: "http://gateway:8932"
-      BPANE_CDP_ENDPOINT: "http://172.28.0.10:9223"
+      BPANE_CDP_ENDPOINT: "http://host:9223"
       BPANE_MCP_PORT: "8931"
       BPANE_MCP_RESOLUTION: "1600x900"
+      BPANE_SESSION_BOOTSTRAP_MODE: "off"
       BPANE_GATEWAY_OIDC_TOKEN_URL: "http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token"
       BPANE_GATEWAY_OIDC_CLIENT_ID: "bpane-mcp-bridge"
       BPANE_GATEWAY_OIDC_CLIENT_SECRET: "bpane-mcp-bridge-secret"
@@ -169,6 +178,7 @@ services:
 
 volumes:
   agent-socket:
+  bpane-postgres-data:
 
 networks:
   bpane-internal:

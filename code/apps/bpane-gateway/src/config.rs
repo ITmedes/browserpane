@@ -11,6 +11,19 @@ pub struct Config {
     #[arg(long, default_value = "/tmp/bpane.sock")]
     pub agent_socket: PathBuf,
 
+    /// Runtime backend: "static_single", "docker_single", or "docker_pool".
+    #[arg(long, default_value = "static_single")]
+    pub runtime_backend: String,
+
+    /// Idle timeout before an unattached runtime assignment is released or shut down.
+    #[arg(long, default_value_t = 300)]
+    pub runtime_idle_timeout_secs: u64,
+
+    /// Optional CDP endpoint exposed for the static_single runtime backend.
+    /// This should be reachable from internal automation services such as mcp-bridge.
+    #[arg(long)]
+    pub runtime_cdp_endpoint: Option<String>,
+
     /// TLS certificate file (PEM).
     #[arg(long)]
     pub cert: Option<PathBuf>,
@@ -45,6 +58,70 @@ pub struct Config {
     /// Useful when the public issuer is browser-reachable but the gateway must fetch keys over an internal URL.
     #[arg(long)]
     pub oidc_jwks_url: Option<String>,
+
+    /// Optional Postgres connection string for the versioned session control plane.
+    #[arg(long)]
+    pub database_url: Option<String>,
+
+    /// Public browser-facing gateway URL returned in session connect metadata.
+    #[arg(long, default_value = "https://localhost:4433")]
+    pub public_gateway_url: String,
+
+    /// Docker CLI binary used by the optional docker_single runtime backend.
+    #[arg(long, default_value = "docker")]
+    pub docker_runtime_bin: String,
+
+    /// Host worker image used by the optional docker_single runtime backend.
+    #[arg(long)]
+    pub docker_runtime_image: Option<String>,
+
+    /// Docker network used by the optional docker_single runtime backend.
+    #[arg(long)]
+    pub docker_runtime_network: Option<String>,
+
+    /// Docker named volume mounted at /run/bpane for the optional docker_single runtime backend.
+    #[arg(long)]
+    pub docker_runtime_volume: Option<String>,
+
+    /// Container name prefix used by docker-backed runtime workers.
+    #[arg(long, default_value = "bpane-runtime")]
+    pub docker_runtime_container_name_prefix: String,
+
+    /// Session-scoped socket root inside the shared run volume for docker_single.
+    #[arg(long, default_value = "/run/bpane/sessions")]
+    pub docker_runtime_socket_root: String,
+
+    /// CDP proxy port exposed by docker-backed runtime workers.
+    #[arg(long, default_value_t = 9223)]
+    pub docker_runtime_cdp_proxy_port: u16,
+
+    /// shm-size passed to docker run for the optional docker_single runtime backend.
+    #[arg(long, default_value = "128m")]
+    pub docker_runtime_shm_size: String,
+
+    /// Startup timeout for the optional docker_single runtime backend.
+    #[arg(long, default_value_t = 60)]
+    pub docker_runtime_start_timeout_secs: u64,
+
+    /// Maximum number of runtime-backed sessions that can exist in parallel in docker_pool mode.
+    #[arg(long, default_value_t = 1)]
+    pub max_active_runtimes: usize,
+
+    /// Maximum number of runtime workers that may be starting concurrently in docker_pool mode.
+    #[arg(long, default_value_t = 1)]
+    pub max_starting_runtimes: usize,
+
+    /// Optional env-file forwarded to docker run for the optional docker_single runtime backend.
+    #[arg(long)]
+    pub docker_runtime_env_file: Option<PathBuf>,
+
+    /// Apply --security-opt seccomp=unconfined when launching docker runtime workers.
+    #[arg(long, default_value_t = false)]
+    pub docker_runtime_seccomp_unconfined: bool,
+
+    /// Lifetime for minted session-scoped connect tickets.
+    #[arg(long, default_value_t = 300)]
+    pub session_ticket_ttl_secs: u64,
 
     /// Session heartbeat timeout in seconds.
     #[arg(long, default_value_t = 15)]
