@@ -22,13 +22,14 @@ use self::request::{validate_request_path, RequestValidationError};
 use self::session_task::handle_session;
 use crate::auth::AuthValidator;
 use crate::connect_ticket::SessionConnectTicketManager;
+use crate::runtime_manager::SessionRuntimeManager;
 use crate::session_control::SessionStore;
 use crate::session_registry::SessionRegistry;
 
 pub struct TransportServer {
     bind_addr: SocketAddr,
     identity: Identity,
-    agent_socket_path: String,
+    runtime_manager: Arc<SessionRuntimeManager>,
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
@@ -40,7 +41,7 @@ impl TransportServer {
     pub fn new(
         bind_addr: SocketAddr,
         identity: Identity,
-        agent_socket_path: String,
+        runtime_manager: Arc<SessionRuntimeManager>,
         auth_validator: Arc<AuthValidator>,
         connect_ticket_manager: Arc<SessionConnectTicketManager>,
         session_store: SessionStore,
@@ -50,7 +51,7 @@ impl TransportServer {
         Self {
             bind_addr,
             identity,
-            agent_socket_path,
+            runtime_manager,
             auth_validator,
             connect_ticket_manager,
             session_store,
@@ -131,6 +132,22 @@ impl TransportServer {
                 }
             };
 
+            let runtime = match self
+                .runtime_manager
+                .resolve(validated_request.session_id)
+                .await
+            {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    warn!(
+                        session_id = %validated_request.session_id,
+                        "runtime resolution failed: {error}"
+                    );
+                    session_request.not_found().await;
+                    continue;
+                }
+            };
+
             let connection = match session_request.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
@@ -141,7 +158,7 @@ impl TransportServer {
 
             session_counter += 1;
             let session_id = session_counter;
-            let agent_path = self.agent_socket_path.clone();
+            let agent_path = runtime.agent_socket_path.clone();
             let heartbeat_timeout = self.heartbeat_timeout;
             let active_sessions_clone = active_sessions.clone();
             let registry = self.registry.clone();

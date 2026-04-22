@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
 use crate::connect_ticket::SessionConnectTicketManager;
+use crate::runtime_manager::{ResolvedSessionRuntime, RuntimeManagerError, SessionRuntimeManager};
 use crate::session_control::{
     CreateSessionRequest, SessionLifecycleState, SessionListResponse, SessionOwnerMode,
     SessionResource, SessionStore, SessionStoreError, SetAutomationDelegateRequest, StoredSession,
@@ -24,7 +25,7 @@ struct ApiState {
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
-    agent_socket_path: String,
+    runtime_manager: Arc<SessionRuntimeManager>,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
 }
@@ -250,7 +251,10 @@ async fn get_session_status(
     let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
     let hub = state
         .registry
-        .ensure_hub_for_session(session_id, &state.agent_socket_path)
+        .ensure_hub_for_session(
+            session_id,
+            &resolve_runtime(&state, session_id).await?.agent_socket_path,
+        )
         .await
         .map_err(|error| {
             (
@@ -312,6 +316,8 @@ async fn delete_session(
             )
         })?;
 
+    state.runtime_manager.release(session_id).await;
+
     Ok(Json(stopped.to_resource(&state.public_gateway_url, None)))
 }
 
@@ -326,9 +332,12 @@ async fn session_status(
     let Some(session_id) = legacy_runtime_session_id(&state).await else {
         return Err(StatusCode::NOT_FOUND);
     };
+    let runtime = resolve_runtime_compat(&state, session_id)
+        .await
+        .map_err(|status| status)?;
     let hub = state
         .registry
-        .ensure_hub_for_session(session_id, &state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
         .await
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
     let snapshot = hub.telemetry_snapshot().await;
@@ -383,9 +392,10 @@ async fn set_mcp_owner(
             }),
         ));
     };
+    let runtime = resolve_runtime(&state, session_id).await?;
     let hub = state
         .registry
-        .ensure_hub_for_session(session_id, &state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
         .await
         .map_err(|e| {
             (
@@ -408,9 +418,10 @@ async fn set_session_mcp_owner(
     Json(req): Json<McpOwnerRequest>,
 ) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
     let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let runtime = resolve_runtime(&state, session_id).await?;
     let hub = state
         .registry
-        .ensure_hub_for_session(session_id, &state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
         .await
         .map_err(|error| {
             (
@@ -437,9 +448,12 @@ async fn clear_mcp_owner(
     let Some(session_id) = legacy_runtime_session_id(&state).await else {
         return Err(StatusCode::NOT_FOUND);
     };
+    let runtime = resolve_runtime_compat(&state, session_id)
+        .await
+        .map_err(|status| status)?;
     let hub = state
         .registry
-        .ensure_hub_for_session(session_id, &state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
         .await
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
 
@@ -454,9 +468,10 @@ async fn clear_session_mcp_owner(
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
     let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let runtime = resolve_runtime(&state, session_id).await?;
     let hub = state
         .registry
-        .ensure_hub_for_session(session_id, &state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
         .await
         .map_err(|error| {
             (
@@ -479,7 +494,7 @@ pub async fn run_api_server(
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
-    agent_socket_path: String,
+    runtime_manager: Arc<SessionRuntimeManager>,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
 ) -> anyhow::Result<()> {
@@ -488,7 +503,7 @@ pub async fn run_api_server(
         auth_validator,
         connect_ticket_manager,
         session_store,
-        agent_socket_path,
+        runtime_manager,
         public_gateway_url,
         default_owner_mode,
     });
@@ -654,6 +669,37 @@ async fn runtime_is_currently_in_use(state: &ApiState) -> bool {
         return false;
     };
     snapshot.browser_clients > 0 || snapshot.viewer_clients > 0 || snapshot.mcp_owner
+}
+
+async fn resolve_runtime(
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<ResolvedSessionRuntime, (StatusCode, Json<ErrorResponse>)> {
+    state
+        .runtime_manager
+        .resolve(session_id)
+        .await
+        .map_err(map_runtime_manager_error)
+}
+
+async fn resolve_runtime_compat(
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<ResolvedSessionRuntime, StatusCode> {
+    state
+        .runtime_manager
+        .resolve(session_id)
+        .await
+        .map_err(|_| StatusCode::CONFLICT)
+}
+
+fn map_runtime_manager_error(error: RuntimeManagerError) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::CONFLICT,
+        Json(ErrorResponse {
+            error: error.to_string(),
+        }),
+    )
 }
 
 async fn legacy_runtime_session_id(state: &ApiState) -> Option<Uuid> {

@@ -9,6 +9,7 @@ use tower::ServiceExt;
 use super::*;
 use crate::auth::AuthValidator;
 use crate::connect_ticket::SessionConnectTicketManager;
+use crate::runtime_manager::SessionRuntimeManager;
 
 fn test_router() -> (Router, String) {
     let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
@@ -23,7 +24,9 @@ fn test_router() -> (Router, String) {
             Duration::from_secs(300),
         )),
         session_store: SessionStore::in_memory(),
-        agent_socket_path: "/tmp/test.sock".to_string(),
+        runtime_manager: Arc::new(SessionRuntimeManager::static_single(
+            "/tmp/test.sock".to_string(),
+        )),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
     });
@@ -227,7 +230,9 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
             Duration::from_secs(300),
         )),
         session_store: SessionStore::in_memory(),
-        agent_socket_path: "/tmp/test.sock".to_string(),
+        runtime_manager: Arc::new(SessionRuntimeManager::static_single(
+            "/tmp/test.sock".to_string(),
+        )),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
     });
@@ -279,7 +284,9 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
             Duration::from_secs(300),
         )),
         session_store: SessionStore::in_memory(),
-        agent_socket_path: "/tmp/test.sock".to_string(),
+        runtime_manager: Arc::new(SessionRuntimeManager::static_single(
+            "/tmp/test.sock".to_string(),
+        )),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
     });
