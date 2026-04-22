@@ -55,7 +55,8 @@ The main blockers are outside that abstraction:
     - `docker_single`: one start-on-demand runtime container with idle shutdown
     - `docker_pool`: multiple start-on-demand runtime containers with explicit active/startup caps
   - `docker_single` still enforces one active runtime at a time; `docker_pool` is the first backend that can run multiple session workers in parallel
-  - the remaining work is runtime metadata persistence, stronger worker lifecycle/recovery semantics, and promoting the worker-pool backend from opt-in infrastructure to the default tested path
+  - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions
+  - the remaining work is runtime metadata persistence, stronger worker lifecycle/recovery semantics, and session-specific MCP/CDP wiring for automation in pool mode
 - `code/apps/bpane-gateway/src/main.rs` and `config.rs`
   - one `--agent-socket`, one host endpoint
 - `code/integrations/mcp-bridge/src/index.ts`
