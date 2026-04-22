@@ -1235,6 +1235,54 @@
       }
     }
 
+    async function mintSessionConnectTicket(accessToken, controlSession) {
+      const ticketPath = controlSession?.connect?.ticket_path;
+      if (!ticketPath) {
+        return null;
+      }
+
+      const response = await fetch(ticketPath, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`session ticket mint failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      const payload = await response.json();
+      if (typeof payload?.token !== 'string' || payload.token.trim() === '') {
+        throw new Error('session ticket response did not include a token');
+      }
+      log(`Minted short-lived session connect ticket for ${controlSession.id}`, 'ok');
+      return payload.token;
+    }
+
+    async function resolveSessionConnectCredential(accessToken, controlSession) {
+      if (controlSession?.connect?.auth_type === 'session_connect_ticket') {
+        const connectTicket = await mintSessionConnectTicket(accessToken, controlSession);
+        if (connectTicket) {
+          return {
+            connectTicket,
+            accessToken: null,
+          };
+        }
+      }
+      return {
+        connectTicket: null,
+        accessToken,
+      };
+    }
+
     function buildMcpBridgeDelegatePayload() {
       const bridge = authState.config?.mcpBridge;
       if (!bridge?.clientId) {
@@ -1405,6 +1453,7 @@
           if (overlay) overlay.style.display = '';
           return;
         }
+        const connectCredential = await resolveSessionConnectCredential(accessToken, controlSession);
         const gatewayUrl = `${controlSession.connect.gateway_url}${controlSession.connect.transport_path}`;
         log(`Connecting to ${gatewayUrl} via session ${controlSession.id}...`);
         log(
@@ -1414,7 +1463,8 @@
         session = await BpaneSession.connect({
           container,
           gatewayUrl,
-          accessToken,
+          connectTicket: connectCredential.connectTicket ?? undefined,
+          accessToken: connectCredential.accessToken ?? undefined,
           renderBackend: renderBackendSelect.value,
           hiDpi: hidpiToggle.checked,
           scrollCopy: scrollCopyToggle.checked,

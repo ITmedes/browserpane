@@ -54,6 +54,10 @@ pub struct Config {
     #[arg(long, default_value = "https://localhost:4433")]
     pub public_gateway_url: String,
 
+    /// Lifetime for minted session-scoped connect tickets.
+    #[arg(long, default_value_t = 300)]
+    pub session_ticket_ttl_secs: u64,
+
     /// Session heartbeat timeout in seconds.
     #[arg(long, default_value_t = 15)]
     pub heartbeat_timeout_secs: u64,

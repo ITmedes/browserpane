@@ -10,6 +10,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
+use crate::connect_ticket::SessionConnectTicketManager;
 use crate::session_control::{
     CreateSessionRequest, SessionLifecycleState, SessionListResponse, SessionOwnerMode,
     SessionResource, SessionStore, SessionStoreError, SetAutomationDelegateRequest, StoredSession,
@@ -21,6 +22,7 @@ use crate::session_registry::SessionRegistry;
 struct ApiState {
     registry: Arc<SessionRegistry>,
     auth_validator: Arc<AuthValidator>,
+    connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
     agent_socket_path: String,
     public_gateway_url: String,
@@ -72,6 +74,15 @@ struct OkResponse {
 #[derive(Serialize)]
 struct ErrorResponse {
     error: String,
+}
+
+#[derive(Serialize)]
+struct SessionAccessTokenResponse {
+    session_id: Uuid,
+    token_type: String,
+    token: String,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    connect: crate::session_control::SessionConnectInfo,
 }
 
 async fn create_session(
@@ -173,6 +184,62 @@ async fn clear_automation_owner(
         })?;
 
     Ok(Json(stored.to_resource(&state.public_gateway_url, None)))
+}
+
+async fn issue_session_access_token(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionAccessTokenResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let stored = state
+        .session_store
+        .get_session_for_principal(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    if !stored.state.is_runtime_candidate() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "session {session_id} is not connectable in state {}",
+                    stored.state.as_str()
+                ),
+            }),
+        ));
+    }
+
+    let issued = state
+        .connect_ticket_manager
+        .issue_ticket(session_id, &principal)
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to issue session connect ticket: {error}"),
+                }),
+            )
+        })?;
+    let resource = stored.to_resource(&state.public_gateway_url, None);
+
+    Ok(Json(SessionAccessTokenResponse {
+        session_id,
+        token_type: "session_connect_ticket".to_string(),
+        token: issued.token,
+        expires_at: issued.expires_at,
+        connect: resource.connect,
+    }))
 }
 
 async fn get_session_status(
@@ -396,6 +463,7 @@ pub async fn run_api_server(
     bind_addr: SocketAddr,
     registry: Arc<SessionRegistry>,
     auth_validator: Arc<AuthValidator>,
+    connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
     agent_socket_path: String,
     public_gateway_url: String,
@@ -404,6 +472,7 @@ pub async fn run_api_server(
     let state = Arc::new(ApiState {
         registry,
         auth_validator,
+        connect_ticket_manager,
         session_store,
         agent_socket_path,
         public_gateway_url,
@@ -445,6 +514,10 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         .route(
             "/api/v1/sessions/{session_id}",
             get(get_session).delete(delete_session),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/access-tokens",
+            post(issue_session_access_token),
         )
         .route(
             "/api/v1/sessions/{session_id}/automation-owner",

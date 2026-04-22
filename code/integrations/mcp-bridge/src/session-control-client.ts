@@ -19,6 +19,7 @@ export interface GatewaySessionResource {
     gateway_url: string;
     transport_path: string;
     auth_type: string;
+    ticket_path?: string | null;
     compatibility_mode: string;
   };
   integration_context?: Record<string, unknown> | null;

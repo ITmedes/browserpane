@@ -8,6 +8,7 @@ use tower::ServiceExt;
 
 use super::*;
 use crate::auth::AuthValidator;
+use crate::connect_ticket::SessionConnectTicketManager;
 
 fn test_router() -> (Router, String) {
     let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
@@ -17,6 +18,10 @@ fn test_router() -> (Router, String) {
     let state = Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
+        connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
+            vec![5; 32],
+            Duration::from_secs(300),
+        )),
         session_store: SessionStore::in_memory(),
         agent_socket_path: "/tmp/test.sock".to_string(),
         public_gateway_url: "https://localhost:4433".to_string(),
@@ -84,6 +89,11 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     assert_eq!(created["owner_mode"], "collaborative");
     assert_eq!(created["connect"]["gateway_url"], "https://localhost:4433");
     assert_eq!(created["connect"]["transport_path"], "/session");
+    assert_eq!(created["connect"]["auth_type"], "session_connect_ticket");
+    assert_eq!(
+        created["connect"]["ticket_path"],
+        format!("/api/v1/sessions/{session_id}/access-tokens")
+    );
     assert_eq!(
         created["connect"]["compatibility_mode"],
         "legacy_single_runtime"
@@ -120,6 +130,24 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     let fetched = response_json(get_response).await;
     assert_eq!(fetched["id"], session_id);
     assert_eq!(fetched["labels"]["suite"], "contract");
+
+    let issue_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/access-tokens"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(issue_response.status(), StatusCode::OK);
+    let issued = response_json(issue_response).await;
+    assert_eq!(issued["session_id"], session_id);
+    assert_eq!(issued["token_type"], "session_connect_ticket");
+    assert!(issued["token"].as_str().unwrap().starts_with("v1."));
 
     let delete_response = app
         .clone()
@@ -194,6 +222,10 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
     let state = Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
+        connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
+            vec![5; 32],
+            Duration::from_secs(300),
+        )),
         session_store: SessionStore::in_memory(),
         agent_socket_path: "/tmp/test.sock".to_string(),
         public_gateway_url: "https://localhost:4433".to_string(),
@@ -242,6 +274,10 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
     let state = Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
+        connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
+            vec![5; 32],
+            Duration::from_secs(300),
+        )),
         session_store: SessionStore::in_memory(),
         agent_socket_path: "/tmp/test.sock".to_string(),
         public_gateway_url: "https://localhost:4433".to_string(),

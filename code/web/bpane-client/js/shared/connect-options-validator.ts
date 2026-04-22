@@ -4,6 +4,7 @@ interface ConnectOptionsLike {
   container?: unknown;
   gatewayUrl?: unknown;
   accessToken?: unknown;
+  connectTicket?: unknown;
   token?: unknown;
 }
 
@@ -21,15 +22,17 @@ export class SessionConnectOptionsValidator {
         'BpaneSession.connect requires a non-empty gatewayUrl',
       );
     }
-    const accessToken = typeof options.accessToken === 'string'
+    const credential = typeof options.connectTicket === 'string'
+      ? options.connectTicket
+      : typeof options.accessToken === 'string'
       ? options.accessToken
       : typeof options.token === 'string'
         ? options.token
         : null;
-    if (typeof accessToken !== 'string' || accessToken.trim() === '') {
+    if (typeof credential !== 'string' || credential.trim() === '') {
       throw new ValidationError(
         'bpane.connect.invalid_access_token',
-        'BpaneSession.connect requires a non-empty accessToken',
+        'BpaneSession.connect requires a non-empty connectTicket, accessToken, or token',
       );
     }
   }

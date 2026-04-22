@@ -159,6 +159,7 @@ pub struct SessionConnectInfo {
     pub gateway_url: String,
     pub transport_path: String,
     pub auth_type: String,
+    pub ticket_path: Option<String>,
     pub compatibility_mode: String,
 }
 
@@ -249,7 +250,8 @@ impl StoredSession {
             connect: SessionConnectInfo {
                 gateway_url: public_gateway_url.to_string(),
                 transport_path: "/session".to_string(),
-                auth_type: "bearer_access_token".to_string(),
+                auth_type: "session_connect_ticket".to_string(),
+                ticket_path: Some(format!("/api/v1/sessions/{}/access-tokens", self.id)),
                 compatibility_mode: "legacy_single_runtime".to_string(),
             },
             created_at: self.created_at,

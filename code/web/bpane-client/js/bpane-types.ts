@@ -5,6 +5,8 @@ export interface BpaneOptions {
   gatewayUrl: string;
   /** OIDC/JWT access token for the gateway session. */
   accessToken?: string;
+  /** Short-lived session-scoped connect ticket minted from the control plane. */
+  connectTicket?: string;
   /** Legacy dev-token compatibility path. Prefer `accessToken`. */
   token?: string;
   hiDpi?: boolean;
