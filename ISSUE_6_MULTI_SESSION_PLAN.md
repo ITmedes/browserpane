@@ -42,13 +42,16 @@ The current repo already has one strong building block: `SessionHub` is the righ
 The main blockers are outside that abstraction:
 
 - `code/apps/bpane-gateway/src/api.rs`
-  - public API is still global and single-session: `/api/session/status`, `/api/session/mcp-owner`
+  - public API now has both legacy global compatibility routes and owner-scoped `/api/v1/sessions` plus session-scoped `status` / `mcp-owner`
+  - the remaining gap is formal delegation and access-ticket flows across mixed principals
 - `code/apps/bpane-gateway/src/transport.rs`
   - WebTransport still validates one global token and routes every browser connection through one implicit session
 - `code/apps/bpane-gateway/src/main.rs` and `config.rs`
   - one `--agent-socket`, one host endpoint
 - `code/integrations/mcp-bridge/src/index.ts`
-  - assumes one BrowserPane session, one gateway API URL, one CDP endpoint, one resolution policy
+  - can now resolve a control session and use session-scoped ownership/status APIs
+  - still assumes one BrowserPane runtime endpoint and one CDP target underneath
+  - still lacks a first-class cross-principal delegation flow
 - `deploy/compose.yml`
   - local stack is still hard-wired to one host worker and one socket volume
 
@@ -104,6 +107,35 @@ Common pattern:
 - multitab and viewer/embed behavior are session-local
 
 BrowserPane already has the shared-session side of this. The missing part is making session selection explicit at the control-plane boundary.
+
+### 6. Delegation across principals is explicit
+
+Common pattern:
+
+- one actor creates or owns a session
+- another actor is explicitly allowed to attach, observe, or automate that session
+- the attach path is deliberate, scoped, and revocable
+
+BrowserPane needs this because its browser user and `mcp-bridge` service principal are currently different identities.
+
+### 7. Reconnect / resume is expected
+
+Common pattern:
+
+- session connections can drop and reconnect
+- the session resource remains the stable handle
+- reconnect and explicit release are normal parts of the lifecycle
+
+BrowserPane should plan for reconnect-friendly attach semantics early, even before persistent cross-worker resurrection exists.
+
+### 8. Recordings / artifacts / replay are normal companion features
+
+Common pattern:
+
+- recordings, live views, and artifacts are attached to a session resource
+- these are not necessarily phase-1 requirements, but the session model should leave space for them
+
+BrowserPane should keep recordings out of the immediate critical path, but the session resource should not paint us into a corner.
 
 ## Industry Patterns We Should Not Copy Directly
 
@@ -186,6 +218,8 @@ Start with `/api/v1` and a small stable core:
 - `POST /api/v1/sessions/{id}/automation-owner`
 - `DELETE /api/v1/sessions/{id}/automation-owner`
 
+For BrowserPane specifically, the next practical addition after the current Phase 0 slice should be explicit delegation or attach semantics for mixed principals, not more global compatibility endpoints.
+
 `GET /api/v1/sessions` should be included early even if filtering is basic at first, because session listing is one of the most standard and integration-friendly control-plane expectations.
 
 ### Internal boundary
@@ -226,7 +260,7 @@ Current status:
   - `DELETE /api/v1/sessions/{id}/mcp-owner`
 - persistence is Postgres-backed in the normal compose/runtime path
 - `test-embed.html` already consumes that API and resolves/creates a session resource before browser connect
-- `mcp-bridge` now has the first session-control client hooks and can use session-scoped ownership APIs for an explicit managed session, but local compose keeps bootstrap off until a shared session-selection flow lands for browser and automation principals
+- `mcp-bridge` now has the first session-control client hooks and can use session-scoped ownership APIs for an explicit managed session, but local compose keeps bootstrap off until a shared session-selection or delegation flow lands for browser and automation principals
 - the remaining Phase 0 gap is tightening the formal contract surface and expanding downstream integration to consume these resources instead of the older implicit single-session assumptions
 
 Exit criteria:
@@ -292,6 +326,7 @@ Deliverables:
   - session ID required
   - session-scoped ownership calls
   - per-session CDP endpoint resolution
+  - explicit delegated attach model for mixed browser-user and service-account principals
 
 Exit criteria:
 
@@ -410,6 +445,30 @@ Concrete first PR target:
 4. Add tests for the new public contract and compatibility behavior.
 
 This is the lowest-risk way to start because it freezes the product boundary before runtime refactors begin.
+
+## MCP / Automation Use Cases To Design For
+
+These are the MCP-adjacent use cases that match the way modern browser-session platforms are typically used:
+
+1. Human-supervised automation on one live session
+   - human watches or intervenes while automation drives
+2. Attach automation to an existing user-owned session by explicit delegation
+   - this is the most important missing capability for BrowserPane right now
+3. Create a session for automation first, then let humans join later
+4. Temporary ownership handoff between human and automation
+5. Reconnect or resume the same session after disconnect
+6. Embed a live session view inside another product or dashboard
+7. Query or resolve sessions by metadata, labels, or integration context
+8. Record or replay a session later for debugging, support, or audit
+9. Reuse auth or context where the product needs session continuity
+10. Run multiple isolated automation sessions in parallel
+
+What this implies for BrowserPane:
+
+- the next important control-plane feature is explicit delegation, not more implicit bootstrap
+- reconnect-friendly semantics matter early
+- metadata and integration context should remain first-class
+- recordings should stay out of the critical path for now, but the session model should leave room for them
 
 ## Decision Summary
 
