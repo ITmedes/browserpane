@@ -7,6 +7,8 @@ inside a browser `<div>` using WebTransport, WebCodecs, and WebGL 2 — no
 plugins, no Electron, no VNC viewer. The container size drives the remote
 resolution pixel-for-pixel.
 
+The canonical frozen v1 session-control contract is [openapi/bpane-control-v1.yaml](/Users/cfinkelstein/workspace/pane/openapi/bpane-control-v1.yaml).
+
 The system has five runtime components connected by two transport layers plus a persistent control-plane store:
 
 ```
@@ -221,6 +223,7 @@ Stateless relay between host agent and browser clients.
 - **Auth** (`auth.rs`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
 - **Heartbeat**: disconnects after 15s without CONTROL ping
 - **HTTP API** (`api.rs`, :8932):
+  - canonical frozen v1 contract: `openapi/bpane-control-v1.yaml`
   - `POST /api/v1/sessions` — create a persistent session resource
   - `GET /api/v1/sessions` — list owner-scoped sessions
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
@@ -235,6 +238,7 @@ Stateless relay between host agent and browser clients.
   - `POST /api/session/mcp-owner` — claim session, lock resolution
   - `DELETE /api/session/mcp-owner` — release ownership
   - all current endpoints require `Authorization: Bearer <token>`
+  - the `/api/session/*` routes are compatibility-only and are intentionally outside the frozen v1 contract
 - **Relay** (`relay.rs`): bidirectional Unix socket <-> async bridge, 64 KB read
   buffer, zero-copy frame slicing with `Bytes`
 
@@ -340,10 +344,12 @@ The default dev stack no longer uses a shared token file.
 - `web` serves `/auth-config.json`
 - `test-embed.html` discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
+- the local demo user is `demo / demo-demo`
 - after login, `test-embed.html` lists owner-scoped `/api/v1/sessions`, lets the user join an existing session or start a new one, and then uses the selected session resource's connect metadata
 - the page then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
 - test-page-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via `PUT /control-session`
+- the console shows whether the currently selected session is the exact session delegated to `mcp-bridge`
 - `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource and lazily binds Playwright MCP on first client connect
 - the resulting access token is sent to `bpane-gateway` as:
   - HTTP API bearer token for authenticated control calls

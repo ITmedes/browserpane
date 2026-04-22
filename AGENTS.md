@@ -16,6 +16,8 @@ When docs disagree, prefer:
 3. This file
 4. `README.md`
 
+For the frozen owner-scoped session-control contract, use `openapi/bpane-control-v1.yaml`.
+
 ## What BrowserPane is
 
 BrowserPane is a browser-native remote browser/desktop stack for a Linux host container.
@@ -54,7 +56,7 @@ Current product shape:
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
   - `runtime_manager.rs`: session-id-to-runtime resolution seam; currently supports `static_single`, `docker_single`, and `docker_pool` backends. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions. Docker-backed workers now carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile, and Docker runtime assignments are now persisted/reconciled through Postgres on gateway restart.
-  - `api.rs`: legacy compatibility endpoints plus `POST/GET/DELETE /api/v1/sessions` and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
+  - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`
@@ -118,9 +120,10 @@ Run these where applicable:
 ## Local development flow
 
 1. `./deploy/gen-dev-cert.sh dev/certs`
-2. `docker compose -f deploy/compose.yml up --build`
+2. For the multi-session control-plane path, prefer:
+   `BPANE_GATEWAY_RUNTIME_BACKEND=docker_pool BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 docker compose -f deploy/compose.yml up --build`
 3. Open `http://localhost:8080` in Chromium.
-4. Log in through the local Keycloak realm if prompted.
+4. Log in through the local Keycloak realm with `demo / demo-demo`.
 5. The test page will resolve or create an owner-scoped `/api/v1/sessions` resource before transport connect.
 6. The test page will mint a short-lived session-scoped connect ticket before WebTransport connect.
 7. Use `Delegate MCP` if you want the local `mcp-bridge` to adopt that same session.
