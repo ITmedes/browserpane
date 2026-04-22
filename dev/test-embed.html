@@ -205,6 +205,23 @@
       white-space: nowrap;
     }
 
+    .meta-chip.mcp-active {
+      border-color: rgba(79, 209, 168, 0.42);
+      background: rgba(21, 83, 63, 0.48);
+      color: #d7fff0;
+    }
+
+    .meta-chip.mcp-inactive {
+      border-color: rgba(137, 161, 201, 0.18);
+      color: var(--muted);
+    }
+
+    .meta-chip.mcp-warning {
+      border-color: rgba(255, 209, 102, 0.32);
+      background: rgba(87, 65, 24, 0.34);
+      color: #ffe1a1;
+    }
+
     .browser-panel {
       min-height: 0;
       flex: 1;
@@ -501,6 +518,24 @@
       font-size: 11px;
     }
 
+    .helper-note.info {
+      border-color: rgba(137, 161, 201, 0.22);
+      background: rgba(19, 33, 55, 0.56);
+      color: #d3dff1;
+    }
+
+    .helper-note.ok {
+      border-color: rgba(79, 209, 168, 0.34);
+      background: rgba(18, 68, 54, 0.44);
+      color: #d6fff1;
+    }
+
+    .helper-note.warn {
+      border-color: rgba(255, 209, 102, 0.28);
+      background: rgba(87, 65, 24, 0.34);
+      color: #ffe1a1;
+    }
+
     .metrics-panel {
       gap: 12px;
       background: rgba(11, 23, 40, 0.92);
@@ -621,6 +656,7 @@
           <span id="status" class="status disconnected">Disconnected</span>
           <span id="auth-display" class="meta-chip">Auth: --</span>
           <span id="session-display" class="meta-chip">Session: --</span>
+          <span id="mcp-display" class="meta-chip mcp-inactive">MCP: --</span>
         </div>
       </header>
 
@@ -686,6 +722,10 @@
           Start a fresh browser with <code>Start New Session</code>, reconnect a stopped
           session with <code>Join / Reconnect</code>, or open the same selected session from
           another signed-in browser to share the live workspace.
+        </div>
+
+        <div id="mcp-delegation-note" class="helper-note info">
+          MCP delegation: log in to see whether the selected session is attached to the local bridge.
         </div>
 
         <div class="action-grid">
@@ -845,6 +885,8 @@
     const logPanel = document.getElementById('log-panel');
     const authDisplay = document.getElementById('auth-display');
     const sessionDisplay = document.getElementById('session-display');
+    const mcpDisplay = document.getElementById('mcp-display');
+    const mcpDelegationNote = document.getElementById('mcp-delegation-note');
     const authHint = document.getElementById('auth-hint');
     const navLinks = Array.from(document.querySelectorAll('.nav-link'));
 
@@ -1391,18 +1433,30 @@
       resources: [],
       selectedSessionId: '',
     };
+    const mcpBridgeState = {
+      controlSessionId: '',
+      controlSessionState: '',
+      available: false,
+      lastError: '',
+      pollInterval: null,
+    };
 
     function isRuntimeCandidateSessionState(state) {
       return ['pending', 'starting', 'ready', 'active', 'idle', 'stopped'].includes(state);
+    }
+
+    function getShortSessionId(sessionId) {
+      return sessionId ? String(sessionId).slice(0, 8) : '--';
     }
 
     function getSessionLabel(resource) {
       if (!resource?.id) {
         return 'Session: --';
       }
-      const shortId = String(resource.id).slice(0, 8);
+      const shortId = getShortSessionId(resource.id);
       const state = resource.state ?? 'unknown';
-      return `Session: ${shortId} (${state})`;
+      const suffix = resource.id === mcpBridgeState.controlSessionId ? ' · MCP delegated' : '';
+      return `Session: ${shortId} (${state})${suffix}`;
     }
 
     function supportsLocalMcpDelegation(resource) {
@@ -1411,6 +1465,7 @@
 
     function renderSessionState() {
       sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
+      renderMcpDelegationState();
     }
 
     function isJoinableSession(resource) {
@@ -1418,12 +1473,13 @@
     }
 
     function getSessionOptionLabel(resource) {
-      const shortId = String(resource.id).slice(0, 8);
+      const shortId = getShortSessionId(resource.id);
       const state = resource.state ?? 'unknown';
       const viewport = resource?.viewport?.width && resource?.viewport?.height
         ? `${resource.viewport.width}x${resource.viewport.height}`
         : '--';
-      return `${shortId} · ${state} · ${viewport}`;
+      const delegated = resource.id === mcpBridgeState.controlSessionId ? ' · MCP' : '';
+      return `${shortId} · ${state} · ${viewport}${delegated}`;
     }
 
     function syncSelectedSessionResource() {
@@ -1467,6 +1523,164 @@
         sessionSelect.value = controlSessionState.selectedSessionId || '';
       }
       syncSelectedSessionResource();
+    }
+
+    function getMcpBridgeDisplayName() {
+      return authState.config?.mcpBridge?.displayName
+        ?? authState.config?.mcpBridge?.clientId
+        ?? 'BrowserPane MCP bridge';
+    }
+
+    function getMcpBridgeHealthUrl() {
+      const controlUrl = authState.config?.mcpBridge?.controlUrl;
+      if (!controlUrl) {
+        return '';
+      }
+      try {
+        const url = new URL(controlUrl, window.location.href);
+        url.pathname = '/health';
+        url.search = '';
+        url.hash = '';
+        return url.toString();
+      } catch {
+        return '';
+      }
+    }
+
+    function stopMcpBridgePolling({ clearState = false } = {}) {
+      if (mcpBridgeState.pollInterval) {
+        clearInterval(mcpBridgeState.pollInterval);
+        mcpBridgeState.pollInterval = null;
+      }
+      if (clearState) {
+        mcpBridgeState.controlSessionId = '';
+        mcpBridgeState.controlSessionState = '';
+        mcpBridgeState.available = false;
+        mcpBridgeState.lastError = '';
+      }
+    }
+
+    function setMcpDisplayState(text, className) {
+      mcpDisplay.textContent = text;
+      mcpDisplay.className = `meta-chip ${className}`;
+    }
+
+    function renderMcpDelegationState() {
+      const selectedSessionId = controlSessionState.resource?.id ?? '';
+      const controlSessionId = mcpBridgeState.controlSessionId;
+      const bridgeName = getMcpBridgeDisplayName();
+
+      if (!authState.config?.mcpBridge?.clientId) {
+        setMcpDisplayState('MCP: unavailable', 'mcp-warning');
+        mcpDelegationNote.className = 'helper-note warn';
+        mcpDelegationNote.textContent = 'MCP bridge delegation is not configured for this page.';
+        return;
+      }
+
+      if (!authState.tokens?.access_token) {
+        setMcpDisplayState('MCP: login required', 'mcp-inactive');
+        mcpDelegationNote.className = 'helper-note info';
+        mcpDelegationNote.textContent =
+          'Log in to see whether the selected session is currently delegated to the local MCP bridge.';
+        return;
+      }
+
+      if (!mcpBridgeState.available && mcpBridgeState.lastError) {
+        setMcpDisplayState('MCP: bridge unavailable', 'mcp-warning');
+        mcpDelegationNote.className = 'helper-note warn';
+        mcpDelegationNote.textContent =
+          `${bridgeName} status could not be loaded right now. Delegation state may be stale until the bridge becomes reachable again.`;
+        return;
+      }
+
+      if (!controlSessionId) {
+        setMcpDisplayState('MCP: no delegated session', 'mcp-inactive');
+        mcpDelegationNote.className = 'helper-note info';
+        mcpDelegationNote.textContent = selectedSessionId
+          ? `The selected session ${getShortSessionId(selectedSessionId)} is not delegated to ${bridgeName}. Use "Delegate MCP" if you want the bridge to drive this exact browser.`
+          : `No session is currently delegated to ${bridgeName}. Select a session and use "Delegate MCP" to attach the bridge to it.`;
+        return;
+      }
+
+      if (selectedSessionId && selectedSessionId === controlSessionId) {
+        setMcpDisplayState('MCP: this session delegated', 'mcp-active');
+        mcpDelegationNote.className = 'helper-note ok';
+        mcpDelegationNote.textContent =
+          `${bridgeName} is currently attached to session ${getShortSessionId(controlSessionId)}. Actions from the bridge will drive the exact browser shown in this console.`;
+        return;
+      }
+
+      setMcpDisplayState(`MCP: session ${getShortSessionId(controlSessionId)}`, 'mcp-warning');
+      mcpDelegationNote.className = 'helper-note warn';
+      mcpDelegationNote.textContent = selectedSessionId
+        ? `${bridgeName} is attached to session ${getShortSessionId(controlSessionId)}, not the currently selected session ${getShortSessionId(selectedSessionId)}.`
+        : `${bridgeName} is currently attached to session ${getShortSessionId(controlSessionId)}. Select that session if you want to inspect or share the exact delegated browser.`;
+    }
+
+    async function refreshMcpBridgeState({ silent = true } = {}) {
+      const healthUrl = getMcpBridgeHealthUrl();
+      if (!healthUrl || !authState.tokens?.access_token) {
+        stopMcpBridgePolling({ clearState: true });
+        renderSessionPicker();
+        renderSessionState();
+        return null;
+      }
+
+      try {
+        const response = await fetch(`${healthUrl}?_=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        mcpBridgeState.controlSessionId = typeof payload?.control_session_id === 'string'
+          ? payload.control_session_id
+          : '';
+        mcpBridgeState.controlSessionState = typeof payload?.control_session_state === 'string'
+          ? payload.control_session_state
+          : '';
+        mcpBridgeState.available = true;
+        mcpBridgeState.lastError = '';
+        renderSessionPicker();
+        renderSessionState();
+        if (!silent && mcpBridgeState.controlSessionId) {
+          log(`MCP bridge currently controls session ${mcpBridgeState.controlSessionId}`, 'info');
+        }
+        return payload;
+      } catch (error) {
+        mcpBridgeState.available = false;
+        mcpBridgeState.lastError = error.message;
+        renderSessionPicker();
+        renderSessionState();
+        if (!silent) {
+          log(`MCP bridge status check failed: ${error.message}`, 'warn');
+        }
+        return null;
+      }
+    }
+
+    function syncMcpBridgePolling() {
+      const shouldPoll = authState.config?.mode === 'oidc'
+        && Boolean(authState.tokens?.access_token)
+        && Boolean(authState.config?.mcpBridge?.controlUrl);
+
+      if (!shouldPoll) {
+        stopMcpBridgePolling({ clearState: true });
+        renderSessionPicker();
+        renderSessionState();
+        return;
+      }
+
+      if (mcpBridgeState.pollInterval) {
+        return;
+      }
+
+      void refreshMcpBridgeState({ silent: true });
+      mcpBridgeState.pollInterval = setInterval(() => {
+        if (document.visibilityState === 'hidden') {
+          return;
+        }
+        void refreshMcpBridgeState({ silent: true });
+      }, 5000);
     }
 
     function buildRedirectUri() {
@@ -1526,6 +1740,7 @@
       controlSessionState.resource = null;
       controlSessionState.resources = [];
       controlSessionState.selectedSessionId = '';
+      stopMcpBridgePolling({ clearState: true });
       sessionStorage.removeItem(AUTH_STORAGE_KEY);
       renderSessionState();
     }
@@ -1605,6 +1820,7 @@
       disconnectBtn.disabled = !session;
       renderSessionPicker();
       renderSessionState();
+      syncMcpBridgePolling();
     }
 
     async function fetchAuthConfig() {
@@ -2065,6 +2281,7 @@
           await refreshSessionResources(accessToken, { preserveSelection: true, silent: true }).catch((error) => {
             log(`Session list refresh failed: ${error.message}`, 'error');
           });
+          await refreshMcpBridgeState({ silent: true });
         }
       }
       window.__bpaneAuth = {
