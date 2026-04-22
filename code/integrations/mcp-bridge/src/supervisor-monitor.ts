@@ -9,6 +9,7 @@ export class SupervisorMonitor {
   constructor(
     private gatewayApiUrl: string,
     private pollIntervalMs: number = 2000,
+    private getHeaders: (() => Promise<Record<string, string>>) | null = null,
   ) {}
 
   start(): void {
@@ -29,7 +30,8 @@ export class SupervisorMonitor {
 
   private async poll(): Promise<void> {
     try {
-      const resp = await fetch(`${this.gatewayApiUrl}/api/session/status`);
+      const headers = this.getHeaders ? await this.getHeaders() : {};
+      const resp = await fetch(`${this.gatewayApiUrl}/api/session/status`, { headers });
       if (resp.ok) {
         const data = (await resp.json()) as {
           browser_clients: number;

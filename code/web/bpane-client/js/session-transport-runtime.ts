@@ -18,7 +18,8 @@ export interface SessionTransportRuntimeInput {
 
 export interface SessionTransportConnectOptions {
   gatewayUrl: string;
-  token: string;
+  accessToken?: string;
+  token?: string;
   certHashUrl?: string;
 }
 
@@ -59,7 +60,11 @@ export class SessionTransportRuntime {
 
   async connect(options: SessionTransportConnectOptions): Promise<void> {
     const nonce = `${Date.now()}.${Math.random().toString(36).slice(2)}`;
-    const url = `${options.gatewayUrl}?token=${encodeURIComponent(options.token)}&_=${nonce}`;
+    const accessToken = options.accessToken ?? options.token;
+    if (!accessToken) {
+      throw new Error('missing access token');
+    }
+    const url = `${options.gatewayUrl}?access_token=${encodeURIComponent(accessToken)}&_=${nonce}`;
     const certHash = options.certHashUrl ? await this.fetchCertHash(options.certHashUrl) : null;
 
     try {

@@ -1,0 +1,92 @@
+{
+  "realm": "browserpane-dev",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": true,
+  "clients": [
+    {
+      "clientId": "bpane-web",
+      "name": "BrowserPane Web",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "bpane-gateway-audience"
+      ]
+    },
+    {
+      "clientId": "bpane-gateway",
+      "name": "BrowserPane Gateway Audience",
+      "protocol": "openid-connect",
+      "bearerOnly": true
+    },
+    {
+      "clientId": "bpane-mcp-bridge",
+      "name": "BrowserPane MCP Bridge",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "bpane-mcp-bridge-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "defaultClientScopes": [
+        "bpane-gateway-audience"
+      ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "bpane-gateway-audience",
+      "description": "Adds the BrowserPane gateway audience to access tokens.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "display.on.consent.screen": "false",
+        "include.in.token.scope": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "bpane-gateway-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "bpane-gateway",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "demo",
+      "firstName": "Demo",
+      "lastName": "User",
+      "email": "demo@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo-demo",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

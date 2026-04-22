@@ -149,7 +149,7 @@ describe('SessionTransportRuntime', () => {
 
     expect(createTransport).toHaveBeenCalledOnce();
     const [url, options] = createTransport.mock.calls[0];
-    expect(url).toMatch(/^https:\/\/localhost:4433\?token=test-token&_=\d+\.\w+$/);
+    expect(url).toMatch(/^https:\/\/localhost:4433\?access_token=test-token&_=\d+\.\w+$/);
     expect(options).toEqual({});
     expect(onConnect).toHaveBeenCalledOnce();
   });
