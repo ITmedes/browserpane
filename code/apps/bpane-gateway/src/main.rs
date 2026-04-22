@@ -3,6 +3,7 @@ mod auth;
 mod config;
 mod connect_ticket;
 mod relay;
+mod runtime_manager;
 mod session;
 mod session_control;
 mod session_hub;
@@ -21,6 +22,7 @@ use wtransport::Identity;
 use auth::{AuthValidator, OidcConfig};
 use config::Config;
 use connect_ticket::SessionConnectTicketManager;
+use runtime_manager::SessionRuntimeManager;
 use session_control::{SessionOwnerMode, SessionStore};
 use session_registry::SessionRegistry;
 use transport::TransportServer;
@@ -117,11 +119,12 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let agent_socket_str = config.agent_socket.to_str().unwrap().to_string();
+    let runtime_manager = Arc::new(SessionRuntimeManager::static_single(agent_socket_str));
 
     let server = TransportServer::new(
         bind_addr,
         identity,
-        agent_socket_str.clone(),
+        runtime_manager.clone(),
         auth_validator.clone(),
         connect_ticket_manager.clone(),
         session_store.clone(),
@@ -147,7 +150,7 @@ async fn main() -> anyhow::Result<()> {
             auth_validator,
             connect_ticket_manager,
             session_store,
-            agent_socket_str,
+            runtime_manager,
             config.public_gateway_url,
             if config.exclusive_browser_owner {
                 SessionOwnerMode::ExclusiveBrowserOwner

@@ -49,6 +49,9 @@ The main blockers are outside that abstraction:
 - `code/apps/bpane-gateway/src/transport.rs`
   - WebTransport now resolves a session-scoped connect ticket and routes browser connections through the public `session_id`
   - the remaining compatibility limit is that session routing still resolves to one active host runtime candidate
+- `code/apps/bpane-gateway/src/runtime_manager.rs`
+  - this seam now exists and currently resolves every active session through the legacy single host socket
+  - the remaining work is replacing that backend with real per-session runtime assignment, idle shutdown, and capacity limits
 - `code/apps/bpane-gateway/src/main.rs` and `config.rs`
   - one `--agent-socket`, one host endpoint
 - `code/integrations/mcp-bridge/src/index.ts`
@@ -58,7 +61,7 @@ The main blockers are outside that abstraction:
 - `deploy/compose.yml`
   - local stack is still hard-wired to one host worker and one socket volume
 
-`SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is host/runtime lifecycle and mapping multiple runtime workers behind those session IDs.
+`SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is host/runtime lifecycle and mapping multiple runtime workers behind those session IDs through `runtime_manager.rs`.
 
 ## Industry Patterns Worth Copying
 

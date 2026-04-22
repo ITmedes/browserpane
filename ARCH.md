@@ -206,6 +206,9 @@ Stateless relay between host agent and browser clients.
   - in-memory backend fallback for tests and dev fallback mode
   - session-scoped connect metadata and routing keyed by public `session_id`
   - `legacy_single_runtime` compatibility gating so Phase 0 can expose session resources before true multi-session workers land
+- **Runtime manager** (`runtime_manager.rs`): resolves `session_id -> runtime endpoint`
+  - current backend is still the single static host socket
+  - this is the seam where per-session worker startup/shutdown and runtime caps will land
 - **MCP ownership**: atomic flag that locks resolution for browser clients
   when an MCP agent owns the session
 - **Auth** (`auth.rs`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
