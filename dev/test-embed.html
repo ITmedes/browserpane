@@ -184,6 +184,7 @@
       <button id="btn-login">Login</button>
       <button id="btn-logout" disabled>Logout</button>
       <button id="btn-connect">Connect</button>
+      <button id="btn-delegate-mcp" disabled>Delegate MCP</button>
       <button id="btn-disconnect" disabled>Disconnect</button>
       <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
         Render
@@ -288,6 +289,7 @@
     const metricsScrollEl = document.getElementById('metrics-scroll');
     const metricsVideoEl = document.getElementById('metrics-video');
     const connectBtn = document.getElementById('btn-connect');
+    const delegateMcpBtn = document.getElementById('btn-delegate-mcp');
     const disconnectBtn = document.getElementById('btn-disconnect');
     const metricsStartBtn = document.getElementById('btn-metrics-start');
     const metricsStopBtn = document.getElementById('btn-metrics-stop');
@@ -974,6 +976,7 @@
         logoutBtn.disabled = true;
       }
       connectBtn.disabled = !canConnect;
+      delegateMcpBtn.disabled = !(config?.mode === 'oidc' && authState.tokens?.access_token && config?.mcpBridge?.clientId);
       disconnectBtn.disabled = !session;
       renderSessionState();
     }
@@ -1230,6 +1233,87 @@
         log(`Session control preflight failed: ${error.message}`, 'error');
         return null;
       }
+    }
+
+    function buildMcpBridgeDelegatePayload() {
+      const bridge = authState.config?.mcpBridge;
+      if (!bridge?.clientId) {
+        throw new Error('MCP bridge delegation is not configured for this page');
+      }
+      return {
+        client_id: bridge.clientId,
+        issuer: bridge.issuer || authState.config?.issuer,
+        display_name: bridge.displayName || bridge.clientId,
+      };
+    }
+
+    async function assignMcpBridgeControlSession(sessionId) {
+      const controlUrl = authState.config?.mcpBridge?.controlUrl;
+      if (!controlUrl) {
+        log(`MCP delegation created. Configure the bridge with BPANE_SESSION_ID=${sessionId} to attach manually.`, 'warn');
+        return;
+      }
+
+      const response = await fetch(controlUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`bridge control session update failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      log(`MCP bridge control session set to ${sessionId}`, 'ok');
+    }
+
+    async function delegateCurrentSessionToMcp() {
+      const accessToken = await getValidAccessToken();
+      if (!accessToken) {
+        setStatus('Login required', 'error');
+        log('MCP delegation cancelled: no access token available', 'error');
+        return;
+      }
+
+      log('Resolving control-plane session for MCP delegation...', 'info');
+      const controlSession = await resolveGatewaySessionResource(accessToken);
+      if (!controlSession) {
+        setStatus('Session resolution failed', 'error');
+        return;
+      }
+
+      const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(controlSession.id)}/automation-owner`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+        body: JSON.stringify(buildMcpBridgeDelegatePayload()),
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`session delegation failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+
+      controlSessionState.resource = await response.json();
+      renderSessionState();
+      log(`Delegated session ${controlSession.id} to ${authState.config.mcpBridge.clientId}`, 'ok');
+      await assignMcpBridgeControlSession(controlSession.id);
     }
 
     async function logout() {
@@ -1604,6 +1688,9 @@
     // ── Button handlers ─────────────────────────────────────────────
     loginBtn.addEventListener('click', () => void beginLogin());
     logoutBtn.addEventListener('click', () => void logout());
+    delegateMcpBtn.addEventListener('click', () => void delegateCurrentSessionToMcp().catch((error) => {
+      log(`MCP delegation failed: ${error.message}`, 'error');
+    }));
     connectBtn.addEventListener('click', connect);
     disconnectBtn.addEventListener('click', () => doDisconnect());
     metricsStartBtn.addEventListener('click', startBenchmarkSample);

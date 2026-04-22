@@ -348,3 +348,67 @@ async fn rejects_session_scoped_runtime_routes_for_stopped_sessions() {
         .unwrap()
         .contains("runtime-compatible state"));
 }
+
+#[tokio::test]
+async fn owner_can_set_and_clear_session_automation_delegate() {
+    let (app, token) = test_router();
+
+    let created = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let delegated = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/automation-owner"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "client_id": "bpane-mcp-bridge",
+                        "issuer": "https://issuer.example",
+                        "display_name": "BrowserPane MCP bridge"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delegated.status(), StatusCode::OK);
+    let delegated_body = response_json(delegated).await;
+    assert_eq!(
+        delegated_body["automation_delegate"]["client_id"],
+        "bpane-mcp-bridge"
+    );
+
+    let cleared = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/sessions/{session_id}/automation-owner"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cleared.status(), StatusCode::OK);
+    let cleared_body = response_json(cleared).await;
+    assert!(cleared_body["automation_delegate"].is_null());
+}

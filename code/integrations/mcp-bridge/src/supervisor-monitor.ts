@@ -5,7 +5,7 @@
 export class SupervisorMonitor {
   private browserClientCount = 0;
   private intervalId: ReturnType<typeof setInterval> | null = null;
-  private readonly statusPath: string;
+  private statusPath: string;
 
   constructor(
     private gatewayApiUrl: string,
@@ -30,6 +30,10 @@ export class SupervisorMonitor {
 
   getBrowserClientCount(): number {
     return this.browserClientCount;
+  }
+
+  setStatusPath(statusPath: string): void {
+    this.statusPath = statusPath;
   }
 
   private async poll(): Promise<void> {

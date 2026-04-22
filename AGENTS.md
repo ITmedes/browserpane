@@ -53,7 +53,7 @@ Current product shape:
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
-  - `api.rs`: legacy compatibility endpoints plus `POST/GET/DELETE /api/v1/sessions` and session-scoped `status` / `mcp-owner` routes.
+  - `api.rs`: legacy compatibility endpoints plus `POST/GET/DELETE /api/v1/sessions` and session-scoped `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`
@@ -67,7 +67,7 @@ Current product shape:
   - TypeScript package. There is no meaningful Rust browser client crate in the current repo.
 - `code/integrations/mcp-bridge`
   - SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
-  - Can resolve an explicit control-plane session via `/api/v1/sessions` and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured.
+  - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its local `/control-session` API, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
@@ -121,8 +121,9 @@ Run these where applicable:
 3. Open `http://localhost:8080` in Chromium.
 4. Log in through the local Keycloak realm if prompted.
 5. The test page will resolve or create an owner-scoped `/api/v1/sessions` resource before transport connect.
-6. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
-7. `keycloak` listens on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
+6. Use `Delegate MCP` if you want the local `mcp-bridge` to adopt that same session.
+7. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
+8. `keycloak` listens on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
 
 ## Guardrails for contributors and agents
 

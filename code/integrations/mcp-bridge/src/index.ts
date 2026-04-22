@@ -44,6 +44,18 @@ function parseResolution(s: string): { width: number; height: number } {
   return { width: w, height: h };
 }
 
+async function readJsonBody<T>(req: http.IncomingMessage): Promise<T> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) {
+    throw new Error("request body is required");
+  }
+  return JSON.parse(raw) as T;
+}
+
 class GatewayTokenManager {
   private accessToken: string | null = null;
   private expiresAtMs = 0;
@@ -246,6 +258,7 @@ function createServerForConnection(
 
 async function main() {
   const { width, height } = parseResolution(MCP_RESOLUTION);
+  const managedSessionLocked = SESSION_ID.length > 0;
   const sessionControlClient = new SessionControlClient({
     gatewayApiUrl: GATEWAY_API_URL,
     getHeaders: (extra) => gatewayTokenManager.getAuthHeaders(extra ?? {}),
@@ -258,7 +271,7 @@ async function main() {
       cdp_endpoint: CDP_ENDPOINT,
     },
   });
-  const managedSession = await sessionControlClient.resolveManagedSession();
+  let managedSession = await sessionControlClient.resolveManagedSession();
 
   // 1. Do NOT register as MCP owner at startup — wait for first SSE client.
   //    This avoids locking the resolution when no MCP client is connected.
@@ -271,6 +284,11 @@ async function main() {
     sessionStatusPath(managedSession),
   );
   monitor.start();
+
+  function setManagedSession(next: GatewaySessionResource | null): void {
+    managedSession = next;
+    monitor.setStatusPath(sessionStatusPath(managedSession));
+  }
 
   // 3. Connect to @playwright/mcp subprocess
   const playwrightTransport = spawnPlaywrightMcp();
@@ -299,8 +317,8 @@ async function main() {
   const httpServer = http.createServer(async (req, res) => {
     // CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     if (req.method === "OPTIONS") {
       res.writeHead(204);
@@ -324,6 +342,76 @@ async function main() {
           control_session_mode: managedSession?.connect.compatibility_mode ?? null,
         }),
       );
+      return;
+    }
+
+    if (url.pathname === "/control-session" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          locked: managedSessionLocked,
+          session: managedSession,
+        }),
+      );
+      return;
+    }
+
+    if (url.pathname === "/control-session" && req.method === "PUT") {
+      if (managedSessionLocked) {
+        res.writeHead(409, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "control session is locked by BPANE_SESSION_ID" }));
+        return;
+      }
+      if (servers.size > 0) {
+        res.writeHead(409, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({ error: "cannot switch control session while MCP clients are connected" }),
+        );
+        return;
+      }
+      try {
+        const body = await readJsonBody<{ session_id?: string }>(req);
+        const sessionId = (body.session_id ?? "").trim();
+        if (!sessionId) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "session_id is required" }));
+          return;
+        }
+        const resolved = await sessionControlClient.getSession(sessionId);
+        if (!resolved) {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: `session ${sessionId} not found or not delegated` }));
+          return;
+        }
+        setManagedSession(resolved);
+        console.log(`[mcp-bridge] control session set to ${resolved.id} (${resolved.state})`);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ session: managedSession }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: message }));
+      }
+      return;
+    }
+
+    if (url.pathname === "/control-session" && req.method === "DELETE") {
+      if (managedSessionLocked) {
+        res.writeHead(409, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "control session is locked by BPANE_SESSION_ID" }));
+        return;
+      }
+      if (servers.size > 0) {
+        res.writeHead(409, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({ error: "cannot clear control session while MCP clients are connected" }),
+        );
+        return;
+      }
+      setManagedSession(null);
+      console.log("[mcp-bridge] cleared control session");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
       return;
     }
 
