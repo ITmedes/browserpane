@@ -213,6 +213,7 @@ Stateless relay between host agent and browser clients.
     - `docker_pool`: opt-in Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`
   - session resources, runtime capacity, and compatibility routing now derive from this runtime profile
   - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions via the Docker socket, shared `/run/bpane` volume, and a shared host-worker env profile
+  - Docker runtime assignment metadata is now persisted in Postgres and reconciled on gateway startup, so an existing pool-mode worker can be rebound after a gateway restart without launching a duplicate runtime
   - Docker-backed workers now receive `BPANE_SESSION_ID` and reuse a session-specific Chromium profile rooted under the shared `/run/bpane` volume, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state
   - this is profile-backed restoration, not true container/process suspension: exact live in-memory browser state only survives while the worker is still running
 - **MCP ownership**: atomic flag that locks resolution for browser clients
@@ -356,6 +357,11 @@ The default dev stack no longer uses a shared token file.
 - `docker_single` keeps the old single-runtime compatibility behavior with start/stop-on-idle worker lifecycle
 - `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
 - `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`), explicit delegated-session assignment through its local `/control-session` API, and one active managed runtime per bridge instance
+- the local smoke path for this model now lives in `code/web/bpane-client/scripts/run-multi-session-smoke.mjs` and verifies:
+  - two parallel pool-mode browser sessions
+  - viewer join on an existing session
+  - MCP delegation and bridge runtime switching
+  - clean teardown back to zero active runtime assignments
 
 The default imported local realm contains:
 

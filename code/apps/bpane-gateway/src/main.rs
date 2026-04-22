@@ -188,6 +188,11 @@ async fn main() -> anyhow::Result<()> {
         SessionStore::in_memory_with_config(runtime_manager.profile().clone())
     };
 
+    runtime_manager
+        .attach_session_store(session_store.clone())
+        .await;
+    runtime_manager.reconcile_persisted_state().await?;
+
     let server = TransportServer::new(
         bind_addr,
         identity,

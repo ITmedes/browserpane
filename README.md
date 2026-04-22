@@ -125,6 +125,7 @@ The default local auth flow is now OIDC-based:
 - sessions created from the test page use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
 - reconnecting a stopped session now restarts the same session resource instead of creating a new one
 - in Docker-backed runtime modes, BrowserPane reuses a session-specific Chromium profile so cookies, cache, downloads, and Chromium session-restore state survive worker restarts
+- Docker-backed runtime assignments are now persisted in Postgres and recovered on gateway restart, so an existing pool-mode worker can be rebound without launching a duplicate container
 - exact in-memory browser process state is only preserved while the worker is still alive; once idle-stop shuts a worker down, reconnect restores the browser from its persisted profile rather than from a true container checkpoint
 - if you want the local `mcp-bridge` to follow that same session, click `Delegate MCP`
 
@@ -175,6 +176,7 @@ Current limitation:
 - the default runtime backend is still `legacy_single_runtime` compatibility mode
 - the optional `docker_single` backend can now start and stop one runtime container for the active session
 - the optional `docker_pool` backend can start multiple runtime containers in parallel, but only up to its configured runtime caps
+- Docker-backed runtime assignment metadata is now persisted and reconciled on gateway startup so pool-mode workers can survive a gateway restart cleanly
 - `mcp-bridge` now follows the selected delegated session's runtime endpoint, but each bridge instance still manages only one control session at a time
 - the default compose stack still only runs one active BrowserPane session at a time because it uses the single-runtime backend
 - global compatibility routes like `/api/session/status` and `/api/session/mcp-owner` are only valid in legacy single-runtime mode; multi-runtime backends should use session-scoped `/api/v1/sessions/{id}/...` routes
@@ -205,7 +207,7 @@ cargo test -p bpane-protocol
 cargo test -p bpane-host
 cargo test -p bpane-gateway
 cd code/integrations/mcp-bridge && npm run build
-cd code/tests/e2e && npm test
+cd code/web/bpane-client && npm run smoke:multisession -- --headless
 ```
 
 ## Shared Session Behavior
