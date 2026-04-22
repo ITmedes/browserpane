@@ -1,56 +1,122 @@
-use crate::auth::{AuthError, AuthValidator};
+use uuid::Uuid;
+
+use crate::auth::{AuthError, AuthValidator, AuthenticatedPrincipal};
 use crate::connect_ticket::{SessionConnectTicketError, SessionConnectTicketManager};
+use crate::session_control::SessionStore;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum RequestValidationError {
-    MissingToken,
+    MissingCredential,
+    MissingSessionId,
     InvalidToken(AuthError),
     InvalidSessionTicket(SessionConnectTicketError),
+    SessionNotVisible,
+    SessionLookupFailed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ValidatedConnectRequest {
+    pub session_id: Uuid,
 }
 
 pub(super) async fn validate_request_path(
     path: &str,
     auth_validator: &AuthValidator,
     connect_ticket_manager: &SessionConnectTicketManager,
-) -> Result<(), RequestValidationError> {
-    match extract_connect_credential(path) {
-        Some(ConnectCredential::SessionTicket(ticket)) => connect_ticket_manager
-            .validate_ticket(&ticket)
-            .map(|_| ())
-            .map_err(RequestValidationError::InvalidSessionTicket),
-        Some(ConnectCredential::BearerToken(token)) => auth_validator
-            .validate_token(&token)
-            .await
-            .map_err(RequestValidationError::InvalidToken),
-        None => Err(RequestValidationError::MissingToken),
+    session_store: &SessionStore,
+) -> Result<ValidatedConnectRequest, RequestValidationError> {
+    match extract_connect_request(path)? {
+        ConnectRequest::SessionTicket { ticket } => {
+            let claims = connect_ticket_manager
+                .validate_ticket(&ticket)
+                .map_err(RequestValidationError::InvalidSessionTicket)?;
+            let principal = AuthenticatedPrincipal {
+                subject: claims.subject,
+                issuer: claims.issuer,
+                display_name: None,
+                client_id: claims.client_id,
+            };
+            let session = session_store
+                .get_session_for_principal(&principal, claims.session_id)
+                .await
+                .map_err(|_| RequestValidationError::SessionLookupFailed)?;
+            if session
+                .as_ref()
+                .is_none_or(|stored| !stored.state.is_runtime_candidate())
+            {
+                return Err(RequestValidationError::SessionNotVisible);
+            }
+            Ok(ValidatedConnectRequest {
+                session_id: claims.session_id,
+            })
+        }
+        ConnectRequest::BearerToken { token, session_id } => {
+            let principal = auth_validator
+                .authenticate(&token)
+                .await
+                .map_err(RequestValidationError::InvalidToken)?;
+            let session = session_store
+                .get_session_for_principal(&principal, session_id)
+                .await
+                .map_err(|_| RequestValidationError::SessionLookupFailed)?;
+            if session
+                .as_ref()
+                .is_none_or(|stored| !stored.state.is_runtime_candidate())
+            {
+                return Err(RequestValidationError::SessionNotVisible);
+            }
+            Ok(ValidatedConnectRequest { session_id })
+        }
     }
 }
 
-enum ConnectCredential {
-    SessionTicket(String),
-    BearerToken(String),
+enum ConnectRequest {
+    SessionTicket { ticket: String },
+    BearerToken { token: String, session_id: Uuid },
 }
 
-fn extract_connect_credential(path: &str) -> Option<ConnectCredential> {
-    let query = path.split('?').nth(1)?;
+fn extract_connect_request(path: &str) -> Result<ConnectRequest, RequestValidationError> {
+    let query = path
+        .split('?')
+        .nth(1)
+        .ok_or(RequestValidationError::MissingCredential)?;
+    let mut session_ticket: Option<String> = None;
+    let mut bearer_token: Option<String> = None;
+    let mut session_id: Option<Uuid> = None;
+
     for param in query.split('&') {
         if let Some(value) = param.strip_prefix("session_ticket=") {
-            return Some(ConnectCredential::SessionTicket(value.to_string()));
+            session_ticket = Some(value.to_string());
+            continue;
         }
         if let Some(value) = param.strip_prefix("access_token=") {
-            return Some(ConnectCredential::BearerToken(value.to_string()));
+            bearer_token = Some(value.to_string());
+            continue;
         }
         if let Some(value) = param.strip_prefix("token=") {
-            return Some(ConnectCredential::BearerToken(value.to_string()));
+            bearer_token = Some(value.to_string());
+            continue;
+        }
+        if let Some(value) = param.strip_prefix("session_id=") {
+            session_id = Uuid::parse_str(value).ok();
         }
     }
-    None
+
+    if let Some(ticket) = session_ticket {
+        return Ok(ConnectRequest::SessionTicket { ticket });
+    }
+
+    let token = bearer_token.ok_or(RequestValidationError::MissingCredential)?;
+    let session_id = session_id.ok_or(RequestValidationError::MissingSessionId)?;
+    Ok(ConnectRequest::BearerToken { token, session_id })
 }
 
+#[cfg(test)]
 pub(super) fn extract_token(path: &str) -> Option<String> {
-    match extract_connect_credential(path)? {
-        ConnectCredential::SessionTicket(value) | ConnectCredential::BearerToken(value) => {
-            Some(value)
-        }
-    }
+    extract_connect_request(path)
+        .ok()
+        .map(|request| match request {
+            ConnectRequest::SessionTicket { ticket } => ticket,
+            ConnectRequest::BearerToken { token, .. } => token,
+        })
 }

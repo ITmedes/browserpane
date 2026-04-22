@@ -204,6 +204,7 @@ Stateless relay between host agent and browser clients.
 - **Session control** (`session_control.rs`): owner-scoped versioned session resources with:
   - Postgres-backed persistence in normal runtime
   - in-memory backend fallback for tests and dev fallback mode
+  - session-scoped connect metadata and routing keyed by public `session_id`
   - `legacy_single_runtime` compatibility gating so Phase 0 can expose session resources before true multi-session workers land
 - **MCP ownership**: atomic flag that locks resolution for browser clients
   when an MCP agent owns the session
@@ -336,6 +337,7 @@ The default dev stack no longer uses a shared token file.
   - HTTP API bearer token for authenticated control calls
 - the browser transport then uses the minted ticket as:
   - WebTransport query param: `session_ticket=...`
+- `bpane-gateway` resolves that ticket back to the delegated or owner-visible `session_id` before admitting the transport
 - `mcp-bridge` obtains its own bearer token with client credentials
 - the versioned session API is also bearer-protected and owner-scoped
 - the current session resource connect contract advertises `auth_type: session_connect_ticket` and still carries `compatibility_mode: legacy_single_runtime`

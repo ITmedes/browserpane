@@ -140,15 +140,17 @@ The local dev flow now uses those routes to bridge browser-owned and automation-
 
 - `test-embed.html` resolves or creates an owner-scoped session before connect
 - it then mints a short-lived `session_connect_ticket` from `POST /api/v1/sessions/{id}/access-tokens`
+- the gateway routes the WebTransport connect through that explicit session id instead of one global token path
 - `Delegate MCP` assigns that session to the local `bpane-mcp-bridge` service principal
 - the page then calls `mcp-bridge` on `:8931/control-session` so the bridge adopts that same session for later ownership/status calls
 
 Current limitation:
 
 - the public session resource model is now versioned and persistent
-- the actual runtime is still in `legacy_single_runtime` compatibility mode
+- gateway transport and runtime compatibility APIs are now session-scoped
+- the actual host runtime is still in `legacy_single_runtime` compatibility mode
 - so only one active BrowserPane session can exist at a time until the later multi-session host/gateway phases land
-- the local `mcp-bridge` can now be pointed at an explicitly delegated session, but the underlying runtime is still one implicit host-backed session
+- the local `mcp-bridge` can now be pointed at an explicitly delegated session, but only one session can be backed by the host runtime at once
 
 ### Build And Test Without Running The Full Stack
 

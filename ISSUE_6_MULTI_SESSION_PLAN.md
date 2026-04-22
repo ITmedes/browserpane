@@ -28,6 +28,7 @@ Completed baseline for the first Phase 0 control-plane slice:
 - `bpane-gateway` exposes owner-scoped `POST/GET/DELETE /api/v1/sessions`
 - those session resources are persisted in Postgres
 - the current resource contract returns session-scoped connect metadata
+- browser transport routing is now keyed by public `session_id` through short-lived connect tickets
 - the actual runtime remains in `legacy_single_runtime` compatibility mode, so only one active runtime-backed session is allowed for now
 
 Implication for issue #6:
@@ -43,9 +44,11 @@ The main blockers are outside that abstraction:
 
 - `code/apps/bpane-gateway/src/api.rs`
   - public API now has both legacy global compatibility routes and owner-scoped `/api/v1/sessions` plus session-scoped `status` / `mcp-owner`
-  - the remaining gap is formal delegation and access-ticket flows across mixed principals
+  - formal delegation and access-ticket flows across mixed principals now exist
+  - the remaining gap is real runtime selection and worker lifecycle behind those session resources
 - `code/apps/bpane-gateway/src/transport.rs`
-  - WebTransport still validates one global token and routes every browser connection through one implicit session
+  - WebTransport now resolves a session-scoped connect ticket and routes browser connections through the public `session_id`
+  - the remaining compatibility limit is that session routing still resolves to one active host runtime candidate
 - `code/apps/bpane-gateway/src/main.rs` and `config.rs`
   - one `--agent-socket`, one host endpoint
 - `code/integrations/mcp-bridge/src/index.ts`
@@ -55,7 +58,7 @@ The main blockers are outside that abstraction:
 - `deploy/compose.yml`
   - local stack is still hard-wired to one host worker and one socket volume
 
-`SessionRegistry` is already closer to the target shape than the public API is. It can hold multiple hubs internally, but it is still keyed by agent socket path instead of a public logical session ID.
+`SessionRegistry` is now keyed by public logical session ID inside the gateway. The remaining multi-session gap is no longer gateway identity/routing; it is host/runtime lifecycle and mapping multiple runtime workers behind those session IDs.
 
 ## Industry Patterns Worth Copying
 
@@ -299,13 +302,14 @@ Deliverables:
 
 - session-scoped WebTransport request parsing
 - registry keyed by logical session ID
-- gateway lookup from session ID to host manager runtime endpoint
 - session-scoped status and ownership APIs
+- gateway lookup from session ID to host manager runtime endpoint
 
 Exit criteria:
 
-- one gateway serves multiple active sessions
+- completed in the current branch for the single-runtime compatibility model
 - browser clients for session A cannot attach to session B accidentally
+- remaining follow-up: replace the legacy single-runtime lookup with true per-session host runtime resolution
 
 ### Phase 3: Ship the public control plane
 

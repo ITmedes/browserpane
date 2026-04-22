@@ -7,6 +7,7 @@ use super::bitrate::DatagramStats;
 use super::bootstrap::send_initial_frames;
 use super::egress::{spawn_agent_to_browser_task, EgressTaskContext};
 use super::ingress::spawn_browser_to_agent_task;
+use super::request::ValidatedConnectRequest;
 use super::tasks::{spawn_bitrate_hint_task, spawn_direct_control_task, spawn_gateway_pinger};
 use crate::session::Session;
 use crate::session_registry::SessionRegistry;
@@ -14,11 +15,13 @@ use crate::session_registry::SessionRegistry;
 pub(super) async fn handle_session(
     connection: wtransport::Connection,
     session_id: u64,
+    connect_request: ValidatedConnectRequest,
     agent_socket_path: &str,
     heartbeat_timeout: Duration,
     registry: Arc<SessionRegistry>,
 ) -> anyhow::Result<()> {
-    let (client_handle, hub) = registry.join(agent_socket_path).await?;
+    let routed_session_id = connect_request.session_id;
+    let (client_handle, hub) = registry.join(routed_session_id, agent_socket_path).await?;
     let client_id = client_handle.client_id;
     let joined_as_owner = client_handle.is_owner;
     let initial_access_state = client_handle.initial_access_state;
@@ -29,6 +32,7 @@ pub(super) async fn handle_session(
 
     debug!(
         session_id,
+        %routed_session_id,
         client_id,
         is_owner = joined_as_owner,
         "client joined session hub"
@@ -97,7 +101,7 @@ pub(super) async fn handle_session(
     }
 
     session.deactivate();
-    registry.leave(agent_socket_path, client_id).await;
+    registry.leave(routed_session_id, client_id).await;
 
     connection.close(wtransport::VarInt::from_u32(0), b"session ended");
 
