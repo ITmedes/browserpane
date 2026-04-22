@@ -250,7 +250,7 @@ async fn get_session_status(
     let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
     let hub = state
         .registry
-        .ensure_hub(&state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &state.agent_socket_path)
         .await
         .map_err(|error| {
             (
@@ -323,9 +323,12 @@ async fn session_status(
     authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let Some(session_id) = legacy_runtime_session_id(&state).await else {
+        return Err(StatusCode::NOT_FOUND);
+    };
     let hub = state
         .registry
-        .ensure_hub(&state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &state.agent_socket_path)
         .await
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
     let snapshot = hub.telemetry_snapshot().await;
@@ -372,9 +375,17 @@ async fn set_mcp_owner(
     authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let Some(session_id) = legacy_runtime_session_id(&state).await else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "no runtime-backed session is available".to_string(),
+            }),
+        ));
+    };
     let hub = state
         .registry
-        .ensure_hub(&state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &state.agent_socket_path)
         .await
         .map_err(|e| {
             (
@@ -399,7 +410,7 @@ async fn set_session_mcp_owner(
     let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
     let hub = state
         .registry
-        .ensure_hub(&state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &state.agent_socket_path)
         .await
         .map_err(|error| {
             (
@@ -423,9 +434,12 @@ async fn clear_mcp_owner(
     authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let Some(session_id) = legacy_runtime_session_id(&state).await else {
+        return Err(StatusCode::NOT_FOUND);
+    };
     let hub = state
         .registry
-        .ensure_hub(&state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &state.agent_socket_path)
         .await
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
 
@@ -442,7 +456,7 @@ async fn clear_session_mcp_owner(
     let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
     let hub = state
         .registry
-        .ensure_hub(&state.agent_socket_path)
+        .ensure_hub_for_session(session_id, &state.agent_socket_path)
         .await
         .map_err(|error| {
             (
@@ -633,14 +647,23 @@ async fn authorize_visible_session_request(
 }
 
 async fn runtime_is_currently_in_use(state: &ApiState) -> bool {
-    let Some(snapshot) = state
-        .registry
-        .telemetry_snapshot_if_live(&state.agent_socket_path)
-        .await
-    else {
+    let Some(session_id) = legacy_runtime_session_id(state).await else {
+        return false;
+    };
+    let Some(snapshot) = state.registry.telemetry_snapshot_if_live(session_id).await else {
         return false;
     };
     snapshot.browser_clients > 0 || snapshot.viewer_clients > 0 || snapshot.mcp_owner
+}
+
+async fn legacy_runtime_session_id(state: &ApiState) -> Option<Uuid> {
+    state
+        .session_store
+        .get_runtime_candidate_session()
+        .await
+        .ok()
+        .flatten()
+        .map(|session| session.id)
 }
 
 #[cfg(test)]

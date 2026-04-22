@@ -124,6 +124,7 @@ async fn main() -> anyhow::Result<()> {
         agent_socket_str.clone(),
         auth_validator.clone(),
         connect_ticket_manager.clone(),
+        session_store.clone(),
         Duration::from_secs(config.heartbeat_timeout_secs),
         registry.clone(),
     );

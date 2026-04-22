@@ -391,6 +391,15 @@ impl SessionStore {
         }
     }
 
+    pub async fn get_runtime_candidate_session(
+        &self,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.get_runtime_candidate_session().await,
+            SessionStoreBackend::Postgres(store) => store.get_runtime_candidate_session().await,
+        }
+    }
+
     pub async fn set_automation_delegate_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -419,10 +428,14 @@ impl SessionStore {
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
-                store.clear_automation_delegate_for_owner(principal, id).await
+                store
+                    .clear_automation_delegate_for_owner(principal, id)
+                    .await
             }
             SessionStoreBackend::Postgres(store) => {
-                store.clear_automation_delegate_for_owner(principal, id).await
+                store
+                    .clear_automation_delegate_for_owner(principal, id)
+                    .await
             }
         }
     }
@@ -586,6 +599,20 @@ impl InMemorySessionStore {
             .await
             .iter()
             .find(|session| session.id == id && session_visible_to_principal(session, principal))
+            .cloned();
+        Ok(session)
+    }
+
+    async fn get_runtime_candidate_session(
+        &self,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let session = self
+            .sessions
+            .lock()
+            .await
+            .iter()
+            .filter(|session| session.state.is_runtime_candidate())
+            .max_by(|left, right| left.updated_at.cmp(&right.updated_at))
             .cloned();
         Ok(session)
     }
@@ -937,11 +964,60 @@ impl PostgresSessionStore {
                     )
                   )
                 "#,
-                &[&id, &principal.subject, &principal.issuer, &principal.client_id],
+                &[
+                    &id,
+                    &principal.subject,
+                    &principal.issuer,
+                    &principal.client_id,
+                ],
             )
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to load session for principal: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_session).transpose()
+    }
+
+    async fn get_runtime_candidate_session(
+        &self,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
+                    state,
+                    template_id,
+                    owner_mode,
+                    viewport_width,
+                    viewport_height,
+                    idle_timeout_sec,
+                    labels,
+                    integration_context,
+                    created_at,
+                    updated_at,
+                    stopped_at
+                FROM control_sessions
+                WHERE state IN ('pending', 'starting', 'ready', 'active', 'idle')
+                ORDER BY updated_at DESC
+                LIMIT 1
+                "#,
+                &[],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to load runtime candidate session: {error}"
+                ))
             })?;
         row.as_ref().map(row_to_stored_session).transpose()
     }
@@ -1047,9 +1123,7 @@ impl PostgresSessionStore {
             )
             .await
             .map_err(|error| {
-                SessionStoreError::Backend(format!(
-                    "failed to set automation delegate: {error}"
-                ))
+                SessionStoreError::Backend(format!("failed to set automation delegate: {error}"))
             })?;
         row.as_ref().map(row_to_stored_session).transpose()
     }
@@ -1098,9 +1172,7 @@ impl PostgresSessionStore {
             )
             .await
             .map_err(|error| {
-                SessionStoreError::Backend(format!(
-                    "failed to clear automation delegate: {error}"
-                ))
+                SessionStoreError::Backend(format!("failed to clear automation delegate: {error}"))
             })?;
         row.as_ref().map(row_to_stored_session).transpose()
     }

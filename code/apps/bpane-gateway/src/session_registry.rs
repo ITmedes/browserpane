@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
+use uuid::Uuid;
 
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_hub::{ClientHandle, SessionHub};
@@ -12,7 +13,7 @@ use crate::session_hub::{ClientHandle, SessionHub};
 /// When a browser client connects, the registry either returns an existing
 /// hub (joining the session) or creates a new one (first client).
 pub struct SessionRegistry {
-    hubs: Mutex<HashMap<String, Arc<SessionHub>>>,
+    hubs: Mutex<HashMap<Uuid, Arc<SessionHub>>>,
     max_viewers: u32,
     exclusive_browser_owner: bool,
 }
@@ -26,10 +27,10 @@ impl SessionRegistry {
         }
     }
 
-    fn prune_inactive_hubs(hubs: &mut HashMap<String, Arc<SessionHub>>) {
-        hubs.retain(|path, hub| {
+    fn prune_inactive_hubs(hubs: &mut HashMap<Uuid, Arc<SessionHub>>) {
+        hubs.retain(|session_id, hub| {
             if !hub.is_active() {
-                debug!("removing inactive hub for {path}");
+                debug!("removing inactive hub for session {session_id}");
                 false
             } else {
                 true
@@ -37,45 +38,46 @@ impl SessionRegistry {
         });
     }
 
-    async fn lookup_live_hub(&self, agent_socket_path: &str) -> Option<Arc<SessionHub>> {
+    async fn lookup_live_hub(&self, session_id: Uuid) -> Option<Arc<SessionHub>> {
         let mut hubs = self.hubs.lock().await;
         Self::prune_inactive_hubs(&mut hubs);
-        hubs.get(agent_socket_path).cloned()
+        hubs.get(&session_id).cloned()
     }
 
     pub async fn telemetry_snapshot_if_live(
         &self,
-        agent_socket_path: &str,
+        session_id: Uuid,
     ) -> Option<SessionTelemetrySnapshot> {
-        let hub = self.lookup_live_hub(agent_socket_path).await?;
+        let hub = self.lookup_live_hub(session_id).await?;
         Some(hub.telemetry_snapshot().await)
     }
 
     async fn insert_or_get_live_hub(
         &self,
-        agent_socket_path: &str,
+        session_id: Uuid,
         new_hub: Arc<SessionHub>,
     ) -> (Arc<SessionHub>, bool) {
         let mut hubs = self.hubs.lock().await;
         Self::prune_inactive_hubs(&mut hubs);
 
-        if let Some(existing) = hubs.get(agent_socket_path) {
+        if let Some(existing) = hubs.get(&session_id) {
             debug!(
-                path = agent_socket_path,
+                %session_id,
                 "concurrent session hub creation won race, using existing"
             );
             return (existing.clone(), false);
         }
 
-        hubs.insert(agent_socket_path.to_string(), new_hub.clone());
+        hubs.insert(session_id, new_hub.clone());
         (new_hub, true)
     }
 
     async fn get_or_create_hub(
         &self,
+        session_id: Uuid,
         agent_socket_path: &str,
     ) -> anyhow::Result<(Arc<SessionHub>, bool)> {
-        if let Some(hub) = self.lookup_live_hub(agent_socket_path).await {
+        if let Some(hub) = self.lookup_live_hub(session_id).await {
             return Ok((hub, false));
         }
 
@@ -88,9 +90,7 @@ impl SessionRegistry {
             .await?,
         );
 
-        Ok(self
-            .insert_or_get_live_hub(agent_socket_path, new_hub)
-            .await)
+        Ok(self.insert_or_get_live_hub(session_id, new_hub).await)
     }
 
     /// Join an existing session or create a new one.
@@ -103,9 +103,12 @@ impl SessionRegistry {
     /// not serialize behind relay setup.
     pub async fn join(
         &self,
+        session_id: Uuid,
         agent_socket_path: &str,
     ) -> anyhow::Result<(ClientHandle, Arc<SessionHub>)> {
-        let (hub, created) = self.get_or_create_hub(agent_socket_path).await?;
+        let (hub, created) = self
+            .get_or_create_hub(session_id, agent_socket_path)
+            .await?;
         let handle = hub.subscribe().await.map_err(anyhow::Error::from)?;
 
         if created {
@@ -126,20 +129,26 @@ impl SessionRegistry {
     }
 
     /// Get or create a hub without subscribing a browser client.
-    /// Used by the HTTP API for MCP owner registration.
+    /// Used by the HTTP API for session-scoped runtime access.
     ///
     /// Like `join()`, the mutex is held only for the HashMap operation;
     /// `SessionHub::new()` runs outside the critical section.
-    pub async fn ensure_hub(&self, agent_socket_path: &str) -> anyhow::Result<Arc<SessionHub>> {
-        let (hub, _) = self.get_or_create_hub(agent_socket_path).await?;
+    pub async fn ensure_hub_for_session(
+        &self,
+        session_id: Uuid,
+        agent_socket_path: &str,
+    ) -> anyhow::Result<Arc<SessionHub>> {
+        let (hub, _) = self
+            .get_or_create_hub(session_id, agent_socket_path)
+            .await?;
         Ok(hub)
     }
 
     /// Called when a client disconnects.
-    pub async fn leave(&self, agent_socket_path: &str, client_id: u64) {
+    pub async fn leave(&self, session_id: Uuid, client_id: u64) {
         let hub = {
             let hubs = self.hubs.lock().await;
-            hubs.get(agent_socket_path).cloned()
+            hubs.get(&session_id).cloned()
         };
 
         if let Some(hub) = hub {
@@ -147,7 +156,7 @@ impl SessionRegistry {
             let remaining = hub.client_count();
             debug!(client_id, remaining, "client left session");
         } else {
-            warn!(client_id, "leave called but no hub found for path");
+            warn!(client_id, %session_id, "leave called but no hub found for session");
         }
     }
 }

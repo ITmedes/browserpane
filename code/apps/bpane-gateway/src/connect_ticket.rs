@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -75,7 +75,8 @@ impl SessionConnectTicketManager {
             client_id: principal.client_id.clone(),
             expires_at_unix: expires_at.timestamp(),
         };
-        let payload = serde_json::to_vec(&claims).map_err(|_| SessionConnectTicketError::InvalidPayload)?;
+        let payload =
+            serde_json::to_vec(&claims).map_err(|_| SessionConnectTicketError::InvalidPayload)?;
         let payload_encoded = URL_SAFE_NO_PAD.encode(&payload);
         let signature_encoded = URL_SAFE_NO_PAD.encode(self.sign(&payload)?);
         Ok(IssuedSessionConnectTicket {
@@ -108,8 +109,8 @@ impl SessionConnectTicketManager {
             return Err(SessionConnectTicketError::InvalidSignature);
         }
 
-        let claims: SessionConnectTicketClaims =
-            serde_json::from_slice(&payload).map_err(|_| SessionConnectTicketError::InvalidPayload)?;
+        let claims: SessionConnectTicketClaims = serde_json::from_slice(&payload)
+            .map_err(|_| SessionConnectTicketError::InvalidPayload)?;
         if Utc::now().timestamp() > claims.expires_at_unix {
             return Err(SessionConnectTicketError::Expired);
         }
@@ -141,7 +142,9 @@ mod tests {
     fn issues_and_validates_ticket() {
         let manager = SessionConnectTicketManager::new(vec![7; 32], Duration::from_secs(300));
         let session_id = Uuid::now_v7();
-        let issued = manager.issue_ticket(session_id, &principal("demo")).unwrap();
+        let issued = manager
+            .issue_ticket(session_id, &principal("demo"))
+            .unwrap();
 
         let validated = manager.validate_ticket(&issued.token).unwrap();
         assert_eq!(validated.session_id, session_id);
