@@ -231,3 +231,120 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
 
     assert_eq!(lookup.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_before_runtime_work()
+{
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![11; 32]));
+    let alpha_token = auth_validator.generate_token().unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let bravo_token = auth_validator.generate_token().unwrap();
+    let state = Arc::new(ApiState {
+        registry: Arc::new(SessionRegistry::new(10, false)),
+        auth_validator,
+        session_store: SessionStore::in_memory(),
+        agent_socket_path: "/tmp/test.sock".to_string(),
+        public_gateway_url: "https://localhost:4433".to_string(),
+        default_owner_mode: SessionOwnerMode::Collaborative,
+    });
+    let app = build_api_router(state);
+
+    let created = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&alpha_token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let foreign_status = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/status"))
+                .header("authorization", bearer(&bravo_token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(foreign_status.status(), StatusCode::NOT_FOUND);
+
+    let unknown_owner = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/mcp-owner"))
+                .header("authorization", bearer(&bravo_token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "width": 1280, "height": 720 }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unknown_owner.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn rejects_session_scoped_runtime_routes_for_stopped_sessions() {
+    let (app, token) = test_router();
+
+    let created = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let delete_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/sessions/{session_id}"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete_response.status(), StatusCode::OK);
+
+    let status_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/status"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(status_response.status(), StatusCode::CONFLICT);
+    let body = response_json(status_response).await;
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("runtime-compatible state"));
+}

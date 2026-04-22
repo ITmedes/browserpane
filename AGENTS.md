@@ -53,7 +53,7 @@ Current product shape:
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
-  - `api.rs`: legacy session endpoints plus `POST/GET/DELETE /api/v1/sessions`.
+  - `api.rs`: legacy compatibility endpoints plus `POST/GET/DELETE /api/v1/sessions` and session-scoped `status` / `mcp-owner` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`
@@ -67,7 +67,7 @@ Current product shape:
   - TypeScript package. There is no meaningful Rust browser client crate in the current repo.
 - `code/integrations/mcp-bridge`
   - SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
-  - Can resolve an explicit control-plane session via `/api/v1/sessions`, but the local compose default still leaves that bootstrap off until per-session ownership APIs exist.
+  - Can resolve an explicit control-plane session via `/api/v1/sessions` and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.

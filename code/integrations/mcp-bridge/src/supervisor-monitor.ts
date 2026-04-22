@@ -5,12 +5,16 @@
 export class SupervisorMonitor {
   private browserClientCount = 0;
   private intervalId: ReturnType<typeof setInterval> | null = null;
+  private readonly statusPath: string;
 
   constructor(
     private gatewayApiUrl: string,
     private pollIntervalMs: number = 2000,
     private getHeaders: (() => Promise<Record<string, string>>) | null = null,
-  ) {}
+    statusPath: string = "/api/session/status",
+  ) {
+    this.statusPath = statusPath;
+  }
 
   start(): void {
     this.poll();
@@ -31,7 +35,7 @@ export class SupervisorMonitor {
   private async poll(): Promise<void> {
     try {
       const headers = this.getHeaders ? await this.getHeaders() : {};
-      const resp = await fetch(`${this.gatewayApiUrl}/api/session/status`, { headers });
+      const resp = await fetch(`${this.gatewayApiUrl}${this.statusPath}`, { headers });
       if (resp.ok) {
         const data = (await resp.json()) as {
           browser_clients: number;

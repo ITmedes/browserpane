@@ -9,7 +9,10 @@ import {
   ListPromptsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import http from "node:http";
-import { SessionControlClient } from "./session-control-client.js";
+import {
+  GatewaySessionResource,
+  SessionControlClient,
+} from "./session-control-client.js";
 import { SupervisorMonitor } from "./supervisor-monitor.js";
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -102,20 +105,40 @@ const gatewayTokenManager = new GatewayTokenManager();
 
 // ── Register MCP owner with gateway ──────────────────────────────────
 
-async function registerMcpOwner(width: number, height: number): Promise<void> {
+function sessionStatusPath(session: GatewaySessionResource | null): string {
+  return session
+    ? `/api/v1/sessions/${encodeURIComponent(session.id)}/status`
+    : "/api/session/status";
+}
+
+function sessionMcpOwnerPath(session: GatewaySessionResource | null): string {
+  return session
+    ? `/api/v1/sessions/${encodeURIComponent(session.id)}/mcp-owner`
+    : "/api/session/mcp-owner";
+}
+
+async function registerMcpOwner(
+  session: GatewaySessionResource | null,
+  width: number,
+  height: number,
+): Promise<void> {
   const maxRetries = 30;
+  const path = sessionMcpOwnerPath(session);
   for (let i = 0; i < maxRetries; i++) {
     try {
       const headers = await gatewayTokenManager.getAuthHeaders({
         "Content-Type": "application/json",
       });
-      const resp = await fetch(`${GATEWAY_API_URL}/api/session/mcp-owner`, {
+      const resp = await fetch(`${GATEWAY_API_URL}${path}`, {
         method: "POST",
         headers,
         body: JSON.stringify({ width, height }),
       });
       if (resp.ok) {
-        console.log(`[mcp-bridge] registered as MCP owner at ${width}x${height}`);
+        const sessionSuffix = session ? ` for session ${session.id}` : "";
+        console.log(
+          `[mcp-bridge] registered as MCP owner${sessionSuffix} at ${width}x${height}`,
+        );
         return;
       }
       console.warn(`[mcp-bridge] gateway returned ${resp.status}, retrying...`);
@@ -127,14 +150,18 @@ async function registerMcpOwner(width: number, height: number): Promise<void> {
   throw new Error("Failed to register MCP owner with gateway after retries");
 }
 
-async function unregisterMcpOwner(): Promise<void> {
+async function unregisterMcpOwner(session: GatewaySessionResource | null): Promise<void> {
   try {
     const headers = await gatewayTokenManager.getAuthHeaders();
-    await fetch(`${GATEWAY_API_URL}/api/session/mcp-owner`, {
+    await fetch(`${GATEWAY_API_URL}${sessionMcpOwnerPath(session)}`, {
       method: "DELETE",
       headers,
     });
-    console.log("[mcp-bridge] unregistered MCP owner");
+    if (session) {
+      console.log(`[mcp-bridge] unregistered MCP owner for session ${session.id}`);
+    } else {
+      console.log("[mcp-bridge] unregistered MCP owner");
+    }
   } catch {
     console.warn("[mcp-bridge] failed to unregister MCP owner (gateway unavailable)");
   }
@@ -241,6 +268,7 @@ async function main() {
     GATEWAY_API_URL,
     POLL_INTERVAL_MS,
     () => gatewayTokenManager.getAuthHeaders(),
+    sessionStatusPath(managedSession),
   );
   monitor.start();
 
@@ -306,7 +334,7 @@ async function main() {
 
       // Re-register MCP ownership when the first client connects after all disconnected
       if (servers.size === 0) {
-        await registerMcpOwner(width, height);
+        await registerMcpOwner(managedSession, width, height);
       }
 
       transports.set(sessionId, transport);
@@ -322,7 +350,7 @@ async function main() {
         // When all MCP clients disconnect, clear ownership so resolution unlocks
         if (servers.size === 0) {
           console.log("[mcp-bridge] no MCP clients remaining — clearing ownership");
-          await unregisterMcpOwner();
+          await unregisterMcpOwner(managedSession);
         }
       });
 
@@ -344,7 +372,7 @@ async function main() {
 
     // POST /register — re-register MCP owner (e.g. after reconnect)
     if (url.pathname === "/register" && req.method === "POST") {
-      await registerMcpOwner(width, height);
+      await registerMcpOwner(managedSession, width, height);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
       return;
@@ -365,7 +393,7 @@ async function main() {
   const shutdown = async () => {
     console.log("\n[mcp-bridge] shutting down...");
     monitor.stop();
-    await unregisterMcpOwner();
+    await unregisterMcpOwner(managedSession);
     await playwrightClient.close();
     httpServer.close();
     process.exit(0);
@@ -377,19 +405,19 @@ async function main() {
   // Safety net: clear MCP ownership on unexpected crash
   process.on("uncaughtException", async (err) => {
     console.error("[mcp-bridge] uncaught exception:", err);
-    await unregisterMcpOwner();
+    await unregisterMcpOwner(managedSession);
     process.exit(1);
   });
 
   process.on("unhandledRejection", async (reason) => {
     console.error("[mcp-bridge] unhandled rejection:", reason);
-    await unregisterMcpOwner();
+    await unregisterMcpOwner(managedSession);
     process.exit(1);
   });
 }
 
 main().catch(async (err) => {
   console.error("[mcp-bridge] fatal:", err);
-  await unregisterMcpOwner();
+  await unregisterMcpOwner(null);
   process.exit(1);
 });
