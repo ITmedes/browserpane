@@ -55,7 +55,9 @@ Four containers on a Docker bridge network (`172.28.0.0/24`):
        │  / -> test-embed.html    │
        │  /dist/ -> bpane-client   │
        │  /auth-config.json       │
-       │  /cert-hash -> certs     │
+       │  /cert-hash -> cert.pem  │
+       │  /cert-fingerprint ->    │
+       │     cert.pem             │
        └────────────┬─────────────┘
                     │
            Docker Bridge Network

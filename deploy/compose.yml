@@ -6,8 +6,10 @@
 #
 # Then open http://localhost:8080 in Chrome and click "Connect".
 #
-# The SPKI fingerprint is in dev/certs/cert-fingerprint.txt.
-# For Chrome: --ignore-certificate-errors-spki-list=$(cat dev/certs/cert-fingerprint.txt)
+# The current runtime SPKI fingerprint is also served at:
+#   http://localhost:8080/cert-fingerprint
+# For Chrome:
+#   --ignore-certificate-errors-spki-list=$(curl -fsS http://localhost:8080/cert-fingerprint)
 #
 # Services:
 #   host     - Linux host agent (Xvfb + xterm)

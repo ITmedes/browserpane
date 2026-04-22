@@ -102,11 +102,13 @@ The default local auth flow is now OIDC-based:
 
 `test-embed.html` fetches `/auth-config.json` and performs an Authorization Code + PKCE login. The browser client then connects to the gateway with an OIDC access token.
 
-For Chromium, WebTransport still needs trusted TLS on localhost. The SPKI fingerprint is written to:
+For Chromium, WebTransport still needs trusted TLS on localhost. The current runtime SPKI fingerprint is served at:
 
 ```text
-dev/certs/cert-fingerprint.txt
+http://localhost:8080/cert-fingerprint
 ```
+
+`./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem` for CLI use.
 
 ### Build And Test Without Running The Full Stack
 
