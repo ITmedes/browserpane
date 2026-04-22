@@ -214,6 +214,8 @@ Stateless relay between host agent and browser clients.
   - `GET /api/v1/sessions` — list owner-scoped sessions
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
   - `DELETE /api/v1/sessions/{id}` — stop one owner-scoped session resource
+  - `POST /api/v1/sessions/{id}/automation-owner` — delegate one session to an automation principal
+  - `DELETE /api/v1/sessions/{id}/automation-owner` — clear automation delegation
   - `GET /api/v1/sessions/{id}/status` — session-scoped runtime telemetry for compatibility mode
   - `POST /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership claim
   - `DELETE /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership release
@@ -313,6 +315,8 @@ running against the Chromium instance inside the host container.
 - Lazy registration: only claims MCP ownership on first SSE client connect
 - Registers/clears MCP ownership with gateway (resolution lock)
 - Uses OIDC client-credentials for gateway API access in the local compose stack
+- Exposes a local control-session API on `:8931` so the browser test page can point
+  the bridge at an explicitly delegated session without restarting the service
 - Graceful shutdown: always releases ownership on SIGINT/SIGTERM
 
 ---
@@ -325,14 +329,14 @@ The default dev stack no longer uses a shared token file.
 - `test-embed.html` discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - after login, `test-embed.html` resolves or creates an owner-scoped `/api/v1/sessions` resource and uses its returned connect metadata
+- `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via `PUT /control-session`
 - the resulting access token is sent to `bpane-gateway` as:
   - WebTransport query param: `access_token=...`
   - HTTP API bearer token for authenticated control calls
 - `mcp-bridge` obtains its own bearer token with client credentials
 - the versioned session API is also bearer-protected and owner-scoped
 - the current session resource connect contract still advertises `compatibility_mode: legacy_single_runtime`
-- `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`) and now uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured
-- local compose still leaves the bootstrap disabled by default because browser users and the service-account bridge do not yet share a cross-principal session-selection flow
+- `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`) and now also supports explicit delegated-session assignment through its local `/control-session` API
 
 The default imported local realm contains:
 

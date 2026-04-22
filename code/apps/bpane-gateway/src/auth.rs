@@ -35,6 +35,7 @@ pub struct AuthenticatedPrincipal {
     pub subject: String,
     pub issuer: String,
     pub display_name: Option<String>,
+    pub client_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -143,6 +144,7 @@ impl HmacTokenValidator {
             subject: format!("legacy-dev-token:{subject_suffix}"),
             issuer: "bpane-gateway".to_string(),
             display_name: None,
+            client_id: None,
         })
     }
 }
@@ -195,11 +197,17 @@ impl OidcTokenValidator {
             .or_else(|| claims.get("client_id").and_then(Value::as_str))
             .or_else(|| claims.get("azp").and_then(Value::as_str))
             .map(ToString::to_string);
+        let client_id = claims
+            .get("client_id")
+            .and_then(Value::as_str)
+            .or_else(|| claims.get("azp").and_then(Value::as_str))
+            .map(ToString::to_string);
 
         Ok(AuthenticatedPrincipal {
             subject: subject.to_string(),
             issuer: issuer.to_string(),
             display_name,
+            client_id,
         })
     }
 

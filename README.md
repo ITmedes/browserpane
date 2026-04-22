@@ -103,6 +103,7 @@ The default local auth flow is now OIDC-based:
 - use the demo account `demo / demo-demo`
 - return to the page and click `Connect`
 - the page will resolve or create an owner-scoped `/api/v1/sessions` resource before opening WebTransport
+- if you want the local `mcp-bridge` to follow that same session, click `Delegate MCP`
 
 `test-embed.html` fetches `/auth-config.json` and performs an Authorization Code + PKCE login. The browser client then connects to the gateway with an OIDC access token.
 
@@ -130,13 +131,21 @@ The same API surface now also includes session-scoped runtime compatibility rout
 - `GET /api/v1/sessions/{id}/status`
 - `POST /api/v1/sessions/{id}/mcp-owner`
 - `DELETE /api/v1/sessions/{id}/mcp-owner`
+- `POST /api/v1/sessions/{id}/automation-owner`
+- `DELETE /api/v1/sessions/{id}/automation-owner`
+
+The local dev flow now uses those routes to bridge browser-owned and automation-owned control:
+
+- `test-embed.html` resolves or creates an owner-scoped session before connect
+- `Delegate MCP` assigns that session to the local `bpane-mcp-bridge` service principal
+- the page then calls `mcp-bridge` on `:8931/control-session` so the bridge adopts that same session for later ownership/status calls
 
 Current limitation:
 
 - the public session resource model is now versioned and persistent
 - the actual runtime is still in `legacy_single_runtime` compatibility mode
 - so only one active BrowserPane session can exist at a time until the later multi-session host/gateway phases land
-- the local `mcp-bridge` can use the session-scoped ownership/status endpoints when a managed control session is configured; compose still leaves bootstrap off by default until a shared session-selection story lands for mixed browser and automation principals
+- the local `mcp-bridge` can now be pointed at an explicitly delegated session, but the underlying runtime is still one implicit host-backed session
 
 ### Build And Test Without Running The Full Stack
 

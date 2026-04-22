@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
 use crate::session_control::{
     CreateSessionRequest, SessionLifecycleState, SessionListResponse, SessionOwnerMode,
-    SessionResource, SessionStore, SessionStoreError, StoredSession,
+    SessionResource, SessionStore, SessionStoreError, SetAutomationDelegateRequest, StoredSession,
 };
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_registry::SessionRegistry;
@@ -119,12 +119,48 @@ async fn get_session(
     Path(session_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let stored = authorize_visible_session_request(&headers, &state, session_id).await?;
+
+    Ok(Json(stored.to_resource(&state.public_gateway_url, None)))
+}
+
+async fn set_automation_owner(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<SetAutomationDelegateRequest>,
+) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
     let stored = state
         .session_store
-        .get_session_for_owner(&principal, session_id)
+        .set_automation_delegate_for_owner(&principal, session_id, request)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    Ok(Json(stored.to_resource(&state.public_gateway_url, None)))
+}
+
+async fn clear_automation_owner(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let stored = state
+        .session_store
+        .clear_automation_delegate_for_owner(&principal, session_id)
         .await
         .map_err(map_session_store_error)?
         .ok_or_else(|| {
@@ -411,6 +447,10 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
             get(get_session).delete(delete_session),
         )
         .route(
+            "/api/v1/sessions/{session_id}/automation-owner",
+            post(set_automation_owner).delete(clear_automation_owner),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/status",
             get(get_session_status),
         )
@@ -471,22 +511,7 @@ async fn authorize_runtime_session_request(
     state: &ApiState,
     session_id: Uuid,
 ) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
-    let principal = authorize_api_request(headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    let session = state
-        .session_store
-        .get_session_for_owner(&principal, session_id)
-        .await
-        .map_err(map_session_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: format!("session {session_id} not found"),
-                }),
-            )
-        })?;
+    let session = authorize_visible_session_request(headers, state, session_id).await?;
 
     if !matches!(
         session.state,
@@ -505,6 +530,31 @@ async fn authorize_runtime_session_request(
             }),
         ));
     }
+
+    Ok(session)
+}
+
+async fn authorize_visible_session_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let session = state
+        .session_store
+        .get_session_for_principal(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
 
     Ok(session)
 }

@@ -163,6 +163,10 @@ services:
       BPANE_OIDC_SCOPE: openid
       BPANE_OIDC_EXAMPLE_USERNAME: demo
       BPANE_OIDC_EXAMPLE_PASSWORD: demo-demo
+      BPANE_MCP_BRIDGE_CONTROL_URL: http://localhost:8931/control-session
+      BPANE_MCP_BRIDGE_CLIENT_ID: bpane-mcp-bridge
+      BPANE_MCP_BRIDGE_ISSUER: http://localhost:8091/realms/browserpane-dev
+      BPANE_MCP_BRIDGE_DISPLAY_NAME: BrowserPane MCP bridge
     volumes:
       - ../dev/certs:/usr/share/nginx/html/certs:ro
     depends_on:

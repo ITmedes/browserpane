@@ -123,6 +123,13 @@ pub struct SessionOwner {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionAutomationDelegate {
+    pub client_id: String,
+    pub issuer: String,
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionCapabilities {
     pub browser_input: bool,
     pub clipboard: bool,
@@ -164,6 +171,7 @@ pub struct SessionResource {
     pub viewport: SessionViewport,
     pub capabilities: SessionCapabilities,
     pub owner: SessionOwner,
+    pub automation_delegate: Option<SessionAutomationDelegate>,
     pub idle_timeout_sec: Option<u32>,
     pub labels: HashMap<String, String>,
     pub integration_context: Option<Value>,
@@ -189,6 +197,15 @@ pub struct CreateSessionRequest {
     pub integration_context: Option<Value>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SetAutomationDelegateRequest {
+    pub client_id: String,
+    #[serde(default)]
+    pub issuer: Option<String>,
+    #[serde(default)]
+    pub display_name: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct SessionListResponse {
     pub sessions: Vec<SessionResource>,
@@ -202,6 +219,7 @@ pub struct StoredSession {
     pub owner_mode: SessionOwnerMode,
     pub viewport: SessionViewport,
     pub owner: SessionOwner,
+    pub automation_delegate: Option<SessionAutomationDelegate>,
     pub idle_timeout_sec: Option<u32>,
     pub labels: HashMap<String, String>,
     pub integration_context: Option<Value>,
@@ -224,6 +242,7 @@ impl StoredSession {
             viewport: self.viewport.clone(),
             capabilities: SessionCapabilities::default(),
             owner: self.owner.clone(),
+            automation_delegate: self.automation_delegate.clone(),
             idle_timeout_sec: self.idle_timeout_sec,
             labels: self.labels.clone(),
             integration_context: self.integration_context.clone(),
@@ -354,6 +373,57 @@ impl SessionStore {
             }
         }
     }
+
+    pub async fn get_session_for_principal(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_session_for_principal(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_session_for_principal(principal, id).await
+            }
+        }
+    }
+
+    pub async fn set_automation_delegate_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: SetAutomationDelegateRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        validate_automation_delegate_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .set_automation_delegate_for_owner(principal, id, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .set_automation_delegate_for_owner(principal, id, request)
+                    .await
+            }
+        }
+    }
+
+    pub async fn clear_automation_delegate_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.clear_automation_delegate_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.clear_automation_delegate_for_owner(principal, id).await
+            }
+        }
+    }
 }
 
 async fn connect_to_postgres_with_retry(
@@ -403,6 +473,24 @@ fn validate_create_request(request: &CreateSessionRequest) -> Result<(), Session
     Ok(())
 }
 
+fn validate_automation_delegate_request(
+    request: &SetAutomationDelegateRequest,
+) -> Result<(), SessionStoreError> {
+    if request.client_id.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "client_id must not be empty".to_string(),
+        ));
+    }
+    if let Some(issuer) = &request.issuer {
+        if issuer.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "issuer must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 struct InMemorySessionStore {
     sessions: Mutex<Vec<StoredSession>>,
@@ -435,6 +523,7 @@ impl InMemorySessionStore {
                 issuer: principal.issuer.clone(),
                 display_name: principal.display_name.clone(),
             },
+            automation_delegate: None,
             idle_timeout_sec: request.idle_timeout_sec,
             labels: request.labels,
             integration_context: request.integration_context,
@@ -484,6 +573,21 @@ impl InMemorySessionStore {
         Ok(session)
     }
 
+    async fn get_session_for_principal(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let session = self
+            .sessions
+            .lock()
+            .await
+            .iter()
+            .find(|session| session.id == id && session_visible_to_principal(session, principal))
+            .cloned();
+        Ok(session)
+    }
+
     async fn stop_session_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -506,6 +610,51 @@ impl InMemorySessionStore {
 
         Ok(Some(session.clone()))
     }
+
+    async fn set_automation_delegate_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: SetAutomationDelegateRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| {
+            session.id == id
+                && session.owner.subject == principal.subject
+                && session.owner.issuer == principal.issuer
+        }) else {
+            return Ok(None);
+        };
+
+        session.automation_delegate = Some(SessionAutomationDelegate {
+            client_id: request.client_id,
+            issuer: request.issuer.unwrap_or_else(|| principal.issuer.clone()),
+            display_name: request.display_name,
+        });
+        session.updated_at = Utc::now();
+
+        Ok(Some(session.clone()))
+    }
+
+    async fn clear_automation_delegate_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| {
+            session.id == id
+                && session.owner.subject == principal.subject
+                && session.owner.issuer == principal.issuer
+        }) else {
+            return Ok(None);
+        };
+
+        session.automation_delegate = None;
+        session.updated_at = Utc::now();
+
+        Ok(Some(session.clone()))
+    }
 }
 
 struct PostgresSessionStore {
@@ -524,6 +673,9 @@ impl PostgresSessionStore {
                     owner_subject TEXT NOT NULL,
                     owner_issuer TEXT NOT NULL,
                     owner_display_name TEXT NULL,
+                    automation_owner_client_id TEXT NULL,
+                    automation_owner_issuer TEXT NULL,
+                    automation_owner_display_name TEXT NULL,
                     state TEXT NOT NULL,
                     template_id TEXT NULL,
                     owner_mode TEXT NOT NULL,
@@ -543,6 +695,13 @@ impl PostgresSessionStore {
 
                 CREATE INDEX IF NOT EXISTS idx_control_sessions_runtime_state
                     ON control_sessions (runtime_binding, state, created_at DESC);
+
+                ALTER TABLE control_sessions
+                    ADD COLUMN IF NOT EXISTS automation_owner_client_id TEXT NULL;
+                ALTER TABLE control_sessions
+                    ADD COLUMN IF NOT EXISTS automation_owner_issuer TEXT NULL;
+                ALTER TABLE control_sessions
+                    ADD COLUMN IF NOT EXISTS automation_owner_display_name TEXT NULL;
                 "#,
             )
             .await
@@ -609,6 +768,9 @@ impl PostgresSessionStore {
                     owner_subject,
                     owner_issuer,
                     owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
                     state,
                     template_id,
                     owner_mode,
@@ -662,6 +824,9 @@ impl PostgresSessionStore {
                     owner_subject,
                     owner_issuer,
                     owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
                     state,
                     template_id,
                     owner_mode,
@@ -703,6 +868,9 @@ impl PostgresSessionStore {
                     owner_subject,
                     owner_issuer,
                     owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
                     state,
                     template_id,
                     owner_mode,
@@ -722,6 +890,56 @@ impl PostgresSessionStore {
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to load session: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_session).transpose()
+    }
+
+    async fn get_session_for_principal(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
+                    state,
+                    template_id,
+                    owner_mode,
+                    viewport_width,
+                    viewport_height,
+                    idle_timeout_sec,
+                    labels,
+                    integration_context,
+                    created_at,
+                    updated_at,
+                    stopped_at
+                FROM control_sessions
+                WHERE id = $1
+                  AND (
+                    (owner_subject = $2 AND owner_issuer = $3)
+                    OR (
+                        automation_owner_client_id IS NOT NULL
+                        AND automation_owner_issuer = $3
+                        AND automation_owner_client_id = $4
+                    )
+                  )
+                "#,
+                &[&id, &principal.subject, &principal.issuer, &principal.client_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to load session for principal: {error}"))
             })?;
         row.as_ref().map(row_to_stored_session).transpose()
     }
@@ -750,6 +968,9 @@ impl PostgresSessionStore {
                     owner_subject,
                     owner_issuer,
                     owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
                     state,
                     template_id,
                     owner_mode,
@@ -770,6 +991,117 @@ impl PostgresSessionStore {
             })?;
         row.as_ref().map(row_to_stored_session).transpose()
     }
+
+    async fn set_automation_delegate_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: SetAutomationDelegateRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let issuer = request.issuer.unwrap_or_else(|| principal.issuer.clone());
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                UPDATE control_sessions
+                SET
+                    automation_owner_client_id = $4,
+                    automation_owner_issuer = $5,
+                    automation_owner_display_name = $6,
+                    updated_at = NOW()
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
+                    state,
+                    template_id,
+                    owner_mode,
+                    viewport_width,
+                    viewport_height,
+                    idle_timeout_sec,
+                    labels,
+                    integration_context,
+                    created_at,
+                    updated_at,
+                    stopped_at
+                "#,
+                &[
+                    &id,
+                    &principal.subject,
+                    &principal.issuer,
+                    &request.client_id,
+                    &issuer,
+                    &request.display_name,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to set automation delegate: {error}"
+                ))
+            })?;
+        row.as_ref().map(row_to_stored_session).transpose()
+    }
+
+    async fn clear_automation_delegate_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                UPDATE control_sessions
+                SET
+                    automation_owner_client_id = NULL,
+                    automation_owner_issuer = NULL,
+                    automation_owner_display_name = NULL,
+                    updated_at = NOW()
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    automation_owner_client_id,
+                    automation_owner_issuer,
+                    automation_owner_display_name,
+                    state,
+                    template_id,
+                    owner_mode,
+                    viewport_width,
+                    viewport_height,
+                    idle_timeout_sec,
+                    labels,
+                    integration_context,
+                    created_at,
+                    updated_at,
+                    stopped_at
+                "#,
+                &[&id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to clear automation delegate: {error}"
+                ))
+            })?;
+        row.as_ref().map(row_to_stored_session).transpose()
+    }
 }
 
 fn json_labels(labels: &HashMap<String, String>) -> Value {
@@ -778,6 +1110,22 @@ fn json_labels(labels: &HashMap<String, String>) -> Value {
         object.insert(key.clone(), Value::String(value.clone()));
     }
     Value::Object(object)
+}
+
+fn session_visible_to_principal(
+    session: &StoredSession,
+    principal: &AuthenticatedPrincipal,
+) -> bool {
+    if session.owner.subject == principal.subject && session.owner.issuer == principal.issuer {
+        return true;
+    }
+
+    let Some(delegate) = &session.automation_delegate else {
+        return false;
+    };
+
+    principal.client_id.as_deref() == Some(delegate.client_id.as_str())
+        && principal.issuer == delegate.issuer
 }
 
 fn row_to_stored_session(row: &Row) -> Result<StoredSession, SessionStoreError> {
@@ -809,6 +1157,8 @@ fn row_to_stored_session(row: &Row) -> Result<StoredSession, SessionStoreError> 
 
     let width = row.get::<_, i32>("viewport_width");
     let height = row.get::<_, i32>("viewport_height");
+    let automation_owner_client_id = row.get::<_, Option<String>>("automation_owner_client_id");
+    let automation_owner_issuer = row.get::<_, Option<String>>("automation_owner_issuer");
 
     Ok(StoredSession {
         id: row.get("id"),
@@ -823,6 +1173,14 @@ fn row_to_stored_session(row: &Row) -> Result<StoredSession, SessionStoreError> 
             subject: row.get("owner_subject"),
             issuer: row.get("owner_issuer"),
             display_name: row.get("owner_display_name"),
+        },
+        automation_delegate: match (automation_owner_client_id, automation_owner_issuer) {
+            (Some(client_id), Some(issuer)) => Some(SessionAutomationDelegate {
+                client_id,
+                issuer,
+                display_name: row.get("automation_owner_display_name"),
+            }),
+            _ => None,
         },
         idle_timeout_sec: row
             .get::<_, Option<i32>>("idle_timeout_sec")
@@ -844,6 +1202,16 @@ mod tests {
             subject: subject.to_string(),
             issuer: "https://issuer.example".to_string(),
             display_name: Some(subject.to_string()),
+            client_id: None,
+        }
+    }
+
+    fn service_principal(subject: &str, client_id: &str) -> AuthenticatedPrincipal {
+        AuthenticatedPrincipal {
+            subject: subject.to_string(),
+            issuer: "https://issuer.example".to_string(),
+            display_name: Some(client_id.to_string()),
+            client_id: Some(client_id.to_string()),
         }
     }
 
@@ -923,6 +1291,54 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(error, SessionStoreError::ActiveSessionConflict));
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_allows_delegated_client_to_load_session() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let delegate = service_principal("service-account-id", "bpane-mcp-bridge");
+
+        let created = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+
+        let updated = store
+            .set_automation_delegate_for_owner(
+                &owner,
+                created.id,
+                SetAutomationDelegateRequest {
+                    client_id: "bpane-mcp-bridge".to_string(),
+                    issuer: None,
+                    display_name: Some("BrowserPane MCP bridge".to_string()),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            updated.automation_delegate.as_ref().unwrap().client_id,
+            "bpane-mcp-bridge"
+        );
+
+        let visible = store
+            .get_session_for_principal(&delegate, created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(visible.id, created.id);
     }
 
     #[test]
