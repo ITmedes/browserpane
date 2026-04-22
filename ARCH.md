@@ -336,8 +336,9 @@ The default dev stack no longer uses a shared token file.
 - `web` serves `/auth-config.json`
 - `test-embed.html` discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
-- after login, `test-embed.html` resolves or creates an owner-scoped `/api/v1/sessions` resource and uses its returned connect metadata
+- after login, `test-embed.html` lists owner-scoped `/api/v1/sessions`, lets the user join an existing session or start a new one, and then uses the selected session resource's connect metadata
 - the page then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
+- test-page-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via `PUT /control-session`
 - the resulting access token is sent to `bpane-gateway` as:
   - HTTP API bearer token for authenticated control calls

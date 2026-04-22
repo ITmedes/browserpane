@@ -114,8 +114,9 @@ The default local auth flow is now OIDC-based:
 - click `Login`
 - authenticate against the local Keycloak realm
 - use the demo account `demo / demo-demo`
-- return to the page and click `Connect`
-- the page will resolve or create an owner-scoped `/api/v1/sessions` resource before opening WebTransport
+- return to the page and either select an existing session or click `Start New Session`
+- the page joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
+- sessions created from the test page use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
 - if you want the local `mcp-bridge` to follow that same session, click `Delegate MCP`
 
 `test-embed.html` fetches `/auth-config.json` and performs an Authorization Code + PKCE login. The browser client then connects to the gateway with an OIDC access token.

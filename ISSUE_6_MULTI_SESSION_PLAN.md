@@ -273,7 +273,8 @@ Current status:
   - `POST /api/v1/sessions/{id}/mcp-owner`
   - `DELETE /api/v1/sessions/{id}/mcp-owner`
 - persistence is Postgres-backed in the normal compose/runtime path
-- `test-embed.html` already consumes that API and resolves/creates a session resource before browser connect
+- `test-embed.html` already consumes that API, lets the user join an existing session or start a new one, and uses the selected session resource before browser connect
+- the local test integration currently creates sessions with `idle_timeout_sec = 300`, and the gateway now stops those sessions automatically after 5 minutes of non-use
 - browser transport now uses a short-lived session-scoped connect ticket minted from `/api/v1/sessions/{id}/access-tokens`
 - `test-embed.html` can now explicitly delegate the current session to the local `bpane-mcp-bridge` principal and assign that same session through `mcp-bridge`'s local `/control-session` API
 - `mcp-bridge` now has the first session-control client hooks and can use session-scoped ownership APIs for an explicit managed session without relying on implicit bootstrap

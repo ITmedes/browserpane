@@ -48,6 +48,26 @@
       cursor: pointer;
       font-size: 13px;
     }
+    select {
+      padding: 6px 10px;
+      border: 1px solid #444;
+      border-radius: 6px;
+      background: #2a2a4e;
+      color: #e0e0e0;
+      font-size: 13px;
+      max-width: 320px;
+    }
+    .session-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .session-picker label {
+      font-size: 12px;
+      color: #b6bfd7;
+      white-space: nowrap;
+    }
     button:hover { background: #3a3a6e; }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
     #desktop-container {
@@ -183,7 +203,15 @@
     <div class="controls">
       <button id="btn-login">Login</button>
       <button id="btn-logout" disabled>Logout</button>
-      <button id="btn-connect">Connect</button>
+      <div class="session-picker">
+        <label for="session-select">Session</label>
+        <select id="session-select" disabled>
+          <option value="">Login first</option>
+        </select>
+      </div>
+      <button id="btn-refresh-sessions" disabled>Refresh Sessions</button>
+      <button id="btn-new-session" disabled>Start New Session</button>
+      <button id="btn-connect">Join Selected</button>
       <button id="btn-delegate-mcp" disabled>Delegate MCP</button>
       <button id="btn-disconnect" disabled>Disconnect</button>
       <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
@@ -288,6 +316,9 @@
     const metricsTilesEl = document.getElementById('metrics-tiles');
     const metricsScrollEl = document.getElementById('metrics-scroll');
     const metricsVideoEl = document.getElementById('metrics-video');
+    const sessionSelect = document.getElementById('session-select');
+    const refreshSessionsBtn = document.getElementById('btn-refresh-sessions');
+    const newSessionBtn = document.getElementById('btn-new-session');
     const connectBtn = document.getElementById('btn-connect');
     const delegateMcpBtn = document.getElementById('btn-delegate-mcp');
     const disconnectBtn = document.getElementById('btn-disconnect');
@@ -846,6 +877,8 @@
     };
     const controlSessionState = {
       resource: null,
+      resources: [],
+      selectedSessionId: '',
     };
 
     function isRuntimeCandidateSessionState(state) {
@@ -863,6 +896,62 @@
 
     function renderSessionState() {
       sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
+    }
+
+    function isJoinableSession(resource) {
+      return Boolean(resource?.id) && isRuntimeCandidateSessionState(resource.state);
+    }
+
+    function getSessionOptionLabel(resource) {
+      const shortId = String(resource.id).slice(0, 8);
+      const state = resource.state ?? 'unknown';
+      const viewport = resource?.viewport?.width && resource?.viewport?.height
+        ? `${resource.viewport.width}x${resource.viewport.height}`
+        : '--';
+      return `${shortId} · ${state} · ${viewport}`;
+    }
+
+    function syncSelectedSessionResource() {
+      const selected = controlSessionState.resources.find(
+        (resource) => resource.id === controlSessionState.selectedSessionId,
+      ) ?? null;
+      controlSessionState.resource = selected;
+      renderSessionState();
+      return selected;
+    }
+
+    function renderSessionPicker() {
+      const canManageSessions = authState.config?.mode === 'oidc' && Boolean(authState.tokens?.access_token);
+      const resources = controlSessionState.resources ?? [];
+      const previousValue = controlSessionState.selectedSessionId;
+
+      sessionSelect.innerHTML = '';
+
+      if (!canManageSessions) {
+        sessionSelect.appendChild(new Option('Login first', ''));
+        sessionSelect.disabled = true;
+      } else if (resources.length === 0) {
+        sessionSelect.appendChild(new Option('No sessions available', ''));
+        sessionSelect.disabled = true;
+        controlSessionState.selectedSessionId = '';
+      } else {
+        for (const resource of resources) {
+          const option = new Option(getSessionOptionLabel(resource), resource.id);
+          option.disabled = !isJoinableSession(resource);
+          sessionSelect.appendChild(option);
+        }
+        const selectedValue = resources.some((resource) => resource.id === previousValue)
+          ? previousValue
+          : (resources.find((resource) => isJoinableSession(resource))?.id ?? resources[0].id);
+        sessionSelect.disabled = Boolean(session);
+        controlSessionState.selectedSessionId = selectedValue;
+        sessionSelect.value = selectedValue;
+      }
+
+      if (sessionSelect.value !== controlSessionState.selectedSessionId) {
+        sessionSelect.value = controlSessionState.selectedSessionId || '';
+      }
+      syncSelectedSessionResource();
     }
 
     function buildRedirectUri() {
@@ -920,6 +1009,8 @@
       authState.claims = null;
       authState.gatewayPreflightOk = false;
       controlSessionState.resource = null;
+      controlSessionState.resources = [];
+      controlSessionState.selectedSessionId = '';
       sessionStorage.removeItem(AUTH_STORAGE_KEY);
       renderSessionState();
     }
@@ -951,6 +1042,8 @@
     function renderAuthState() {
       const claims = authState.claims;
       const config = authState.config;
+      const hasAccessToken = Boolean(authState.tokens?.access_token);
+      const selectedJoinableSession = isJoinableSession(controlSessionState.resource);
       const username =
         claims?.preferred_username ??
         claims?.email ??
@@ -958,26 +1051,36 @@
         claims?.sub ??
         '--';
       const canConnect = config?.mode === 'oidc'
-        ? Boolean(authState.tokens?.access_token) && !session
+        ? hasAccessToken && !session && selectedJoinableSession
+        : false;
+      const canStartSession = config?.mode === 'oidc'
+        ? hasAccessToken && !session
+        : false;
+      const canRefreshSessions = config?.mode === 'oidc'
+        ? hasAccessToken && !session
         : false;
       if (config?.mode === 'oidc') {
-        if (authState.tokens?.access_token) {
+        if (hasAccessToken) {
           authDisplay.textContent = `Auth: logged in as ${username}`;
         } else {
           authDisplay.textContent = 'Auth: login required';
         }
         authHint.textContent = getExampleUserLabel();
-        loginBtn.disabled = Boolean(authState.tokens?.access_token);
-        logoutBtn.disabled = !authState.tokens?.access_token;
+        loginBtn.disabled = hasAccessToken;
+        logoutBtn.disabled = !hasAccessToken;
       } else {
         authDisplay.textContent = 'Auth: disabled';
         authHint.textContent = '';
         loginBtn.disabled = true;
         logoutBtn.disabled = true;
       }
+      refreshSessionsBtn.disabled = !canRefreshSessions;
+      newSessionBtn.disabled = !canStartSession;
       connectBtn.disabled = !canConnect;
-      delegateMcpBtn.disabled = !(config?.mode === 'oidc' && authState.tokens?.access_token && config?.mcpBridge?.clientId);
+      sessionSelect.disabled = !canRefreshSessions || controlSessionState.resources.length === 0;
+      delegateMcpBtn.disabled = !(config?.mode === 'oidc' && hasAccessToken && config?.mcpBridge?.clientId && controlSessionState.resource?.id);
       disconnectBtn.disabled = !session;
+      renderSessionPicker();
       renderSessionState();
     }
 
@@ -1148,6 +1251,22 @@
       return Array.isArray(payload?.sessions) ? payload.sessions : [];
     }
 
+    async function refreshSessionResources(accessToken, { preserveSelection = true, silent = false } = {}) {
+      const sessions = await fetchSessionResources(accessToken);
+      const previousSelection = preserveSelection
+        ? (controlSessionState.selectedSessionId || controlSessionState.resource?.id || '')
+        : '';
+      controlSessionState.resources = sessions;
+      controlSessionState.selectedSessionId = sessions.some((resource) => resource.id === previousSelection)
+        ? previousSelection
+        : (sessions.find((resource) => isJoinableSession(resource))?.id ?? sessions[0]?.id ?? '');
+      renderSessionPicker();
+      if (!silent) {
+        log(`Loaded ${sessions.length} session${sessions.length === 1 ? '' : 's'} from control plane`, 'info');
+      }
+      return sessions;
+    }
+
     async function createSessionResource(accessToken) {
       const response = await fetch(SESSION_API_URL, {
         method: 'POST',
@@ -1159,6 +1278,7 @@
         cache: 'no-store',
         body: JSON.stringify({
           owner_mode: 'collaborative',
+          idle_timeout_sec: 300,
           integration_context: {
             source: 'test-embed',
             origin: window.location.origin,
@@ -1182,55 +1302,60 @@
       return response.json();
     }
 
-    async function resolveGatewaySessionResource(accessToken) {
+    async function createAndSelectSessionResource(accessToken) {
       try {
-        const existing = (await fetchSessionResources(accessToken)).find((candidate) =>
-          isRuntimeCandidateSessionState(candidate.state),
-        );
-        if (existing) {
-          controlSessionState.resource = existing;
-          authState.gatewayPreflightOk = true;
-          log(
-            `Session control resolved existing session ${existing.id} (${existing.state})`,
-            'ok',
-          );
-          renderSessionState();
-          return existing;
-        }
-
         const created = await createSessionResource(accessToken);
+        controlSessionState.resources = [
+          created,
+          ...controlSessionState.resources.filter((resource) => resource.id !== created.id),
+        ];
+        controlSessionState.selectedSessionId = created.id;
         controlSessionState.resource = created;
         authState.gatewayPreflightOk = true;
+        renderSessionPicker();
         log(
           `Session control created session ${created.id} (${created.state})`,
           'ok',
         );
-        renderSessionState();
         return created;
       } catch (error) {
+        authState.gatewayPreflightOk = false;
         if (error?.status === 409) {
           try {
-            const retry = (await fetchSessionResources(accessToken)).find((candidate) =>
-              isRuntimeCandidateSessionState(candidate.state),
-            );
-            if (retry) {
-              controlSessionState.resource = retry;
-              authState.gatewayPreflightOk = true;
-              log(
-                `Session control reused conflicting active session ${retry.id} (${retry.state})`,
-                'warn',
-              );
-              renderSessionState();
-              return retry;
-            }
+            await refreshSessionResources(accessToken, { preserveSelection: false, silent: true });
           } catch {
-            // fall through to the generic error path below
+            // keep the original conflict error
           }
         }
-        authState.gatewayPreflightOk = false;
-        controlSessionState.resource = null;
-        renderSessionState();
         log(`Session control preflight failed: ${error.message}`, 'error');
+        return null;
+      }
+    }
+
+    async function resolveSelectedSessionResource(accessToken) {
+      try {
+        if (!controlSessionState.resources.length) {
+          await refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+        }
+        const selected = controlSessionState.resources.find(
+          (resource) => resource.id === controlSessionState.selectedSessionId,
+        );
+        if (!selected) {
+          log('Select an existing session first, or click "Start New Session".', 'warn');
+          return null;
+        }
+        if (!isJoinableSession(selected)) {
+          log(`Selected session ${selected.id} is not joinable in state ${selected.state}.`, 'warn');
+          return null;
+        }
+        controlSessionState.resource = selected;
+        authState.gatewayPreflightOk = true;
+        renderSessionState();
+        log(`Selected existing session ${selected.id} (${selected.state})`, 'ok');
+        return selected;
+      } catch (error) {
+        authState.gatewayPreflightOk = false;
+        log(`Session control refresh failed: ${error.message}`, 'error');
         return null;
       }
     }
@@ -1330,10 +1455,13 @@
         return;
       }
 
-      log('Resolving control-plane session for MCP delegation...', 'info');
-      const controlSession = await resolveGatewaySessionResource(accessToken);
+      let controlSession = controlSessionState.resource;
+      if (!controlSession?.id) {
+        log('Resolving selected control-plane session for MCP delegation...', 'info');
+        controlSession = await resolveSelectedSessionResource(accessToken);
+      }
       if (!controlSession) {
-        setStatus('Session resolution failed', 'error');
+        setStatus('Session selection required', 'error');
         return;
       }
 
@@ -1399,6 +1527,14 @@
       });
       renderAuthState();
       authState.initialized = true;
+      if (authState.tokens?.access_token) {
+        const accessToken = await getValidAccessToken();
+        if (accessToken) {
+          await refreshSessionResources(accessToken, { preserveSelection: true, silent: true }).catch((error) => {
+            log(`Session list refresh failed: ${error.message}`, 'error');
+          });
+        }
+      }
       window.__bpaneAuth = {
         isConfigured: () => authState.config?.mode === 'oidc',
         isAuthenticated: () => Boolean(authState.tokens?.access_token),
@@ -1434,7 +1570,7 @@
       lastObservedBatchCount: 0,
     };
 
-    async function connect() {
+    async function connect(mode = 'selected') {
       const accessToken = await getValidAccessToken();
       if (!accessToken) {
         setStatus('Login required', 'error');
@@ -1447,9 +1583,11 @@
       log('Resolving control-plane session...', 'info');
 
       try {
-        const controlSession = await resolveGatewaySessionResource(accessToken);
+        const controlSession = mode === 'new'
+          ? await createAndSelectSessionResource(accessToken)
+          : await resolveSelectedSessionResource(accessToken);
         if (!controlSession) {
-          setStatus('Session resolution failed', 'error');
+          setStatus(mode === 'new' ? 'Session creation failed' : 'Session selection required', 'error');
           if (overlay) overlay.style.display = '';
           return;
         }
@@ -1476,6 +1614,13 @@
           onConnect: () => {
             log('Connected', 'ok');
             setStatus('Connected', 'connected');
+            if (controlSessionState.resource) {
+              controlSessionState.resource = {
+                ...controlSessionState.resource,
+                state: 'active',
+              };
+              renderSessionPicker();
+            }
             renderAuthState();
             cameraBtn.disabled = true;
             micBtn.disabled = false;
@@ -1597,6 +1742,13 @@
             session = null;
             if (overlay) overlay.style.display = '';
             setStatus('Disconnected', 'disconnected');
+            if (controlSessionState.resource && isRuntimeCandidateSessionState(controlSessionState.resource.state)) {
+              controlSessionState.resource = {
+                ...controlSessionState.resource,
+                state: 'idle',
+              };
+              renderSessionPicker();
+            }
             renderAuthState();
             cameraBtn.disabled = true;
             micBtn.disabled = true;
@@ -1620,6 +1772,12 @@
             liveState.resolution.width = 0;
             liveState.resolution.height = 0;
             setMetricsButtons();
+            void getValidAccessToken().then((accessToken) => {
+              if (accessToken) {
+                return refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+              }
+              return null;
+            });
           },
           onError: (error) => {
             log(`Error: ${error.message}`, 'error');
@@ -1644,6 +1802,7 @@
         });
         renderBackendEl.textContent = formatRenderDiagnostics(session.getRenderDiagnostics());
         log(formatRenderDiagnostics(session.getRenderDiagnostics()), 'info');
+        renderAuthState();
       } catch (e) {
         log(`Connection failed: ${e.message}`, 'error');
         setStatus('Connection failed', 'error');
@@ -1668,6 +1827,13 @@
       }
       if (overlay) overlay.style.display = '';
       setStatus('Disconnected', 'disconnected');
+      if (controlSessionState.resource && isRuntimeCandidateSessionState(controlSessionState.resource.state)) {
+        controlSessionState.resource = {
+          ...controlSessionState.resource,
+          state: 'idle',
+        };
+        renderSessionPicker();
+      }
       renderAuthState();
       cameraBtn.disabled = true;
       micBtn.disabled = true;
@@ -1691,6 +1857,12 @@
       liveState.resolution.width = 0;
       liveState.resolution.height = 0;
       setMetricsButtons();
+      void getValidAccessToken().then((accessToken) => {
+        if (accessToken) {
+          return refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+        }
+        return null;
+      });
     }
 
     // ── Camera toggle ───────────────────────────────────────────────
@@ -1741,7 +1913,22 @@
     delegateMcpBtn.addEventListener('click', () => void delegateCurrentSessionToMcp().catch((error) => {
       log(`MCP delegation failed: ${error.message}`, 'error');
     }));
-    connectBtn.addEventListener('click', connect);
+    sessionSelect.addEventListener('change', () => {
+      controlSessionState.selectedSessionId = sessionSelect.value;
+      syncSelectedSessionResource();
+      renderAuthState();
+    });
+    refreshSessionsBtn.addEventListener('click', () => void getValidAccessToken().then((accessToken) => {
+      if (!accessToken) {
+        setStatus('Login required', 'error');
+        return null;
+      }
+      return refreshSessionResources(accessToken, { preserveSelection: true, silent: false });
+    }).catch((error) => {
+      log(`Session refresh failed: ${error.message}`, 'error');
+    }));
+    newSessionBtn.addEventListener('click', () => void connect('new'));
+    connectBtn.addEventListener('click', () => void connect('selected'));
     disconnectBtn.addEventListener('click', () => doDisconnect());
     metricsStartBtn.addEventListener('click', startBenchmarkSample);
     metricsStopBtn.addEventListener('click', () => stopBenchmarkSample('manual'));
@@ -1780,7 +1967,7 @@
       log(`OIDC login configured for issuer ${authState.config.issuer}`, 'info');
       log(`Example user: ${getExampleUserLabel() || 'none configured'}`, 'info');
     }
-    log('Ready. Login, then click "Connect" to start.');
+    log('Ready. Login, then join an existing session or start a new one.');
   </script>
 </body>
 </html>

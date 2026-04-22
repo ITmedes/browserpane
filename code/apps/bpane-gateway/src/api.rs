@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
 use crate::connect_ticket::SessionConnectTicketManager;
+use crate::idle_stop::schedule_idle_session_stop;
 use crate::runtime_manager::{ResolvedSessionRuntime, RuntimeManagerError, SessionRuntimeManager};
 use crate::session_control::{
     CreateSessionRequest, SessionLifecycleState, SessionListResponse, SessionOwnerMode,
@@ -26,6 +27,7 @@ struct ApiState {
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
     runtime_manager: Arc<SessionRuntimeManager>,
+    idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
 }
@@ -100,6 +102,14 @@ async fn create_session(
         .create_session(&principal, request, owner_mode)
         .await
         .map_err(map_session_store_error)?;
+
+    schedule_idle_session_stop(
+        stored.id,
+        state.idle_stop_timeout,
+        state.registry.clone(),
+        state.session_store.clone(),
+        state.runtime_manager.clone(),
+    );
 
     Ok((
         StatusCode::CREATED,
@@ -452,6 +462,7 @@ async fn set_mcp_owner(
 
     hub.set_mcp_owner(req.width, req.height).await;
     state.runtime_manager.mark_session_active(session_id).await;
+    let _ = state.session_store.mark_session_active(session_id).await;
 
     Ok(Json(OkResponse { ok: true }))
 }
@@ -479,6 +490,7 @@ async fn set_session_mcp_owner(
 
     hub.set_mcp_owner(req.width, req.height).await;
     state.runtime_manager.mark_session_active(session_id).await;
+    let _ = state.session_store.mark_session_active(session_id).await;
 
     Ok(Json(OkResponse { ok: true }))
 }
@@ -513,7 +525,15 @@ async fn clear_mcp_owner(
     hub.clear_mcp_owner().await;
     let snapshot = hub.telemetry_snapshot().await;
     if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
+        let _ = state.session_store.mark_session_idle(session_id).await;
         state.runtime_manager.mark_session_idle(session_id).await;
+        schedule_idle_session_stop(
+            session_id,
+            state.idle_stop_timeout,
+            state.registry.clone(),
+            state.session_store.clone(),
+            state.runtime_manager.clone(),
+        );
     }
 
     Ok(Json(OkResponse { ok: true }))
@@ -542,7 +562,15 @@ async fn clear_session_mcp_owner(
     hub.clear_mcp_owner().await;
     let snapshot = hub.telemetry_snapshot().await;
     if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
+        let _ = state.session_store.mark_session_idle(session_id).await;
         state.runtime_manager.mark_session_idle(session_id).await;
+        schedule_idle_session_stop(
+            session_id,
+            state.idle_stop_timeout,
+            state.registry.clone(),
+            state.session_store.clone(),
+            state.runtime_manager.clone(),
+        );
     }
 
     Ok(Json(OkResponse { ok: true }))
@@ -556,6 +584,7 @@ pub async fn run_api_server(
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
     runtime_manager: Arc<SessionRuntimeManager>,
+    idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
 ) -> anyhow::Result<()> {
@@ -565,6 +594,7 @@ pub async fn run_api_server(
         connect_ticket_manager,
         session_store,
         runtime_manager,
+        idle_stop_timeout,
         public_gateway_url,
         default_owner_mode,
     });

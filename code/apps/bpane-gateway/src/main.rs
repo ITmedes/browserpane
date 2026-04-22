@@ -2,6 +2,7 @@ mod api;
 mod auth;
 mod config;
 mod connect_ticket;
+mod idle_stop;
 mod relay;
 mod runtime_manager;
 mod session;
@@ -191,6 +192,7 @@ async fn main() -> anyhow::Result<()> {
         auth_validator.clone(),
         connect_ticket_manager.clone(),
         session_store.clone(),
+        Duration::from_secs(config.runtime_idle_timeout_secs),
         Duration::from_secs(config.heartbeat_timeout_secs),
         registry.clone(),
     );
@@ -214,6 +216,7 @@ async fn main() -> anyhow::Result<()> {
             connect_ticket_manager,
             session_store,
             runtime_manager,
+            Duration::from_secs(config.runtime_idle_timeout_secs),
             config.public_gateway_url,
             if config.exclusive_browser_owner {
                 SessionOwnerMode::ExclusiveBrowserOwner
