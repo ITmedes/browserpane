@@ -22,6 +22,11 @@ export interface GatewaySessionResource {
     ticket_path?: string | null;
     compatibility_mode: string;
   };
+  runtime?: {
+    binding: string;
+    compatibility_mode: string;
+    cdp_endpoint?: string | null;
+  } | null;
   integration_context?: Record<string, unknown> | null;
 }
 

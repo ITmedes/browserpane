@@ -94,10 +94,12 @@ services:
       --max-viewers 10
       --max-active-runtimes ${BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES:-2}
       --max-starting-runtimes ${BPANE_GATEWAY_MAX_STARTING_RUNTIMES:-1}
+      --runtime-cdp-endpoint ${BPANE_GATEWAY_RUNTIME_CDP_ENDPOINT:-http://host:9223}
       --docker-runtime-image ${BPANE_GATEWAY_DOCKER_RUNTIME_IMAGE:-deploy-host}
       --docker-runtime-network ${BPANE_GATEWAY_DOCKER_RUNTIME_NETWORK:-deploy_bpane-internal}
       --docker-runtime-volume ${BPANE_GATEWAY_DOCKER_RUNTIME_VOLUME:-deploy_agent-socket}
       --docker-runtime-env-file ${BPANE_GATEWAY_DOCKER_RUNTIME_ENV_FILE:-/runtime/host-runtime.env}
+      --docker-runtime-cdp-proxy-port ${BPANE_GATEWAY_DOCKER_RUNTIME_CDP_PROXY_PORT:-9223}
       --docker-runtime-seccomp-unconfined
       --oidc-issuer http://localhost:8091/realms/browserpane-dev
       --oidc-audience bpane-gateway
@@ -157,7 +159,7 @@ services:
       dockerfile: deploy/Dockerfile.mcp-bridge
     environment:
       BPANE_GATEWAY_API_URL: "http://gateway:8932"
-      BPANE_CDP_ENDPOINT: "http://172.28.0.10:9223"
+      BPANE_CDP_ENDPOINT: "http://host:9223"
       BPANE_MCP_PORT: "8931"
       BPANE_MCP_RESOLUTION: "1600x900"
       BPANE_SESSION_BOOTSTRAP_MODE: "off"

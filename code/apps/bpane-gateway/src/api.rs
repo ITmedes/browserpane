@@ -113,11 +113,7 @@ async fn create_session(
 
     Ok((
         StatusCode::CREATED,
-        Json(stored.to_resource(
-            &state.public_gateway_url,
-            state.session_store.compatibility_mode(),
-            None,
-        )),
+        Json(session_resource(&state, &stored, None)),
     ))
 }
 
@@ -134,13 +130,7 @@ async fn list_sessions(
         .await
         .map_err(map_session_store_error)?
         .into_iter()
-        .map(|session| {
-            session.to_resource(
-                &state.public_gateway_url,
-                state.session_store.compatibility_mode(),
-                None,
-            )
-        })
+        .map(|session| session_resource(&state, &session, None))
         .collect();
 
     Ok(Json(SessionListResponse { sessions }))
@@ -153,11 +143,7 @@ async fn get_session(
 ) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
     let stored = authorize_visible_session_request(&headers, &state, session_id).await?;
 
-    Ok(Json(stored.to_resource(
-        &state.public_gateway_url,
-        state.session_store.compatibility_mode(),
-        None,
-    )))
+    Ok(Json(session_resource(&state, &stored, None)))
 }
 
 async fn set_automation_owner(
@@ -183,11 +169,7 @@ async fn set_automation_owner(
             )
         })?;
 
-    Ok(Json(stored.to_resource(
-        &state.public_gateway_url,
-        state.session_store.compatibility_mode(),
-        None,
-    )))
+    Ok(Json(session_resource(&state, &stored, None)))
 }
 
 async fn clear_automation_owner(
@@ -212,11 +194,7 @@ async fn clear_automation_owner(
             )
         })?;
 
-    Ok(Json(stored.to_resource(
-        &state.public_gateway_url,
-        state.session_store.compatibility_mode(),
-        None,
-    )))
+    Ok(Json(session_resource(&state, &stored, None)))
 }
 
 async fn issue_session_access_token(
@@ -290,11 +268,7 @@ async fn issue_session_access_token(
                 }),
             )
         })?;
-    let resource = connectable.to_resource(
-        &state.public_gateway_url,
-        state.session_store.compatibility_mode(),
-        None,
-    );
+    let resource = session_resource(&state, &connectable, None);
 
     Ok(Json(SessionAccessTokenResponse {
         session_id,
@@ -381,11 +355,7 @@ async fn delete_session(
     state.runtime_manager.release(session_id).await;
     state.registry.remove_session(session_id).await;
 
-    Ok(Json(stopped.to_resource(
-        &state.public_gateway_url,
-        state.session_store.compatibility_mode(),
-        None,
-    )))
+    Ok(Json(session_resource(&state, &stopped, None)))
 }
 
 /// GET /api/session/status
@@ -645,6 +615,21 @@ async fn authorize_api_request(
         .authenticate(token)
         .await
         .map_err(|error| format!("invalid bearer token: {error}"))
+}
+
+fn session_resource(
+    state: &ApiState,
+    stored: &StoredSession,
+    state_override: Option<SessionLifecycleState>,
+) -> SessionResource {
+    stored.to_resource(
+        &state.public_gateway_url,
+        state
+            .runtime_manager
+            .describe_session_runtime(stored.id)
+            .into(),
+        state_override,
+    )
 }
 
 fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {

@@ -19,6 +19,11 @@ pub struct Config {
     #[arg(long, default_value_t = 300)]
     pub runtime_idle_timeout_secs: u64,
 
+    /// Optional CDP endpoint exposed for the static_single runtime backend.
+    /// This should be reachable from internal automation services such as mcp-bridge.
+    #[arg(long)]
+    pub runtime_cdp_endpoint: Option<String>,
+
     /// TLS certificate file (PEM).
     #[arg(long)]
     pub cert: Option<PathBuf>,
@@ -85,6 +90,10 @@ pub struct Config {
     /// Session-scoped socket root inside the shared run volume for docker_single.
     #[arg(long, default_value = "/run/bpane/sessions")]
     pub docker_runtime_socket_root: String,
+
+    /// CDP proxy port exposed by docker-backed runtime workers.
+    #[arg(long, default_value_t = 9223)]
+    pub docker_runtime_cdp_proxy_port: u16,
 
     /// shm-size passed to docker run for the optional docker_single runtime backend.
     #[arg(long, default_value = "128m")]

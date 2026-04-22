@@ -343,7 +343,7 @@ The default dev stack no longer uses a shared token file.
 - the page then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
 - test-page-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via `PUT /control-session`
-- the local page intentionally only exposes `Delegate MCP` for `legacy_single_runtime` sessions, because the bridge still targets one fixed CDP endpoint today
+- `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource and lazily binds Playwright MCP on first client connect
 - the resulting access token is sent to `bpane-gateway` as:
   - HTTP API bearer token for authenticated control calls
 - the browser transport then uses the minted ticket as:
@@ -355,7 +355,7 @@ The default dev stack no longer uses a shared token file.
 - the default compose stack still runs the `static_single` runtime backend, so that control-plane flow still lands on one active host worker
 - `docker_single` keeps the old single-runtime compatibility behavior with start/stop-on-idle worker lifecycle
 - `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
-- `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`) and now also supports explicit delegated-session assignment through its local `/control-session` API
+- `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`), explicit delegated-session assignment through its local `/control-session` API, and one active managed runtime per bridge instance
 
 The default imported local realm contains:
 

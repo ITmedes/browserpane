@@ -17,6 +17,13 @@ pub struct ResolvedSessionRuntime {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeSessionAccessInfo {
+    pub binding: String,
+    pub compatibility_mode: String,
+    pub cdp_endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeProfile {
     pub runtime_binding: String,
     pub compatibility_mode: String,
@@ -79,6 +86,7 @@ impl std::error::Error for RuntimeManagerError {}
 pub enum RuntimeManagerConfig {
     StaticSingle {
         agent_socket_path: String,
+        cdp_endpoint: Option<String>,
         idle_timeout: Duration,
     },
     DockerSingle(DockerRuntimeConfig),
@@ -93,6 +101,7 @@ pub struct DockerRuntimeConfig {
     pub shared_run_volume: String,
     pub container_name_prefix: String,
     pub socket_root: String,
+    pub cdp_proxy_port: u16,
     pub shm_size: String,
     pub start_timeout: Duration,
     pub idle_timeout: Duration,
@@ -119,6 +128,7 @@ impl SessionRuntimeManager {
         match config {
             RuntimeManagerConfig::StaticSingle {
                 agent_socket_path,
+                cdp_endpoint,
                 idle_timeout,
             } => {
                 let profile = RuntimeProfile {
@@ -129,7 +139,11 @@ impl SessionRuntimeManager {
                 };
                 Ok(Self {
                     backend: RuntimeBackend::StaticSingle(Arc::new(
-                        StaticSingleRuntimeManager::new(agent_socket_path, idle_timeout),
+                        StaticSingleRuntimeManager::new(
+                            agent_socket_path,
+                            cdp_endpoint,
+                            idle_timeout,
+                        ),
                     )),
                     profile,
                 })
@@ -175,6 +189,13 @@ impl SessionRuntimeManager {
         &self.profile
     }
 
+    pub fn describe_session_runtime(&self, session_id: Uuid) -> RuntimeSessionAccessInfo {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(manager) => manager.describe_runtime(self.profile()),
+            RuntimeBackend::Docker(manager) => manager.describe_runtime(session_id),
+        }
+    }
+
     pub async fn resolve(
         &self,
         session_id: Uuid,
@@ -217,16 +238,30 @@ struct RuntimeLease {
 
 struct StaticSingleRuntimeManager {
     agent_socket_path: String,
+    cdp_endpoint: Option<String>,
     idle_timeout: Duration,
     active: Mutex<Option<RuntimeLease>>,
 }
 
 impl StaticSingleRuntimeManager {
-    fn new(agent_socket_path: String, idle_timeout: Duration) -> Self {
+    fn new(
+        agent_socket_path: String,
+        cdp_endpoint: Option<String>,
+        idle_timeout: Duration,
+    ) -> Self {
         Self {
             agent_socket_path,
+            cdp_endpoint,
             idle_timeout,
             active: Mutex::new(None),
+        }
+    }
+
+    fn describe_runtime(&self, profile: &RuntimeProfile) -> RuntimeSessionAccessInfo {
+        RuntimeSessionAccessInfo {
+            binding: profile.runtime_binding.clone(),
+            compatibility_mode: profile.compatibility_mode.clone(),
+            cdp_endpoint: self.cdp_endpoint.clone(),
         }
     }
 
@@ -564,6 +599,22 @@ impl DockerRuntimeManager {
         )
     }
 
+    fn cdp_endpoint_for_session(&self, session_id: Uuid) -> String {
+        format!(
+            "http://{}:{}",
+            self.container_name_for_session(session_id),
+            self.config.cdp_proxy_port
+        )
+    }
+
+    fn describe_runtime(&self, session_id: Uuid) -> RuntimeSessionAccessInfo {
+        RuntimeSessionAccessInfo {
+            binding: self.profile.runtime_binding.clone(),
+            compatibility_mode: self.profile.compatibility_mode.clone(),
+            cdp_endpoint: Some(self.cdp_endpoint_for_session(session_id)),
+        }
+    }
+
     async fn start_container(&self, lease: &RuntimeLease) -> Result<(), RuntimeManagerError> {
         let container_name = lease.container_name.as_deref().ok_or_else(|| {
             RuntimeManagerError::StartupFailed(
@@ -729,6 +780,7 @@ mod tests {
             shared_run_volume: "deploy_agent-socket".to_string(),
             container_name_prefix: "bpane-runtime".to_string(),
             socket_root: "/run/bpane/sessions".to_string(),
+            cdp_proxy_port: 9223,
             shm_size: "128m".to_string(),
             start_timeout: Duration::from_secs(30),
             idle_timeout: Duration::from_secs(300),
@@ -743,6 +795,7 @@ mod tests {
     async fn static_single_runtime_reuses_same_session_assignment() {
         let manager = SessionRuntimeManager::new(RuntimeManagerConfig::StaticSingle {
             agent_socket_path: "/tmp/bpane.sock".to_string(),
+            cdp_endpoint: Some("http://host:9223".to_string()),
             idle_timeout: Duration::from_secs(300),
         })
         .unwrap();
@@ -757,12 +810,20 @@ mod tests {
             manager.profile().compatibility_mode,
             "legacy_single_runtime"
         );
+        assert_eq!(
+            manager
+                .describe_session_runtime(session_id)
+                .cdp_endpoint
+                .as_deref(),
+            Some("http://host:9223")
+        );
     }
 
     #[tokio::test]
     async fn static_single_runtime_blocks_parallel_session_assignment() {
         let manager = SessionRuntimeManager::new(RuntimeManagerConfig::StaticSingle {
             agent_socket_path: "/tmp/bpane.sock".to_string(),
+            cdp_endpoint: None,
             idle_timeout: Duration::from_secs(300),
         })
         .unwrap();
@@ -784,6 +845,7 @@ mod tests {
     async fn static_single_runtime_release_allows_next_session() {
         let manager = SessionRuntimeManager::new(RuntimeManagerConfig::StaticSingle {
             agent_socket_path: "/tmp/bpane.sock".to_string(),
+            cdp_endpoint: None,
             idle_timeout: Duration::from_secs(300),
         })
         .unwrap();
@@ -838,6 +900,13 @@ mod tests {
         assert_eq!(manager.profile().compatibility_mode, "session_runtime_pool");
         assert_eq!(manager.profile().max_runtime_sessions, 2);
         assert!(!manager.profile().supports_legacy_global_routes);
+        assert_eq!(
+            manager
+                .describe_session_runtime(Uuid::nil())
+                .cdp_endpoint
+                .as_deref(),
+            Some("http://bpane-runtime-00000000000000000000000000000000:9223")
+        );
     }
 
     #[test]
@@ -863,6 +932,10 @@ mod tests {
         assert_eq!(
             manager.container_name_for_session(session_id),
             format!("bpane-runtime-{}", session_id.as_simple())
+        );
+        assert_eq!(
+            manager.cdp_endpoint_for_session(session_id),
+            format!("http://bpane-runtime-{}:9223", session_id.as_simple())
         );
     }
 }

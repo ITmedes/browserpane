@@ -166,7 +166,7 @@ The local dev flow now uses those routes to bridge browser-owned and automation-
 - the gateway routes the WebTransport connect through that explicit session id instead of one global token path
 - `Delegate MCP` assigns that session to the local `bpane-mcp-bridge` service principal
 - the page then calls `mcp-bridge` on `:8931/control-session` so the bridge adopts that same session for later ownership/status calls
-- local MCP delegation is only enabled on the current legacy single-runtime backend; the pool backend can run multiple browser sessions, but `mcp-bridge` still targets one fixed CDP endpoint
+- the local `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource, so delegated control also works in `docker_pool` mode
 
 Current limitation:
 
@@ -175,8 +175,8 @@ Current limitation:
 - the default runtime backend is still `legacy_single_runtime` compatibility mode
 - the optional `docker_single` backend can now start and stop one runtime container for the active session
 - the optional `docker_pool` backend can start multiple runtime containers in parallel, but only up to its configured runtime caps
+- `mcp-bridge` now follows the selected delegated session's runtime endpoint, but each bridge instance still manages only one control session at a time
 - the default compose stack still only runs one active BrowserPane session at a time because it uses the single-runtime backend
-- the local `mcp-bridge` can now be pointed at an explicitly delegated session, but that flow is still tied to the single-runtime backend because the bridge still uses one fixed CDP endpoint
 - global compatibility routes like `/api/session/status` and `/api/session/mcp-owner` are only valid in legacy single-runtime mode; multi-runtime backends should use session-scoped `/api/v1/sessions/{id}/...` routes
 
 ### Build And Test Without Running The Full Stack
