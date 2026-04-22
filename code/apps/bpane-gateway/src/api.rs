@@ -11,8 +11,8 @@ use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
 use crate::session_control::{
-    CreateSessionRequest, SessionListResponse, SessionOwnerMode, SessionResource, SessionStore,
-    SessionStoreError,
+    CreateSessionRequest, SessionLifecycleState, SessionListResponse, SessionOwnerMode,
+    SessionResource, SessionStore, SessionStoreError, StoredSession,
 };
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_registry::SessionRegistry;
@@ -137,6 +137,29 @@ async fn get_session(
         })?;
 
     Ok(Json(stored.to_resource(&state.public_gateway_url, None)))
+}
+
+async fn get_session_status(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionStatus>, (StatusCode, Json<ErrorResponse>)> {
+    let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let hub = state
+        .registry
+        .ensure_hub(&state.agent_socket_path)
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to connect to host agent: {error}"),
+                }),
+            )
+        })?;
+    let snapshot = hub.telemetry_snapshot().await;
+
+    Ok(Json(session_status_from_snapshot(snapshot)))
 }
 
 async fn delete_session(
@@ -264,6 +287,31 @@ async fn set_mcp_owner(
     Ok(Json(OkResponse { ok: true }))
 }
 
+async fn set_session_mcp_owner(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(req): Json<McpOwnerRequest>,
+) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let hub = state
+        .registry
+        .ensure_hub(&state.agent_socket_path)
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to connect to host agent: {error}"),
+                }),
+            )
+        })?;
+
+    hub.set_mcp_owner(req.width, req.height).await;
+
+    Ok(Json(OkResponse { ok: true }))
+}
+
 /// DELETE /api/session/mcp-owner
 async fn clear_mcp_owner(
     headers: HeaderMap,
@@ -277,6 +325,30 @@ async fn clear_mcp_owner(
         .ensure_hub(&state.agent_socket_path)
         .await
         .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+
+    hub.clear_mcp_owner().await;
+
+    Ok(Json(OkResponse { ok: true }))
+}
+
+async fn clear_session_mcp_owner(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let hub = state
+        .registry
+        .ensure_hub(&state.agent_socket_path)
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to connect to host agent: {error}"),
+                }),
+            )
+        })?;
 
     hub.clear_mcp_owner().await;
 
@@ -338,6 +410,14 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
             "/api/v1/sessions/{session_id}",
             get(get_session).delete(delete_session),
         )
+        .route(
+            "/api/v1/sessions/{session_id}/status",
+            get(get_session_status),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/mcp-owner",
+            post(set_session_mcp_owner).delete(clear_session_mcp_owner),
+        )
         .route("/api/session/status", get(session_status))
         .route("/api/session/mcp-owner", post(set_mcp_owner))
         .route("/api/session/mcp-owner", delete(clear_mcp_owner))
@@ -384,6 +464,49 @@ fn map_session_store_error(error: SessionStoreError) -> (StatusCode, Json<ErrorR
             }),
         ),
     }
+}
+
+async fn authorize_runtime_session_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let session = state
+        .session_store
+        .get_session_for_owner(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    if !matches!(
+        session.state,
+        SessionLifecycleState::Pending
+            | SessionLifecycleState::Starting
+            | SessionLifecycleState::Ready
+            | SessionLifecycleState::Active
+            | SessionLifecycleState::Idle
+    ) {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "session {session_id} is not attached to a runtime-compatible state"
+                ),
+            }),
+        ));
+    }
+
+    Ok(session)
 }
 
 async fn runtime_is_currently_in_use(state: &ApiState) -> bool {

@@ -214,6 +214,9 @@ Stateless relay between host agent and browser clients.
   - `GET /api/v1/sessions` — list owner-scoped sessions
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
   - `DELETE /api/v1/sessions/{id}` — stop one owner-scoped session resource
+  - `GET /api/v1/sessions/{id}/status` — session-scoped runtime telemetry for compatibility mode
+  - `POST /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership claim
+  - `DELETE /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership release
   - `GET /api/session/status` — client counts, resolution, telemetry
   - `POST /api/session/mcp-owner` — claim session, lock resolution
   - `DELETE /api/session/mcp-owner` — release ownership
@@ -328,7 +331,8 @@ The default dev stack no longer uses a shared token file.
 - `mcp-bridge` obtains its own bearer token with client credentials
 - the versioned session API is also bearer-protected and owner-scoped
 - the current session resource connect contract still advertises `compatibility_mode: legacy_single_runtime`
-- `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`), but local compose leaves it disabled until session-scoped ownership APIs exist
+- `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`) and now uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured
+- local compose still leaves the bootstrap disabled by default because browser users and the service-account bridge do not yet share a cross-principal session-selection flow
 
 The default imported local realm contains:
 

@@ -125,12 +125,18 @@ The local stack now includes a Phase 0 session control plane in `bpane-gateway`.
 
 These endpoints are bearer-protected, owner-scoped, and stored in Postgres.
 
+The same API surface now also includes session-scoped runtime compatibility routes:
+
+- `GET /api/v1/sessions/{id}/status`
+- `POST /api/v1/sessions/{id}/mcp-owner`
+- `DELETE /api/v1/sessions/{id}/mcp-owner`
+
 Current limitation:
 
 - the public session resource model is now versioned and persistent
 - the actual runtime is still in `legacy_single_runtime` compatibility mode
 - so only one active BrowserPane session can exist at a time until the later multi-session host/gateway phases land
-- the local `mcp-bridge` still uses the legacy global ownership/status endpoints by default; its session-control bootstrap is present but left disabled in compose until session-scoped ownership APIs exist
+- the local `mcp-bridge` can use the session-scoped ownership/status endpoints when a managed control session is configured; compose still leaves bootstrap off by default until a shared session-selection story lands for mixed browser and automation principals
 
 ### Build And Test Without Running The Full Stack
 
