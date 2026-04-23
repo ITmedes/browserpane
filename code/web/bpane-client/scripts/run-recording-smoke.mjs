@@ -200,8 +200,14 @@ async function getAccessToken(page) {
   return await page.evaluate(() => window.__bpaneAuth?.getAccessToken?.() ?? null);
 }
 
-function buildRecorderPageUrl(pageUrl) {
+function buildBrowserOnlyPageUrl(pageUrl) {
   const url = new URL(pageUrl);
+  url.searchParams.set('layout', 'browser-only');
+  return url.toString();
+}
+
+function buildRecorderPageUrl(pageUrl) {
+  const url = new URL(buildBrowserOnlyPageUrl(pageUrl));
   url.searchParams.set('client_role', 'recorder');
   return url.toString();
 }
@@ -334,10 +340,12 @@ async function main() {
     if (!accessToken) {
       throw new Error('Failed to acquire an access token from the owner page.');
     }
+    await configurePage(ownerPage, options, buildBrowserOnlyPageUrl(options.pageUrl));
 
     recorderPage = await context.newPage();
-    await configurePage(recorderPage, options, buildRecorderPageUrl(options.pageUrl));
+    await configurePage(recorderPage, options, options.pageUrl);
     await ensureLoggedIn(recorderPage, options);
+    await configurePage(recorderPage, options, buildRecorderPageUrl(options.pageUrl));
 
     log('Starting source session');
     const createdSession = await startNewInteractiveSession(ownerPage, options);

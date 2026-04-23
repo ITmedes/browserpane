@@ -40,6 +40,11 @@
       overflow: hidden;
     }
 
+    body.browser-only {
+      padding: 0;
+      background: #02060d;
+    }
+
     button,
     select,
     input {
@@ -93,11 +98,21 @@
       height: calc(100vh - 36px);
     }
 
+    body.browser-only .app-shell {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+      height: 100vh;
+    }
+
     .workspace {
       min-width: 0;
       display: flex;
       flex-direction: column;
       gap: 14px;
+    }
+
+    body.browser-only .workspace {
+      gap: 0;
     }
 
     .workspace-header,
@@ -235,6 +250,15 @@
       box-shadow: var(--shadow);
     }
 
+    body.browser-only .browser-panel {
+      gap: 0;
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      background: #000;
+      box-shadow: none;
+    }
+
     #desktop-container {
       flex: 1;
       min-height: 420px;
@@ -245,6 +269,12 @@
         #000;
       border: 1px solid rgba(196, 213, 244, 0.08);
       position: relative;
+    }
+
+    body.browser-only #desktop-container {
+      min-height: 100vh;
+      border: none;
+      border-radius: 0;
     }
 
     #desktop-container canvas {
@@ -300,6 +330,12 @@
     .info-bar > span {
       flex: 0 0 auto;
       white-space: nowrap;
+    }
+
+    body.browser-only .workspace-header,
+    body.browser-only .sidebar,
+    body.browser-only .info-bar {
+      display: none;
     }
 
     .sidebar {
@@ -884,9 +920,15 @@
     const GATEWAY_PORT = 4433;
     const GATEWAY_URL = `https://${GATEWAY_HOST}:${GATEWAY_PORT}`;
     const SESSION_API_URL = '/api/v1/sessions';
+    const LAYOUT_MODE = pageParams.get('layout')?.toLowerCase() === 'browser-only'
+      ? 'browser-only'
+      : 'console';
     const DEFAULT_CLIENT_ROLE = pageParams.get('client_role')?.toLowerCase() === 'recorder'
       ? 'recorder'
       : 'interactive';
+    if (LAYOUT_MODE === 'browser-only') {
+      document.body.classList.add('browser-only');
+    }
 
     // ── DOM refs ────────────────────────────────────────────────────
     const container = document.getElementById('desktop-container');
