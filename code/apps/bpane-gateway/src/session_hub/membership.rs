@@ -7,9 +7,12 @@ use bpane_protocol::ControlMessage;
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use super::{ClientHandle, SessionHub, SubscribeError};
+use super::{BrowserClientRole, ClientHandle, SessionHub, SubscribeError};
 
-pub(super) async fn subscribe(hub: &SessionHub) -> Result<ClientHandle, SubscribeError> {
+pub(super) async fn subscribe(
+    hub: &SessionHub,
+    client_role: BrowserClientRole,
+) -> Result<ClientHandle, SubscribeError> {
     let join_started = Instant::now();
     let client_id = hub.client_counter.fetch_add(1, Ordering::Relaxed) + 1;
     let mcp_is_owner = hub.mcp_is_owner.load(Ordering::Relaxed);
@@ -17,10 +20,11 @@ pub(super) async fn subscribe(hub: &SessionHub) -> Result<ClientHandle, Subscrib
     let prev_count = connected_clients.len() as u32;
     let current_owner_id = hub.owner_id.load(Ordering::Relaxed);
     let exclusive_browser_owner = hub.exclusive_browser_owner;
-    let is_resize_owner = !mcp_is_owner && current_owner_id == 0;
+    let is_resize_owner =
+        client_role == BrowserClientRole::Interactive && !mcp_is_owner && current_owner_id == 0;
     let (control_tx, control_rx) = mpsc::channel::<ControlMessage>(8);
 
-    let is_owner = if mcp_is_owner {
+    let is_owner = if client_role == BrowserClientRole::Recorder || mcp_is_owner {
         false
     } else if !exclusive_browser_owner {
         true
@@ -28,12 +32,19 @@ pub(super) async fn subscribe(hub: &SessionHub) -> Result<ClientHandle, Subscrib
         current_owner_id == 0
     };
 
-    if !is_owner {
+    if client_role == BrowserClientRole::Interactive && !is_owner {
         let owner_connected = !mcp_is_owner && current_owner_id != 0 && prev_count > 0;
+        let current_viewers = {
+            let roles = hub.client_roles.read().unwrap();
+            connected_clients
+                .iter()
+                .filter(|id| roles.get(id) == Some(&BrowserClientRole::Interactive))
+                .count() as u32
+        };
         let current_viewers = if owner_connected {
-            prev_count.saturating_sub(1)
+            current_viewers.saturating_sub(1)
         } else {
-            prev_count
+            current_viewers
         };
         if current_viewers >= hub.max_viewers {
             hub.joins_rejected_viewer_cap
@@ -51,6 +62,11 @@ pub(super) async fn subscribe(hub: &SessionHub) -> Result<ClientHandle, Subscrib
     hub.client_count
         .store(connected_clients.len() as u32, Ordering::Relaxed);
     drop(connected_clients);
+
+    hub.client_roles
+        .write()
+        .unwrap()
+        .insert(client_id, client_role);
 
     hub.client_control_txs
         .lock()
@@ -75,6 +91,7 @@ pub(super) async fn subscribe(hub: &SessionHub) -> Result<ClientHandle, Subscrib
         to_host: hub.to_agent.clone(),
         client_id,
         is_owner,
+        client_role,
         initial_frames,
         initial_access_state,
         control_rx,
@@ -88,12 +105,17 @@ pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
         .store(connected_clients.len() as u32, Ordering::Relaxed);
 
     let remaining_clients = connected_clients.clone();
+    let next_owner = if hub.mcp_is_owner.load(Ordering::Relaxed) {
+        0
+    } else {
+        let roles = hub.client_roles.read().unwrap();
+        connected_clients
+            .iter()
+            .copied()
+            .find(|id| roles.get(id) == Some(&BrowserClientRole::Interactive))
+            .unwrap_or(0)
+    };
     if hub.owner_id.load(Ordering::Relaxed) == client_id {
-        let next_owner = if hub.mcp_is_owner.load(Ordering::Relaxed) {
-            0
-        } else {
-            connected_clients.first().copied().unwrap_or(0)
-        };
         hub.owner_id.store(next_owner, Ordering::Relaxed);
         if next_owner != 0 {
             debug!(
@@ -103,13 +125,14 @@ pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
         }
     } else if hub.owner_id.load(Ordering::Relaxed) == 0 && !hub.mcp_is_owner.load(Ordering::Relaxed)
     {
-        if let Some(next_owner) = connected_clients.first().copied() {
+        if next_owner != 0 {
             hub.owner_id.store(next_owner, Ordering::Relaxed);
             debug!(client_id, next_owner, "restored missing session owner");
         }
     }
     drop(connected_clients);
 
+    hub.client_roles.write().unwrap().remove(&client_id);
     hub.client_control_txs.lock().await.remove(&client_id);
     super::policy::notify_client_access_states(hub, &remaining_clients, None).await;
 }

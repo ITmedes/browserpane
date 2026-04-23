@@ -517,6 +517,7 @@ components:
       required:
         - browser_clients
         - viewer_clients
+        - recorder_clients
         - max_viewers
         - viewer_slots_remaining
         - exclusive_browser_owner
@@ -528,6 +529,9 @@ components:
           type: integer
           minimum: 0
         viewer_clients:
+          type: integer
+          minimum: 0
+        recorder_clients:
           type: integer
           minimum: 0
         max_viewers:

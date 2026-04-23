@@ -36,6 +36,7 @@ struct ApiState {
 struct SessionStatus {
     browser_clients: u32,
     viewer_clients: u32,
+    recorder_clients: u32,
     max_viewers: u32,
     viewer_slots_remaining: u32,
     exclusive_browser_owner: bool,
@@ -406,6 +407,7 @@ fn session_status_from_snapshot(snapshot: SessionTelemetrySnapshot) -> SessionSt
     SessionStatus {
         browser_clients: snapshot.browser_clients,
         viewer_clients: snapshot.viewer_clients,
+        recorder_clients: snapshot.recorder_clients,
         max_viewers: snapshot.max_viewers,
         viewer_slots_remaining: snapshot.viewer_slots_remaining,
         exclusive_browser_owner: snapshot.exclusive_browser_owner,

@@ -8,7 +8,10 @@ use super::bootstrap::send_initial_frames;
 use super::egress::{spawn_agent_to_browser_task, EgressTaskContext};
 use super::ingress::spawn_browser_to_agent_task;
 use super::request::ValidatedConnectRequest;
-use super::tasks::{spawn_bitrate_hint_task, spawn_direct_control_task, spawn_gateway_pinger};
+use super::tasks::{
+    recorder_role_suppresses_bitrate_feedback, spawn_bitrate_hint_task, spawn_direct_control_task,
+    spawn_gateway_pinger,
+};
 use crate::idle_stop::schedule_idle_session_stop;
 use crate::session::Session;
 use crate::session_control::SessionStore;
@@ -27,9 +30,16 @@ pub(super) async fn handle_session(
     registry: Arc<SessionRegistry>,
 ) -> anyhow::Result<()> {
     let routed_session_id = connect_request.session_id;
-    let (client_handle, hub) = registry.join(routed_session_id, agent_socket_path).await?;
+    let (client_handle, hub) = registry
+        .join_with_role(
+            routed_session_id,
+            agent_socket_path,
+            connect_request.client_role,
+        )
+        .await?;
     let client_id = client_handle.client_id;
     let joined_as_owner = client_handle.is_owner;
+    let client_role = client_handle.client_role;
     let initial_access_state = client_handle.initial_access_state;
     let control_rx = client_handle.control_rx;
     let from_host = client_handle.from_host;
@@ -77,14 +87,6 @@ pub(super) async fn handle_session(
         from_host,
     );
 
-    let bitrate_hint_task = spawn_bitrate_hint_task(
-        session_id,
-        client_id,
-        session.clone(),
-        dgram_stats.clone(),
-        send_stream.clone(),
-    );
-
     let browser_to_agent = spawn_browser_to_agent_task(
         session.clone(),
         hub.clone(),
@@ -98,12 +100,28 @@ pub(super) async fn handle_session(
 
     let gateway_pinger = spawn_gateway_pinger(session.clone(), send_stream.clone());
 
-    tokio::select! {
-        _ = agent_to_browser => {}
-        _ = browser_to_agent => {}
-        _ = direct_control_task => {}
-        _ = gateway_pinger => {}
-        _ = bitrate_hint_task => {}
+    if recorder_role_suppresses_bitrate_feedback(client_role) {
+        tokio::select! {
+            _ = agent_to_browser => {}
+            _ = browser_to_agent => {}
+            _ = direct_control_task => {}
+            _ = gateway_pinger => {}
+        }
+    } else {
+        let bitrate_hint_task = spawn_bitrate_hint_task(
+            session_id,
+            client_id,
+            session.clone(),
+            dgram_stats.clone(),
+            send_stream.clone(),
+        );
+        tokio::select! {
+            _ = agent_to_browser => {}
+            _ = browser_to_agent => {}
+            _ = direct_control_task => {}
+            _ = gateway_pinger => {}
+            _ = bitrate_hint_task => {}
+        }
     }
 
     session.deactivate();

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::RwLock;
 use tokio::sync::{broadcast, mpsc, Mutex};
 
 use bpane_protocol::frame::Frame;
@@ -16,7 +17,7 @@ mod telemetry;
 mod types;
 
 pub use self::telemetry::SessionTelemetrySnapshot;
-pub use self::types::{ClientHandle, ResizeResult, SubscribeError};
+pub use self::types::{BrowserClientRole, ClientHandle, ResizeResult, SubscribeError};
 
 /// Broadcast channel capacity. At 30fps, 1024 frames is ~34 seconds of buffer.
 const BROADCAST_CAPACITY: usize = 1024;
@@ -33,6 +34,7 @@ pub struct SessionHub {
     exclusive_browser_owner: bool,
     current_resolution: Arc<Mutex<(u16, u16)>>,
     connected_clients: Mutex<Vec<u64>>,
+    client_roles: RwLock<HashMap<u64, BrowserClientRole>>,
     client_control_txs: Mutex<HashMap<u64, mpsc::Sender<ControlMessage>>>,
     client_counter: AtomicU64,
     client_count: AtomicU32,
@@ -100,6 +102,7 @@ impl SessionHub {
             exclusive_browser_owner,
             current_resolution,
             connected_clients: Mutex::new(Vec::new()),
+            client_roles: RwLock::new(HashMap::new()),
             client_control_txs: Mutex::new(HashMap::new()),
             client_counter: AtomicU64::new(0),
             client_count: AtomicU32::new(0),
@@ -132,7 +135,15 @@ impl SessionHub {
     /// Subscribe a new client to the hub.
     /// The first subscriber becomes the session owner.
     pub async fn subscribe(&self) -> Result<ClientHandle, SubscribeError> {
-        membership::subscribe(self).await
+        membership::subscribe(self, BrowserClientRole::Interactive).await
+    }
+
+    /// Subscribe a new client with an explicit runtime role.
+    pub async fn subscribe_with_role(
+        &self,
+        client_role: BrowserClientRole,
+    ) -> Result<ClientHandle, SubscribeError> {
+        membership::subscribe(self, client_role).await
     }
 
     /// Called when a client disconnects.
@@ -189,6 +200,10 @@ impl SessionHub {
 
     pub fn viewer_count(&self) -> u32 {
         policy::viewer_count(self)
+    }
+
+    pub fn recorder_count(&self) -> u32 {
+        policy::recorder_count(self)
     }
 
     pub async fn telemetry_snapshot(&self) -> SessionTelemetrySnapshot {

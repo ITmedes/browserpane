@@ -177,6 +177,30 @@ describe('SessionTransportRuntime', () => {
     expect(url).toMatch(/^https:\/\/localhost:4433\?session_ticket=session-ticket&_=\d+\.\w+$/);
   });
 
+  it('adds the recorder client role to the transport URL when requested', async () => {
+    const transport = createMockTransport();
+    const createTransport = vi.fn((url: string, options: WebTransportOptions) => {
+      void url;
+      void options;
+      return transport as unknown as WebTransport;
+    });
+    const { runtime } = createRuntime({
+      createTransport,
+      pingIntervalMs: 1000,
+    });
+
+    await runtime.connect({
+      gatewayUrl: 'https://localhost:4433',
+      token: 'test-token',
+      clientRole: 'recorder',
+    });
+
+    const [url] = createTransport.mock.calls[0];
+    expect(url).toMatch(
+      /^https:\/\/localhost:4433\?access_token=test-token&client_role=recorder&_=\d+\.\w+$/,
+    );
+  });
+
   it('passes server certificate hashes when fetch returns a valid hash', async () => {
     const transport = createMockTransport();
     const createTransport = vi.fn((url: string, options: WebTransportOptions) => {

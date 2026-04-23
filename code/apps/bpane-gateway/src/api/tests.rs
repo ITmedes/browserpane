@@ -83,6 +83,40 @@ fn blocking_session_stop_only_applies_to_legacy_runtime_backends() {
     ));
 }
 
+#[test]
+fn session_status_maps_recorder_clients() {
+    let status = session_status_from_snapshot(SessionTelemetrySnapshot {
+        browser_clients: 3,
+        viewer_clients: 1,
+        recorder_clients: 1,
+        max_viewers: 10,
+        viewer_slots_remaining: 9,
+        exclusive_browser_owner: false,
+        mcp_owner: false,
+        resolution: (1280, 720),
+        joins_accepted: 4,
+        joins_rejected_viewer_cap: 0,
+        last_join_latency_ms: 12,
+        average_join_latency_ms: 9.5,
+        max_join_latency_ms: 15,
+        full_refresh_requests: 1,
+        full_refresh_tiles_requested: 30,
+        last_full_refresh_tiles: 30,
+        max_full_refresh_tiles: 30,
+        egress_send_stream_lock_acquires_total: 10,
+        egress_send_stream_lock_wait_us_total: 20,
+        egress_send_stream_lock_wait_us_average: 2.0,
+        egress_send_stream_lock_wait_us_max: 6,
+        egress_lagged_receives_total: 0,
+        egress_lagged_frames_total: 0,
+    });
+
+    assert_eq!(status.browser_clients, 3);
+    assert_eq!(status.viewer_clients, 1);
+    assert_eq!(status.recorder_clients, 1);
+    assert_eq!(status.viewer_slots_remaining, 9);
+}
+
 #[tokio::test]
 async fn creates_lists_gets_and_stops_a_session_resource() {
     let (app, token) = test_router();

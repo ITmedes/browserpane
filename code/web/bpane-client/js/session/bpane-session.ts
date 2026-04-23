@@ -322,6 +322,7 @@ export class BpaneSession {
       gatewayUrl: this.options.gatewayUrl,
       connectTicket: this.options.connectTicket,
       accessToken: this.options.accessToken ?? this.options.token,
+      clientRole: this.options.clientRole,
       certHashUrl: this.options.certHashUrl,
     });
   }

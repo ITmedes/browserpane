@@ -487,6 +487,15 @@ describe('BpaneSession', () => {
       expect(opts).toEqual({});
     });
 
+    it('constructs WebTransport with recorder client role when requested', async () => {
+      await createSession({ clientRole: 'recorder' });
+      expect(globalThis.WebTransport).toHaveBeenCalledOnce();
+      const [url] = (globalThis.WebTransport as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(url).toMatch(
+        /^https:\/\/localhost:4433\?access_token=test-token&client_role=recorder&_=\d+\.\w+$/,
+      );
+    });
+
     it('removes canvas and cursor overlay on disconnect', async () => {
       const { session, container } = await createSession();
       session.disconnect();
