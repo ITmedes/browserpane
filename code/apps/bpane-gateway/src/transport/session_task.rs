@@ -10,16 +10,16 @@ use super::ingress::spawn_browser_to_agent_task;
 use super::request::ValidatedConnectRequest;
 use super::tasks::{spawn_bitrate_hint_task, spawn_direct_control_task, spawn_gateway_pinger};
 use crate::idle_stop::schedule_idle_session_stop;
-use crate::runtime_manager::SessionRuntimeManager;
 use crate::session::Session;
 use crate::session_control::SessionStore;
+use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 
 pub(super) async fn handle_session(
     connection: wtransport::Connection,
     session_id: u64,
     connect_request: ValidatedConnectRequest,
-    runtime_manager: Arc<SessionRuntimeManager>,
+    session_manager: Arc<SessionManager>,
     session_store: SessionStore,
     idle_stop_timeout: Duration,
     agent_socket_path: &str,
@@ -111,24 +111,24 @@ pub(super) async fn handle_session(
     if let Some(snapshot) = registry.telemetry_snapshot_if_live(routed_session_id).await {
         if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
             let _ = session_store.mark_session_idle(routed_session_id).await;
-            runtime_manager.mark_session_idle(routed_session_id).await;
+            session_manager.mark_session_idle(routed_session_id).await;
             schedule_idle_session_stop(
                 routed_session_id,
                 idle_stop_timeout,
                 registry.clone(),
                 session_store.clone(),
-                runtime_manager.clone(),
+                session_manager.clone(),
             );
         }
     } else {
         let _ = session_store.mark_session_idle(routed_session_id).await;
-        runtime_manager.mark_session_idle(routed_session_id).await;
+        session_manager.mark_session_idle(routed_session_id).await;
         schedule_idle_session_stop(
             routed_session_id,
             idle_stop_timeout,
             registry.clone(),
             session_store,
-            runtime_manager.clone(),
+            session_manager.clone(),
         );
     }
 
