@@ -2511,9 +2511,7 @@
       renderRecordingState();
 
       try {
-        await session.startRecording({
-          frameRate: 30,
-        });
+        await session.startRecording();
         recordingState.active = true;
         renderRecordingState();
         log(`Recording started for session ${sessionId || 'current session'}`, 'ok');

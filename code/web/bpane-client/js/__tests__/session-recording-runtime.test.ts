@@ -147,9 +147,12 @@ describe('SessionRecordingRuntime', () => {
       class {},
       { isTypeSupported },
     );
+    const createVideoStream = vi.fn(
+      () => new MockMediaStream([new MockTrack('video')]) as unknown as MediaStream,
+    );
 
     const runtime = new SessionRecordingRuntime({
-      createVideoStream: vi.fn(() => new MockMediaStream([new MockTrack('video')]) as unknown as MediaStream),
+      createVideoStream,
       getAudioStream: vi.fn(async () => new MockMediaStream([new MockTrack('audio')]) as unknown as MediaStream),
       stopVideoStream: vi.fn(),
       mediaRecorderFactory: (stream, options) => new MockMediaRecorder(
@@ -161,10 +164,11 @@ describe('SessionRecordingRuntime', () => {
 
     await runtime.start();
 
+    expect(createVideoStream).toHaveBeenCalledWith(24);
     expect(MockMediaRecorder.instances[0].options).toEqual(expect.objectContaining({
       mimeType: 'video/webm;codecs=vp9,opus',
-      videoBitsPerSecond: 3_000_000,
-      audioBitsPerSecond: 96_000,
+      videoBitsPerSecond: 2_000_000,
+      audioBitsPerSecond: 64_000,
     }));
     expect(isTypeSupported).toHaveBeenCalled();
   });
