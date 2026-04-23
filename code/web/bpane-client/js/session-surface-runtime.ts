@@ -1,6 +1,7 @@
 import type { TileInfo } from './nal.js';
 import type { CacheMissEvent } from './render/tile-draw-runtime.js';
 import { SessionCursorRuntime } from './session-cursor-runtime.js';
+import { SessionRecordingSurfaceRuntime } from './session-recording-surface-runtime.js';
 import { SessionResizeRuntime } from './session-resize-runtime.js';
 import { SessionVideoDisplayRuntime } from './session-video-display-runtime.js';
 import {
@@ -40,6 +41,7 @@ export class SessionSurfaceRuntime {
   private cursorEl: HTMLCanvasElement | null;
   private readonly cursorRuntime: SessionCursorRuntime;
   private readonly resizeRuntime: SessionResizeRuntime;
+  private readonly recordingSurfaceRuntime: SessionRecordingSurfaceRuntime;
   private readonly videoDisplayRuntime: SessionVideoDisplayRuntime;
   private glRenderer: WebGLTileRenderer | null = null;
   private renderDiagnostics: WebGLRendererDiagnostics = {
@@ -79,6 +81,10 @@ export class SessionSurfaceRuntime {
       canvas: this.canvas,
       cursorEl: this.cursorEl,
       cursorCtx,
+    });
+    this.recordingSurfaceRuntime = new SessionRecordingSurfaceRuntime({
+      sourceCanvas: this.canvas,
+      cursorCanvas: this.cursorEl,
     });
 
     if ((input.renderBackend ?? 'auto') !== 'canvas2d') {
@@ -159,6 +165,14 @@ export class SessionSurfaceRuntime {
     return this.canvas;
   }
 
+  createRecordingStream(frameRate = 30): MediaStream {
+    return this.recordingSurfaceRuntime.start(frameRate);
+  }
+
+  stopRecordingStream(): void {
+    this.recordingSurfaceRuntime.stop();
+  }
+
   getRenderDiagnostics(): WebGLRendererDiagnostics {
     return { ...this.renderDiagnostics };
   }
@@ -198,6 +212,7 @@ export class SessionSurfaceRuntime {
   }
 
   destroy(): void {
+    this.recordingSurfaceRuntime.stop();
     this.resizeRuntime.destroy();
     this.videoDisplayRuntime.destroy();
     this.cursorRuntime.reset();

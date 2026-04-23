@@ -8,6 +8,8 @@
 export type {
   BpaneOptions,
   RenderBackendPreference,
+  SessionClientRole,
+  SessionRecordingOptions,
   SessionCapabilities,
 } from './bpane-types.js';
 export { BpaneSession } from './session/bpane-session.js';

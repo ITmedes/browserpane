@@ -3,9 +3,21 @@ use std::sync::atomic::Ordering;
 use bpane_protocol::{ClientAccessFlags, ControlMessage};
 use tracing::{info, warn};
 
-use super::{ResizeResult, SessionHub};
+use super::{BrowserClientRole, ResizeResult, SessionHub};
+
+fn client_role(hub: &SessionHub, client_id: u64) -> BrowserClientRole {
+    hub.client_roles
+        .read()
+        .unwrap()
+        .get(&client_id)
+        .copied()
+        .unwrap_or(BrowserClientRole::Interactive)
+}
 
 pub(super) fn is_browser_owner(hub: &SessionHub, client_id: u64) -> bool {
+    if client_role(hub, client_id) == BrowserClientRole::Recorder {
+        return false;
+    }
     if hub.mcp_is_owner() {
         return false;
     }
@@ -17,6 +29,9 @@ pub(super) fn is_browser_owner(hub: &SessionHub, client_id: u64) -> bool {
 }
 
 pub(super) fn is_resize_owner(hub: &SessionHub, client_id: u64) -> bool {
+    if client_role(hub, client_id) == BrowserClientRole::Recorder {
+        return false;
+    }
     if hub.mcp_is_owner() {
         return false;
     }
@@ -90,19 +105,21 @@ pub(super) async fn clear_mcp_owner(hub: &SessionHub) {
 }
 
 pub(super) fn viewer_count(hub: &SessionHub) -> u32 {
-    let clients = hub.client_count();
-    if hub.mcp_is_owner() {
-        clients
-    } else if hub.exclusive_browser_owner
-        && hub.owner_id.load(Ordering::Relaxed) != 0
-        && clients > 0
-    {
-        clients.saturating_sub(1)
-    } else if hub.exclusive_browser_owner {
-        clients
-    } else {
-        0
-    }
+    let roles = hub.client_roles.read().unwrap();
+    roles
+        .iter()
+        .filter(|(_, role)| **role == BrowserClientRole::Interactive)
+        .filter(|(client_id, _)| !is_browser_owner(hub, **client_id))
+        .count() as u32
+}
+
+pub(super) fn recorder_count(hub: &SessionHub) -> u32 {
+    hub.client_roles
+        .read()
+        .unwrap()
+        .values()
+        .filter(|role| **role == BrowserClientRole::Recorder)
+        .count() as u32
 }
 
 async fn forward_resize_request(

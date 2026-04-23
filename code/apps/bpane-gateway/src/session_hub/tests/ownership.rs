@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::session_hub::BrowserClientRole;
 
 #[tokio::test]
 async fn first_subscriber_is_owner() {
@@ -179,5 +180,52 @@ async fn viewer_cap_blocks_extra_viewers() {
     let snapshot = hub.telemetry_snapshot().await;
     assert_eq!(snapshot.viewer_clients, 1);
     assert_eq!(snapshot.joins_rejected_viewer_cap, 1);
+    assert_eq!(snapshot.viewer_slots_remaining, 0);
+}
+
+#[tokio::test]
+async fn recorder_clients_stay_passive_and_do_not_consume_viewer_slots() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("test.sock");
+    let sock_str = sock.to_str().unwrap();
+
+    let _agent = mock_agent(sock_str).await;
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let hub = Arc::new(SessionHub::new(sock_str, 1, true).await.unwrap());
+
+    let owner = hub.subscribe().await.unwrap();
+    assert!(matches!(
+        hub.request_resize(owner.client_id, 1600, 900).await,
+        ResizeResult::Applied
+    ));
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let recorder = hub
+        .subscribe_with_role(BrowserClientRole::Recorder)
+        .await
+        .unwrap();
+    assert!(!recorder.is_owner);
+    assert_eq!(recorder.client_role, BrowserClientRole::Recorder);
+    assert!(!hub.is_browser_owner(recorder.client_id));
+    assert_eq!(
+        recorder.initial_access_state,
+        Some(ControlMessage::ClientAccessState {
+            flags: ClientAccessFlags::VIEW_ONLY | ClientAccessFlags::RESIZE_LOCKED,
+            width: 1600,
+            height: 900,
+        })
+    );
+
+    let viewer = hub.subscribe().await.unwrap();
+    assert!(!viewer.is_owner);
+
+    let err = hub.subscribe().await.unwrap_err();
+    assert_eq!(err, SubscribeError::ViewerLimitReached { max_viewers: 1 });
+
+    let snapshot = hub.telemetry_snapshot().await;
+    assert_eq!(snapshot.browser_clients, 3);
+    assert_eq!(snapshot.viewer_clients, 1);
+    assert_eq!(snapshot.recorder_clients, 1);
     assert_eq!(snapshot.viewer_slots_remaining, 0);
 }

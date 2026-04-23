@@ -5,6 +5,18 @@ use bpane_protocol::ControlMessage;
 use tokio::sync::{broadcast, mpsc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserClientRole {
+    Interactive,
+    Recorder,
+}
+
+impl BrowserClientRole {
+    pub fn allows_bitrate_feedback(self) -> bool {
+        matches!(self, Self::Interactive)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubscribeError {
     ViewerLimitReached { max_viewers: u32 },
 }
@@ -33,6 +45,8 @@ pub struct ClientHandle {
     /// Whether this client is the session owner (first to connect).
     /// In collaborative mode this stays `true` for interactive late joiners.
     pub is_owner: bool,
+    /// Browser client role for policy and telemetry decisions.
+    pub client_role: BrowserClientRole,
     /// Frames to send immediately on connect (cached SessionReady + last keyframe).
     pub initial_frames: Vec<Arc<Frame>>,
     /// Optional gateway-managed access state to send immediately on connect.
