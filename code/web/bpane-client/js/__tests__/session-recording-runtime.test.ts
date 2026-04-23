@@ -141,6 +141,34 @@ describe('SessionRecordingRuntime', () => {
     expect(MockMediaRecorder.instances[0].stream.getAudioTracks()).toHaveLength(0);
   });
 
+  it('uses a compressed default recording profile when no explicit options are provided', async () => {
+    const isTypeSupported = vi.fn((mimeType: string) => mimeType === 'video/webm;codecs=vp9,opus');
+    (globalThis as any).MediaRecorder = Object.assign(
+      class {},
+      { isTypeSupported },
+    );
+
+    const runtime = new SessionRecordingRuntime({
+      createVideoStream: vi.fn(() => new MockMediaStream([new MockTrack('video')]) as unknown as MediaStream),
+      getAudioStream: vi.fn(async () => new MockMediaStream([new MockTrack('audio')]) as unknown as MediaStream),
+      stopVideoStream: vi.fn(),
+      mediaRecorderFactory: (stream, options) => new MockMediaRecorder(
+        stream as unknown as MockMediaStream,
+        options,
+      ) as unknown as MediaRecorder,
+      mediaStreamFactory: (tracks) => new MockMediaStream(tracks as any[]) as unknown as MediaStream,
+    });
+
+    await runtime.start();
+
+    expect(MockMediaRecorder.instances[0].options).toEqual(expect.objectContaining({
+      mimeType: 'video/webm;codecs=vp9,opus',
+      videoBitsPerSecond: 3_000_000,
+      audioBitsPerSecond: 96_000,
+    }));
+    expect(isTypeSupported).toHaveBeenCalled();
+  });
+
   it('stops the recording tracks during destroy cleanup', async () => {
     const videoTrack = new MockTrack('video');
     const audioTrack = new MockTrack('audio');

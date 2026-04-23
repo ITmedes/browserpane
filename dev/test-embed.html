@@ -2513,8 +2513,6 @@
       try {
         await session.startRecording({
           frameRate: 30,
-          videoBitsPerSecond: 8_000_000,
-          audioBitsPerSecond: 128_000,
         });
         recordingState.active = true;
         renderRecordingState();
