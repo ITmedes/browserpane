@@ -86,8 +86,8 @@ export class SessionRecordingSurfaceRuntime {
 
   private getOutputSize(): { width: number; height: number } {
     const sourceRect = this.sourceCanvas.getBoundingClientRect();
-    const width = Math.max(1, Math.round(sourceRect.width) || this.sourceCanvas.width);
-    const height = Math.max(1, Math.round(sourceRect.height) || this.sourceCanvas.height);
+    const width = Math.max(1, this.sourceCanvas.width || Math.round(sourceRect.width));
+    const height = Math.max(1, this.sourceCanvas.height || Math.round(sourceRect.height));
     return { width, height };
   }
 }
