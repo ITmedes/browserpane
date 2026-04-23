@@ -1,5 +1,13 @@
 import type { SessionRecordingOptions } from './bpane-types.js';
 
+const DEFAULT_RECORDING_VIDEO_BITS_PER_SECOND = 3_000_000;
+const DEFAULT_RECORDING_AUDIO_BITS_PER_SECOND = 96_000;
+const PREFERRED_RECORDING_MIME_TYPES = [
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm',
+];
+
 export interface SessionRecordingRuntimeInput {
   createVideoStream: (frameRate: number) => MediaStream;
   getAudioStream: () => Promise<MediaStream | null>;
@@ -111,16 +119,28 @@ export class SessionRecordingRuntime {
 
   private buildRecorderOptions(options: SessionRecordingOptions): MediaRecorderOptions {
     const recorderOptions: MediaRecorderOptions = {};
-    if (options.mimeType) {
-      recorderOptions.mimeType = options.mimeType;
+    const preferredMimeType = options.mimeType ?? this.resolvePreferredMimeType();
+    if (preferredMimeType) {
+      recorderOptions.mimeType = preferredMimeType;
     }
-    if (typeof options.audioBitsPerSecond === 'number') {
-      recorderOptions.audioBitsPerSecond = options.audioBitsPerSecond;
-    }
-    if (typeof options.videoBitsPerSecond === 'number') {
-      recorderOptions.videoBitsPerSecond = options.videoBitsPerSecond;
-    }
+    recorderOptions.audioBitsPerSecond = typeof options.audioBitsPerSecond === 'number'
+      ? options.audioBitsPerSecond
+      : DEFAULT_RECORDING_AUDIO_BITS_PER_SECOND;
+    recorderOptions.videoBitsPerSecond = typeof options.videoBitsPerSecond === 'number'
+      ? options.videoBitsPerSecond
+      : DEFAULT_RECORDING_VIDEO_BITS_PER_SECOND;
     return recorderOptions;
+  }
+
+  private resolvePreferredMimeType(): string | undefined {
+    const supportsType = typeof MediaRecorder !== 'undefined'
+      && typeof MediaRecorder.isTypeSupported === 'function'
+      ? MediaRecorder.isTypeSupported.bind(MediaRecorder)
+      : null;
+    if (!supportsType) {
+      return undefined;
+    }
+    return PREFERRED_RECORDING_MIME_TYPES.find((mimeType) => supportsType(mimeType));
   }
 
   private reset(): void {
