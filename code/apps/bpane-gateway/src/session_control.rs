@@ -12,8 +12,9 @@ use tokio_postgres::{Client, Connection, NoTls, Row, Socket};
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
-use crate::runtime_manager::{
-    PersistedRuntimeAssignment, RuntimeAssignmentStatus, RuntimeProfile, RuntimeSessionAccessInfo,
+use crate::session_manager::{
+    PersistedSessionRuntimeAssignment, SessionManagerProfile, SessionRuntimeAccess,
+    SessionRuntimeAssignmentStatus,
 };
 
 const DEFAULT_VIEWPORT_WIDTH: u16 = 1600;
@@ -173,8 +174,8 @@ pub struct SessionRuntimeInfo {
     pub cdp_endpoint: Option<String>,
 }
 
-impl From<RuntimeSessionAccessInfo> for SessionRuntimeInfo {
-    fn from(value: RuntimeSessionAccessInfo) -> Self {
+impl From<SessionRuntimeAccess> for SessionRuntimeInfo {
+    fn from(value: SessionRuntimeAccess) -> Self {
         Self {
             binding: value.binding,
             compatibility_mode: value.compatibility_mode,
@@ -329,8 +330,8 @@ enum SessionStoreBackend {
     Postgres(Arc<PostgresSessionStore>),
 }
 
-impl From<RuntimeProfile> for SessionStoreConfig {
-    fn from(runtime_profile: RuntimeProfile) -> Self {
+impl From<SessionManagerProfile> for SessionStoreConfig {
+    fn from(runtime_profile: SessionManagerProfile) -> Self {
         Self {
             runtime_binding: runtime_profile.runtime_binding,
             max_runtime_candidates: runtime_profile.max_runtime_sessions,
@@ -339,8 +340,8 @@ impl From<RuntimeProfile> for SessionStoreConfig {
 }
 
 #[cfg(test)]
-fn legacy_runtime_profile() -> RuntimeProfile {
-    RuntimeProfile {
+fn legacy_runtime_profile() -> SessionManagerProfile {
+    SessionManagerProfile {
         runtime_binding: "legacy_single_session".to_string(),
         compatibility_mode: "legacy_single_runtime".to_string(),
         max_runtime_sessions: 1,
@@ -354,7 +355,7 @@ impl SessionStore {
         Self::in_memory_with_config(legacy_runtime_profile())
     }
 
-    pub fn in_memory_with_config(runtime_profile: RuntimeProfile) -> Self {
+    pub fn in_memory_with_config(runtime_profile: SessionManagerProfile) -> Self {
         Self {
             backend: SessionStoreBackend::InMemory(Arc::new(InMemorySessionStore {
                 sessions: Mutex::new(Vec::new()),
@@ -366,7 +367,7 @@ impl SessionStore {
 
     pub async fn from_database_url_with_config(
         database_url: &str,
-        runtime_profile: RuntimeProfile,
+        runtime_profile: SessionManagerProfile,
     ) -> Result<Self, SessionStoreError> {
         let (client, connection) = connect_to_postgres_with_retry(database_url).await?;
         tokio::spawn(async move {
@@ -573,7 +574,7 @@ impl SessionStore {
 
     pub async fn upsert_runtime_assignment(
         &self,
-        assignment: PersistedRuntimeAssignment,
+        assignment: PersistedSessionRuntimeAssignment,
     ) -> Result<(), SessionStoreError> {
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
@@ -595,7 +596,7 @@ impl SessionStore {
     pub async fn list_runtime_assignments(
         &self,
         runtime_binding: &str,
-    ) -> Result<Vec<PersistedRuntimeAssignment>, SessionStoreError> {
+    ) -> Result<Vec<PersistedSessionRuntimeAssignment>, SessionStoreError> {
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.list_runtime_assignments(runtime_binding).await
@@ -688,7 +689,7 @@ fn validate_automation_delegate_request(
 
 struct InMemorySessionStore {
     sessions: Mutex<Vec<StoredSession>>,
-    runtime_assignments: Mutex<HashMap<Uuid, PersistedRuntimeAssignment>>,
+    runtime_assignments: Mutex<HashMap<Uuid, PersistedSessionRuntimeAssignment>>,
     config: SessionStoreConfig,
 }
 
@@ -957,7 +958,7 @@ impl InMemorySessionStore {
 
     async fn upsert_runtime_assignment(
         &self,
-        assignment: PersistedRuntimeAssignment,
+        assignment: PersistedSessionRuntimeAssignment,
     ) -> Result<(), SessionStoreError> {
         self.runtime_assignments
             .lock()
@@ -974,7 +975,7 @@ impl InMemorySessionStore {
     async fn list_runtime_assignments(
         &self,
         runtime_binding: &str,
-    ) -> Result<Vec<PersistedRuntimeAssignment>, SessionStoreError> {
+    ) -> Result<Vec<PersistedSessionRuntimeAssignment>, SessionStoreError> {
         let assignments = self.runtime_assignments.lock().await;
         let mut values = assignments
             .values()
@@ -1778,7 +1779,7 @@ impl PostgresSessionStore {
 
     async fn upsert_runtime_assignment(
         &self,
-        assignment: PersistedRuntimeAssignment,
+        assignment: PersistedSessionRuntimeAssignment,
     ) -> Result<(), SessionStoreError> {
         self.client
             .lock()
@@ -1839,7 +1840,7 @@ impl PostgresSessionStore {
     async fn list_runtime_assignments(
         &self,
         runtime_binding: &str,
-    ) -> Result<Vec<PersistedRuntimeAssignment>, SessionStoreError> {
+    ) -> Result<Vec<PersistedSessionRuntimeAssignment>, SessionStoreError> {
         let rows = self
             .client
             .lock()
@@ -2004,12 +2005,14 @@ fn row_to_stored_session(row: &Row) -> Result<StoredSession, SessionStoreError> 
     })
 }
 
-fn row_to_runtime_assignment(row: &Row) -> Result<PersistedRuntimeAssignment, SessionStoreError> {
+fn row_to_runtime_assignment(
+    row: &Row,
+) -> Result<PersistedSessionRuntimeAssignment, SessionStoreError> {
     let status = row
         .get::<_, String>("status")
-        .parse::<RuntimeAssignmentStatus>()
+        .parse::<SessionRuntimeAssignmentStatus>()
         .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
-    Ok(PersistedRuntimeAssignment {
+    Ok(PersistedSessionRuntimeAssignment {
         session_id: row.get("session_id"),
         runtime_binding: row.get("runtime_binding"),
         status,
@@ -2126,7 +2129,7 @@ mod tests {
 
     #[tokio::test]
     async fn in_memory_store_respects_runtime_pool_capacity() {
-        let store = SessionStore::in_memory_with_config(RuntimeProfile {
+        let store = SessionStore::in_memory_with_config(SessionManagerProfile {
             runtime_binding: "docker_runtime_pool".to_string(),
             compatibility_mode: "session_runtime_pool".to_string(),
             max_runtime_sessions: 2,
@@ -2330,7 +2333,7 @@ mod tests {
 
     #[tokio::test]
     async fn reconnect_prep_respects_runtime_pool_capacity() {
-        let store = SessionStore::in_memory_with_config(RuntimeProfile {
+        let store = SessionStore::in_memory_with_config(SessionManagerProfile {
             runtime_binding: "docker_runtime_pool".to_string(),
             compatibility_mode: "session_runtime_pool".to_string(),
             max_runtime_sessions: 1,
@@ -2393,7 +2396,7 @@ mod tests {
 
     #[tokio::test]
     async fn in_memory_store_persists_runtime_assignments_and_can_clear_them() {
-        let store = SessionStore::in_memory_with_config(RuntimeProfile {
+        let store = SessionStore::in_memory_with_config(SessionManagerProfile {
             runtime_binding: "docker_runtime_pool".to_string(),
             compatibility_mode: "session_runtime_pool".to_string(),
             max_runtime_sessions: 2,
@@ -2417,10 +2420,10 @@ mod tests {
             .unwrap();
 
         store
-            .upsert_runtime_assignment(PersistedRuntimeAssignment {
+            .upsert_runtime_assignment(PersistedSessionRuntimeAssignment {
                 session_id: session.id,
                 runtime_binding: "docker_runtime_pool".to_string(),
-                status: RuntimeAssignmentStatus::Ready,
+                status: SessionRuntimeAssignmentStatus::Ready,
                 agent_socket_path: format!("/run/bpane/sessions/{}.sock", session.id),
                 container_name: Some(format!("bpane-runtime-{}", session.id.as_simple())),
                 cdp_endpoint: Some(format!(
@@ -2437,7 +2440,7 @@ mod tests {
             .unwrap();
         assert_eq!(assignments.len(), 1);
         assert_eq!(assignments[0].session_id, session.id);
-        assert_eq!(assignments[0].status, RuntimeAssignmentStatus::Ready);
+        assert_eq!(assignments[0].status, SessionRuntimeAssignmentStatus::Ready);
 
         store.clear_runtime_assignment(session.id).await.unwrap();
         assert!(store

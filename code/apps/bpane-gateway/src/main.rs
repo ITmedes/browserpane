@@ -8,6 +8,7 @@ mod runtime_manager;
 mod session;
 mod session_control;
 mod session_hub;
+mod session_manager;
 mod session_registry;
 mod transport;
 
@@ -23,8 +24,8 @@ use wtransport::Identity;
 use auth::{AuthValidator, OidcConfig};
 use config::Config;
 use connect_ticket::SessionConnectTicketManager;
-use runtime_manager::{DockerRuntimeConfig, RuntimeManagerConfig, SessionRuntimeManager};
 use session_control::{SessionOwnerMode, SessionStore};
+use session_manager::{SessionManager, SessionManagerConfig, SessionManagerDockerConfig};
 use session_registry::SessionRegistry;
 use transport::TransportServer;
 
@@ -112,14 +113,14 @@ async fn main() -> anyhow::Result<()> {
     ));
 
     let agent_socket_str = config.agent_socket.to_str().unwrap().to_string();
-    let runtime_manager = Arc::new(SessionRuntimeManager::new(
+    let session_manager = Arc::new(SessionManager::new(
         match config.runtime_backend.as_str() {
-            "static_single" => RuntimeManagerConfig::StaticSingle {
+            "static_single" => SessionManagerConfig::StaticSingle {
                 agent_socket_path: agent_socket_str,
                 cdp_endpoint: config.runtime_cdp_endpoint.clone(),
                 idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
             },
-            "docker_single" => RuntimeManagerConfig::DockerSingle(DockerRuntimeConfig {
+            "docker_single" => SessionManagerConfig::DockerSingle(SessionManagerDockerConfig {
                 docker_bin: config.docker_runtime_bin.clone(),
                 image: config.docker_runtime_image.clone().ok_or_else(|| {
                     anyhow::anyhow!(
@@ -147,7 +148,7 @@ async fn main() -> anyhow::Result<()> {
                 seccomp_unconfined: config.docker_runtime_seccomp_unconfined,
                 env_file: config.docker_runtime_env_file.clone(),
             }),
-            "docker_pool" => RuntimeManagerConfig::DockerPool(DockerRuntimeConfig {
+            "docker_pool" => SessionManagerConfig::DockerPool(SessionManagerDockerConfig {
                 docker_bin: config.docker_runtime_bin.clone(),
                 image: config.docker_runtime_image.clone().ok_or_else(|| {
                     anyhow::anyhow!(
@@ -181,22 +182,22 @@ async fn main() -> anyhow::Result<()> {
 
     let session_store = if let Some(database_url) = &config.database_url {
         info!("using postgres-backed session control store");
-        SessionStore::from_database_url_with_config(database_url, runtime_manager.profile().clone())
+        SessionStore::from_database_url_with_config(database_url, session_manager.profile().clone())
             .await?
     } else {
         warn!("no --database-url configured; /api/v1 sessions will use an in-memory store");
-        SessionStore::in_memory_with_config(runtime_manager.profile().clone())
+        SessionStore::in_memory_with_config(session_manager.profile().clone())
     };
 
-    runtime_manager
+    session_manager
         .attach_session_store(session_store.clone())
         .await;
-    runtime_manager.reconcile_persisted_state().await?;
+    session_manager.reconcile_persisted_state().await?;
 
     let server = TransportServer::new(
         bind_addr,
         identity,
-        runtime_manager.clone(),
+        session_manager.clone(),
         auth_validator.clone(),
         connect_ticket_manager.clone(),
         session_store.clone(),
@@ -223,7 +224,7 @@ async fn main() -> anyhow::Result<()> {
             auth_validator,
             connect_ticket_manager,
             session_store,
-            runtime_manager,
+            session_manager,
             Duration::from_secs(config.runtime_idle_timeout_secs),
             config.public_gateway_url,
             if config.exclusive_browser_owner {
