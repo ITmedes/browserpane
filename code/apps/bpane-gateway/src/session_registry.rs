@@ -6,7 +6,7 @@ use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::session_hub::SessionTelemetrySnapshot;
-use crate::session_hub::{ClientHandle, SessionHub};
+use crate::session_hub::{BrowserClientRole, ClientHandle, SessionHub};
 
 /// Maps agent socket paths to active SessionHubs.
 ///
@@ -106,10 +106,27 @@ impl SessionRegistry {
         session_id: Uuid,
         agent_socket_path: &str,
     ) -> anyhow::Result<(ClientHandle, Arc<SessionHub>)> {
+        self.join_with_role(
+            session_id,
+            agent_socket_path,
+            BrowserClientRole::Interactive,
+        )
+        .await
+    }
+
+    pub async fn join_with_role(
+        &self,
+        session_id: Uuid,
+        agent_socket_path: &str,
+        client_role: BrowserClientRole,
+    ) -> anyhow::Result<(ClientHandle, Arc<SessionHub>)> {
         let (hub, created) = self
             .get_or_create_hub(session_id, agent_socket_path)
             .await?;
-        let handle = hub.subscribe().await.map_err(anyhow::Error::from)?;
+        let handle = hub
+            .subscribe_with_role(client_role)
+            .await
+            .map_err(anyhow::Error::from)?;
 
         if created {
             debug!(
@@ -120,6 +137,7 @@ impl SessionRegistry {
             debug!(
                 client_id = handle.client_id,
                 is_owner = handle.is_owner,
+                ?client_role,
                 clients = hub.client_count(),
                 "client joined existing session"
             );

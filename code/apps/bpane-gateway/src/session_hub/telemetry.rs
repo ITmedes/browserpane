@@ -7,6 +7,7 @@ use super::SessionHub;
 pub struct SessionTelemetrySnapshot {
     pub browser_clients: u32,
     pub viewer_clients: u32,
+    pub recorder_clients: u32,
     pub max_viewers: u32,
     pub viewer_slots_remaining: u32,
     pub exclusive_browser_owner: bool,
@@ -32,6 +33,7 @@ pub struct SessionTelemetrySnapshot {
 pub(super) fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelemetrySnapshot {
     let browser_clients = hub.client_count();
     let viewer_clients = hub.viewer_count();
+    let recorder_clients = hub.recorder_count();
     let joins_accepted = hub.joins_accepted.load(Ordering::Relaxed);
     let total_join_latency_ms = hub.total_join_latency_ms.load(Ordering::Relaxed);
     let egress_send_stream_lock_acquires_total = hub
@@ -44,6 +46,7 @@ pub(super) fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelem
     SessionTelemetrySnapshot {
         browser_clients,
         viewer_clients,
+        recorder_clients,
         max_viewers: hub.max_viewers,
         viewer_slots_remaining: hub.max_viewers.saturating_sub(viewer_clients),
         exclusive_browser_owner: hub.exclusive_browser_owner,

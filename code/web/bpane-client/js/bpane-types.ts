@@ -1,4 +1,5 @@
 export type RenderBackendPreference = 'auto' | 'canvas2d' | 'webgl2';
+export type SessionClientRole = 'interactive' | 'recorder';
 
 export interface BpaneOptions {
   container: HTMLElement;
@@ -9,6 +10,8 @@ export interface BpaneOptions {
   connectTicket?: string;
   /** Legacy dev-token compatibility path. Prefer `accessToken`. */
   token?: string;
+  /** Optional browser client role for gateway policy decisions. */
+  clientRole?: SessionClientRole;
   hiDpi?: boolean;
   audio?: boolean;
   microphone?: boolean;
@@ -34,4 +37,11 @@ export interface SessionCapabilities {
   camera: boolean;
   fileTransfer: boolean;
   keyboardLayout: boolean;
+}
+
+export interface SessionRecordingOptions {
+  frameRate?: number;
+  mimeType?: string;
+  videoBitsPerSecond?: number;
+  audioBitsPerSecond?: number;
 }

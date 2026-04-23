@@ -40,6 +40,11 @@
       overflow: hidden;
     }
 
+    body.browser-only {
+      padding: 0;
+      background: #02060d;
+    }
+
     button,
     select,
     input {
@@ -93,11 +98,21 @@
       height: calc(100vh - 36px);
     }
 
+    body.browser-only .app-shell {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+      height: 100vh;
+    }
+
     .workspace {
       min-width: 0;
       display: flex;
       flex-direction: column;
       gap: 14px;
+    }
+
+    body.browser-only .workspace {
+      gap: 0;
     }
 
     .workspace-header,
@@ -235,6 +250,15 @@
       box-shadow: var(--shadow);
     }
 
+    body.browser-only .browser-panel {
+      gap: 0;
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      background: #000;
+      box-shadow: none;
+    }
+
     #desktop-container {
       flex: 1;
       min-height: 420px;
@@ -245,6 +269,12 @@
         #000;
       border: 1px solid rgba(196, 213, 244, 0.08);
       position: relative;
+    }
+
+    body.browser-only #desktop-container {
+      min-height: 100vh;
+      border: none;
+      border-radius: 0;
     }
 
     #desktop-container canvas {
@@ -300,6 +330,12 @@
     .info-bar > span {
       flex: 0 0 auto;
       white-space: nowrap;
+    }
+
+    body.browser-only .workspace-header,
+    body.browser-only .sidebar,
+    body.browser-only .info-bar {
+      display: none;
     }
 
     .sidebar {
@@ -567,6 +603,89 @@
       background: rgba(18, 31, 54, 0.76);
     }
 
+    .recording-library {
+      display: grid;
+      gap: 12px;
+      padding-top: 4px;
+    }
+
+    .recording-library-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .recording-library-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .recording-library-card,
+    .recording-library-empty {
+      padding: 12px 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(16, 27, 46, 0.74);
+    }
+
+    .recording-library-card {
+      display: grid;
+      gap: 10px;
+    }
+
+    .recording-library-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .recording-library-title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .recording-library-title strong {
+      color: #eef4ff;
+      font-size: 13px;
+      line-height: 1.35;
+      word-break: break-all;
+    }
+
+    .recording-library-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      color: #c5d3eb;
+    }
+
+    .recording-library-meta span {
+      padding: 6px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(137, 161, 201, 0.12);
+      background: rgba(18, 31, 54, 0.76);
+    }
+
+    .recording-library-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .recording-library-empty {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
     .panel-logs {
       min-height: 300px;
       flex: 1;
@@ -692,6 +811,7 @@
       <nav class="control-nav" aria-label="Console navigation">
         <a class="nav-link" href="#panel-sessions">Sessions</a>
         <a class="nav-link" href="#panel-display">Display</a>
+        <a class="nav-link" href="#panel-recording">Recording</a>
         <a class="nav-link" href="#panel-metrics">Metrics</a>
         <a class="nav-link" href="#panel-logs">Logs</a>
       </nav>
@@ -788,6 +908,78 @@
         </div>
       </section>
 
+      <section class="panel" id="panel-recording">
+        <div class="panel-header">
+          <div class="panel-heading">
+            <span class="panel-title">Recording</span>
+            <h2>Capture the composed session output</h2>
+            <p class="panel-copy">
+              Records the exact BrowserPane surface you see here: tile composition, ROI video,
+              cursor overlay, and desktop audio. The artifact stays local and is saved as WebM.
+            </p>
+          </div>
+        </div>
+
+        <div id="recording-note" class="helper-note info">
+          Connect to a session first, then start a local recording from the composed browser view.
+        </div>
+
+        <div class="metrics-grid">
+          <span id="recording-status">Recording: idle</span>
+          <span id="recording-session">Session: --</span>
+          <span id="recording-file">Artifact: --</span>
+        </div>
+
+        <label class="toggle-card">
+          <input type="checkbox" id="recording-autodownload-toggle" checked>
+          <span class="toggle-body">
+            <span class="toggle-text">
+              <strong>Auto Download</strong>
+              <small>Download the WebM automatically as soon as recording stops.</small>
+            </span>
+            <span class="toggle-visual" aria-hidden="true"></span>
+          </span>
+        </label>
+
+        <div class="action-grid tool-grid">
+          <button id="btn-recording-start" disabled>Start Recording</button>
+          <button id="btn-recording-stop" disabled>Stop & Save WebM</button>
+          <button id="btn-recording-download" disabled>Download Last WebM</button>
+        </div>
+
+        <div class="recording-library">
+          <div class="recording-library-header">
+            <div class="panel-heading">
+              <span class="panel-title">Recording Library</span>
+              <p class="panel-copy">
+                Download retained control-plane recording segments for the selected session, or
+                fetch the current session export bundle built from those segments.
+              </p>
+            </div>
+            <button id="btn-recording-library-refresh" disabled>Refresh Library</button>
+          </div>
+
+          <div id="recording-library-note" class="helper-note info">
+            Select a session to inspect persisted recording segments and the session export bundle.
+          </div>
+
+          <div class="metrics-grid">
+            <span id="recording-library-status">Library: --</span>
+            <span id="recording-playback-status">Playback Export: --</span>
+          </div>
+
+          <div class="action-grid">
+            <button id="btn-recording-playback-download" disabled>Download Session Export</button>
+          </div>
+
+          <div id="recording-library-list" class="recording-library-list">
+            <div class="recording-library-empty">
+              No control-plane recordings loaded yet.
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel metrics-panel" id="panel-metrics">
         <div class="metrics-header">
           <div class="panel-heading">
@@ -838,10 +1030,20 @@
     const { BpaneSession } = await import(SDK_PATH);
 
     // ── Config ──────────────────────────────────────────────────────
+    const pageParams = new URLSearchParams(window.location.search);
     const GATEWAY_HOST = location.hostname || 'localhost';
     const GATEWAY_PORT = 4433;
     const GATEWAY_URL = `https://${GATEWAY_HOST}:${GATEWAY_PORT}`;
     const SESSION_API_URL = '/api/v1/sessions';
+    const LAYOUT_MODE = pageParams.get('layout')?.toLowerCase() === 'browser-only'
+      ? 'browser-only'
+      : 'console';
+    const DEFAULT_CLIENT_ROLE = pageParams.get('client_role')?.toLowerCase() === 'recorder'
+      ? 'recorder'
+      : 'interactive';
+    if (LAYOUT_MODE === 'browser-only') {
+      document.body.classList.add('browser-only');
+    }
 
     // ── DOM refs ────────────────────────────────────────────────────
     const container = document.getElementById('desktop-container');
@@ -872,6 +1074,20 @@
     const metricsStopBtn = document.getElementById('btn-metrics-stop');
     const metricsCopyBtn = document.getElementById('btn-metrics-copy');
     const metricsResetBtn = document.getElementById('btn-metrics-reset');
+    const recordingStartBtn = document.getElementById('btn-recording-start');
+    const recordingStopBtn = document.getElementById('btn-recording-stop');
+    const recordingDownloadBtn = document.getElementById('btn-recording-download');
+    const recordingAutoDownloadToggle = document.getElementById('recording-autodownload-toggle');
+    const recordingStatusEl = document.getElementById('recording-status');
+    const recordingSessionEl = document.getElementById('recording-session');
+    const recordingFileEl = document.getElementById('recording-file');
+    const recordingNoteEl = document.getElementById('recording-note');
+    const recordingLibraryRefreshBtn = document.getElementById('btn-recording-library-refresh');
+    const recordingLibraryNoteEl = document.getElementById('recording-library-note');
+    const recordingLibraryStatusEl = document.getElementById('recording-library-status');
+    const recordingPlaybackStatusEl = document.getElementById('recording-playback-status');
+    const recordingPlaybackDownloadBtn = document.getElementById('btn-recording-playback-download');
+    const recordingLibraryListEl = document.getElementById('recording-library-list');
     const loginBtn = document.getElementById('btn-login');
     const logoutBtn = document.getElementById('btn-logout');
     const renderBackendSelect = document.getElementById('render-backend-select');
@@ -938,6 +1154,37 @@
     function formatRate(bytesPerSec) {
       if (!Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return '0 B/s';
       return `${formatBytes(bytesPerSec)}/s`;
+    }
+
+    function formatTimestamp(value) {
+      if (!value) return '--';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '--';
+      return date.toLocaleString();
+    }
+
+    function formatTerminationReason(reason) {
+      if (!reason) return '--';
+      return String(reason)
+        .split('_')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    }
+
+    function parseContentDispositionFilename(value) {
+      if (!value) {
+        return '';
+      }
+      const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(value);
+      if (utf8Match?.[1]) {
+        try {
+          return decodeURIComponent(utf8Match[1]);
+        } catch {
+          return utf8Match[1];
+        }
+      }
+      const plainMatch = /filename="?([^"]+)"?/i.exec(value);
+      return plainMatch?.[1] ?? '';
     }
 
     function topChannelRates(curr, prev, dtSec) {
@@ -1456,7 +1703,8 @@
       const shortId = getShortSessionId(resource.id);
       const state = resource.state ?? 'unknown';
       const suffix = resource.id === mcpBridgeState.controlSessionId ? ' · MCP delegated' : '';
-      return `Session: ${shortId} (${state})${suffix}`;
+      const clientRole = currentClientRole === 'recorder' ? ' · recorder' : '';
+      return `Session: ${shortId} (${state})${suffix}${clientRole}`;
     }
 
     function supportsLocalMcpDelegation(resource) {
@@ -1466,6 +1714,8 @@
     function renderSessionState() {
       sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
       renderMcpDelegationState();
+      renderRecordingState();
+      renderRecordingCatalogState();
     }
 
     function isJoinableSession(resource) {
@@ -1488,7 +1738,23 @@
       ) ?? null;
       controlSessionState.resource = selected;
       renderSessionState();
+      void refreshRecordingCatalogForSelectedSession({ force: false, silent: true }).catch((error) => {
+        log(`Recording library refresh failed: ${error.message}`, 'error');
+      });
       return selected;
+    }
+
+    function cloneValue(value) {
+      return value ? JSON.parse(JSON.stringify(value)) : value;
+    }
+
+    function setSelectedSessionId(sessionId) {
+      const nextSessionId = typeof sessionId === 'string' ? sessionId : '';
+      controlSessionState.selectedSessionId = nextSessionId;
+      if (sessionSelect.value !== nextSessionId) {
+        sessionSelect.value = nextSessionId;
+      }
+      return syncSelectedSessionResource();
     }
 
     function renderSessionPicker() {
@@ -1740,6 +2006,7 @@
       controlSessionState.resource = null;
       controlSessionState.resources = [];
       controlSessionState.selectedSessionId = '';
+      clearRecordingCatalogState();
       stopMcpBridgePolling({ clearState: true });
       sessionStorage.removeItem(AUTH_STORAGE_KEY);
       renderSessionState();
@@ -2018,6 +2285,10 @@
         body: JSON.stringify({
           owner_mode: 'collaborative',
           idle_timeout_sec: 300,
+          recording: {
+            mode: 'manual',
+            format: 'webm',
+          },
           integration_context: {
             source: 'test-embed',
             origin: window.location.origin,
@@ -2294,6 +2565,7 @@
 
     // ── Session state ───────────────────────────────────────────────
     let session = null;
+    let currentClientRole = DEFAULT_CLIENT_ROLE;
     const liveState = {
       frameInterval: null,
       lastFrameCount: 0,
@@ -2318,13 +2590,526 @@
       maxBatchCommands: 0,
       lastObservedBatchCount: 0,
     };
+    const recordingState = {
+      active: false,
+      startedAtMs: 0,
+      lastBlob: null,
+      lastFilename: '',
+      autoDownload: true,
+    };
+    const recordingCatalogState = {
+      sessionId: '',
+      recordings: [],
+      playback: null,
+      loading: false,
+      loaded: false,
+      error: '',
+      downloadingRecordingId: '',
+      downloadingPlayback: false,
+      requestId: 0,
+    };
 
-    async function connect(mode = 'selected') {
+    function makeRecordingFilename(sessionId) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const sessionLabel = sessionId ? getShortSessionId(sessionId) : 'session';
+      return `browserpane-${sessionLabel}-${stamp}.webm`;
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    async function downloadAuthenticatedArtifact(accessToken, path, fallbackFilename) {
+      const response = await fetch(path, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      const blob = await response.blob();
+      const filename = parseContentDispositionFilename(response.headers.get('content-disposition'))
+        || fallbackFilename;
+      downloadBlob(blob, filename);
+      return {
+        filename,
+        bytes: blob.size,
+        mimeType: response.headers.get('content-type') ?? blob.type ?? '',
+      };
+    }
+
+    async function fetchSessionRecordings(accessToken, sessionId) {
+      const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(sessionId)}/recordings`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      const payload = await response.json();
+      return Array.isArray(payload?.recordings) ? payload.recordings : [];
+    }
+
+    async function fetchSessionPlayback(accessToken, sessionId) {
+      const response = await fetch(
+        `${SESSION_API_URL}/${encodeURIComponent(sessionId)}/recording-playback`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+          },
+          cache: 'no-store',
+        },
+      );
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      return await response.json();
+    }
+
+    function clearRecordingCatalogState(sessionId = '') {
+      recordingCatalogState.requestId += 1;
+      recordingCatalogState.sessionId = sessionId;
+      recordingCatalogState.recordings = [];
+      recordingCatalogState.playback = null;
+      recordingCatalogState.loading = false;
+      recordingCatalogState.loaded = false;
+      recordingCatalogState.error = '';
+      recordingCatalogState.downloadingRecordingId = '';
+      recordingCatalogState.downloadingPlayback = false;
+      renderRecordingCatalogState();
+    }
+
+    function buildRecordingCard(recording) {
+      const card = document.createElement('article');
+      card.className = 'recording-library-card';
+
+      const header = document.createElement('div');
+      header.className = 'recording-library-card-header';
+
+      const title = document.createElement('div');
+      title.className = 'recording-library-title';
+      title.textContent = `Segment ${getShortSessionId(recording.id)}`;
+      header.appendChild(title);
+
+      const stateBadge = document.createElement('span');
+      stateBadge.className = 'metric-badge';
+      stateBadge.textContent = recording.state ?? 'unknown';
+      header.appendChild(stateBadge);
+      card.appendChild(header);
+
+      const meta = document.createElement('div');
+      meta.className = 'recording-library-meta';
+      const metaItems = [
+        `Started: ${formatTimestamp(recording.started_at)}`,
+        `Completed: ${formatTimestamp(recording.completed_at)}`,
+        `Duration: ${formatDuration(recording.duration_ms ?? 0)}`,
+        `Size: ${formatBytes(recording.bytes ?? 0)}`,
+        `Termination: ${formatTerminationReason(recording.termination_reason)}`,
+      ];
+      if (recording.previous_recording_id) {
+        metaItems.push(`Previous: ${getShortSessionId(recording.previous_recording_id)}`);
+      }
+      if (recording.error) {
+        metaItems.push(`Error: ${recording.error}`);
+      }
+      for (const item of metaItems) {
+        const chip = document.createElement('span');
+        chip.textContent = item;
+        meta.appendChild(chip);
+      }
+      card.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'recording-library-actions';
+      const downloadBtn = document.createElement('button');
+      downloadBtn.type = 'button';
+      downloadBtn.dataset.action = 'download-recording';
+      downloadBtn.dataset.recordingId = recording.id;
+      downloadBtn.textContent = recordingCatalogState.downloadingRecordingId === recording.id
+        ? 'Downloading...'
+        : 'Download Segment';
+      downloadBtn.disabled = !recording.artifact_available
+        || Boolean(recordingCatalogState.downloadingRecordingId)
+        || recordingCatalogState.downloadingPlayback;
+      if (!recording.artifact_available) {
+        downloadBtn.textContent = recording.state === 'ready' ? 'Artifact Unavailable' : 'Artifact Pending';
+      }
+      actions.appendChild(downloadBtn);
+      card.appendChild(actions);
+
+      return card;
+    }
+
+    function renderRecordingCatalogState() {
+      const selectedSessionId = controlSessionState.resource?.id ?? '';
+      const canManageSessions = authState.config?.mode === 'oidc' && Boolean(authState.tokens?.access_token);
+      const playback = recordingCatalogState.playback;
+      const hasPlayableExport = (playback?.included_segment_count ?? 0) > 0;
+
+      recordingLibraryRefreshBtn.disabled = !canManageSessions || !selectedSessionId || recordingCatalogState.loading;
+      recordingPlaybackDownloadBtn.disabled = !canManageSessions
+        || !selectedSessionId
+        || !hasPlayableExport
+        || recordingCatalogState.loading
+        || recordingCatalogState.downloadingPlayback
+        || Boolean(recordingCatalogState.downloadingRecordingId);
+      recordingPlaybackDownloadBtn.textContent = recordingCatalogState.downloadingPlayback
+        ? 'Downloading Export...'
+        : 'Download Session Export (.zip)';
+
+      if (!canManageSessions) {
+        recordingLibraryNoteEl.className = 'helper-note info';
+        recordingLibraryNoteEl.textContent = 'Login first to inspect retained session recordings.';
+        recordingLibraryStatusEl.textContent = 'Library: login required';
+        recordingPlaybackStatusEl.textContent = 'Playback Export: login required';
+        recordingLibraryListEl.innerHTML =
+          '<div class="recording-library-empty">Login first to load retained recordings.</div>';
+        return;
+      }
+
+      if (!selectedSessionId) {
+        recordingLibraryNoteEl.className = 'helper-note info';
+        recordingLibraryNoteEl.textContent =
+          'Select a session to inspect persisted recording segments and the session export bundle.';
+        recordingLibraryStatusEl.textContent = 'Library: no session selected';
+        recordingPlaybackStatusEl.textContent = 'Playback Export: --';
+        recordingLibraryListEl.innerHTML =
+          '<div class="recording-library-empty">Select a session to load retained recordings.</div>';
+        return;
+      }
+
+      if (recordingCatalogState.loading) {
+        recordingLibraryNoteEl.className = 'helper-note info';
+        recordingLibraryNoteEl.textContent =
+          `Loading retained recordings for session ${getShortSessionId(selectedSessionId)}...`;
+      } else if (recordingCatalogState.error) {
+        recordingLibraryNoteEl.className = 'helper-note warn';
+        recordingLibraryNoteEl.textContent = `Recording library failed to load: ${recordingCatalogState.error}`;
+      } else if (!recordingCatalogState.loaded) {
+        recordingLibraryNoteEl.className = 'helper-note info';
+        recordingLibraryNoteEl.textContent =
+          'Refresh the library to inspect retained recording segments and the session export bundle.';
+      } else if (recordingCatalogState.recordings.length === 0) {
+        recordingLibraryNoteEl.className = 'helper-note info';
+        recordingLibraryNoteEl.textContent =
+          'No retained recording segments exist for the selected session yet.';
+      } else {
+        recordingLibraryNoteEl.className = 'helper-note ok';
+        recordingLibraryNoteEl.textContent =
+          `Loaded ${recordingCatalogState.recordings.length} retained recording segment${recordingCatalogState.recordings.length === 1 ? '' : 's'} for session ${getShortSessionId(selectedSessionId)}.`;
+      }
+
+      if (recordingCatalogState.loading) {
+        recordingLibraryStatusEl.textContent = 'Library: loading...';
+      } else {
+        const count = recordingCatalogState.recordings.length;
+        recordingLibraryStatusEl.textContent = recordingCatalogState.loaded
+          ? `Library: ${count} segment${count === 1 ? '' : 's'}`
+          : 'Library: idle';
+      }
+
+      if (!playback) {
+        recordingPlaybackStatusEl.textContent = 'Playback Export: --';
+      } else {
+        recordingPlaybackStatusEl.textContent =
+          `Playback Export: ${playback.state} · ${playback.included_segment_count}/${playback.segment_count} segments · ${formatBytes(playback.included_bytes)}`;
+      }
+
+      recordingLibraryListEl.innerHTML = '';
+      if (!recordingCatalogState.recordings.length) {
+        const empty = document.createElement('div');
+        empty.className = 'recording-library-empty';
+        empty.textContent = recordingCatalogState.loading
+          ? 'Loading retained recordings...'
+          : 'No retained recording segments are available for this session yet.';
+        recordingLibraryListEl.appendChild(empty);
+        return;
+      }
+
+      for (const recording of recordingCatalogState.recordings) {
+        recordingLibraryListEl.appendChild(buildRecordingCard(recording));
+      }
+    }
+
+    async function refreshRecordingCatalogForSelectedSession({ force = false, silent = true } = {}) {
+      const accessToken = await getValidAccessToken();
+      const sessionId = controlSessionState.resource?.id ?? '';
+      if (!accessToken || !sessionId) {
+        clearRecordingCatalogState(sessionId);
+        return null;
+      }
+      if (!force
+        && !recordingCatalogState.error
+        && recordingCatalogState.loaded
+        && recordingCatalogState.sessionId === sessionId) {
+        return {
+          recordings: recordingCatalogState.recordings,
+          playback: recordingCatalogState.playback,
+        };
+      }
+
+      const requestId = recordingCatalogState.requestId + 1;
+      recordingCatalogState.requestId = requestId;
+      recordingCatalogState.sessionId = sessionId;
+      recordingCatalogState.loading = true;
+      recordingCatalogState.error = '';
+      renderRecordingCatalogState();
+
+      try {
+        const [recordings, playback] = await Promise.all([
+          fetchSessionRecordings(accessToken, sessionId),
+          fetchSessionPlayback(accessToken, sessionId),
+        ]);
+        if (recordingCatalogState.requestId !== requestId) {
+          return null;
+        }
+        recordingCatalogState.recordings = recordings;
+        recordingCatalogState.playback = playback;
+        recordingCatalogState.loading = false;
+        recordingCatalogState.loaded = true;
+        recordingCatalogState.error = '';
+        renderRecordingCatalogState();
+        if (!silent) {
+          log(
+            `Loaded ${recordings.length} retained recording segment${recordings.length === 1 ? '' : 's'} for session ${sessionId}`,
+            'info',
+          );
+        }
+        return {
+          recordings,
+          playback,
+        };
+      } catch (error) {
+        if (recordingCatalogState.requestId !== requestId) {
+          return null;
+        }
+        recordingCatalogState.recordings = [];
+        recordingCatalogState.playback = null;
+        recordingCatalogState.loading = false;
+        recordingCatalogState.loaded = true;
+        recordingCatalogState.error = error.message;
+        renderRecordingCatalogState();
+        if (!silent) {
+          log(`Recording library refresh failed: ${error.message}`, 'error');
+        }
+        throw error;
+      }
+    }
+
+    async function downloadCatalogRecordingById(recordingId) {
+      const accessToken = await getValidAccessToken();
+      const sessionId = controlSessionState.resource?.id ?? '';
+      const recording = recordingCatalogState.recordings.find((entry) => entry.id === recordingId);
+      if (!accessToken || !sessionId) {
+        throw new Error('login and session selection are required');
+      }
+      if (!recording) {
+        throw new Error(`recording ${recordingId} is not loaded`);
+      }
+      if (!recording.artifact_available) {
+        throw new Error(`recording ${recordingId} does not have a downloadable artifact`);
+      }
+
+      recordingCatalogState.downloadingRecordingId = recordingId;
+      renderRecordingCatalogState();
+      try {
+        const result = await downloadAuthenticatedArtifact(
+          accessToken,
+          recording.content_path,
+          `browserpane-${sessionId}-${recordingId}.webm`,
+        );
+        log(`Downloaded retained segment ${recordingId} (${formatBytes(result.bytes)})`, 'info');
+        return result;
+      } finally {
+        recordingCatalogState.downloadingRecordingId = '';
+        renderRecordingCatalogState();
+      }
+    }
+
+    async function downloadSessionPlaybackExport() {
+      const accessToken = await getValidAccessToken();
+      const sessionId = controlSessionState.resource?.id ?? '';
+      if (!accessToken || !sessionId) {
+        throw new Error('login and session selection are required');
+      }
+
+      recordingCatalogState.downloadingPlayback = true;
+      renderRecordingCatalogState();
+      try {
+        const result = await downloadAuthenticatedArtifact(
+          accessToken,
+          `${SESSION_API_URL}/${encodeURIComponent(sessionId)}/recording-playback/export`,
+          `browserpane-${sessionId}-recording-playback.zip`,
+        );
+        log(`Downloaded session export for ${sessionId} (${formatBytes(result.bytes)})`, 'info');
+        return result;
+      } finally {
+        recordingCatalogState.downloadingPlayback = false;
+        renderRecordingCatalogState();
+      }
+    }
+
+    function renderRecordingState() {
+      const selectedSessionId = controlSessionState.resource?.id ?? '';
+      const displaySessionId = selectedSessionId || '';
+      const activeDurationMs = recordingState.active
+        ? Math.max(0, Date.now() - recordingState.startedAtMs)
+        : 0;
+      recordingStatusEl.textContent = recordingState.active
+        ? `Recording: live ${formatDuration(activeDurationMs)}`
+        : recordingState.lastBlob
+          ? `Recording: ready ${formatBytes(recordingState.lastBlob.size)}`
+          : 'Recording: idle';
+      recordingSessionEl.textContent = displaySessionId
+        ? `Session: ${getShortSessionId(displaySessionId)}`
+        : 'Session: --';
+      recordingFileEl.textContent = recordingState.lastFilename
+        ? `Artifact: ${recordingState.lastFilename}`
+        : 'Artifact: --';
+      recordingStartBtn.disabled = !session || recordingState.active;
+      recordingStopBtn.disabled = !session || !recordingState.active;
+      recordingDownloadBtn.disabled = !recordingState.lastBlob;
+
+      if (recordingState.active) {
+        recordingNoteEl.className = 'helper-note ok';
+        recordingNoteEl.textContent =
+          `Recording is live for session ${displaySessionId ? getShortSessionId(displaySessionId) : '--'}. ` +
+          'Stopping will finalize a local WebM from the composed surface and desktop audio.';
+        return;
+      }
+      if (recordingState.lastBlob) {
+        recordingNoteEl.className = 'helper-note info';
+        recordingNoteEl.textContent =
+          `The last recording is ready${recordingState.autoDownload ? ' and was downloaded automatically' : ''}. ` +
+          'Use "Download Last WebM" to save it again.';
+        return;
+      }
+      recordingNoteEl.className = 'helper-note info';
+      recordingNoteEl.textContent = session
+        ? 'Connected. Start recording to capture the exact BrowserPane view and desktop audio into a local WebM.'
+        : 'Connect to a session first, then start a local recording from the composed browser view.';
+    }
+
+    async function startSessionRecording() {
+      if (!session) {
+        log('Cannot start recording: connect first.', 'warn');
+        return;
+      }
+      if (recordingState.active) {
+        return;
+      }
+
+      const sessionId = controlSessionState.resource?.id ?? '';
+      recordingState.startedAtMs = Date.now();
+      recordingState.lastBlob = null;
+      recordingState.lastFilename = makeRecordingFilename(sessionId);
+      renderRecordingState();
+
+      try {
+        await session.startRecording();
+        recordingState.active = true;
+        renderRecordingState();
+        log(`Recording started for session ${sessionId || 'current session'}`, 'ok');
+      } catch (error) {
+        recordingState.active = false;
+        renderRecordingState();
+        log(`Recording start failed: ${error.message}`, 'error');
+      }
+    }
+
+    async function stopSessionRecording({
+      reason = 'manual',
+      sourceSession = session,
+      autoDownload = recordingState.autoDownload,
+    } = {}) {
+      if (!sourceSession || !sourceSession.isRecording()) {
+        recordingState.active = false;
+        renderRecordingState();
+        return null;
+      }
+
+      try {
+        const blob = await sourceSession.stopRecording();
+        recordingState.active = false;
+        recordingState.lastBlob = blob;
+        if (!recordingState.lastFilename) {
+          recordingState.lastFilename = makeRecordingFilename(controlSessionState.resource?.id ?? '');
+        }
+        renderRecordingState();
+        log(
+          `Recording finalized after ${reason}: ${recordingState.lastFilename} (${formatBytes(blob.size)})`,
+          'ok',
+        );
+        if (autoDownload) {
+          downloadBlob(blob, recordingState.lastFilename);
+          log(`Downloaded ${recordingState.lastFilename}`, 'info');
+        }
+        return blob;
+      } catch (error) {
+        recordingState.active = false;
+        renderRecordingState();
+        log(`Recording stop failed: ${error.message}`, 'error');
+        return null;
+      }
+    }
+
+    function downloadLastRecording() {
+      if (!recordingState.lastBlob || !recordingState.lastFilename) {
+        log('No recording is ready to download yet.', 'warn');
+        return;
+      }
+      downloadBlob(recordingState.lastBlob, recordingState.lastFilename);
+      log(`Downloaded ${recordingState.lastFilename}`, 'info');
+    }
+
+    function setRecordingAutoDownload(enabled) {
+      recordingState.autoDownload = Boolean(enabled);
+      recordingAutoDownloadToggle.checked = recordingState.autoDownload;
+      renderRecordingState();
+      log(`Recording auto download ${recordingState.autoDownload ? 'enabled' : 'disabled'}`, 'info');
+      return recordingState.autoDownload;
+    }
+
+    async function connect(mode = 'selected', connectOptions = {}) {
       const accessToken = await getValidAccessToken();
       if (!accessToken) {
         setStatus('Login required', 'error');
         log('Connection cancelled: no access token available', 'error');
-        return;
+        return null;
       }
 
       if (overlay) overlay.style.display = 'none';
@@ -2338,13 +3123,19 @@
         if (!controlSession) {
           setStatus(mode === 'new' ? 'Session creation failed' : 'Session selection required', 'error');
           if (overlay) overlay.style.display = '';
-          return;
+          return null;
         }
         const connectCredential = await resolveSessionConnectCredential(accessToken, controlSession);
         const gatewayUrl = `${controlSession.connect.gateway_url}${controlSession.connect.transport_path}`;
+        const clientRole = connectOptions.clientRole === 'recorder'
+          ? 'recorder'
+          : connectOptions.clientRole === 'interactive'
+            ? 'interactive'
+            : DEFAULT_CLIENT_ROLE;
+        currentClientRole = clientRole;
         log(`Connecting to ${gatewayUrl} via session ${controlSession.id}...`);
         log(
-          `Connect options: render=${renderBackendSelect.value}, scrollCopy=${scrollCopyToggle.checked ? 'on' : 'off'}, hiDpi=${hidpiToggle.checked}`,
+          `Connect options: render=${renderBackendSelect.value}, scrollCopy=${scrollCopyToggle.checked ? 'on' : 'off'}, hiDpi=${hidpiToggle.checked}, role=${clientRole}`,
           'info',
         );
         session = await BpaneSession.connect({
@@ -2359,6 +3150,7 @@
           audio: true,
           camera: true,
           fileTransfer: true,
+          clientRole,
           certHashUrl: '/cert-hash',
           onConnect: () => {
             log('Connected', 'ok');
@@ -2388,6 +3180,7 @@
             } else {
               setMetricsButtons();
             }
+            renderRecordingState();
             liveState.frameInterval = setInterval(() => {
               if (!session) return;
               const now = performance.now();
@@ -2482,15 +3275,26 @@
                 tileRate,
                 videoRate,
               });
+              if (recordingState.active) {
+                renderRecordingState();
+              }
             }, 200);
           },
           onDisconnect: (reason) => {
             log(`Disconnected: ${reason}`, 'warn');
+            const disconnectedSession = session;
+            if (disconnectedSession?.isRecording()) {
+              void stopSessionRecording({
+                reason: `transport disconnect (${reason})`,
+                sourceSession: disconnectedSession,
+              });
+            }
             // Don't call session.disconnect() here — it's already disconnecting.
             // Just update the UI state.
             if (liveState.frameInterval) { clearInterval(liveState.frameInterval); liveState.frameInterval = null; }
             stopBenchmarkSample('disconnect');
             session = null;
+            currentClientRole = DEFAULT_CLIENT_ROLE;
             if (overlay) overlay.style.display = '';
             setStatus('Disconnected', 'disconnected');
             if (controlSessionState.resource && isRuntimeCandidateSessionState(controlSessionState.resource.state)) {
@@ -2521,6 +3325,7 @@
             liveState.resolution.width = 0;
             liveState.resolution.height = 0;
             setMetricsButtons();
+            renderRecordingState();
             void getValidAccessToken().then((accessToken) => {
               if (accessToken) {
                 return refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
@@ -2552,6 +3357,7 @@
         renderBackendEl.textContent = formatRenderDiagnostics(session.getRenderDiagnostics());
         log(formatRenderDiagnostics(session.getRenderDiagnostics()), 'info');
         renderAuthState();
+        return controlSessionState.resource;
       } catch (e) {
         log(`Connection failed: ${e.message}`, 'error');
         setStatus('Connection failed', 'error');
@@ -2564,16 +3370,25 @@
         log('Hint: Chrome requires trusted TLS for WebTransport.', 'warn');
         log(`Launch Chrome with: --origin-to-force-quic-on=${GATEWAY_HOST}:${GATEWAY_PORT}`, 'warn');
         if (overlay) overlay.style.display = '';
+        return null;
       }
     }
 
-    function doDisconnect() {
+    async function doDisconnect() {
+      const activeSession = session;
+      if (activeSession?.isRecording()) {
+        await stopSessionRecording({
+          reason: 'manual disconnect',
+          sourceSession: activeSession,
+        });
+      }
       if (liveState.frameInterval) { clearInterval(liveState.frameInterval); liveState.frameInterval = null; }
       stopBenchmarkSample('disconnect');
-      if (session) {
-        session.disconnect();
+      if (activeSession) {
+        activeSession.disconnect();
         session = null;
       }
+      currentClientRole = DEFAULT_CLIENT_ROLE;
       if (overlay) overlay.style.display = '';
       setStatus('Disconnected', 'disconnected');
       if (controlSessionState.resource && isRuntimeCandidateSessionState(controlSessionState.resource.state)) {
@@ -2604,6 +3419,7 @@
       liveState.resolution.width = 0;
       liveState.resolution.height = 0;
       setMetricsButtons();
+      renderRecordingState();
       void getValidAccessToken().then((accessToken) => {
         if (accessToken) {
           return refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
@@ -2672,7 +3488,36 @@
     }));
     newSessionBtn.addEventListener('click', () => void connect('new'));
     connectBtn.addEventListener('click', () => void connect('selected'));
-    disconnectBtn.addEventListener('click', () => doDisconnect());
+    disconnectBtn.addEventListener('click', () => void doDisconnect());
+    recordingStartBtn.addEventListener('click', () => void startSessionRecording());
+    recordingStopBtn.addEventListener('click', () => void stopSessionRecording());
+    recordingDownloadBtn.addEventListener('click', downloadLastRecording);
+    recordingAutoDownloadToggle.addEventListener('change', () => {
+      setRecordingAutoDownload(recordingAutoDownloadToggle.checked);
+    });
+    recordingLibraryRefreshBtn.addEventListener('click', () => {
+      void refreshRecordingCatalogForSelectedSession({ force: true, silent: false }).catch((error) => {
+        log(`Recording library refresh failed: ${error.message}`, 'error');
+      });
+    });
+    recordingPlaybackDownloadBtn.addEventListener('click', () => {
+      void downloadSessionPlaybackExport().catch((error) => {
+        log(`Session export download failed: ${error.message}`, 'error');
+      });
+    });
+    recordingLibraryListEl.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action="download-recording"]');
+      if (!button) {
+        return;
+      }
+      const recordingId = button.dataset.recordingId;
+      if (!recordingId) {
+        return;
+      }
+      void downloadCatalogRecordingById(recordingId).catch((error) => {
+        log(`Recording download failed: ${error.message}`, 'error');
+      });
+    });
     metricsStartBtn.addEventListener('click', startBenchmarkSample);
     metricsStopBtn.addEventListener('click', () => stopBenchmarkSample('manual'));
     metricsCopyBtn.addEventListener('click', () => void copyBenchmarkSummary());
@@ -2706,15 +3551,94 @@
       resetSample: resetBenchmarkMetrics,
       getSummary: () => cloneSummary(benchmarkState.summary),
     };
+    window.__bpaneControl = {
+      listSessions: () => cloneValue(controlSessionState.resources) ?? [],
+      getState: () => ({
+        connected: Boolean(session),
+        selectedSessionId: controlSessionState.selectedSessionId,
+        sessionId: controlSessionState.resource?.id ?? '',
+        clientRole: currentClientRole,
+        status: statusEl.textContent?.trim() ?? '',
+      }),
+      refreshSessions: async ({ preserveSelection = true, silent = false } = {}) => {
+        const accessToken = await getValidAccessToken();
+        if (!accessToken) {
+          throw new Error('no access token available');
+        }
+        const sessions = await refreshSessionResources(accessToken, { preserveSelection, silent });
+        return cloneValue(sessions) ?? [];
+      },
+      selectSession: async (sessionId) => {
+        if (!sessionId) {
+          throw new Error('session id is required');
+        }
+        const accessToken = await getValidAccessToken();
+        if (!accessToken) {
+          throw new Error('no access token available');
+        }
+        if (!controlSessionState.resources.some((resource) => resource.id === sessionId)) {
+          await refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+        }
+        const resource = setSelectedSessionId(sessionId);
+        if (!resource) {
+          throw new Error(`session ${sessionId} is not visible`);
+        }
+        renderAuthState();
+        return cloneValue(resource);
+      },
+      startNewSession: async (options = {}) => {
+        await connect('new', options);
+        return cloneValue(controlSessionState.resource);
+      },
+      connectSelected: async (options = {}) => {
+        await connect('selected', options);
+        return cloneValue(controlSessionState.resource);
+      },
+      disconnect: doDisconnect,
+    };
+    window.__bpaneRecording = {
+      start: startSessionRecording,
+      stop: () => stopSessionRecording({ reason: 'api' }),
+      downloadLast: downloadLastRecording,
+      refreshCatalog: (options = {}) => refreshRecordingCatalogForSelectedSession(options),
+      downloadCatalogRecording: downloadCatalogRecordingById,
+      downloadPlaybackExport: downloadSessionPlaybackExport,
+      setAutoDownload: setRecordingAutoDownload,
+      getState: () => ({
+        active: recordingState.active,
+        startedAtMs: recordingState.startedAtMs,
+        lastFilename: recordingState.lastFilename,
+        lastBlobSize: recordingState.lastBlob?.size ?? 0,
+        autoDownload: recordingState.autoDownload,
+      }),
+      getCatalogState: () => ({
+        sessionId: recordingCatalogState.sessionId,
+        recordings: cloneValue(recordingCatalogState.recordings) ?? [],
+        playback: cloneValue(recordingCatalogState.playback),
+        loading: recordingCatalogState.loading,
+        loaded: recordingCatalogState.loaded,
+        error: recordingCatalogState.error,
+        downloadingRecordingId: recordingCatalogState.downloadingRecordingId,
+        downloadingPlayback: recordingCatalogState.downloadingPlayback,
+      }),
+    };
 
     // ── Startup ─────────────────────────────────────────────────────
     renderBenchmarkMetrics();
+    renderRecordingState();
+    renderRecordingCatalogState();
     await initializeAuth();
     setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
     setToggleButtonState(micBtn, false, 'Mic On', 'Mic Off');
     log(`Gateway target: ${GATEWAY_URL}`);
     log(`Session control API: ${SESSION_API_URL}`, 'info');
+    log(`Default client role: ${DEFAULT_CLIENT_ROLE}`, 'info');
     log('Benchmark metrics API: window.__bpaneBenchmarkMetrics.{startSample,stopSample,resetSample,getSummary}', 'info');
+    log('Control API: window.__bpaneControl.{listSessions,getState,refreshSessions,selectSession,startNewSession,connectSelected,disconnect}', 'info');
+    log(
+      'Recording API: window.__bpaneRecording.{start,stop,downloadLast,refreshCatalog,downloadCatalogRecording,downloadPlaybackExport,setAutoDownload,getState,getCatalogState}',
+      'info',
+    );
     if (authState.config?.mode === 'oidc') {
       log(`OIDC login configured for issuer ${authState.config.issuer}`, 'info');
       log(`Example user: ${getExampleUserLabel() || 'none configured'}`, 'info');

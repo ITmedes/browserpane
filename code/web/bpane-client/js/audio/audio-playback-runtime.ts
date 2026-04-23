@@ -9,6 +9,7 @@ function resolvePlaybackWorkletModuleUrl(): string {
 export class AudioPlaybackRuntime {
   private audioContext: AudioContext | null = null;
   private audioWorkletNode: AudioWorkletNode | null = null;
+  private recordingDestination: MediaStreamAudioDestinationNode | null = null;
   private starting: Promise<void> | null = null;
   private resumeHandler: (() => void) | null = null;
 
@@ -33,6 +34,16 @@ export class AudioPlaybackRuntime {
     );
   }
 
+  async ensureRecordingStream(): Promise<MediaStream | null> {
+    if (!this.audioWorkletNode && !this.starting) {
+      this.starting = this.start();
+    }
+    if (this.starting) {
+      await this.starting;
+    }
+    return this.recordingDestination?.stream ?? null;
+  }
+
   destroy(): void {
     this.detachResumeHandler();
 
@@ -40,6 +51,7 @@ export class AudioPlaybackRuntime {
       this.audioWorkletNode.disconnect();
       this.audioWorkletNode = null;
     }
+    this.recordingDestination = null;
     if (this.audioContext) {
       this.audioContext.close();
       this.audioContext = null;
@@ -64,6 +76,10 @@ export class AudioPlaybackRuntime {
         { outputChannelCount: [2] },
       );
       audioWorkletNode.connect(audioContext.destination);
+      if (typeof audioContext.createMediaStreamDestination === 'function') {
+        this.recordingDestination = audioContext.createMediaStreamDestination();
+        audioWorkletNode.connect(this.recordingDestination);
+      }
       this.audioWorkletNode = audioWorkletNode;
 
       if (audioContext.state === 'suspended') {

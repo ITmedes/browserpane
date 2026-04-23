@@ -6,6 +6,7 @@ use tokio::net::UnixListener;
 use uuid::Uuid;
 
 use super::SessionRegistry;
+use crate::session_hub::BrowserClientRole;
 
 fn session_id() -> Uuid {
     Uuid::now_v7()
@@ -75,6 +76,30 @@ async fn exclusive_owner_mode_marks_late_joiner_as_viewer() {
     let (c2, _) = registry.join(session_id, sock_str).await.unwrap();
     assert!(c1.is_owner);
     assert!(!c2.is_owner);
+}
+
+#[tokio::test]
+async fn recorder_role_joins_without_becoming_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("test.sock");
+    let sock_str = sock.to_str().unwrap();
+
+    let _agent = mock_agent(sock_str).await;
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let registry = SessionRegistry::new(10, true);
+    let session_id = session_id();
+
+    let (owner, _) = registry.join(session_id, sock_str).await.unwrap();
+    let (recorder, _) = registry
+        .join_with_role(session_id, sock_str, BrowserClientRole::Recorder)
+        .await
+        .unwrap();
+
+    assert!(owner.is_owner);
+    assert_eq!(owner.client_role, BrowserClientRole::Interactive);
+    assert!(!recorder.is_owner);
+    assert_eq!(recorder.client_role, BrowserClientRole::Recorder);
 }
 
 #[tokio::test]

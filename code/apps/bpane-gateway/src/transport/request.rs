@@ -3,6 +3,7 @@ use uuid::Uuid;
 use crate::auth::{AuthError, AuthValidator, AuthenticatedPrincipal};
 use crate::connect_ticket::{SessionConnectTicketError, SessionConnectTicketManager};
 use crate::session_control::SessionStore;
+use crate::session_hub::BrowserClientRole;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum RequestValidationError {
@@ -17,6 +18,7 @@ pub(super) enum RequestValidationError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ValidatedConnectRequest {
     pub session_id: Uuid,
+    pub client_role: BrowserClientRole,
 }
 
 pub(super) async fn validate_request_path(
@@ -25,6 +27,7 @@ pub(super) async fn validate_request_path(
     connect_ticket_manager: &SessionConnectTicketManager,
     session_store: &SessionStore,
 ) -> Result<ValidatedConnectRequest, RequestValidationError> {
+    let client_role = parsed_client_role(path);
     match extract_connect_request(path)? {
         ConnectRequest::SessionTicket { ticket } => {
             let claims = connect_ticket_manager
@@ -48,6 +51,7 @@ pub(super) async fn validate_request_path(
             }
             Ok(ValidatedConnectRequest {
                 session_id: claims.session_id,
+                client_role,
             })
         }
         ConnectRequest::BearerToken { token, session_id } => {
@@ -65,7 +69,10 @@ pub(super) async fn validate_request_path(
             {
                 return Err(RequestValidationError::SessionNotVisible);
             }
-            Ok(ValidatedConnectRequest { session_id })
+            Ok(ValidatedConnectRequest {
+                session_id,
+                client_role,
+            })
         }
     }
 }
@@ -109,6 +116,22 @@ fn extract_connect_request(path: &str) -> Result<ConnectRequest, RequestValidati
     let token = bearer_token.ok_or(RequestValidationError::MissingCredential)?;
     let session_id = session_id.ok_or(RequestValidationError::MissingSessionId)?;
     Ok(ConnectRequest::BearerToken { token, session_id })
+}
+
+fn parsed_client_role(path: &str) -> BrowserClientRole {
+    let Some(query) = path.split('?').nth(1) else {
+        return BrowserClientRole::Interactive;
+    };
+
+    for param in query.split('&') {
+        if let Some(value) = param.strip_prefix("client_role=") {
+            if value.eq_ignore_ascii_case("recorder") {
+                return BrowserClientRole::Recorder;
+            }
+        }
+    }
+
+    BrowserClientRole::Interactive
 }
 
 #[cfg(test)]

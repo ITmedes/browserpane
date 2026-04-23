@@ -56,6 +56,11 @@ Current product shape:
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
+  - `recording_artifact_store.rs`: recording artifact storage boundary. `local_fs` is the current implementation; the gateway persists opaque artifact refs instead of raw filesystem paths.
+  - `recording_lifecycle.rs`: recorder-worker launch, persisted assignment tracking, and restart reconciliation for session-scoped recording, including `recording.mode=always`. Recording resources are contiguous segments; restart recovery fails the stale in-flight segment and starts a linked fresh one instead of pretending the artifact is continuous.
+  - `recording_playback.rs`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.
+  - `recording_observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
+  - `recording_retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions. Docker-backed workers carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile, and Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
@@ -72,6 +77,9 @@ Current product shape:
 - `code/integrations/mcp-bridge`
   - SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
   - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its local `/control-session` API, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured, including in `docker_pool` mode.
+- `code/integrations/recording-worker`
+  - Playwright-driven recorder worker that attaches as a `recorder` browser client through the control plane.
+  - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals, then hands a temporary local file path back to the gateway for artifact-store finalization.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
@@ -98,6 +106,7 @@ Current product shape:
 - Gateway session status reports:
   - browser and viewer counts
   - `max_viewers` and remaining slots
+  - session-scoped recording playback/export summary derived from retained segments
   - join latency telemetry
   - full-refresh burst telemetry
 
@@ -112,11 +121,13 @@ Run these in `code/web/bpane-client`:
 - `npx tsc --noEmit`
 - `npm test`
 - `npm run build`
+- `npm run smoke:recording -- --headless`
 - `npm run smoke:multisession -- --headless`
 - `npm run test:coverage`
 
 Run these where applicable:
 - `cd code/integrations/mcp-bridge && npm run build`
+- `cd code/integrations/recording-worker && npm run build`
 
 ## Local development flow
 
