@@ -35,3 +35,10 @@ export interface SessionCapabilities {
   fileTransfer: boolean;
   keyboardLayout: boolean;
 }
+
+export interface SessionRecordingOptions {
+  frameRate?: number;
+  mimeType?: string;
+  videoBitsPerSecond?: number;
+  audioBitsPerSecond?: number;
+}

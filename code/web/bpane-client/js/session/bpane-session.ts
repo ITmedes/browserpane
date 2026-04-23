@@ -8,7 +8,8 @@ import { FileTransferController } from '../file-transfer.js';
 import { fnvHash } from '../hash.js';
 import { InputController } from '../input-controller.js';
 import { NalReassembler } from '../nal.js';
-import type { BpaneOptions, SessionCapabilities } from '../bpane-types.js';
+import type { BpaneOptions, SessionCapabilities, SessionRecordingOptions } from '../bpane-types.js';
+import { SessionRecordingRuntime } from '../session-recording-runtime.js';
 import { SessionCapabilityRuntime } from '../session-capability-runtime.js';
 import { SessionControlRuntime } from '../session-control-runtime.js';
 import { SessionFrameRouterRuntime } from '../session-frame-router-runtime.js';
@@ -60,6 +61,7 @@ export class BpaneSession {
   private nalReassembler = new NalReassembler();
   private surfaceRuntime: SessionSurfaceRuntime;
   private videoDecoderRuntime: SessionVideoDecoderRuntime;
+  private recordingRuntime: SessionRecordingRuntime;
   private stats = new SessionStats();
 
   private constructor(options: BpaneOptions) {
@@ -162,6 +164,13 @@ export class BpaneSession {
     this.transportRuntime = runtimes.transportRuntime;
     this.surfaceRuntime = runtimes.surfaceRuntime;
     this.videoDecoderRuntime = runtimes.videoDecoderRuntime;
+    this.recordingRuntime = new SessionRecordingRuntime({
+      createVideoStream: (frameRate) => this.surfaceRuntime.createRecordingStream(frameRate),
+      getAudioStream: () => this.audio.ensureRecordingStream(),
+      stopVideoStream: () => {
+        this.surfaceRuntime.stopRecordingStream();
+      },
+    });
     this.surfaceRuntime.start();
   }
 
@@ -255,9 +264,22 @@ export class BpaneSession {
     return this.surfaceRuntime.getRenderDiagnostics();
   }
 
+  isRecording(): boolean {
+    return this.recordingRuntime.isRecording();
+  }
+
+  async startRecording(options: SessionRecordingOptions = {}): Promise<void> {
+    return this.recordingRuntime.start(options);
+  }
+
+  async stopRecording(): Promise<Blob> {
+    return this.recordingRuntime.stop();
+  }
+
   disconnect(): void {
     if (!this.connected) return;
     this.connected = false;
+    this.recordingRuntime.destroy();
     if (this.input) {
       this.input.destroy();
       this.input = null;

@@ -70,6 +70,13 @@ export class AudioController {
     this.microphoneRuntime.stop();
   }
 
+  async ensureRecordingStream(): Promise<MediaStream | null> {
+    if (!this.audioEnabled) {
+      return null;
+    }
+    return this.audioPlaybackRuntime.ensureRecordingStream();
+  }
+
   destroy(): void {
     this.stopMicrophone();
 
