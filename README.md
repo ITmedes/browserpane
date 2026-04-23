@@ -231,6 +231,7 @@ npm ci
 npx tsc --noEmit
 npm test
 npm run build
+npm run smoke:recording -- --headless
 ```
 
 Other useful checks:
@@ -240,6 +241,7 @@ cargo test -p bpane-protocol
 cargo test -p bpane-host
 cargo test -p bpane-gateway
 cd code/integrations/mcp-bridge && npm run build
+cd code/web/bpane-client && npm run smoke:recording -- --headless
 cd code/web/bpane-client && npm run smoke:multisession -- --headless
 ```
 

@@ -879,10 +879,14 @@
     const { BpaneSession } = await import(SDK_PATH);
 
     // ── Config ──────────────────────────────────────────────────────
+    const pageParams = new URLSearchParams(window.location.search);
     const GATEWAY_HOST = location.hostname || 'localhost';
     const GATEWAY_PORT = 4433;
     const GATEWAY_URL = `https://${GATEWAY_HOST}:${GATEWAY_PORT}`;
     const SESSION_API_URL = '/api/v1/sessions';
+    const DEFAULT_CLIENT_ROLE = pageParams.get('client_role')?.toLowerCase() === 'recorder'
+      ? 'recorder'
+      : 'interactive';
 
     // ── DOM refs ────────────────────────────────────────────────────
     const container = document.getElementById('desktop-container');
@@ -1505,7 +1509,8 @@
       const shortId = getShortSessionId(resource.id);
       const state = resource.state ?? 'unknown';
       const suffix = resource.id === mcpBridgeState.controlSessionId ? ' · MCP delegated' : '';
-      return `Session: ${shortId} (${state})${suffix}`;
+      const clientRole = currentClientRole === 'recorder' ? ' · recorder' : '';
+      return `Session: ${shortId} (${state})${suffix}${clientRole}`;
     }
 
     function supportsLocalMcpDelegation(resource) {
@@ -1539,6 +1544,19 @@
       controlSessionState.resource = selected;
       renderSessionState();
       return selected;
+    }
+
+    function cloneValue(value) {
+      return value ? JSON.parse(JSON.stringify(value)) : value;
+    }
+
+    function setSelectedSessionId(sessionId) {
+      const nextSessionId = typeof sessionId === 'string' ? sessionId : '';
+      controlSessionState.selectedSessionId = nextSessionId;
+      if (sessionSelect.value !== nextSessionId) {
+        sessionSelect.value = nextSessionId;
+      }
+      return syncSelectedSessionResource();
     }
 
     function renderSessionPicker() {
@@ -2344,6 +2362,7 @@
 
     // ── Session state ───────────────────────────────────────────────
     let session = null;
+    let currentClientRole = DEFAULT_CLIENT_ROLE;
     const liveState = {
       frameInterval: null,
       lastFrameCount: 0,
@@ -2510,12 +2529,20 @@
       log(`Downloaded ${recordingState.lastFilename}`, 'info');
     }
 
-    async function connect(mode = 'selected') {
+    function setRecordingAutoDownload(enabled) {
+      recordingState.autoDownload = Boolean(enabled);
+      recordingAutoDownloadToggle.checked = recordingState.autoDownload;
+      renderRecordingState();
+      log(`Recording auto download ${recordingState.autoDownload ? 'enabled' : 'disabled'}`, 'info');
+      return recordingState.autoDownload;
+    }
+
+    async function connect(mode = 'selected', connectOptions = {}) {
       const accessToken = await getValidAccessToken();
       if (!accessToken) {
         setStatus('Login required', 'error');
         log('Connection cancelled: no access token available', 'error');
-        return;
+        return null;
       }
 
       if (overlay) overlay.style.display = 'none';
@@ -2529,13 +2556,19 @@
         if (!controlSession) {
           setStatus(mode === 'new' ? 'Session creation failed' : 'Session selection required', 'error');
           if (overlay) overlay.style.display = '';
-          return;
+          return null;
         }
         const connectCredential = await resolveSessionConnectCredential(accessToken, controlSession);
         const gatewayUrl = `${controlSession.connect.gateway_url}${controlSession.connect.transport_path}`;
+        const clientRole = connectOptions.clientRole === 'recorder'
+          ? 'recorder'
+          : connectOptions.clientRole === 'interactive'
+            ? 'interactive'
+            : DEFAULT_CLIENT_ROLE;
+        currentClientRole = clientRole;
         log(`Connecting to ${gatewayUrl} via session ${controlSession.id}...`);
         log(
-          `Connect options: render=${renderBackendSelect.value}, scrollCopy=${scrollCopyToggle.checked ? 'on' : 'off'}, hiDpi=${hidpiToggle.checked}`,
+          `Connect options: render=${renderBackendSelect.value}, scrollCopy=${scrollCopyToggle.checked ? 'on' : 'off'}, hiDpi=${hidpiToggle.checked}, role=${clientRole}`,
           'info',
         );
         session = await BpaneSession.connect({
@@ -2550,6 +2583,7 @@
           audio: true,
           camera: true,
           fileTransfer: true,
+          clientRole,
           certHashUrl: '/cert-hash',
           onConnect: () => {
             log('Connected', 'ok');
@@ -2693,6 +2727,7 @@
             if (liveState.frameInterval) { clearInterval(liveState.frameInterval); liveState.frameInterval = null; }
             stopBenchmarkSample('disconnect');
             session = null;
+            currentClientRole = DEFAULT_CLIENT_ROLE;
             if (overlay) overlay.style.display = '';
             setStatus('Disconnected', 'disconnected');
             if (controlSessionState.resource && isRuntimeCandidateSessionState(controlSessionState.resource.state)) {
@@ -2755,6 +2790,7 @@
         renderBackendEl.textContent = formatRenderDiagnostics(session.getRenderDiagnostics());
         log(formatRenderDiagnostics(session.getRenderDiagnostics()), 'info');
         renderAuthState();
+        return controlSessionState.resource;
       } catch (e) {
         log(`Connection failed: ${e.message}`, 'error');
         setStatus('Connection failed', 'error');
@@ -2767,6 +2803,7 @@
         log('Hint: Chrome requires trusted TLS for WebTransport.', 'warn');
         log(`Launch Chrome with: --origin-to-force-quic-on=${GATEWAY_HOST}:${GATEWAY_PORT}`, 'warn');
         if (overlay) overlay.style.display = '';
+        return null;
       }
     }
 
@@ -2784,6 +2821,7 @@
         activeSession.disconnect();
         session = null;
       }
+      currentClientRole = DEFAULT_CLIENT_ROLE;
       if (overlay) overlay.style.display = '';
       setStatus('Disconnected', 'disconnected');
       if (controlSessionState.resource && isRuntimeCandidateSessionState(controlSessionState.resource.state)) {
@@ -2888,9 +2926,7 @@
     recordingStopBtn.addEventListener('click', () => void stopSessionRecording());
     recordingDownloadBtn.addEventListener('click', downloadLastRecording);
     recordingAutoDownloadToggle.addEventListener('change', () => {
-      recordingState.autoDownload = recordingAutoDownloadToggle.checked;
-      renderRecordingState();
-      log(`Recording auto download ${recordingState.autoDownload ? 'enabled' : 'disabled'}`, 'info');
+      setRecordingAutoDownload(recordingAutoDownloadToggle.checked);
     });
     metricsStartBtn.addEventListener('click', startBenchmarkSample);
     metricsStopBtn.addEventListener('click', () => stopBenchmarkSample('manual'));
@@ -2925,10 +2961,56 @@
       resetSample: resetBenchmarkMetrics,
       getSummary: () => cloneSummary(benchmarkState.summary),
     };
+    window.__bpaneControl = {
+      listSessions: () => cloneValue(controlSessionState.resources) ?? [],
+      getState: () => ({
+        connected: Boolean(session),
+        selectedSessionId: controlSessionState.selectedSessionId,
+        sessionId: controlSessionState.resource?.id ?? '',
+        clientRole: currentClientRole,
+        status: statusEl.textContent?.trim() ?? '',
+      }),
+      refreshSessions: async ({ preserveSelection = true, silent = false } = {}) => {
+        const accessToken = await getValidAccessToken();
+        if (!accessToken) {
+          throw new Error('no access token available');
+        }
+        const sessions = await refreshSessionResources(accessToken, { preserveSelection, silent });
+        return cloneValue(sessions) ?? [];
+      },
+      selectSession: async (sessionId) => {
+        if (!sessionId) {
+          throw new Error('session id is required');
+        }
+        const accessToken = await getValidAccessToken();
+        if (!accessToken) {
+          throw new Error('no access token available');
+        }
+        if (!controlSessionState.resources.some((resource) => resource.id === sessionId)) {
+          await refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+        }
+        const resource = setSelectedSessionId(sessionId);
+        if (!resource) {
+          throw new Error(`session ${sessionId} is not visible`);
+        }
+        renderAuthState();
+        return cloneValue(resource);
+      },
+      startNewSession: async (options = {}) => {
+        await connect('new', options);
+        return cloneValue(controlSessionState.resource);
+      },
+      connectSelected: async (options = {}) => {
+        await connect('selected', options);
+        return cloneValue(controlSessionState.resource);
+      },
+      disconnect: doDisconnect,
+    };
     window.__bpaneRecording = {
       start: startSessionRecording,
       stop: () => stopSessionRecording({ reason: 'api' }),
       downloadLast: downloadLastRecording,
+      setAutoDownload: setRecordingAutoDownload,
       getState: () => ({
         active: recordingState.active,
         startedAtMs: recordingState.startedAtMs,
@@ -2946,8 +3028,10 @@
     setToggleButtonState(micBtn, false, 'Mic On', 'Mic Off');
     log(`Gateway target: ${GATEWAY_URL}`);
     log(`Session control API: ${SESSION_API_URL}`, 'info');
+    log(`Default client role: ${DEFAULT_CLIENT_ROLE}`, 'info');
     log('Benchmark metrics API: window.__bpaneBenchmarkMetrics.{startSample,stopSample,resetSample,getSummary}', 'info');
-    log('Recording API: window.__bpaneRecording.{start,stop,downloadLast,getState}', 'info');
+    log('Control API: window.__bpaneControl.{listSessions,getState,refreshSessions,selectSession,startNewSession,connectSelected,disconnect}', 'info');
+    log('Recording API: window.__bpaneRecording.{start,stop,downloadLast,setAutoDownload,getState}', 'info');
     if (authState.config?.mode === 'oidc') {
       log(`OIDC login configured for issuer ${authState.config.issuer}`, 'info');
       log(`Example user: ${getExampleUserLabel() || 'none configured'}`, 'info');
