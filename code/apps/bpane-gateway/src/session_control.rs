@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Context;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value};
 use tokio::sync::Mutex;
@@ -119,6 +119,143 @@ impl Default for SessionViewport {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionRecordingMode {
+    #[default]
+    Disabled,
+    Manual,
+    Always,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionRecordingFormat {
+    #[default]
+    Webm,
+}
+
+impl SessionRecordingFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Webm => "webm",
+        }
+    }
+}
+
+impl FromStr for SessionRecordingFormat {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "webm" => Ok(Self::Webm),
+            _ => Err("unknown session recording format"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionRecordingPolicy {
+    #[serde(default)]
+    pub mode: SessionRecordingMode,
+    #[serde(default)]
+    pub format: SessionRecordingFormat,
+    #[serde(default)]
+    pub retention_sec: Option<u32>,
+}
+
+impl Default for SessionRecordingPolicy {
+    fn default() -> Self {
+        Self {
+            mode: SessionRecordingMode::Disabled,
+            format: SessionRecordingFormat::Webm,
+            retention_sec: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionRecordingState {
+    Starting,
+    Recording,
+    Finalizing,
+    Ready,
+    Failed,
+}
+
+impl SessionRecordingState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Starting => "starting",
+            Self::Recording => "recording",
+            Self::Finalizing => "finalizing",
+            Self::Ready => "ready",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub fn is_active(self) -> bool {
+        matches!(self, Self::Starting | Self::Recording | Self::Finalizing)
+    }
+
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Ready | Self::Failed)
+    }
+}
+
+impl FromStr for SessionRecordingState {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "starting" => Ok(Self::Starting),
+            "recording" => Ok(Self::Recording),
+            "finalizing" => Ok(Self::Finalizing),
+            "ready" => Ok(Self::Ready),
+            "failed" => Ok(Self::Failed),
+            _ => Err("unknown session recording state"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionRecordingTerminationReason {
+    ManualStop,
+    SessionStop,
+    IdleStop,
+    GatewayRestart,
+    WorkerExit,
+}
+
+impl SessionRecordingTerminationReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ManualStop => "manual_stop",
+            Self::SessionStop => "session_stop",
+            Self::IdleStop => "idle_stop",
+            Self::GatewayRestart => "gateway_restart",
+            Self::WorkerExit => "worker_exit",
+        }
+    }
+}
+
+impl FromStr for SessionRecordingTerminationReason {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "manual_stop" => Ok(Self::ManualStop),
+            "session_stop" => Ok(Self::SessionStop),
+            "idle_stop" => Ok(Self::IdleStop),
+            "gateway_restart" => Ok(Self::GatewayRestart),
+            "worker_exit" => Ok(Self::WorkerExit),
+            _ => Err("unknown session recording termination reason"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionOwner {
     pub subject: String,
@@ -197,11 +334,37 @@ pub struct SessionResource {
     pub idle_timeout_sec: Option<u32>,
     pub labels: HashMap<String, String>,
     pub integration_context: Option<Value>,
+    pub recording: SessionRecordingPolicy,
     pub connect: SessionConnectInfo,
     pub runtime: SessionRuntimeInfo,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub stopped_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SessionRecordingResource {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub previous_recording_id: Option<Uuid>,
+    pub state: SessionRecordingState,
+    pub format: SessionRecordingFormat,
+    pub mime_type: Option<String>,
+    pub bytes: Option<u64>,
+    pub duration_ms: Option<u64>,
+    pub error: Option<String>,
+    pub termination_reason: Option<SessionRecordingTerminationReason>,
+    pub artifact_available: bool,
+    pub content_path: String,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionRecordingListResponse {
+    pub recordings: Vec<SessionRecordingResource>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -218,6 +381,8 @@ pub struct CreateSessionRequest {
     pub labels: HashMap<String, String>,
     #[serde(default)]
     pub integration_context: Option<Value>,
+    #[serde(default)]
+    pub recording: SessionRecordingPolicy,
 }
 
 #[derive(Debug, Deserialize)]
@@ -227,6 +392,33 @@ pub struct SetAutomationDelegateRequest {
     pub issuer: Option<String>,
     #[serde(default)]
     pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CompleteSessionRecordingRequest {
+    #[serde(alias = "artifact_path")]
+    pub source_path: String,
+    #[serde(default)]
+    pub mime_type: Option<String>,
+    #[serde(default)]
+    pub bytes: Option<u64>,
+    #[serde(default)]
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PersistCompletedSessionRecordingRequest {
+    pub artifact_ref: String,
+    pub mime_type: Option<String>,
+    pub bytes: Option<u64>,
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FailSessionRecordingRequest {
+    pub error: String,
+    #[serde(default)]
+    pub termination_reason: Option<SessionRecordingTerminationReason>,
 }
 
 #[derive(Debug, Serialize)]
@@ -246,9 +438,75 @@ pub struct StoredSession {
     pub idle_timeout_sec: Option<u32>,
     pub labels: HashMap<String, String>,
     pub integration_context: Option<Value>,
+    pub recording: SessionRecordingPolicy,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub stopped_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredSessionRecording {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub previous_recording_id: Option<Uuid>,
+    pub state: SessionRecordingState,
+    pub format: SessionRecordingFormat,
+    pub mime_type: Option<String>,
+    pub bytes: Option<u64>,
+    pub duration_ms: Option<u64>,
+    pub error: Option<String>,
+    pub termination_reason: Option<SessionRecordingTerminationReason>,
+    pub artifact_ref: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordingArtifactRetentionCandidate {
+    pub session_id: Uuid,
+    pub recording_id: Uuid,
+    pub artifact_ref: String,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionRecordingWorkerAssignmentStatus {
+    Starting,
+    Running,
+    Stopping,
+}
+
+impl SessionRecordingWorkerAssignmentStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::Stopping => "stopping",
+        }
+    }
+}
+
+impl FromStr for SessionRecordingWorkerAssignmentStatus {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "starting" => Ok(Self::Starting),
+            "running" => Ok(Self::Running),
+            "stopping" => Ok(Self::Stopping),
+            _ => Err("unknown session recording worker assignment status"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedSessionRecordingWorkerAssignment {
+    pub session_id: Uuid,
+    pub recording_id: Uuid,
+    pub status: SessionRecordingWorkerAssignmentStatus,
+    pub process_id: Option<u32>,
 }
 
 impl StoredSession {
@@ -270,6 +528,7 @@ impl StoredSession {
             idle_timeout_sec: self.idle_timeout_sec,
             labels: self.labels.clone(),
             integration_context: self.integration_context.clone(),
+            recording: self.recording.clone(),
             connect: SessionConnectInfo {
                 gateway_url: public_gateway_url.to_string(),
                 transport_path: "/session".to_string(),
@@ -285,9 +544,36 @@ impl StoredSession {
     }
 }
 
+impl StoredSessionRecording {
+    pub fn to_resource(&self) -> SessionRecordingResource {
+        SessionRecordingResource {
+            id: self.id,
+            session_id: self.session_id,
+            previous_recording_id: self.previous_recording_id,
+            state: self.state,
+            format: self.format,
+            mime_type: self.mime_type.clone(),
+            bytes: self.bytes,
+            duration_ms: self.duration_ms,
+            error: self.error.clone(),
+            termination_reason: self.termination_reason,
+            artifact_available: self.artifact_ref.is_some(),
+            content_path: format!(
+                "/api/v1/sessions/{}/recordings/{}/content",
+                self.session_id, self.id
+            ),
+            started_at: self.started_at,
+            completed_at: self.completed_at,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum SessionStoreError {
     ActiveSessionConflict { max_runtime_sessions: usize },
+    Conflict(String),
     InvalidRequest(String),
     Backend(String),
 }
@@ -305,6 +591,7 @@ impl std::fmt::Display for SessionStoreError {
                     if *max_runtime_sessions == 1 { "" } else { "s" }
                 )
             }
+            Self::Conflict(message) => write!(f, "{message}"),
             Self::InvalidRequest(message) => write!(f, "{message}"),
             Self::Backend(message) => write!(f, "{message}"),
         }
@@ -359,7 +646,9 @@ impl SessionStore {
         Self {
             backend: SessionStoreBackend::InMemory(Arc::new(InMemorySessionStore {
                 sessions: Mutex::new(Vec::new()),
+                recordings: Mutex::new(Vec::new()),
                 runtime_assignments: Mutex::new(HashMap::new()),
+                recording_worker_assignments: Mutex::new(HashMap::new()),
                 config: SessionStoreConfig::from(runtime_profile),
             })),
         }
@@ -586,10 +875,227 @@ impl SessionStore {
         }
     }
 
+    pub async fn create_recording_for_session(
+        &self,
+        session_id: Uuid,
+        format: SessionRecordingFormat,
+        previous_recording_id: Option<Uuid>,
+    ) -> Result<StoredSessionRecording, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .create_recording_for_session(session_id, format, previous_recording_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .create_recording_for_session(session_id, format, previous_recording_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn list_recordings_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<StoredSessionRecording>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_recordings_for_session(session_id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_recordings_for_session(session_id).await
+            }
+        }
+    }
+
+    pub async fn get_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_recording_for_session(session_id, recording_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_recording_for_session(session_id, recording_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn get_latest_recording_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_latest_recording_for_session(session_id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_latest_recording_for_session(session_id).await
+            }
+        }
+    }
+
+    pub async fn list_recording_artifact_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<RecordingArtifactRetentionCandidate>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .list_recording_artifact_retention_candidates(now)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .list_recording_artifact_retention_candidates(now)
+                    .await
+            }
+        }
+    }
+
+    pub async fn stop_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+        termination_reason: SessionRecordingTerminationReason,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .stop_recording_for_session(session_id, recording_id, termination_reason)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .stop_recording_for_session(session_id, recording_id, termination_reason)
+                    .await
+            }
+        }
+    }
+
+    pub async fn clear_recording_artifact_path(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .clear_recording_artifact_path(session_id, recording_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .clear_recording_artifact_path(session_id, recording_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn complete_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+        request: PersistCompletedSessionRecordingRequest,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        validate_persist_completed_recording_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .complete_recording_for_session(session_id, recording_id, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .complete_recording_for_session(session_id, recording_id, request)
+                    .await
+            }
+        }
+    }
+
+    pub async fn fail_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+        request: FailSessionRecordingRequest,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        validate_fail_recording_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .fail_recording_for_session(session_id, recording_id, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .fail_recording_for_session(session_id, recording_id, request)
+                    .await
+            }
+        }
+    }
+
     pub async fn clear_runtime_assignment(&self, id: Uuid) -> Result<(), SessionStoreError> {
         match &self.backend {
             SessionStoreBackend::InMemory(store) => store.clear_runtime_assignment(id).await,
             SessionStoreBackend::Postgres(store) => store.clear_runtime_assignment(id).await,
+        }
+    }
+
+    pub async fn upsert_recording_worker_assignment(
+        &self,
+        assignment: PersistedSessionRecordingWorkerAssignment,
+    ) -> Result<(), SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.upsert_recording_worker_assignment(assignment).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.upsert_recording_worker_assignment(assignment).await
+            }
+        }
+    }
+
+    pub async fn clear_recording_worker_assignment(
+        &self,
+        session_id: Uuid,
+    ) -> Result<(), SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.clear_recording_worker_assignment(session_id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.clear_recording_worker_assignment(session_id).await
+            }
+        }
+    }
+
+    pub async fn get_recording_worker_assignment(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<PersistedSessionRecordingWorkerAssignment>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_recording_worker_assignment(session_id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_recording_worker_assignment(session_id).await
+            }
+        }
+    }
+
+    pub async fn list_recording_worker_assignments(
+        &self,
+    ) -> Result<Vec<PersistedSessionRecordingWorkerAssignment>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.list_recording_worker_assignments().await,
+            SessionStoreBackend::Postgres(store) => store.list_recording_worker_assignments().await,
         }
     }
 
@@ -666,6 +1172,13 @@ fn validate_create_request(request: &CreateSessionRequest) -> Result<(), Session
             ));
         }
     }
+    if let Some(retention_sec) = request.recording.retention_sec {
+        if retention_sec == 0 {
+            return Err(SessionStoreError::InvalidRequest(
+                "recording.retention_sec must be greater than zero when provided".to_string(),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -687,9 +1200,58 @@ fn validate_automation_delegate_request(
     Ok(())
 }
 
+fn validate_complete_recording_request(
+    request: &CompleteSessionRecordingRequest,
+) -> Result<(), SessionStoreError> {
+    if request.source_path.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "source_path must not be empty".to_string(),
+        ));
+    }
+    if let Some(mime_type) = &request.mime_type {
+        if mime_type.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "mime_type must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_persist_completed_recording_request(
+    request: &PersistCompletedSessionRecordingRequest,
+) -> Result<(), SessionStoreError> {
+    if request.artifact_ref.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "artifact_ref must not be empty".to_string(),
+        ));
+    }
+    if let Some(mime_type) = &request.mime_type {
+        if mime_type.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "mime_type must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_fail_recording_request(
+    request: &FailSessionRecordingRequest,
+) -> Result<(), SessionStoreError> {
+    if request.error.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "error must not be empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 struct InMemorySessionStore {
     sessions: Mutex<Vec<StoredSession>>,
+    recordings: Mutex<Vec<StoredSessionRecording>>,
     runtime_assignments: Mutex<HashMap<Uuid, PersistedSessionRuntimeAssignment>>,
+    recording_worker_assignments: Mutex<HashMap<Uuid, PersistedSessionRecordingWorkerAssignment>>,
     config: SessionStoreConfig,
 }
 
@@ -741,6 +1303,7 @@ impl InMemorySessionStore {
             idle_timeout_sec: request.idle_timeout_sec,
             labels: request.labels,
             integration_context: request.integration_context,
+            recording: request.recording,
             created_at: now,
             updated_at: now,
             stopped_at: None,
@@ -956,6 +1519,241 @@ impl InMemorySessionStore {
         Ok(Some(session.clone()))
     }
 
+    async fn create_recording_for_session(
+        &self,
+        session_id: Uuid,
+        format: SessionRecordingFormat,
+        previous_recording_id: Option<Uuid>,
+    ) -> Result<StoredSessionRecording, SessionStoreError> {
+        let mut recordings = self.recordings.lock().await;
+        if let Some(active) = recordings
+            .iter()
+            .find(|recording| recording.session_id == session_id && recording.state.is_active())
+        {
+            return Err(SessionStoreError::Conflict(format!(
+                "session {session_id} already has active recording {}",
+                active.id
+            )));
+        }
+
+        let now = Utc::now();
+        let recording = StoredSessionRecording {
+            id: Uuid::now_v7(),
+            session_id,
+            previous_recording_id,
+            state: SessionRecordingState::Recording,
+            format,
+            mime_type: Some(recording_mime_type(format).to_string()),
+            bytes: None,
+            duration_ms: None,
+            error: None,
+            termination_reason: None,
+            artifact_ref: None,
+            started_at: now,
+            completed_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        recordings.push(recording.clone());
+        Ok(recording)
+    }
+
+    async fn list_recordings_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<StoredSessionRecording>, SessionStoreError> {
+        let mut recordings = self
+            .recordings
+            .lock()
+            .await
+            .iter()
+            .filter(|recording| recording.session_id == session_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        recordings.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+        Ok(recordings)
+    }
+
+    async fn get_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        Ok(self
+            .recordings
+            .lock()
+            .await
+            .iter()
+            .find(|recording| recording.session_id == session_id && recording.id == recording_id)
+            .cloned())
+    }
+
+    async fn get_latest_recording_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        Ok(self
+            .recordings
+            .lock()
+            .await
+            .iter()
+            .filter(|recording| recording.session_id == session_id)
+            .max_by(|left, right| {
+                left.updated_at
+                    .cmp(&right.updated_at)
+                    .then_with(|| left.created_at.cmp(&right.created_at))
+            })
+            .cloned())
+    }
+
+    async fn list_recording_artifact_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<RecordingArtifactRetentionCandidate>, SessionStoreError> {
+        let sessions = self.sessions.lock().await;
+        let session_retention = sessions
+            .iter()
+            .filter_map(|session| {
+                session
+                    .recording
+                    .retention_sec
+                    .map(|retention| (session.id, retention))
+            })
+            .collect::<HashMap<_, _>>();
+        let recordings = self.recordings.lock().await;
+        let mut candidates = recordings
+            .iter()
+            .filter_map(|recording| {
+                if recording.state != SessionRecordingState::Ready {
+                    return None;
+                }
+                let artifact_ref = recording.artifact_ref.clone()?;
+                let completed_at = recording.completed_at?;
+                let retention_sec = *session_retention.get(&recording.session_id)?;
+                let expires_at = completed_at + ChronoDuration::seconds(i64::from(retention_sec));
+                if expires_at > now {
+                    return None;
+                }
+                Some(RecordingArtifactRetentionCandidate {
+                    session_id: recording.session_id,
+                    recording_id: recording.id,
+                    artifact_ref,
+                    expires_at,
+                })
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| left.expires_at.cmp(&right.expires_at));
+        Ok(candidates)
+    }
+
+    async fn stop_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+        termination_reason: SessionRecordingTerminationReason,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        let mut recordings = self.recordings.lock().await;
+        let Some(recording) = recordings
+            .iter_mut()
+            .find(|recording| recording.session_id == session_id && recording.id == recording_id)
+        else {
+            return Ok(None);
+        };
+
+        if !recording.state.is_active() {
+            return Err(SessionStoreError::Conflict(format!(
+                "recording {recording_id} is not active"
+            )));
+        }
+
+        recording.state = SessionRecordingState::Finalizing;
+        recording.termination_reason = Some(termination_reason);
+        recording.updated_at = Utc::now();
+        Ok(Some(recording.clone()))
+    }
+
+    async fn complete_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+        request: PersistCompletedSessionRecordingRequest,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        let mut recordings = self.recordings.lock().await;
+        let Some(recording) = recordings
+            .iter_mut()
+            .find(|recording| recording.session_id == session_id && recording.id == recording_id)
+        else {
+            return Ok(None);
+        };
+
+        if !recording.state.is_active() {
+            return Err(SessionStoreError::Conflict(format!(
+                "recording {recording_id} is not active"
+            )));
+        }
+
+        let now = Utc::now();
+        recording.state = SessionRecordingState::Ready;
+        recording.artifact_ref = Some(request.artifact_ref);
+        recording.mime_type = request
+            .mime_type
+            .or_else(|| recording.mime_type.clone())
+            .or_else(|| Some(recording_mime_type(recording.format).to_string()));
+        recording.bytes = request.bytes;
+        recording.duration_ms = request.duration_ms;
+        recording.error = None;
+        recording.completed_at = Some(now);
+        recording.updated_at = now;
+        Ok(Some(recording.clone()))
+    }
+
+    async fn clear_recording_artifact_path(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        let mut recordings = self.recordings.lock().await;
+        let Some(recording) = recordings
+            .iter_mut()
+            .find(|recording| recording.session_id == session_id && recording.id == recording_id)
+        else {
+            return Ok(None);
+        };
+
+        recording.artifact_ref = None;
+        recording.updated_at = Utc::now();
+        Ok(Some(recording.clone()))
+    }
+
+    async fn fail_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+        request: FailSessionRecordingRequest,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        let mut recordings = self.recordings.lock().await;
+        let Some(recording) = recordings
+            .iter_mut()
+            .find(|recording| recording.session_id == session_id && recording.id == recording_id)
+        else {
+            return Ok(None);
+        };
+
+        if matches!(recording.state, SessionRecordingState::Ready) {
+            return Err(SessionStoreError::Conflict(format!(
+                "recording {recording_id} is already complete"
+            )));
+        }
+
+        let now = Utc::now();
+        recording.state = SessionRecordingState::Failed;
+        recording.error = Some(request.error);
+        recording.termination_reason = request.termination_reason;
+        recording.completed_at = Some(now);
+        recording.updated_at = now;
+        Ok(Some(recording.clone()))
+    }
+
     async fn upsert_runtime_assignment(
         &self,
         assignment: PersistedSessionRuntimeAssignment,
@@ -970,6 +1768,43 @@ impl InMemorySessionStore {
     async fn clear_runtime_assignment(&self, id: Uuid) -> Result<(), SessionStoreError> {
         self.runtime_assignments.lock().await.remove(&id);
         Ok(())
+    }
+
+    async fn upsert_recording_worker_assignment(
+        &self,
+        assignment: PersistedSessionRecordingWorkerAssignment,
+    ) -> Result<(), SessionStoreError> {
+        self.recording_worker_assignments
+            .lock()
+            .await
+            .insert(assignment.session_id, assignment);
+        Ok(())
+    }
+
+    async fn clear_recording_worker_assignment(&self, id: Uuid) -> Result<(), SessionStoreError> {
+        self.recording_worker_assignments.lock().await.remove(&id);
+        Ok(())
+    }
+
+    async fn get_recording_worker_assignment(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<PersistedSessionRecordingWorkerAssignment>, SessionStoreError> {
+        Ok(self
+            .recording_worker_assignments
+            .lock()
+            .await
+            .get(&id)
+            .cloned())
+    }
+
+    async fn list_recording_worker_assignments(
+        &self,
+    ) -> Result<Vec<PersistedSessionRecordingWorkerAssignment>, SessionStoreError> {
+        let assignments = self.recording_worker_assignments.lock().await;
+        let mut values = assignments.values().cloned().collect::<Vec<_>>();
+        values.sort_by_key(|assignment| assignment.session_id);
+        Ok(values)
     }
 
     async fn list_runtime_assignments(
@@ -1032,6 +1867,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec INTEGER NULL CHECK (idle_timeout_sec IS NULL OR idle_timeout_sec > 0),
                     labels JSONB NOT NULL DEFAULT '{}'::jsonb,
                     integration_context JSONB NULL,
+                    recording JSONB NOT NULL DEFAULT '{"mode":"disabled","format":"webm","retention_sec":null}'::jsonb,
                     runtime_binding TEXT NOT NULL DEFAULT 'legacy_single_session',
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1058,12 +1894,51 @@ impl PostgresSessionStore {
                 CREATE INDEX IF NOT EXISTS idx_control_session_runtimes_binding_updated
                     ON control_session_runtimes (runtime_binding, updated_at DESC);
 
+                CREATE TABLE IF NOT EXISTS control_session_recordings (
+                    id UUID PRIMARY KEY,
+                    session_id UUID NOT NULL REFERENCES control_sessions(id) ON DELETE CASCADE,
+                    previous_recording_id UUID NULL REFERENCES control_session_recordings(id) ON DELETE SET NULL,
+                    state TEXT NOT NULL,
+                    format TEXT NOT NULL,
+                    mime_type TEXT NULL,
+                    byte_count BIGINT NULL CHECK (byte_count IS NULL OR byte_count >= 0),
+                    duration_ms BIGINT NULL CHECK (duration_ms IS NULL OR duration_ms >= 0),
+                    error TEXT NULL,
+                    termination_reason TEXT NULL,
+                    artifact_path TEXT NULL,
+                    started_at TIMESTAMPTZ NOT NULL,
+                    completed_at TIMESTAMPTZ NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_session_recordings_session_created
+                    ON control_session_recordings (session_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS control_session_recording_workers (
+                    session_id UUID PRIMARY KEY REFERENCES control_sessions(id) ON DELETE CASCADE,
+                    recording_id UUID NOT NULL REFERENCES control_session_recordings(id) ON DELETE CASCADE,
+                    status TEXT NOT NULL,
+                    process_id BIGINT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_session_recording_workers_updated
+                    ON control_session_recording_workers (updated_at DESC);
+
                 ALTER TABLE control_sessions
                     ADD COLUMN IF NOT EXISTS automation_owner_client_id TEXT NULL;
                 ALTER TABLE control_sessions
                     ADD COLUMN IF NOT EXISTS automation_owner_issuer TEXT NULL;
                 ALTER TABLE control_sessions
                     ADD COLUMN IF NOT EXISTS automation_owner_display_name TEXT NULL;
+                ALTER TABLE control_sessions
+                    ADD COLUMN IF NOT EXISTS recording JSONB NOT NULL DEFAULT '{"mode":"disabled","format":"webm","retention_sec":null}'::jsonb;
+                ALTER TABLE control_session_recordings
+                    ADD COLUMN IF NOT EXISTS previous_recording_id UUID NULL REFERENCES control_session_recordings(id) ON DELETE SET NULL;
+                ALTER TABLE control_session_recordings
+                    ADD COLUMN IF NOT EXISTS termination_reason TEXT NULL;
                 "#,
             )
             .await
@@ -1108,6 +1983,7 @@ impl PostgresSessionStore {
         let viewport = request.viewport.unwrap_or_default();
         let now = Utc::now();
         let labels_value = json_labels(&request.labels);
+        let recording_value = json_recording_policy(&request.recording)?;
         let session_id = Uuid::now_v7();
         let row = transaction
             .query_one(
@@ -1125,11 +2001,12 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     runtime_binding,
                     created_at,
                     updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13, $14, $14)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13::jsonb, $14, $15, $15)
                 RETURNING
                     id,
                     owner_subject,
@@ -1146,6 +2023,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1163,6 +2041,7 @@ impl PostgresSessionStore {
                     &request.idle_timeout_sec.map(|value| value as i32),
                     &labels_value,
                     &request.integration_context,
+                    &recording_value,
                     &self.config.runtime_binding,
                     &now,
                 ],
@@ -1203,6 +2082,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1247,6 +2127,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1288,6 +2169,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1330,6 +2212,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1383,6 +2266,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1438,6 +2322,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1484,6 +2369,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1530,6 +2416,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1571,6 +2458,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1650,6 +2538,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1708,6 +2597,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1764,6 +2654,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1775,6 +2666,523 @@ impl PostgresSessionStore {
                 SessionStoreError::Backend(format!("failed to clear automation delegate: {error}"))
             })?;
         row.as_ref().map(row_to_stored_session).transpose()
+    }
+
+    async fn create_recording_for_session(
+        &self,
+        session_id: Uuid,
+        format: SessionRecordingFormat,
+        previous_recording_id: Option<Uuid>,
+    ) -> Result<StoredSessionRecording, SessionStoreError> {
+        let mut client = self.client.lock().await;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+
+        let active = transaction
+            .query_opt(
+                r#"
+                SELECT id
+                FROM control_session_recordings
+                WHERE session_id = $1
+                  AND state IN ('starting', 'recording', 'finalizing')
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT 1
+                FOR UPDATE
+                "#,
+                &[&session_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to check active recordings: {error}"))
+            })?;
+        if let Some(active) = active {
+            let active_id: Uuid = active.get("id");
+            return Err(SessionStoreError::Conflict(format!(
+                "session {session_id} already has active recording {active_id}"
+            )));
+        }
+
+        let now = Utc::now();
+        let recording_id = Uuid::now_v7();
+        let row = transaction
+            .query_one(
+                r#"
+                INSERT INTO control_session_recordings (
+                    id,
+                    session_id,
+                    previous_recording_id,
+                    state,
+                    format,
+                    mime_type,
+                    started_at,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $7)
+                RETURNING
+                    id,
+                    session_id,
+                    previous_recording_id,
+                    state,
+                    format,
+                    mime_type,
+                    byte_count,
+                    duration_ms,
+                    error,
+                    termination_reason,
+                    artifact_path AS artifact_ref,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &recording_id,
+                    &session_id,
+                    &previous_recording_id,
+                    &SessionRecordingState::Recording.as_str(),
+                    &format.as_str(),
+                    &recording_mime_type(format),
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to insert recording: {error}"))
+            })?;
+
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+
+        row_to_stored_session_recording(&row)
+    }
+
+    async fn list_recordings_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<StoredSessionRecording>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    session_id,
+                    previous_recording_id,
+                    state,
+                    format,
+                    mime_type,
+                    byte_count,
+                    duration_ms,
+                    error,
+                    termination_reason,
+                    artifact_path AS artifact_ref,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_session_recordings
+                WHERE session_id = $1
+                ORDER BY created_at DESC, updated_at DESC
+                "#,
+                &[&session_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list session recordings: {error}"))
+            })?;
+
+        rows.iter().map(row_to_stored_session_recording).collect()
+    }
+
+    async fn get_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    session_id,
+                    previous_recording_id,
+                    state,
+                    format,
+                    mime_type,
+                    byte_count,
+                    duration_ms,
+                    error,
+                    termination_reason,
+                    artifact_path AS artifact_ref,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_session_recordings
+                WHERE session_id = $1 AND id = $2
+                "#,
+                &[&session_id, &recording_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to load session recording: {error}"))
+            })?;
+        row.as_ref()
+            .map(row_to_stored_session_recording)
+            .transpose()
+    }
+
+    async fn get_latest_recording_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    session_id,
+                    previous_recording_id,
+                    state,
+                    format,
+                    mime_type,
+                    byte_count,
+                    duration_ms,
+                    error,
+                    termination_reason,
+                    artifact_path AS artifact_ref,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_session_recordings
+                WHERE session_id = $1
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT 1
+                "#,
+                &[&session_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to load latest recording: {error}"))
+            })?;
+        row.as_ref()
+            .map(row_to_stored_session_recording)
+            .transpose()
+    }
+
+    async fn list_recording_artifact_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<RecordingArtifactRetentionCandidate>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    r.session_id,
+                    r.id AS recording_id,
+                    r.artifact_path AS artifact_ref,
+                    r.completed_at,
+                    ((s.recording ->> 'retention_sec')::INTEGER) AS retention_sec
+                FROM control_session_recordings r
+                INNER JOIN control_sessions s
+                    ON s.id = r.session_id
+                WHERE r.state = 'ready'
+                  AND r.artifact_path IS NOT NULL
+                  AND r.completed_at IS NOT NULL
+                  AND (s.recording ->> 'retention_sec') IS NOT NULL
+                ORDER BY r.completed_at ASC, r.created_at ASC
+                "#,
+                &[],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list recording artifact retention candidates: {error}"
+                ))
+            })?;
+
+        let mut candidates = rows
+            .iter()
+            .filter_map(|row| {
+                let completed_at = row.get::<_, DateTime<Utc>>("completed_at");
+                let retention_sec = row.get::<_, i32>("retention_sec");
+                let expires_at = completed_at + ChronoDuration::seconds(i64::from(retention_sec));
+                if expires_at > now {
+                    return None;
+                }
+                Some(RecordingArtifactRetentionCandidate {
+                    session_id: row.get("session_id"),
+                    recording_id: row.get("recording_id"),
+                    artifact_ref: row.get("artifact_ref"),
+                    expires_at,
+                })
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| left.expires_at.cmp(&right.expires_at));
+        Ok(candidates)
+    }
+
+    async fn stop_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+        termination_reason: SessionRecordingTerminationReason,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                UPDATE control_session_recordings
+                SET
+                    state = 'finalizing',
+                    termination_reason = $3,
+                    updated_at = NOW()
+                WHERE session_id = $1
+                  AND id = $2
+                  AND state IN ('starting', 'recording', 'finalizing')
+                RETURNING
+                    id,
+                    session_id,
+                    previous_recording_id,
+                    state,
+                    format,
+                    mime_type,
+                    byte_count,
+                    duration_ms,
+                    error,
+                    termination_reason,
+                    artifact_path AS artifact_ref,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                "#,
+                &[&session_id, &recording_id, &termination_reason.as_str()],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to stop recording: {error}"))
+            })?;
+        if let Some(row) = row {
+            return row_to_stored_session_recording(&row).map(Some);
+        }
+
+        let existing = self
+            .get_recording_for_session(session_id, recording_id)
+            .await?;
+        if existing.is_some() {
+            return Err(SessionStoreError::Conflict(format!(
+                "recording {recording_id} is not active"
+            )));
+        }
+        Ok(None)
+    }
+
+    async fn complete_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+        request: PersistCompletedSessionRecordingRequest,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                UPDATE control_session_recordings
+                SET
+                    state = 'ready',
+                    artifact_path = $3,
+                    mime_type = COALESCE($4, mime_type),
+                    byte_count = $5,
+                    duration_ms = $6,
+                    error = NULL,
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE session_id = $1
+                  AND id = $2
+                  AND state IN ('starting', 'recording', 'finalizing')
+                RETURNING
+                    id,
+                    session_id,
+                    previous_recording_id,
+                    state,
+                    format,
+                    mime_type,
+                    byte_count,
+                    duration_ms,
+                    error,
+                    termination_reason,
+                    artifact_path AS artifact_ref,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &session_id,
+                    &recording_id,
+                    &request.artifact_ref,
+                    &request.mime_type,
+                    &request.bytes.map(|value| value as i64),
+                    &request.duration_ms.map(|value| value as i64),
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to complete recording: {error}"))
+            })?;
+        if let Some(row) = row {
+            return row_to_stored_session_recording(&row).map(Some);
+        }
+
+        let existing = self
+            .get_recording_for_session(session_id, recording_id)
+            .await?;
+        if existing.is_some() {
+            return Err(SessionStoreError::Conflict(format!(
+                "recording {recording_id} is not active"
+            )));
+        }
+        Ok(None)
+    }
+
+    async fn clear_recording_artifact_path(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                UPDATE control_session_recordings
+                SET
+                    artifact_path = NULL,
+                    updated_at = NOW()
+                WHERE session_id = $1
+                  AND id = $2
+                RETURNING
+                    id,
+                    session_id,
+                    previous_recording_id,
+                    state,
+                    format,
+                    mime_type,
+                    byte_count,
+                    duration_ms,
+                    error,
+                    termination_reason,
+                    artifact_path AS artifact_ref,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                "#,
+                &[&session_id, &recording_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to clear recording artifact path: {error}"
+                ))
+            })?;
+        row.as_ref()
+            .map(row_to_stored_session_recording)
+            .transpose()
+    }
+
+    async fn fail_recording_for_session(
+        &self,
+        session_id: Uuid,
+        recording_id: Uuid,
+        request: FailSessionRecordingRequest,
+    ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                UPDATE control_session_recordings
+                SET
+                    state = 'failed',
+                    error = $3,
+                    termination_reason = $4,
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE session_id = $1
+                  AND id = $2
+                  AND state IN ('starting', 'recording', 'finalizing', 'failed')
+                RETURNING
+                    id,
+                    session_id,
+                    previous_recording_id,
+                    state,
+                    format,
+                    mime_type,
+                    byte_count,
+                    duration_ms,
+                    error,
+                    termination_reason,
+                    artifact_path AS artifact_ref,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &session_id,
+                    &recording_id,
+                    &request.error,
+                    &request
+                        .termination_reason
+                        .map(|reason| reason.as_str().to_string()),
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to fail recording: {error}"))
+            })?;
+        if let Some(row) = row {
+            return row_to_stored_session_recording(&row).map(Some);
+        }
+
+        let existing = self
+            .get_recording_for_session(session_id, recording_id)
+            .await?;
+        if let Some(existing) = existing {
+            if matches!(existing.state, SessionRecordingState::Ready) {
+                return Err(SessionStoreError::Conflict(format!(
+                    "recording {recording_id} is already complete"
+                )));
+            }
+        } else {
+            return Ok(None);
+        }
+
+        self.get_recording_for_session(session_id, recording_id)
+            .await
     }
 
     async fn upsert_runtime_assignment(
@@ -1835,6 +3243,127 @@ impl PostgresSessionStore {
                 SessionStoreError::Backend(format!("failed to clear runtime assignment: {error}"))
             })?;
         Ok(())
+    }
+
+    async fn upsert_recording_worker_assignment(
+        &self,
+        assignment: PersistedSessionRecordingWorkerAssignment,
+    ) -> Result<(), SessionStoreError> {
+        let process_id = assignment.process_id.map(i64::from);
+        self.client
+            .lock()
+            .await
+            .execute(
+                r#"
+                INSERT INTO control_session_recording_workers (
+                    session_id,
+                    recording_id,
+                    status,
+                    process_id,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, NOW(), NOW())
+                ON CONFLICT (session_id)
+                DO UPDATE SET
+                    recording_id = EXCLUDED.recording_id,
+                    status = EXCLUDED.status,
+                    process_id = EXCLUDED.process_id,
+                    updated_at = NOW()
+                "#,
+                &[
+                    &assignment.session_id,
+                    &assignment.recording_id,
+                    &assignment.status.as_str(),
+                    &process_id,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to upsert recording worker assignment: {error}"
+                ))
+            })?;
+        Ok(())
+    }
+
+    async fn clear_recording_worker_assignment(&self, id: Uuid) -> Result<(), SessionStoreError> {
+        self.client
+            .lock()
+            .await
+            .execute(
+                "DELETE FROM control_session_recording_workers WHERE session_id = $1",
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to clear recording worker assignment: {error}"
+                ))
+            })?;
+        Ok(())
+    }
+
+    async fn get_recording_worker_assignment(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<PersistedSessionRecordingWorkerAssignment>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    session_id,
+                    recording_id,
+                    status,
+                    process_id
+                FROM control_session_recording_workers
+                WHERE session_id = $1
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to load recording worker assignment: {error}"
+                ))
+            })?;
+        row.as_ref()
+            .map(row_to_recording_worker_assignment)
+            .transpose()
+    }
+
+    async fn list_recording_worker_assignments(
+        &self,
+    ) -> Result<Vec<PersistedSessionRecordingWorkerAssignment>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    session_id,
+                    recording_id,
+                    status,
+                    process_id
+                FROM control_session_recording_workers
+                ORDER BY updated_at DESC, created_at DESC
+                "#,
+                &[],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list recording worker assignments: {error}"
+                ))
+            })?;
+
+        rows.iter()
+            .map(row_to_recording_worker_assignment)
+            .collect()
     }
 
     async fn list_runtime_assignments(
@@ -1900,6 +3429,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    recording,
                     created_at,
                     updated_at,
                     stopped_at
@@ -1922,6 +3452,18 @@ fn json_labels(labels: &HashMap<String, String>) -> Value {
         object.insert(key.clone(), Value::String(value.clone()));
     }
     Value::Object(object)
+}
+
+fn recording_mime_type(format: SessionRecordingFormat) -> &'static str {
+    match format {
+        SessionRecordingFormat::Webm => "video/webm",
+    }
+}
+
+fn json_recording_policy(recording: &SessionRecordingPolicy) -> Result<Value, SessionStoreError> {
+    serde_json::to_value(recording).map_err(|error| {
+        SessionStoreError::Backend(format!("failed to encode recording policy: {error}"))
+    })
 }
 
 fn session_visible_to_principal(
@@ -1966,6 +3508,10 @@ fn row_to_stored_session(row: &Row) -> Result<StoredSession, SessionStoreError> 
             ))
         })
         .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let recording = serde_json::from_value::<SessionRecordingPolicy>(row.get("recording"))
+        .map_err(|error| {
+            SessionStoreError::Backend(format!("failed to decode recording policy: {error}"))
+        })?;
 
     let width = row.get::<_, i32>("viewport_width");
     let height = row.get::<_, i32>("viewport_height");
@@ -1999,9 +3545,51 @@ fn row_to_stored_session(row: &Row) -> Result<StoredSession, SessionStoreError> 
             .map(|value| value as u32),
         labels,
         integration_context: row.get("integration_context"),
+        recording,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
         stopped_at: row.get("stopped_at"),
+    })
+}
+
+fn row_to_stored_session_recording(row: &Row) -> Result<StoredSessionRecording, SessionStoreError> {
+    let state = row
+        .get::<_, String>("state")
+        .parse::<SessionRecordingState>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let format = row
+        .get::<_, String>("format")
+        .parse::<SessionRecordingFormat>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let termination_reason = row
+        .get::<_, Option<String>>("termination_reason")
+        .map(|value| {
+            value
+                .parse::<SessionRecordingTerminationReason>()
+                .map_err(|error| SessionStoreError::Backend(error.to_string()))
+        })
+        .transpose()?;
+
+    Ok(StoredSessionRecording {
+        id: row.get("id"),
+        session_id: row.get("session_id"),
+        previous_recording_id: row.get("previous_recording_id"),
+        state,
+        format,
+        mime_type: row.get("mime_type"),
+        bytes: row
+            .get::<_, Option<i64>>("byte_count")
+            .map(|value| value as u64),
+        duration_ms: row
+            .get::<_, Option<i64>>("duration_ms")
+            .map(|value| value as u64),
+        error: row.get("error"),
+        termination_reason,
+        artifact_ref: row.get("artifact_ref"),
+        started_at: row.get("started_at"),
+        completed_at: row.get("completed_at"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
     })
 }
 
@@ -2019,6 +3607,30 @@ fn row_to_runtime_assignment(
         agent_socket_path: row.get("agent_socket_path"),
         container_name: row.get("container_name"),
         cdp_endpoint: row.get("cdp_endpoint"),
+    })
+}
+
+fn row_to_recording_worker_assignment(
+    row: &Row,
+) -> Result<PersistedSessionRecordingWorkerAssignment, SessionStoreError> {
+    let status = row
+        .get::<_, String>("status")
+        .parse::<SessionRecordingWorkerAssignmentStatus>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let process_id = row
+        .get::<_, Option<i64>>("process_id")
+        .map(|value| u32::try_from(value))
+        .transpose()
+        .map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "recording worker process_id is out of range: {error}"
+            ))
+        })?;
+    Ok(PersistedSessionRecordingWorkerAssignment {
+        session_id: row.get("session_id"),
+        recording_id: row.get("recording_id"),
+        status,
+        process_id,
     })
 }
 
@@ -2063,6 +3675,11 @@ mod tests {
                     idle_timeout_sec: Some(600),
                     labels: HashMap::from([("suite".to_string(), "smoke".to_string())]),
                     integration_context: Some(serde_json::json!({ "ticket": "BPANE-6" })),
+                    recording: SessionRecordingPolicy {
+                        mode: SessionRecordingMode::Manual,
+                        format: SessionRecordingFormat::Webm,
+                        retention_sec: Some(86_400),
+                    },
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2072,6 +3689,10 @@ mod tests {
         let alpha_sessions = store.list_sessions_for_owner(&alpha).await.unwrap();
         assert_eq!(alpha_sessions.len(), 1);
         assert_eq!(alpha_sessions[0].id, created.id);
+        assert_eq!(alpha_sessions[0].recording, created.recording);
+        assert_eq!(created.recording.mode, SessionRecordingMode::Manual);
+        assert_eq!(created.recording.format, SessionRecordingFormat::Webm);
+        assert_eq!(created.recording.retention_sec, Some(86_400));
 
         let bravo_sessions = store.list_sessions_for_owner(&bravo).await.unwrap();
         assert!(bravo_sessions.is_empty());
@@ -2097,6 +3718,7 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2113,6 +3735,7 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2148,6 +3771,7 @@ mod tests {
                         idle_timeout_sec: None,
                         labels: HashMap::new(),
                         integration_context: None,
+                        recording: SessionRecordingPolicy::default(),
                     },
                     SessionOwnerMode::Collaborative,
                 )
@@ -2165,6 +3789,7 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2195,6 +3820,7 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2241,6 +3867,7 @@ mod tests {
                     idle_timeout_sec: Some(300),
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2264,6 +3891,7 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2309,6 +3937,7 @@ mod tests {
                     idle_timeout_sec: Some(300),
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2351,6 +3980,7 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2375,6 +4005,7 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2413,6 +4044,7 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2451,6 +4083,72 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn in_memory_store_persists_recording_worker_assignments() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let session = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                    recording: SessionRecordingPolicy {
+                        mode: SessionRecordingMode::Always,
+                        format: SessionRecordingFormat::Webm,
+                        retention_sec: None,
+                    },
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+        let recording = store
+            .create_recording_for_session(session.id, SessionRecordingFormat::Webm, None)
+            .await
+            .unwrap();
+
+        store
+            .upsert_recording_worker_assignment(PersistedSessionRecordingWorkerAssignment {
+                session_id: session.id,
+                recording_id: recording.id,
+                status: SessionRecordingWorkerAssignmentStatus::Running,
+                process_id: Some(4242),
+            })
+            .await
+            .unwrap();
+
+        let loaded = store
+            .get_recording_worker_assignment(session.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.recording_id, recording.id);
+        assert_eq!(
+            loaded.status,
+            SessionRecordingWorkerAssignmentStatus::Running
+        );
+        assert_eq!(loaded.process_id, Some(4242));
+
+        let listed = store.list_recording_worker_assignments().await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].session_id, session.id);
+
+        store
+            .clear_recording_worker_assignment(session.id)
+            .await
+            .unwrap();
+        assert!(store
+            .list_recording_worker_assignments()
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
     async fn in_memory_store_can_restore_runtime_candidate_to_ready_after_runtime_loss() {
         let store = SessionStore::in_memory();
         let owner = principal("owner");
@@ -2464,6 +4162,7 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
             )
@@ -2485,6 +4184,196 @@ mod tests {
         assert_eq!(restored.state, SessionLifecycleState::Ready);
     }
 
+    #[tokio::test]
+    async fn in_memory_store_creates_and_stops_recording_metadata() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let session = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                    recording: SessionRecordingPolicy {
+                        mode: SessionRecordingMode::Manual,
+                        format: SessionRecordingFormat::Webm,
+                        retention_sec: None,
+                    },
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+
+        let created = store
+            .create_recording_for_session(session.id, SessionRecordingFormat::Webm, None)
+            .await
+            .unwrap();
+        assert_eq!(created.session_id, session.id);
+        assert_eq!(created.previous_recording_id, None);
+        assert_eq!(created.state, SessionRecordingState::Recording);
+        assert_eq!(created.mime_type.as_deref(), Some("video/webm"));
+
+        let listed = store.list_recordings_for_session(session.id).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, created.id);
+
+        let stopped = store
+            .stop_recording_for_session(
+                session.id,
+                created.id,
+                SessionRecordingTerminationReason::ManualStop,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stopped.state, SessionRecordingState::Finalizing);
+        assert_eq!(
+            stopped.termination_reason,
+            Some(SessionRecordingTerminationReason::ManualStop)
+        );
+
+        let latest = store
+            .get_latest_recording_for_session(session.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(latest.id, created.id);
+        assert_eq!(latest.state, SessionRecordingState::Finalizing);
+        assert_eq!(
+            latest.termination_reason,
+            Some(SessionRecordingTerminationReason::ManualStop)
+        );
+
+        let completed = store
+            .complete_recording_for_session(
+                session.id,
+                created.id,
+                PersistCompletedSessionRecordingRequest {
+                    artifact_ref: "local_fs:session/recording.webm".to_string(),
+                    mime_type: Some("video/webm".to_string()),
+                    bytes: Some(123),
+                    duration_ms: Some(456),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(completed.state, SessionRecordingState::Ready);
+        assert_eq!(
+            completed.artifact_ref.as_deref(),
+            Some("local_fs:session/recording.webm")
+        );
+        assert_eq!(completed.bytes, Some(123));
+        assert_eq!(completed.duration_ms, Some(456));
+
+        let failed = store
+            .create_recording_for_session(
+                session.id,
+                SessionRecordingFormat::Webm,
+                Some(created.id),
+            )
+            .await
+            .unwrap();
+        let failed = store
+            .fail_recording_for_session(
+                session.id,
+                failed.id,
+                FailSessionRecordingRequest {
+                    error: "boom".to_string(),
+                    termination_reason: Some(SessionRecordingTerminationReason::WorkerExit),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(failed.state, SessionRecordingState::Failed);
+        assert_eq!(failed.previous_recording_id, Some(created.id));
+        assert_eq!(failed.error.as_deref(), Some("boom"));
+        assert_eq!(
+            failed.termination_reason,
+            Some(SessionRecordingTerminationReason::WorkerExit)
+        );
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_lists_and_clears_expired_recording_artifacts() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let session = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                    recording: SessionRecordingPolicy {
+                        mode: SessionRecordingMode::Manual,
+                        format: SessionRecordingFormat::Webm,
+                        retention_sec: Some(60),
+                    },
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+
+        let created = store
+            .create_recording_for_session(session.id, SessionRecordingFormat::Webm, None)
+            .await
+            .unwrap();
+        let completed = store
+            .complete_recording_for_session(
+                session.id,
+                created.id,
+                PersistCompletedSessionRecordingRequest {
+                    artifact_ref: "local_fs:session/recording.webm".to_string(),
+                    mime_type: Some("video/webm".to_string()),
+                    bytes: Some(123),
+                    duration_ms: Some(456),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        let candidates = store
+            .list_recording_artifact_retention_candidates(
+                completed.completed_at.unwrap() + chrono::Duration::seconds(61),
+            )
+            .await
+            .unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].session_id, session.id);
+        assert_eq!(candidates[0].recording_id, created.id);
+        assert_eq!(
+            candidates[0].artifact_ref,
+            "local_fs:session/recording.webm"
+        );
+
+        let cleared = store
+            .clear_recording_artifact_path(session.id, created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(cleared.artifact_ref.is_none());
+
+        let candidates = store
+            .list_recording_artifact_retention_candidates(
+                completed.completed_at.unwrap() + chrono::Duration::seconds(61),
+            )
+            .await
+            .unwrap();
+        assert!(candidates.is_empty());
+    }
+
     #[test]
     fn rejects_non_object_integration_context() {
         let error = validate_create_request(&CreateSessionRequest {
@@ -2494,6 +4383,51 @@ mod tests {
             idle_timeout_sec: None,
             labels: HashMap::new(),
             integration_context: Some(Value::String("bad".to_string())),
+            recording: SessionRecordingPolicy::default(),
+        })
+        .unwrap_err();
+
+        assert!(matches!(error, SessionStoreError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn rejects_zero_recording_retention() {
+        let error = validate_create_request(&CreateSessionRequest {
+            template_id: None,
+            owner_mode: None,
+            viewport: None,
+            idle_timeout_sec: None,
+            labels: HashMap::new(),
+            integration_context: None,
+            recording: SessionRecordingPolicy {
+                mode: SessionRecordingMode::Manual,
+                format: SessionRecordingFormat::Webm,
+                retention_sec: Some(0),
+            },
+        })
+        .unwrap_err();
+
+        assert!(matches!(error, SessionStoreError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn rejects_empty_recording_source_path() {
+        let error = validate_complete_recording_request(&CompleteSessionRecordingRequest {
+            source_path: "   ".to_string(),
+            mime_type: None,
+            bytes: None,
+            duration_ms: None,
+        })
+        .unwrap_err();
+
+        assert!(matches!(error, SessionStoreError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn rejects_empty_recording_failure_message() {
+        let error = validate_fail_recording_request(&FailSessionRecordingRequest {
+            error: "".to_string(),
+            termination_reason: None,
         })
         .unwrap_err();
 

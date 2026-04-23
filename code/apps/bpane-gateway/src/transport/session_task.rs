@@ -13,6 +13,7 @@ use super::tasks::{
     spawn_gateway_pinger,
 };
 use crate::idle_stop::schedule_idle_session_stop;
+use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session::Session;
 use crate::session_control::SessionStore;
 use crate::session_manager::SessionManager;
@@ -28,6 +29,7 @@ pub(super) async fn handle_session(
     agent_socket_path: &str,
     heartbeat_timeout: Duration,
     registry: Arc<SessionRegistry>,
+    recording_lifecycle: Arc<RecordingLifecycleManager>,
 ) -> anyhow::Result<()> {
     let routed_session_id = connect_request.session_id;
     let (client_handle, hub) = registry
@@ -136,6 +138,7 @@ pub(super) async fn handle_session(
                 registry.clone(),
                 session_store.clone(),
                 session_manager.clone(),
+                recording_lifecycle.clone(),
             );
         }
     } else {
@@ -147,6 +150,7 @@ pub(super) async fn handle_session(
             registry.clone(),
             session_store,
             session_manager.clone(),
+            recording_lifecycle,
         );
     }
 

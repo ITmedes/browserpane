@@ -4,7 +4,10 @@ use std::time::Duration;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::session_control::{SessionLifecycleState, SessionStore};
+use crate::recording_lifecycle::RecordingLifecycleManager;
+use crate::session_control::{
+    SessionLifecycleState, SessionRecordingTerminationReason, SessionStore,
+};
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 
@@ -14,6 +17,7 @@ pub fn schedule_idle_session_stop(
     registry: Arc<SessionRegistry>,
     session_store: SessionStore,
     session_manager: Arc<SessionManager>,
+    recording_lifecycle: Arc<RecordingLifecycleManager>,
 ) {
     tokio::spawn(async move {
         let timeout = match session_store.get_session_by_id(session_id).await {
@@ -34,6 +38,13 @@ pub fn schedule_idle_session_stop(
             if snapshot.browser_clients > 0 || snapshot.viewer_clients > 0 || snapshot.mcp_owner {
                 return;
             }
+        }
+
+        if let Err(error) = recording_lifecycle
+            .request_stop_and_wait(session_id, SessionRecordingTerminationReason::IdleStop)
+            .await
+        {
+            warn!(%session_id, "failed to finalize recording before idle stop: {error}");
         }
 
         match session_store.stop_session_if_idle(session_id).await {
