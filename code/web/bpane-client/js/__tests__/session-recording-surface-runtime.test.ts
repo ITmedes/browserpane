@@ -97,16 +97,16 @@ describe('SessionRecordingSurfaceRuntime', () => {
     expect(recordingContext.drawImage).toHaveBeenNthCalledWith(2, cursorCanvas, 0, 0, 1280, 720);
   });
 
-  it('uses the displayed canvas bounds for the recording output size', () => {
-    const sourceCanvas = createCanvas(892, 654);
-    const cursorCanvas = createCanvas(892, 654);
+  it('keeps the source bitmap size when the displayed canvas is scaled down', () => {
+    const sourceCanvas = createCanvas(1784, 1310);
+    const cursorCanvas = createCanvas(1784, 1310);
     sourceCanvas.getBoundingClientRect = () => ({
-      width: 1180,
-      height: 780,
+      width: 892,
+      height: 655,
       top: 0,
       left: 0,
-      right: 1180,
-      bottom: 780,
+      right: 892,
+      bottom: 655,
       x: 0,
       y: 0,
       toJSON() {
@@ -123,10 +123,10 @@ describe('SessionRecordingSurfaceRuntime', () => {
 
     const recordingCanvas = captureStreamSpy.mock.instances[0] as HTMLCanvasElement;
     const recordingContext = contexts.get(recordingCanvas)! as any;
-    expect(recordingCanvas.width).toBe(1180);
-    expect(recordingCanvas.height).toBe(780);
-    expect(recordingContext.drawImage).toHaveBeenNthCalledWith(1, sourceCanvas, 0, 0, 1180, 780);
-    expect(recordingContext.drawImage).toHaveBeenNthCalledWith(2, cursorCanvas, 0, 0, 1180, 780);
+    expect(recordingCanvas.width).toBe(1784);
+    expect(recordingCanvas.height).toBe(1310);
+    expect(recordingContext.drawImage).toHaveBeenNthCalledWith(1, sourceCanvas, 0, 0, 1784, 1310);
+    expect(recordingContext.drawImage).toHaveBeenNthCalledWith(2, cursorCanvas, 0, 0, 1784, 1310);
   });
 
   it('cancels the mirror loop when stopped', () => {
