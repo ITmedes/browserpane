@@ -1,3 +1,4 @@
+import type { SessionClientRole } from './bpane-types.js';
 import { UnsupportedFeatureError } from './shared/errors.js';
 
 export interface SessionTransportRuntimeInput {
@@ -21,6 +22,7 @@ export interface SessionTransportConnectOptions {
   connectTicket?: string;
   accessToken?: string;
   token?: string;
+  clientRole?: SessionClientRole;
   certHashUrl?: string;
 }
 
@@ -68,7 +70,10 @@ export class SessionTransportRuntime {
     }
     const queryParam = connectTicket ? 'session_ticket' : 'access_token';
     const queryValue = connectTicket ?? accessToken!;
-    const url = `${options.gatewayUrl}?${queryParam}=${encodeURIComponent(queryValue)}&_=${nonce}`;
+    const extraParams = options.clientRole === 'recorder'
+      ? '&client_role=recorder'
+      : '';
+    const url = `${options.gatewayUrl}?${queryParam}=${encodeURIComponent(queryValue)}${extraParams}&_=${nonce}`;
     const certHash = options.certHashUrl ? await this.fetchCertHash(options.certHashUrl) : null;
 
     try {

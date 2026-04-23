@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::auth::AuthenticatedPrincipal;
 use crate::connect_ticket::{SessionConnectTicketError, SessionConnectTicketManager};
 use crate::session_control::{CreateSessionRequest, SessionOwnerMode, SessionStore};
+use crate::session_hub::BrowserClientRole;
 
 fn empty_request() -> CreateSessionRequest {
     CreateSessionRequest {
@@ -62,7 +63,36 @@ async fn validate_request_path_accepts_valid_token() {
     assert_eq!(
         validate_request_path(&path, &validator, &ticket_manager, &store).await,
         Ok(ValidatedConnectRequest {
-            session_id: session.id
+            session_id: session.id,
+            client_role: BrowserClientRole::Interactive,
+        })
+    );
+}
+
+#[tokio::test]
+async fn validate_request_path_accepts_recorder_client_role() {
+    let validator = AuthValidator::from_hmac_secret(b"transport-request-secret".to_vec());
+    let ticket_manager = SessionConnectTicketManager::new(
+        b"transport-request-secret".to_vec(),
+        Duration::from_secs(300),
+    );
+    let token = validator.generate_token().unwrap();
+    let store = SessionStore::in_memory();
+    let principal = validator.authenticate(&token).await.unwrap();
+    let session = store
+        .create_session(&principal, empty_request(), SessionOwnerMode::Collaborative)
+        .await
+        .unwrap();
+    let path = format!(
+        "/session?token={token}&session_id={}&client_role=recorder",
+        session.id
+    );
+
+    assert_eq!(
+        validate_request_path(&path, &validator, &ticket_manager, &store).await,
+        Ok(ValidatedConnectRequest {
+            session_id: session.id,
+            client_role: BrowserClientRole::Recorder,
         })
     );
 }
@@ -94,7 +124,8 @@ async fn validate_request_path_accepts_valid_session_ticket() {
     assert_eq!(
         validate_request_path(&path, &validator, &ticket_manager, &store).await,
         Ok(ValidatedConnectRequest {
-            session_id: session.id
+            session_id: session.id,
+            client_role: BrowserClientRole::Interactive,
         })
     );
 }
