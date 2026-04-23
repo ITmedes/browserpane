@@ -208,7 +208,14 @@ Stateless relay between host agent and browser clients.
   - in-memory backend fallback for tests and dev fallback mode
   - session-scoped connect metadata and routing keyed by public `session_id`
   - `legacy_single_runtime` compatibility gating so Phase 0 can expose session resources before true multi-session workers land
-- **Runtime manager** (`runtime_manager.rs`): resolves `session_id -> runtime endpoint`
+- **Session manager** (`session_manager.rs`): internal gateway boundary for session lifecycle/runtime orchestration
+  - this is the only runtime-lifecycle surface the rest of the gateway should depend on
+  - current responsibilities are:
+    - resolve `session_id -> runtime endpoint`
+    - attach/reconcile persisted runtime assignments
+    - expose runtime profile/capacity semantics to session control
+    - mark runtime-backed sessions active/idle and release them on stop
+- **Runtime manager** (`runtime_manager.rs`): current backend implementation behind `SessionManager`
   - current backends are:
     - `static_single`: one shared host socket, with idle release semantics in the gateway
     - `docker_single`: opt-in Docker-backed worker startup/shutdown for the active session, with idle timeout and one active runtime at a time

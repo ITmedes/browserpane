@@ -9,7 +9,7 @@ use tower::ServiceExt;
 use super::*;
 use crate::auth::AuthValidator;
 use crate::connect_ticket::SessionConnectTicketManager;
-use crate::runtime_manager::{RuntimeManagerConfig, SessionRuntimeManager};
+use crate::session_manager::{SessionManager, SessionManagerConfig};
 
 fn test_router() -> (Router, String) {
     let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
@@ -24,8 +24,8 @@ fn test_router() -> (Router, String) {
             Duration::from_secs(300),
         )),
         session_store: SessionStore::in_memory(),
-        runtime_manager: Arc::new(
-            SessionRuntimeManager::new(RuntimeManagerConfig::StaticSingle {
+        session_manager: Arc::new(
+            SessionManager::new(SessionManagerConfig::StaticSingle {
                 agent_socket_path: "/tmp/test.sock".to_string(),
                 cdp_endpoint: Some("http://host:9223".to_string()),
                 idle_timeout: Duration::from_secs(300),
@@ -361,8 +361,8 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
             Duration::from_secs(300),
         )),
         session_store: SessionStore::in_memory(),
-        runtime_manager: Arc::new(
-            SessionRuntimeManager::new(RuntimeManagerConfig::StaticSingle {
+        session_manager: Arc::new(
+            SessionManager::new(SessionManagerConfig::StaticSingle {
                 agent_socket_path: "/tmp/test.sock".to_string(),
                 cdp_endpoint: Some("http://host:9223".to_string()),
                 idle_timeout: Duration::from_secs(300),
@@ -421,8 +421,8 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
             Duration::from_secs(300),
         )),
         session_store: SessionStore::in_memory(),
-        runtime_manager: Arc::new(
-            SessionRuntimeManager::new(RuntimeManagerConfig::StaticSingle {
+        session_manager: Arc::new(
+            SessionManager::new(SessionManagerConfig::StaticSingle {
                 agent_socket_path: "/tmp/test.sock".to_string(),
                 cdp_endpoint: Some("http://host:9223".to_string()),
                 idle_timeout: Duration::from_secs(300),

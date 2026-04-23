@@ -49,22 +49,25 @@ The main blockers are outside that abstraction:
 - `code/apps/bpane-gateway/src/api.rs`
   - public API now has both legacy global compatibility routes and owner-scoped `/api/v1/sessions` plus session-scoped `status` / `mcp-owner`
   - formal delegation and access-ticket flows across mixed principals now exist
-  - the remaining gap is real runtime selection and worker lifecycle behind those session resources
+  - the remaining work is contract hardening and later operational policy, not first-pass routing/lifecycle
 - `code/apps/bpane-gateway/src/transport.rs`
   - WebTransport now resolves a session-scoped connect ticket and routes browser connections through the public `session_id`
-  - the remaining compatibility limit is that session routing still resolves to one active host runtime candidate
+  - runtime routing is now session-scoped against the public control-plane session id
+- `code/apps/bpane-gateway/src/session_manager.rs`
+  - this is now the internal gateway boundary for session lifecycle/runtime orchestration
+  - the rest of the gateway depends on `SessionManager`, not directly on runtime backend details
 - `code/apps/bpane-gateway/src/runtime_manager.rs`
-  - this seam now exists and currently supports:
+  - current backend implementation behind `SessionManager`; supports:
     - `static_single`: one shared host socket
     - `docker_single`: one start-on-demand runtime container with idle shutdown
     - `docker_pool`: multiple start-on-demand runtime containers with explicit active/startup caps
-  - `docker_single` still enforces one active runtime at a time; `docker_pool` is the first backend that can run multiple session workers in parallel
+  - `docker_single` still enforces one active runtime at a time; `docker_pool` runs multiple session workers in parallel
   - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions
   - runtime assignment metadata is now persisted and reconciled on gateway restart
   - stopped sessions can now restart against the same persisted Chromium profile in Docker-backed modes
   - the remaining work is hardening and broader operational policy, not first-pass runtime identity/routing
 - `code/apps/bpane-gateway/src/main.rs` and `config.rs`
-  - one `--agent-socket`, one host endpoint
+  - bootstrap the `SessionManager` boundary and select the current runtime backend/profile
 - `code/integrations/mcp-bridge/src/index.ts`
   - can now resolve a control session, use session-scoped ownership/status APIs, and bind to the delegated session's runtime-specific CDP endpoint
   - still limits one managed control session per bridge instance
@@ -307,7 +310,8 @@ Exit criteria:
 
 Deliverables:
 
-- new internal host-side manager process or crate
+- explicit internal session-manager boundary between gateway control-plane logic and runtime backend implementation: done in the current branch as `session_manager.rs`
+- current backend implementation remains in `runtime_manager.rs`
 - per-session runtime allocation:
   - display
   - socket path
@@ -320,8 +324,9 @@ Deliverables:
 
 Exit criteria:
 
-- two independent session workers can run in parallel on one host
-- stopping one session does not disturb the other
+- two independent session workers can run in parallel on one host: done in `docker_pool`
+- stopping one session does not disturb the other: done
+- gateway modules depend on the session-manager boundary rather than backend implementation details: done
 
 ### Phase 2: Make gateway routing session-scoped
 
@@ -334,9 +339,8 @@ Deliverables:
 
 Exit criteria:
 
-- completed in the current branch for the single-runtime compatibility model
+- completed in the current branch
 - browser clients for session A cannot attach to session B accidentally
-- remaining follow-up: replace the legacy single-runtime lookup with true per-session host runtime resolution
 
 ### Phase 3: Ship the public control plane
 

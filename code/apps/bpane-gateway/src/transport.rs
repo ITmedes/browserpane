@@ -22,14 +22,14 @@ use self::request::{validate_request_path, RequestValidationError};
 use self::session_task::handle_session;
 use crate::auth::AuthValidator;
 use crate::connect_ticket::SessionConnectTicketManager;
-use crate::runtime_manager::SessionRuntimeManager;
 use crate::session_control::SessionStore;
+use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 
 pub struct TransportServer {
     bind_addr: SocketAddr,
     identity: Identity,
-    runtime_manager: Arc<SessionRuntimeManager>,
+    session_manager: Arc<SessionManager>,
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
@@ -42,7 +42,7 @@ impl TransportServer {
     pub fn new(
         bind_addr: SocketAddr,
         identity: Identity,
-        runtime_manager: Arc<SessionRuntimeManager>,
+        session_manager: Arc<SessionManager>,
         auth_validator: Arc<AuthValidator>,
         connect_ticket_manager: Arc<SessionConnectTicketManager>,
         session_store: SessionStore,
@@ -53,7 +53,7 @@ impl TransportServer {
         Self {
             bind_addr,
             identity,
-            runtime_manager,
+            session_manager,
             auth_validator,
             connect_ticket_manager,
             session_store,
@@ -136,7 +136,7 @@ impl TransportServer {
             };
 
             let runtime = match self
-                .runtime_manager
+                .session_manager
                 .resolve(validated_request.session_id)
                 .await
             {
@@ -150,7 +150,7 @@ impl TransportServer {
                     continue;
                 }
             };
-            self.runtime_manager
+            self.session_manager
                 .mark_session_active(validated_request.session_id)
                 .await;
             if let Err(error) = self
@@ -178,7 +178,7 @@ impl TransportServer {
             let heartbeat_timeout = self.heartbeat_timeout;
             let active_sessions_clone = active_sessions.clone();
             let registry = self.registry.clone();
-            let runtime_manager = self.runtime_manager.clone();
+            let session_manager = self.session_manager.clone();
             let session_store = self.session_store.clone();
             let idle_stop_timeout = self.idle_stop_timeout;
             active_sessions.fetch_add(1, Ordering::Relaxed);
@@ -194,7 +194,7 @@ impl TransportServer {
                     connection,
                     session_id,
                     validated_request,
-                    runtime_manager,
+                    session_manager,
                     session_store,
                     idle_stop_timeout,
                     &agent_path,
