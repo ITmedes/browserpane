@@ -58,6 +58,8 @@ Current product shape:
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
   - `recording_artifact_store.rs`: recording artifact storage boundary. `local_fs` is the current implementation; the gateway persists opaque artifact refs instead of raw filesystem paths.
   - `recording_lifecycle.rs`: recorder-worker launch, persisted assignment tracking, and restart reconciliation for session-scoped recording, including `recording.mode=always`. Recording resources are contiguous segments; restart recovery fails the stale in-flight segment and starts a linked fresh one instead of pretending the artifact is continuous.
+  - `recording_playback.rs`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.
+  - `recording_observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
   - `recording_retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions. Docker-backed workers carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile, and Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
@@ -104,6 +106,7 @@ Current product shape:
 - Gateway session status reports:
   - browser and viewer counts
   - `max_viewers` and remaining slots
+  - session-scoped recording playback/export summary derived from retained segments
   - join latency telemetry
   - full-refresh burst telemetry
 

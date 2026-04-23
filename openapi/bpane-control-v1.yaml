@@ -273,6 +273,85 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/recording-playback:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Session Recordings]
+      summary: Summarize session-level playback built from retained recording segments
+      operationId: getSessionRecordingPlayback
+      responses:
+        '200':
+          description: Session playback resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecordingPlaybackResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/recording-playback/manifest:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Session Recordings]
+      summary: Materialize a session playback manifest over included recording segments
+      operationId: getSessionRecordingPlaybackManifest
+      responses:
+        '200':
+          description: Session playback manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecordingPlaybackManifest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/recording-playback/export:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Session Recordings]
+      summary: Download a packaged playback bundle containing manifest, player, and included segments
+      operationId: getSessionRecordingPlaybackExport
+      responses:
+        '200':
+          description: Zipped session playback bundle
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/recording/operations:
+    get:
+      tags: [Session Recordings]
+      summary: Read gateway-local recording operation counters and timestamps
+      operationId: getRecordingOperations
+      responses:
+        '200':
+          description: Recording operation snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingObservabilitySnapshot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/access-tokens:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -804,6 +883,207 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SessionRecordingResource'
+    SessionRecordingPlaybackState:
+      type: string
+      enum:
+        - empty
+        - ready
+        - partial
+    SessionRecordingPlaybackResource:
+      type: object
+      required:
+        - session_id
+        - state
+        - segment_count
+        - included_segment_count
+        - failed_segment_count
+        - active_segment_count
+        - missing_artifact_segment_count
+        - included_bytes
+        - included_duration_ms
+        - manifest_path
+        - export_path
+        - generated_at
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/SessionRecordingPlaybackState'
+        segment_count:
+          type: integer
+          minimum: 0
+        included_segment_count:
+          type: integer
+          minimum: 0
+        failed_segment_count:
+          type: integer
+          minimum: 0
+        active_segment_count:
+          type: integer
+          minimum: 0
+        missing_artifact_segment_count:
+          type: integer
+          minimum: 0
+        included_bytes:
+          type: integer
+          minimum: 0
+        included_duration_ms:
+          type: integer
+          minimum: 0
+        manifest_path:
+          type: string
+        export_path:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+    SessionRecordingPlaybackSegment:
+      type: object
+      required:
+        - sequence
+        - recording_id
+        - previous_recording_id
+        - file_name
+        - content_path
+        - mime_type
+        - bytes
+        - duration_ms
+        - termination_reason
+        - started_at
+        - completed_at
+      properties:
+        sequence:
+          type: integer
+          minimum: 1
+        recording_id:
+          type: string
+          format: uuid
+        previous_recording_id:
+          type: string
+          format: uuid
+          nullable: true
+        file_name:
+          type: string
+        content_path:
+          type: string
+        mime_type:
+          type: string
+        bytes:
+          type: integer
+          nullable: true
+          minimum: 0
+        duration_ms:
+          type: integer
+          nullable: true
+          minimum: 0
+        termination_reason:
+          allOf:
+            - $ref: '#/components/schemas/SessionRecordingTerminationReason'
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+    SessionRecordingPlaybackOmittedSegment:
+      type: object
+      required:
+        - recording_id
+        - previous_recording_id
+        - state
+        - artifact_available
+        - omitted_reason
+        - termination_reason
+        - error
+        - started_at
+        - completed_at
+      properties:
+        recording_id:
+          type: string
+          format: uuid
+        previous_recording_id:
+          type: string
+          format: uuid
+          nullable: true
+        state:
+          $ref: '#/components/schemas/SessionRecordingResourceState'
+        artifact_available:
+          type: boolean
+        omitted_reason:
+          type: string
+        termination_reason:
+          allOf:
+            - $ref: '#/components/schemas/SessionRecordingTerminationReason'
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+    SessionRecordingPlaybackManifest:
+      type: object
+      required:
+        - format_version
+        - session_id
+        - state
+        - segment_count
+        - included_segment_count
+        - failed_segment_count
+        - active_segment_count
+        - missing_artifact_segment_count
+        - included_bytes
+        - included_duration_ms
+        - generated_at
+        - segments
+        - omitted_segments
+      properties:
+        format_version:
+          type: string
+        session_id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/SessionRecordingPlaybackState'
+        segment_count:
+          type: integer
+          minimum: 0
+        included_segment_count:
+          type: integer
+          minimum: 0
+        failed_segment_count:
+          type: integer
+          minimum: 0
+        active_segment_count:
+          type: integer
+          minimum: 0
+        missing_artifact_segment_count:
+          type: integer
+          minimum: 0
+        included_bytes:
+          type: integer
+          minimum: 0
+        included_duration_ms:
+          type: integer
+          minimum: 0
+        generated_at:
+          type: string
+          format: date-time
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionRecordingPlaybackSegment'
+        omitted_segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionRecordingPlaybackOmittedSegment'
     CompleteSessionRecordingRequest:
       type: object
       required: [source_path]
@@ -858,6 +1138,7 @@ components:
         - mcp_owner
         - resolution
         - recording
+        - playback
         - telemetry
       properties:
         browser_clients:
@@ -888,6 +1169,8 @@ components:
             minimum: 0
         recording:
           $ref: '#/components/schemas/SessionRecordingStatus'
+        playback:
+          $ref: '#/components/schemas/SessionRecordingPlaybackResource'
         telemetry:
           $ref: '#/components/schemas/SessionTelemetry'
     SessionRecordingStatusState:
@@ -1001,6 +1284,72 @@ components:
         egress_lagged_frames_total:
           type: integer
           minimum: 0
+    RecordingObservabilitySnapshot:
+      type: object
+      required:
+        - artifact_finalize_requests_total
+        - artifact_finalize_successes_total
+        - artifact_finalize_failures_total
+        - recording_failures_total
+        - playback_manifest_requests_total
+        - playback_export_requests_total
+        - playback_export_successes_total
+        - playback_export_failures_total
+        - playback_export_bytes_total
+        - retention_passes_total
+        - retention_candidates_total
+        - retention_deleted_artifacts_total
+        - retention_failures_total
+        - last_playback_export_at
+        - last_retention_pass_at
+      properties:
+        artifact_finalize_requests_total:
+          type: integer
+          minimum: 0
+        artifact_finalize_successes_total:
+          type: integer
+          minimum: 0
+        artifact_finalize_failures_total:
+          type: integer
+          minimum: 0
+        recording_failures_total:
+          type: integer
+          minimum: 0
+        playback_manifest_requests_total:
+          type: integer
+          minimum: 0
+        playback_export_requests_total:
+          type: integer
+          minimum: 0
+        playback_export_successes_total:
+          type: integer
+          minimum: 0
+        playback_export_failures_total:
+          type: integer
+          minimum: 0
+        playback_export_bytes_total:
+          type: integer
+          minimum: 0
+        retention_passes_total:
+          type: integer
+          minimum: 0
+        retention_candidates_total:
+          type: integer
+          minimum: 0
+        retention_deleted_artifacts_total:
+          type: integer
+          minimum: 0
+        retention_failures_total:
+          type: integer
+          minimum: 0
+        last_playback_export_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_retention_pass_at:
+          type: string
+          format: date-time
+          nullable: true
     SetAutomationDelegateRequest:
       type: object
       required: [client_id]

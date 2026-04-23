@@ -6,6 +6,7 @@ use tokio::time::sleep;
 use tracing::{info, warn};
 
 use crate::recording_artifact_store::RecordingArtifactStore;
+use crate::recording_observability::RecordingObservability;
 use crate::session_control::{
     RecordingArtifactRetentionCandidate, SessionStore, SessionStoreError,
 };
@@ -13,6 +14,7 @@ use crate::session_control::{
 #[derive(Clone)]
 pub struct RecordingRetentionManager {
     artifact_store: Arc<RecordingArtifactStore>,
+    observability: Arc<RecordingObservability>,
     session_store: SessionStore,
     interval: Duration,
 }
@@ -21,10 +23,12 @@ impl RecordingRetentionManager {
     pub fn new(
         session_store: SessionStore,
         artifact_store: Arc<RecordingArtifactStore>,
+        observability: Arc<RecordingObservability>,
         interval: Duration,
     ) -> Self {
         Self {
             artifact_store,
+            observability,
             session_store,
             interval,
         }
@@ -46,6 +50,9 @@ impl RecordingRetentionManager {
             .session_store
             .list_recording_artifact_retention_candidates(now)
             .await?;
+        self.observability
+            .record_retention_pass(now, candidates.len())
+            .await;
         for candidate in candidates {
             self.cleanup_candidate(candidate).await;
         }
@@ -56,6 +63,7 @@ impl RecordingRetentionManager {
         match self.artifact_store.delete(&candidate.artifact_ref).await {
             Ok(()) => {}
             Err(error) => {
+                self.observability.record_retention_failure();
                 warn!(
                     session_id = %candidate.session_id,
                     recording_id = %candidate.recording_id,
@@ -72,6 +80,7 @@ impl RecordingRetentionManager {
             .await
         {
             Ok(Some(_)) => {
+                self.observability.record_retention_deleted_artifact();
                 info!(
                     session_id = %candidate.session_id,
                     recording_id = %candidate.recording_id,
@@ -81,6 +90,7 @@ impl RecordingRetentionManager {
             }
             Ok(None) => {}
             Err(error) => {
+                self.observability.record_retention_failure();
                 warn!(
                     session_id = %candidate.session_id,
                     recording_id = %candidate.recording_id,
@@ -105,6 +115,7 @@ mod tests {
     use crate::recording_artifact_store::{
         FinalizeRecordingArtifactRequest, RecordingArtifactStore,
     };
+    use crate::recording_observability::RecordingObservability;
     use crate::session_control::{
         CreateSessionRequest, PersistCompletedSessionRecordingRequest, SessionOwnerMode,
         SessionRecordingFormat, SessionRecordingMode, SessionRecordingPolicy,
@@ -191,6 +202,7 @@ mod tests {
         let manager = Arc::new(RecordingRetentionManager::new(
             store.clone(),
             artifact_store.clone(),
+            Arc::new(RecordingObservability::default()),
             Duration::from_secs(60),
         ));
 
@@ -260,6 +272,7 @@ mod tests {
         let manager = Arc::new(RecordingRetentionManager::new(
             store.clone(),
             artifact_store.clone(),
+            Arc::new(RecordingObservability::default()),
             Duration::from_secs(60),
         ));
 
@@ -282,5 +295,66 @@ mod tests {
             reloaded.artifact_ref.as_deref(),
             Some(stored_artifact.artifact_ref.as_str())
         );
+    }
+
+    #[tokio::test]
+    async fn cleanup_pass_updates_observability_counters() {
+        let store = SessionStore::in_memory();
+        let session_id = create_manual_recording_session(&store, Some(60)).await;
+        let temp_dir = tempdir().unwrap();
+        let source_path = temp_dir.path().join("recording.webm");
+        std::fs::write(&source_path, b"artifact").unwrap();
+        let artifact_root = temp_dir.path().join("artifacts");
+        let artifact_store = Arc::new(RecordingArtifactStore::local_fs(artifact_root.clone()));
+        let observability = Arc::new(RecordingObservability::default());
+
+        let recording = store
+            .create_recording_for_session(session_id, SessionRecordingFormat::Webm, None)
+            .await
+            .unwrap();
+        let stored_artifact = artifact_store
+            .finalize(FinalizeRecordingArtifactRequest {
+                session_id,
+                recording_id: recording.id,
+                format: SessionRecordingFormat::Webm,
+                source_path: source_path.to_string_lossy().to_string(),
+            })
+            .await
+            .unwrap();
+        store
+            .complete_recording_for_session(
+                session_id,
+                recording.id,
+                PersistCompletedSessionRecordingRequest {
+                    artifact_ref: stored_artifact.artifact_ref.clone(),
+                    mime_type: Some("video/webm".to_string()),
+                    bytes: Some(8),
+                    duration_ms: Some(500),
+                },
+            )
+            .await
+            .unwrap();
+        let completed = store
+            .get_recording_for_session(session_id, recording.id)
+            .await
+            .unwrap()
+            .unwrap();
+        let manager = Arc::new(RecordingRetentionManager::new(
+            store.clone(),
+            artifact_store,
+            observability.clone(),
+            Duration::from_secs(60),
+        ));
+
+        manager
+            .run_cleanup_pass(completed.completed_at.unwrap() + ChronoDuration::seconds(61))
+            .await
+            .unwrap();
+
+        let snapshot = observability.snapshot().await;
+        assert_eq!(snapshot.retention_passes_total, 1);
+        assert_eq!(snapshot.retention_candidates_total, 1);
+        assert_eq!(snapshot.retention_deleted_artifacts_total, 1);
+        assert_eq!(snapshot.retention_failures_total, 0);
     }
 }
