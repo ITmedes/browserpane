@@ -1,7 +1,8 @@
 import type { SessionRecordingOptions } from './bpane-types.js';
 
-const DEFAULT_RECORDING_VIDEO_BITS_PER_SECOND = 3_000_000;
-const DEFAULT_RECORDING_AUDIO_BITS_PER_SECOND = 96_000;
+const DEFAULT_RECORDING_FRAME_RATE = 24;
+const DEFAULT_RECORDING_VIDEO_BITS_PER_SECOND = 2_000_000;
+const DEFAULT_RECORDING_AUDIO_BITS_PER_SECOND = 64_000;
 const PREFERRED_RECORDING_MIME_TYPES = [
   'video/webm;codecs=vp9,opus',
   'video/webm;codecs=vp8,opus',
@@ -50,7 +51,7 @@ export class SessionRecordingRuntime {
       throw new Error('recording is already active');
     }
 
-    const videoStream = this.createVideoStream(options.frameRate ?? 30);
+    const videoStream = this.createVideoStream(options.frameRate ?? DEFAULT_RECORDING_FRAME_RATE);
     try {
       const audioStream = await this.getAudioStream();
       const tracks = [
