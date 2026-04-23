@@ -199,8 +199,78 @@ class MockAudioContext {
     addModule: vi.fn().mockResolvedValue(undefined),
   };
   createMediaStreamSource = vi.fn(() => ({ connect: vi.fn() }));
+  createMediaStreamDestination = vi.fn(() => ({
+    stream: new MockMediaStream([new MockMediaTrack('audio')]) as unknown as MediaStream,
+  }));
   resume = vi.fn();
   close = vi.fn();
+}
+
+class MockMediaTrack {
+  readonly kind: string;
+
+  constructor(kind: string) {
+    this.kind = kind;
+  }
+}
+
+class MockMediaStream {
+  private readonly tracks: any[];
+
+  constructor(tracks: any[] = []) {
+    this.tracks = [...tracks];
+  }
+
+  addTrack(track: any) {
+    this.tracks.push(track);
+  }
+
+  getTracks() {
+    return [...this.tracks];
+  }
+}
+
+class MockBlobEvent extends Event {
+  readonly data: Blob;
+
+  constructor(type: string, data: Blob) {
+    super(type);
+    this.data = data;
+  }
+}
+
+class MockMediaRecorder extends EventTarget {
+  static instances: MockMediaRecorder[] = [];
+
+  readonly stream: MockMediaStream;
+  readonly options?: MediaRecorderOptions;
+  readonly start = vi.fn();
+  readonly stop = vi.fn();
+  readonly requestData = vi.fn();
+  state: RecordingState = 'inactive';
+  ondataavailable: ((event: BlobEvent) => void) | null = null;
+  onstop: ((event: Event) => void) | null = null;
+
+  constructor(stream: MockMediaStream, options?: MediaRecorderOptions) {
+    super();
+    this.stream = stream;
+    this.options = options;
+    MockMediaRecorder.instances.push(this);
+  }
+
+  emitData(bytes: number[]) {
+    const event = new MockBlobEvent(
+      'dataavailable',
+      new Blob([new Uint8Array(bytes)], { type: this.options?.mimeType ?? 'video/webm' }),
+    ) as unknown as BlobEvent;
+    this.ondataavailable?.(event);
+  }
+
+  emitStop() {
+    this.state = 'inactive';
+    const event = new Event('stop');
+    this.onstop?.(event);
+  }
 }
 
 class MockEncodedVideoIngressChunk {
@@ -269,6 +339,8 @@ beforeEach(() => {
   (globalThis as any).EncodedVideoChunk = MockEncodedVideoChunk;
   (globalThis as any).AudioContext = MockAudioContext;
   (globalThis as any).AudioWorkletNode = MockAudioWorkletNode;
+  (globalThis as any).MediaStream = MockMediaStream;
+  (globalThis as any).MediaRecorder = MockMediaRecorder;
   (globalThis as any).VideoEncoder = MockCameraVideoEncoder;
   (globalThis as any).VideoFrame = MockCameraVideoFrame;
   (globalThis as any).ImageData = class MockImageData {
@@ -313,8 +385,15 @@ beforeEach(() => {
     // Don't call cb to avoid infinite loop in tests
     return 1;
   });
+  (globalThis as any).cancelAnimationFrame = vi.fn();
+  Object.defineProperty(HTMLCanvasElement.prototype, 'captureStream', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => new MockMediaStream([new MockMediaTrack('video')]) as unknown as MediaStream),
+  });
 
   MockVideoDecoder.instances = [];
+  MockMediaRecorder.instances = [];
 });
 
 afterEach(() => {
@@ -426,6 +505,27 @@ describe('BpaneSession', () => {
       const { session } = await createSession();
       session.disconnect();
       expect(mockTransport.close).toHaveBeenCalled();
+    });
+
+    it('starts and stops programmatic recording from the composed session output', async () => {
+      const { session } = await createSession();
+
+      await session.startRecording({ frameRate: 24, mimeType: 'video/webm;codecs=vp9,opus' });
+
+      expect(session.isRecording()).toBe(true);
+      expect(MockMediaRecorder.instances).toHaveLength(1);
+      expect(MockMediaRecorder.instances[0].start).toHaveBeenCalledOnce();
+      expect((HTMLCanvasElement.prototype as any).captureStream).toHaveBeenCalledWith(24);
+
+      MockMediaRecorder.instances[0].emitData([1, 2, 3, 4]);
+      const stopPromise = session.stopRecording();
+      expect(MockMediaRecorder.instances[0].requestData).toHaveBeenCalledOnce();
+      expect(MockMediaRecorder.instances[0].stop).toHaveBeenCalledOnce();
+      MockMediaRecorder.instances[0].emitStop();
+
+      const blob = await stopPromise;
+      expect(blob.size).toBe(4);
+      expect(session.isRecording()).toBe(false);
     });
   });
 

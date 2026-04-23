@@ -692,6 +692,7 @@
       <nav class="control-nav" aria-label="Console navigation">
         <a class="nav-link" href="#panel-sessions">Sessions</a>
         <a class="nav-link" href="#panel-display">Display</a>
+        <a class="nav-link" href="#panel-recording">Recording</a>
         <a class="nav-link" href="#panel-metrics">Metrics</a>
         <a class="nav-link" href="#panel-logs">Logs</a>
       </nav>
@@ -788,6 +789,46 @@
         </div>
       </section>
 
+      <section class="panel" id="panel-recording">
+        <div class="panel-header">
+          <div class="panel-heading">
+            <span class="panel-title">Recording</span>
+            <h2>Capture the composed session output</h2>
+            <p class="panel-copy">
+              Records the exact BrowserPane surface you see here: tile composition, ROI video,
+              cursor overlay, and desktop audio. The artifact stays local and is saved as WebM.
+            </p>
+          </div>
+        </div>
+
+        <div id="recording-note" class="helper-note info">
+          Connect to a session first, then start a local recording from the composed browser view.
+        </div>
+
+        <div class="metrics-grid">
+          <span id="recording-status">Recording: idle</span>
+          <span id="recording-session">Session: --</span>
+          <span id="recording-file">Artifact: --</span>
+        </div>
+
+        <label class="toggle-card">
+          <input type="checkbox" id="recording-autodownload-toggle" checked>
+          <span class="toggle-body">
+            <span class="toggle-text">
+              <strong>Auto Download</strong>
+              <small>Download the WebM automatically as soon as recording stops.</small>
+            </span>
+            <span class="toggle-visual" aria-hidden="true"></span>
+          </span>
+        </label>
+
+        <div class="action-grid tool-grid">
+          <button id="btn-recording-start" disabled>Start Recording</button>
+          <button id="btn-recording-stop" disabled>Stop & Save WebM</button>
+          <button id="btn-recording-download" disabled>Download Last WebM</button>
+        </div>
+      </section>
+
       <section class="panel metrics-panel" id="panel-metrics">
         <div class="metrics-header">
           <div class="panel-heading">
@@ -872,6 +913,14 @@
     const metricsStopBtn = document.getElementById('btn-metrics-stop');
     const metricsCopyBtn = document.getElementById('btn-metrics-copy');
     const metricsResetBtn = document.getElementById('btn-metrics-reset');
+    const recordingStartBtn = document.getElementById('btn-recording-start');
+    const recordingStopBtn = document.getElementById('btn-recording-stop');
+    const recordingDownloadBtn = document.getElementById('btn-recording-download');
+    const recordingAutoDownloadToggle = document.getElementById('recording-autodownload-toggle');
+    const recordingStatusEl = document.getElementById('recording-status');
+    const recordingSessionEl = document.getElementById('recording-session');
+    const recordingFileEl = document.getElementById('recording-file');
+    const recordingNoteEl = document.getElementById('recording-note');
     const loginBtn = document.getElementById('btn-login');
     const logoutBtn = document.getElementById('btn-logout');
     const renderBackendSelect = document.getElementById('render-backend-select');
@@ -1466,6 +1515,7 @@
     function renderSessionState() {
       sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
       renderMcpDelegationState();
+      renderRecordingState();
     }
 
     function isJoinableSession(resource) {
@@ -2318,6 +2368,147 @@
       maxBatchCommands: 0,
       lastObservedBatchCount: 0,
     };
+    const recordingState = {
+      active: false,
+      startedAtMs: 0,
+      lastBlob: null,
+      lastFilename: '',
+      autoDownload: true,
+    };
+
+    function makeRecordingFilename(sessionId) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const sessionLabel = sessionId ? getShortSessionId(sessionId) : 'session';
+      return `browserpane-${sessionLabel}-${stamp}.webm`;
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    function renderRecordingState() {
+      const selectedSessionId = controlSessionState.resource?.id ?? '';
+      const displaySessionId = selectedSessionId || '';
+      const activeDurationMs = recordingState.active
+        ? Math.max(0, Date.now() - recordingState.startedAtMs)
+        : 0;
+      recordingStatusEl.textContent = recordingState.active
+        ? `Recording: live ${formatDuration(activeDurationMs)}`
+        : recordingState.lastBlob
+          ? `Recording: ready ${formatBytes(recordingState.lastBlob.size)}`
+          : 'Recording: idle';
+      recordingSessionEl.textContent = displaySessionId
+        ? `Session: ${getShortSessionId(displaySessionId)}`
+        : 'Session: --';
+      recordingFileEl.textContent = recordingState.lastFilename
+        ? `Artifact: ${recordingState.lastFilename}`
+        : 'Artifact: --';
+      recordingStartBtn.disabled = !session || recordingState.active;
+      recordingStopBtn.disabled = !session || !recordingState.active;
+      recordingDownloadBtn.disabled = !recordingState.lastBlob;
+
+      if (recordingState.active) {
+        recordingNoteEl.className = 'helper-note ok';
+        recordingNoteEl.textContent =
+          `Recording is live for session ${displaySessionId ? getShortSessionId(displaySessionId) : '--'}. ` +
+          'Stopping will finalize a local WebM from the composed surface and desktop audio.';
+        return;
+      }
+      if (recordingState.lastBlob) {
+        recordingNoteEl.className = 'helper-note info';
+        recordingNoteEl.textContent =
+          `The last recording is ready${recordingState.autoDownload ? ' and was downloaded automatically' : ''}. ` +
+          'Use "Download Last WebM" to save it again.';
+        return;
+      }
+      recordingNoteEl.className = 'helper-note info';
+      recordingNoteEl.textContent = session
+        ? 'Connected. Start recording to capture the exact BrowserPane view and desktop audio into a local WebM.'
+        : 'Connect to a session first, then start a local recording from the composed browser view.';
+    }
+
+    async function startSessionRecording() {
+      if (!session) {
+        log('Cannot start recording: connect first.', 'warn');
+        return;
+      }
+      if (recordingState.active) {
+        return;
+      }
+
+      const sessionId = controlSessionState.resource?.id ?? '';
+      recordingState.startedAtMs = Date.now();
+      recordingState.lastBlob = null;
+      recordingState.lastFilename = makeRecordingFilename(sessionId);
+      renderRecordingState();
+
+      try {
+        await session.startRecording({
+          frameRate: 30,
+          videoBitsPerSecond: 8_000_000,
+          audioBitsPerSecond: 128_000,
+        });
+        recordingState.active = true;
+        renderRecordingState();
+        log(`Recording started for session ${sessionId || 'current session'}`, 'ok');
+      } catch (error) {
+        recordingState.active = false;
+        renderRecordingState();
+        log(`Recording start failed: ${error.message}`, 'error');
+      }
+    }
+
+    async function stopSessionRecording({
+      reason = 'manual',
+      sourceSession = session,
+      autoDownload = recordingState.autoDownload,
+    } = {}) {
+      if (!sourceSession || !sourceSession.isRecording()) {
+        recordingState.active = false;
+        renderRecordingState();
+        return null;
+      }
+
+      try {
+        const blob = await sourceSession.stopRecording();
+        recordingState.active = false;
+        recordingState.lastBlob = blob;
+        if (!recordingState.lastFilename) {
+          recordingState.lastFilename = makeRecordingFilename(controlSessionState.resource?.id ?? '');
+        }
+        renderRecordingState();
+        log(
+          `Recording finalized after ${reason}: ${recordingState.lastFilename} (${formatBytes(blob.size)})`,
+          'ok',
+        );
+        if (autoDownload) {
+          downloadBlob(blob, recordingState.lastFilename);
+          log(`Downloaded ${recordingState.lastFilename}`, 'info');
+        }
+        return blob;
+      } catch (error) {
+        recordingState.active = false;
+        renderRecordingState();
+        log(`Recording stop failed: ${error.message}`, 'error');
+        return null;
+      }
+    }
+
+    function downloadLastRecording() {
+      if (!recordingState.lastBlob || !recordingState.lastFilename) {
+        log('No recording is ready to download yet.', 'warn');
+        return;
+      }
+      downloadBlob(recordingState.lastBlob, recordingState.lastFilename);
+      log(`Downloaded ${recordingState.lastFilename}`, 'info');
+    }
 
     async function connect(mode = 'selected') {
       const accessToken = await getValidAccessToken();
@@ -2388,6 +2579,7 @@
             } else {
               setMetricsButtons();
             }
+            renderRecordingState();
             liveState.frameInterval = setInterval(() => {
               if (!session) return;
               const now = performance.now();
@@ -2482,10 +2674,20 @@
                 tileRate,
                 videoRate,
               });
+              if (recordingState.active) {
+                renderRecordingState();
+              }
             }, 200);
           },
           onDisconnect: (reason) => {
             log(`Disconnected: ${reason}`, 'warn');
+            const disconnectedSession = session;
+            if (disconnectedSession?.isRecording()) {
+              void stopSessionRecording({
+                reason: `transport disconnect (${reason})`,
+                sourceSession: disconnectedSession,
+              });
+            }
             // Don't call session.disconnect() here — it's already disconnecting.
             // Just update the UI state.
             if (liveState.frameInterval) { clearInterval(liveState.frameInterval); liveState.frameInterval = null; }
@@ -2521,6 +2723,7 @@
             liveState.resolution.width = 0;
             liveState.resolution.height = 0;
             setMetricsButtons();
+            renderRecordingState();
             void getValidAccessToken().then((accessToken) => {
               if (accessToken) {
                 return refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
@@ -2567,11 +2770,18 @@
       }
     }
 
-    function doDisconnect() {
+    async function doDisconnect() {
+      const activeSession = session;
+      if (activeSession?.isRecording()) {
+        await stopSessionRecording({
+          reason: 'manual disconnect',
+          sourceSession: activeSession,
+        });
+      }
       if (liveState.frameInterval) { clearInterval(liveState.frameInterval); liveState.frameInterval = null; }
       stopBenchmarkSample('disconnect');
-      if (session) {
-        session.disconnect();
+      if (activeSession) {
+        activeSession.disconnect();
         session = null;
       }
       if (overlay) overlay.style.display = '';
@@ -2604,6 +2814,7 @@
       liveState.resolution.width = 0;
       liveState.resolution.height = 0;
       setMetricsButtons();
+      renderRecordingState();
       void getValidAccessToken().then((accessToken) => {
         if (accessToken) {
           return refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
@@ -2672,7 +2883,15 @@
     }));
     newSessionBtn.addEventListener('click', () => void connect('new'));
     connectBtn.addEventListener('click', () => void connect('selected'));
-    disconnectBtn.addEventListener('click', () => doDisconnect());
+    disconnectBtn.addEventListener('click', () => void doDisconnect());
+    recordingStartBtn.addEventListener('click', () => void startSessionRecording());
+    recordingStopBtn.addEventListener('click', () => void stopSessionRecording());
+    recordingDownloadBtn.addEventListener('click', downloadLastRecording);
+    recordingAutoDownloadToggle.addEventListener('change', () => {
+      recordingState.autoDownload = recordingAutoDownloadToggle.checked;
+      renderRecordingState();
+      log(`Recording auto download ${recordingState.autoDownload ? 'enabled' : 'disabled'}`, 'info');
+    });
     metricsStartBtn.addEventListener('click', startBenchmarkSample);
     metricsStopBtn.addEventListener('click', () => stopBenchmarkSample('manual'));
     metricsCopyBtn.addEventListener('click', () => void copyBenchmarkSummary());
@@ -2706,15 +2925,29 @@
       resetSample: resetBenchmarkMetrics,
       getSummary: () => cloneSummary(benchmarkState.summary),
     };
+    window.__bpaneRecording = {
+      start: startSessionRecording,
+      stop: () => stopSessionRecording({ reason: 'api' }),
+      downloadLast: downloadLastRecording,
+      getState: () => ({
+        active: recordingState.active,
+        startedAtMs: recordingState.startedAtMs,
+        lastFilename: recordingState.lastFilename,
+        lastBlobSize: recordingState.lastBlob?.size ?? 0,
+        autoDownload: recordingState.autoDownload,
+      }),
+    };
 
     // ── Startup ─────────────────────────────────────────────────────
     renderBenchmarkMetrics();
+    renderRecordingState();
     await initializeAuth();
     setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
     setToggleButtonState(micBtn, false, 'Mic On', 'Mic Off');
     log(`Gateway target: ${GATEWAY_URL}`);
     log(`Session control API: ${SESSION_API_URL}`, 'info');
     log('Benchmark metrics API: window.__bpaneBenchmarkMetrics.{startSample,stopSample,resetSample,getSummary}', 'info');
+    log('Recording API: window.__bpaneRecording.{start,stop,downloadLast,getState}', 'info');
     if (authState.config?.mode === 'oidc') {
       log(`OIDC login configured for issuer ${authState.config.issuer}`, 'info');
       log(`Example user: ${getExampleUserLabel() || 'none configured'}`, 'info');

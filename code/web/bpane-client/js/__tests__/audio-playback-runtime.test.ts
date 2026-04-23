@@ -37,6 +37,9 @@ class MockAudioContext {
     }),
   };
   readonly destination = {} as AudioDestinationNode;
+  readonly createMediaStreamDestination = vi.fn(() => ({
+    stream: { id: 'recording-audio-stream' } as unknown as MediaStream,
+  }) as MediaStreamAudioDestinationNode);
   readonly resume = vi.fn(async () => {});
   readonly close = vi.fn(async () => {});
   state: AudioContextState;
@@ -81,7 +84,13 @@ describe('AudioPlaybackRuntime', () => {
     );
     expect(MockAudioWorkletNode.instances).toHaveLength(1);
     expect(MockAudioWorkletNode.instances[0].connect).toHaveBeenCalledWith(MockAudioContext.instances[0].destination);
+    expect(MockAudioWorkletNode.instances[0].connect).toHaveBeenCalledWith(
+      expect.objectContaining({ stream: expect.anything() }),
+    );
     expect(runtime.ensureStarted()).toBe(true);
+    await expect(runtime.ensureRecordingStream()).resolves.toEqual(
+      expect.objectContaining({ id: 'recording-audio-stream' }),
+    );
 
     runtime.enqueueSamples(new Float32Array([0.25, -0.25, 0.5, -0.5]));
 
