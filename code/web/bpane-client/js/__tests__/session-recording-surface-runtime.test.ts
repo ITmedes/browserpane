@@ -6,6 +6,19 @@ function createCanvas(width: number, height: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
+  canvas.getBoundingClientRect = () => ({
+    width,
+    height,
+    top: 0,
+    left: 0,
+    right: width,
+    bottom: height,
+    x: 0,
+    y: 0,
+    toJSON() {
+      return {};
+    },
+  }) as DOMRect;
   return canvas;
 }
 
@@ -82,6 +95,38 @@ describe('SessionRecordingSurfaceRuntime', () => {
     expect(recordingContext.clearRect).toHaveBeenCalledWith(0, 0, 1280, 720);
     expect(recordingContext.drawImage).toHaveBeenNthCalledWith(1, sourceCanvas, 0, 0, 1280, 720);
     expect(recordingContext.drawImage).toHaveBeenNthCalledWith(2, cursorCanvas, 0, 0, 1280, 720);
+  });
+
+  it('uses the displayed canvas bounds for the recording output size', () => {
+    const sourceCanvas = createCanvas(892, 654);
+    const cursorCanvas = createCanvas(892, 654);
+    sourceCanvas.getBoundingClientRect = () => ({
+      width: 1180,
+      height: 780,
+      top: 0,
+      left: 0,
+      right: 1180,
+      bottom: 780,
+      x: 0,
+      y: 0,
+      toJSON() {
+        return {};
+      },
+    }) as DOMRect;
+    const runtime = new SessionRecordingSurfaceRuntime({
+      sourceCanvas,
+      cursorCanvas,
+    });
+
+    runtime.start(30);
+    rafCallback?.(0);
+
+    const recordingCanvas = captureStreamSpy.mock.instances[0] as HTMLCanvasElement;
+    const recordingContext = contexts.get(recordingCanvas)! as any;
+    expect(recordingCanvas.width).toBe(1180);
+    expect(recordingCanvas.height).toBe(780);
+    expect(recordingContext.drawImage).toHaveBeenNthCalledWith(1, sourceCanvas, 0, 0, 1180, 780);
+    expect(recordingContext.drawImage).toHaveBeenNthCalledWith(2, cursorCanvas, 0, 0, 1180, 780);
   });
 
   it('cancels the mirror loop when stopped', () => {

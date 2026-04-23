@@ -22,8 +22,9 @@ export class SessionRecordingSurfaceRuntime {
     }
 
     const recordingCanvas = document.createElement('canvas');
-    recordingCanvas.width = this.sourceCanvas.width;
-    recordingCanvas.height = this.sourceCanvas.height;
+    const outputSize = this.getOutputSize();
+    recordingCanvas.width = outputSize.width;
+    recordingCanvas.height = outputSize.height;
     const recordingContext = recordingCanvas.getContext('2d');
     if (!recordingContext) {
       throw new Error('2d recording canvas is unavailable');
@@ -68,9 +69,10 @@ export class SessionRecordingSurfaceRuntime {
       return;
     }
 
-    if (canvas.width !== this.sourceCanvas.width || canvas.height !== this.sourceCanvas.height) {
-      canvas.width = this.sourceCanvas.width;
-      canvas.height = this.sourceCanvas.height;
+    const outputSize = this.getOutputSize();
+    if (canvas.width !== outputSize.width || canvas.height !== outputSize.height) {
+      canvas.width = outputSize.width;
+      canvas.height = outputSize.height;
     }
 
     context.clearRect(0, 0, canvas.width, canvas.height);
@@ -81,4 +83,11 @@ export class SessionRecordingSurfaceRuntime {
 
     this.animationFrameId = requestAnimationFrame(this.drawFrame);
   };
+
+  private getOutputSize(): { width: number; height: number } {
+    const sourceRect = this.sourceCanvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(sourceRect.width) || this.sourceCanvas.width);
+    const height = Math.max(1, Math.round(sourceRect.height) || this.sourceCanvas.height);
+    return { width, height };
+  }
 }
