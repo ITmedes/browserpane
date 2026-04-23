@@ -6,7 +6,9 @@ use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
 use crate::connect_ticket::{SessionConnectTicketError, SessionConnectTicketManager};
-use crate::session_control::{CreateSessionRequest, SessionOwnerMode, SessionStore};
+use crate::session_control::{
+    CreateSessionRequest, SessionOwnerMode, SessionRecordingPolicy, SessionStore,
+};
 use crate::session_hub::BrowserClientRole;
 
 fn empty_request() -> CreateSessionRequest {
@@ -17,6 +19,7 @@ fn empty_request() -> CreateSessionRequest {
         idle_timeout_sec: None,
         labels: HashMap::new(),
         integration_context: None,
+        recording: SessionRecordingPolicy::default(),
     }
 }
 

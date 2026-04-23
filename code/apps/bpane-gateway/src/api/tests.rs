@@ -9,6 +9,13 @@ use tower::ServiceExt;
 use super::*;
 use crate::auth::AuthValidator;
 use crate::connect_ticket::SessionConnectTicketManager;
+use crate::recording_artifact_store::RecordingArtifactStore;
+use crate::recording_lifecycle::RecordingLifecycleManager;
+use crate::recording_retention::RecordingRetentionManager;
+use crate::session_control::{
+    SessionRecordingFormat, SessionRecordingMode, SessionRecordingPolicy,
+    SessionRecordingState as StoredSessionRecordingState, StoredSessionRecording,
+};
 use crate::session_manager::{SessionManager, SessionManagerConfig};
 
 fn test_router() -> (Router, String) {
@@ -32,11 +39,18 @@ fn test_router() -> (Router, String) {
             })
             .unwrap(),
         ),
+        recording_artifact_store: test_artifact_store(),
+        recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
     });
     (build_api_router(state), token)
+}
+
+fn test_artifact_store() -> Arc<RecordingArtifactStore> {
+    let root = std::env::temp_dir().join(format!("bpane-artifacts-test-{}", uuid::Uuid::now_v7()));
+    Arc::new(RecordingArtifactStore::local_fs(root))
 }
 
 fn bearer(token: &str) -> String {
@@ -85,36 +99,74 @@ fn blocking_session_stop_only_applies_to_legacy_runtime_backends() {
 
 #[test]
 fn session_status_maps_recorder_clients() {
-    let status = session_status_from_snapshot(SessionTelemetrySnapshot {
-        browser_clients: 3,
-        viewer_clients: 1,
-        recorder_clients: 1,
-        max_viewers: 10,
-        viewer_slots_remaining: 9,
-        exclusive_browser_owner: false,
-        mcp_owner: false,
-        resolution: (1280, 720),
-        joins_accepted: 4,
-        joins_rejected_viewer_cap: 0,
-        last_join_latency_ms: 12,
-        average_join_latency_ms: 9.5,
-        max_join_latency_ms: 15,
-        full_refresh_requests: 1,
-        full_refresh_tiles_requested: 30,
-        last_full_refresh_tiles: 30,
-        max_full_refresh_tiles: 30,
-        egress_send_stream_lock_acquires_total: 10,
-        egress_send_stream_lock_wait_us_total: 20,
-        egress_send_stream_lock_wait_us_average: 2.0,
-        egress_send_stream_lock_wait_us_max: 6,
-        egress_lagged_receives_total: 0,
-        egress_lagged_frames_total: 0,
-    });
+    let status = session_status_from_snapshot(
+        SessionTelemetrySnapshot {
+            browser_clients: 3,
+            viewer_clients: 1,
+            recorder_clients: 1,
+            max_viewers: 10,
+            viewer_slots_remaining: 9,
+            exclusive_browser_owner: false,
+            mcp_owner: false,
+            resolution: (1280, 720),
+            joins_accepted: 4,
+            joins_rejected_viewer_cap: 0,
+            last_join_latency_ms: 12,
+            average_join_latency_ms: 9.5,
+            max_join_latency_ms: 15,
+            full_refresh_requests: 1,
+            full_refresh_tiles_requested: 30,
+            last_full_refresh_tiles: 30,
+            max_full_refresh_tiles: 30,
+            egress_send_stream_lock_acquires_total: 10,
+            egress_send_stream_lock_wait_us_total: 20,
+            egress_send_stream_lock_wait_us_average: 2.0,
+            egress_send_stream_lock_wait_us_max: 6,
+            egress_lagged_receives_total: 0,
+            egress_lagged_frames_total: 0,
+        },
+        &SessionRecordingPolicy {
+            mode: SessionRecordingMode::Manual,
+            format: SessionRecordingFormat::Webm,
+            retention_sec: Some(86_400),
+        },
+        Some(&StoredSessionRecording {
+            id: uuid::Uuid::now_v7(),
+            session_id: uuid::Uuid::now_v7(),
+            previous_recording_id: None,
+            state: StoredSessionRecordingState::Recording,
+            format: SessionRecordingFormat::Webm,
+            mime_type: Some("video/webm".to_string()),
+            bytes: Some(4096),
+            duration_ms: Some(1200),
+            error: None,
+            termination_reason: None,
+            artifact_ref: None,
+            started_at: chrono::Utc::now(),
+            completed_at: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }),
+    );
 
     assert_eq!(status.browser_clients, 3);
     assert_eq!(status.viewer_clients, 1);
     assert_eq!(status.recorder_clients, 1);
     assert_eq!(status.viewer_slots_remaining, 9);
+    assert_eq!(
+        status.recording.configured_mode,
+        SessionRecordingMode::Manual
+    );
+    assert_eq!(status.recording.format, SessionRecordingFormat::Webm);
+    assert_eq!(status.recording.retention_sec, Some(86_400));
+    assert!(matches!(
+        status.recording.state,
+        SessionRecordingStatusState::Recording
+    ));
+    assert!(status.recording.recorder_attached);
+    assert!(status.recording.active_recording_id.is_some());
+    assert_eq!(status.recording.bytes_written, Some(4096));
+    assert_eq!(status.recording.duration_ms, Some(1200));
 }
 
 #[tokio::test]
@@ -135,7 +187,12 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
                         "viewport": { "width": 1440, "height": 900 },
                         "idle_timeout_sec": 900,
                         "labels": { "suite": "contract" },
-                        "integration_context": { "ticket": "BPANE-6" }
+                        "integration_context": { "ticket": "BPANE-6" },
+                        "recording": {
+                          "mode": "manual",
+                          "format": "webm",
+                          "retention_sec": 86400
+                        }
                     })
                     .to_string(),
                 ))
@@ -165,6 +222,9 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     assert!(created["owner"]["issuer"].is_string());
     assert_eq!(created["labels"]["suite"], "contract");
     assert_eq!(created["integration_context"]["ticket"], "BPANE-6");
+    assert_eq!(created["recording"]["mode"], "manual");
+    assert_eq!(created["recording"]["format"], "webm");
+    assert_eq!(created["recording"]["retention_sec"], 86400);
     assert_eq!(created["connect"]["gateway_url"], "https://localhost:4433");
     assert_eq!(created["connect"]["transport_path"], "/session");
     assert_eq!(created["connect"]["auth_type"], "session_connect_ticket");
@@ -217,6 +277,7 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     let fetched = response_json(get_response).await;
     assert_eq!(fetched["id"], session_id);
     assert_eq!(fetched["labels"]["suite"], "contract");
+    assert_eq!(fetched["recording"]["mode"], "manual");
 
     let issue_response = app
         .clone()
@@ -265,6 +326,407 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     assert_eq!(stopped["id"], session_id);
     assert_eq!(stopped["state"], "stopped");
     assert!(stopped["stopped_at"].is_string());
+}
+
+#[tokio::test]
+async fn rejects_always_mode_when_recording_worker_is_not_configured() {
+    let (app, token) = test_router();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "recording": {
+                          "mode": "always",
+                          "format": "webm"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload = response_json(response).await;
+    assert_eq!(
+        payload["error"],
+        "recording mode=always requires a configured recording worker"
+    );
+}
+
+#[tokio::test]
+async fn creates_lists_gets_and_stops_session_recording_metadata() {
+    let (app, token) = test_router();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "recording": {
+                          "mode": "manual",
+                          "format": "webm"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let session = response_json(create_session_response).await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+
+    let create_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_recording_response.status(), StatusCode::CREATED);
+    let created_recording = response_json(create_recording_response).await;
+    let recording_id = created_recording["id"].as_str().unwrap().to_string();
+    assert_eq!(created_recording["session_id"], session_id);
+    assert_eq!(created_recording["state"], "recording");
+    assert_eq!(created_recording["format"], "webm");
+    assert_eq!(created_recording["mime_type"], "video/webm");
+    assert!(created_recording["previous_recording_id"].is_null());
+    assert!(created_recording["termination_reason"].is_null());
+    assert_eq!(
+        created_recording["content_path"],
+        format!("/api/v1/sessions/{session_id}/recordings/{recording_id}/content")
+    );
+    assert_eq!(created_recording["artifact_available"], false);
+
+    let list_recordings_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_recordings_response.status(), StatusCode::OK);
+    let recordings = response_json(list_recordings_response).await;
+    assert_eq!(recordings["recordings"].as_array().unwrap().len(), 1);
+    assert_eq!(recordings["recordings"][0]["id"], recording_id);
+
+    let get_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get_recording_response.status(), StatusCode::OK);
+    let fetched_recording = response_json(get_recording_response).await;
+    assert_eq!(fetched_recording["id"], recording_id);
+    assert_eq!(fetched_recording["state"], "recording");
+
+    let stop_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/stop"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stop_recording_response.status(), StatusCode::OK);
+    let stopped_recording = response_json(stop_recording_response).await;
+    assert_eq!(stopped_recording["state"], "finalizing");
+    assert_eq!(stopped_recording["termination_reason"], "manual_stop");
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let artifact_path = temp_dir.path().join("recording.webm");
+    std::fs::write(&artifact_path, b"webm-bytes").unwrap();
+
+    let complete_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/complete"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                      "source_path": artifact_path.to_string_lossy(),
+                      "mime_type": "video/webm",
+                      "bytes": 10,
+                      "duration_ms": 2500
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(complete_recording_response.status(), StatusCode::OK);
+    let completed_recording = response_json(complete_recording_response).await;
+    assert_eq!(completed_recording["state"], "ready");
+    assert_eq!(completed_recording["artifact_available"], true);
+    assert_eq!(completed_recording["bytes"], 10);
+    assert_eq!(completed_recording["duration_ms"], 2500);
+
+    let content_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/content"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(content_response.status(), StatusCode::OK);
+    let content_bytes = to_bytes(content_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(content_bytes.as_ref(), b"webm-bytes");
+}
+
+#[tokio::test]
+async fn recording_failure_updates_metadata_state() {
+    let (app, token) = test_router();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "recording": {
+                          "mode": "manual",
+                          "format": "webm"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let session = response_json(create_session_response).await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+
+    let create_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let recording = response_json(create_recording_response).await;
+    let recording_id = recording["id"].as_str().unwrap().to_string();
+
+    let fail_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/fail"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                      "error": "recorder worker crashed",
+                      "termination_reason": "worker_exit"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(fail_response.status(), StatusCode::OK);
+    let failed = response_json(fail_response).await;
+    assert_eq!(failed["state"], "failed");
+    assert_eq!(failed["error"], "recorder worker crashed");
+    assert_eq!(failed["termination_reason"], "worker_exit");
+}
+
+#[tokio::test]
+async fn expired_recording_artifacts_return_gone() {
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
+    let token = auth_validator.generate_token().unwrap();
+    let session_store = SessionStore::in_memory();
+    let artifact_store = test_artifact_store();
+    let state = Arc::new(ApiState {
+        registry: Arc::new(SessionRegistry::new(10, false)),
+        auth_validator,
+        connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
+            vec![5; 32],
+            Duration::from_secs(300),
+        )),
+        session_store: session_store.clone(),
+        session_manager: Arc::new(
+            SessionManager::new(SessionManagerConfig::StaticSingle {
+                agent_socket_path: "/tmp/test.sock".to_string(),
+                cdp_endpoint: Some("http://host:9223".to_string()),
+                idle_timeout: Duration::from_secs(300),
+            })
+            .unwrap(),
+        ),
+        recording_artifact_store: artifact_store.clone(),
+        recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        idle_stop_timeout: Duration::from_secs(300),
+        public_gateway_url: "https://localhost:4433".to_string(),
+        default_owner_mode: SessionOwnerMode::Collaborative,
+    });
+    let app = build_api_router(state);
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "recording": {
+                          "mode": "manual",
+                          "format": "webm",
+                          "retention_sec": 60
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let session = response_json(create_session_response).await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+
+    let create_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let recording = response_json(create_recording_response).await;
+    let recording_id = recording["id"].as_str().unwrap().to_string();
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let artifact_path = temp_dir.path().join("recording.webm");
+    std::fs::write(&artifact_path, b"webm-bytes").unwrap();
+
+    let complete_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/complete"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                      "source_path": artifact_path.to_string_lossy(),
+                      "mime_type": "video/webm",
+                      "bytes": 10,
+                      "duration_ms": 2500
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(complete_recording_response.status(), StatusCode::OK);
+
+    let recording_uuid = uuid::Uuid::parse_str(&recording_id).unwrap();
+    let session_uuid = uuid::Uuid::parse_str(&session_id).unwrap();
+    let stored = session_store
+        .get_recording_for_session(session_uuid, recording_uuid)
+        .await
+        .unwrap()
+        .unwrap();
+    let retention = RecordingRetentionManager::new(
+        session_store.clone(),
+        artifact_store,
+        Duration::from_secs(60),
+    );
+    retention
+        .run_cleanup_pass(stored.completed_at.unwrap() + chrono::Duration::seconds(61))
+        .await
+        .unwrap();
+
+    let content_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/content"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(content_response.status(), StatusCode::GONE);
+    let body = response_json(content_response).await;
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("no longer available"));
 }
 
 #[tokio::test]
@@ -403,6 +865,8 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
             })
             .unwrap(),
         ),
+        recording_artifact_store: test_artifact_store(),
+        recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
@@ -463,6 +927,8 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
             })
             .unwrap(),
         ),
+        recording_artifact_store: test_artifact_store(),
+        recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,

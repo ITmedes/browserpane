@@ -15,6 +15,7 @@ servers:
 tags:
   - name: Sessions
   - name: Session Runtime
+  - name: Session Recordings
   - name: Session Automation
 security:
   - bearerAuth: []
@@ -78,6 +79,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
     delete:
@@ -97,6 +100,177 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/recordings:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Session Recordings]
+      summary: List recordings associated with a visible session
+      operationId: listSessionRecordings
+      responses:
+        '200':
+          description: Session recording metadata list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecordingListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Session Recordings]
+      summary: Create a new recording resource for a runtime-compatible session
+      operationId: createSessionRecording
+      responses:
+        '201':
+          description: Recording metadata created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecordingResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/recordings/{recording_id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags: [Session Recordings]
+      summary: Fetch one recording resource for a visible session
+      operationId: getSessionRecording
+      responses:
+        '200':
+          description: Recording metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecordingResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/recordings/{recording_id}/stop:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/RecordingId'
+    post:
+      tags: [Session Recordings]
+      summary: Transition an active recording toward finalization
+      operationId: stopSessionRecording
+      responses:
+        '200':
+          description: Recording metadata after stop request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecordingResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/recordings/{recording_id}/complete:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/RecordingId'
+    post:
+      tags: [Session Recordings]
+      summary: Finalize recording metadata with artifact details
+      operationId: completeSessionRecording
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteSessionRecordingRequest'
+      responses:
+        '200':
+          description: Recording metadata after artifact finalization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecordingResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/recordings/{recording_id}/fail:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/RecordingId'
+    post:
+      tags: [Session Recordings]
+      summary: Mark a recording resource as failed
+      operationId: failSessionRecording
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FailSessionRecordingRequest'
+      responses:
+        '200':
+          description: Recording metadata after failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecordingResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/recordings/{recording_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags: [Session Recordings]
+      summary: Download recording artifact content when available
+      operationId: getSessionRecordingContent
+      responses:
+        '200':
+          description: Recording artifact bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            video/webm:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/access-tokens:
@@ -247,6 +421,13 @@ components:
       schema:
         type: string
         format: uuid
+    RecordingId:
+      name: recording_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     BadRequest:
       description: Request validation failed
@@ -268,6 +449,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
       description: Runtime or lifecycle conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Gone:
+      description: Artifact was previously available but has expired or been removed
       content:
         application/json:
           schema:
@@ -355,6 +542,30 @@ components:
           type: boolean
         resize:
           type: boolean
+    SessionRecordingMode:
+      type: string
+      enum:
+        - disabled
+        - manual
+        - always
+    SessionRecordingFormat:
+      type: string
+      enum: [webm]
+    SessionRecordingPolicy:
+      type: object
+      required:
+        - mode
+        - format
+        - retention_sec
+      properties:
+        mode:
+          $ref: '#/components/schemas/SessionRecordingMode'
+        format:
+          $ref: '#/components/schemas/SessionRecordingFormat'
+        retention_sec:
+          type: integer
+          nullable: true
+          minimum: 1
     SessionConnectInfo:
       type: object
       required:
@@ -412,6 +623,7 @@ components:
         - idle_timeout_sec
         - labels
         - integration_context
+        - recording
         - connect
         - runtime
         - created_at
@@ -450,6 +662,8 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        recording:
+          $ref: '#/components/schemas/SessionRecordingPolicy'
         connect:
           $ref: '#/components/schemas/SessionConnectInfo'
         runtime:
@@ -487,6 +701,8 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        recording:
+          $ref: '#/components/schemas/SessionRecordingPolicy'
     SessionListResponse:
       type: object
       required: [sessions]
@@ -495,6 +711,124 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SessionResource'
+    SessionRecordingResourceState:
+      type: string
+      enum:
+        - starting
+        - recording
+        - finalizing
+        - ready
+        - failed
+    SessionRecordingTerminationReason:
+      type: string
+      enum:
+        - manual_stop
+        - session_stop
+        - idle_stop
+        - gateway_restart
+        - worker_exit
+    SessionRecordingResource:
+      type: object
+      required:
+        - id
+        - session_id
+        - previous_recording_id
+        - state
+        - format
+        - mime_type
+        - bytes
+        - duration_ms
+        - error
+        - termination_reason
+        - artifact_available
+        - content_path
+        - started_at
+        - completed_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        previous_recording_id:
+          type: string
+          format: uuid
+          nullable: true
+        state:
+          $ref: '#/components/schemas/SessionRecordingResourceState'
+        format:
+          $ref: '#/components/schemas/SessionRecordingFormat'
+        mime_type:
+          type: string
+          nullable: true
+        bytes:
+          type: integer
+          nullable: true
+          minimum: 0
+        duration_ms:
+          type: integer
+          nullable: true
+          minimum: 0
+        error:
+          type: string
+          nullable: true
+        termination_reason:
+          allOf:
+            - $ref: '#/components/schemas/SessionRecordingTerminationReason'
+          nullable: true
+        artifact_available:
+          type: boolean
+        content_path:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SessionRecordingListResponse:
+      type: object
+      required: [recordings]
+      properties:
+        recordings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionRecordingResource'
+    CompleteSessionRecordingRequest:
+      type: object
+      required: [source_path]
+      properties:
+        source_path:
+          type: string
+        mime_type:
+          type: string
+          nullable: true
+        bytes:
+          type: integer
+          nullable: true
+          minimum: 0
+        duration_ms:
+          type: integer
+          nullable: true
+          minimum: 0
+    FailSessionRecordingRequest:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        termination_reason:
+          $ref: '#/components/schemas/SessionRecordingTerminationReason'
     SessionAccessTokenResponse:
       type: object
       required: [session_id, token_type, token, expires_at, connect]
@@ -523,6 +857,7 @@ components:
         - exclusive_browser_owner
         - mcp_owner
         - resolution
+        - recording
         - telemetry
       properties:
         browser_clients:
@@ -551,8 +886,59 @@ components:
           items:
             type: integer
             minimum: 0
+        recording:
+          $ref: '#/components/schemas/SessionRecordingStatus'
         telemetry:
           $ref: '#/components/schemas/SessionTelemetry'
+    SessionRecordingStatusState:
+      type: string
+      enum:
+        - disabled
+        - idle
+        - recording
+        - finalizing
+        - ready
+        - failed
+    SessionRecordingStatus:
+      type: object
+      required:
+        - configured_mode
+        - format
+        - retention_sec
+        - state
+        - active_recording_id
+        - recorder_attached
+        - started_at
+        - bytes_written
+        - duration_ms
+      properties:
+        configured_mode:
+          $ref: '#/components/schemas/SessionRecordingMode'
+        format:
+          $ref: '#/components/schemas/SessionRecordingFormat'
+        retention_sec:
+          type: integer
+          nullable: true
+          minimum: 1
+        state:
+          $ref: '#/components/schemas/SessionRecordingStatusState'
+        active_recording_id:
+          type: string
+          nullable: true
+        recorder_attached:
+          type: boolean
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        bytes_written:
+          type: integer
+          nullable: true
+          minimum: 0
+        duration_ms:
+          type: integer
+          nullable: true
+          minimum: 0
     SessionTelemetry:
       type: object
       required:

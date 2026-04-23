@@ -22,6 +22,7 @@ use self::request::{validate_request_path, RequestValidationError};
 use self::session_task::handle_session;
 use crate::auth::AuthValidator;
 use crate::connect_ticket::SessionConnectTicketManager;
+use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_control::SessionStore;
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
@@ -33,6 +34,7 @@ pub struct TransportServer {
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
+    recording_lifecycle: Arc<RecordingLifecycleManager>,
     idle_stop_timeout: Duration,
     heartbeat_timeout: Duration,
     registry: Arc<SessionRegistry>,
@@ -46,6 +48,7 @@ impl TransportServer {
         auth_validator: Arc<AuthValidator>,
         connect_ticket_manager: Arc<SessionConnectTicketManager>,
         session_store: SessionStore,
+        recording_lifecycle: Arc<RecordingLifecycleManager>,
         idle_stop_timeout: Duration,
         heartbeat_timeout: Duration,
         registry: Arc<SessionRegistry>,
@@ -57,6 +60,7 @@ impl TransportServer {
             auth_validator,
             connect_ticket_manager,
             session_store,
+            recording_lifecycle,
             idle_stop_timeout,
             heartbeat_timeout,
             registry,
@@ -180,6 +184,7 @@ impl TransportServer {
             let registry = self.registry.clone();
             let session_manager = self.session_manager.clone();
             let session_store = self.session_store.clone();
+            let recording_lifecycle = self.recording_lifecycle.clone();
             let idle_stop_timeout = self.idle_stop_timeout;
             active_sessions.fetch_add(1, Ordering::Relaxed);
 
@@ -200,6 +205,7 @@ impl TransportServer {
                     &agent_path,
                     heartbeat_timeout,
                     registry.clone(),
+                    recording_lifecycle,
                 )
                 .await
                 {
