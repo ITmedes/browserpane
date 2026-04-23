@@ -4,8 +4,8 @@ use std::time::Duration;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::runtime_manager::SessionRuntimeManager;
 use crate::session_control::{SessionLifecycleState, SessionStore};
+use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 
 pub fn schedule_idle_session_stop(
@@ -13,7 +13,7 @@ pub fn schedule_idle_session_stop(
     default_timeout: Duration,
     registry: Arc<SessionRegistry>,
     session_store: SessionStore,
-    runtime_manager: Arc<SessionRuntimeManager>,
+    session_manager: Arc<SessionManager>,
 ) {
     tokio::spawn(async move {
         let timeout = match session_store.get_session_by_id(session_id).await {
@@ -38,7 +38,7 @@ pub fn schedule_idle_session_stop(
 
         match session_store.stop_session_if_idle(session_id).await {
             Ok(Some(session)) if session.state == SessionLifecycleState::Stopped => {
-                runtime_manager.release(session_id).await;
+                session_manager.release(session_id).await;
                 registry.remove_session(session_id).await;
                 info!(%session_id, "stopped idle session after {:?}", timeout);
             }

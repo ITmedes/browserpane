@@ -12,12 +12,12 @@ use uuid::Uuid;
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
 use crate::connect_ticket::SessionConnectTicketManager;
 use crate::idle_stop::schedule_idle_session_stop;
-use crate::runtime_manager::{ResolvedSessionRuntime, RuntimeManagerError, SessionRuntimeManager};
 use crate::session_control::{
     CreateSessionRequest, SessionLifecycleState, SessionListResponse, SessionOwnerMode,
     SessionResource, SessionStore, SessionStoreError, SetAutomationDelegateRequest, StoredSession,
 };
 use crate::session_hub::SessionTelemetrySnapshot;
+use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime};
 use crate::session_registry::SessionRegistry;
 
 /// Shared state for the HTTP API.
@@ -26,7 +26,7 @@ struct ApiState {
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
-    runtime_manager: Arc<SessionRuntimeManager>,
+    session_manager: Arc<SessionManager>,
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
@@ -108,7 +108,7 @@ async fn create_session(
         state.idle_stop_timeout,
         state.registry.clone(),
         state.session_store.clone(),
-        state.runtime_manager.clone(),
+        state.session_manager.clone(),
     );
 
     Ok((
@@ -238,7 +238,7 @@ async fn issue_session_access_token(
             state.idle_stop_timeout,
             state.registry.clone(),
             state.session_store.clone(),
-            state.runtime_manager.clone(),
+            state.session_manager.clone(),
         );
         prepared
     } else {
@@ -330,7 +330,10 @@ async fn delete_session(
 
     if should_block_session_stop(
         stored.state,
-        state.runtime_manager.profile().supports_legacy_global_routes,
+        state
+            .session_manager
+            .profile()
+            .supports_legacy_global_routes,
         runtime_is_currently_in_use(&state).await,
     ) {
         return Err((
@@ -356,7 +359,7 @@ async fn delete_session(
             )
         })?;
 
-    state.runtime_manager.release(session_id).await;
+    state.session_manager.release(session_id).await;
     state.registry.remove_session(session_id).await;
 
     Ok(Json(session_resource(&state, &stopped, None)))
@@ -462,7 +465,7 @@ async fn set_mcp_owner(
         })?;
 
     hub.set_mcp_owner(req.width, req.height).await;
-    state.runtime_manager.mark_session_active(session_id).await;
+    state.session_manager.mark_session_active(session_id).await;
     let _ = state.session_store.mark_session_active(session_id).await;
 
     Ok(Json(OkResponse { ok: true }))
@@ -490,7 +493,7 @@ async fn set_session_mcp_owner(
         })?;
 
     hub.set_mcp_owner(req.width, req.height).await;
-    state.runtime_manager.mark_session_active(session_id).await;
+    state.session_manager.mark_session_active(session_id).await;
     let _ = state.session_store.mark_session_active(session_id).await;
 
     Ok(Json(OkResponse { ok: true }))
@@ -505,7 +508,7 @@ async fn clear_mcp_owner(
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
     if !state
-        .runtime_manager
+        .session_manager
         .profile()
         .supports_legacy_global_routes
     {
@@ -527,13 +530,13 @@ async fn clear_mcp_owner(
     let snapshot = hub.telemetry_snapshot().await;
     if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
         let _ = state.session_store.mark_session_idle(session_id).await;
-        state.runtime_manager.mark_session_idle(session_id).await;
+        state.session_manager.mark_session_idle(session_id).await;
         schedule_idle_session_stop(
             session_id,
             state.idle_stop_timeout,
             state.registry.clone(),
             state.session_store.clone(),
-            state.runtime_manager.clone(),
+            state.session_manager.clone(),
         );
     }
 
@@ -564,13 +567,13 @@ async fn clear_session_mcp_owner(
     let snapshot = hub.telemetry_snapshot().await;
     if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
         let _ = state.session_store.mark_session_idle(session_id).await;
-        state.runtime_manager.mark_session_idle(session_id).await;
+        state.session_manager.mark_session_idle(session_id).await;
         schedule_idle_session_stop(
             session_id,
             state.idle_stop_timeout,
             state.registry.clone(),
             state.session_store.clone(),
-            state.runtime_manager.clone(),
+            state.session_manager.clone(),
         );
     }
 
@@ -584,7 +587,7 @@ pub async fn run_api_server(
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
-    runtime_manager: Arc<SessionRuntimeManager>,
+    session_manager: Arc<SessionManager>,
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
@@ -594,7 +597,7 @@ pub async fn run_api_server(
         auth_validator,
         connect_ticket_manager,
         session_store,
-        runtime_manager,
+        session_manager,
         idle_stop_timeout,
         public_gateway_url,
         default_owner_mode,
@@ -629,7 +632,7 @@ fn session_resource(
     stored.to_resource(
         &state.public_gateway_url,
         state
-            .runtime_manager
+            .session_manager
             .describe_session_runtime(stored.id)
             .into(),
         state_override,
@@ -789,26 +792,26 @@ fn should_block_session_stop(
 async fn resolve_runtime(
     state: &ApiState,
     session_id: Uuid,
-) -> Result<ResolvedSessionRuntime, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<SessionRuntime, (StatusCode, Json<ErrorResponse>)> {
     state
-        .runtime_manager
+        .session_manager
         .resolve(session_id)
         .await
-        .map_err(map_runtime_manager_error)
+        .map_err(map_session_manager_error)
 }
 
 async fn resolve_runtime_compat(
     state: &ApiState,
     session_id: Uuid,
-) -> Result<ResolvedSessionRuntime, StatusCode> {
+) -> Result<SessionRuntime, StatusCode> {
     state
-        .runtime_manager
+        .session_manager
         .resolve(session_id)
         .await
         .map_err(|_| StatusCode::CONFLICT)
 }
 
-fn map_runtime_manager_error(error: RuntimeManagerError) -> (StatusCode, Json<ErrorResponse>) {
+fn map_session_manager_error(error: SessionManagerError) -> (StatusCode, Json<ErrorResponse>) {
     (
         StatusCode::CONFLICT,
         Json(ErrorResponse {
@@ -835,7 +838,7 @@ fn ensure_legacy_runtime_routes_supported(
     state: &ApiState,
 ) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
     if state
-        .runtime_manager
+        .session_manager
         .profile()
         .supports_legacy_global_routes
     {

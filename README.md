@@ -205,6 +205,7 @@ Current limitation:
 
 - the public session resource model is now versioned and persistent
 - gateway transport and runtime compatibility APIs are now session-scoped
+- gateway runtime orchestration now goes through an internal `SessionManager` boundary; the current runtime backend implementation still lives in `runtime_manager.rs`
 - the default runtime backend is still `legacy_single_runtime` compatibility mode
 - the optional `docker_single` backend can now start and stop one runtime container for the active session
 - the optional `docker_pool` backend can start multiple runtime containers in parallel, but only up to its configured runtime caps
