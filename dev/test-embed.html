@@ -603,6 +603,89 @@
       background: rgba(18, 31, 54, 0.76);
     }
 
+    .recording-library {
+      display: grid;
+      gap: 12px;
+      padding-top: 4px;
+    }
+
+    .recording-library-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .recording-library-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .recording-library-card,
+    .recording-library-empty {
+      padding: 12px 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(16, 27, 46, 0.74);
+    }
+
+    .recording-library-card {
+      display: grid;
+      gap: 10px;
+    }
+
+    .recording-library-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .recording-library-title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .recording-library-title strong {
+      color: #eef4ff;
+      font-size: 13px;
+      line-height: 1.35;
+      word-break: break-all;
+    }
+
+    .recording-library-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      color: #c5d3eb;
+    }
+
+    .recording-library-meta span {
+      padding: 6px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(137, 161, 201, 0.12);
+      background: rgba(18, 31, 54, 0.76);
+    }
+
+    .recording-library-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .recording-library-empty {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
     .panel-logs {
       min-height: 300px;
       flex: 1;
@@ -863,6 +946,38 @@
           <button id="btn-recording-stop" disabled>Stop & Save WebM</button>
           <button id="btn-recording-download" disabled>Download Last WebM</button>
         </div>
+
+        <div class="recording-library">
+          <div class="recording-library-header">
+            <div class="panel-heading">
+              <span class="panel-title">Recording Library</span>
+              <p class="panel-copy">
+                Download retained control-plane recording segments for the selected session, or
+                fetch the current session export bundle built from those segments.
+              </p>
+            </div>
+            <button id="btn-recording-library-refresh" disabled>Refresh Library</button>
+          </div>
+
+          <div id="recording-library-note" class="helper-note info">
+            Select a session to inspect persisted recording segments and the session export bundle.
+          </div>
+
+          <div class="metrics-grid">
+            <span id="recording-library-status">Library: --</span>
+            <span id="recording-playback-status">Playback Export: --</span>
+          </div>
+
+          <div class="action-grid">
+            <button id="btn-recording-playback-download" disabled>Download Session Export</button>
+          </div>
+
+          <div id="recording-library-list" class="recording-library-list">
+            <div class="recording-library-empty">
+              No control-plane recordings loaded yet.
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="panel metrics-panel" id="panel-metrics">
@@ -967,6 +1082,12 @@
     const recordingSessionEl = document.getElementById('recording-session');
     const recordingFileEl = document.getElementById('recording-file');
     const recordingNoteEl = document.getElementById('recording-note');
+    const recordingLibraryRefreshBtn = document.getElementById('btn-recording-library-refresh');
+    const recordingLibraryNoteEl = document.getElementById('recording-library-note');
+    const recordingLibraryStatusEl = document.getElementById('recording-library-status');
+    const recordingPlaybackStatusEl = document.getElementById('recording-playback-status');
+    const recordingPlaybackDownloadBtn = document.getElementById('btn-recording-playback-download');
+    const recordingLibraryListEl = document.getElementById('recording-library-list');
     const loginBtn = document.getElementById('btn-login');
     const logoutBtn = document.getElementById('btn-logout');
     const renderBackendSelect = document.getElementById('render-backend-select');
@@ -1033,6 +1154,37 @@
     function formatRate(bytesPerSec) {
       if (!Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return '0 B/s';
       return `${formatBytes(bytesPerSec)}/s`;
+    }
+
+    function formatTimestamp(value) {
+      if (!value) return '--';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '--';
+      return date.toLocaleString();
+    }
+
+    function formatTerminationReason(reason) {
+      if (!reason) return '--';
+      return String(reason)
+        .split('_')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    }
+
+    function parseContentDispositionFilename(value) {
+      if (!value) {
+        return '';
+      }
+      const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(value);
+      if (utf8Match?.[1]) {
+        try {
+          return decodeURIComponent(utf8Match[1]);
+        } catch {
+          return utf8Match[1];
+        }
+      }
+      const plainMatch = /filename="?([^"]+)"?/i.exec(value);
+      return plainMatch?.[1] ?? '';
     }
 
     function topChannelRates(curr, prev, dtSec) {
@@ -1563,6 +1715,7 @@
       sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
       renderMcpDelegationState();
       renderRecordingState();
+      renderRecordingCatalogState();
     }
 
     function isJoinableSession(resource) {
@@ -1585,6 +1738,9 @@
       ) ?? null;
       controlSessionState.resource = selected;
       renderSessionState();
+      void refreshRecordingCatalogForSelectedSession({ force: false, silent: true }).catch((error) => {
+        log(`Recording library refresh failed: ${error.message}`, 'error');
+      });
       return selected;
     }
 
@@ -1850,6 +2006,7 @@
       controlSessionState.resource = null;
       controlSessionState.resources = [];
       controlSessionState.selectedSessionId = '';
+      clearRecordingCatalogState();
       stopMcpBridgePolling({ clearState: true });
       sessionStorage.removeItem(AUTH_STORAGE_KEY);
       renderSessionState();
@@ -2128,6 +2285,10 @@
         body: JSON.stringify({
           owner_mode: 'collaborative',
           idle_timeout_sec: 300,
+          recording: {
+            mode: 'manual',
+            format: 'webm',
+          },
           integration_context: {
             source: 'test-embed',
             origin: window.location.origin,
@@ -2436,6 +2597,17 @@
       lastFilename: '',
       autoDownload: true,
     };
+    const recordingCatalogState = {
+      sessionId: '',
+      recordings: [],
+      playback: null,
+      loading: false,
+      loaded: false,
+      error: '',
+      downloadingRecordingId: '',
+      downloadingPlayback: false,
+      requestId: 0,
+    };
 
     function makeRecordingFilename(sessionId) {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -2452,6 +2624,363 @@
       anchor.click();
       anchor.remove();
       setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    async function downloadAuthenticatedArtifact(accessToken, path, fallbackFilename) {
+      const response = await fetch(path, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      const blob = await response.blob();
+      const filename = parseContentDispositionFilename(response.headers.get('content-disposition'))
+        || fallbackFilename;
+      downloadBlob(blob, filename);
+      return {
+        filename,
+        bytes: blob.size,
+        mimeType: response.headers.get('content-type') ?? blob.type ?? '',
+      };
+    }
+
+    async function fetchSessionRecordings(accessToken, sessionId) {
+      const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(sessionId)}/recordings`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      const payload = await response.json();
+      return Array.isArray(payload?.recordings) ? payload.recordings : [];
+    }
+
+    async function fetchSessionPlayback(accessToken, sessionId) {
+      const response = await fetch(
+        `${SESSION_API_URL}/${encodeURIComponent(sessionId)}/recording-playback`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+          },
+          cache: 'no-store',
+        },
+      );
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const payload = await response.json();
+          detail = payload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      return await response.json();
+    }
+
+    function clearRecordingCatalogState(sessionId = '') {
+      recordingCatalogState.requestId += 1;
+      recordingCatalogState.sessionId = sessionId;
+      recordingCatalogState.recordings = [];
+      recordingCatalogState.playback = null;
+      recordingCatalogState.loading = false;
+      recordingCatalogState.loaded = false;
+      recordingCatalogState.error = '';
+      recordingCatalogState.downloadingRecordingId = '';
+      recordingCatalogState.downloadingPlayback = false;
+      renderRecordingCatalogState();
+    }
+
+    function buildRecordingCard(recording) {
+      const card = document.createElement('article');
+      card.className = 'recording-library-card';
+
+      const header = document.createElement('div');
+      header.className = 'recording-library-card-header';
+
+      const title = document.createElement('div');
+      title.className = 'recording-library-title';
+      title.textContent = `Segment ${getShortSessionId(recording.id)}`;
+      header.appendChild(title);
+
+      const stateBadge = document.createElement('span');
+      stateBadge.className = 'metric-badge';
+      stateBadge.textContent = recording.state ?? 'unknown';
+      header.appendChild(stateBadge);
+      card.appendChild(header);
+
+      const meta = document.createElement('div');
+      meta.className = 'recording-library-meta';
+      const metaItems = [
+        `Started: ${formatTimestamp(recording.started_at)}`,
+        `Completed: ${formatTimestamp(recording.completed_at)}`,
+        `Duration: ${formatDuration(recording.duration_ms ?? 0)}`,
+        `Size: ${formatBytes(recording.bytes ?? 0)}`,
+        `Termination: ${formatTerminationReason(recording.termination_reason)}`,
+      ];
+      if (recording.previous_recording_id) {
+        metaItems.push(`Previous: ${getShortSessionId(recording.previous_recording_id)}`);
+      }
+      if (recording.error) {
+        metaItems.push(`Error: ${recording.error}`);
+      }
+      for (const item of metaItems) {
+        const chip = document.createElement('span');
+        chip.textContent = item;
+        meta.appendChild(chip);
+      }
+      card.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'recording-library-actions';
+      const downloadBtn = document.createElement('button');
+      downloadBtn.type = 'button';
+      downloadBtn.dataset.action = 'download-recording';
+      downloadBtn.dataset.recordingId = recording.id;
+      downloadBtn.textContent = recordingCatalogState.downloadingRecordingId === recording.id
+        ? 'Downloading...'
+        : 'Download Segment';
+      downloadBtn.disabled = !recording.artifact_available
+        || Boolean(recordingCatalogState.downloadingRecordingId)
+        || recordingCatalogState.downloadingPlayback;
+      if (!recording.artifact_available) {
+        downloadBtn.textContent = recording.state === 'ready' ? 'Artifact Unavailable' : 'Artifact Pending';
+      }
+      actions.appendChild(downloadBtn);
+      card.appendChild(actions);
+
+      return card;
+    }
+
+    function renderRecordingCatalogState() {
+      const selectedSessionId = controlSessionState.resource?.id ?? '';
+      const canManageSessions = authState.config?.mode === 'oidc' && Boolean(authState.tokens?.access_token);
+      const playback = recordingCatalogState.playback;
+      const hasPlayableExport = (playback?.included_segment_count ?? 0) > 0;
+
+      recordingLibraryRefreshBtn.disabled = !canManageSessions || !selectedSessionId || recordingCatalogState.loading;
+      recordingPlaybackDownloadBtn.disabled = !canManageSessions
+        || !selectedSessionId
+        || !hasPlayableExport
+        || recordingCatalogState.loading
+        || recordingCatalogState.downloadingPlayback
+        || Boolean(recordingCatalogState.downloadingRecordingId);
+      recordingPlaybackDownloadBtn.textContent = recordingCatalogState.downloadingPlayback
+        ? 'Downloading Export...'
+        : 'Download Session Export (.zip)';
+
+      if (!canManageSessions) {
+        recordingLibraryNoteEl.className = 'helper-note info';
+        recordingLibraryNoteEl.textContent = 'Login first to inspect retained session recordings.';
+        recordingLibraryStatusEl.textContent = 'Library: login required';
+        recordingPlaybackStatusEl.textContent = 'Playback Export: login required';
+        recordingLibraryListEl.innerHTML =
+          '<div class="recording-library-empty">Login first to load retained recordings.</div>';
+        return;
+      }
+
+      if (!selectedSessionId) {
+        recordingLibraryNoteEl.className = 'helper-note info';
+        recordingLibraryNoteEl.textContent =
+          'Select a session to inspect persisted recording segments and the session export bundle.';
+        recordingLibraryStatusEl.textContent = 'Library: no session selected';
+        recordingPlaybackStatusEl.textContent = 'Playback Export: --';
+        recordingLibraryListEl.innerHTML =
+          '<div class="recording-library-empty">Select a session to load retained recordings.</div>';
+        return;
+      }
+
+      if (recordingCatalogState.loading) {
+        recordingLibraryNoteEl.className = 'helper-note info';
+        recordingLibraryNoteEl.textContent =
+          `Loading retained recordings for session ${getShortSessionId(selectedSessionId)}...`;
+      } else if (recordingCatalogState.error) {
+        recordingLibraryNoteEl.className = 'helper-note warn';
+        recordingLibraryNoteEl.textContent = `Recording library failed to load: ${recordingCatalogState.error}`;
+      } else if (!recordingCatalogState.loaded) {
+        recordingLibraryNoteEl.className = 'helper-note info';
+        recordingLibraryNoteEl.textContent =
+          'Refresh the library to inspect retained recording segments and the session export bundle.';
+      } else if (recordingCatalogState.recordings.length === 0) {
+        recordingLibraryNoteEl.className = 'helper-note info';
+        recordingLibraryNoteEl.textContent =
+          'No retained recording segments exist for the selected session yet.';
+      } else {
+        recordingLibraryNoteEl.className = 'helper-note ok';
+        recordingLibraryNoteEl.textContent =
+          `Loaded ${recordingCatalogState.recordings.length} retained recording segment${recordingCatalogState.recordings.length === 1 ? '' : 's'} for session ${getShortSessionId(selectedSessionId)}.`;
+      }
+
+      if (recordingCatalogState.loading) {
+        recordingLibraryStatusEl.textContent = 'Library: loading...';
+      } else {
+        const count = recordingCatalogState.recordings.length;
+        recordingLibraryStatusEl.textContent = recordingCatalogState.loaded
+          ? `Library: ${count} segment${count === 1 ? '' : 's'}`
+          : 'Library: idle';
+      }
+
+      if (!playback) {
+        recordingPlaybackStatusEl.textContent = 'Playback Export: --';
+      } else {
+        recordingPlaybackStatusEl.textContent =
+          `Playback Export: ${playback.state} · ${playback.included_segment_count}/${playback.segment_count} segments · ${formatBytes(playback.included_bytes)}`;
+      }
+
+      recordingLibraryListEl.innerHTML = '';
+      if (!recordingCatalogState.recordings.length) {
+        const empty = document.createElement('div');
+        empty.className = 'recording-library-empty';
+        empty.textContent = recordingCatalogState.loading
+          ? 'Loading retained recordings...'
+          : 'No retained recording segments are available for this session yet.';
+        recordingLibraryListEl.appendChild(empty);
+        return;
+      }
+
+      for (const recording of recordingCatalogState.recordings) {
+        recordingLibraryListEl.appendChild(buildRecordingCard(recording));
+      }
+    }
+
+    async function refreshRecordingCatalogForSelectedSession({ force = false, silent = true } = {}) {
+      const accessToken = await getValidAccessToken();
+      const sessionId = controlSessionState.resource?.id ?? '';
+      if (!accessToken || !sessionId) {
+        clearRecordingCatalogState(sessionId);
+        return null;
+      }
+      if (!force
+        && !recordingCatalogState.error
+        && recordingCatalogState.loaded
+        && recordingCatalogState.sessionId === sessionId) {
+        return {
+          recordings: recordingCatalogState.recordings,
+          playback: recordingCatalogState.playback,
+        };
+      }
+
+      const requestId = recordingCatalogState.requestId + 1;
+      recordingCatalogState.requestId = requestId;
+      recordingCatalogState.sessionId = sessionId;
+      recordingCatalogState.loading = true;
+      recordingCatalogState.error = '';
+      renderRecordingCatalogState();
+
+      try {
+        const [recordings, playback] = await Promise.all([
+          fetchSessionRecordings(accessToken, sessionId),
+          fetchSessionPlayback(accessToken, sessionId),
+        ]);
+        if (recordingCatalogState.requestId !== requestId) {
+          return null;
+        }
+        recordingCatalogState.recordings = recordings;
+        recordingCatalogState.playback = playback;
+        recordingCatalogState.loading = false;
+        recordingCatalogState.loaded = true;
+        recordingCatalogState.error = '';
+        renderRecordingCatalogState();
+        if (!silent) {
+          log(
+            `Loaded ${recordings.length} retained recording segment${recordings.length === 1 ? '' : 's'} for session ${sessionId}`,
+            'info',
+          );
+        }
+        return {
+          recordings,
+          playback,
+        };
+      } catch (error) {
+        if (recordingCatalogState.requestId !== requestId) {
+          return null;
+        }
+        recordingCatalogState.recordings = [];
+        recordingCatalogState.playback = null;
+        recordingCatalogState.loading = false;
+        recordingCatalogState.loaded = true;
+        recordingCatalogState.error = error.message;
+        renderRecordingCatalogState();
+        if (!silent) {
+          log(`Recording library refresh failed: ${error.message}`, 'error');
+        }
+        throw error;
+      }
+    }
+
+    async function downloadCatalogRecordingById(recordingId) {
+      const accessToken = await getValidAccessToken();
+      const sessionId = controlSessionState.resource?.id ?? '';
+      const recording = recordingCatalogState.recordings.find((entry) => entry.id === recordingId);
+      if (!accessToken || !sessionId) {
+        throw new Error('login and session selection are required');
+      }
+      if (!recording) {
+        throw new Error(`recording ${recordingId} is not loaded`);
+      }
+      if (!recording.artifact_available) {
+        throw new Error(`recording ${recordingId} does not have a downloadable artifact`);
+      }
+
+      recordingCatalogState.downloadingRecordingId = recordingId;
+      renderRecordingCatalogState();
+      try {
+        const result = await downloadAuthenticatedArtifact(
+          accessToken,
+          recording.content_path,
+          `browserpane-${sessionId}-${recordingId}.webm`,
+        );
+        log(`Downloaded retained segment ${recordingId} (${formatBytes(result.bytes)})`, 'info');
+        return result;
+      } finally {
+        recordingCatalogState.downloadingRecordingId = '';
+        renderRecordingCatalogState();
+      }
+    }
+
+    async function downloadSessionPlaybackExport() {
+      const accessToken = await getValidAccessToken();
+      const sessionId = controlSessionState.resource?.id ?? '';
+      if (!accessToken || !sessionId) {
+        throw new Error('login and session selection are required');
+      }
+
+      recordingCatalogState.downloadingPlayback = true;
+      renderRecordingCatalogState();
+      try {
+        const result = await downloadAuthenticatedArtifact(
+          accessToken,
+          `${SESSION_API_URL}/${encodeURIComponent(sessionId)}/recording-playback/export`,
+          `browserpane-${sessionId}-recording-playback.zip`,
+        );
+        log(`Downloaded session export for ${sessionId} (${formatBytes(result.bytes)})`, 'info');
+        return result;
+      } finally {
+        recordingCatalogState.downloadingPlayback = false;
+        renderRecordingCatalogState();
+      }
     }
 
     function renderRecordingState() {
@@ -2966,6 +3495,29 @@
     recordingAutoDownloadToggle.addEventListener('change', () => {
       setRecordingAutoDownload(recordingAutoDownloadToggle.checked);
     });
+    recordingLibraryRefreshBtn.addEventListener('click', () => {
+      void refreshRecordingCatalogForSelectedSession({ force: true, silent: false }).catch((error) => {
+        log(`Recording library refresh failed: ${error.message}`, 'error');
+      });
+    });
+    recordingPlaybackDownloadBtn.addEventListener('click', () => {
+      void downloadSessionPlaybackExport().catch((error) => {
+        log(`Session export download failed: ${error.message}`, 'error');
+      });
+    });
+    recordingLibraryListEl.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action="download-recording"]');
+      if (!button) {
+        return;
+      }
+      const recordingId = button.dataset.recordingId;
+      if (!recordingId) {
+        return;
+      }
+      void downloadCatalogRecordingById(recordingId).catch((error) => {
+        log(`Recording download failed: ${error.message}`, 'error');
+      });
+    });
     metricsStartBtn.addEventListener('click', startBenchmarkSample);
     metricsStopBtn.addEventListener('click', () => stopBenchmarkSample('manual'));
     metricsCopyBtn.addEventListener('click', () => void copyBenchmarkSummary());
@@ -3048,6 +3600,9 @@
       start: startSessionRecording,
       stop: () => stopSessionRecording({ reason: 'api' }),
       downloadLast: downloadLastRecording,
+      refreshCatalog: (options = {}) => refreshRecordingCatalogForSelectedSession(options),
+      downloadCatalogRecording: downloadCatalogRecordingById,
+      downloadPlaybackExport: downloadSessionPlaybackExport,
       setAutoDownload: setRecordingAutoDownload,
       getState: () => ({
         active: recordingState.active,
@@ -3056,11 +3611,22 @@
         lastBlobSize: recordingState.lastBlob?.size ?? 0,
         autoDownload: recordingState.autoDownload,
       }),
+      getCatalogState: () => ({
+        sessionId: recordingCatalogState.sessionId,
+        recordings: cloneValue(recordingCatalogState.recordings) ?? [],
+        playback: cloneValue(recordingCatalogState.playback),
+        loading: recordingCatalogState.loading,
+        loaded: recordingCatalogState.loaded,
+        error: recordingCatalogState.error,
+        downloadingRecordingId: recordingCatalogState.downloadingRecordingId,
+        downloadingPlayback: recordingCatalogState.downloadingPlayback,
+      }),
     };
 
     // ── Startup ─────────────────────────────────────────────────────
     renderBenchmarkMetrics();
     renderRecordingState();
+    renderRecordingCatalogState();
     await initializeAuth();
     setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
     setToggleButtonState(micBtn, false, 'Mic On', 'Mic Off');
@@ -3069,7 +3635,10 @@
     log(`Default client role: ${DEFAULT_CLIENT_ROLE}`, 'info');
     log('Benchmark metrics API: window.__bpaneBenchmarkMetrics.{startSample,stopSample,resetSample,getSummary}', 'info');
     log('Control API: window.__bpaneControl.{listSessions,getState,refreshSessions,selectSession,startNewSession,connectSelected,disconnect}', 'info');
-    log('Recording API: window.__bpaneRecording.{start,stop,downloadLast,setAutoDownload,getState}', 'info');
+    log(
+      'Recording API: window.__bpaneRecording.{start,stop,downloadLast,refreshCatalog,downloadCatalogRecording,downloadPlaybackExport,setAutoDownload,getState,getCatalogState}',
+      'info',
+    );
     if (authState.config?.mode === 'oidc') {
       log(`OIDC login configured for issuer ${authState.config.issuer}`, 'info');
       log(`Example user: ${getExampleUserLabel() || 'none configured'}`, 'info');

@@ -245,12 +245,15 @@ async function connectRecorderToSession(page, options, sessionId) {
 }
 
 async function disconnectPage(page) {
-  await page.evaluate(async () => {
-    const state = window.__bpaneControl?.getState?.();
-    if (state?.connected) {
-      await window.__bpaneControl.disconnect();
-    }
-  }).catch(() => {});
+  await Promise.race([
+    page.evaluate(async () => {
+      const state = window.__bpaneControl?.getState?.();
+      if (state?.connected) {
+        await window.__bpaneControl.disconnect();
+      }
+    }).catch(() => {}),
+    sleep(5000),
+  ]);
 }
 
 async function nudgeRemotePage(page) {
@@ -418,6 +421,124 @@ async function stageFileForGateway(sourcePath, finalizeTarget) {
   await execFile('docker', ['cp', sourcePath, `deploy-gateway-1:${finalizeTarget.gatewayPath}`]);
 }
 
+function resolveSegmentOutputPath(requestedOutputPath, tempDir, sessionId, segmentIndex) {
+  if (!requestedOutputPath) {
+    return path.join(tempDir, `browserpane-${sessionId}-segment-${segmentIndex}.webm`);
+  }
+  if (segmentIndex === 1) {
+    return requestedOutputPath;
+  }
+  const extension = path.extname(requestedOutputPath) || '.webm';
+  const base = requestedOutputPath.slice(0, requestedOutputPath.length - extension.length);
+  return `${base}-segment-${segmentIndex}${extension}`;
+}
+
+async function savePlaywrightDownload(download, targetPath) {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await download.saveAs(targetPath);
+  const stats = await fs.stat(targetPath);
+  return {
+    path: targetPath,
+    bytes: stats.size,
+    suggestedFilename: download.suggestedFilename(),
+  };
+}
+
+async function captureRecordingSegment({
+  accessToken,
+  ownerPage,
+  recorderPage,
+  options,
+  sessionId,
+  segmentIndex,
+  requestedOutputPath,
+  tempDir,
+}) {
+  const recordingResource = await createSessionRecording(accessToken, options, sessionId);
+  const recordingId = recordingResource.id;
+  if (!recordingId) {
+    throw new Error(`Failed to create control-plane recording metadata for segment ${segmentIndex}.`);
+  }
+
+  await recorderPage.evaluate(() => {
+    window.__bpaneRecording.setAutoDownload(false);
+    return window.__bpaneRecording.start();
+  });
+  log(`Recording segment ${segmentIndex} started for session ${sessionId}`);
+
+  await nudgeRemotePage(ownerPage);
+  await sleep(options.recordDurationMs);
+  await nudgeRemotePage(ownerPage);
+
+  const recordingStop = await recorderPage.evaluate(async () => {
+    const blob = await window.__bpaneRecording.stop();
+    return { size: blob?.size ?? 0, type: blob?.type ?? '' };
+  });
+  if (!recordingStop.size) {
+    throw new Error(`Recording segment ${segmentIndex} finalized without any media bytes.`);
+  }
+
+  const stoppedRecording = await stopSessionRecording(accessToken, options, sessionId, recordingId);
+  const outputPath = resolveSegmentOutputPath(requestedOutputPath, tempDir, sessionId, segmentIndex);
+  const [download] = await Promise.all([
+    recorderPage.waitForEvent('download'),
+    recorderPage.evaluate(() => window.__bpaneRecording.downloadLast()),
+  ]);
+  const savedDownload = await savePlaywrightDownload(download, outputPath);
+  if (savedDownload.bytes <= 1024) {
+    throw new Error(
+      `Recording segment ${segmentIndex} artifact is unexpectedly small (${savedDownload.bytes} bytes).`,
+    );
+  }
+
+  const finalizeTarget = resolveGatewayVisibleFinalizePath(sessionId, recordingId);
+  await stageFileForGateway(savedDownload.path, finalizeTarget);
+  const completedRecording = await completeSessionRecording(
+    accessToken,
+    options,
+    sessionId,
+    recordingId,
+    finalizeTarget.gatewayPath,
+    recordingStop.type || 'video/webm',
+    savedDownload.bytes,
+    options.recordDurationMs,
+  );
+
+  return {
+    index: segmentIndex,
+    id: recordingId,
+    outputPath: savedDownload.path,
+    bytes: savedDownload.bytes,
+    mimeType: recordingStop.type || 'video/webm',
+    durationMs: options.recordDurationMs,
+    suggestedFilename: savedDownload.suggestedFilename,
+    stopResponse: stoppedRecording,
+    controlPlane: completedRecording,
+  };
+}
+
+async function downloadRecordingFromLibrary(page, recordingId, targetPath) {
+  const button = page.locator(
+    `[data-action="download-recording"][data-recording-id="${recordingId}"]`,
+  );
+  await button.waitFor({ state: 'visible', timeout: 10000 });
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    button.click(),
+  ]);
+  return await savePlaywrightDownload(download, targetPath);
+}
+
+async function downloadPlaybackExportFromLibrary(page, targetPath) {
+  const button = page.locator('#btn-recording-playback-download');
+  await button.waitFor({ state: 'visible', timeout: 10000 });
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    button.click(),
+  ]);
+  return await savePlaywrightDownload(download, targetPath);
+}
+
 async function deleteSession(accessToken, options, sessionId) {
   try {
     const response = await fetch(`${options.pageUrl}/api/v1/sessions/${sessionId}`, {
@@ -460,8 +581,7 @@ async function main() {
   let recorderPage = null;
   let accessToken = '';
   let sessionId = '';
-  let recordingId = '';
-  let outputPath = options.outputPath;
+  let tempDir = '';
 
   try {
     context = await browser.newContext({
@@ -477,12 +597,12 @@ async function main() {
     if (!accessToken) {
       throw new Error('Failed to acquire an access token from the owner page.');
     }
-    await configurePage(ownerPage, options, buildBrowserOnlyPageUrl(options.pageUrl));
 
     recorderPage = await context.newPage();
     await configurePage(recorderPage, options, options.pageUrl);
     await ensureLoggedIn(recorderPage, options);
     await configurePage(recorderPage, options, buildRecorderPageUrl(options.pageUrl));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-recording-smoke-'));
 
     log('Starting source session');
     const createdSession = await createSessionResource(accessToken, options);
@@ -501,59 +621,22 @@ async function main() {
       (status) => status?.browser_clients >= 2 && status?.recorder_clients === 1,
       options.connectTimeoutMs,
     );
-    const recordingResource = await createSessionRecording(accessToken, options, sessionId);
-    recordingId = recordingResource.id;
-    if (!recordingId) {
-      throw new Error('Failed to create control-plane recording metadata.');
+    const recordingSegments = [];
+    for (let segmentIndex = 1; segmentIndex <= 2; segmentIndex++) {
+      recordingSegments.push(
+        await captureRecordingSegment({
+          accessToken,
+          ownerPage,
+          recorderPage,
+          options,
+          sessionId,
+          segmentIndex,
+          requestedOutputPath: options.outputPath,
+          tempDir,
+        }),
+      );
     }
 
-    await recorderPage.evaluate(() => {
-      window.__bpaneRecording.setAutoDownload(false);
-      return window.__bpaneRecording.start();
-    });
-    log(`Recording started for session ${sessionId}`);
-
-    await nudgeRemotePage(ownerPage);
-    await sleep(options.recordDurationMs);
-    await nudgeRemotePage(ownerPage);
-
-    const recordingStop = await recorderPage.evaluate(async () => {
-      const blob = await window.__bpaneRecording.stop();
-      return { size: blob?.size ?? 0, type: blob?.type ?? '' };
-    });
-    if (!recordingStop.size) {
-      throw new Error('Recording finalized without any media bytes.');
-    }
-    await stopSessionRecording(accessToken, options, sessionId, recordingId);
-
-    if (!outputPath) {
-      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-recording-smoke-'));
-      outputPath = path.join(tempDir, `browserpane-${sessionId}.webm`);
-    }
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    const [download] = await Promise.all([
-      recorderPage.waitForEvent('download'),
-      recorderPage.evaluate(() => window.__bpaneRecording.downloadLast()),
-    ]);
-    await download.saveAs(outputPath);
-
-    const artifactStats = await fs.stat(outputPath);
-    if (artifactStats.size <= 1024) {
-      throw new Error(`Recording artifact is unexpectedly small (${artifactStats.size} bytes).`);
-    }
-    const finalizeTarget = resolveGatewayVisibleFinalizePath(sessionId, recordingId);
-    await stageFileForGateway(outputPath, finalizeTarget);
-    const completedRecording = await completeSessionRecording(
-      accessToken,
-      options,
-      sessionId,
-      recordingId,
-      finalizeTarget.gatewayPath,
-      recordingStop.type || 'video/webm',
-      artifactStats.size,
-      options.recordDurationMs,
-    );
     const playback = await fetchSessionPlayback(accessToken, options, sessionId);
     const playbackManifest = await fetchSessionPlaybackManifest(accessToken, options, sessionId);
     const playbackExport = await fetchSessionPlaybackExport(accessToken, options, sessionId);
@@ -562,16 +645,67 @@ async function main() {
     if (playback.state !== 'ready') {
       throw new Error(`Expected playback state=ready, got ${playback.state}`);
     }
-    if (playback.included_segment_count !== 1) {
+    if (playback.included_segment_count !== recordingSegments.length) {
       throw new Error(
-        `Expected playback to include exactly one segment, got ${playback.included_segment_count}.`,
+        `Expected playback to include exactly ${recordingSegments.length} segments, got ${playback.included_segment_count}.`,
       );
     }
-    if (playbackManifest.segments?.length !== 1) {
-      throw new Error('Playback manifest did not include the expected segment entry.');
+    if (playbackManifest.segments?.length !== recordingSegments.length) {
+      throw new Error('Playback manifest did not include the expected segment entries.');
     }
-    if (playbackExport.contentType !== 'application/zip' || playbackExport.bytes <= artifactStats.size) {
+    const largestSegmentBytes = Math.max(...recordingSegments.map((segment) => segment.bytes));
+    if (playbackExport.contentType !== 'application/zip' || playbackExport.bytes <= largestSegmentBytes) {
       throw new Error('Playback export bundle was not generated as a non-empty zip artifact.');
+    }
+
+    const refreshButton = ownerPage.locator('#btn-recording-library-refresh');
+    await refreshButton.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+    await refreshButton.click();
+    const recordingCatalog = await poll(
+      `recording library for ${sessionId}`,
+      () => ownerPage.evaluate(() => window.__bpaneRecording.getCatalogState()),
+      (state) => (
+        state?.loaded === true
+        && state?.recordings?.length >= 2
+        && state?.playback?.included_segment_count >= 2
+      ),
+      options.connectTimeoutMs,
+    );
+
+    const uiDownloadDir = path.join(tempDir, 'ui-downloads');
+    const downloadedSegments = [];
+    for (const segment of recordingSegments) {
+      const targetPath = path.join(uiDownloadDir, `segment-${segment.index}.webm`);
+      const downloaded = await downloadRecordingFromLibrary(ownerPage, segment.id, targetPath);
+      if (!downloaded.suggestedFilename.endsWith('.webm')) {
+        throw new Error(`Expected segment download filename to end with .webm, got ${downloaded.suggestedFilename}`);
+      }
+      if (downloaded.bytes !== segment.bytes) {
+        throw new Error(
+          `Segment download size mismatch for ${segment.id}: expected ${segment.bytes}, got ${downloaded.bytes}.`,
+        );
+      }
+      downloadedSegments.push({
+        recording_id: segment.id,
+        path: downloaded.path,
+        bytes: downloaded.bytes,
+        suggested_filename: downloaded.suggestedFilename,
+      });
+    }
+
+    const downloadedPlaybackExport = await downloadPlaybackExportFromLibrary(
+      ownerPage,
+      path.join(uiDownloadDir, 'recording-playback.zip'),
+    );
+    if (!downloadedPlaybackExport.suggestedFilename.endsWith('.zip')) {
+      throw new Error(
+        `Expected playback export download filename to end with .zip, got ${downloadedPlaybackExport.suggestedFilename}`,
+      );
+    }
+    if (downloadedPlaybackExport.bytes !== playbackExport.bytes) {
+      throw new Error(
+        `Playback export download size mismatch: expected ${playbackExport.bytes}, got ${downloadedPlaybackExport.bytes}.`,
+      );
     }
 
     const sessionResource = await fetchSessionResource(accessToken, options, sessionId);
@@ -583,24 +717,37 @@ async function main() {
         id: sessionId,
         runtime: sessionResource.runtime,
       },
-      recording: {
-        id: recordingId,
-        output_path: outputPath,
-        bytes: artifactStats.size,
-        mime_type: recordingStop.type,
-        duration_ms: options.recordDurationMs,
-        control_plane: completedRecording,
-      },
+      recordings: recordingSegments.map((segment) => ({
+        id: segment.id,
+        output_path: segment.outputPath,
+        bytes: segment.bytes,
+        mime_type: segment.mimeType,
+        duration_ms: segment.durationMs,
+        suggested_filename: segment.suggestedFilename,
+        control_plane: segment.controlPlane,
+      })),
       playback,
       playback_manifest: playbackManifest,
       playback_export: playbackExport,
+      ui_recording_library: {
+        recordings: recordingCatalog.recordings,
+        playback: recordingCatalog.playback,
+        downloaded_segments: downloadedSegments,
+        downloaded_playback_export: {
+          path: downloadedPlaybackExport.path,
+          bytes: downloadedPlaybackExport.bytes,
+          suggested_filename: downloadedPlaybackExport.suggestedFilename,
+        },
+      },
       recording_operations: recordingOperations,
       status_before_recording: statusBefore,
       status_after_recording: statusAfter,
       recorder_client: recorderState,
     };
 
-    log(`Recorded ${artifactStats.size} bytes to ${outputPath}`);
+    log(
+      `Recorded ${recordingSegments.length} segments for session ${sessionId} and verified UI downloads from test-embed.`,
+    );
     console.log(JSON.stringify(summary, null, 2));
 
     if (options.summaryPath) {
