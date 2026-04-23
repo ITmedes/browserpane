@@ -7,6 +7,7 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
@@ -18,6 +19,11 @@ use crate::recording_artifact_store::{
     FinalizeRecordingArtifactRequest, RecordingArtifactStore, RecordingArtifactStoreError,
 };
 use crate::recording_lifecycle::{RecordingLifecycleError, RecordingLifecycleManager};
+use crate::recording_observability::{RecordingObservability, RecordingObservabilitySnapshot};
+use crate::recording_playback::{
+    prepare_session_recording_playback, PreparedSessionRecordingPlayback, RecordingPlaybackError,
+    SessionRecordingPlaybackManifest, SessionRecordingPlaybackResource,
+};
 use crate::session_control::{
     CompleteSessionRecordingRequest, CreateSessionRequest, FailSessionRecordingRequest,
     PersistCompletedSessionRecordingRequest, SessionLifecycleState, SessionListResponse,
@@ -38,6 +44,7 @@ struct ApiState {
     session_store: SessionStore,
     session_manager: Arc<SessionManager>,
     recording_artifact_store: Arc<RecordingArtifactStore>,
+    recording_observability: Arc<RecordingObservability>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
@@ -55,6 +62,7 @@ struct SessionStatus {
     mcp_owner: bool,
     resolution: (u16, u16),
     recording: SessionRecordingStatus,
+    playback: SessionRecordingPlaybackResource,
     telemetry: SessionTelemetry,
 }
 
@@ -296,6 +304,9 @@ async fn complete_session_recording(
         bytes,
         duration_ms,
     } = request;
+    state
+        .recording_observability
+        .record_artifact_finalize_request();
     let stored_artifact = state
         .recording_artifact_store
         .finalize(FinalizeRecordingArtifactRequest {
@@ -305,7 +316,12 @@ async fn complete_session_recording(
             source_path,
         })
         .await
-        .map_err(map_recording_artifact_store_error)?;
+        .map_err(|error| {
+            state
+                .recording_observability
+                .record_artifact_finalize_failure();
+            map_recording_artifact_store_error(error)
+        })?;
     let recording = state
         .session_store
         .complete_recording_for_session(
@@ -325,6 +341,9 @@ async fn complete_session_recording(
             tokio::spawn(async move {
                 let _ = artifact_store.delete(&artifact_ref).await;
             });
+            state
+                .recording_observability
+                .record_artifact_finalize_failure();
             map_session_store_error(error)
         })?
         .ok_or_else(|| {
@@ -333,6 +352,9 @@ async fn complete_session_recording(
             tokio::spawn(async move {
                 let _ = artifact_store.delete(&artifact_ref).await;
             });
+            state
+                .recording_observability
+                .record_artifact_finalize_failure();
             (
                 StatusCode::NOT_FOUND,
                 Json(ErrorResponse {
@@ -342,6 +364,9 @@ async fn complete_session_recording(
                 }),
             )
         })?;
+    state
+        .recording_observability
+        .record_artifact_finalize_success();
     Ok(Json(recording.to_resource()))
 }
 
@@ -367,6 +392,7 @@ async fn fail_session_recording(
                 }),
             )
         })?;
+    state.recording_observability.record_recording_failure();
     Ok(Json(recording.to_resource()))
 }
 
@@ -456,6 +482,95 @@ async fn get_session_recording_content(
         )?,
     );
     Ok(response)
+}
+
+async fn get_session_recording_playback(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionRecordingPlaybackResource>, (StatusCode, Json<ErrorResponse>)> {
+    let _session = authorize_visible_session_request(&headers, &state, session_id).await?;
+    let playback = load_session_recording_playback(&state, session_id).await?;
+    Ok(Json(playback.resource))
+}
+
+async fn get_session_recording_playback_manifest(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionRecordingPlaybackManifest>, (StatusCode, Json<ErrorResponse>)> {
+    let _session = authorize_visible_session_request(&headers, &state, session_id).await?;
+    state
+        .recording_observability
+        .record_playback_manifest_request();
+    let playback = load_session_recording_playback(&state, session_id).await?;
+    Ok(Json(playback.manifest))
+}
+
+async fn get_session_recording_playback_export(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
+    let _session = authorize_visible_session_request(&headers, &state, session_id).await?;
+    state
+        .recording_observability
+        .record_playback_export_request();
+    let playback = load_session_recording_playback(&state, session_id).await?;
+    let bytes = playback
+        .export_bundle(&state.recording_artifact_store)
+        .await
+        .map_err(|error| {
+            state
+                .recording_observability
+                .record_playback_export_failure();
+            map_recording_playback_error(error)
+        })?;
+    state
+        .recording_observability
+        .record_playback_export_success(bytes.len() as u64, Utc::now())
+        .await;
+
+    let filename = format!("browserpane-{session_id}-recording-playback.zip");
+    let mut response = Response::new(axum::body::Body::from(bytes.clone()));
+    response
+        .headers_mut()
+        .insert(CONTENT_TYPE, HeaderValue::from_static("application/zip"));
+    response.headers_mut().insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&bytes.len().to_string()).map_err(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("failed to encode content length header: {error}"),
+                }),
+            )
+        })?,
+    );
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename=\"{filename}\"")).map_err(
+            |error| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: format!("failed to encode content disposition header: {error}"),
+                    }),
+                )
+            },
+        )?,
+    );
+    Ok(response)
+}
+
+async fn get_recording_operations(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<RecordingObservabilitySnapshot>, (StatusCode, Json<ErrorResponse>)> {
+    authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    Ok(Json(state.recording_observability.snapshot().await))
 }
 
 async fn set_automation_owner(
@@ -628,16 +743,19 @@ async fn get_session_status(
             )
         })?;
     let snapshot = hub.telemetry_snapshot().await;
-    let latest_recording = state
+    let recordings = state
         .session_store
-        .get_latest_recording_for_session(session_id)
+        .list_recordings_for_session(session_id)
         .await
         .map_err(map_session_store_error)?;
+    let latest_recording = latest_recording(&recordings);
+    let playback = prepare_session_recording_playback(session_id, &recordings, Utc::now());
 
     Ok(Json(session_status_from_snapshot(
         snapshot,
         &session.recording,
-        latest_recording.as_ref(),
+        latest_recording,
+        playback.resource,
     )))
 }
 
@@ -754,16 +872,19 @@ async fn session_status(
             )
         })?;
     let snapshot = hub.telemetry_snapshot().await;
-    let latest_recording = state
+    let recordings = state
         .session_store
-        .get_latest_recording_for_session(session_id)
+        .list_recordings_for_session(session_id)
         .await
         .map_err(map_session_store_error)?;
+    let latest_recording = latest_recording(&recordings);
+    let playback = prepare_session_recording_playback(session_id, &recordings, Utc::now());
 
     Ok(Json(session_status_from_snapshot(
         snapshot,
         &session.recording,
-        latest_recording.as_ref(),
+        latest_recording,
+        playback.resource,
     )))
 }
 
@@ -771,6 +892,7 @@ fn session_status_from_snapshot(
     snapshot: SessionTelemetrySnapshot,
     recording_policy: &SessionRecordingPolicy,
     latest_recording: Option<&StoredSessionRecording>,
+    playback: SessionRecordingPlaybackResource,
 ) -> SessionStatus {
     SessionStatus {
         browser_clients: snapshot.browser_clients,
@@ -782,6 +904,7 @@ fn session_status_from_snapshot(
         mcp_owner: snapshot.mcp_owner,
         resolution: snapshot.resolution,
         recording: recording_status_from_snapshot(snapshot, recording_policy, latest_recording),
+        playback,
         telemetry: SessionTelemetry {
             joins_accepted: snapshot.joins_accepted,
             joins_rejected_viewer_cap: snapshot.joins_rejected_viewer_cap,
@@ -1000,6 +1123,7 @@ pub async fn run_api_server(
     session_store: SessionStore,
     session_manager: Arc<SessionManager>,
     recording_artifact_store: Arc<RecordingArtifactStore>,
+    recording_observability: Arc<RecordingObservability>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
@@ -1012,6 +1136,7 @@ pub async fn run_api_server(
         session_store,
         session_manager,
         recording_artifact_store,
+        recording_observability,
         recording_lifecycle,
         idle_stop_timeout,
         public_gateway_url,
@@ -1094,6 +1219,18 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
             get(get_session_recording_content),
         )
         .route(
+            "/api/v1/sessions/{session_id}/recording-playback",
+            get(get_session_recording_playback),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/recording-playback/manifest",
+            get(get_session_recording_playback_manifest),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/recording-playback/export",
+            get(get_session_recording_playback_export),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/access-tokens",
             post(issue_session_access_token),
         )
@@ -1108,6 +1245,10 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         .route(
             "/api/v1/sessions/{session_id}/mcp-owner",
             post(set_session_mcp_owner).delete(clear_session_mcp_owner),
+        )
+        .route(
+            "/api/v1/recording/operations",
+            get(get_recording_operations),
         )
         .route("/api/session/status", get(session_status))
         .route("/api/session/mcp-owner", post(set_mcp_owner))
@@ -1176,6 +1317,38 @@ fn map_recording_artifact_store_error(
         ),
         RecordingArtifactStoreError::Backend(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+    }
+}
+
+fn map_recording_playback_error(
+    error: RecordingPlaybackError,
+) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        RecordingPlaybackError::Empty => (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+        RecordingPlaybackError::Artifact(RecordingArtifactStoreError::Backend(inner))
+            if inner.kind() == std::io::ErrorKind::NotFound =>
+        {
+            (
+                StatusCode::GONE,
+                Json(ErrorResponse {
+                    error: "a playback segment artifact is no longer available".to_string(),
+                }),
+            )
+        }
+        RecordingPlaybackError::Artifact(inner) => map_recording_artifact_store_error(inner),
+        RecordingPlaybackError::ManifestEncode(_)
+        | RecordingPlaybackError::Io(_)
+        | RecordingPlaybackError::Package(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
                 error: error.to_string(),
             }),
@@ -1252,6 +1425,30 @@ async fn load_session_recording(
                 }),
             )
         })
+}
+
+async fn load_session_recording_playback(
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<PreparedSessionRecordingPlayback, (StatusCode, Json<ErrorResponse>)> {
+    let recordings = state
+        .session_store
+        .list_recordings_for_session(session_id)
+        .await
+        .map_err(map_session_store_error)?;
+    Ok(prepare_session_recording_playback(
+        session_id,
+        &recordings,
+        Utc::now(),
+    ))
+}
+
+fn latest_recording(recordings: &[StoredSessionRecording]) -> Option<&StoredSessionRecording> {
+    recordings.iter().max_by(|left, right| {
+        left.updated_at
+            .cmp(&right.updated_at)
+            .then_with(|| left.created_at.cmp(&right.created_at))
+    })
 }
 
 async fn authorize_visible_session_request(

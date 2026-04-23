@@ -5,6 +5,8 @@ mod connect_ticket;
 mod idle_stop;
 mod recording_artifact_store;
 mod recording_lifecycle;
+mod recording_observability;
+mod recording_playback;
 mod recording_retention;
 mod relay;
 mod runtime_manager;
@@ -30,6 +32,7 @@ use config::Config;
 use connect_ticket::SessionConnectTicketManager;
 use recording_artifact_store::RecordingArtifactStore;
 use recording_lifecycle::{RecordingLifecycleManager, RecordingWorkerConfig};
+use recording_observability::RecordingObservability;
 use recording_retention::RecordingRetentionManager;
 use session_control::{SessionOwnerMode, SessionStore};
 use session_manager::{SessionManager, SessionManagerConfig, SessionManagerDockerConfig};
@@ -235,10 +238,12 @@ async fn main() -> anyhow::Result<()> {
     let recording_artifact_store = Arc::new(RecordingArtifactStore::local_fs(
         config.recording_artifact_local_root.clone(),
     ));
+    let recording_observability = Arc::new(RecordingObservability::default());
     if config.recording_artifact_cleanup_interval_secs > 0 {
         let recording_retention = Arc::new(RecordingRetentionManager::new(
             session_store.clone(),
             recording_artifact_store.clone(),
+            recording_observability.clone(),
             Duration::from_secs(config.recording_artifact_cleanup_interval_secs),
         ));
         recording_retention.run_cleanup_pass(Utc::now()).await?;
@@ -278,6 +283,7 @@ async fn main() -> anyhow::Result<()> {
             session_store,
             session_manager,
             recording_artifact_store,
+            recording_observability,
             recording_lifecycle,
             Duration::from_secs(config.runtime_idle_timeout_secs),
             config.public_gateway_url,
