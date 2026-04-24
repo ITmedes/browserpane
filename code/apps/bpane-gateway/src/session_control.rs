@@ -21,6 +21,11 @@ use crate::session_manager::{
     PersistedSessionRuntimeAssignment, SessionManagerProfile, SessionRuntimeAccess,
     SessionRuntimeAssignmentStatus,
 };
+use crate::workflow::{
+    PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
+    PersistWorkflowRunEventRequest, PersistWorkflowRunRequest, StoredWorkflowDefinition,
+    StoredWorkflowDefinitionVersion, StoredWorkflowRun, StoredWorkflowRunEvent,
+};
 
 const DEFAULT_VIEWPORT_WIDTH: u16 = 1600;
 const DEFAULT_VIEWPORT_HEIGHT: u16 = 900;
@@ -372,7 +377,7 @@ pub struct SessionRecordingListResponse {
     pub recordings: Vec<SessionRecordingResource>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateSessionRequest {
     #[serde(default)]
     pub template_id: Option<String>,
@@ -579,6 +584,7 @@ impl StoredSessionRecording {
 pub enum SessionStoreError {
     ActiveSessionConflict { max_runtime_sessions: usize },
     Conflict(String),
+    NotFound(String),
     InvalidRequest(String),
     Backend(String),
 }
@@ -597,6 +603,7 @@ impl std::fmt::Display for SessionStoreError {
                 )
             }
             Self::Conflict(message) => write!(f, "{message}"),
+            Self::NotFound(message) => write!(f, "{message}"),
             Self::InvalidRequest(message) => write!(f, "{message}"),
             Self::Backend(message) => write!(f, "{message}"),
         }
@@ -654,6 +661,10 @@ impl SessionStore {
                 automation_tasks: Mutex::new(Vec::new()),
                 automation_task_events: Mutex::new(Vec::new()),
                 automation_task_logs: Mutex::new(Vec::new()),
+                workflow_definitions: Mutex::new(Vec::new()),
+                workflow_definition_versions: Mutex::new(Vec::new()),
+                workflow_runs: Mutex::new(Vec::new()),
+                workflow_run_events: Mutex::new(Vec::new()),
                 recordings: Mutex::new(Vec::new()),
                 runtime_assignments: Mutex::new(HashMap::new()),
                 recording_worker_assignments: Mutex::new(HashMap::new()),
@@ -950,6 +961,170 @@ impl SessionStore {
             }
             SessionStoreBackend::Postgres(store) => {
                 store.append_automation_task_log(id, stream, message).await
+            }
+        }
+    }
+
+    pub async fn create_workflow_definition(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowDefinitionRequest,
+    ) -> Result<StoredWorkflowDefinition, SessionStoreError> {
+        validate_workflow_definition_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_workflow_definition(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_workflow_definition(principal, request).await
+            }
+        }
+    }
+
+    pub async fn list_workflow_definitions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredWorkflowDefinition>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_workflow_definitions_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_workflow_definitions_for_owner(principal).await
+            }
+        }
+    }
+
+    pub async fn get_workflow_definition_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowDefinition>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_workflow_definition_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_workflow_definition_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn create_workflow_definition_version(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowDefinitionVersionRequest,
+    ) -> Result<StoredWorkflowDefinitionVersion, SessionStoreError> {
+        validate_workflow_definition_version_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .create_workflow_definition_version(principal, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .create_workflow_definition_version(principal, request)
+                    .await
+            }
+        }
+    }
+
+    pub async fn get_workflow_definition_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workflow_definition_id: Uuid,
+        version: &str,
+    ) -> Result<Option<StoredWorkflowDefinitionVersion>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_workflow_definition_version_for_owner(
+                        principal,
+                        workflow_definition_id,
+                        version,
+                    )
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_workflow_definition_version_for_owner(
+                        principal,
+                        workflow_definition_id,
+                        version,
+                    )
+                    .await
+            }
+        }
+    }
+
+    pub async fn create_workflow_run(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowRunRequest,
+    ) -> Result<StoredWorkflowRun, SessionStoreError> {
+        validate_workflow_run_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_workflow_run(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_workflow_run(principal, request).await
+            }
+        }
+    }
+
+    pub async fn get_workflow_run_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_workflow_run_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_workflow_run_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn list_workflow_run_events_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredWorkflowRunEvent>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .list_workflow_run_events_for_owner(principal, id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .list_workflow_run_events_for_owner(principal, id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn append_workflow_run_event_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistWorkflowRunEventRequest,
+    ) -> Result<Option<StoredWorkflowRunEvent>, SessionStoreError> {
+        validate_workflow_run_event_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .append_workflow_run_event_for_owner(principal, id, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .append_workflow_run_event_for_owner(principal, id, request)
+                    .await
             }
         }
     }
@@ -1425,6 +1600,108 @@ fn validate_automation_task_log_message(message: &str) -> Result<(), SessionStor
     Ok(())
 }
 
+fn validate_workflow_definition_request(
+    request: &PersistWorkflowDefinitionRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow name must not be empty".to_string(),
+        ));
+    }
+    if let Some(description) = &request.description {
+        if description.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow description must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    for label in &request.labels {
+        if label.0.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow label keys must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_workflow_definition_version_request(
+    request: &PersistWorkflowDefinitionVersionRequest,
+) -> Result<(), SessionStoreError> {
+    if request.version.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow version must not be empty".to_string(),
+        ));
+    }
+    if request.executor.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow executor must not be empty".to_string(),
+        ));
+    }
+    if request.entrypoint.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow entrypoint must not be empty".to_string(),
+        ));
+    }
+    if let Some(default_session) = &request.default_session {
+        serde_json::from_value::<CreateSessionRequest>(default_session.clone()).map_err(
+            |error| {
+                SessionStoreError::InvalidRequest(format!(
+                    "default_session must be a valid session create payload: {error}"
+                ))
+            },
+        )?;
+    }
+    for value in [
+        &request.allowed_credential_binding_ids,
+        &request.allowed_extension_ids,
+        &request.allowed_file_workspace_ids,
+    ] {
+        for entry in value {
+            if entry.trim().is_empty() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "workflow allowed reference ids must not be empty".to_string(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_workflow_run_request(
+    request: &PersistWorkflowRunRequest,
+) -> Result<(), SessionStoreError> {
+    if request.workflow_version.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow_version must not be empty".to_string(),
+        ));
+    }
+    for label in &request.labels {
+        if label.0.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run label keys must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_workflow_run_event_request(
+    request: &PersistWorkflowRunEventRequest,
+) -> Result<(), SessionStoreError> {
+    if request.event_type.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow run event_type must not be empty".to_string(),
+        ));
+    }
+    if request.message.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow run event message must not be empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_complete_recording_request(
     request: &CompleteSessionRecordingRequest,
 ) -> Result<(), SessionStoreError> {
@@ -1477,6 +1754,10 @@ struct InMemorySessionStore {
     automation_tasks: Mutex<Vec<StoredAutomationTask>>,
     automation_task_events: Mutex<Vec<StoredAutomationTaskEvent>>,
     automation_task_logs: Mutex<Vec<StoredAutomationTaskLog>>,
+    workflow_definitions: Mutex<Vec<StoredWorkflowDefinition>>,
+    workflow_definition_versions: Mutex<Vec<StoredWorkflowDefinitionVersion>>,
+    workflow_runs: Mutex<Vec<StoredWorkflowRun>>,
+    workflow_run_events: Mutex<Vec<StoredWorkflowRunEvent>>,
     recordings: Mutex<Vec<StoredSessionRecording>>,
     runtime_assignments: Mutex<HashMap<Uuid, PersistedSessionRuntimeAssignment>>,
     recording_worker_assignments: Mutex<HashMap<Uuid, PersistedSessionRecordingWorkerAssignment>>,
@@ -2018,6 +2299,316 @@ impl InMemorySessionStore {
         Ok(Some(log))
     }
 
+    async fn create_workflow_definition(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowDefinitionRequest,
+    ) -> Result<StoredWorkflowDefinition, SessionStoreError> {
+        let now = Utc::now();
+        let workflow = StoredWorkflowDefinition {
+            id: Uuid::now_v7(),
+            owner_subject: principal.subject.clone(),
+            owner_issuer: principal.issuer.clone(),
+            name: request.name,
+            description: request.description,
+            labels: request.labels,
+            latest_version: None,
+            created_at: now,
+            updated_at: now,
+        };
+        self.workflow_definitions
+            .lock()
+            .await
+            .push(workflow.clone());
+        Ok(workflow)
+    }
+
+    async fn list_workflow_definitions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredWorkflowDefinition>, SessionStoreError> {
+        let mut workflows = self
+            .workflow_definitions
+            .lock()
+            .await
+            .iter()
+            .filter(|workflow| {
+                workflow.owner_subject == principal.subject
+                    && workflow.owner_issuer == principal.issuer
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        workflows.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+        Ok(workflows)
+    }
+
+    async fn get_workflow_definition_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowDefinition>, SessionStoreError> {
+        Ok(self
+            .workflow_definitions
+            .lock()
+            .await
+            .iter()
+            .find(|workflow| {
+                workflow.id == id
+                    && workflow.owner_subject == principal.subject
+                    && workflow.owner_issuer == principal.issuer
+            })
+            .cloned())
+    }
+
+    async fn create_workflow_definition_version(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowDefinitionVersionRequest,
+    ) -> Result<StoredWorkflowDefinitionVersion, SessionStoreError> {
+        let Some(_) = self
+            .get_workflow_definition_for_owner(principal, request.workflow_definition_id)
+            .await?
+        else {
+            return Err(SessionStoreError::NotFound(format!(
+                "workflow definition {} not found",
+                request.workflow_definition_id
+            )));
+        };
+
+        let mut versions = self.workflow_definition_versions.lock().await;
+        if versions.iter().any(|version| {
+            version.workflow_definition_id == request.workflow_definition_id
+                && version.version == request.version
+        }) {
+            return Err(SessionStoreError::Conflict(format!(
+                "workflow version {} already exists",
+                request.version
+            )));
+        }
+
+        let now = Utc::now();
+        let version = StoredWorkflowDefinitionVersion {
+            id: Uuid::now_v7(),
+            workflow_definition_id: request.workflow_definition_id,
+            version: request.version.clone(),
+            executor: request.executor,
+            entrypoint: request.entrypoint,
+            input_schema: request.input_schema,
+            output_schema: request.output_schema,
+            default_session: request.default_session,
+            allowed_credential_binding_ids: request.allowed_credential_binding_ids,
+            allowed_extension_ids: request.allowed_extension_ids,
+            allowed_file_workspace_ids: request.allowed_file_workspace_ids,
+            created_at: now,
+        };
+        versions.push(version.clone());
+        drop(versions);
+
+        if let Some(workflow) = self
+            .workflow_definitions
+            .lock()
+            .await
+            .iter_mut()
+            .find(|workflow| workflow.id == request.workflow_definition_id)
+        {
+            workflow.latest_version = Some(version.version.clone());
+            workflow.updated_at = now;
+        }
+
+        Ok(version)
+    }
+
+    async fn get_workflow_definition_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workflow_definition_id: Uuid,
+        version: &str,
+    ) -> Result<Option<StoredWorkflowDefinitionVersion>, SessionStoreError> {
+        if self
+            .get_workflow_definition_for_owner(principal, workflow_definition_id)
+            .await?
+            .is_none()
+        {
+            return Ok(None);
+        }
+        Ok(self
+            .workflow_definition_versions
+            .lock()
+            .await
+            .iter()
+            .find(|stored| {
+                stored.workflow_definition_id == workflow_definition_id && stored.version == version
+            })
+            .cloned())
+    }
+
+    async fn create_workflow_run(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowRunRequest,
+    ) -> Result<StoredWorkflowRun, SessionStoreError> {
+        let Some(task) = self
+            .get_automation_task_for_owner(principal, request.automation_task_id)
+            .await?
+        else {
+            return Err(SessionStoreError::NotFound(format!(
+                "automation task {} not found",
+                request.automation_task_id
+            )));
+        };
+        if task.session_id != request.session_id {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run session_id must match the bound automation task session".to_string(),
+            ));
+        }
+        if self
+            .get_workflow_definition_for_owner(principal, request.workflow_definition_id)
+            .await?
+            .is_none()
+        {
+            return Err(SessionStoreError::NotFound(format!(
+                "workflow definition {} not found",
+                request.workflow_definition_id
+            )));
+        }
+        let Some(version) = self
+            .workflow_definition_versions
+            .lock()
+            .await
+            .iter()
+            .find(|version| version.id == request.workflow_definition_version_id)
+            .cloned()
+        else {
+            return Err(SessionStoreError::NotFound(format!(
+                "workflow definition version {} not found",
+                request.workflow_definition_version_id
+            )));
+        };
+        if version.workflow_definition_id != request.workflow_definition_id {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run version must belong to the requested workflow definition".to_string(),
+            ));
+        }
+
+        let now = Utc::now();
+        let run = StoredWorkflowRun {
+            id: Uuid::now_v7(),
+            workflow_definition_id: request.workflow_definition_id,
+            workflow_definition_version_id: request.workflow_definition_version_id,
+            workflow_version: request.workflow_version.clone(),
+            session_id: request.session_id,
+            automation_task_id: request.automation_task_id,
+            input: request.input,
+            labels: request.labels,
+            created_at: now,
+            updated_at: now,
+        };
+        self.workflow_runs.lock().await.push(run.clone());
+        self.workflow_run_events
+            .lock()
+            .await
+            .push(StoredWorkflowRunEvent {
+                id: Uuid::now_v7(),
+                run_id: run.id,
+                event_type: "workflow_run.created".to_string(),
+                message: "workflow run created".to_string(),
+                data: Some(serde_json::json!({
+                    "workflow_definition_id": run.workflow_definition_id,
+                    "workflow_definition_version_id": run.workflow_definition_version_id,
+                    "workflow_version": run.workflow_version,
+                    "automation_task_id": run.automation_task_id,
+                    "session_id": run.session_id,
+                })),
+                created_at: now,
+            });
+        Ok(run)
+    }
+
+    async fn get_workflow_run_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        let Some(run) = self
+            .workflow_runs
+            .lock()
+            .await
+            .iter()
+            .find(|run| run.id == id)
+            .cloned()
+        else {
+            return Ok(None);
+        };
+        let Some(task) = self
+            .get_automation_task_for_owner(principal, run.automation_task_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+        if task.session_id != run.session_id {
+            return Ok(None);
+        }
+        Ok(Some(run))
+    }
+
+    async fn list_workflow_run_events_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredWorkflowRunEvent>, SessionStoreError> {
+        if self
+            .get_workflow_run_for_owner(principal, id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+        let mut events = self
+            .workflow_run_events
+            .lock()
+            .await
+            .iter()
+            .filter(|event| event.run_id == id)
+            .cloned()
+            .collect::<Vec<_>>();
+        events.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+        Ok(events)
+    }
+
+    async fn append_workflow_run_event_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistWorkflowRunEventRequest,
+    ) -> Result<Option<StoredWorkflowRunEvent>, SessionStoreError> {
+        if self
+            .get_workflow_run_for_owner(principal, id)
+            .await?
+            .is_none()
+        {
+            return Ok(None);
+        }
+        let event = StoredWorkflowRunEvent {
+            id: Uuid::now_v7(),
+            run_id: id,
+            event_type: request.event_type,
+            message: request.message,
+            data: request.data,
+            created_at: Utc::now(),
+        };
+        self.workflow_run_events.lock().await.push(event.clone());
+        if let Some(run) = self
+            .workflow_runs
+            .lock()
+            .await
+            .iter_mut()
+            .find(|run| run.id == id)
+        {
+            run.updated_at = event.created_at;
+        }
+        Ok(Some(event))
+    }
+
     async fn create_recording_for_session(
         &self,
         session_id: Uuid,
@@ -2476,6 +3067,72 @@ impl PostgresSessionStore {
 
                 CREATE INDEX IF NOT EXISTS idx_control_automation_task_logs_task_created
                     ON control_automation_task_logs (task_id, created_at ASC);
+
+                CREATE TABLE IF NOT EXISTS control_workflow_definitions (
+                    id UUID PRIMARY KEY,
+                    owner_subject TEXT NOT NULL,
+                    owner_issuer TEXT NOT NULL,
+                    owner_display_name TEXT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT NULL,
+                    labels JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    latest_version TEXT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_workflow_definitions_owner_created
+                    ON control_workflow_definitions (owner_subject, owner_issuer, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS control_workflow_definition_versions (
+                    id UUID PRIMARY KEY,
+                    workflow_definition_id UUID NOT NULL REFERENCES control_workflow_definitions(id) ON DELETE CASCADE,
+                    version TEXT NOT NULL,
+                    executor TEXT NOT NULL,
+                    entrypoint TEXT NOT NULL,
+                    input_schema JSONB NULL,
+                    output_schema JSONB NULL,
+                    default_session JSONB NULL,
+                    allowed_credential_binding_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    allowed_extension_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    allowed_file_workspace_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (workflow_definition_id, version)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_workflow_definition_versions_workflow_created
+                    ON control_workflow_definition_versions (workflow_definition_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS control_workflow_runs (
+                    id UUID PRIMARY KEY,
+                    workflow_definition_id UUID NOT NULL REFERENCES control_workflow_definitions(id) ON DELETE CASCADE,
+                    workflow_definition_version_id UUID NOT NULL REFERENCES control_workflow_definition_versions(id) ON DELETE RESTRICT,
+                    workflow_version TEXT NOT NULL,
+                    session_id UUID NOT NULL REFERENCES control_sessions(id) ON DELETE CASCADE,
+                    automation_task_id UUID NOT NULL REFERENCES control_automation_tasks(id) ON DELETE CASCADE,
+                    input JSONB NULL,
+                    labels JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_workflow_runs_definition_created
+                    ON control_workflow_runs (workflow_definition_id, created_at DESC);
+
+                CREATE INDEX IF NOT EXISTS idx_control_workflow_runs_task
+                    ON control_workflow_runs (automation_task_id);
+
+                CREATE TABLE IF NOT EXISTS control_workflow_run_events (
+                    id UUID PRIMARY KEY,
+                    run_id UUID NOT NULL REFERENCES control_workflow_runs(id) ON DELETE CASCADE,
+                    event_type TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    data JSONB NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_workflow_run_events_run_created
+                    ON control_workflow_run_events (run_id, created_at ASC);
 
                 ALTER TABLE control_sessions
                     ADD COLUMN IF NOT EXISTS automation_owner_client_id TEXT NULL;
@@ -3889,6 +4546,680 @@ impl PostgresSessionStore {
             .transpose()
     }
 
+    async fn create_workflow_definition(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowDefinitionRequest,
+    ) -> Result<StoredWorkflowDefinition, SessionStoreError> {
+        let now = Utc::now();
+        let labels_value = json_labels(&request.labels);
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_one(
+                r#"
+                INSERT INTO control_workflow_definitions (
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    name,
+                    description,
+                    labels,
+                    latest_version,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NULL, $8, $8)
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    name,
+                    description,
+                    labels,
+                    latest_version,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &principal.subject,
+                    &principal.issuer,
+                    &principal.display_name,
+                    &request.name,
+                    &request.description,
+                    &labels_value,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to insert workflow definition: {error}"))
+            })?;
+        row_to_stored_workflow_definition(&row)
+    }
+
+    async fn list_workflow_definitions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredWorkflowDefinition>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    name,
+                    description,
+                    labels,
+                    latest_version,
+                    created_at,
+                    updated_at
+                FROM control_workflow_definitions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                ORDER BY created_at DESC
+                "#,
+                &[&principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list workflow definitions: {error}"))
+            })?;
+        rows.iter().map(row_to_stored_workflow_definition).collect()
+    }
+
+    async fn get_workflow_definition_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowDefinition>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    name,
+                    description,
+                    labels,
+                    latest_version,
+                    created_at,
+                    updated_at
+                FROM control_workflow_definitions
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[&id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to load workflow definition: {error}"))
+            })?;
+        row.as_ref()
+            .map(row_to_stored_workflow_definition)
+            .transpose()
+    }
+
+    async fn create_workflow_definition_version(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowDefinitionVersionRequest,
+    ) -> Result<StoredWorkflowDefinitionVersion, SessionStoreError> {
+        let mut client = self.client.lock().await;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+
+        let visible = transaction
+            .query_opt(
+                r#"
+                SELECT id
+                FROM control_workflow_definitions
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[
+                    &request.workflow_definition_id,
+                    &principal.subject,
+                    &principal.issuer,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to validate workflow definition ownership: {error}"
+                ))
+            })?;
+        if visible.is_none() {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Err(SessionStoreError::NotFound(format!(
+                "workflow definition {} not found",
+                request.workflow_definition_id
+            )));
+        }
+
+        let now = Utc::now();
+        let row = transaction
+            .query_one(
+                r#"
+                INSERT INTO control_workflow_definition_versions (
+                    id,
+                    workflow_definition_id,
+                    version,
+                    executor,
+                    entrypoint,
+                    input_schema,
+                    output_schema,
+                    default_session,
+                    allowed_credential_binding_ids,
+                    allowed_extension_ids,
+                    allowed_file_workspace_ids,
+                    created_at
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb,
+                    $9::jsonb, $10::jsonb, $11::jsonb, $12
+                )
+                RETURNING
+                    id,
+                    workflow_definition_id,
+                    version,
+                    executor,
+                    entrypoint,
+                    input_schema,
+                    output_schema,
+                    default_session,
+                    allowed_credential_binding_ids,
+                    allowed_extension_ids,
+                    allowed_file_workspace_ids,
+                    created_at
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &request.workflow_definition_id,
+                    &request.version,
+                    &request.executor,
+                    &request.entrypoint,
+                    &request.input_schema,
+                    &request.output_schema,
+                    &request.default_session,
+                    &json_string_array(&request.allowed_credential_binding_ids),
+                    &json_string_array(&request.allowed_extension_ids),
+                    &json_string_array(&request.allowed_file_workspace_ids),
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                if let Some(code) = error.code() {
+                    if code.code() == "23505" {
+                        return SessionStoreError::Conflict(format!(
+                            "workflow version {} already exists",
+                            request.version
+                        ));
+                    }
+                }
+                SessionStoreError::Backend(format!(
+                    "failed to insert workflow definition version: {error}"
+                ))
+            })?;
+
+        transaction
+            .execute(
+                r#"
+                UPDATE control_workflow_definitions
+                SET latest_version = $2, updated_at = $3
+                WHERE id = $1
+                "#,
+                &[&request.workflow_definition_id, &request.version, &now],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to update workflow definition latest_version: {error}"
+                ))
+            })?;
+
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+        row_to_stored_workflow_definition_version(&row)
+    }
+
+    async fn get_workflow_definition_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workflow_definition_id: Uuid,
+        version: &str,
+    ) -> Result<Option<StoredWorkflowDefinitionVersion>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    version.id,
+                    version.workflow_definition_id,
+                    version.version,
+                    version.executor,
+                    version.entrypoint,
+                    version.input_schema,
+                    version.output_schema,
+                    version.default_session,
+                    version.allowed_credential_binding_ids,
+                    version.allowed_extension_ids,
+                    version.allowed_file_workspace_ids,
+                    version.created_at
+                FROM control_workflow_definition_versions version
+                JOIN control_workflow_definitions workflow
+                  ON workflow.id = version.workflow_definition_id
+                WHERE version.workflow_definition_id = $1
+                  AND version.version = $2
+                  AND workflow.owner_subject = $3
+                  AND workflow.owner_issuer = $4
+                "#,
+                &[
+                    &workflow_definition_id,
+                    &version,
+                    &principal.subject,
+                    &principal.issuer,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to load workflow definition version: {error}"
+                ))
+            })?;
+        row.as_ref()
+            .map(row_to_stored_workflow_definition_version)
+            .transpose()
+    }
+
+    async fn create_workflow_run(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowRunRequest,
+    ) -> Result<StoredWorkflowRun, SessionStoreError> {
+        let mut client = self.client.lock().await;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+
+        let workflow_row = transaction
+            .query_opt(
+                r#"
+                SELECT id
+                FROM control_workflow_definitions
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[
+                    &request.workflow_definition_id,
+                    &principal.subject,
+                    &principal.issuer,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to validate workflow definition for run: {error}"
+                ))
+            })?;
+        if workflow_row.is_none() {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Err(SessionStoreError::NotFound(format!(
+                "workflow definition {} not found",
+                request.workflow_definition_id
+            )));
+        }
+
+        let version_row = transaction
+            .query_opt(
+                r#"
+                SELECT id, workflow_definition_id, version
+                FROM control_workflow_definition_versions
+                WHERE id = $1
+                "#,
+                &[&request.workflow_definition_version_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to validate workflow definition version for run: {error}"
+                ))
+            })?;
+        let Some(version_row) = version_row else {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Err(SessionStoreError::NotFound(format!(
+                "workflow definition version {} not found",
+                request.workflow_definition_version_id
+            )));
+        };
+        let version_workflow_id: Uuid = version_row.get("workflow_definition_id");
+        let version_name: String = version_row.get("version");
+        if version_workflow_id != request.workflow_definition_id
+            || version_name != request.workflow_version
+        {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run version must belong to the requested workflow definition".to_string(),
+            ));
+        }
+
+        let task_row = transaction
+            .query_opt(
+                r#"
+                SELECT id, session_id
+                FROM control_automation_tasks
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[
+                    &request.automation_task_id,
+                    &principal.subject,
+                    &principal.issuer,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to validate automation task for workflow run: {error}"
+                ))
+            })?;
+        let Some(task_row) = task_row else {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Err(SessionStoreError::NotFound(format!(
+                "automation task {} not found",
+                request.automation_task_id
+            )));
+        };
+        let task_session_id: Uuid = task_row.get("session_id");
+        if task_session_id != request.session_id {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run session_id must match the bound automation task session".to_string(),
+            ));
+        }
+
+        let now = Utc::now();
+        let row = transaction
+            .query_one(
+                r#"
+                INSERT INTO control_workflow_runs (
+                    id,
+                    workflow_definition_id,
+                    workflow_definition_version_id,
+                    workflow_version,
+                    session_id,
+                    automation_task_id,
+                    input,
+                    labels,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $9)
+                RETURNING
+                    id,
+                    workflow_definition_id,
+                    workflow_definition_version_id,
+                    workflow_version,
+                    session_id,
+                    automation_task_id,
+                    input,
+                    labels,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &request.workflow_definition_id,
+                    &request.workflow_definition_version_id,
+                    &request.workflow_version,
+                    &request.session_id,
+                    &request.automation_task_id,
+                    &request.input,
+                    &json_labels(&request.labels),
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to insert workflow run: {error}"))
+            })?;
+        let run_id: Uuid = row.get("id");
+
+        transaction
+            .execute(
+                r#"
+                INSERT INTO control_workflow_run_events (
+                    id,
+                    run_id,
+                    event_type,
+                    message,
+                    data,
+                    created_at
+                )
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &run_id,
+                    &"workflow_run.created",
+                    &"workflow run created",
+                    &Some(serde_json::json!({
+                        "workflow_definition_id": request.workflow_definition_id,
+                        "workflow_definition_version_id": request.workflow_definition_version_id,
+                        "workflow_version": request.workflow_version,
+                        "session_id": request.session_id,
+                        "automation_task_id": request.automation_task_id,
+                    })),
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to insert workflow run event: {error}"))
+            })?;
+
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+        row_to_stored_workflow_run(&row)
+    }
+
+    async fn get_workflow_run_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    run.id,
+                    run.workflow_definition_id,
+                    run.workflow_definition_version_id,
+                    run.workflow_version,
+                    run.session_id,
+                    run.automation_task_id,
+                    run.input,
+                    run.labels,
+                    run.created_at,
+                    run.updated_at
+                FROM control_workflow_runs run
+                JOIN control_workflow_definitions workflow
+                  ON workflow.id = run.workflow_definition_id
+                WHERE run.id = $1
+                  AND workflow.owner_subject = $2
+                  AND workflow.owner_issuer = $3
+                "#,
+                &[&id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to load workflow run: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_workflow_run).transpose()
+    }
+
+    async fn list_workflow_run_events_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredWorkflowRunEvent>, SessionStoreError> {
+        if self
+            .get_workflow_run_for_owner(principal, id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    run_id,
+                    event_type,
+                    message,
+                    data,
+                    created_at
+                FROM control_workflow_run_events
+                WHERE run_id = $1
+                ORDER BY created_at ASC, id ASC
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list workflow run events: {error}"))
+            })?;
+        rows.iter().map(row_to_stored_workflow_run_event).collect()
+    }
+
+    async fn append_workflow_run_event_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistWorkflowRunEventRequest,
+    ) -> Result<Option<StoredWorkflowRunEvent>, SessionStoreError> {
+        if self
+            .get_workflow_run_for_owner(principal, id)
+            .await?
+            .is_none()
+        {
+            return Ok(None);
+        }
+        let now = Utc::now();
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                WITH inserted AS (
+                    INSERT INTO control_workflow_run_events (
+                        id,
+                        run_id,
+                        event_type,
+                        message,
+                        data,
+                        created_at
+                    )
+                    VALUES ($2, $1, $3, $4, $5::jsonb, $6)
+                    RETURNING
+                        id,
+                        run_id,
+                        event_type,
+                        message,
+                        data,
+                        created_at
+                )
+                UPDATE control_workflow_runs
+                SET updated_at = $6
+                WHERE id = $1
+                RETURNING (SELECT id FROM inserted) AS inserted_id
+                "#,
+                &[
+                    &id,
+                    &Uuid::now_v7(),
+                    &request.event_type,
+                    &request.message,
+                    &request.data,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to append workflow run event: {error}"))
+            })?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let inserted_id: Uuid = row.get("inserted_id");
+        let event_row = self
+            .client
+            .lock()
+            .await
+            .query_one(
+                r#"
+                SELECT
+                    id,
+                    run_id,
+                    event_type,
+                    message,
+                    data,
+                    created_at
+                FROM control_workflow_run_events
+                WHERE id = $1
+                "#,
+                &[&inserted_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to reload workflow run event: {error}"))
+            })?;
+        row_to_stored_workflow_run_event(&event_row).map(Some)
+    }
+
     async fn create_recording_for_session(
         &self,
         session_id: Uuid,
@@ -4685,6 +6016,25 @@ fn json_string_array(values: &[String]) -> Value {
     )
 }
 
+fn row_to_json_string_array(
+    value: Value,
+    field_name: &str,
+) -> Result<Vec<String>, SessionStoreError> {
+    value
+        .as_array()
+        .with_context(|| format!("{field_name} column must be a JSON array"))
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|entry| {
+            entry
+                .as_str()
+                .with_context(|| format!("{field_name} entries must be strings"))
+                .map(|entry| entry.to_string())
+                .map_err(|error| SessionStoreError::Backend(error.to_string()))
+        })
+        .collect()
+}
+
 fn recording_mime_type(format: SessionRecordingFormat) -> &'static str {
     match format {
         SessionRecordingFormat::Webm => "video/webm",
@@ -4914,6 +6264,118 @@ fn row_to_stored_automation_task_log(
         task_id: row.get("task_id"),
         stream,
         message: row.get("message"),
+        created_at: row.get("created_at"),
+    })
+}
+
+fn row_to_stored_workflow_definition(
+    row: &Row,
+) -> Result<StoredWorkflowDefinition, SessionStoreError> {
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("workflow definition labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("workflow definition label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+
+    Ok(StoredWorkflowDefinition {
+        id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        description: row.get("description"),
+        labels,
+        latest_version: row.get("latest_version"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
+fn row_to_stored_workflow_definition_version(
+    row: &Row,
+) -> Result<StoredWorkflowDefinitionVersion, SessionStoreError> {
+    let allowed_credential_binding_ids = row_to_json_string_array(
+        row.get("allowed_credential_binding_ids"),
+        "workflow allowed_credential_binding_ids",
+    )?;
+    let allowed_extension_ids = row_to_json_string_array(
+        row.get("allowed_extension_ids"),
+        "workflow allowed_extension_ids",
+    )?;
+    let allowed_file_workspace_ids = row_to_json_string_array(
+        row.get("allowed_file_workspace_ids"),
+        "workflow allowed_file_workspace_ids",
+    )?;
+
+    Ok(StoredWorkflowDefinitionVersion {
+        id: row.get("id"),
+        workflow_definition_id: row.get("workflow_definition_id"),
+        version: row.get("version"),
+        executor: row.get("executor"),
+        entrypoint: row.get("entrypoint"),
+        input_schema: row.get("input_schema"),
+        output_schema: row.get("output_schema"),
+        default_session: row.get("default_session"),
+        allowed_credential_binding_ids,
+        allowed_extension_ids,
+        allowed_file_workspace_ids,
+        created_at: row.get("created_at"),
+    })
+}
+
+fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionStoreError> {
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("workflow run labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("workflow run label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+
+    Ok(StoredWorkflowRun {
+        id: row.get("id"),
+        workflow_definition_id: row.get("workflow_definition_id"),
+        workflow_definition_version_id: row.get("workflow_definition_version_id"),
+        workflow_version: row.get("workflow_version"),
+        session_id: row.get("session_id"),
+        automation_task_id: row.get("automation_task_id"),
+        input: row.get("input"),
+        labels,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
+fn row_to_stored_workflow_run_event(
+    row: &Row,
+) -> Result<StoredWorkflowRunEvent, SessionStoreError> {
+    Ok(StoredWorkflowRunEvent {
+        id: row.get("id"),
+        run_id: row.get("run_id"),
+        event_type: row.get("event_type"),
+        message: row.get("message"),
+        data: row.get("data"),
         created_at: row.get("created_at"),
     })
 }

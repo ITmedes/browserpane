@@ -43,6 +43,13 @@ use crate::session_control::{
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime};
 use crate::session_registry::SessionRegistry;
+use crate::workflow::{
+    PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
+    PersistWorkflowRunEventRequest, PersistWorkflowRunRequest, WorkflowDefinitionListResponse,
+    WorkflowDefinitionResource, WorkflowDefinitionVersionResource, WorkflowRunEventListResponse,
+    WorkflowRunEventResource, WorkflowRunLogListResponse, WorkflowRunLogResource,
+    WorkflowRunResource,
+};
 
 /// Shared state for the HTTP API.
 struct ApiState {
@@ -140,6 +147,46 @@ struct CreateAutomationTaskRequest {
     display_name: Option<String>,
     executor: String,
     session: AutomationTaskSessionRequest,
+    #[serde(default)]
+    input: Option<Value>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct CreateWorkflowDefinitionRequest {
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct CreateWorkflowDefinitionVersionRequest {
+    version: String,
+    executor: String,
+    entrypoint: String,
+    #[serde(default)]
+    input_schema: Option<Value>,
+    #[serde(default)]
+    output_schema: Option<Value>,
+    #[serde(default)]
+    default_session: Option<Value>,
+    #[serde(default)]
+    allowed_credential_binding_ids: Vec<String>,
+    #[serde(default)]
+    allowed_extension_ids: Vec<String>,
+    #[serde(default)]
+    allowed_file_workspace_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct CreateWorkflowRunRequest {
+    workflow_id: Uuid,
+    version: String,
+    #[serde(default)]
+    session: Option<AutomationTaskSessionRequest>,
     #[serde(default)]
     input: Option<Value>,
     #[serde(default)]
@@ -257,44 +304,8 @@ async fn create_automation_task(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    let (session_id, session_source) = match (
-        request.session.existing_session_id,
-        request.session.create_session,
-    ) {
-        (Some(session_id), None) => {
-            let visible = state
-                .session_store
-                .get_session_for_owner(&principal, session_id)
-                .await
-                .map_err(map_session_store_error)?
-                .ok_or_else(|| {
-                    (
-                        StatusCode::NOT_FOUND,
-                        Json(ErrorResponse {
-                            error: format!("session {session_id} not found"),
-                        }),
-                    )
-                })?;
-            (visible.id, AutomationTaskSessionSource::ExistingSession)
-        }
-        (None, Some(create_session_request)) => {
-            let owner_mode = resolve_owner_mode(&state, create_session_request.owner_mode)?;
-            let created =
-                create_owned_session(&state, &principal, create_session_request, owner_mode)
-                    .await?;
-            (created.id, AutomationTaskSessionSource::CreatedSession)
-        }
-        _ => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error:
-                        "session must provide exactly one of existing_session_id or create_session"
-                            .to_string(),
-                }),
-            ));
-        }
-    };
+    let (session_id, session_source) =
+        resolve_task_session_binding(&state, &principal, Some(request.session), None).await?;
 
     let task = state
         .session_store
@@ -427,6 +438,356 @@ async fn get_automation_task_logs(
         .map(|log| log.to_resource())
         .collect();
     Ok(Json(AutomationTaskLogListResponse { logs }))
+}
+
+async fn list_workflow_definitions(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowDefinitionListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workflows = state
+        .session_store
+        .list_workflow_definitions_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|workflow| workflow.to_resource())
+        .collect();
+    Ok(Json(WorkflowDefinitionListResponse { workflows }))
+}
+
+async fn create_workflow_definition(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateWorkflowDefinitionRequest>,
+) -> Result<(StatusCode, Json<WorkflowDefinitionResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workflow = state
+        .session_store
+        .create_workflow_definition(
+            &principal,
+            PersistWorkflowDefinitionRequest {
+                name: request.name,
+                description: request.description,
+                labels: request.labels,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(workflow.to_resource())))
+}
+
+async fn get_workflow_definition(
+    headers: HeaderMap,
+    Path(workflow_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowDefinitionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workflow = state
+        .session_store
+        .get_workflow_definition_for_owner(&principal, workflow_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow definition {workflow_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(workflow.to_resource()))
+}
+
+async fn create_workflow_definition_version(
+    headers: HeaderMap,
+    Path(workflow_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateWorkflowDefinitionVersionRequest>,
+) -> Result<(StatusCode, Json<WorkflowDefinitionVersionResource>), (StatusCode, Json<ErrorResponse>)>
+{
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let version = state
+        .session_store
+        .create_workflow_definition_version(
+            &principal,
+            PersistWorkflowDefinitionVersionRequest {
+                workflow_definition_id: workflow_id,
+                version: request.version,
+                executor: request.executor,
+                entrypoint: request.entrypoint,
+                input_schema: request.input_schema,
+                output_schema: request.output_schema,
+                default_session: request.default_session,
+                allowed_credential_binding_ids: request.allowed_credential_binding_ids,
+                allowed_extension_ids: request.allowed_extension_ids,
+                allowed_file_workspace_ids: request.allowed_file_workspace_ids,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(version.to_resource())))
+}
+
+async fn get_workflow_definition_version(
+    headers: HeaderMap,
+    Path((workflow_id, version)): Path<(Uuid, String)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowDefinitionVersionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let version_resource = state
+        .session_store
+        .get_workflow_definition_version_for_owner(&principal, workflow_id, &version)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {version} for workflow {workflow_id} not found"
+                    ),
+                }),
+            )
+        })?;
+    Ok(Json(version_resource.to_resource()))
+}
+
+async fn create_workflow_run(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateWorkflowRunRequest>,
+) -> Result<(StatusCode, Json<WorkflowRunResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workflow = state
+        .session_store
+        .get_workflow_definition_for_owner(&principal, request.workflow_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow definition {} not found", request.workflow_id),
+                }),
+            )
+        })?;
+    let version = state
+        .session_store
+        .get_workflow_definition_version_for_owner(
+            &principal,
+            request.workflow_id,
+            &request.version,
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {} for workflow {} not found",
+                        request.version, request.workflow_id
+                    ),
+                }),
+            )
+        })?;
+    let (session_id, session_source) = resolve_task_session_binding(
+        &state,
+        &principal,
+        request.session,
+        version.default_session.as_ref(),
+    )
+    .await?;
+    let task = state
+        .session_store
+        .create_automation_task(
+            &principal,
+            PersistAutomationTaskRequest {
+                display_name: Some(format!("{} {}", workflow.name, version.version)),
+                executor: version.executor.clone(),
+                session_id,
+                session_source,
+                input: request.input.clone(),
+                labels: request.labels.clone(),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    let run = state
+        .session_store
+        .create_workflow_run(
+            &principal,
+            PersistWorkflowRunRequest {
+                workflow_definition_id: workflow.id,
+                workflow_definition_version_id: version.id,
+                workflow_version: version.version.clone(),
+                session_id,
+                automation_task_id: task.id,
+                input: request.input,
+                labels: request.labels,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(run.to_resource(&task))))
+}
+
+async fn get_workflow_run(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
+    let (run, task) = authorize_visible_workflow_run_request(&headers, &state, run_id).await?;
+    Ok(Json(run.to_resource(&task)))
+}
+
+async fn cancel_workflow_run(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let run = state
+        .session_store
+        .get_workflow_run_for_owner(&principal, run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    let task = state
+        .session_store
+        .cancel_automation_task_for_owner(&principal, run.automation_task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "automation task {} for workflow run {run_id} not found",
+                        run.automation_task_id
+                    ),
+                }),
+            )
+        })?;
+    let _ = state
+        .session_store
+        .append_workflow_run_event_for_owner(
+            &principal,
+            run.id,
+            PersistWorkflowRunEventRequest {
+                event_type: "workflow_run.cancel_requested".to_string(),
+                message: "workflow run cancellation requested".to_string(),
+                data: Some(serde_json::json!({
+                    "automation_task_id": run.automation_task_id,
+                })),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok(Json(run.to_resource(&task)))
+}
+
+async fn get_workflow_run_events(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunEventListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let run = state
+        .session_store
+        .get_workflow_run_for_owner(&principal, run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    let mut events = state
+        .session_store
+        .list_workflow_run_events_for_owner(&principal, run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|event| event.to_resource())
+        .collect::<Vec<WorkflowRunEventResource>>();
+    let task_events = state
+        .session_store
+        .list_automation_task_events_for_owner(&principal, run.automation_task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|event| {
+            WorkflowRunEventResource::from_automation_task(run.id, run.automation_task_id, &event)
+        });
+    events.extend(task_events);
+    events.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    Ok(Json(WorkflowRunEventListResponse { events }))
+}
+
+async fn get_workflow_run_logs(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunLogListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let run = state
+        .session_store
+        .get_workflow_run_for_owner(&principal, run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    let logs = state
+        .session_store
+        .list_automation_task_logs_for_owner(&principal, run.automation_task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|log| {
+            WorkflowRunLogResource::from_automation_task(run.id, run.automation_task_id, &log)
+        })
+        .collect();
+    Ok(Json(WorkflowRunLogListResponse { logs }))
 }
 
 async fn list_session_recordings(
@@ -1406,6 +1767,125 @@ async fn create_owned_session(
     Ok(stored)
 }
 
+async fn resolve_task_session_binding(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    session: Option<AutomationTaskSessionRequest>,
+    default_session: Option<&Value>,
+) -> Result<(Uuid, AutomationTaskSessionSource), (StatusCode, Json<ErrorResponse>)> {
+    match session {
+        Some(AutomationTaskSessionRequest {
+            existing_session_id: Some(session_id),
+            create_session: None,
+        }) => {
+            let visible = state
+                .session_store
+                .get_session_for_owner(principal, session_id)
+                .await
+                .map_err(map_session_store_error)?
+                .ok_or_else(|| {
+                    (
+                        StatusCode::NOT_FOUND,
+                        Json(ErrorResponse {
+                            error: format!("session {session_id} not found"),
+                        }),
+                    )
+                })?;
+            Ok((visible.id, AutomationTaskSessionSource::ExistingSession))
+        }
+        Some(AutomationTaskSessionRequest {
+            existing_session_id: None,
+            create_session: Some(create_session_request),
+        }) => {
+            let owner_mode = resolve_owner_mode(state, create_session_request.owner_mode)?;
+            let created =
+                create_owned_session(state, principal, create_session_request, owner_mode).await?;
+            Ok((created.id, AutomationTaskSessionSource::CreatedSession))
+        }
+        Some(_) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "session must provide exactly one of existing_session_id or create_session"
+                    .to_string(),
+            }),
+        )),
+        None => {
+            let Some(default_session) = default_session else {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: "workflow run requires a session binding or version.default_session"
+                            .to_string(),
+                    }),
+                ));
+            };
+            let create_session_request = serde_json::from_value::<CreateSessionRequest>(
+                default_session.clone(),
+            )
+            .map_err(|error| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: format!(
+                            "workflow version default_session is not a valid session create payload: {error}"
+                        ),
+                    }),
+                )
+            })?;
+            let owner_mode = resolve_owner_mode(state, create_session_request.owner_mode)?;
+            let created =
+                create_owned_session(state, principal, create_session_request, owner_mode).await?;
+            Ok((created.id, AutomationTaskSessionSource::CreatedSession))
+        }
+    }
+}
+
+async fn authorize_visible_workflow_run_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+    run_id: Uuid,
+) -> Result<
+    (
+        crate::workflow::StoredWorkflowRun,
+        crate::automation_task::StoredAutomationTask,
+    ),
+    (StatusCode, Json<ErrorResponse>),
+> {
+    let principal = authorize_api_request(headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let run = state
+        .session_store
+        .get_workflow_run_for_owner(&principal, run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    let task = state
+        .session_store
+        .get_automation_task_for_owner(&principal, run.automation_task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "automation task {} for workflow run {run_id} not found",
+                        run.automation_task_id
+                    ),
+                }),
+            )
+        })?;
+    Ok((run, task))
+}
+
 async fn authorize_api_request(
     headers: &HeaderMap,
     auth_validator: &AuthValidator,
@@ -1452,6 +1932,36 @@ fn extract_automation_access_token(headers: &HeaderMap) -> Option<&str> {
 fn build_api_router(state: Arc<ApiState>) -> Router {
     Router::new()
         .route("/api/v1/sessions", post(create_session).get(list_sessions))
+        .route(
+            "/api/v1/workflows",
+            post(create_workflow_definition).get(list_workflow_definitions),
+        )
+        .route(
+            "/api/v1/workflows/{workflow_id}",
+            get(get_workflow_definition),
+        )
+        .route(
+            "/api/v1/workflows/{workflow_id}/versions",
+            post(create_workflow_definition_version),
+        )
+        .route(
+            "/api/v1/workflows/{workflow_id}/versions/{version}",
+            get(get_workflow_definition_version),
+        )
+        .route("/api/v1/workflow-runs", post(create_workflow_run))
+        .route("/api/v1/workflow-runs/{run_id}", get(get_workflow_run))
+        .route(
+            "/api/v1/workflow-runs/{run_id}/cancel",
+            post(cancel_workflow_run),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/events",
+            get(get_workflow_run_events),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/logs",
+            get(get_workflow_run_logs),
+        )
         .route(
             "/api/v1/automation-tasks",
             post(create_automation_task).get(list_automation_tasks),
@@ -1571,6 +2081,12 @@ fn map_session_store_error(error: SessionStoreError) -> (StatusCode, Json<ErrorR
         ),
         SessionStoreError::Conflict(_) => (
             StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+        SessionStoreError::NotFound(_) => (
+            StatusCode::NOT_FOUND,
             Json(ErrorResponse {
                 error: error.to_string(),
             }),

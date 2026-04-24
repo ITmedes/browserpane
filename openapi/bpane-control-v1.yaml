@@ -18,6 +18,7 @@ tags:
   - name: Session Recordings
   - name: Session Automation
   - name: Automation Tasks
+  - name: Workflows
 security:
   - bearerAuth: []
 paths:
@@ -181,6 +182,226 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AutomationTaskLogListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows:
+    get:
+      tags: [Workflows]
+      summary: List workflow definitions visible to the authenticated owner
+      operationId: listWorkflowDefinitions
+      responses:
+        '200':
+          description: Workflow definition list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Workflows]
+      summary: Create a workflow definition
+      operationId: createWorkflowDefinition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkflowDefinitionRequest'
+      responses:
+        '201':
+          description: Workflow definition created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    get:
+      tags: [Workflows]
+      summary: Fetch one workflow definition
+      operationId: getWorkflowDefinition
+      responses:
+        '200':
+          description: Workflow definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}/versions:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    post:
+      tags: [Workflows]
+      summary: Create an immutable workflow definition version
+      operationId: createWorkflowDefinitionVersion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkflowDefinitionVersionRequest'
+      responses:
+        '201':
+          description: Workflow definition version created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionVersionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}/versions/{version}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/WorkflowVersion'
+    get:
+      tags: [Workflows]
+      summary: Fetch one workflow definition version
+      operationId: getWorkflowDefinitionVersion
+      responses:
+        '200':
+          description: Workflow definition version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionVersionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs:
+    post:
+      tags: [Workflows]
+      summary: Invoke a workflow definition version
+      operationId: createWorkflowRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkflowRunRequest'
+      responses:
+        '201':
+          description: Workflow run created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Workflows]
+      summary: Fetch one workflow run
+      operationId: getWorkflowRun
+      responses:
+        '200':
+          description: Workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Workflows]
+      summary: Cancel a workflow run by cancelling its active automation task
+      operationId: cancelWorkflowRun
+      responses:
+        '200':
+          description: Updated workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/events:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Workflows]
+      summary: List workflow run events, including child automation task events
+      operationId: getWorkflowRunEvents
+      responses:
+        '200':
+          description: Workflow run event list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunEventListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/logs:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Workflows]
+      summary: List workflow run logs, including child automation task logs
+      operationId: getWorkflowRunLogs
+      responses:
+        '200':
+          description: Workflow run log list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunLogListResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -675,6 +896,26 @@ components:
       schema:
         type: string
         format: uuid
+    WorkflowId:
+      name: workflow_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WorkflowVersion:
+      name: version
+      in: path
+      required: true
+      schema:
+        type: string
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     BadRequest:
       description: Request validation failed
@@ -1003,6 +1244,331 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AutomationTaskLogResource'
+    WorkflowRunState:
+      type: string
+      enum:
+        - pending
+        - starting
+        - running
+        - awaiting_input
+        - succeeded
+        - failed
+        - cancelled
+        - timed_out
+    WorkflowRunEventSource:
+      type: string
+      enum:
+        - run
+        - automation_task
+    WorkflowRunLogSource:
+      type: string
+      enum:
+        - automation_task
+    CreateWorkflowDefinitionRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    WorkflowDefinitionResource:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - labels
+        - latest_version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        latest_version:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowDefinitionListResponse:
+      type: object
+      required: [workflows]
+      properties:
+        workflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowDefinitionResource'
+    CreateWorkflowDefinitionVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [version, executor, entrypoint]
+      properties:
+        version:
+          type: string
+        executor:
+          type: string
+        entrypoint:
+          type: string
+        input_schema:
+          nullable: true
+        output_schema:
+          nullable: true
+        default_session:
+          nullable: true
+        allowed_credential_binding_ids:
+          type: array
+          items:
+            type: string
+        allowed_extension_ids:
+          type: array
+          items:
+            type: string
+        allowed_file_workspace_ids:
+          type: array
+          items:
+            type: string
+    WorkflowDefinitionVersionResource:
+      type: object
+      required:
+        - id
+        - workflow_definition_id
+        - version
+        - executor
+        - entrypoint
+        - input_schema
+        - output_schema
+        - default_session
+        - allowed_credential_binding_ids
+        - allowed_extension_ids
+        - allowed_file_workspace_ids
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_definition_id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        executor:
+          type: string
+        entrypoint:
+          type: string
+        input_schema:
+          nullable: true
+        output_schema:
+          nullable: true
+        default_session:
+          nullable: true
+        allowed_credential_binding_ids:
+          type: array
+          items:
+            type: string
+        allowed_extension_ids:
+          type: array
+          items:
+            type: string
+        allowed_file_workspace_ids:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+    CreateWorkflowRunRequest:
+      type: object
+      additionalProperties: false
+      required: [workflow_id, version]
+      properties:
+        workflow_id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        session:
+          allOf:
+            - $ref: '#/components/schemas/CreateAutomationTaskSessionRequest'
+          nullable: true
+        input:
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    WorkflowRunResource:
+      type: object
+      required:
+        - id
+        - workflow_definition_id
+        - workflow_definition_version_id
+        - workflow_version
+        - state
+        - session_id
+        - automation_task_id
+        - input
+        - output
+        - error
+        - artifact_refs
+        - labels
+        - started_at
+        - completed_at
+        - events_path
+        - logs_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_definition_id:
+          type: string
+          format: uuid
+        workflow_definition_version_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: string
+        state:
+          $ref: '#/components/schemas/WorkflowRunState'
+        session_id:
+          type: string
+          format: uuid
+        automation_task_id:
+          type: string
+          format: uuid
+        input:
+          nullable: true
+        output:
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        artifact_refs:
+          type: array
+          items:
+            type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        events_path:
+          type: string
+        logs_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowRunEventResource:
+      type: object
+      required:
+        - id
+        - run_id
+        - source
+        - automation_task_id
+        - event_type
+        - message
+        - data
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        source:
+          $ref: '#/components/schemas/WorkflowRunEventSource'
+        automation_task_id:
+          type: string
+          format: uuid
+          nullable: true
+        event_type:
+          type: string
+        message:
+          type: string
+        data:
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    WorkflowRunEventListResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunEventResource'
+    WorkflowRunLogResource:
+      type: object
+      required:
+        - id
+        - run_id
+        - source
+        - automation_task_id
+        - stream
+        - message
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        source:
+          $ref: '#/components/schemas/WorkflowRunLogSource'
+        automation_task_id:
+          type: string
+          format: uuid
+          nullable: true
+        stream:
+          $ref: '#/components/schemas/AutomationTaskLogStream'
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    WorkflowRunLogListResponse:
+      type: object
+      required: [logs]
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunLogResource'
     SessionConnectInfo:
       type: object
       required:

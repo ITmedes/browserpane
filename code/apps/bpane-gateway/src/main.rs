@@ -18,6 +18,7 @@ mod session_hub;
 mod session_manager;
 mod session_registry;
 mod transport;
+mod workflow;
 
 use std::sync::Arc;
 use std::time::Duration;
