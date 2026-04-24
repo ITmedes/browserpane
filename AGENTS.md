@@ -7,7 +7,7 @@ Project-wide Rust coding standards live in `RUST_STANDARDS.md`.
 - Update that file instead of expanding this one with detailed Rust style rules.
 
 Project-wide TypeScript and Node.js coding standards live in `NODEJS_STANDARDS.md`.
-- Apply them to `code/web/bpane-client`, `code/integrations/mcp-bridge`, and future TS/Node packages.
+- Apply them to `code/web/bpane-client`, `code/integrations/mcp-bridge`, `code/integrations/recording-worker`, `code/integrations/workflow-worker`, and future TS/Node packages.
 - Update that file instead of expanding this one with detailed TS/Node style rules.
 
 When docs disagree, prefer:
@@ -83,11 +83,15 @@ Current product shape:
 - `code/integrations/recording-worker`
   - Playwright-driven recorder worker that attaches as a `recorder` browser client through the control plane.
   - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals, then hands a temporary local file path back to the gateway for artifact-store finalization.
+- `code/integrations/workflow-worker`
+  - One-off workflow executor worker for owner-scoped workflow runs with git-backed source snapshots.
+  - Loads the workflow run through the gateway using an owner bearer token, mints session automation access, downloads the run source snapshot, materializes it locally, and executes the pinned Playwright entrypoint against the bound BrowserPane session.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
   - Local session-control persistence in compose is Postgres on `:5433`.
   - Local compose can now be switched to `docker_pool` for browser-session workers via gateway env overrides; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
+  - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 
 ## Protocol and media facts
 
@@ -134,6 +138,7 @@ Run these in `code/web/bpane-client`:
 Run these where applicable:
 - `cd code/integrations/mcp-bridge && npm run build`
 - `cd code/integrations/recording-worker && npm run build`
+- `cd code/integrations/workflow-worker && npm run build`
 
 ## Local development flow
 

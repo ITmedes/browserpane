@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const DEFAULTS = {
@@ -22,6 +23,8 @@ const COMMON_CHROME_PATHS = [
   '/usr/bin/chromium',
   '/usr/bin/chromium-browser',
 ].filter(Boolean);
+
+const PROJECT_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
 function parseArgs(argv) {
   const options = { ...DEFAULTS };
@@ -227,6 +230,63 @@ async function inspectZipEntries(bytes) {
   }
 }
 
+function runGitCommand(repoDir, args, options = {}) {
+  return execFileSync('git', args, {
+    cwd: repoDir,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: 'utf8',
+    ...options,
+  });
+}
+
+function initializeMainBranch(repoDir) {
+  try {
+    runGitCommand(repoDir, ['init', '-b', 'main']);
+  } catch {
+    runGitCommand(repoDir, ['init']);
+    runGitCommand(repoDir, ['checkout', '-b', 'main']);
+  }
+}
+
+async function createLocalWorkflowRepo() {
+  const repoDir = await fs.mkdtemp(path.join(PROJECT_ROOT, '.workflow-smoke-repo-'));
+  const workflowDir = path.join(repoDir, 'workflows', 'smoke');
+  await fs.mkdir(workflowDir, { recursive: true });
+  await fs.writeFile(
+    path.join(workflowDir, 'run.mjs'),
+    `export default async function run({ page, input, sessionId, workflowRunId, automationTaskId }) {
+  const targetUrl =
+    input && typeof input.target_url === 'string' && input.target_url.trim()
+      ? input.target_url.trim()
+      : 'http://web:8080';
+  console.log(\`workflow visiting \${targetUrl}\`);
+  await page.goto(targetUrl, { waitUntil: 'networkidle' });
+  const title = await page.title();
+  console.error(\`workflow captured title \${title}\`);
+  return {
+    title,
+    final_url: page.url(),
+    session_id: sessionId,
+    workflow_run_id: workflowRunId,
+    automation_task_id: automationTaskId,
+  };
+}
+`,
+    'utf8',
+  );
+  initializeMainBranch(repoDir);
+  runGitCommand(repoDir, ['config', 'user.name', 'BrowserPane Smoke']);
+  runGitCommand(repoDir, ['config', 'user.email', 'smoke@browserpane.local']);
+  runGitCommand(repoDir, ['add', '.']);
+  runGitCommand(repoDir, ['commit', '-m', 'Add workflow smoke entrypoint']);
+  const commit = runGitCommand(repoDir, ['rev-parse', 'HEAD']).trim();
+  return {
+    repoDir,
+    repositoryUrl: `/workspace/${path.basename(repoDir)}`,
+    commit,
+  };
+}
+
 async function createWorkflow(accessToken, options) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflows`, {
     method: 'POST',
@@ -244,7 +304,7 @@ async function createWorkflow(accessToken, options) {
   });
 }
 
-async function createWorkflowVersion(accessToken, options, workflowId) {
+async function createWorkflowVersion(accessToken, options, workflowId, source) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflows/${workflowId}/versions`, {
     method: 'POST',
     headers: {
@@ -254,28 +314,31 @@ async function createWorkflowVersion(accessToken, options, workflowId) {
     body: JSON.stringify({
       version: 'v1',
       executor: 'playwright',
-      entrypoint: 'openapi/bpane-control-v1.yaml',
+      entrypoint: 'workflows/smoke/run.mjs',
       source: {
         kind: 'git',
-        repository_url: 'https://github.com/ITmedes/browserpane.git',
+        repository_url: source.repositoryUrl,
         ref: 'refs/heads/main',
-        root_path: 'openapi',
+        root_path: 'workflows',
       },
       input_schema: {
         type: 'object',
-        required: ['month'],
+        required: ['target_url'],
+        properties: {
+          target_url: {
+            type: 'string',
+          },
+        },
       },
       output_schema: {
         type: 'object',
-        required: ['csv_file_id'],
+        required: ['title', 'final_url', 'session_id', 'workflow_run_id', 'automation_task_id'],
       },
       default_session: {
         labels: {
           origin: 'workflow-smoke',
         },
       },
-      allowed_credential_binding_ids: ['cred_smoke'],
-      allowed_file_workspace_ids: ['ws_smoke'],
     }),
   });
 }
@@ -291,7 +354,7 @@ async function createWorkflowRun(accessToken, options, workflowId) {
       workflow_id: workflowId,
       version: 'v1',
       input: {
-        month: '2026-03',
+        target_url: 'http://web:8080',
       },
       labels: {
         suite: 'smoke',
@@ -319,60 +382,15 @@ async function issueAutomationAccess(accessToken, options, sessionId) {
   });
 }
 
-async function fetchWorkflowRunEvents(accessToken, options, runId) {
-  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/events`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-}
-
 async function fetchWorkflowRunEventsWithAutomationToken(automationToken, options, runId) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/events`, {
     headers: { 'x-bpane-automation-access-token': automationToken },
   });
 }
 
-async function fetchWorkflowRunLogs(accessToken, options, runId) {
-  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/logs`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-}
-
 async function fetchWorkflowRunLogsWithAutomationToken(automationToken, options, runId) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/logs`, {
     headers: { 'x-bpane-automation-access-token': automationToken },
-  });
-}
-
-async function transitionWorkflowRun(automationToken, options, runId, body) {
-  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/state`, {
-    method: 'POST',
-    headers: {
-      'x-bpane-automation-access-token': automationToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-}
-
-async function appendWorkflowRunLog(automationToken, options, runId, body) {
-  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/logs`, {
-    method: 'POST',
-    headers: {
-      'x-bpane-automation-access-token': automationToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-}
-
-async function appendAutomationTaskLog(automationToken, options, taskId, body) {
-  return await fetchJson(`${options.pageUrl}/api/v1/automation-tasks/${taskId}/logs`, {
-    method: 'POST',
-    headers: {
-      'x-bpane-automation-access-token': automationToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
   });
 }
 
@@ -391,6 +409,42 @@ async function deleteSession(accessToken, options, sessionId) {
     const detail = await response.text().catch(() => '');
     throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
   }
+}
+
+function buildWorkflowWorkerImage() {
+  execFileSync(
+    'docker',
+    ['compose', '-f', 'deploy/compose.yml', '--profile', 'workflow', 'build', 'workflow-worker'],
+    {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+    },
+  );
+}
+
+function runWorkflowWorker(runId, accessToken) {
+  execFileSync(
+    'docker',
+    [
+      'compose',
+      '-f',
+      'deploy/compose.yml',
+      '--profile',
+      'workflow',
+      'run',
+      '--rm',
+      '--no-deps',
+      '-e',
+      `BPANE_WORKFLOW_RUN_ID=${runId}`,
+      '-e',
+      `BPANE_WORKFLOW_BEARER_TOKEN=${accessToken}`,
+      'workflow-worker',
+    ],
+    {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+    },
+  );
 }
 
 async function main() {
@@ -418,6 +472,7 @@ async function main() {
   let accessToken = '';
   let automationToken = '';
   let createdSessionId = '';
+  let localWorkflowSource = null;
 
   try {
     context = await browser.newContext({
@@ -432,14 +487,25 @@ async function main() {
       throw new Error('Failed to acquire an access token from the test page.');
     }
 
+    log('Preparing local git-backed workflow source');
+    localWorkflowSource = await createLocalWorkflowRepo();
+
     log('Creating workflow definition and immutable version');
     const workflow = await createWorkflow(accessToken, options);
-    const version = await createWorkflowVersion(accessToken, options, workflow.id);
+    const version = await createWorkflowVersion(
+      accessToken,
+      options,
+      workflow.id,
+      localWorkflowSource,
+    );
     if (version.version !== 'v1') {
       throw new Error(`Expected workflow version v1, got ${version.version ?? 'missing'}.`);
     }
     if (version.source?.kind !== 'git' || !version.source?.resolved_commit) {
       throw new Error('Workflow version did not expose resolved git source metadata.');
+    }
+    if (version.source.resolved_commit !== localWorkflowSource.commit) {
+      throw new Error('Workflow version did not pin the expected local git commit.');
     }
 
     log('Creating workflow run');
@@ -489,34 +555,19 @@ async function main() {
       throw new Error('Workflow source snapshot download returned an empty archive.');
     }
     const sourceSnapshotEntries = await inspectZipEntries(sourceSnapshotBytes);
-    if (!sourceSnapshotEntries.includes('openapi/bpane-control-v1.yaml')) {
+    if (!sourceSnapshotEntries.includes('workflows/smoke/run.mjs')) {
       throw new Error('Workflow source snapshot archive is missing the pinned entrypoint file.');
     }
-    if (sourceSnapshotEntries.includes('README.md')) {
-      throw new Error('Workflow source snapshot archive leaked files outside the configured root_path.');
+    if (sourceSnapshotEntries.some((entry) => entry.startsWith('.git/'))) {
+      throw new Error(
+        'Workflow source snapshot archive leaked repository internals outside the configured root_path.',
+      );
     }
 
-    log(`Driving workflow run ${runId} through automation access`);
-    await transitionWorkflowRun(automationToken, options, runId, {
-      state: 'running',
-      message: 'workflow executor attached',
-    });
-    await appendWorkflowRunLog(automationToken, options, runId, {
-      stream: 'system',
-      message: 'workflow bootstrapped',
-    });
-    await appendAutomationTaskLog(automationToken, options, pendingRun.automation_task_id, {
-      stream: 'stdout',
-      message: 'opened report page',
-    });
-    await transitionWorkflowRun(automationToken, options, runId, {
-      state: 'succeeded',
-      output: {
-        csv_file_id: 'file_123',
-      },
-      artifact_refs: ['artifact://workflow-trace.zip'],
-      message: 'workflow completed',
-    });
+    log('Building workflow-worker image');
+    buildWorkflowWorkerImage();
+    log(`Executing workflow run ${runId} through workflow-worker`);
+    runWorkflowWorker(runId, accessToken);
 
     const succeededRun = await poll(
       'workflow run success',
@@ -524,8 +575,20 @@ async function main() {
       (run) => run?.state === 'succeeded',
       options.connectTimeoutMs,
     );
-    if (succeededRun.output?.csv_file_id !== 'file_123') {
-      throw new Error('Workflow run did not persist the expected structured output.');
+    if (succeededRun.output?.title !== 'BrowserPane Test Embed') {
+      throw new Error('Workflow run did not persist the expected page title output.');
+    }
+    if (!String(succeededRun.output?.final_url ?? '').startsWith('http://web:8080')) {
+      throw new Error('Workflow run did not persist the expected final URL.');
+    }
+    if (succeededRun.output?.session_id !== createdSessionId) {
+      throw new Error('Workflow run did not persist the expected session id.');
+    }
+    if (succeededRun.output?.workflow_run_id !== runId) {
+      throw new Error('Workflow run did not persist the expected run id.');
+    }
+    if (succeededRun.output?.automation_task_id !== succeededRun.automation_task_id) {
+      throw new Error('Workflow run did not persist the expected automation task id.');
     }
 
     const events = await fetchWorkflowRunEventsWithAutomationToken(
@@ -537,6 +600,8 @@ async function main() {
     for (const expected of [
       'workflow_run.created',
       'automation_task.created',
+      'workflow_run.starting',
+      'automation_task.starting',
       'workflow_run.running',
       'automation_task.running',
       'workflow_run.succeeded',
@@ -556,6 +621,33 @@ async function main() {
     if (!logSources.includes('run') || !logSources.includes('automation_task')) {
       throw new Error('Workflow run logs did not expose both run and automation task sources.');
     }
+    if (
+      !logs.logs.some(
+        (log) =>
+          log.source === 'run' &&
+          log.message.includes('materialized workflow source snapshot'),
+      )
+    ) {
+      throw new Error('Workflow run logs are missing the source snapshot materialization message.');
+    }
+    if (
+      !logs.logs.some(
+        (log) =>
+          log.source === 'automation_task' &&
+          log.message.includes('workflow visiting http://web:8080'),
+      )
+    ) {
+      throw new Error('Workflow run logs are missing the workflow stdout message.');
+    }
+    if (
+      !logs.logs.some(
+        (log) =>
+          log.source === 'automation_task' &&
+          log.message.includes('workflow captured title BrowserPane Test Embed'),
+      )
+    ) {
+      throw new Error('Workflow run logs are missing the workflow stderr message.');
+    }
 
     const summary = {
       workflowId: workflow.id,
@@ -569,7 +661,8 @@ async function main() {
       sourceSnapshotEntries: sourceSnapshotEntries.length,
       events: events.events.length,
       logs: logs.logs.length,
-      outputCsvFileId: succeededRun.output?.csv_file_id ?? null,
+      outputTitle: succeededRun.output?.title ?? null,
+      outputFinalUrl: succeededRun.output?.final_url ?? null,
     };
 
     if (options.outputPath) {
@@ -588,6 +681,9 @@ async function main() {
         );
       }
     }
+    if (localWorkflowSource?.repoDir) {
+      await fs.rm(localWorkflowSource.repoDir, { recursive: true, force: true }).catch(() => {});
+    }
     if (context) {
       await context.close().catch(() => {});
     }
@@ -596,6 +692,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`[workflow-smoke] ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+  console.error(
+    `[workflow-smoke] ${error instanceof Error ? error.stack ?? error.message : String(error)}`,
+  );
   process.exitCode = 1;
 });
