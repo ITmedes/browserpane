@@ -177,6 +177,10 @@ pub struct Config {
     #[arg(long, default_value = "/tmp/bpane-file-workspaces")]
     pub file_workspace_local_root: PathBuf,
 
+    /// Git executable used to resolve workflow git sources to immutable commits.
+    #[arg(long, default_value = "git")]
+    pub workflow_git_bin: PathBuf,
+
     /// Optional SPKI pin forwarded to the recorder worker Chromium process.
     #[arg(long)]
     pub recording_worker_cert_spki: Option<String>,

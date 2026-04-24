@@ -20,6 +20,7 @@ mod session_manager;
 mod session_registry;
 mod transport;
 mod workflow;
+mod workflow_source;
 mod workspace_file_store;
 
 use std::sync::Arc;
@@ -44,6 +45,7 @@ use session_control::{SessionOwnerMode, SessionStore};
 use session_manager::{SessionManager, SessionManagerConfig, SessionManagerDockerConfig};
 use session_registry::SessionRegistry;
 use transport::TransportServer;
+use workflow_source::WorkflowSourceResolver;
 use workspace_file_store::WorkspaceFileStore;
 
 #[tokio::main]
@@ -252,6 +254,8 @@ async fn main() -> anyhow::Result<()> {
     let workspace_file_store = Arc::new(WorkspaceFileStore::local_fs(
         config.file_workspace_local_root.clone(),
     ));
+    let workflow_source_resolver =
+        Arc::new(WorkflowSourceResolver::new(config.workflow_git_bin.clone()));
     let recording_observability = Arc::new(RecordingObservability::default());
     if config.recording_artifact_cleanup_interval_secs > 0 {
         let recording_retention = Arc::new(RecordingRetentionManager::new(
@@ -299,6 +303,7 @@ async fn main() -> anyhow::Result<()> {
             session_manager,
             recording_artifact_store,
             workspace_file_store,
+            workflow_source_resolver,
             recording_observability,
             recording_lifecycle,
             Duration::from_secs(config.runtime_idle_timeout_secs),

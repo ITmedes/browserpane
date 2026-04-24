@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import process from 'node:process';
+import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 
 const DEFAULTS = {
@@ -213,6 +214,10 @@ async function createWorkflow(accessToken, options) {
 }
 
 async function createWorkflowVersion(accessToken, options, workflowId) {
+  const resolvedCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: new URL('../../../..', import.meta.url),
+    encoding: 'utf8',
+  }).trim();
   return await fetchJson(`${options.pageUrl}/api/v1/workflows/${workflowId}/versions`, {
     method: 'POST',
     headers: {
@@ -223,6 +228,13 @@ async function createWorkflowVersion(accessToken, options, workflowId) {
       version: 'v1',
       executor: 'playwright',
       entrypoint: 'workflows/smoke/export.ts',
+      source: {
+        kind: 'git',
+        repository_url: 'https://github.com/ITmedes/browserpane.git',
+        ref: 'refs/heads/feature/BPANE-0045',
+        resolved_commit: resolvedCommit,
+        root_path: 'workflows',
+      },
       input_schema: {
         type: 'object',
         required: ['month'],
@@ -400,6 +412,9 @@ async function main() {
     if (version.version !== 'v1') {
       throw new Error(`Expected workflow version v1, got ${version.version ?? 'missing'}.`);
     }
+    if (version.source?.kind !== 'git' || !version.source?.resolved_commit) {
+      throw new Error('Workflow version did not expose resolved git source metadata.');
+    }
 
     log('Creating workflow run');
     const createdRun = await createWorkflowRun(accessToken, options, workflow.id);
@@ -498,6 +513,7 @@ async function main() {
     const summary = {
       workflowId: workflow.id,
       workflowVersion: version.version,
+      workflowSourceCommit: version.source?.resolved_commit ?? null,
       runId,
       state: succeededRun.state,
       sessionId: createdSessionId,

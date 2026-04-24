@@ -57,6 +57,7 @@ use crate::workflow::{
     WorkflowRunEventListResponse, WorkflowRunEventResource, WorkflowRunLogListResponse,
     WorkflowRunLogResource, WorkflowRunResource, WorkflowRunState, WorkflowRunTransitionRequest,
 };
+use crate::workflow_source::{WorkflowSource, WorkflowSourceError, WorkflowSourceResolver};
 use crate::workspace_file_store::{
     StoreWorkspaceFileRequest, WorkspaceFileStore, WorkspaceFileStoreError,
 };
@@ -71,6 +72,7 @@ struct ApiState {
     session_manager: Arc<SessionManager>,
     recording_artifact_store: Arc<RecordingArtifactStore>,
     workspace_file_store: Arc<WorkspaceFileStore>,
+    workflow_source_resolver: Arc<WorkflowSourceResolver>,
     recording_observability: Arc<RecordingObservability>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
     idle_stop_timeout: std::time::Duration,
@@ -180,6 +182,8 @@ struct CreateWorkflowDefinitionVersionRequest {
     version: String,
     executor: String,
     entrypoint: String,
+    #[serde(default)]
+    source: Option<WorkflowSource>,
     #[serde(default)]
     input_schema: Option<Value>,
     #[serde(default)]
@@ -621,24 +625,42 @@ async fn create_workflow_definition_version(
     Json(request): Json<CreateWorkflowDefinitionVersionRequest>,
 ) -> Result<(StatusCode, Json<WorkflowDefinitionVersionResource>), (StatusCode, Json<ErrorResponse>)>
 {
+    let CreateWorkflowDefinitionVersionRequest {
+        version,
+        executor,
+        entrypoint,
+        source,
+        input_schema,
+        output_schema,
+        default_session,
+        allowed_credential_binding_ids,
+        allowed_extension_ids,
+        allowed_file_workspace_ids,
+    } = request;
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let resolved_source = state
+        .workflow_source_resolver
+        .resolve(source)
+        .await
+        .map_err(map_workflow_source_error)?;
     let version = state
         .session_store
         .create_workflow_definition_version(
             &principal,
             PersistWorkflowDefinitionVersionRequest {
                 workflow_definition_id: workflow_id,
-                version: request.version,
-                executor: request.executor,
-                entrypoint: request.entrypoint,
-                input_schema: request.input_schema,
-                output_schema: request.output_schema,
-                default_session: request.default_session,
-                allowed_credential_binding_ids: request.allowed_credential_binding_ids,
-                allowed_extension_ids: request.allowed_extension_ids,
-                allowed_file_workspace_ids: request.allowed_file_workspace_ids,
+                version,
+                executor,
+                entrypoint,
+                source: resolved_source,
+                input_schema,
+                output_schema,
+                default_session,
+                allowed_credential_binding_ids,
+                allowed_extension_ids,
+                allowed_file_workspace_ids,
             },
         )
         .await
@@ -2132,6 +2154,7 @@ pub async fn run_api_server(
     session_manager: Arc<SessionManager>,
     recording_artifact_store: Arc<RecordingArtifactStore>,
     workspace_file_store: Arc<WorkspaceFileStore>,
+    workflow_source_resolver: Arc<WorkflowSourceResolver>,
     recording_observability: Arc<RecordingObservability>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
     idle_stop_timeout: std::time::Duration,
@@ -2147,6 +2170,7 @@ pub async fn run_api_server(
         session_manager,
         recording_artifact_store,
         workspace_file_store,
+        workflow_source_resolver,
         recording_observability,
         recording_lifecycle,
         idle_stop_timeout,
@@ -2875,6 +2899,23 @@ fn map_workspace_file_content_error(
             )
         }
         other => map_workspace_file_store_error(other),
+    }
+}
+
+fn map_workflow_source_error(error: WorkflowSourceError) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        WorkflowSourceError::Invalid(_) => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+        WorkflowSourceError::Resolve(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
     }
 }
 

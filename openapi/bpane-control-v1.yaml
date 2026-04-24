@@ -1801,6 +1801,10 @@ components:
           type: string
         entrypoint:
           type: string
+        source:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowSource'
+          nullable: true
         input_schema:
           nullable: true
         output_schema:
@@ -1827,6 +1831,7 @@ components:
         - version
         - executor
         - entrypoint
+        - source
         - input_schema
         - output_schema
         - default_session
@@ -1847,6 +1852,10 @@ components:
           type: string
         entrypoint:
           type: string
+        source:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowSource'
+          nullable: true
         input_schema:
           nullable: true
         output_schema:
@@ -1868,6 +1877,36 @@ components:
         created_at:
           type: string
           format: date-time
+    WorkflowSource:
+      oneOf:
+        - $ref: '#/components/schemas/WorkflowGitSource'
+      discriminator:
+        propertyName: kind
+        mapping:
+          git: '#/components/schemas/WorkflowGitSource'
+    WorkflowGitSource:
+      type: object
+      required:
+        - kind
+        - repository_url
+        - ref
+        - resolved_commit
+        - root_path
+      properties:
+        kind:
+          type: string
+          enum: [git]
+        repository_url:
+          type: string
+        ref:
+          type: string
+          nullable: true
+        resolved_commit:
+          type: string
+          nullable: true
+        root_path:
+          type: string
+          nullable: true
     CreateWorkflowRunRequest:
       type: object
       additionalProperties: false

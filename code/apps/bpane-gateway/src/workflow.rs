@@ -10,6 +10,7 @@ use crate::automation_task::{
     AutomationTaskLogStream, AutomationTaskState, StoredAutomationTaskEvent,
     StoredAutomationTaskLog,
 };
+use crate::workflow_source::WorkflowSource;
 
 #[derive(Debug, Clone)]
 pub struct PersistWorkflowDefinitionRequest {
@@ -24,6 +25,7 @@ pub struct PersistWorkflowDefinitionVersionRequest {
     pub version: String,
     pub executor: String,
     pub entrypoint: String,
+    pub source: Option<WorkflowSource>,
     pub input_schema: Option<Value>,
     pub output_schema: Option<Value>,
     pub default_session: Option<Value>,
@@ -86,6 +88,7 @@ pub struct StoredWorkflowDefinitionVersion {
     pub version: String,
     pub executor: String,
     pub entrypoint: String,
+    pub source: Option<WorkflowSource>,
     pub input_schema: Option<Value>,
     pub output_schema: Option<Value>,
     pub default_session: Option<Value>,
@@ -254,6 +257,7 @@ pub struct WorkflowDefinitionVersionResource {
     pub version: String,
     pub executor: String,
     pub entrypoint: String,
+    pub source: Option<WorkflowSource>,
     pub input_schema: Option<Value>,
     pub output_schema: Option<Value>,
     pub default_session: Option<Value>,
@@ -340,6 +344,7 @@ impl StoredWorkflowDefinitionVersion {
             version: self.version.clone(),
             executor: self.executor.clone(),
             entrypoint: self.entrypoint.clone(),
+            source: self.source.clone(),
             input_schema: self.input_schema.clone(),
             output_schema: self.output_schema.clone(),
             default_session: self.default_session.clone(),

@@ -33,6 +33,7 @@ use crate::workflow::{
     StoredWorkflowDefinitionVersion, StoredWorkflowRun, StoredWorkflowRunEvent,
     StoredWorkflowRunLog, WorkflowRunState, WorkflowRunTransitionRequest,
 };
+use crate::workflow_source::WorkflowSource;
 
 const DEFAULT_VIEWPORT_WIDTH: u16 = 1600;
 const DEFAULT_VIEWPORT_HEIGHT: u16 = 900;
@@ -1844,6 +1845,43 @@ fn validate_workflow_definition_version_request(
             "workflow entrypoint must not be empty".to_string(),
         ));
     }
+    if let Some(source) = &request.source {
+        match source {
+            WorkflowSource::Git(source) => {
+                if source.repository_url.trim().is_empty() {
+                    return Err(SessionStoreError::InvalidRequest(
+                        "workflow git source repository_url must not be empty".to_string(),
+                    ));
+                }
+                if source
+                    .r#ref
+                    .as_deref()
+                    .is_some_and(|value| value.trim().is_empty())
+                {
+                    return Err(SessionStoreError::InvalidRequest(
+                        "workflow git source ref must not be empty when provided".to_string(),
+                    ));
+                }
+                if let Some(commit) = source.resolved_commit.as_deref() {
+                    if commit.len() != 40 || !commit.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                        return Err(SessionStoreError::InvalidRequest(
+                            "workflow git source resolved_commit must be a 40-character hex sha"
+                                .to_string(),
+                        ));
+                    }
+                }
+                if source
+                    .root_path
+                    .as_deref()
+                    .is_some_and(|value| value.trim().is_empty())
+                {
+                    return Err(SessionStoreError::InvalidRequest(
+                        "workflow git source root_path must not be empty when provided".to_string(),
+                    ));
+                }
+            }
+        }
+    }
     if let Some(default_session) = &request.default_session {
         serde_json::from_value::<CreateSessionRequest>(default_session.clone()).map_err(
             |error| {
@@ -2712,6 +2750,7 @@ impl InMemorySessionStore {
             version: request.version.clone(),
             executor: request.executor,
             entrypoint: request.entrypoint,
+            source: request.source,
             input_schema: request.input_schema,
             output_schema: request.output_schema,
             default_session: request.default_session,
@@ -3746,6 +3785,7 @@ impl PostgresSessionStore {
                     version TEXT NOT NULL,
                     executor TEXT NOT NULL,
                     entrypoint TEXT NOT NULL,
+                    source JSONB NULL,
                     input_schema JSONB NULL,
                     output_schema JSONB NULL,
                     default_session JSONB NULL,
@@ -3861,6 +3901,8 @@ impl PostgresSessionStore {
                     ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NULL;
                 ALTER TABLE control_workflow_runs
                     ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ NULL;
+                ALTER TABLE control_workflow_definition_versions
+                    ADD COLUMN IF NOT EXISTS source JSONB NULL;
                 "#,
             )
             .await
@@ -5540,6 +5582,7 @@ impl PostgresSessionStore {
         }
 
         let now = Utc::now();
+        let source_value = json_workflow_source(request.source.as_ref())?;
         let row = transaction
             .query_one(
                 r#"
@@ -5549,6 +5592,7 @@ impl PostgresSessionStore {
                     version,
                     executor,
                     entrypoint,
+                    source,
                     input_schema,
                     output_schema,
                     default_session,
@@ -5558,8 +5602,8 @@ impl PostgresSessionStore {
                     created_at
                 )
                 VALUES (
-                    $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb,
-                    $9::jsonb, $10::jsonb, $11::jsonb, $12
+                    $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb,
+                    $10::jsonb, $11::jsonb, $12::jsonb, $13
                 )
                 RETURNING
                     id,
@@ -5567,6 +5611,7 @@ impl PostgresSessionStore {
                     version,
                     executor,
                     entrypoint,
+                    source,
                     input_schema,
                     output_schema,
                     default_session,
@@ -5581,6 +5626,7 @@ impl PostgresSessionStore {
                     &request.version,
                     &request.executor,
                     &request.entrypoint,
+                    &source_value,
                     &request.input_schema,
                     &request.output_schema,
                     &request.default_session,
@@ -5645,6 +5691,7 @@ impl PostgresSessionStore {
                     version.version,
                     version.executor,
                     version.entrypoint,
+                    version.source,
                     version.input_schema,
                     version.output_schema,
                     version.default_session,
@@ -7616,6 +7663,18 @@ fn json_labels(labels: &HashMap<String, String>) -> Value {
     Value::Object(object)
 }
 
+fn json_workflow_source(
+    source: Option<&WorkflowSource>,
+) -> Result<Option<Value>, SessionStoreError> {
+    source
+        .map(|source| {
+            serde_json::to_value(source).map_err(|error| {
+                SessionStoreError::Backend(format!("failed to encode workflow source: {error}"))
+            })
+        })
+        .transpose()
+}
+
 fn sync_workflow_run_with_task(run: &mut StoredWorkflowRun, task: &StoredAutomationTask) {
     run.state = WorkflowRunState::from(task.state);
     run.output = task.output.clone();
@@ -7925,6 +7984,16 @@ fn row_to_stored_workflow_definition(
 fn row_to_stored_workflow_definition_version(
     row: &Row,
 ) -> Result<StoredWorkflowDefinitionVersion, SessionStoreError> {
+    let source = row
+        .get::<_, Option<Value>>("source")
+        .map(|value| {
+            serde_json::from_value::<WorkflowSource>(value).map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "workflow definition version source must be valid workflow source json: {error}"
+                ))
+            })
+        })
+        .transpose()?;
     let allowed_credential_binding_ids = row_to_json_string_array(
         row.get("allowed_credential_binding_ids"),
         "workflow allowed_credential_binding_ids",
@@ -7944,6 +8013,7 @@ fn row_to_stored_workflow_definition_version(
         version: row.get("version"),
         executor: row.get("executor"),
         entrypoint: row.get("entrypoint"),
+        source,
         input_schema: row.get("input_schema"),
         output_schema: row.get("output_schema"),
         default_session: row.get("default_session"),

@@ -56,6 +56,7 @@ Current product shape:
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
+  - `workflow_source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
   - `file_workspace.rs`: owner-scoped file workspace and workspace-file resource shapes persisted by the control plane.
   - `workspace_file_store.rs`: workspace file content storage boundary. `local_fs` is the current implementation; workspace files carry opaque artifact refs plus optional provenance metadata instead of raw filesystem paths.
   - `recording_artifact_store.rs`: recording artifact storage boundary. `local_fs` is the current implementation; the gateway persists opaque artifact refs instead of raw filesystem paths.

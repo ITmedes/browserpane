@@ -21,6 +21,7 @@ use crate::session_control::{
     SessionRecordingState as StoredSessionRecordingState, StoredSessionRecording,
 };
 use crate::session_manager::{SessionManager, SessionManagerConfig};
+use crate::workflow_source::WorkflowSourceResolver;
 use crate::workspace_file_store::WorkspaceFileStore;
 
 fn test_router() -> (Router, String) {
@@ -50,6 +51,7 @@ fn test_router() -> (Router, String) {
         ),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
@@ -70,6 +72,10 @@ fn test_workspace_file_store() -> Arc<WorkspaceFileStore> {
         uuid::Uuid::now_v7()
     ));
     Arc::new(WorkspaceFileStore::local_fs(root))
+}
+
+fn test_workflow_source_resolver() -> Arc<WorkflowSourceResolver> {
+    Arc::new(WorkflowSourceResolver::new(std::path::PathBuf::from("git")))
 }
 
 struct TestAgentServer {
@@ -141,6 +147,7 @@ async fn test_router_with_live_agent() -> (Router, String, TestAgentServer) {
         ),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
@@ -1082,6 +1089,7 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
         ),
         recording_artifact_store: artifact_store.clone(),
         workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
@@ -1323,6 +1331,7 @@ async fn recording_operations_snapshot_tracks_finalize_playback_and_failures() {
         ),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: observability.clone(),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
@@ -1529,6 +1538,7 @@ async fn expired_recording_artifacts_return_gone() {
         ),
         recording_artifact_store: artifact_store.clone(),
         workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
@@ -1786,6 +1796,7 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
         ),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
@@ -1854,6 +1865,7 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
         ),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
@@ -2914,6 +2926,138 @@ async fn automation_access_token_can_update_workflow_run_state_logs_and_outputs(
         .collect::<Vec<_>>();
     assert!(sources.contains(&"run".to_string()));
     assert!(sources.contains(&"automation_task".to_string()));
+}
+
+#[tokio::test]
+async fn workflow_definition_versions_can_pin_git_source_metadata() {
+    let (app, token) = test_router();
+    let temp = tempfile::tempdir().unwrap();
+
+    let init = std::process::Command::new("git")
+        .args(["init", "--initial-branch=main"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        init.status.success(),
+        "{}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+    for args in [
+        vec!["config", "user.email", "workflow@test.local"],
+        vec!["config", "user.name", "Workflow Test"],
+    ] {
+        let output = std::process::Command::new("git")
+            .args(&args)
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    std::fs::create_dir_all(temp.path().join("workflows")).unwrap();
+    std::fs::write(
+        temp.path().join("workflows").join("report.ts"),
+        "export default async function run() {}\n",
+    )
+    .unwrap();
+    for args in [vec!["add", "."], vec!["commit", "-m", "init"]] {
+        let output = std::process::Command::new("git")
+            .args(&args)
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let head = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(head.status.success());
+    let expected_commit = String::from_utf8_lossy(&head.stdout)
+        .trim()
+        .to_ascii_lowercase();
+
+    let create_workflow = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflows")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "git-backed-workflow",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_workflow.status(), StatusCode::CREATED);
+    let workflow = response_json(create_workflow).await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/report.ts",
+                        "source": {
+                            "kind": "git",
+                            "repository_url": temp.path().to_string_lossy(),
+                            "ref": "HEAD",
+                            "root_path": "workflows"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+    let version = response_json(create_version).await;
+    assert_eq!(version["source"]["kind"], "git");
+    assert_eq!(
+        version["source"]["repository_url"],
+        temp.path().to_string_lossy().to_string()
+    );
+    assert_eq!(version["source"]["ref"], "HEAD");
+    assert_eq!(version["source"]["resolved_commit"], expected_commit);
+    assert_eq!(version["source"]["root_path"], "workflows");
+
+    let get_version = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions/v1"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get_version.status(), StatusCode::OK);
+    let fetched = response_json(get_version).await;
+    assert_eq!(fetched["source"]["resolved_commit"], expected_commit);
 }
 
 #[tokio::test]
