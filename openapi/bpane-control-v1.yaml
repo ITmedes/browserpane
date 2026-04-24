@@ -113,6 +113,9 @@ paths:
       tags: [Automation Tasks]
       summary: Fetch one automation task
       operationId: getAutomationTask
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       responses:
         '200':
           description: Automation task
@@ -124,6 +127,39 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks/{task_id}/state:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [Automation Tasks]
+      summary: Transition an automation task through executor-owned state updates
+      operationId: transitionAutomationTaskState
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitionAutomationTaskRequest'
+      responses:
+        '200':
+          description: Updated automation task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/automation-tasks/{task_id}/cancel:
@@ -155,6 +191,9 @@ paths:
       tags: [Automation Tasks]
       summary: List persisted events for one automation task
       operationId: getAutomationTaskEvents
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       responses:
         '200':
           description: Automation task event list
@@ -175,6 +214,9 @@ paths:
       tags: [Automation Tasks]
       summary: List persisted log lines for one automation task
       operationId: getAutomationTaskLogs
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       responses:
         '200':
           description: Automation task log list
@@ -182,6 +224,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AutomationTaskLogListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Automation Tasks]
+      summary: Append a persisted log line for one automation task
+      operationId: appendAutomationTaskLog
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppendAutomationTaskLogRequest'
+      responses:
+        '200':
+          description: Persisted automation task log line
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskLogResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -333,6 +403,9 @@ paths:
       tags: [Workflows]
       summary: Fetch one workflow run
       operationId: getWorkflowRun
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       responses:
         '200':
           description: Workflow run
@@ -344,6 +417,39 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/state:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Workflows]
+      summary: Transition a workflow run through executor-owned state updates
+      operationId: transitionWorkflowRunState
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitionWorkflowRunRequest'
+      responses:
+        '200':
+          description: Updated workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflow-runs/{run_id}/cancel:
@@ -375,6 +481,9 @@ paths:
       tags: [Workflows]
       summary: List workflow run events, including child automation task events
       operationId: getWorkflowRunEvents
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       responses:
         '200':
           description: Workflow run event list
@@ -395,6 +504,9 @@ paths:
       tags: [Workflows]
       summary: List workflow run logs, including child automation task logs
       operationId: getWorkflowRunLogs
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       responses:
         '200':
           description: Workflow run log list
@@ -402,6 +514,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkflowRunLogListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Workflows]
+      summary: Append a persisted workflow-run log line
+      operationId: appendWorkflowRunLog
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppendWorkflowRunLogRequest'
+      responses:
+        '200':
+          description: Persisted workflow run log line
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunLogResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1114,6 +1254,36 @@ components:
           type: object
           additionalProperties:
             type: string
+    TransitionAutomationTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state:
+          $ref: '#/components/schemas/AutomationTaskState'
+        output:
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        artifact_refs:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+          nullable: true
+        data:
+          nullable: true
+    AppendAutomationTaskLogRequest:
+      type: object
+      additionalProperties: false
+      required: [stream, message]
+      properties:
+        stream:
+          $ref: '#/components/schemas/AutomationTaskLogStream'
+        message:
+          type: string
     AutomationTaskResource:
       type: object
       required:
@@ -1263,6 +1433,7 @@ components:
     WorkflowRunLogSource:
       type: string
       enum:
+        - run
         - automation_task
     CreateWorkflowDefinitionRequest:
       type: object
@@ -1416,6 +1587,36 @@ components:
           type: object
           additionalProperties:
             type: string
+    TransitionWorkflowRunRequest:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state:
+          $ref: '#/components/schemas/WorkflowRunState'
+        output:
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        artifact_refs:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+          nullable: true
+        data:
+          nullable: true
+    AppendWorkflowRunLogRequest:
+      type: object
+      additionalProperties: false
+      required: [stream, message]
+      properties:
+        stream:
+          $ref: '#/components/schemas/AutomationTaskLogStream'
+        message:
+          type: string
     WorkflowRunResource:
       type: object
       required:

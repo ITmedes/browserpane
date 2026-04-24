@@ -19,7 +19,8 @@ use crate::automation_access_token::{
 };
 use crate::automation_task::{
     AutomationTaskEventListResponse, AutomationTaskListResponse, AutomationTaskLogListResponse,
-    AutomationTaskResource, AutomationTaskSessionSource, PersistAutomationTaskRequest,
+    AutomationTaskLogStream, AutomationTaskResource, AutomationTaskSessionSource,
+    AutomationTaskState, AutomationTaskTransitionRequest, PersistAutomationTaskRequest,
 };
 use crate::connect_ticket::SessionConnectTicketManager;
 use crate::idle_stop::schedule_idle_session_stop;
@@ -45,10 +46,10 @@ use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime
 use crate::session_registry::SessionRegistry;
 use crate::workflow::{
     PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
-    PersistWorkflowRunEventRequest, PersistWorkflowRunRequest, WorkflowDefinitionListResponse,
-    WorkflowDefinitionResource, WorkflowDefinitionVersionResource, WorkflowRunEventListResponse,
-    WorkflowRunEventResource, WorkflowRunLogListResponse, WorkflowRunLogResource,
-    WorkflowRunResource,
+    PersistWorkflowRunEventRequest, PersistWorkflowRunLogRequest, PersistWorkflowRunRequest,
+    WorkflowDefinitionListResponse, WorkflowDefinitionResource, WorkflowDefinitionVersionResource,
+    WorkflowRunEventListResponse, WorkflowRunEventResource, WorkflowRunLogListResponse,
+    WorkflowRunLogResource, WorkflowRunResource, WorkflowRunState, WorkflowRunTransitionRequest,
 };
 
 /// Shared state for the HTTP API.
@@ -193,6 +194,48 @@ struct CreateWorkflowRunRequest {
     labels: std::collections::HashMap<String, String>,
 }
 
+#[derive(Deserialize)]
+struct TransitionAutomationTaskRequest {
+    state: AutomationTaskState,
+    #[serde(default)]
+    output: Option<Value>,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
+    artifact_refs: Vec<String>,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    data: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct AppendAutomationTaskLogRequest {
+    stream: AutomationTaskLogStream,
+    message: String,
+}
+
+#[derive(Deserialize)]
+struct TransitionWorkflowRunRequest {
+    state: WorkflowRunState,
+    #[serde(default)]
+    output: Option<Value>,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
+    artifact_refs: Vec<String>,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    data: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct AppendWorkflowRunLogRequest {
+    stream: AutomationTaskLogStream,
+    message: String,
+}
+
 #[derive(Serialize)]
 struct OkResponse {
     ok: bool,
@@ -331,22 +374,9 @@ async fn get_automation_task(
     Path(task_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<AutomationTaskResource>, (StatusCode, Json<ErrorResponse>)> {
-    let principal = authorize_api_request(&headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    let task = state
-        .session_store
-        .get_automation_task_for_owner(&principal, task_id)
-        .await
-        .map_err(map_session_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: format!("automation task {task_id} not found"),
-                }),
-            )
-        })?;
+    let task =
+        authorize_visible_automation_task_request_with_automation_access(&headers, &state, task_id)
+            .await?;
     Ok(Json(task.to_resource()))
 }
 
@@ -374,28 +404,99 @@ async fn cancel_automation_task(
     Ok(Json(task.to_resource()))
 }
 
+async fn transition_automation_task_state(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<TransitionAutomationTaskRequest>,
+) -> Result<Json<AutomationTaskResource>, (StatusCode, Json<ErrorResponse>)> {
+    let _task =
+        authorize_visible_automation_task_request_with_automation_access(&headers, &state, task_id)
+            .await?;
+    let message = request.message.unwrap_or_else(|| match request.state {
+        AutomationTaskState::Pending => "automation task returned to pending state".to_string(),
+        AutomationTaskState::Starting => "automation task started".to_string(),
+        AutomationTaskState::Running => "automation task entered running state".to_string(),
+        AutomationTaskState::AwaitingInput => "automation task is awaiting input".to_string(),
+        AutomationTaskState::Succeeded => "automation task completed successfully".to_string(),
+        AutomationTaskState::Failed => "automation task failed".to_string(),
+        AutomationTaskState::Cancelled => "automation task cancelled".to_string(),
+        AutomationTaskState::TimedOut => "automation task timed out".to_string(),
+    });
+    let event_type = match request.state {
+        AutomationTaskState::Pending => "automation_task.pending",
+        AutomationTaskState::Starting => "automation_task.starting",
+        AutomationTaskState::Running => "automation_task.running",
+        AutomationTaskState::AwaitingInput => "automation_task.awaiting_input",
+        AutomationTaskState::Succeeded => "automation_task.succeeded",
+        AutomationTaskState::Failed => "automation_task.failed",
+        AutomationTaskState::Cancelled => "automation_task.cancelled",
+        AutomationTaskState::TimedOut => "automation_task.timed_out",
+    };
+    let task = state
+        .session_store
+        .transition_automation_task(
+            task_id,
+            AutomationTaskTransitionRequest {
+                state: request.state,
+                output: request.output,
+                error: request.error,
+                artifact_refs: request.artifact_refs,
+                event_type: event_type.to_string(),
+                event_message: message,
+                event_data: request.data,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("automation task {task_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(task.to_resource()))
+}
+
+async fn append_automation_task_log(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<AppendAutomationTaskLogRequest>,
+) -> Result<
+    Json<crate::automation_task::AutomationTaskLogLineResource>,
+    (StatusCode, Json<ErrorResponse>),
+> {
+    let _task =
+        authorize_visible_automation_task_request_with_automation_access(&headers, &state, task_id)
+            .await?;
+    let log = state
+        .session_store
+        .append_automation_task_log(task_id, request.stream, request.message)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("automation task {task_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(log.to_resource()))
+}
+
 async fn get_automation_task_events(
     headers: HeaderMap,
     Path(task_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<AutomationTaskEventListResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let principal = authorize_api_request(&headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    if state
-        .session_store
-        .get_automation_task_for_owner(&principal, task_id)
-        .await
-        .map_err(map_session_store_error)?
-        .is_none()
-    {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: format!("automation task {task_id} not found"),
-            }),
-        ));
-    }
+    let task =
+        authorize_visible_automation_task_request_with_automation_access(&headers, &state, task_id)
+            .await?;
+    let principal = load_session_owner_principal(&state, task.session_id).await?;
     let events = state
         .session_store
         .list_automation_task_events_for_owner(&principal, task_id)
@@ -412,23 +513,10 @@ async fn get_automation_task_logs(
     Path(task_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<AutomationTaskLogListResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let principal = authorize_api_request(&headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    if state
-        .session_store
-        .get_automation_task_for_owner(&principal, task_id)
-        .await
-        .map_err(map_session_store_error)?
-        .is_none()
-    {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: format!("automation task {task_id} not found"),
-            }),
-        ));
-    }
+    let task =
+        authorize_visible_automation_task_request_with_automation_access(&headers, &state, task_id)
+            .await?;
+    let principal = load_session_owner_principal(&state, task.session_id).await?;
     let logs = state
         .session_store
         .list_automation_task_logs_for_owner(&principal, task_id)
@@ -642,7 +730,7 @@ async fn create_workflow_run(
         )
         .await
         .map_err(map_session_store_error)?;
-    Ok((StatusCode::CREATED, Json(run.to_resource(&task))))
+    Ok((StatusCode::CREATED, Json(run.to_resource())))
 }
 
 async fn get_workflow_run(
@@ -650,8 +738,10 @@ async fn get_workflow_run(
     Path(run_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
-    let (run, task) = authorize_visible_workflow_run_request(&headers, &state, run_id).await?;
-    Ok(Json(run.to_resource(&task)))
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    Ok(Json(run.to_resource()))
 }
 
 async fn cancel_workflow_run(
@@ -675,7 +765,7 @@ async fn cancel_workflow_run(
                 }),
             )
         })?;
-    let task = state
+    let _task = state
         .session_store
         .cancel_automation_task_for_owner(&principal, run.automation_task_id)
         .await
@@ -706,17 +796,6 @@ async fn cancel_workflow_run(
         )
         .await
         .map_err(map_session_store_error)?;
-    Ok(Json(run.to_resource(&task)))
-}
-
-async fn get_workflow_run_events(
-    headers: HeaderMap,
-    Path(run_id): Path<Uuid>,
-    State(state): State<Arc<ApiState>>,
-) -> Result<Json<WorkflowRunEventListResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let principal = authorize_api_request(&headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
     let run = state
         .session_store
         .get_workflow_run_for_owner(&principal, run_id)
@@ -730,6 +809,84 @@ async fn get_workflow_run_events(
                 }),
             )
         })?;
+    Ok(Json(run.to_resource()))
+}
+
+async fn transition_workflow_run_state(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<TransitionWorkflowRunRequest>,
+) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
+    let _run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let run = state
+        .session_store
+        .transition_workflow_run(
+            run_id,
+            WorkflowRunTransitionRequest {
+                state: request.state,
+                output: request.output,
+                error: request.error,
+                artifact_refs: request.artifact_refs,
+                message: request.message,
+                data: request.data,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(run.to_resource()))
+}
+
+async fn append_workflow_run_log(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<AppendWorkflowRunLogRequest>,
+) -> Result<Json<WorkflowRunLogResource>, (StatusCode, Json<ErrorResponse>)> {
+    let _run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let log = state
+        .session_store
+        .append_workflow_run_log(
+            run_id,
+            PersistWorkflowRunLogRequest {
+                stream: request.stream,
+                message: request.message,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(WorkflowRunLogResource::from_run(run_id, &log)))
+}
+
+async fn get_workflow_run_events(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunEventListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let principal = load_session_owner_principal(&state, run.session_id).await?;
     let mut events = state
         .session_store
         .list_workflow_run_events_for_owner(&principal, run_id)
@@ -761,23 +918,19 @@ async fn get_workflow_run_logs(
     Path(run_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<WorkflowRunLogListResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let principal = authorize_api_request(&headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    let run = state
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let principal = load_session_owner_principal(&state, run.session_id).await?;
+    let mut logs = state
         .session_store
-        .get_workflow_run_for_owner(&principal, run_id)
+        .list_workflow_run_logs_for_owner(&principal, run_id)
         .await
         .map_err(map_session_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: format!("workflow run {run_id} not found"),
-                }),
-            )
-        })?;
-    let logs = state
+        .into_iter()
+        .map(|log| WorkflowRunLogResource::from_run(run.id, &log))
+        .collect::<Vec<_>>();
+    let task_logs = state
         .session_store
         .list_automation_task_logs_for_owner(&principal, run.automation_task_id)
         .await
@@ -785,8 +938,13 @@ async fn get_workflow_run_logs(
         .into_iter()
         .map(|log| {
             WorkflowRunLogResource::from_automation_task(run.id, run.automation_task_id, &log)
-        })
-        .collect();
+        });
+    logs.extend(task_logs);
+    logs.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then_with(|| left.id.cmp(&right.id))
+    });
     Ok(Json(WorkflowRunLogListResponse { logs }))
 }
 
@@ -1840,23 +1998,137 @@ async fn resolve_task_session_binding(
     }
 }
 
-async fn authorize_visible_workflow_run_request(
+async fn load_session_owner_principal(
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<AuthenticatedPrincipal, (StatusCode, Json<ErrorResponse>)> {
+    let session = state
+        .session_store
+        .get_session_by_id(session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+    Ok(AuthenticatedPrincipal {
+        subject: session.owner.subject,
+        issuer: session.owner.issuer,
+        display_name: session.owner.display_name,
+        client_id: None,
+    })
+}
+
+async fn authorize_visible_automation_task_request_with_automation_access(
+    headers: &HeaderMap,
+    state: &ApiState,
+    task_id: Uuid,
+) -> Result<crate::automation_task::StoredAutomationTask, (StatusCode, Json<ErrorResponse>)> {
+    if extract_bearer_token(headers).is_some() {
+        match authorize_api_request(headers, &state.auth_validator).await {
+            Ok(principal) => {
+                if let Some(task) = state
+                    .session_store
+                    .get_automation_task_for_owner(&principal, task_id)
+                    .await
+                    .map_err(map_session_store_error)?
+                {
+                    return Ok(task);
+                }
+                if extract_automation_access_token(headers).is_none() {
+                    return Err((
+                        StatusCode::NOT_FOUND,
+                        Json(ErrorResponse {
+                            error: format!("automation task {task_id} not found"),
+                        }),
+                    ));
+                }
+            }
+            Err(error) if extract_automation_access_token(headers).is_none() => {
+                return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })));
+            }
+            Err(_) => {}
+        }
+    }
+
+    let claims = validate_any_automation_access_request(headers, state)?;
+    let task = state
+        .session_store
+        .get_automation_task_by_id(task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("automation task {task_id} not found"),
+                }),
+            )
+        })?;
+    let session = state
+        .session_store
+        .get_session_by_id(task.session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {} not found", task.session_id),
+                }),
+            )
+        })?;
+    if !automation_access_claims_match_session(&claims, &session) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "automation access token is no longer valid for this session".to_string(),
+            }),
+        ));
+    }
+    Ok(task)
+}
+
+async fn authorize_visible_workflow_run_request_with_automation_access(
     headers: &HeaderMap,
     state: &ApiState,
     run_id: Uuid,
-) -> Result<
-    (
-        crate::workflow::StoredWorkflowRun,
-        crate::automation_task::StoredAutomationTask,
-    ),
-    (StatusCode, Json<ErrorResponse>),
-> {
-    let principal = authorize_api_request(headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+) -> Result<crate::workflow::StoredWorkflowRun, (StatusCode, Json<ErrorResponse>)> {
+    if extract_bearer_token(headers).is_some() {
+        match authorize_api_request(headers, &state.auth_validator).await {
+            Ok(principal) => {
+                if let Some(run) = state
+                    .session_store
+                    .get_workflow_run_for_owner(&principal, run_id)
+                    .await
+                    .map_err(map_session_store_error)?
+                {
+                    return Ok(run);
+                }
+                if extract_automation_access_token(headers).is_none() {
+                    return Err((
+                        StatusCode::NOT_FOUND,
+                        Json(ErrorResponse {
+                            error: format!("workflow run {run_id} not found"),
+                        }),
+                    ));
+                }
+            }
+            Err(error) if extract_automation_access_token(headers).is_none() => {
+                return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })));
+            }
+            Err(_) => {}
+        }
+    }
+
+    let claims = validate_any_automation_access_request(headers, state)?;
     let run = state
         .session_store
-        .get_workflow_run_for_owner(&principal, run_id)
+        .get_workflow_run_by_id(run_id)
         .await
         .map_err(map_session_store_error)?
         .ok_or_else(|| {
@@ -1867,23 +2139,28 @@ async fn authorize_visible_workflow_run_request(
                 }),
             )
         })?;
-    let task = state
+    let session = state
         .session_store
-        .get_automation_task_for_owner(&principal, run.automation_task_id)
+        .get_session_by_id(run.session_id)
         .await
         .map_err(map_session_store_error)?
         .ok_or_else(|| {
             (
                 StatusCode::NOT_FOUND,
                 Json(ErrorResponse {
-                    error: format!(
-                        "automation task {} for workflow run {run_id} not found",
-                        run.automation_task_id
-                    ),
+                    error: format!("session {} not found", run.session_id),
                 }),
             )
         })?;
-    Ok((run, task))
+    if !automation_access_claims_match_session(&claims, &session) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "automation access token is no longer valid for this session".to_string(),
+            }),
+        ));
+    }
+    Ok(run)
 }
 
 async fn authorize_api_request(
@@ -1951,6 +2228,10 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         .route("/api/v1/workflow-runs", post(create_workflow_run))
         .route("/api/v1/workflow-runs/{run_id}", get(get_workflow_run))
         .route(
+            "/api/v1/workflow-runs/{run_id}/state",
+            post(transition_workflow_run_state),
+        )
+        .route(
             "/api/v1/workflow-runs/{run_id}/cancel",
             post(cancel_workflow_run),
         )
@@ -1960,7 +2241,7 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         )
         .route(
             "/api/v1/workflow-runs/{run_id}/logs",
-            get(get_workflow_run_logs),
+            get(get_workflow_run_logs).post(append_workflow_run_log),
         )
         .route(
             "/api/v1/automation-tasks",
@@ -1969,6 +2250,10 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         .route(
             "/api/v1/automation-tasks/{task_id}",
             get(get_automation_task),
+        )
+        .route(
+            "/api/v1/automation-tasks/{task_id}/state",
+            post(transition_automation_task_state),
         )
         .route(
             "/api/v1/automation-tasks/{task_id}/cancel",
@@ -1980,7 +2265,7 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         )
         .route(
             "/api/v1/automation-tasks/{task_id}/logs",
-            get(get_automation_task_logs),
+            get(get_automation_task_logs).post(append_automation_task_log),
         )
         .route(
             "/api/v1/sessions/{session_id}",
@@ -2345,25 +2630,7 @@ fn validate_automation_access_request(
     state: &ApiState,
     session_id: Uuid,
 ) -> Result<SessionAutomationAccessTokenClaims, (StatusCode, Json<ErrorResponse>)> {
-    let token = extract_automation_access_token(headers).ok_or_else(|| {
-        (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorResponse {
-                error: "missing bearer token or session automation access token".to_string(),
-            }),
-        )
-    })?;
-    let claims = state
-        .automation_access_token_manager
-        .validate_token(token)
-        .map_err(|error| {
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(ErrorResponse {
-                    error: format!("invalid session automation access token: {error}"),
-                }),
-            )
-        })?;
+    let claims = validate_any_automation_access_request(headers, state)?;
     if claims.session_id != session_id {
         return Err((
             StatusCode::UNAUTHORIZED,
@@ -2374,6 +2641,31 @@ fn validate_automation_access_request(
         ));
     }
     Ok(claims)
+}
+
+fn validate_any_automation_access_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+) -> Result<SessionAutomationAccessTokenClaims, (StatusCode, Json<ErrorResponse>)> {
+    let token = extract_automation_access_token(headers).ok_or_else(|| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "missing bearer token or session automation access token".to_string(),
+            }),
+        )
+    })?;
+    state
+        .automation_access_token_manager
+        .validate_token(token)
+        .map_err(|error| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: format!("invalid session automation access token: {error}"),
+                }),
+            )
+        })
 }
 
 fn automation_access_claims_match_session(

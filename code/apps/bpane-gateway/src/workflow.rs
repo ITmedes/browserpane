@@ -7,7 +7,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::automation_task::{
-    AutomationTaskLogStream, AutomationTaskState, StoredAutomationTask, StoredAutomationTaskEvent,
+    AutomationTaskLogStream, AutomationTaskState, StoredAutomationTaskEvent,
     StoredAutomationTaskLog,
 };
 
@@ -51,6 +51,22 @@ pub struct PersistWorkflowRunEventRequest {
 }
 
 #[derive(Debug, Clone)]
+pub struct PersistWorkflowRunLogRequest {
+    pub stream: AutomationTaskLogStream,
+    pub message: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkflowRunTransitionRequest {
+    pub state: WorkflowRunState,
+    pub output: Option<Value>,
+    pub error: Option<String>,
+    pub artifact_refs: Vec<String>,
+    pub message: Option<String>,
+    pub data: Option<Value>,
+}
+
+#[derive(Debug, Clone)]
 pub struct StoredWorkflowDefinition {
     pub id: Uuid,
     pub owner_subject: String,
@@ -87,8 +103,14 @@ pub struct StoredWorkflowRun {
     pub workflow_version: String,
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
+    pub state: WorkflowRunState,
     pub input: Option<Value>,
+    pub output: Option<Value>,
+    pub error: Option<String>,
+    pub artifact_refs: Vec<String>,
     pub labels: HashMap<String, String>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -100,6 +122,15 @@ pub struct StoredWorkflowRunEvent {
     pub event_type: String,
     pub message: String,
     pub data: Option<Value>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredWorkflowRunLog {
+    pub id: Uuid,
+    pub run_id: Uuid,
+    pub stream: AutomationTaskLogStream,
+    pub message: String,
     pub created_at: DateTime<Utc>,
 }
 
@@ -131,6 +162,21 @@ impl From<AutomationTaskState> for WorkflowRunState {
     }
 }
 
+impl From<WorkflowRunState> for AutomationTaskState {
+    fn from(value: WorkflowRunState) -> Self {
+        match value {
+            WorkflowRunState::Pending => Self::Pending,
+            WorkflowRunState::Starting => Self::Starting,
+            WorkflowRunState::Running => Self::Running,
+            WorkflowRunState::AwaitingInput => Self::AwaitingInput,
+            WorkflowRunState::Succeeded => Self::Succeeded,
+            WorkflowRunState::Failed => Self::Failed,
+            WorkflowRunState::Cancelled => Self::Cancelled,
+            WorkflowRunState::TimedOut => Self::TimedOut,
+        }
+    }
+}
+
 impl FromStr for WorkflowRunState {
     type Err = &'static str;
 
@@ -149,6 +195,28 @@ impl FromStr for WorkflowRunState {
     }
 }
 
+impl WorkflowRunState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::AwaitingInput => "awaiting_input",
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+            Self::TimedOut => "timed_out",
+        }
+    }
+
+    pub fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Succeeded | Self::Failed | Self::Cancelled | Self::TimedOut
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowRunEventSource {
@@ -159,6 +227,7 @@ pub enum WorkflowRunEventSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowRunLogSource {
+    Run,
     AutomationTask,
 }
 
@@ -283,26 +352,26 @@ impl StoredWorkflowDefinitionVersion {
 }
 
 impl StoredWorkflowRun {
-    pub fn to_resource(&self, task: &StoredAutomationTask) -> WorkflowRunResource {
+    pub fn to_resource(&self) -> WorkflowRunResource {
         WorkflowRunResource {
             id: self.id,
             workflow_definition_id: self.workflow_definition_id,
             workflow_definition_version_id: self.workflow_definition_version_id,
             workflow_version: self.workflow_version.clone(),
-            state: WorkflowRunState::from(task.state),
+            state: self.state,
             session_id: self.session_id,
             automation_task_id: self.automation_task_id,
             input: self.input.clone(),
-            output: task.output.clone(),
-            error: task.error.clone(),
-            artifact_refs: task.artifact_refs.clone(),
+            output: self.output.clone(),
+            error: self.error.clone(),
+            artifact_refs: self.artifact_refs.clone(),
             labels: self.labels.clone(),
-            started_at: task.started_at,
-            completed_at: task.completed_at,
+            started_at: self.started_at,
+            completed_at: self.completed_at,
             events_path: format!("/api/v1/workflow-runs/{}/events", self.id),
             logs_path: format!("/api/v1/workflow-runs/{}/logs", self.id),
             created_at: self.created_at,
-            updated_at: std::cmp::max(self.updated_at, task.updated_at),
+            updated_at: self.updated_at,
         }
     }
 }
@@ -342,6 +411,18 @@ impl WorkflowRunEventResource {
 }
 
 impl WorkflowRunLogResource {
+    pub fn from_run(run_id: Uuid, log: &StoredWorkflowRunLog) -> Self {
+        Self {
+            id: log.id,
+            run_id,
+            source: WorkflowRunLogSource::Run,
+            automation_task_id: None,
+            stream: log.stream,
+            message: log.message.clone(),
+            created_at: log.created_at,
+        }
+    }
+
     pub fn from_automation_task(
         run_id: Uuid,
         task_id: Uuid,
@@ -356,5 +437,57 @@ impl WorkflowRunLogResource {
             message: log.message.clone(),
             created_at: log.created_at,
         }
+    }
+}
+
+pub fn workflow_run_event_type(state: WorkflowRunState) -> &'static str {
+    match state {
+        WorkflowRunState::Pending => "workflow_run.pending",
+        WorkflowRunState::Starting => "workflow_run.starting",
+        WorkflowRunState::Running => "workflow_run.running",
+        WorkflowRunState::AwaitingInput => "workflow_run.awaiting_input",
+        WorkflowRunState::Succeeded => "workflow_run.succeeded",
+        WorkflowRunState::Failed => "workflow_run.failed",
+        WorkflowRunState::Cancelled => "workflow_run.cancelled",
+        WorkflowRunState::TimedOut => "workflow_run.timed_out",
+    }
+}
+
+pub fn workflow_run_default_message(state: WorkflowRunState) -> &'static str {
+    match state {
+        WorkflowRunState::Pending => "workflow run returned to pending state",
+        WorkflowRunState::Starting => "workflow run started",
+        WorkflowRunState::Running => "workflow run entered running state",
+        WorkflowRunState::AwaitingInput => "workflow run is awaiting input",
+        WorkflowRunState::Succeeded => "workflow run completed successfully",
+        WorkflowRunState::Failed => "workflow run failed",
+        WorkflowRunState::Cancelled => "workflow run cancelled",
+        WorkflowRunState::TimedOut => "workflow run timed out",
+    }
+}
+
+pub fn automation_task_event_type_for_run_state(state: WorkflowRunState) -> &'static str {
+    match state {
+        WorkflowRunState::Pending => "automation_task.pending",
+        WorkflowRunState::Starting => "automation_task.starting",
+        WorkflowRunState::Running => "automation_task.running",
+        WorkflowRunState::AwaitingInput => "automation_task.awaiting_input",
+        WorkflowRunState::Succeeded => "automation_task.succeeded",
+        WorkflowRunState::Failed => "automation_task.failed",
+        WorkflowRunState::Cancelled => "automation_task.cancelled",
+        WorkflowRunState::TimedOut => "automation_task.timed_out",
+    }
+}
+
+pub fn automation_task_default_message_for_run_state(state: WorkflowRunState) -> &'static str {
+    match state {
+        WorkflowRunState::Pending => "automation task returned to pending state",
+        WorkflowRunState::Starting => "automation task started",
+        WorkflowRunState::Running => "automation task entered running state",
+        WorkflowRunState::AwaitingInput => "automation task is awaiting input",
+        WorkflowRunState::Succeeded => "automation task completed successfully",
+        WorkflowRunState::Failed => "automation task failed",
+        WorkflowRunState::Cancelled => "automation task cancelled",
+        WorkflowRunState::TimedOut => "automation task timed out",
     }
 }

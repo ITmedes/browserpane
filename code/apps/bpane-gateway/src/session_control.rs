@@ -22,9 +22,12 @@ use crate::session_manager::{
     SessionRuntimeAssignmentStatus,
 };
 use crate::workflow::{
-    PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
-    PersistWorkflowRunEventRequest, PersistWorkflowRunRequest, StoredWorkflowDefinition,
+    automation_task_default_message_for_run_state, automation_task_event_type_for_run_state,
+    workflow_run_default_message, workflow_run_event_type, PersistWorkflowDefinitionRequest,
+    PersistWorkflowDefinitionVersionRequest, PersistWorkflowRunEventRequest,
+    PersistWorkflowRunLogRequest, PersistWorkflowRunRequest, StoredWorkflowDefinition,
     StoredWorkflowDefinitionVersion, StoredWorkflowRun, StoredWorkflowRunEvent,
+    StoredWorkflowRunLog, WorkflowRunState, WorkflowRunTransitionRequest,
 };
 
 const DEFAULT_VIEWPORT_WIDTH: u16 = 1600;
@@ -665,6 +668,7 @@ impl SessionStore {
                 workflow_definition_versions: Mutex::new(Vec::new()),
                 workflow_runs: Mutex::new(Vec::new()),
                 workflow_run_events: Mutex::new(Vec::new()),
+                workflow_run_logs: Mutex::new(Vec::new()),
                 recordings: Mutex::new(Vec::new()),
                 runtime_assignments: Mutex::new(HashMap::new()),
                 recording_worker_assignments: Mutex::new(HashMap::new()),
@@ -879,6 +883,16 @@ impl SessionStore {
         }
     }
 
+    pub async fn get_automation_task_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.get_automation_task_by_id(id).await,
+            SessionStoreBackend::Postgres(store) => store.get_automation_task_by_id(id).await,
+        }
+    }
+
     pub async fn cancel_automation_task_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -1089,6 +1103,16 @@ impl SessionStore {
         }
     }
 
+    pub async fn get_workflow_run_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.get_workflow_run_by_id(id).await,
+            SessionStoreBackend::Postgres(store) => store.get_workflow_run_by_id(id).await,
+        }
+    }
+
     pub async fn list_workflow_run_events_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -1104,6 +1128,21 @@ impl SessionStore {
                 store
                     .list_workflow_run_events_for_owner(principal, id)
                     .await
+            }
+        }
+    }
+
+    pub async fn list_workflow_run_logs_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredWorkflowRunLog>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_workflow_run_logs_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_workflow_run_logs_for_owner(principal, id).await
             }
         }
     }
@@ -1125,6 +1164,38 @@ impl SessionStore {
                 store
                     .append_workflow_run_event_for_owner(principal, id, request)
                     .await
+            }
+        }
+    }
+
+    pub async fn transition_workflow_run(
+        &self,
+        id: Uuid,
+        request: WorkflowRunTransitionRequest,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        validate_workflow_run_transition_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.transition_workflow_run(id, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.transition_workflow_run(id, request).await
+            }
+        }
+    }
+
+    pub async fn append_workflow_run_log(
+        &self,
+        id: Uuid,
+        request: PersistWorkflowRunLogRequest,
+    ) -> Result<Option<StoredWorkflowRunLog>, SessionStoreError> {
+        validate_workflow_run_log_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.append_workflow_run_log(id, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.append_workflow_run_log(id, request).await
             }
         }
     }
@@ -1702,6 +1773,30 @@ fn validate_workflow_run_event_request(
     Ok(())
 }
 
+fn validate_workflow_run_transition_request(
+    request: &WorkflowRunTransitionRequest,
+) -> Result<(), SessionStoreError> {
+    let task_request = AutomationTaskTransitionRequest {
+        state: request.state.into(),
+        output: request.output.clone(),
+        error: request.error.clone(),
+        artifact_refs: request.artifact_refs.clone(),
+        event_type: "workflow_run.transition".to_string(),
+        event_message: request
+            .message
+            .clone()
+            .unwrap_or_else(|| "workflow run transition".to_string()),
+        event_data: request.data.clone(),
+    };
+    validate_automation_task_transition_request(&task_request)
+}
+
+fn validate_workflow_run_log_request(
+    request: &PersistWorkflowRunLogRequest,
+) -> Result<(), SessionStoreError> {
+    validate_automation_task_log_message(&request.message)
+}
+
 fn validate_complete_recording_request(
     request: &CompleteSessionRecordingRequest,
 ) -> Result<(), SessionStoreError> {
@@ -1758,6 +1853,7 @@ struct InMemorySessionStore {
     workflow_definition_versions: Mutex<Vec<StoredWorkflowDefinitionVersion>>,
     workflow_runs: Mutex<Vec<StoredWorkflowRun>>,
     workflow_run_events: Mutex<Vec<StoredWorkflowRunEvent>>,
+    workflow_run_logs: Mutex<Vec<StoredWorkflowRunLog>>,
     recordings: Mutex<Vec<StoredSessionRecording>>,
     runtime_assignments: Mutex<HashMap<Uuid, PersistedSessionRuntimeAssignment>>,
     recording_worker_assignments: Mutex<HashMap<Uuid, PersistedSessionRecordingWorkerAssignment>>,
@@ -2119,6 +2215,19 @@ impl InMemorySessionStore {
         Ok(Some(task))
     }
 
+    async fn get_automation_task_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        Ok(self
+            .automation_tasks
+            .lock()
+            .await
+            .iter()
+            .find(|task| task.id == id)
+            .cloned())
+    }
+
     async fn cancel_automation_task_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -2145,6 +2254,16 @@ impl InMemorySessionStore {
         task.updated_at = now;
         let task = task.clone();
         drop(tasks);
+
+        if let Some(run) = self
+            .workflow_runs
+            .lock()
+            .await
+            .iter_mut()
+            .find(|run| run.automation_task_id == id)
+        {
+            sync_workflow_run_with_task(run, &task);
+        }
 
         self.automation_task_events
             .lock()
@@ -2261,6 +2380,16 @@ impl InMemorySessionStore {
         task.updated_at = now;
         let task = task.clone();
         drop(tasks);
+
+        if let Some(run) = self
+            .workflow_runs
+            .lock()
+            .await
+            .iter_mut()
+            .find(|run| run.automation_task_id == id)
+        {
+            sync_workflow_run_with_task(run, &task);
+        }
 
         self.automation_task_events
             .lock()
@@ -2498,8 +2627,14 @@ impl InMemorySessionStore {
             workflow_version: request.workflow_version.clone(),
             session_id: request.session_id,
             automation_task_id: request.automation_task_id,
+            state: WorkflowRunState::Pending,
             input: request.input,
+            output: None,
+            error: None,
+            artifact_refs: Vec::new(),
             labels: request.labels,
+            started_at: None,
+            completed_at: None,
             created_at: now,
             updated_at: now,
         };
@@ -2551,6 +2686,19 @@ impl InMemorySessionStore {
         Ok(Some(run))
     }
 
+    async fn get_workflow_run_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        Ok(self
+            .workflow_runs
+            .lock()
+            .await
+            .iter()
+            .find(|run| run.id == id)
+            .cloned())
+    }
+
     async fn list_workflow_run_events_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -2573,6 +2721,31 @@ impl InMemorySessionStore {
             .collect::<Vec<_>>();
         events.sort_by(|left, right| left.created_at.cmp(&right.created_at));
         Ok(events)
+    }
+
+    async fn list_workflow_run_logs_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredWorkflowRunLog>, SessionStoreError> {
+        if self
+            .get_workflow_run_for_owner(principal, id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+
+        let mut logs = self
+            .workflow_run_logs
+            .lock()
+            .await
+            .iter()
+            .filter(|log| log.run_id == id)
+            .cloned()
+            .collect::<Vec<_>>();
+        logs.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+        Ok(logs)
     }
 
     async fn append_workflow_run_event_for_owner(
@@ -2607,6 +2780,138 @@ impl InMemorySessionStore {
             run.updated_at = event.created_at;
         }
         Ok(Some(event))
+    }
+
+    async fn transition_workflow_run(
+        &self,
+        id: Uuid,
+        request: WorkflowRunTransitionRequest,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        let run = self
+            .workflow_runs
+            .lock()
+            .await
+            .iter()
+            .find(|run| run.id == id)
+            .cloned();
+        let Some(run) = run else {
+            return Ok(None);
+        };
+
+        let task_state: AutomationTaskState = request.state.into();
+        let task_event_type = automation_task_event_type_for_run_state(request.state).to_string();
+        let task_event_message = request.message.clone().unwrap_or_else(|| {
+            automation_task_default_message_for_run_state(request.state).to_string()
+        });
+        let now = Utc::now();
+
+        let task = {
+            let mut tasks = self.automation_tasks.lock().await;
+            let Some(task) = tasks
+                .iter_mut()
+                .find(|task| task.id == run.automation_task_id)
+            else {
+                return Err(SessionStoreError::NotFound(format!(
+                    "automation task {} for workflow run {} not found",
+                    run.automation_task_id, id
+                )));
+            };
+            if task.state.is_terminal() {
+                return Err(SessionStoreError::Conflict(format!(
+                    "automation task {} is already terminal",
+                    task.id
+                )));
+            }
+            if !task.state.can_transition_to(task_state) {
+                return Err(SessionStoreError::Conflict(format!(
+                    "automation task {} cannot transition from {} to {}",
+                    task.id,
+                    task.state.as_str(),
+                    task_state.as_str()
+                )));
+            }
+            if matches!(
+                task_state,
+                AutomationTaskState::Starting
+                    | AutomationTaskState::Running
+                    | AutomationTaskState::AwaitingInput
+            ) && task.started_at.is_none()
+            {
+                task.started_at = Some(now);
+            }
+            if task_state.is_terminal() {
+                task.completed_at = Some(now);
+            }
+            task.state = task_state;
+            task.output = request.output.clone();
+            task.error = request.error.clone();
+            task.artifact_refs = request.artifact_refs.clone();
+            task.updated_at = now;
+            task.clone()
+        };
+
+        self.automation_task_events
+            .lock()
+            .await
+            .push(StoredAutomationTaskEvent {
+                id: Uuid::now_v7(),
+                task_id: task.id,
+                event_type: task_event_type,
+                message: task_event_message,
+                data: request.data.clone(),
+                created_at: now,
+            });
+
+        let run_message = request
+            .message
+            .unwrap_or_else(|| workflow_run_default_message(request.state).to_string());
+        let run = {
+            let mut runs = self.workflow_runs.lock().await;
+            let Some(run) = runs.iter_mut().find(|run| run.id == id) else {
+                return Ok(None);
+            };
+            sync_workflow_run_with_task(run, &task);
+            run.updated_at = now;
+            run.clone()
+        };
+
+        self.workflow_run_events
+            .lock()
+            .await
+            .push(StoredWorkflowRunEvent {
+                id: Uuid::now_v7(),
+                run_id: id,
+                event_type: workflow_run_event_type(request.state).to_string(),
+                message: run_message,
+                data: request.data,
+                created_at: now,
+            });
+
+        Ok(Some(run))
+    }
+
+    async fn append_workflow_run_log(
+        &self,
+        id: Uuid,
+        request: PersistWorkflowRunLogRequest,
+    ) -> Result<Option<StoredWorkflowRunLog>, SessionStoreError> {
+        let mut runs = self.workflow_runs.lock().await;
+        let Some(run) = runs.iter_mut().find(|run| run.id == id) else {
+            return Ok(None);
+        };
+
+        let log = StoredWorkflowRunLog {
+            id: Uuid::now_v7(),
+            run_id: id,
+            stream: request.stream,
+            message: request.message,
+            created_at: Utc::now(),
+        };
+        run.updated_at = log.created_at;
+        drop(runs);
+
+        self.workflow_run_logs.lock().await.push(log.clone());
+        Ok(Some(log))
     }
 
     async fn create_recording_for_session(
@@ -3110,8 +3415,14 @@ impl PostgresSessionStore {
                     workflow_version TEXT NOT NULL,
                     session_id UUID NOT NULL REFERENCES control_sessions(id) ON DELETE CASCADE,
                     automation_task_id UUID NOT NULL REFERENCES control_automation_tasks(id) ON DELETE CASCADE,
+                    state TEXT NOT NULL DEFAULT 'pending',
                     input JSONB NULL,
+                    output JSONB NULL,
+                    error TEXT NULL,
+                    artifact_refs JSONB NOT NULL DEFAULT '[]'::jsonb,
                     labels JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    started_at TIMESTAMPTZ NULL,
+                    completed_at TIMESTAMPTZ NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
@@ -3134,6 +3445,17 @@ impl PostgresSessionStore {
                 CREATE INDEX IF NOT EXISTS idx_control_workflow_run_events_run_created
                     ON control_workflow_run_events (run_id, created_at ASC);
 
+                CREATE TABLE IF NOT EXISTS control_workflow_run_logs (
+                    id UUID PRIMARY KEY,
+                    run_id UUID NOT NULL REFERENCES control_workflow_runs(id) ON DELETE CASCADE,
+                    stream TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_workflow_run_logs_run_created
+                    ON control_workflow_run_logs (run_id, created_at ASC);
+
                 ALTER TABLE control_sessions
                     ADD COLUMN IF NOT EXISTS automation_owner_client_id TEXT NULL;
                 ALTER TABLE control_sessions
@@ -3146,6 +3468,18 @@ impl PostgresSessionStore {
                     ADD COLUMN IF NOT EXISTS previous_recording_id UUID NULL REFERENCES control_session_recordings(id) ON DELETE SET NULL;
                 ALTER TABLE control_session_recordings
                     ADD COLUMN IF NOT EXISTS termination_reason TEXT NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'pending';
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS output JSONB NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS error TEXT NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS artifact_refs JSONB NOT NULL DEFAULT '[]'::jsonb;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ NULL;
                 "#,
             )
             .await
@@ -4088,6 +4422,48 @@ impl PostgresSessionStore {
         row.as_ref().map(row_to_stored_automation_task).transpose()
     }
 
+    async fn get_automation_task_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_automation_tasks
+                WHERE id = $1
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to load automation task by id: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_automation_task).transpose()
+    }
+
     async fn cancel_automation_task_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -4241,11 +4617,44 @@ impl PostgresSessionStore {
                 ))
             })?;
 
+        let task = row_to_stored_automation_task(&row)?;
+        transaction
+            .execute(
+                r#"
+                UPDATE control_workflow_runs
+                SET
+                    state = $2,
+                    output = $3::jsonb,
+                    error = $4,
+                    artifact_refs = $5::jsonb,
+                    started_at = $6,
+                    completed_at = $7,
+                    updated_at = $8
+                WHERE automation_task_id = $1
+                "#,
+                &[
+                    &task.id,
+                    &WorkflowRunState::from(task.state).as_str(),
+                    &task.output,
+                    &task.error,
+                    &json_string_array(&task.artifact_refs),
+                    &task.started_at,
+                    &task.completed_at,
+                    &task.updated_at,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to sync workflow run after automation task cancel: {error}"
+                ))
+            })?;
+
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
         })?;
 
-        row_to_stored_automation_task(&row).map(Some)
+        Ok(Some(task))
     }
 
     async fn list_automation_task_events_for_owner(
@@ -4490,11 +4899,44 @@ impl PostgresSessionStore {
                 ))
             })?;
 
+        let task = row_to_stored_automation_task(&row)?;
+        transaction
+            .execute(
+                r#"
+                UPDATE control_workflow_runs
+                SET
+                    state = $2,
+                    output = $3::jsonb,
+                    error = $4,
+                    artifact_refs = $5::jsonb,
+                    started_at = $6,
+                    completed_at = $7,
+                    updated_at = $8
+                WHERE automation_task_id = $1
+                "#,
+                &[
+                    &task.id,
+                    &WorkflowRunState::from(task.state).as_str(),
+                    &task.output,
+                    &task.error,
+                    &json_string_array(&task.artifact_refs),
+                    &task.started_at,
+                    &task.completed_at,
+                    &task.updated_at,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to sync workflow run after automation task transition: {error}"
+                ))
+            })?;
+
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
         })?;
 
-        row_to_stored_automation_task(&row).map(Some)
+        Ok(Some(task))
     }
 
     async fn append_automation_task_log(
@@ -4984,12 +5426,21 @@ impl PostgresSessionStore {
                     workflow_version,
                     session_id,
                     automation_task_id,
+                    state,
                     input,
+                    output,
+                    error,
+                    artifact_refs,
                     labels,
+                    started_at,
+                    completed_at,
                     created_at,
                     updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $9)
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7,
+                    $8::jsonb, NULL, NULL, $9::jsonb, $10::jsonb, NULL, NULL, $11, $11
+                )
                 RETURNING
                     id,
                     workflow_definition_id,
@@ -4997,8 +5448,14 @@ impl PostgresSessionStore {
                     workflow_version,
                     session_id,
                     automation_task_id,
+                    state,
                     input,
+                    output,
+                    error,
+                    artifact_refs,
                     labels,
+                    started_at,
+                    completed_at,
                     created_at,
                     updated_at
                 "#,
@@ -5009,7 +5466,9 @@ impl PostgresSessionStore {
                     &request.workflow_version,
                     &request.session_id,
                     &request.automation_task_id,
+                    &WorkflowRunState::Pending.as_str(),
                     &request.input,
+                    &json_string_array(&Vec::new()),
                     &json_labels(&request.labels),
                     &now,
                 ],
@@ -5077,8 +5536,14 @@ impl PostgresSessionStore {
                     run.workflow_version,
                     run.session_id,
                     run.automation_task_id,
+                    run.state,
                     run.input,
+                    run.output,
+                    run.error,
+                    run.artifact_refs,
                     run.labels,
+                    run.started_at,
+                    run.completed_at,
                     run.created_at,
                     run.updated_at
                 FROM control_workflow_runs run
@@ -5093,6 +5558,45 @@ impl PostgresSessionStore {
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to load workflow run: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_workflow_run).transpose()
+    }
+
+    async fn get_workflow_run_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    workflow_definition_id,
+                    workflow_definition_version_id,
+                    workflow_version,
+                    session_id,
+                    automation_task_id,
+                    state,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_workflow_runs
+                WHERE id = $1
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to load workflow run by id: {error}"))
             })?;
         row.as_ref().map(row_to_stored_workflow_run).transpose()
     }
@@ -5133,6 +5637,43 @@ impl PostgresSessionStore {
                 SessionStoreError::Backend(format!("failed to list workflow run events: {error}"))
             })?;
         rows.iter().map(row_to_stored_workflow_run_event).collect()
+    }
+
+    async fn list_workflow_run_logs_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredWorkflowRunLog>, SessionStoreError> {
+        if self
+            .get_workflow_run_for_owner(principal, id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    run_id,
+                    stream,
+                    message,
+                    created_at
+                FROM control_workflow_run_logs
+                WHERE run_id = $1
+                ORDER BY created_at ASC, id ASC
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list workflow run logs: {error}"))
+            })?;
+        rows.iter().map(row_to_stored_workflow_run_log).collect()
     }
 
     async fn append_workflow_run_event_for_owner(
@@ -5218,6 +5759,378 @@ impl PostgresSessionStore {
                 SessionStoreError::Backend(format!("failed to reload workflow run event: {error}"))
             })?;
         row_to_stored_workflow_run_event(&event_row).map(Some)
+    }
+
+    async fn transition_workflow_run(
+        &self,
+        id: Uuid,
+        request: WorkflowRunTransitionRequest,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        let mut client = self.client.lock().await;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+
+        let run_row = transaction
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    workflow_definition_id,
+                    workflow_definition_version_id,
+                    workflow_version,
+                    session_id,
+                    automation_task_id,
+                    state,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_workflow_runs
+                WHERE id = $1
+                FOR UPDATE
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to lock workflow run for transition: {error}"
+                ))
+            })?;
+        let Some(run_row) = run_row else {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Ok(None);
+        };
+        let current_run = row_to_stored_workflow_run(&run_row)?;
+
+        let task_row = transaction
+            .query_one(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_automation_tasks
+                WHERE id = $1
+                FOR UPDATE
+                "#,
+                &[&current_run.automation_task_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to lock automation task for workflow run transition: {error}"
+                ))
+            })?;
+        let current_task = row_to_stored_automation_task(&task_row)?;
+        let task_state: AutomationTaskState = request.state.into();
+        if current_task.state.is_terminal() {
+            return Err(SessionStoreError::Conflict(format!(
+                "automation task {} is already terminal",
+                current_task.id
+            )));
+        }
+        if !current_task.state.can_transition_to(task_state) {
+            return Err(SessionStoreError::Conflict(format!(
+                "automation task {} cannot transition from {} to {}",
+                current_task.id,
+                current_task.state.as_str(),
+                task_state.as_str()
+            )));
+        }
+
+        let now = Utc::now();
+        let started_at = if matches!(
+            task_state,
+            AutomationTaskState::Starting
+                | AutomationTaskState::Running
+                | AutomationTaskState::AwaitingInput
+        ) {
+            current_task.started_at.or(Some(now))
+        } else {
+            current_task.started_at
+        };
+        let completed_at = if task_state.is_terminal() {
+            Some(now)
+        } else {
+            current_task.completed_at
+        };
+        let artifact_refs = json_string_array(&request.artifact_refs);
+        let task_row = transaction
+            .query_one(
+                r#"
+                UPDATE control_automation_tasks
+                SET
+                    state = $2,
+                    output = $3::jsonb,
+                    error = $4,
+                    artifact_refs = $5::jsonb,
+                    started_at = $6,
+                    completed_at = $7,
+                    updated_at = $8
+                WHERE id = $1
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &current_task.id,
+                    &task_state.as_str(),
+                    &request.output,
+                    &request.error,
+                    &artifact_refs,
+                    &started_at,
+                    &completed_at,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to update automation task for workflow run transition: {error}"
+                ))
+            })?;
+        let task = row_to_stored_automation_task(&task_row)?;
+
+        let task_message = request.message.clone().unwrap_or_else(|| {
+            automation_task_default_message_for_run_state(request.state).to_string()
+        });
+        transaction
+            .execute(
+                r#"
+                INSERT INTO control_automation_task_events (
+                    id,
+                    task_id,
+                    event_type,
+                    message,
+                    data,
+                    created_at
+                )
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &task.id,
+                    &automation_task_event_type_for_run_state(request.state),
+                    &task_message,
+                    &request.data,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to insert automation task event for workflow run transition: {error}"
+                ))
+            })?;
+
+        let run_row = transaction
+            .query_one(
+                r#"
+                UPDATE control_workflow_runs
+                SET
+                    state = $2,
+                    output = $3::jsonb,
+                    error = $4,
+                    artifact_refs = $5::jsonb,
+                    started_at = $6,
+                    completed_at = $7,
+                    updated_at = $8
+                WHERE id = $1
+                RETURNING
+                    id,
+                    workflow_definition_id,
+                    workflow_definition_version_id,
+                    workflow_version,
+                    session_id,
+                    automation_task_id,
+                    state,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &id,
+                    &request.state.as_str(),
+                    &task.output,
+                    &task.error,
+                    &json_string_array(&task.artifact_refs),
+                    &task.started_at,
+                    &task.completed_at,
+                    &task.updated_at,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to update workflow run state: {error}"))
+            })?;
+
+        let run_message = request
+            .message
+            .unwrap_or_else(|| workflow_run_default_message(request.state).to_string());
+        transaction
+            .execute(
+                r#"
+                INSERT INTO control_workflow_run_events (
+                    id,
+                    run_id,
+                    event_type,
+                    message,
+                    data,
+                    created_at
+                )
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &id,
+                    &workflow_run_event_type(request.state),
+                    &run_message,
+                    &request.data,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to insert workflow run transition event: {error}"
+                ))
+            })?;
+
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+
+        row_to_stored_workflow_run(&run_row).map(Some)
+    }
+
+    async fn append_workflow_run_log(
+        &self,
+        id: Uuid,
+        request: PersistWorkflowRunLogRequest,
+    ) -> Result<Option<StoredWorkflowRunLog>, SessionStoreError> {
+        let now = Utc::now();
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                WITH inserted AS (
+                    INSERT INTO control_workflow_run_logs (
+                        id,
+                        run_id,
+                        stream,
+                        message,
+                        created_at
+                    )
+                    SELECT $2, $1, $3, $4, $5
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM control_workflow_runs
+                        WHERE id = $1
+                    )
+                    RETURNING
+                        id,
+                        run_id,
+                        stream,
+                        message,
+                        created_at
+                )
+                UPDATE control_workflow_runs
+                SET updated_at = $5
+                WHERE id = $1
+                  AND EXISTS (SELECT 1 FROM inserted)
+                RETURNING (SELECT id FROM inserted) AS inserted_id
+                "#,
+                &[
+                    &id,
+                    &Uuid::now_v7(),
+                    &request.stream.as_str(),
+                    &request.message,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to append workflow run log: {error}"))
+            })?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let inserted_id: Option<Uuid> = row.get("inserted_id");
+        let Some(inserted_id) = inserted_id else {
+            return Ok(None);
+        };
+        let log_row = self
+            .client
+            .lock()
+            .await
+            .query_one(
+                r#"
+                SELECT
+                    id,
+                    run_id,
+                    stream,
+                    message,
+                    created_at
+                FROM control_workflow_run_logs
+                WHERE id = $1
+                "#,
+                &[&inserted_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to reload workflow run log: {error}"))
+            })?;
+        row_to_stored_workflow_run_log(&log_row).map(Some)
     }
 
     async fn create_recording_for_session(
@@ -6006,6 +6919,16 @@ fn json_labels(labels: &HashMap<String, String>) -> Value {
     Value::Object(object)
 }
 
+fn sync_workflow_run_with_task(run: &mut StoredWorkflowRun, task: &StoredAutomationTask) {
+    run.state = WorkflowRunState::from(task.state);
+    run.output = task.output.clone();
+    run.error = task.error.clone();
+    run.artifact_refs = task.artifact_refs.clone();
+    run.started_at = task.started_at;
+    run.completed_at = task.completed_at;
+    run.updated_at = std::cmp::max(run.updated_at, task.updated_at);
+}
+
 fn json_string_array(values: &[String]) -> Value {
     Value::Array(
         values
@@ -6335,6 +7258,12 @@ fn row_to_stored_workflow_definition_version(
 }
 
 fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionStoreError> {
+    let state = row
+        .get::<_, String>("state")
+        .parse::<WorkflowRunState>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let artifact_refs =
+        row_to_json_string_array(row.get("artifact_refs"), "workflow run artifact_refs")?;
     let labels_value: Value = row.get("labels");
     let labels = labels_value
         .as_object()
@@ -6360,8 +7289,14 @@ fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionSto
         workflow_version: row.get("workflow_version"),
         session_id: row.get("session_id"),
         automation_task_id: row.get("automation_task_id"),
+        state,
         input: row.get("input"),
+        output: row.get("output"),
+        error: row.get("error"),
+        artifact_refs,
         labels,
+        started_at: row.get("started_at"),
+        completed_at: row.get("completed_at"),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     })
@@ -6376,6 +7311,20 @@ fn row_to_stored_workflow_run_event(
         event_type: row.get("event_type"),
         message: row.get("message"),
         data: row.get("data"),
+        created_at: row.get("created_at"),
+    })
+}
+
+fn row_to_stored_workflow_run_log(row: &Row) -> Result<StoredWorkflowRunLog, SessionStoreError> {
+    let stream = row
+        .get::<_, String>("stream")
+        .parse::<AutomationTaskLogStream>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    Ok(StoredWorkflowRunLog {
+        id: row.get("id"),
+        run_id: row.get("run_id"),
+        stream,
+        message: row.get("message"),
         created_at: row.get("created_at"),
     })
 }

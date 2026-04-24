@@ -268,8 +268,14 @@ async function fetchWorkflowRun(accessToken, options, runId) {
   });
 }
 
-async function cancelWorkflowRun(accessToken, options, runId) {
-  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/cancel`, {
+async function fetchWorkflowRunWithAutomationToken(automationToken, options, runId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}`, {
+    headers: { 'x-bpane-automation-access-token': automationToken },
+  });
+}
+
+async function issueAutomationAccess(accessToken, options, sessionId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/sessions/${sessionId}/automation-access`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -281,9 +287,54 @@ async function fetchWorkflowRunEvents(accessToken, options, runId) {
   });
 }
 
+async function fetchWorkflowRunEventsWithAutomationToken(automationToken, options, runId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/events`, {
+    headers: { 'x-bpane-automation-access-token': automationToken },
+  });
+}
+
 async function fetchWorkflowRunLogs(accessToken, options, runId) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/logs`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+async function fetchWorkflowRunLogsWithAutomationToken(automationToken, options, runId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/logs`, {
+    headers: { 'x-bpane-automation-access-token': automationToken },
+  });
+}
+
+async function transitionWorkflowRun(automationToken, options, runId, body) {
+  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/state`, {
+    method: 'POST',
+    headers: {
+      'x-bpane-automation-access-token': automationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function appendWorkflowRunLog(automationToken, options, runId, body) {
+  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/logs`, {
+    method: 'POST',
+    headers: {
+      'x-bpane-automation-access-token': automationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function appendAutomationTaskLog(automationToken, options, taskId, body) {
+  return await fetchJson(`${options.pageUrl}/api/v1/automation-tasks/${taskId}/logs`, {
+    method: 'POST',
+    headers: {
+      'x-bpane-automation-access-token': automationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
   });
 }
 
@@ -327,6 +378,7 @@ async function main() {
   let context = null;
   let page = null;
   let accessToken = '';
+  let automationToken = '';
   let createdSessionId = '';
 
   try {
@@ -372,43 +424,87 @@ async function main() {
       throw new Error('Workflow-created session is missing the workflow-smoke origin label.');
     }
 
-    log(`Cancelling workflow run ${runId}`);
-    await cancelWorkflowRun(accessToken, options, runId);
+    const issuedAutomationAccess = await issueAutomationAccess(
+      accessToken,
+      options,
+      createdSessionId,
+    );
+    automationToken = issuedAutomationAccess.token ?? '';
+    if (!automationToken) {
+      throw new Error('Failed to acquire a session automation access token.');
+    }
 
-    const cancelledRun = await poll(
-      'workflow run cancellation',
-      () => fetchWorkflowRun(accessToken, options, runId),
-      (run) => run?.state === 'cancelled',
+    log(`Driving workflow run ${runId} through automation access`);
+    await transitionWorkflowRun(automationToken, options, runId, {
+      state: 'running',
+      message: 'workflow executor attached',
+    });
+    await appendWorkflowRunLog(automationToken, options, runId, {
+      stream: 'system',
+      message: 'workflow bootstrapped',
+    });
+    await appendAutomationTaskLog(automationToken, options, pendingRun.automation_task_id, {
+      stream: 'stdout',
+      message: 'opened report page',
+    });
+    await transitionWorkflowRun(automationToken, options, runId, {
+      state: 'succeeded',
+      output: {
+        csv_file_id: 'file_123',
+      },
+      artifact_refs: ['artifact://workflow-trace.zip'],
+      message: 'workflow completed',
+    });
+
+    const succeededRun = await poll(
+      'workflow run success',
+      () => fetchWorkflowRunWithAutomationToken(automationToken, options, runId),
+      (run) => run?.state === 'succeeded',
       options.connectTimeoutMs,
     );
+    if (succeededRun.output?.csv_file_id !== 'file_123') {
+      throw new Error('Workflow run did not persist the expected structured output.');
+    }
 
-    const events = await fetchWorkflowRunEvents(accessToken, options, runId);
+    const events = await fetchWorkflowRunEventsWithAutomationToken(
+      automationToken,
+      options,
+      runId,
+    );
     const eventTypes = events.events.map((event) => event.event_type);
     for (const expected of [
       'workflow_run.created',
       'automation_task.created',
-      'workflow_run.cancel_requested',
-      'automation_task.cancelled',
+      'workflow_run.running',
+      'automation_task.running',
+      'workflow_run.succeeded',
+      'automation_task.succeeded',
     ]) {
       if (!eventTypes.includes(expected)) {
         throw new Error(`Workflow run events are missing ${expected}.`);
       }
     }
 
-    const logs = await fetchWorkflowRunLogs(accessToken, options, runId);
-    if (logs.logs.length !== 1 || logs.logs[0]?.stream !== 'system') {
-      throw new Error('Workflow run logs did not expose the automation-task cancellation log.');
+    const logs = await fetchWorkflowRunLogsWithAutomationToken(
+      automationToken,
+      options,
+      runId,
+    );
+    const logSources = logs.logs.map((log) => log.source);
+    if (!logSources.includes('run') || !logSources.includes('automation_task')) {
+      throw new Error('Workflow run logs did not expose both run and automation task sources.');
     }
 
     const summary = {
       workflowId: workflow.id,
       workflowVersion: version.version,
       runId,
-      state: cancelledRun.state,
+      state: succeededRun.state,
       sessionId: createdSessionId,
-      automationTaskId: cancelledRun.automation_task_id,
+      automationTaskId: succeededRun.automation_task_id,
       events: events.events.length,
       logs: logs.logs.length,
+      outputCsvFileId: succeededRun.output?.csv_file_id ?? null,
     };
 
     if (options.outputPath) {

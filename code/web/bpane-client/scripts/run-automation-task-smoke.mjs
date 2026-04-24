@@ -201,6 +201,12 @@ async function fetchAutomationTask(accessToken, options, taskId) {
   });
 }
 
+async function fetchAutomationTaskWithAutomationToken(automationToken, options, taskId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/automation-tasks/${taskId}`, {
+    headers: { 'x-bpane-automation-access-token': automationToken },
+  });
+}
+
 async function listAutomationTasks(accessToken, options) {
   return await fetchJson(`${options.pageUrl}/api/v1/automation-tasks`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -251,9 +257,21 @@ async function fetchAutomationTaskEvents(accessToken, options, taskId) {
   });
 }
 
+async function fetchAutomationTaskEventsWithAutomationToken(automationToken, options, taskId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/automation-tasks/${taskId}/events`, {
+    headers: { 'x-bpane-automation-access-token': automationToken },
+  });
+}
+
 async function fetchAutomationTaskLogs(accessToken, options, taskId) {
   return await fetchJson(`${options.pageUrl}/api/v1/automation-tasks/${taskId}/logs`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+async function fetchAutomationTaskLogsWithAutomationToken(automationToken, options, taskId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/automation-tasks/${taskId}/logs`, {
+    headers: { 'x-bpane-automation-access-token': automationToken },
   });
 }
 
@@ -263,10 +281,32 @@ async function fetchSession(accessToken, options, sessionId) {
   });
 }
 
-async function cancelAutomationTask(accessToken, options, taskId) {
-  return await fetchJson(`${options.pageUrl}/api/v1/automation-tasks/${taskId}/cancel`, {
+async function issueAutomationAccess(accessToken, options, sessionId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/sessions/${sessionId}/automation-access`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+async function transitionAutomationTask(automationToken, options, taskId, body) {
+  return await fetchJson(`${options.pageUrl}/api/v1/automation-tasks/${taskId}/state`, {
+    method: 'POST',
+    headers: {
+      'x-bpane-automation-access-token': automationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function appendAutomationTaskLog(automationToken, options, taskId, body) {
+  return await fetchJson(`${options.pageUrl}/api/v1/automation-tasks/${taskId}/logs`, {
+    method: 'POST',
+    headers: {
+      'x-bpane-automation-access-token': automationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
   });
 }
 
@@ -304,6 +344,7 @@ async function main() {
   let context = null;
   let page = null;
   let accessToken = '';
+  let automationToken = '';
   let createdSessionId = '';
 
   try {
@@ -350,6 +391,16 @@ async function main() {
       throw new Error('Created session is missing the automation-task-smoke origin label.');
     }
 
+    const issuedAutomationAccess = await issueAutomationAccess(
+      accessToken,
+      options,
+      createdSessionId,
+    );
+    automationToken = issuedAutomationAccess.token ?? '';
+    if (!automationToken) {
+      throw new Error('Failed to acquire a session automation access token.');
+    }
+
     const initialEvents = await fetchAutomationTaskEvents(accessToken, options, taskId);
     if (initialEvents.events.length !== 1) {
       throw new Error(
@@ -362,45 +413,76 @@ async function main() {
       );
     }
 
-    log(`Cancelling automation task ${taskId}`);
-    await cancelAutomationTask(accessToken, options, taskId);
+    log(`Transitioning automation task ${taskId} through automation access`);
+    await transitionAutomationTask(automationToken, options, taskId, {
+      state: 'running',
+      message: 'executor attached',
+    });
 
-    const cancelledTask = await poll(
-      'automation task cancellation',
-      () => fetchAutomationTask(accessToken, options, taskId),
-      (task) => task?.state === 'cancelled',
+    await appendAutomationTaskLog(automationToken, options, taskId, {
+      stream: 'stdout',
+      message: 'opened dashboard',
+    });
+
+    await transitionAutomationTask(automationToken, options, taskId, {
+      state: 'succeeded',
+      output: {
+        result: 'ok',
+      },
+      artifact_refs: ['artifact://trace.zip'],
+      message: 'executor finished',
+    });
+
+    const succeededTask = await poll(
+      'automation task success',
+      () => fetchAutomationTaskWithAutomationToken(automationToken, options, taskId),
+      (task) => task?.state === 'succeeded',
       options.connectTimeoutMs,
     );
-    if (!cancelledTask.cancel_requested_at || !cancelledTask.completed_at) {
-      throw new Error('Cancelled task is missing cancellation or completion timestamps.');
+    if (!succeededTask.started_at || !succeededTask.completed_at) {
+      throw new Error('Succeeded task is missing execution timestamps.');
+    }
+    if (succeededTask.output?.result !== 'ok') {
+      throw new Error('Succeeded task did not persist the expected structured output.');
     }
 
-    const events = await fetchAutomationTaskEvents(accessToken, options, taskId);
-    if (events.events.length !== 2) {
-      throw new Error(`Expected two task events after cancellation, got ${events.events.length}.`);
-    }
-    if (events.events[1]?.event_type !== 'automation_task.cancelled') {
-      throw new Error(
-        `Unexpected terminal task event type: ${events.events[1]?.event_type ?? 'missing'}`,
-      );
+    const events = await fetchAutomationTaskEventsWithAutomationToken(
+      automationToken,
+      options,
+      taskId,
+    );
+    const eventTypes = events.events.map((event) => event.event_type);
+    for (const expected of [
+      'automation_task.created',
+      'automation_task.running',
+      'automation_task.succeeded',
+    ]) {
+      if (!eventTypes.includes(expected)) {
+        throw new Error(`Automation task events are missing ${expected}.`);
+      }
     }
 
-    const logs = await fetchAutomationTaskLogs(accessToken, options, taskId);
+    const logs = await fetchAutomationTaskLogsWithAutomationToken(
+      automationToken,
+      options,
+      taskId,
+    );
     if (logs.logs.length !== 1) {
-      throw new Error(`Expected one task log after cancellation, got ${logs.logs.length}.`);
+      throw new Error(`Expected one task log after execution, got ${logs.logs.length}.`);
     }
-    if (logs.logs[0]?.stream !== 'system') {
-      throw new Error(`Expected system log stream, got ${logs.logs[0]?.stream ?? 'missing'}.`);
+    if (logs.logs[0]?.stream !== 'stdout') {
+      throw new Error(`Expected stdout log stream, got ${logs.logs[0]?.stream ?? 'missing'}.`);
     }
 
     const summary = {
       taskId,
       sessionId: createdSessionId,
-      state: cancelledTask.state,
+      state: succeededTask.state,
       events: events.events.length,
       logs: logs.logs.length,
-      executor: cancelledTask.executor,
-      sessionSource: cancelledTask.session.source,
+      executor: succeededTask.executor,
+      sessionSource: succeededTask.session.source,
+      outputResult: succeededTask.output?.result ?? null,
     };
 
     if (options.outputPath) {
