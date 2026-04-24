@@ -1,12 +1,33 @@
 # BrowserPane
 
-BrowserPane is a browser-native remote browser/desktop stack for a Linux host container.
+BrowserPane is planed to be a self-hostable remote browser platform for humans and agents.
+
+Most browser automation products stop at managed browsers, CDP endpoints, or live debug links. BrowserPane treats the live browser session itself as the product surface: a real Chromium session that browser users, supervisors, and automation can all attach to with shared-session policy, owner/viewer controls, and persistent session resources.
 
 It runs a real Chromium session inside a Linux environment, captures that surface on the host, transports it over WebTransport, and renders it in a browser client with a tile-first pipeline plus optional ROI H.264 video for media-heavy regions.
 
 ![BrowserPane example](example.png)
 
 The frozen v1 session-control contract now lives in [openapi/bpane-control-v1.yaml](/Users/cfinkelstein/workspace/pane/openapi/bpane-control-v1.yaml).
+
+## Why BrowserPane
+
+BrowserPane will be worth considering if you need more than "a browser for an agent."
+
+- Shared sessions are a first-class feature, not an afterthought. Multiple browser clients can join the same session with collaborative or restricted viewer behavior.
+- Automation attaches to governed sessions instead of bypassing session policy. MCP and other automation flows operate through explicit ownership and session-control APIs.
+- The remoting stack is browser-native. BrowserPane uses WebTransport plus a tile-first render path with optional ROI H.264 instead of relying only on full-frame streaming or vendor-hosted live debug UIs.
+- The session behaves like a real remote workspace. Clipboard, file transfer, audio out, microphone in, camera ingress, resize, and input policy are part of the system design.
+- The platform is self-hostable. Teams can run BrowserPane in their own environment instead of treating browser control as a SaaS-only dependency.
+
+## Where It Fits
+
+BrowserPane is a strong fit for:
+
+- human-in-the-loop browser automation
+- collaborative investigation, support, or review sessions
+- regulated or private deployments that need self-hosted browser access
+- workflow systems that need durable session identity, artifacts, logs, and audit history
 
 ## Current Status
 
