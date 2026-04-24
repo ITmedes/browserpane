@@ -4,13 +4,14 @@ import net from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
-import type { WorkflowRunnerContext } from "./types.js";
+import type { WorkflowRunnerContext, WorkflowRunnerWorkspaceInput } from "./types.js";
 
 type WorkflowExecutionContext = {
   browser: Browser;
   context: BrowserContext;
   page: Page;
   input: unknown;
+  workspaceInputs: WorkflowRunnerWorkspaceInput[];
   sessionId: string;
   workflowRunId: string;
   automationTaskId: string;
@@ -46,6 +47,7 @@ async function main(): Promise<void> {
       context: page.context(),
       page,
       input: context.input,
+      workspaceInputs: context.workspaceInputs,
       sessionId: context.sessionId,
       workflowRunId: context.workflowRunId,
       automationTaskId: context.automationTaskId,

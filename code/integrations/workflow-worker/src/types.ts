@@ -44,6 +44,19 @@ export type GatewayWorkflowRunSourceSnapshot = {
   content_path: string;
 };
 
+export type GatewayWorkflowRunWorkspaceInput = {
+  id: string;
+  workspace_id: string;
+  file_id: string;
+  file_name: string;
+  media_type: string | null;
+  byte_count: number;
+  sha256_hex: string;
+  provenance: unknown;
+  mount_path: string;
+  content_path: string;
+};
+
 export type GatewayWorkflowRunResource = {
   id: string;
   workflow_definition_id: string;
@@ -57,6 +70,7 @@ export type GatewayWorkflowRunResource = {
   error: string | null;
   artifact_refs: string[];
   source_snapshot: GatewayWorkflowRunSourceSnapshot | null;
+  workspace_inputs: GatewayWorkflowRunWorkspaceInput[];
   labels: Record<string, string>;
   started_at: string | null;
   completed_at: string | null;
@@ -92,9 +106,23 @@ export type WorkflowRunnerContext = {
   authToken: string;
   entrypointPath: string;
   sourceRoot: string;
+  workspaceInputs: WorkflowRunnerWorkspaceInput[];
   input: unknown;
   sessionId: string;
   workflowRunId: string;
   automationTaskId: string;
   resultPath: string;
+};
+
+export type WorkflowRunnerWorkspaceInput = {
+  id: string;
+  workspaceId: string;
+  fileId: string;
+  fileName: string;
+  mediaType: string | null;
+  byteCount: number;
+  sha256Hex: string;
+  provenance: unknown;
+  mountPath: string;
+  localPath: string;
 };

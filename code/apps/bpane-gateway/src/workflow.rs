@@ -42,6 +42,7 @@ pub struct PersistWorkflowRunRequest {
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
     pub source_snapshot: Option<WorkflowRunSourceSnapshot>,
+    pub workspace_inputs: Vec<WorkflowRunWorkspaceInput>,
     pub input: Option<Value>,
     pub labels: HashMap<String, String>,
 }
@@ -108,6 +109,7 @@ pub struct StoredWorkflowRun {
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
     pub source_snapshot: Option<WorkflowRunSourceSnapshot>,
+    pub workspace_inputs: Vec<WorkflowRunWorkspaceInput>,
     pub state: WorkflowRunState,
     pub input: Option<Value>,
     pub output: Option<Value>,
@@ -149,6 +151,20 @@ pub struct WorkflowRunSourceSnapshot {
     pub media_type: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowRunWorkspaceInput {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub file_id: Uuid,
+    pub file_name: String,
+    pub media_type: Option<String>,
+    pub byte_count: u64,
+    pub sha256_hex: String,
+    pub provenance: Option<Value>,
+    pub mount_path: String,
+    pub artifact_ref: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct WorkflowRunSourceSnapshotResource {
     pub source: WorkflowSource,
@@ -157,6 +173,20 @@ pub struct WorkflowRunSourceSnapshotResource {
     pub file_id: Uuid,
     pub file_name: String,
     pub media_type: Option<String>,
+    pub content_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowRunWorkspaceInputResource {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub file_id: Uuid,
+    pub file_name: String,
+    pub media_type: Option<String>,
+    pub byte_count: u64,
+    pub sha256_hex: String,
+    pub provenance: Option<Value>,
+    pub mount_path: String,
     pub content_path: String,
 }
 
@@ -304,6 +334,7 @@ pub struct WorkflowRunResource {
     pub error: Option<String>,
     pub artifact_refs: Vec<String>,
     pub source_snapshot: Option<WorkflowRunSourceSnapshotResource>,
+    pub workspace_inputs: Vec<WorkflowRunWorkspaceInputResource>,
     pub labels: HashMap<String, String>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -398,6 +429,11 @@ impl StoredWorkflowRun {
                 .source_snapshot
                 .as_ref()
                 .map(|snapshot| snapshot.to_resource(self.id)),
+            workspace_inputs: self
+                .workspace_inputs
+                .iter()
+                .map(|input| input.to_resource(self.id))
+                .collect(),
             labels: self.labels.clone(),
             started_at: self.started_at,
             completed_at: self.completed_at,
@@ -419,6 +455,26 @@ impl WorkflowRunSourceSnapshot {
             file_name: self.file_name.clone(),
             media_type: self.media_type.clone(),
             content_path: format!("/api/v1/workflow-runs/{run_id}/source-snapshot/content"),
+        }
+    }
+}
+
+impl WorkflowRunWorkspaceInput {
+    pub fn to_resource(&self, run_id: Uuid) -> WorkflowRunWorkspaceInputResource {
+        WorkflowRunWorkspaceInputResource {
+            id: self.id,
+            workspace_id: self.workspace_id,
+            file_id: self.file_id,
+            file_name: self.file_name.clone(),
+            media_type: self.media_type.clone(),
+            byte_count: self.byte_count,
+            sha256_hex: self.sha256_hex.clone(),
+            provenance: self.provenance.clone(),
+            mount_path: self.mount_path.clone(),
+            content_path: format!(
+                "/api/v1/workflow-runs/{run_id}/workspace-inputs/{}/content",
+                self.id
+            ),
         }
     }
 }

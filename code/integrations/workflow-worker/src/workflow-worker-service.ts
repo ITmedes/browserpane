@@ -9,6 +9,7 @@ import type {
   GatewayAutomationTaskLogStream,
   GatewayWorkflowRunResource,
   WorkflowRunnerContext,
+  WorkflowRunnerWorkspaceInput,
 } from "./types.js";
 
 type WorkflowWorkerServiceOptions = {
@@ -71,6 +72,11 @@ export class WorkflowWorkerService {
         "system",
         `materialized workflow source snapshot to ${sourceRoot}`,
       );
+      const workspaceInputs = await this.materializeWorkspaceInputs(
+        run,
+        automationToken,
+        path.join(workDir, "workspace-inputs"),
+      );
 
       await this.controlClient.transitionWorkflowRun(run.id, automationToken, {
         state: "running",
@@ -90,6 +96,7 @@ export class WorkflowWorkerService {
         authToken: automationToken,
         sourceRoot,
         entrypointPath,
+        workspaceInputs,
         resultPath: path.join(workDir, "result.json"),
       });
 
@@ -170,6 +177,7 @@ export class WorkflowWorkerService {
     authToken: string;
     sourceRoot: string;
     entrypointPath: string;
+    workspaceInputs: WorkflowRunnerWorkspaceInput[];
     resultPath: string;
   }): Promise<WorkflowExecutionResult> {
     await fs.mkdir(path.dirname(request.resultPath), { recursive: true });
@@ -180,6 +188,7 @@ export class WorkflowWorkerService {
       authToken: request.authToken,
       entrypointPath: request.entrypointPath,
       sourceRoot: request.sourceRoot,
+      workspaceInputs: request.workspaceInputs,
       input: request.run.input,
       sessionId: request.run.session_id,
       workflowRunId: request.run.id,
@@ -244,6 +253,49 @@ export class WorkflowWorkerService {
   private resolveWorkDir(runId: string): string {
     return path.join(this.workRoot, runId);
   }
+
+  private async materializeWorkspaceInputs(
+    run: GatewayWorkflowRunResource,
+    automationToken: string,
+    destinationRoot: string,
+  ): Promise<WorkflowRunnerWorkspaceInput[]> {
+    if (!run.workspace_inputs.length) {
+      return [];
+    }
+
+    const resolvedRoot = path.resolve(destinationRoot);
+    await fs.mkdir(resolvedRoot, { recursive: true });
+    const materialized: WorkflowRunnerWorkspaceInput[] = [];
+    for (const input of run.workspace_inputs) {
+      const bytes = await this.controlClient.downloadWorkspaceInput(
+        run.id,
+        input.id,
+        automationToken,
+      );
+      const localPath = resolveWorkspaceInputPath(resolvedRoot, input.mount_path);
+      await fs.mkdir(path.dirname(localPath), { recursive: true });
+      await fs.writeFile(localPath, Buffer.from(bytes));
+      materialized.push({
+        id: input.id,
+        workspaceId: input.workspace_id,
+        fileId: input.file_id,
+        fileName: input.file_name,
+        mediaType: input.media_type,
+        byteCount: input.byte_count,
+        sha256Hex: input.sha256_hex,
+        provenance: input.provenance,
+        mountPath: input.mount_path,
+        localPath,
+      });
+      await this.controlClient.appendWorkflowRunLog(
+        run.id,
+        automationToken,
+        "system",
+        `materialized workflow workspace input ${input.mount_path} from workspace ${input.workspace_id}`,
+      );
+    }
+    return materialized;
+  }
 }
 
 async function readStream(stream: NodeJS.ReadableStream | null): Promise<string> {
@@ -262,4 +314,19 @@ function splitLogLines(value: string): string[] {
     .split(/\r?\n/u)
     .map((line) => line.trimEnd())
     .filter((line) => line.length > 0);
+}
+
+function resolveWorkspaceInputPath(root: string, mountPath: string): string {
+  const segments = mountPath
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+  if (!segments.length) {
+    throw new Error("workflow workspace input mount path must not be empty");
+  }
+  const localPath = path.resolve(root, ...segments);
+  if (localPath !== root && !localPath.startsWith(`${root}${path.sep}`)) {
+    throw new Error(`workflow workspace input path escapes work root: ${mountPath}`);
+  }
+  return localPath;
 }

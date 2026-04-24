@@ -112,6 +112,18 @@ export class WorkflowControlClient {
     return new Uint8Array(await response.arrayBuffer());
   }
 
+  async downloadWorkspaceInput(
+    runId: string,
+    inputId: string,
+    automationToken: string,
+  ): Promise<Uint8Array> {
+    const response = await this.fetchResponseWithAutomationAccess(
+      `/api/v1/workflow-runs/${encodeURIComponent(runId)}/workspace-inputs/${encodeURIComponent(inputId)}/content`,
+      automationToken,
+    );
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
   private async fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await this.fetchResponse(path, init);
     return (await response.json()) as T;

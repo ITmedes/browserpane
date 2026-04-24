@@ -32,6 +32,7 @@ use crate::workflow::{
     PersistWorkflowRunLogRequest, PersistWorkflowRunRequest, StoredWorkflowDefinition,
     StoredWorkflowDefinitionVersion, StoredWorkflowRun, StoredWorkflowRunEvent,
     StoredWorkflowRunLog, WorkflowRunSourceSnapshot, WorkflowRunState,
+    WorkflowRunWorkspaceInput,
     WorkflowRunTransitionRequest,
 };
 use crate::workflow_source::WorkflowSource;
@@ -2031,6 +2032,28 @@ fn validate_workflow_run_request(
             ));
         }
     }
+    for workspace_input in &request.workspace_inputs {
+        if workspace_input.file_name.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run workspace input file_name must not be empty".to_string(),
+            ));
+        }
+        if workspace_input.sha256_hex.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run workspace input sha256_hex must not be empty".to_string(),
+            ));
+        }
+        if workspace_input.mount_path.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run workspace input mount_path must not be empty".to_string(),
+            ));
+        }
+        if workspace_input.artifact_ref.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run workspace input artifact_ref must not be empty".to_string(),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -2967,6 +2990,7 @@ impl InMemorySessionStore {
             session_id: request.session_id,
             automation_task_id: request.automation_task_id,
             source_snapshot: request.source_snapshot,
+            workspace_inputs: request.workspace_inputs,
             state: WorkflowRunState::Pending,
             input: request.input,
             output: None,
@@ -3962,6 +3986,7 @@ impl PostgresSessionStore {
                     automation_task_id UUID NOT NULL REFERENCES control_automation_tasks(id) ON DELETE CASCADE,
                     state TEXT NOT NULL DEFAULT 'pending',
                     source_snapshot JSONB NULL,
+                    workspace_inputs JSONB NOT NULL DEFAULT '[]'::jsonb,
                     input JSONB NULL,
                     output JSONB NULL,
                     error TEXT NULL,
@@ -4062,6 +4087,8 @@ impl PostgresSessionStore {
                     ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'pending';
                 ALTER TABLE control_workflow_runs
                     ADD COLUMN IF NOT EXISTS source_snapshot JSONB NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS workspace_inputs JSONB NOT NULL DEFAULT '[]'::jsonb;
                 ALTER TABLE control_workflow_runs
                     ADD COLUMN IF NOT EXISTS output JSONB NULL;
                 ALTER TABLE control_workflow_runs
@@ -6016,6 +6043,7 @@ impl PostgresSessionStore {
 
         let now = Utc::now();
         let source_snapshot = json_workflow_run_source_snapshot(request.source_snapshot.as_ref())?;
+        let workspace_inputs = json_workflow_run_workspace_inputs(&request.workspace_inputs)?;
         let row = transaction
             .query_one(
                 r#"
@@ -6028,6 +6056,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    workspace_inputs,
                     input,
                     output,
                     error,
@@ -6040,7 +6069,7 @@ impl PostgresSessionStore {
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7,
-                    $8::jsonb, $9::jsonb, NULL, NULL, $10::jsonb, $11::jsonb, NULL, NULL, $12, $12
+                    $8::jsonb, $9::jsonb, $10::jsonb, NULL, NULL, $11::jsonb, $12::jsonb, NULL, NULL, $13, $13
                 )
                 RETURNING
                     id,
@@ -6051,6 +6080,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    workspace_inputs,
                     input,
                     output,
                     error,
@@ -6070,6 +6100,7 @@ impl PostgresSessionStore {
                     &request.automation_task_id,
                     &WorkflowRunState::Pending.as_str(),
                     &source_snapshot,
+                    &workspace_inputs,
                     &request.input,
                     &json_string_array(&Vec::new()),
                     &json_labels(&request.labels),
@@ -6141,6 +6172,7 @@ impl PostgresSessionStore {
                     run.automation_task_id,
                     run.state,
                     run.source_snapshot,
+                    run.workspace_inputs,
                     run.input,
                     run.output,
                     run.error,
@@ -6185,6 +6217,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    workspace_inputs,
                     input,
                     output,
                     error,
@@ -6388,6 +6421,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    workspace_inputs,
                     input,
                     output,
                     error,
@@ -6593,6 +6627,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    workspace_inputs,
                     input,
                     output,
                     error,
@@ -8002,6 +8037,16 @@ fn json_workflow_run_source_snapshot(
         .transpose()
 }
 
+fn json_workflow_run_workspace_inputs(
+    workspace_inputs: &[WorkflowRunWorkspaceInput],
+) -> Result<Value, SessionStoreError> {
+    serde_json::to_value(workspace_inputs).map_err(|error| {
+        SessionStoreError::Backend(format!(
+            "failed to encode workflow run workspace_inputs: {error}"
+        ))
+    })
+}
+
 fn sync_workflow_run_with_task(run: &mut StoredWorkflowRun, task: &StoredAutomationTask) {
     run.state = WorkflowRunState::from(task.state);
     run.output = task.output.clone();
@@ -8426,6 +8471,19 @@ fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionSto
             })
         })
         .transpose()?;
+    let workspace_inputs_value: Value = row.get("workspace_inputs");
+    workspace_inputs_value
+        .as_array()
+        .context("workflow run workspace_inputs column must be a JSON array")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let workspace_inputs = serde_json::from_value::<Vec<WorkflowRunWorkspaceInput>>(
+        workspace_inputs_value,
+    )
+    .map_err(|error| {
+        SessionStoreError::Backend(format!(
+            "workflow run workspace_inputs column must be valid workspace input json: {error}"
+        ))
+    })?;
     let artifact_refs =
         row_to_json_string_array(row.get("artifact_refs"), "workflow run artifact_refs")?;
     let labels_value: Value = row.get("labels");
@@ -8455,6 +8513,7 @@ fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionSto
         automation_task_id: row.get("automation_task_id"),
         state,
         source_snapshot,
+        workspace_inputs,
         input: row.get("input"),
         output: row.get("output"),
         error: row.get("error"),
@@ -9269,6 +9328,7 @@ mod tests {
                     session_id: session.id,
                     automation_task_id: task.id,
                     source_snapshot: None,
+                    workspace_inputs: Vec::new(),
                     input: None,
                     labels: HashMap::new(),
                 },

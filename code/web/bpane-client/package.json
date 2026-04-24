@@ -12,6 +12,7 @@
     "smoke:file-workspaces": "node scripts/run-file-workspace-smoke.mjs",
     "smoke:recording": "node scripts/run-recording-smoke.mjs",
     "smoke:workflows": "node scripts/run-workflow-smoke.mjs",
+    "smoke:workflow-workspace": "node scripts/run-workflow-workspace-smoke.mjs",
     "smoke:multisession": "node scripts/run-multi-session-smoke.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

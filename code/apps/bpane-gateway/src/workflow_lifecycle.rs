@@ -697,6 +697,7 @@ mod tests {
                     session_id: session.id,
                     automation_task_id: task.id,
                     source_snapshot: None,
+                    workspace_inputs: Vec::new(),
                     input: None,
                     labels: HashMap::new(),
                 },

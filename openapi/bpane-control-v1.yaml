@@ -450,6 +450,31 @@ paths:
           $ref: '#/components/responses/Gone'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/workspace-inputs/{input_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/RunWorkspaceInputId'
+    get:
+      tags: [Workflows]
+      summary: Download one workflow run workspace input
+      operationId: getWorkflowRunWorkspaceInputContent
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run workspace input content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflow-runs/{run_id}/state:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -1257,6 +1282,13 @@ components:
       schema:
         type: string
         format: uuid
+    RunWorkspaceInputId:
+      name: input_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     WorkspaceId:
       name: workspace_id
       in: path
@@ -1953,10 +1985,28 @@ components:
           nullable: true
         input:
           nullable: true
+        workspace_inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateWorkflowRunWorkspaceInputRequest'
         labels:
           type: object
           additionalProperties:
             type: string
+    CreateWorkflowRunWorkspaceInputRequest:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, file_id]
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        mount_path:
+          type: string
+          nullable: true
     TransitionWorkflowRunRequest:
       type: object
       additionalProperties: false
@@ -2015,6 +2065,46 @@ components:
           nullable: true
         content_path:
           type: string
+    WorkflowRunWorkspaceInputResource:
+      type: object
+      required:
+        - id
+        - workspace_id
+        - file_id
+        - file_name
+        - media_type
+        - byte_count
+        - sha256_hex
+        - provenance
+        - mount_path
+        - content_path
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+        media_type:
+          type: string
+          nullable: true
+        byte_count:
+          type: integer
+          format: int64
+          minimum: 0
+        sha256_hex:
+          type: string
+        provenance:
+          nullable: true
+        mount_path:
+          type: string
+        content_path:
+          type: string
     WorkflowRunResource:
       type: object
       required:
@@ -2030,6 +2120,7 @@ components:
         - error
         - artifact_refs
         - source_snapshot
+        - workspace_inputs
         - labels
         - started_at
         - completed_at
@@ -2072,6 +2163,10 @@ components:
           allOf:
             - $ref: '#/components/schemas/WorkflowRunSourceSnapshotResource'
           nullable: true
+        workspace_inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunWorkspaceInputResource'
         labels:
           type: object
           additionalProperties:

@@ -133,6 +133,7 @@ Run these in `code/web/bpane-client`:
 - `npm test`
 - `npm run build`
 - `npm run smoke:recording -- --headless`
+- `npm run smoke:workflow-workspace -- --headless`
 - `npm run smoke:workflows -- --headless`
 - `npm run smoke:multisession -- --headless`
 - `npm run test:coverage`
