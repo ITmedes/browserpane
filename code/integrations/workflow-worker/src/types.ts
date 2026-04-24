@@ -44,6 +44,35 @@ export type GatewayWorkflowRunSourceSnapshot = {
   content_path: string;
 };
 
+export type GatewayCredentialInjectionMode =
+  | "form_fill"
+  | "cookie_seed"
+  | "storage_seed"
+  | "totp_fill";
+
+export type GatewayCredentialTotpMetadata = {
+  issuer: string | null;
+  account_name: string | null;
+  period_sec: number | null;
+  digits: number | null;
+};
+
+export type GatewayWorkflowRunCredentialBinding = {
+  id: string;
+  name: string;
+  provider: "vault_kv_v2";
+  namespace: string | null;
+  allowed_origins: string[];
+  injection_mode: GatewayCredentialInjectionMode;
+  totp: GatewayCredentialTotpMetadata | null;
+  resolve_path: string;
+};
+
+export type GatewayResolvedWorkflowRunCredentialBinding = {
+  binding: GatewayWorkflowRunCredentialBinding;
+  payload: unknown;
+};
+
 export type GatewayWorkflowRunWorkspaceInput = {
   id: string;
   workspace_id: string;
@@ -70,6 +99,7 @@ export type GatewayWorkflowRunResource = {
   error: string | null;
   artifact_refs: string[];
   source_snapshot: GatewayWorkflowRunSourceSnapshot | null;
+  credential_bindings: GatewayWorkflowRunCredentialBinding[];
   workspace_inputs: GatewayWorkflowRunWorkspaceInput[];
   labels: Record<string, string>;
   started_at: string | null;
@@ -106,6 +136,8 @@ export type WorkflowRunnerContext = {
   authToken: string;
   entrypointPath: string;
   sourceRoot: string;
+  credentialBindings: WorkflowRunnerCredentialBinding[];
+  credentialBindingFiles: Record<string, string>;
   workspaceInputs: WorkflowRunnerWorkspaceInput[];
   input: unknown;
   sessionId: string;
@@ -125,4 +157,18 @@ export type WorkflowRunnerWorkspaceInput = {
   provenance: unknown;
   mountPath: string;
   localPath: string;
+};
+
+export type WorkflowRunnerCredentialBinding = {
+  id: string;
+  name: string;
+  provider: "vault_kv_v2";
+  namespace: string | null;
+  allowedOrigins: string[];
+  injectionMode: GatewayCredentialInjectionMode;
+  totp: GatewayCredentialTotpMetadata | null;
+};
+
+export type WorkflowResolvedCredentialBinding = WorkflowRunnerCredentialBinding & {
+  payload: unknown;
 };

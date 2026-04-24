@@ -1,14 +1,17 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
+use tokio::sync::Mutex;
 use tower::ServiceExt;
 use zip::ZipArchive;
 
@@ -16,6 +19,10 @@ use super::*;
 use crate::auth::AuthValidator;
 use crate::automation_access_token::SessionAutomationAccessTokenManager;
 use crate::connect_ticket::SessionConnectTicketManager;
+use crate::credential_provider::{
+    CredentialProvider, CredentialProviderBackend, CredentialProviderError,
+    ResolvedCredentialSecret, StoreCredentialSecretRequest, StoredCredentialSecret,
+};
 use crate::recording_artifact_store::RecordingArtifactStore;
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::recording_observability::RecordingObservability;
@@ -29,6 +36,46 @@ use crate::session_manager::{SessionManager, SessionManagerConfig};
 use crate::workflow_lifecycle::WorkflowLifecycleManager;
 use crate::workflow_source::WorkflowSourceResolver;
 use crate::workspace_file_store::WorkspaceFileStore;
+
+#[derive(Default)]
+struct TestCredentialProviderBackend {
+    secrets: Mutex<HashMap<String, Value>>,
+}
+
+#[async_trait]
+impl CredentialProviderBackend for TestCredentialProviderBackend {
+    async fn store_secret(
+        &self,
+        request: StoreCredentialSecretRequest,
+    ) -> Result<StoredCredentialSecret, CredentialProviderError> {
+        let external_ref = request
+            .external_ref
+            .unwrap_or_else(|| format!("test/{}", request.binding_id));
+        self.secrets
+            .lock()
+            .await
+            .insert(external_ref.clone(), request.payload);
+        Ok(StoredCredentialSecret { external_ref })
+    }
+
+    async fn resolve_secret(
+        &self,
+        external_ref: &str,
+    ) -> Result<ResolvedCredentialSecret, CredentialProviderError> {
+        let payload = self
+            .secrets
+            .lock()
+            .await
+            .get(external_ref)
+            .cloned()
+            .ok_or_else(|| {
+                CredentialProviderError::Backend(format!(
+                    "test credential secret {external_ref} not found"
+                ))
+            })?;
+        Ok(ResolvedCredentialSecret { payload })
+    }
+}
 
 fn test_router() -> (Router, String) {
     let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
@@ -55,6 +102,7 @@ fn test_router() -> (Router, String) {
             })
             .unwrap(),
         ),
+        credential_provider: Some(test_credential_provider()),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
         workflow_source_resolver: test_workflow_source_resolver(),
@@ -79,6 +127,12 @@ fn test_workspace_file_store() -> Arc<WorkspaceFileStore> {
         uuid::Uuid::now_v7()
     ));
     Arc::new(WorkspaceFileStore::local_fs(root))
+}
+
+fn test_credential_provider() -> Arc<CredentialProvider> {
+    Arc::new(CredentialProvider::new(Arc::new(
+        TestCredentialProviderBackend::default(),
+    )))
 }
 
 fn test_workflow_source_resolver() -> Arc<WorkflowSourceResolver> {
@@ -152,6 +206,7 @@ async fn test_router_with_live_agent() -> (Router, String, TestAgentServer) {
             })
             .unwrap(),
         ),
+        credential_provider: Some(test_credential_provider()),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
         workflow_source_resolver: test_workflow_source_resolver(),
@@ -1128,6 +1183,7 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
             })
             .unwrap(),
         ),
+        credential_provider: Some(test_credential_provider()),
         recording_artifact_store: artifact_store.clone(),
         workspace_file_store: test_workspace_file_store(),
         workflow_source_resolver: test_workflow_source_resolver(),
@@ -1371,6 +1427,7 @@ async fn recording_operations_snapshot_tracks_finalize_playback_and_failures() {
             })
             .unwrap(),
         ),
+        credential_provider: Some(test_credential_provider()),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
         workflow_source_resolver: test_workflow_source_resolver(),
@@ -1579,6 +1636,7 @@ async fn expired_recording_artifacts_return_gone() {
             })
             .unwrap(),
         ),
+        credential_provider: Some(test_credential_provider()),
         recording_artifact_store: artifact_store.clone(),
         workspace_file_store: test_workspace_file_store(),
         workflow_source_resolver: test_workflow_source_resolver(),
@@ -1838,6 +1896,7 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
             })
             .unwrap(),
         ),
+        credential_provider: Some(test_credential_provider()),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
         workflow_source_resolver: test_workflow_source_resolver(),
@@ -1908,6 +1967,7 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
             })
             .unwrap(),
         ),
+        credential_provider: Some(test_credential_provider()),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
         workflow_source_resolver: test_workflow_source_resolver(),
@@ -2853,6 +2913,269 @@ async fn workflow_runs_expose_workspace_input_content_to_owner_and_automation_ac
     assert_eq!(automation_download.status(), StatusCode::OK);
     let automation_bytes = response_bytes(automation_download).await;
     assert_eq!(automation_bytes, owner_bytes);
+}
+
+#[tokio::test]
+async fn creates_lists_and_gets_credential_bindings() {
+    let (app, token) = test_router();
+
+    let created_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/credential-bindings")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "demo-login",
+                        "provider": "vault_kv_v2",
+                        "namespace": "smoke",
+                        "allowed_origins": ["http://web:8080"],
+                        "injection_mode": "form_fill",
+                        "secret_payload": {
+                            "username": "demo",
+                            "password": "demo-demo"
+                        },
+                        "labels": {
+                            "suite": "credential"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created_response.status(), StatusCode::CREATED);
+    let created = response_json(created_response).await;
+    let binding_id = created["id"].as_str().unwrap().to_string();
+    assert_eq!(created["name"], "demo-login");
+    assert_eq!(created["provider"], "vault_kv_v2");
+    assert_eq!(created["namespace"], "smoke");
+    assert_eq!(created["allowed_origins"], json!(["http://web:8080"]));
+    assert_eq!(created["injection_mode"], "form_fill");
+    assert!(created["external_ref"].as_str().unwrap().starts_with("test/"));
+    assert!(created.get("secret_payload").is_none());
+
+    let listed = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/credential-bindings")
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let bindings = listed["credential_bindings"].as_array().unwrap();
+    assert_eq!(bindings.len(), 1);
+    assert_eq!(bindings[0]["id"], binding_id);
+
+    let fetched = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/credential-bindings/{binding_id}"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(fetched["id"], binding_id);
+    assert!(fetched.get("secret_payload").is_none());
+}
+
+#[tokio::test]
+async fn workflow_runs_resolve_credential_bindings_via_automation_access() {
+    let (app, token) = test_router();
+
+    let created_binding = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/credential-bindings")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "demo-login",
+                            "provider": "vault_kv_v2",
+                            "namespace": "smoke",
+                            "allowed_origins": ["http://web:8080"],
+                            "injection_mode": "form_fill",
+                            "secret_payload": {
+                                "username": "demo",
+                                "password": "demo-demo"
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let binding_id = created_binding["id"].as_str().unwrap().to_string();
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "credential-workflow"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/demo.ts",
+                        "allowed_credential_binding_ids": [binding_id]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let create_run = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "session": {
+                            "create_session": {}
+                        },
+                        "credential_binding_ids": [binding_id]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_run.status(), StatusCode::CREATED);
+    let run = response_json(create_run).await;
+    let run_id = run["id"].as_str().unwrap().to_string();
+    let session_id = run["session_id"].as_str().unwrap().to_string();
+    let credential_bindings = run["credential_bindings"].as_array().unwrap();
+    assert_eq!(credential_bindings.len(), 1);
+    assert_eq!(credential_bindings[0]["id"], binding_id);
+
+    let owner_resolve = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/workflow-runs/{run_id}/credential-bindings/{binding_id}/resolved"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(owner_resolve.status(), StatusCode::UNAUTHORIZED);
+
+    let automation_access = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/sessions/{session_id}/automation-access"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let automation_token = automation_access["token"].as_str().unwrap().to_string();
+
+    let automation_resolve = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/workflow-runs/{run_id}/credential-bindings/{binding_id}/resolved"
+                    ))
+                    .header("x-bpane-automation-access-token", &automation_token)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(automation_resolve["binding"]["id"], binding_id);
+    assert_eq!(
+        automation_resolve["payload"],
+        json!({
+            "username": "demo",
+            "password": "demo-demo"
+        })
+    );
+
+    let events = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/workflow-runs/{run_id}/events"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|event| event["event_type"] == "workflow_run.credential_binding_resolved"));
 }
 
 #[tokio::test]

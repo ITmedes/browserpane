@@ -18,6 +18,7 @@ tags:
   - name: Session Recordings
   - name: Session Automation
   - name: Automation Tasks
+  - name: Credential Bindings
   - name: File Workspaces
   - name: Workflows
 security:
@@ -450,6 +451,29 @@ paths:
           $ref: '#/components/responses/Gone'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/credential-bindings/{binding_id}/resolved:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/CredentialBindingId'
+    get:
+      tags: [Workflows]
+      summary: Resolve one workflow run credential binding through session automation access
+      operationId: getWorkflowRunCredentialBindingResolved
+      security:
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run credential binding with resolved secret payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolvedWorkflowRunCredentialBindingResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflow-runs/{run_id}/workspace-inputs/{input_id}/content:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -598,6 +622,65 @@ paths:
                 $ref: '#/components/schemas/WorkflowRunLogResource'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/credential-bindings:
+    get:
+      tags: [Credential Bindings]
+      summary: List credential bindings visible to the authenticated owner
+      operationId: listCredentialBindings
+      responses:
+        '200':
+          description: Credential binding list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialBindingListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Credential Bindings]
+      summary: Create a credential binding and optionally store its secret payload
+      operationId: createCredentialBinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCredentialBindingRequest'
+      responses:
+        '201':
+          description: Credential binding created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialBindingResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/credential-bindings/{binding_id}:
+    parameters:
+      - $ref: '#/components/parameters/CredentialBindingId'
+    get:
+      tags: [Credential Bindings]
+      summary: Fetch one credential binding visible to the authenticated owner
+      operationId: getCredentialBinding
+      responses:
+        '200':
+          description: Credential binding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialBindingResource'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1289,6 +1372,13 @@ components:
       schema:
         type: string
         format: uuid
+    CredentialBindingId:
+      name: binding_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     WorkspaceId:
       name: workspace_id
       in: path
@@ -1674,6 +1764,126 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AutomationTaskLogResource'
+    CredentialBindingProvider:
+      type: string
+      enum:
+        - vault_kv_v2
+    CredentialInjectionMode:
+      type: string
+      enum:
+        - form_fill
+        - cookie_seed
+        - storage_seed
+        - totp_fill
+    CredentialTotpMetadata:
+      type: object
+      properties:
+        issuer:
+          type: string
+          nullable: true
+        account_name:
+          type: string
+          nullable: true
+        period_sec:
+          type: integer
+          nullable: true
+          minimum: 1
+        digits:
+          type: integer
+          nullable: true
+          minimum: 1
+    CreateCredentialBindingRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - provider
+        - injection_mode
+      properties:
+        name:
+          type: string
+        provider:
+          $ref: '#/components/schemas/CredentialBindingProvider'
+        external_ref:
+          type: string
+          nullable: true
+          description: >
+            Existing provider reference. If omitted, `secret_payload` must be supplied and
+            the gateway will create a provider-managed reference.
+        namespace:
+          type: string
+          nullable: true
+        allowed_origins:
+          type: array
+          items:
+            type: string
+        injection_mode:
+          $ref: '#/components/schemas/CredentialInjectionMode'
+        totp:
+          allOf:
+            - $ref: '#/components/schemas/CredentialTotpMetadata'
+          nullable: true
+        secret_payload:
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    CredentialBindingResource:
+      type: object
+      required:
+        - id
+        - name
+        - provider
+        - external_ref
+        - namespace
+        - allowed_origins
+        - injection_mode
+        - totp
+        - labels
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        provider:
+          $ref: '#/components/schemas/CredentialBindingProvider'
+        external_ref:
+          type: string
+        namespace:
+          type: string
+          nullable: true
+        allowed_origins:
+          type: array
+          items:
+            type: string
+        injection_mode:
+          $ref: '#/components/schemas/CredentialInjectionMode'
+        totp:
+          allOf:
+            - $ref: '#/components/schemas/CredentialTotpMetadata'
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CredentialBindingListResponse:
+      type: object
+      required: [credential_bindings]
+      properties:
+        credential_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/CredentialBindingResource'
     CreateFileWorkspaceRequest:
       type: object
       additionalProperties: false
@@ -1877,6 +2087,7 @@ components:
           type: array
           items:
             type: string
+            format: uuid
         allowed_extension_ids:
           type: array
           items:
@@ -1928,6 +2139,7 @@ components:
           type: array
           items:
             type: string
+            format: uuid
         allowed_extension_ids:
           type: array
           items:
@@ -1985,6 +2197,11 @@ components:
           nullable: true
         input:
           nullable: true
+        credential_binding_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
         workspace_inputs:
           type: array
           items:
@@ -2105,6 +2322,50 @@ components:
           type: string
         content_path:
           type: string
+    WorkflowRunCredentialBindingResource:
+      type: object
+      required:
+        - id
+        - name
+        - provider
+        - namespace
+        - allowed_origins
+        - injection_mode
+        - totp
+        - resolve_path
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        provider:
+          $ref: '#/components/schemas/CredentialBindingProvider'
+        namespace:
+          type: string
+          nullable: true
+        allowed_origins:
+          type: array
+          items:
+            type: string
+        injection_mode:
+          $ref: '#/components/schemas/CredentialInjectionMode'
+        totp:
+          allOf:
+            - $ref: '#/components/schemas/CredentialTotpMetadata'
+          nullable: true
+        resolve_path:
+          type: string
+    ResolvedWorkflowRunCredentialBindingResource:
+      type: object
+      required:
+        - binding
+        - payload
+      properties:
+        binding:
+          $ref: '#/components/schemas/WorkflowRunCredentialBindingResource'
+        payload:
+          nullable: true
     WorkflowRunResource:
       type: object
       required:
@@ -2120,6 +2381,7 @@ components:
         - error
         - artifact_refs
         - source_snapshot
+        - credential_bindings
         - workspace_inputs
         - labels
         - started_at
@@ -2163,6 +2425,10 @@ components:
           allOf:
             - $ref: '#/components/schemas/WorkflowRunSourceSnapshotResource'
           nullable: true
+        credential_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunCredentialBindingResource'
         workspace_inputs:
           type: array
           items:

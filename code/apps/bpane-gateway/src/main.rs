@@ -4,6 +4,8 @@ mod automation_access_token;
 mod automation_task;
 mod config;
 mod connect_ticket;
+mod credential_binding;
+mod credential_provider;
 mod file_workspace;
 mod idle_stop;
 mod recording_artifact_store;
@@ -38,6 +40,7 @@ use auth::{AuthValidator, OidcConfig};
 use automation_access_token::SessionAutomationAccessTokenManager;
 use config::Config;
 use connect_ticket::SessionConnectTicketManager;
+use credential_provider::{CredentialProvider, VaultKvV2CredentialProvider};
 use recording_artifact_store::RecordingArtifactStore;
 use recording_lifecycle::{RecordingLifecycleManager, RecordingWorkerConfig};
 use recording_observability::RecordingObservability;
@@ -218,6 +221,23 @@ async fn main() -> anyhow::Result<()> {
         .attach_session_store(session_store.clone())
         .await;
     session_manager.reconcile_persisted_state().await?;
+    let credential_provider = match (
+        config.credential_vault_addr.clone(),
+        config.credential_vault_token.clone(),
+    ) {
+        (Some(addr), Some(token)) => Some(Arc::new(CredentialProvider::new(Arc::new(
+            VaultKvV2CredentialProvider::new(
+                addr,
+                token,
+                config.credential_vault_mount_path.clone(),
+                Some(config.credential_vault_prefix.clone()),
+            )?,
+        )))),
+        (None, None) => None,
+        _ => anyhow::bail!(
+            "--credential-vault-addr and --credential-vault-token must be set together"
+        ),
+    };
     let recording_worker_config = if let Some(bin) = config.recording_worker_bin.clone() {
         Some(RecordingWorkerConfig {
             bin,
@@ -326,6 +346,7 @@ async fn main() -> anyhow::Result<()> {
             automation_access_token_manager,
             session_store,
             session_manager,
+            credential_provider,
             recording_artifact_store,
             workspace_file_store,
             workflow_source_resolver,

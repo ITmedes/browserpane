@@ -4,12 +4,22 @@ import net from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
-import type { WorkflowRunnerContext, WorkflowRunnerWorkspaceInput } from "./types.js";
+import type {
+  WorkflowResolvedCredentialBinding,
+  WorkflowRunnerContext,
+  WorkflowRunnerCredentialBinding,
+  WorkflowRunnerWorkspaceInput,
+} from "./types.js";
 
 type WorkflowExecutionContext = {
   browser: Browser;
   context: BrowserContext;
   page: Page;
+  credentialBindings: WorkflowRunnerCredentialBinding[];
+  credentials: {
+    bindings: WorkflowRunnerCredentialBinding[];
+    load: (bindingId: string, targetOrigin: string) => Promise<WorkflowResolvedCredentialBinding>;
+  };
   input: unknown;
   workspaceInputs: WorkflowRunnerWorkspaceInput[];
   sessionId: string;
@@ -46,6 +56,12 @@ async function main(): Promise<void> {
       browser,
       context: page.context(),
       page,
+      credentialBindings: context.credentialBindings,
+      credentials: {
+        bindings: context.credentialBindings,
+        load: async (bindingId: string, targetOrigin: string) =>
+          loadResolvedCredentialBinding(context, bindingId, targetOrigin),
+      },
       input: context.input,
       workspaceInputs: context.workspaceInputs,
       sessionId: context.sessionId,
@@ -99,6 +115,39 @@ function resolveEntrypointFunction(
   throw new Error(
     `workflow entrypoint ${entrypointPath} must export a default function or named run()`,
   );
+}
+
+async function loadResolvedCredentialBinding(
+  context: WorkflowRunnerContext,
+  bindingId: string,
+  targetOrigin: string,
+): Promise<WorkflowResolvedCredentialBinding> {
+  const binding = context.credentialBindings.find((entry) => entry.id === bindingId);
+  if (!binding) {
+    throw new Error(`unknown workflow credential binding ${bindingId}`);
+  }
+  const normalizedTargetOrigin = normalizeOrigin(targetOrigin);
+  if (binding.allowedOrigins.length > 0) {
+    const allowedOrigins = binding.allowedOrigins.map(normalizeOrigin);
+    if (!allowedOrigins.includes(normalizedTargetOrigin)) {
+      throw new Error(
+        `workflow credential binding ${bindingId} is not allowed for origin ${normalizedTargetOrigin}`,
+      );
+    }
+  }
+  const localPath = context.credentialBindingFiles[bindingId];
+  if (!localPath) {
+    throw new Error(`workflow credential binding ${bindingId} is missing local materialization`);
+  }
+  const payload = JSON.parse(await fs.readFile(localPath, "utf8")) as { payload?: unknown };
+  return {
+    ...binding,
+    payload: payload.payload ?? null,
+  };
+}
+
+function normalizeOrigin(value: string): string {
+  return new URL(value).origin;
 }
 
 function ensureJsonSerializable(value: unknown): unknown {

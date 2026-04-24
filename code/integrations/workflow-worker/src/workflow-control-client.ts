@@ -1,5 +1,6 @@
 import type {
   GatewayAutomationTaskLogStream,
+  GatewayResolvedWorkflowRunCredentialBinding,
   GatewaySessionAutomationAccessResponse,
   GatewayWorkflowDefinitionVersionResource,
   GatewayWorkflowRunResource,
@@ -110,6 +111,17 @@ export class WorkflowControlClient {
       automationToken,
     );
     return new Uint8Array(await response.arrayBuffer());
+  }
+
+  async resolveCredentialBinding(
+    runId: string,
+    bindingId: string,
+    automationToken: string,
+  ): Promise<GatewayResolvedWorkflowRunCredentialBinding> {
+    return this.fetchJsonWithAutomationAccess<GatewayResolvedWorkflowRunCredentialBinding>(
+      `/api/v1/workflow-runs/${encodeURIComponent(runId)}/credential-bindings/${encodeURIComponent(bindingId)}/resolved`,
+      automationToken,
+    );
   }
 
   async downloadWorkspaceInput(

@@ -56,6 +56,7 @@ Current product shape:
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
+  - `credential_provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2.
   - `workflow_source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
   - `file_workspace.rs`: owner-scoped file workspace and workspace-file resource shapes persisted by the control plane.
   - `workspace_file_store.rs`: workspace file content storage boundary. `local_fs` is the current implementation; workspace files carry opaque artifact refs plus optional provenance metadata instead of raw filesystem paths.
@@ -91,6 +92,7 @@ Current product shape:
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
   - Local session-control persistence in compose is Postgres on `:5433`.
+  - Local workflow credential binding dev/testing uses HashiCorp Vault dev mode on `:8200`.
   - Local compose can now be switched to `docker_pool` for browser-session workers via gateway env overrides; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
@@ -133,6 +135,7 @@ Run these in `code/web/bpane-client`:
 - `npm test`
 - `npm run build`
 - `npm run smoke:recording -- --headless`
+- `npm run smoke:workflow-credentials -- --headless`
 - `npm run smoke:workflow-workspace -- --headless`
 - `npm run smoke:workflows -- --headless`
 - `npm run smoke:multisession -- --headless`
@@ -154,7 +157,7 @@ Run these where applicable:
 6. The test page will mint a short-lived session-scoped connect ticket before WebTransport connect.
 7. Use `Delegate MCP` if you want the local `mcp-bridge` to adopt that same session.
 8. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
-9. `keycloak` listens on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
+9. `vault` listens on `:8200`, `keycloak` on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
 
 ## Guardrails for contributors and agents
 

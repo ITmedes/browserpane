@@ -17,6 +17,10 @@ use crate::automation_task::{
     AutomationTaskTransitionRequest, PersistAutomationTaskRequest, StoredAutomationTask,
     StoredAutomationTaskEvent, StoredAutomationTaskLog,
 };
+use crate::credential_binding::{
+    CredentialBindingProvider, CredentialInjectionMode, CredentialTotpMetadata,
+    PersistCredentialBindingRequest, StoredCredentialBinding, WorkflowRunCredentialBinding,
+};
 use crate::file_workspace::{
     PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest, StoredFileWorkspace,
     StoredFileWorkspaceFile,
@@ -716,6 +720,7 @@ impl SessionStore {
                 workflow_runs: Mutex::new(Vec::new()),
                 workflow_run_events: Mutex::new(Vec::new()),
                 workflow_run_logs: Mutex::new(Vec::new()),
+                credential_bindings: Mutex::new(Vec::new()),
                 file_workspaces: Mutex::new(Vec::new()),
                 file_workspace_files: Mutex::new(Vec::new()),
                 recordings: Mutex::new(Vec::new()),
@@ -1262,6 +1267,51 @@ impl SessionStore {
             }
             SessionStoreBackend::Postgres(store) => {
                 store.create_file_workspace(principal, request).await
+            }
+        }
+    }
+
+    pub async fn create_credential_binding(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistCredentialBindingRequest,
+    ) -> Result<StoredCredentialBinding, SessionStoreError> {
+        validate_credential_binding_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_credential_binding(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_credential_binding(principal, request).await
+            }
+        }
+    }
+
+    pub async fn list_credential_bindings_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredCredentialBinding>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_credential_bindings_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_credential_bindings_for_owner(principal).await
+            }
+        }
+    }
+
+    pub async fn get_credential_binding_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredCredentialBinding>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_credential_binding_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_credential_binding_for_owner(principal, id).await
             }
         }
     }
@@ -2032,6 +2082,26 @@ fn validate_workflow_run_request(
             ));
         }
     }
+    for credential_binding in &request.credential_bindings {
+        if credential_binding.name.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run credential binding name must not be empty".to_string(),
+            ));
+        }
+        if credential_binding.external_ref.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run credential binding external_ref must not be empty".to_string(),
+            ));
+        }
+        for origin in &credential_binding.allowed_origins {
+            if origin.trim().is_empty() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "workflow run credential binding allowed_origins must not contain empty values"
+                        .to_string(),
+                ));
+            }
+        }
+    }
     for workspace_input in &request.workspace_inputs {
         if workspace_input.file_name.trim().is_empty() {
             return Err(SessionStoreError::InvalidRequest(
@@ -2095,6 +2165,79 @@ fn validate_workflow_run_log_request(
     request: &PersistWorkflowRunLogRequest,
 ) -> Result<(), SessionStoreError> {
     validate_automation_task_log_message(&request.message)
+}
+
+fn validate_credential_binding_request(
+    request: &PersistCredentialBindingRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "credential binding name must not be empty".to_string(),
+        ));
+    }
+    if request.external_ref.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "credential binding external_ref must not be empty".to_string(),
+        ));
+    }
+    if let Some(namespace) = &request.namespace {
+        if namespace.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "credential binding namespace must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    for origin in &request.allowed_origins {
+        if origin.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "credential binding allowed_origins must not contain empty values".to_string(),
+            ));
+        }
+    }
+    if let Some(totp) = &request.totp {
+        if let Some(issuer) = &totp.issuer {
+            if issuer.trim().is_empty() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "credential binding totp.issuer must not be empty when provided".to_string(),
+                ));
+            }
+        }
+        if let Some(account_name) = &totp.account_name {
+            if account_name.trim().is_empty() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "credential binding totp.account_name must not be empty when provided"
+                        .to_string(),
+                ));
+            }
+        }
+        if let Some(period_sec) = totp.period_sec {
+            if period_sec == 0 {
+                return Err(SessionStoreError::InvalidRequest(
+                    "credential binding totp.period_sec must be greater than zero".to_string(),
+                ));
+            }
+        }
+        if let Some(digits) = totp.digits {
+            if digits == 0 {
+                return Err(SessionStoreError::InvalidRequest(
+                    "credential binding totp.digits must be greater than zero".to_string(),
+                ));
+            }
+        }
+    }
+    for (key, value) in &request.labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "credential binding label keys must not be empty".to_string(),
+            ));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "credential binding label values must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_file_workspace_request(
@@ -2212,6 +2355,7 @@ struct InMemorySessionStore {
     workflow_runs: Mutex<Vec<StoredWorkflowRun>>,
     workflow_run_events: Mutex<Vec<StoredWorkflowRunEvent>>,
     workflow_run_logs: Mutex<Vec<StoredWorkflowRunLog>>,
+    credential_bindings: Mutex<Vec<StoredCredentialBinding>>,
     file_workspaces: Mutex<Vec<StoredFileWorkspace>>,
     file_workspace_files: Mutex<Vec<StoredFileWorkspaceFile>>,
     recordings: Mutex<Vec<StoredSessionRecording>>,
@@ -2990,6 +3134,7 @@ impl InMemorySessionStore {
             session_id: request.session_id,
             automation_task_id: request.automation_task_id,
             source_snapshot: request.source_snapshot,
+            credential_bindings: request.credential_bindings,
             workspace_inputs: request.workspace_inputs,
             state: WorkflowRunState::Pending,
             input: request.input,
@@ -3276,6 +3421,68 @@ impl InMemorySessionStore {
 
         self.workflow_run_logs.lock().await.push(log.clone());
         Ok(Some(log))
+    }
+
+    async fn create_credential_binding(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistCredentialBindingRequest,
+    ) -> Result<StoredCredentialBinding, SessionStoreError> {
+        let now = Utc::now();
+        let binding = StoredCredentialBinding {
+            id: request.id,
+            owner_subject: principal.subject.clone(),
+            owner_issuer: principal.issuer.clone(),
+            name: request.name,
+            provider: request.provider,
+            external_ref: request.external_ref,
+            namespace: request.namespace,
+            allowed_origins: request.allowed_origins,
+            injection_mode: request.injection_mode,
+            totp: request.totp,
+            labels: request.labels,
+            created_at: now,
+            updated_at: now,
+        };
+        self.credential_bindings.lock().await.push(binding.clone());
+        Ok(binding)
+    }
+
+    async fn list_credential_bindings_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredCredentialBinding>, SessionStoreError> {
+        let mut bindings = self
+            .credential_bindings
+            .lock()
+            .await
+            .iter()
+            .filter(|binding| {
+                binding.owner_subject == principal.subject
+                    && binding.owner_issuer == principal.issuer
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        bindings.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+        Ok(bindings)
+    }
+
+    async fn get_credential_binding_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredCredentialBinding>, SessionStoreError> {
+        Ok(self
+            .credential_bindings
+            .lock()
+            .await
+            .iter()
+            .find(|binding| {
+                binding.id == id
+                    && binding.owner_subject == principal.subject
+                    && binding.owner_issuer == principal.issuer
+            })
+            .cloned())
     }
 
     async fn create_file_workspace(
@@ -3977,6 +4184,25 @@ impl PostgresSessionStore {
                 CREATE INDEX IF NOT EXISTS idx_control_workflow_definition_versions_workflow_created
                     ON control_workflow_definition_versions (workflow_definition_id, created_at DESC);
 
+                CREATE TABLE IF NOT EXISTS control_credential_bindings (
+                    id UUID PRIMARY KEY,
+                    owner_subject TEXT NOT NULL,
+                    owner_issuer TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    external_ref TEXT NOT NULL,
+                    namespace TEXT NULL,
+                    allowed_origins JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    injection_mode TEXT NOT NULL,
+                    totp JSONB NULL,
+                    labels JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_credential_bindings_owner_created
+                    ON control_credential_bindings (owner_subject, owner_issuer, created_at DESC);
+
                 CREATE TABLE IF NOT EXISTS control_workflow_runs (
                     id UUID PRIMARY KEY,
                     workflow_definition_id UUID NOT NULL REFERENCES control_workflow_definitions(id) ON DELETE CASCADE,
@@ -3986,6 +4212,7 @@ impl PostgresSessionStore {
                     automation_task_id UUID NOT NULL REFERENCES control_automation_tasks(id) ON DELETE CASCADE,
                     state TEXT NOT NULL DEFAULT 'pending',
                     source_snapshot JSONB NULL,
+                    credential_bindings JSONB NOT NULL DEFAULT '[]'::jsonb,
                     workspace_inputs JSONB NOT NULL DEFAULT '[]'::jsonb,
                     input JSONB NULL,
                     output JSONB NULL,
@@ -4087,6 +4314,8 @@ impl PostgresSessionStore {
                     ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'pending';
                 ALTER TABLE control_workflow_runs
                     ADD COLUMN IF NOT EXISTS source_snapshot JSONB NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS credential_bindings JSONB NOT NULL DEFAULT '[]'::jsonb;
                 ALTER TABLE control_workflow_runs
                     ADD COLUMN IF NOT EXISTS workspace_inputs JSONB NOT NULL DEFAULT '[]'::jsonb;
                 ALTER TABLE control_workflow_runs
@@ -6043,6 +6272,8 @@ impl PostgresSessionStore {
 
         let now = Utc::now();
         let source_snapshot = json_workflow_run_source_snapshot(request.source_snapshot.as_ref())?;
+        let credential_bindings =
+            json_workflow_run_credential_bindings(&request.credential_bindings)?;
         let workspace_inputs = json_workflow_run_workspace_inputs(&request.workspace_inputs)?;
         let row = transaction
             .query_one(
@@ -6056,6 +6287,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    credential_bindings,
                     workspace_inputs,
                     input,
                     output,
@@ -6069,7 +6301,7 @@ impl PostgresSessionStore {
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7,
-                    $8::jsonb, $9::jsonb, $10::jsonb, NULL, NULL, $11::jsonb, $12::jsonb, NULL, NULL, $13, $13
+                    $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, NULL, NULL, $12::jsonb, $13::jsonb, NULL, NULL, $14, $14
                 )
                 RETURNING
                     id,
@@ -6080,6 +6312,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    credential_bindings,
                     workspace_inputs,
                     input,
                     output,
@@ -6100,6 +6333,7 @@ impl PostgresSessionStore {
                     &request.automation_task_id,
                     &WorkflowRunState::Pending.as_str(),
                     &source_snapshot,
+                    &credential_bindings,
                     &workspace_inputs,
                     &request.input,
                     &json_string_array(&Vec::new()),
@@ -6172,6 +6406,7 @@ impl PostgresSessionStore {
                     run.automation_task_id,
                     run.state,
                     run.source_snapshot,
+                    run.credential_bindings,
                     run.workspace_inputs,
                     run.input,
                     run.output,
@@ -6217,6 +6452,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    credential_bindings,
                     workspace_inputs,
                     input,
                     output,
@@ -6421,6 +6657,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    credential_bindings,
                     workspace_inputs,
                     input,
                     output,
@@ -6627,6 +6864,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    credential_bindings,
                     workspace_inputs,
                     input,
                     output,
@@ -6773,6 +7011,161 @@ impl PostgresSessionStore {
                 SessionStoreError::Backend(format!("failed to reload workflow run log: {error}"))
             })?;
         row_to_stored_workflow_run_log(&log_row).map(Some)
+    }
+
+    async fn create_credential_binding(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistCredentialBindingRequest,
+    ) -> Result<StoredCredentialBinding, SessionStoreError> {
+        let now = Utc::now();
+        let totp = request
+            .totp
+            .as_ref()
+            .map(|totp| {
+                serde_json::to_value(totp).map_err(|error| {
+                    SessionStoreError::Backend(format!(
+                        "failed to encode credential binding totp metadata: {error}"
+                    ))
+                })
+            })
+            .transpose()?;
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_one(
+                r#"
+                INSERT INTO control_credential_bindings (
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    provider,
+                    external_ref,
+                    namespace,
+                    allowed_origins,
+                    injection_mode,
+                    totp,
+                    labels,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11::jsonb, $12, $12)
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    provider,
+                    external_ref,
+                    namespace,
+                    allowed_origins,
+                    injection_mode,
+                    totp,
+                    labels,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &request.id,
+                    &principal.subject,
+                    &principal.issuer,
+                    &request.name,
+                    &request.provider.as_str(),
+                    &request.external_ref,
+                    &request.namespace,
+                    &json_string_array(&request.allowed_origins),
+                    &request.injection_mode.as_str(),
+                    &totp,
+                    &json_labels(&request.labels),
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to create credential binding: {error}"))
+            })?;
+        row_to_stored_credential_binding(&row)
+    }
+
+    async fn list_credential_bindings_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredCredentialBinding>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    provider,
+                    external_ref,
+                    namespace,
+                    allowed_origins,
+                    injection_mode,
+                    totp,
+                    labels,
+                    created_at,
+                    updated_at
+                FROM control_credential_bindings
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                ORDER BY created_at DESC
+                "#,
+                &[&principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list credential bindings: {error}"
+                ))
+            })?;
+        rows.iter().map(row_to_stored_credential_binding).collect()
+    }
+
+    async fn get_credential_binding_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredCredentialBinding>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    provider,
+                    external_ref,
+                    namespace,
+                    allowed_origins,
+                    injection_mode,
+                    totp,
+                    labels,
+                    created_at,
+                    updated_at
+                FROM control_credential_bindings
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[&id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to fetch credential binding: {error}"))
+            })?;
+        row.map(|row| row_to_stored_credential_binding(&row)).transpose()
     }
 
     async fn create_file_workspace(
@@ -8037,6 +8430,16 @@ fn json_workflow_run_source_snapshot(
         .transpose()
 }
 
+fn json_workflow_run_credential_bindings(
+    credential_bindings: &[WorkflowRunCredentialBinding],
+) -> Result<Value, SessionStoreError> {
+    serde_json::to_value(credential_bindings).map_err(|error| {
+        SessionStoreError::Backend(format!(
+            "failed to encode workflow run credential_bindings: {error}"
+        ))
+    })
+}
+
 fn json_workflow_run_workspace_inputs(
     workspace_inputs: &[WorkflowRunWorkspaceInput],
 ) -> Result<Value, SessionStoreError> {
@@ -8319,6 +8722,64 @@ fn row_to_stored_automation_task_log(
     })
 }
 
+fn row_to_stored_credential_binding(row: &Row) -> Result<StoredCredentialBinding, SessionStoreError> {
+    let provider = row
+        .get::<_, String>("provider")
+        .parse::<CredentialBindingProvider>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let injection_mode = row
+        .get::<_, String>("injection_mode")
+        .parse::<CredentialInjectionMode>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("credential binding labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("credential binding label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let allowed_origins = row_to_json_string_array(
+        row.get("allowed_origins"),
+        "credential binding allowed_origins",
+    )?;
+    let totp = row
+        .get::<_, Option<Value>>("totp")
+        .map(|value| {
+            serde_json::from_value::<CredentialTotpMetadata>(value).map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "credential binding totp column must be valid totp json: {error}"
+                ))
+            })
+        })
+        .transpose()?;
+
+    Ok(StoredCredentialBinding {
+        id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        provider,
+        external_ref: row.get("external_ref"),
+        namespace: row.get("namespace"),
+        allowed_origins,
+        injection_mode,
+        totp,
+        labels,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
 fn row_to_stored_workflow_definition(
     row: &Row,
 ) -> Result<StoredWorkflowDefinition, SessionStoreError> {
@@ -8471,6 +8932,19 @@ fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionSto
             })
         })
         .transpose()?;
+    let credential_bindings_value: Value = row.get("credential_bindings");
+    credential_bindings_value
+        .as_array()
+        .context("workflow run credential_bindings column must be a JSON array")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let credential_bindings = serde_json::from_value::<Vec<WorkflowRunCredentialBinding>>(
+        credential_bindings_value,
+    )
+    .map_err(|error| {
+        SessionStoreError::Backend(format!(
+            "workflow run credential_bindings column must be valid binding json: {error}"
+        ))
+    })?;
     let workspace_inputs_value: Value = row.get("workspace_inputs");
     workspace_inputs_value
         .as_array()
@@ -8513,6 +8987,7 @@ fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionSto
         automation_task_id: row.get("automation_task_id"),
         state,
         source_snapshot,
+        credential_bindings,
         workspace_inputs,
         input: row.get("input"),
         output: row.get("output"),
@@ -9328,6 +9803,7 @@ mod tests {
                     session_id: session.id,
                     automation_task_id: task.id,
                     source_snapshot: None,
+                    credential_bindings: Vec::new(),
                     workspace_inputs: Vec::new(),
                     input: None,
                     labels: HashMap::new(),

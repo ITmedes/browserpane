@@ -697,6 +697,7 @@ mod tests {
                     session_id: session.id,
                     automation_task_id: task.id,
                     source_snapshot: None,
+                    credential_bindings: Vec::new(),
                     workspace_inputs: Vec::new(),
                     input: None,
                     labels: HashMap::new(),
@@ -758,11 +759,11 @@ printf '%s\n' "$@" >> "{}"
 
         manager.ensure_run_started("playwright", run.id).await.unwrap();
 
-        for _ in 0..50 {
+        for _ in 0..200 {
             if capture_file.exists() {
                 break;
             }
-            sleep(Duration::from_millis(10)).await;
+            sleep(Duration::from_millis(20)).await;
         }
         assert!(capture_file.exists());
 

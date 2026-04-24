@@ -8,6 +8,7 @@ import { WorkflowControlClient } from "./workflow-control-client.js";
 import type {
   GatewayAutomationTaskLogStream,
   GatewayWorkflowRunResource,
+  WorkflowRunnerCredentialBinding,
   WorkflowRunnerContext,
   WorkflowRunnerWorkspaceInput,
 } from "./types.js";
@@ -77,6 +78,11 @@ export class WorkflowWorkerService {
         automationToken,
         path.join(workDir, "workspace-inputs"),
       );
+      const credentialMaterialization = await this.materializeCredentialBindings(
+        run,
+        automationToken,
+        path.join(workDir, "credential-bindings"),
+      );
 
       await this.controlClient.transitionWorkflowRun(run.id, automationToken, {
         state: "running",
@@ -96,6 +102,8 @@ export class WorkflowWorkerService {
         authToken: automationToken,
         sourceRoot,
         entrypointPath,
+        credentialBindings: credentialMaterialization.bindings,
+        credentialBindingFiles: credentialMaterialization.files,
         workspaceInputs,
         resultPath: path.join(workDir, "result.json"),
       });
@@ -177,6 +185,8 @@ export class WorkflowWorkerService {
     authToken: string;
     sourceRoot: string;
     entrypointPath: string;
+    credentialBindings: WorkflowRunnerCredentialBinding[];
+    credentialBindingFiles: Record<string, string>;
     workspaceInputs: WorkflowRunnerWorkspaceInput[];
     resultPath: string;
   }): Promise<WorkflowExecutionResult> {
@@ -188,6 +198,8 @@ export class WorkflowWorkerService {
       authToken: request.authToken,
       entrypointPath: request.entrypointPath,
       sourceRoot: request.sourceRoot,
+      credentialBindings: request.credentialBindings,
+      credentialBindingFiles: request.credentialBindingFiles,
       workspaceInputs: request.workspaceInputs,
       input: request.run.input,
       sessionId: request.run.session_id,
@@ -295,6 +307,51 @@ export class WorkflowWorkerService {
       );
     }
     return materialized;
+  }
+
+  private async materializeCredentialBindings(
+    run: GatewayWorkflowRunResource,
+    automationToken: string,
+    destinationRoot: string,
+  ): Promise<{ bindings: WorkflowRunnerCredentialBinding[]; files: Record<string, string> }> {
+    if (!run.credential_bindings.length) {
+      return { bindings: [], files: {} };
+    }
+
+    const resolvedRoot = path.resolve(destinationRoot);
+    await fs.mkdir(resolvedRoot, { recursive: true });
+    const bindings: WorkflowRunnerCredentialBinding[] = [];
+    const files: Record<string, string> = {};
+    for (const binding of run.credential_bindings) {
+      const resolved = await this.controlClient.resolveCredentialBinding(
+        run.id,
+        binding.id,
+        automationToken,
+      );
+      const localPath = path.join(resolvedRoot, `${binding.id}.json`);
+      await fs.writeFile(
+        localPath,
+        `${JSON.stringify({ payload: resolved.payload }, null, 2)}\n`,
+        "utf8",
+      );
+      files[binding.id] = localPath;
+      bindings.push({
+        id: binding.id,
+        name: binding.name,
+        provider: binding.provider,
+        namespace: binding.namespace,
+        allowedOrigins: binding.allowed_origins,
+        injectionMode: binding.injection_mode,
+        totp: binding.totp,
+      });
+      await this.controlClient.appendWorkflowRunLog(
+        run.id,
+        automationToken,
+        "system",
+        `materialized workflow credential binding ${binding.id} (${binding.name})`,
+      );
+    }
+    return { bindings, files };
   }
 }
 

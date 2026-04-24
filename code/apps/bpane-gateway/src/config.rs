@@ -63,6 +63,22 @@ pub struct Config {
     #[arg(long)]
     pub database_url: Option<String>,
 
+    /// Vault base URL used for credential binding storage and resolution.
+    #[arg(long)]
+    pub credential_vault_addr: Option<String>,
+
+    /// Vault token used for credential binding storage and resolution.
+    #[arg(long)]
+    pub credential_vault_token: Option<String>,
+
+    /// Vault KV v2 mount path used for credential binding storage and resolution.
+    #[arg(long, default_value = "secret")]
+    pub credential_vault_mount_path: String,
+
+    /// Vault key prefix used for managed credential binding secrets.
+    #[arg(long, default_value = "browserpane/credential-bindings")]
+    pub credential_vault_prefix: String,
+
     /// Public browser-facing gateway URL returned in session connect metadata.
     #[arg(long, default_value = "https://localhost:4433")]
     pub public_gateway_url: String,
