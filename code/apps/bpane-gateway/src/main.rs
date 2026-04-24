@@ -1,6 +1,7 @@
 mod api;
 mod auth;
 mod automation_access_token;
+mod automation_task;
 mod config;
 mod connect_ticket;
 mod idle_stop;

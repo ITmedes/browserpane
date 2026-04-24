@@ -9,12 +9,17 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tracing::info;
 use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
 use crate::automation_access_token::{
     SessionAutomationAccessTokenClaims, SessionAutomationAccessTokenManager,
+};
+use crate::automation_task::{
+    AutomationTaskEventListResponse, AutomationTaskListResponse, AutomationTaskLogListResponse,
+    AutomationTaskResource, AutomationTaskSessionSource, PersistAutomationTaskRequest,
 };
 use crate::connect_ticket::SessionConnectTicketManager;
 use crate::idle_stop::schedule_idle_session_stop;
@@ -121,6 +126,26 @@ struct McpOwnerRequest {
     height: u16,
 }
 
+#[derive(Deserialize)]
+struct AutomationTaskSessionRequest {
+    #[serde(default)]
+    existing_session_id: Option<Uuid>,
+    #[serde(default)]
+    create_session: Option<CreateSessionRequest>,
+}
+
+#[derive(Deserialize)]
+struct CreateAutomationTaskRequest {
+    #[serde(default)]
+    display_name: Option<String>,
+    executor: String,
+    session: AutomationTaskSessionRequest,
+    #[serde(default)]
+    input: Option<Value>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+}
+
 #[derive(Serialize)]
 struct OkResponse {
     ok: bool,
@@ -168,38 +193,8 @@ async fn create_session(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    state
-        .recording_lifecycle
-        .validate_mode(request.recording.mode)
-        .map_err(map_recording_lifecycle_error)?;
     let owner_mode = resolve_owner_mode(&state, request.owner_mode)?;
-    let stored = state
-        .session_store
-        .create_session(&principal, request, owner_mode)
-        .await
-        .map_err(map_session_store_error)?;
-    if let Err(error) = state
-        .recording_lifecycle
-        .ensure_auto_recording(&stored)
-        .await
-    {
-        let _ = state
-            .session_store
-            .stop_session_for_owner(&principal, stored.id)
-            .await;
-        state.session_manager.release(stored.id).await;
-        state.registry.remove_session(stored.id).await;
-        return Err(map_recording_lifecycle_error(error));
-    }
-
-    schedule_idle_session_stop(
-        stored.id,
-        state.idle_stop_timeout,
-        state.registry.clone(),
-        state.session_store.clone(),
-        state.session_manager.clone(),
-        state.recording_lifecycle.clone(),
-    );
+    let stored = create_owned_session(&state, &principal, request, owner_mode).await?;
 
     Ok((
         StatusCode::CREATED,
@@ -234,6 +229,204 @@ async fn get_session(
     let stored = authorize_visible_session_request(&headers, &state, session_id).await?;
 
     Ok(Json(session_resource(&state, &stored, None)))
+}
+
+async fn list_automation_tasks(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<AutomationTaskListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let tasks = state
+        .session_store
+        .list_automation_tasks_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|task| task.to_resource())
+        .collect();
+    Ok(Json(AutomationTaskListResponse { tasks }))
+}
+
+async fn create_automation_task(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateAutomationTaskRequest>,
+) -> Result<(StatusCode, Json<AutomationTaskResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let (session_id, session_source) = match (
+        request.session.existing_session_id,
+        request.session.create_session,
+    ) {
+        (Some(session_id), None) => {
+            let visible = state
+                .session_store
+                .get_session_for_owner(&principal, session_id)
+                .await
+                .map_err(map_session_store_error)?
+                .ok_or_else(|| {
+                    (
+                        StatusCode::NOT_FOUND,
+                        Json(ErrorResponse {
+                            error: format!("session {session_id} not found"),
+                        }),
+                    )
+                })?;
+            (visible.id, AutomationTaskSessionSource::ExistingSession)
+        }
+        (None, Some(create_session_request)) => {
+            let owner_mode = resolve_owner_mode(&state, create_session_request.owner_mode)?;
+            let created =
+                create_owned_session(&state, &principal, create_session_request, owner_mode)
+                    .await?;
+            (created.id, AutomationTaskSessionSource::CreatedSession)
+        }
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error:
+                        "session must provide exactly one of existing_session_id or create_session"
+                            .to_string(),
+                }),
+            ));
+        }
+    };
+
+    let task = state
+        .session_store
+        .create_automation_task(
+            &principal,
+            PersistAutomationTaskRequest {
+                display_name: request.display_name,
+                executor: request.executor,
+                session_id,
+                session_source,
+                input: request.input,
+                labels: request.labels,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+
+    Ok((StatusCode::CREATED, Json(task.to_resource())))
+}
+
+async fn get_automation_task(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<AutomationTaskResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let task = state
+        .session_store
+        .get_automation_task_for_owner(&principal, task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("automation task {task_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(task.to_resource()))
+}
+
+async fn cancel_automation_task(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<AutomationTaskResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let task = state
+        .session_store
+        .cancel_automation_task_for_owner(&principal, task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("automation task {task_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(task.to_resource()))
+}
+
+async fn get_automation_task_events(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<AutomationTaskEventListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    if state
+        .session_store
+        .get_automation_task_for_owner(&principal, task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .is_none()
+    {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("automation task {task_id} not found"),
+            }),
+        ));
+    }
+    let events = state
+        .session_store
+        .list_automation_task_events_for_owner(&principal, task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|event| event.to_resource())
+        .collect();
+    Ok(Json(AutomationTaskEventListResponse { events }))
+}
+
+async fn get_automation_task_logs(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<AutomationTaskLogListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    if state
+        .session_store
+        .get_automation_task_for_owner(&principal, task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .is_none()
+    {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("automation task {task_id} not found"),
+            }),
+        ));
+    }
+    let logs = state
+        .session_store
+        .list_automation_task_logs_for_owner(&principal, task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|log| log.to_resource())
+        .collect();
+    Ok(Json(AutomationTaskLogListResponse { logs }))
 }
 
 async fn list_session_recordings(
@@ -1172,6 +1365,47 @@ pub async fn run_api_server(
     Ok(())
 }
 
+async fn create_owned_session(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    request: CreateSessionRequest,
+    owner_mode: SessionOwnerMode,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    state
+        .recording_lifecycle
+        .validate_mode(request.recording.mode)
+        .map_err(map_recording_lifecycle_error)?;
+    let stored = state
+        .session_store
+        .create_session(principal, request, owner_mode)
+        .await
+        .map_err(map_session_store_error)?;
+    if let Err(error) = state
+        .recording_lifecycle
+        .ensure_auto_recording(&stored)
+        .await
+    {
+        let _ = state
+            .session_store
+            .stop_session_for_owner(principal, stored.id)
+            .await;
+        state.session_manager.release(stored.id).await;
+        state.registry.remove_session(stored.id).await;
+        return Err(map_recording_lifecycle_error(error));
+    }
+
+    schedule_idle_session_stop(
+        stored.id,
+        state.idle_stop_timeout,
+        state.registry.clone(),
+        state.session_store.clone(),
+        state.session_manager.clone(),
+        state.recording_lifecycle.clone(),
+    );
+
+    Ok(stored)
+}
+
 async fn authorize_api_request(
     headers: &HeaderMap,
     auth_validator: &AuthValidator,
@@ -1218,6 +1452,26 @@ fn extract_automation_access_token(headers: &HeaderMap) -> Option<&str> {
 fn build_api_router(state: Arc<ApiState>) -> Router {
     Router::new()
         .route("/api/v1/sessions", post(create_session).get(list_sessions))
+        .route(
+            "/api/v1/automation-tasks",
+            post(create_automation_task).get(list_automation_tasks),
+        )
+        .route(
+            "/api/v1/automation-tasks/{task_id}",
+            get(get_automation_task),
+        )
+        .route(
+            "/api/v1/automation-tasks/{task_id}/cancel",
+            post(cancel_automation_task),
+        )
+        .route(
+            "/api/v1/automation-tasks/{task_id}/events",
+            get(get_automation_task_events),
+        )
+        .route(
+            "/api/v1/automation-tasks/{task_id}/logs",
+            get(get_automation_task_logs),
+        )
         .route(
             "/api/v1/sessions/{session_id}",
             get(get_session).delete(delete_session),

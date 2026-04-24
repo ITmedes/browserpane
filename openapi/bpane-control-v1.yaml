@@ -17,6 +17,7 @@ tags:
   - name: Session Runtime
   - name: Session Recordings
   - name: Session Automation
+  - name: Automation Tasks
 security:
   - bearerAuth: []
 paths:
@@ -59,6 +60,131 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks:
+    get:
+      tags: [Automation Tasks]
+      summary: List automation tasks visible to the authenticated owner
+      operationId: listAutomationTasks
+      responses:
+        '200':
+          description: Automation task list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Automation Tasks]
+      summary: Create a new automation task
+      operationId: createAutomationTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAutomationTaskRequest'
+      responses:
+        '201':
+          description: Automation task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks/{task_id}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Automation Tasks]
+      summary: Fetch one automation task
+      operationId: getAutomationTask
+      responses:
+        '200':
+          description: Automation task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks/{task_id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [Automation Tasks]
+      summary: Cancel an automation task that is not yet terminal
+      operationId: cancelAutomationTask
+      responses:
+        '200':
+          description: Updated automation task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks/{task_id}/events:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Automation Tasks]
+      summary: List persisted events for one automation task
+      operationId: getAutomationTaskEvents
+      responses:
+        '200':
+          description: Automation task event list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskEventListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks/{task_id}/logs:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Automation Tasks]
+      summary: List persisted log lines for one automation task
+      operationId: getAutomationTaskLogs
+      responses:
+        '200':
+          description: Automation task log list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskLogListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}:
@@ -542,6 +668,13 @@ components:
       schema:
         type: string
         format: uuid
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     BadRequest:
       description: Request validation failed
@@ -680,6 +813,196 @@ components:
           type: integer
           nullable: true
           minimum: 1
+    AutomationTaskState:
+      type: string
+      enum:
+        - pending
+        - starting
+        - running
+        - awaiting_input
+        - succeeded
+        - failed
+        - cancelled
+        - timed_out
+    AutomationTaskSessionSource:
+      type: string
+      enum:
+        - existing_session
+        - created_session
+    AutomationTaskLogStream:
+      type: string
+      enum:
+        - stdout
+        - stderr
+        - system
+    AutomationTaskSessionBinding:
+      type: object
+      required: [source, session_id]
+      properties:
+        source:
+          $ref: '#/components/schemas/AutomationTaskSessionSource'
+        session_id:
+          type: string
+          format: uuid
+    CreateAutomationTaskSessionRequest:
+      type: object
+      properties:
+        existing_session_id:
+          type: string
+          format: uuid
+          nullable: true
+        create_session:
+          allOf:
+            - $ref: '#/components/schemas/CreateSessionRequest'
+          nullable: true
+    CreateAutomationTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [executor, session]
+      properties:
+        display_name:
+          type: string
+          nullable: true
+        executor:
+          type: string
+        session:
+          $ref: '#/components/schemas/CreateAutomationTaskSessionRequest'
+        input:
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    AutomationTaskResource:
+      type: object
+      required:
+        - id
+        - display_name
+        - executor
+        - state
+        - session
+        - input
+        - output
+        - error
+        - artifact_refs
+        - labels
+        - cancel_requested_at
+        - started_at
+        - completed_at
+        - logs_path
+        - events_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+          nullable: true
+        executor:
+          type: string
+        state:
+          $ref: '#/components/schemas/AutomationTaskState'
+        session:
+          $ref: '#/components/schemas/AutomationTaskSessionBinding'
+        input:
+          nullable: true
+        output:
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        artifact_refs:
+          type: array
+          items:
+            type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        cancel_requested_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        logs_path:
+          type: string
+        events_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AutomationTaskListResponse:
+      type: object
+      required: [tasks]
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationTaskResource'
+    AutomationTaskEventResource:
+      type: object
+      required: [id, task_id, event_type, message, data, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        message:
+          type: string
+        data:
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    AutomationTaskEventListResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationTaskEventResource'
+    AutomationTaskLogResource:
+      type: object
+      required: [id, task_id, stream, message, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        stream:
+          $ref: '#/components/schemas/AutomationTaskLogStream'
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    AutomationTaskLogListResponse:
+      type: object
+      required: [logs]
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationTaskLogResource'
     SessionConnectInfo:
       type: object
       required:

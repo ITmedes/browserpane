@@ -12,6 +12,11 @@ use tokio_postgres::{Client, Connection, NoTls, Row, Socket};
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
+use crate::automation_task::{
+    AutomationTaskLogStream, AutomationTaskSessionSource, AutomationTaskState,
+    AutomationTaskTransitionRequest, PersistAutomationTaskRequest, StoredAutomationTask,
+    StoredAutomationTaskEvent, StoredAutomationTaskLog,
+};
 use crate::session_manager::{
     PersistedSessionRuntimeAssignment, SessionManagerProfile, SessionRuntimeAccess,
     SessionRuntimeAssignmentStatus,
@@ -646,6 +651,9 @@ impl SessionStore {
         Self {
             backend: SessionStoreBackend::InMemory(Arc::new(InMemorySessionStore {
                 sessions: Mutex::new(Vec::new()),
+                automation_tasks: Mutex::new(Vec::new()),
+                automation_task_events: Mutex::new(Vec::new()),
+                automation_task_logs: Mutex::new(Vec::new()),
                 recordings: Mutex::new(Vec::new()),
                 runtime_assignments: Mutex::new(HashMap::new()),
                 recording_worker_assignments: Mutex::new(HashMap::new()),
@@ -811,6 +819,137 @@ impl SessionStore {
                 store
                     .clear_automation_delegate_for_owner(principal, id)
                     .await
+            }
+        }
+    }
+
+    pub async fn create_automation_task(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistAutomationTaskRequest,
+    ) -> Result<StoredAutomationTask, SessionStoreError> {
+        validate_persist_automation_task_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_automation_task(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_automation_task(principal, request).await
+            }
+        }
+    }
+
+    pub async fn list_automation_tasks_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredAutomationTask>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_automation_tasks_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_automation_tasks_for_owner(principal).await
+            }
+        }
+    }
+
+    pub async fn get_automation_task_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_automation_task_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_automation_task_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn cancel_automation_task_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.cancel_automation_task_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.cancel_automation_task_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn list_automation_task_events_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredAutomationTaskEvent>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .list_automation_task_events_for_owner(principal, id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .list_automation_task_events_for_owner(principal, id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn list_automation_task_logs_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredAutomationTaskLog>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .list_automation_task_logs_for_owner(principal, id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .list_automation_task_logs_for_owner(principal, id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn transition_automation_task(
+        &self,
+        id: Uuid,
+        request: AutomationTaskTransitionRequest,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        validate_automation_task_transition_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.transition_automation_task(id, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.transition_automation_task(id, request).await
+            }
+        }
+    }
+
+    pub async fn append_automation_task_log(
+        &self,
+        id: Uuid,
+        stream: AutomationTaskLogStream,
+        message: String,
+    ) -> Result<Option<StoredAutomationTaskLog>, SessionStoreError> {
+        validate_automation_task_log_message(&message)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.append_automation_task_log(id, stream, message).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.append_automation_task_log(id, stream, message).await
             }
         }
     }
@@ -1200,6 +1339,92 @@ fn validate_automation_delegate_request(
     Ok(())
 }
 
+fn validate_persist_automation_task_request(
+    request: &PersistAutomationTaskRequest,
+) -> Result<(), SessionStoreError> {
+    if let Some(display_name) = &request.display_name {
+        if display_name.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "display_name must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    if request.executor.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "executor must not be empty".to_string(),
+        ));
+    }
+    for artifact_ref in &request.labels {
+        if artifact_ref.0.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "task label keys must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_automation_task_transition_request(
+    request: &AutomationTaskTransitionRequest,
+) -> Result<(), SessionStoreError> {
+    if request.event_type.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "event_type must not be empty".to_string(),
+        ));
+    }
+    if request.event_message.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "event_message must not be empty".to_string(),
+        ));
+    }
+    match request.state {
+        AutomationTaskState::Succeeded => {
+            if request.error.is_some() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "succeeded automation tasks must not carry an error".to_string(),
+                ));
+            }
+        }
+        AutomationTaskState::Failed | AutomationTaskState::TimedOut => {
+            let Some(error) = request.error.as_deref() else {
+                return Err(SessionStoreError::InvalidRequest(
+                    "failed or timed_out automation tasks require an error".to_string(),
+                ));
+            };
+            if error.trim().is_empty() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "automation task error must not be empty".to_string(),
+                ));
+            }
+        }
+        AutomationTaskState::Cancelled => {
+            if request.error.is_some() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "cancelled automation tasks must not carry an error".to_string(),
+                ));
+            }
+        }
+        _ => {}
+    }
+    for artifact_ref in &request.artifact_refs {
+        if artifact_ref.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "artifact_refs entries must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_automation_task_log_message(message: &str) -> Result<(), SessionStoreError> {
+    if message.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "automation task log message must not be empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_complete_recording_request(
     request: &CompleteSessionRecordingRequest,
 ) -> Result<(), SessionStoreError> {
@@ -1249,6 +1474,9 @@ fn validate_fail_recording_request(
 
 struct InMemorySessionStore {
     sessions: Mutex<Vec<StoredSession>>,
+    automation_tasks: Mutex<Vec<StoredAutomationTask>>,
+    automation_task_events: Mutex<Vec<StoredAutomationTaskEvent>>,
+    automation_task_logs: Mutex<Vec<StoredAutomationTaskLog>>,
     recordings: Mutex<Vec<StoredSessionRecording>>,
     runtime_assignments: Mutex<HashMap<Uuid, PersistedSessionRuntimeAssignment>>,
     recording_worker_assignments: Mutex<HashMap<Uuid, PersistedSessionRecordingWorkerAssignment>>,
@@ -1517,6 +1745,277 @@ impl InMemorySessionStore {
         session.updated_at = Utc::now();
 
         Ok(Some(session.clone()))
+    }
+
+    async fn create_automation_task(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistAutomationTaskRequest,
+    ) -> Result<StoredAutomationTask, SessionStoreError> {
+        let now = Utc::now();
+        let task = StoredAutomationTask {
+            id: Uuid::now_v7(),
+            display_name: request.display_name,
+            executor: request.executor,
+            state: AutomationTaskState::Pending,
+            session_id: request.session_id,
+            session_source: request.session_source,
+            input: request.input,
+            output: None,
+            error: None,
+            artifact_refs: Vec::new(),
+            labels: request.labels,
+            cancel_requested_at: None,
+            started_at: None,
+            completed_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        let event = StoredAutomationTaskEvent {
+            id: Uuid::now_v7(),
+            task_id: task.id,
+            event_type: "automation_task.created".to_string(),
+            message: "automation task created".to_string(),
+            data: Some(serde_json::json!({
+                "session_id": task.session_id,
+                "session_source": task.session_source.as_str(),
+                "executor": task.executor,
+                "owner_subject": principal.subject,
+                "owner_issuer": principal.issuer,
+            })),
+            created_at: now,
+        };
+        self.automation_tasks.lock().await.push(task.clone());
+        self.automation_task_events.lock().await.push(event);
+        Ok(task)
+    }
+
+    async fn list_automation_tasks_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredAutomationTask>, SessionStoreError> {
+        let sessions = self.sessions.lock().await;
+        let visible_session_ids = sessions
+            .iter()
+            .filter(|session| task_visible_to_principal(session, principal))
+            .map(|session| session.id)
+            .collect::<Vec<_>>();
+        drop(sessions);
+
+        let mut tasks = self
+            .automation_tasks
+            .lock()
+            .await
+            .iter()
+            .filter(|task| visible_session_ids.contains(&task.session_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        tasks.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+        Ok(tasks)
+    }
+
+    async fn get_automation_task_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        let Some(task) = self
+            .automation_tasks
+            .lock()
+            .await
+            .iter()
+            .find(|task| task.id == id)
+            .cloned()
+        else {
+            return Ok(None);
+        };
+        let Some(session) = self.get_session_by_id(task.session_id).await? else {
+            return Ok(None);
+        };
+        if !task_visible_to_principal(&session, principal) {
+            return Ok(None);
+        }
+        Ok(Some(task))
+    }
+
+    async fn cancel_automation_task_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        let visible = self.get_automation_task_for_owner(principal, id).await?;
+        let Some(visible) = visible else {
+            return Ok(None);
+        };
+        if visible.state.is_terminal() {
+            return Err(SessionStoreError::Conflict(format!(
+                "automation task {id} is already terminal"
+            )));
+        }
+
+        let mut tasks = self.automation_tasks.lock().await;
+        let Some(task) = tasks.iter_mut().find(|task| task.id == id) else {
+            return Ok(None);
+        };
+        let now = Utc::now();
+        task.state = AutomationTaskState::Cancelled;
+        task.cancel_requested_at = Some(now);
+        task.completed_at = Some(now);
+        task.updated_at = now;
+        let task = task.clone();
+        drop(tasks);
+
+        self.automation_task_events
+            .lock()
+            .await
+            .push(StoredAutomationTaskEvent {
+                id: Uuid::now_v7(),
+                task_id: id,
+                event_type: "automation_task.cancelled".to_string(),
+                message: "automation task cancelled".to_string(),
+                data: None,
+                created_at: now,
+            });
+        self.automation_task_logs
+            .lock()
+            .await
+            .push(StoredAutomationTaskLog {
+                id: Uuid::now_v7(),
+                task_id: id,
+                stream: AutomationTaskLogStream::System,
+                message: "automation task cancelled".to_string(),
+                created_at: now,
+            });
+        Ok(Some(task))
+    }
+
+    async fn list_automation_task_events_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredAutomationTaskEvent>, SessionStoreError> {
+        if self
+            .get_automation_task_for_owner(principal, id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+
+        let mut events = self
+            .automation_task_events
+            .lock()
+            .await
+            .iter()
+            .filter(|event| event.task_id == id)
+            .cloned()
+            .collect::<Vec<_>>();
+        events.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+        Ok(events)
+    }
+
+    async fn list_automation_task_logs_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredAutomationTaskLog>, SessionStoreError> {
+        if self
+            .get_automation_task_for_owner(principal, id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+
+        let mut logs = self
+            .automation_task_logs
+            .lock()
+            .await
+            .iter()
+            .filter(|log| log.task_id == id)
+            .cloned()
+            .collect::<Vec<_>>();
+        logs.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+        Ok(logs)
+    }
+
+    async fn transition_automation_task(
+        &self,
+        id: Uuid,
+        request: AutomationTaskTransitionRequest,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        let mut tasks = self.automation_tasks.lock().await;
+        let Some(task) = tasks.iter_mut().find(|task| task.id == id) else {
+            return Ok(None);
+        };
+        if task.state.is_terminal() {
+            return Err(SessionStoreError::Conflict(format!(
+                "automation task {id} is already terminal"
+            )));
+        }
+        if !task.state.can_transition_to(request.state) {
+            return Err(SessionStoreError::Conflict(format!(
+                "automation task {id} cannot transition from {} to {}",
+                task.state.as_str(),
+                request.state.as_str()
+            )));
+        }
+        let now = Utc::now();
+        if matches!(
+            request.state,
+            AutomationTaskState::Starting
+                | AutomationTaskState::Running
+                | AutomationTaskState::AwaitingInput
+        ) && task.started_at.is_none()
+        {
+            task.started_at = Some(now);
+        }
+        if request.state.is_terminal() {
+            task.completed_at = Some(now);
+        }
+        task.state = request.state;
+        task.output = request.output;
+        task.error = request.error;
+        task.artifact_refs = request.artifact_refs;
+        task.updated_at = now;
+        let task = task.clone();
+        drop(tasks);
+
+        self.automation_task_events
+            .lock()
+            .await
+            .push(StoredAutomationTaskEvent {
+                id: Uuid::now_v7(),
+                task_id: id,
+                event_type: request.event_type,
+                message: request.event_message,
+                data: request.event_data,
+                created_at: now,
+            });
+        Ok(Some(task))
+    }
+
+    async fn append_automation_task_log(
+        &self,
+        id: Uuid,
+        stream: AutomationTaskLogStream,
+        message: String,
+    ) -> Result<Option<StoredAutomationTaskLog>, SessionStoreError> {
+        let tasks = self.automation_tasks.lock().await;
+        if !tasks.iter().any(|task| task.id == id) {
+            return Ok(None);
+        }
+        drop(tasks);
+
+        let log = StoredAutomationTaskLog {
+            id: Uuid::now_v7(),
+            task_id: id,
+            stream,
+            message,
+            created_at: Utc::now(),
+        };
+        self.automation_task_logs.lock().await.push(log.clone());
+        Ok(Some(log))
     }
 
     async fn create_recording_for_session(
@@ -1926,6 +2425,57 @@ impl PostgresSessionStore {
 
                 CREATE INDEX IF NOT EXISTS idx_control_session_recording_workers_updated
                     ON control_session_recording_workers (updated_at DESC);
+
+                CREATE TABLE IF NOT EXISTS control_automation_tasks (
+                    id UUID PRIMARY KEY,
+                    owner_subject TEXT NOT NULL,
+                    owner_issuer TEXT NOT NULL,
+                    owner_display_name TEXT NULL,
+                    display_name TEXT NULL,
+                    executor TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    session_id UUID NOT NULL REFERENCES control_sessions(id) ON DELETE CASCADE,
+                    session_source TEXT NOT NULL,
+                    input JSONB NULL,
+                    output JSONB NULL,
+                    error TEXT NULL,
+                    artifact_refs JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    labels JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    cancel_requested_at TIMESTAMPTZ NULL,
+                    started_at TIMESTAMPTZ NULL,
+                    completed_at TIMESTAMPTZ NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_automation_tasks_owner_created
+                    ON control_automation_tasks (owner_subject, owner_issuer, created_at DESC);
+
+                CREATE INDEX IF NOT EXISTS idx_control_automation_tasks_session_created
+                    ON control_automation_tasks (session_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS control_automation_task_events (
+                    id UUID PRIMARY KEY,
+                    task_id UUID NOT NULL REFERENCES control_automation_tasks(id) ON DELETE CASCADE,
+                    event_type TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    data JSONB NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_automation_task_events_task_created
+                    ON control_automation_task_events (task_id, created_at ASC);
+
+                CREATE TABLE IF NOT EXISTS control_automation_task_logs (
+                    id UUID PRIMARY KEY,
+                    task_id UUID NOT NULL REFERENCES control_automation_tasks(id) ON DELETE CASCADE,
+                    stream TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_automation_task_logs_task_created
+                    ON control_automation_task_logs (task_id, created_at ASC);
 
                 ALTER TABLE control_sessions
                     ADD COLUMN IF NOT EXISTS automation_owner_client_id TEXT NULL;
@@ -2666,6 +3216,677 @@ impl PostgresSessionStore {
                 SessionStoreError::Backend(format!("failed to clear automation delegate: {error}"))
             })?;
         row.as_ref().map(row_to_stored_session).transpose()
+    }
+
+    async fn create_automation_task(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistAutomationTaskRequest,
+    ) -> Result<StoredAutomationTask, SessionStoreError> {
+        let mut client = self.client.lock().await;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+
+        let now = Utc::now();
+        let task_id = Uuid::now_v7();
+        let labels_value = json_labels(&request.labels);
+        let artifact_refs_value = Value::Array(Vec::new());
+        let row = transaction
+            .query_one(
+                r#"
+                INSERT INTO control_automation_tasks (
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9::jsonb, NULL, NULL,
+                    $10::jsonb, $11::jsonb, NULL, NULL, NULL, $12, $12
+                )
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &task_id,
+                    &principal.subject,
+                    &principal.issuer,
+                    &principal.display_name,
+                    &request.display_name,
+                    &request.executor,
+                    &request.session_id,
+                    &request.session_source.as_str(),
+                    &request.input,
+                    &artifact_refs_value,
+                    &labels_value,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to insert automation task: {error}"))
+            })?;
+
+        transaction
+            .execute(
+                r#"
+                INSERT INTO control_automation_task_events (
+                    id,
+                    task_id,
+                    event_type,
+                    message,
+                    data,
+                    created_at
+                )
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &task_id,
+                    &"automation_task.created",
+                    &"automation task created",
+                    &Some(serde_json::json!({
+                        "session_id": request.session_id,
+                        "session_source": request.session_source.as_str(),
+                        "executor": request.executor,
+                    })),
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to insert automation task event: {error}"
+                ))
+            })?;
+
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+
+        row_to_stored_automation_task(&row)
+    }
+
+    async fn list_automation_tasks_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredAutomationTask>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_automation_tasks
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                ORDER BY created_at DESC
+                "#,
+                &[&principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list automation tasks: {error}"))
+            })?;
+
+        rows.iter().map(row_to_stored_automation_task).collect()
+    }
+
+    async fn get_automation_task_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_automation_tasks
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[&id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to load automation task: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_automation_task).transpose()
+    }
+
+    async fn cancel_automation_task_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        let mut client = self.client.lock().await;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+
+        let row = transaction
+            .query_opt(
+                r#"
+                UPDATE control_automation_tasks
+                SET
+                    state = 'cancelled',
+                    cancel_requested_at = NOW(),
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                  AND state IN ('pending', 'starting', 'running', 'awaiting_input')
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                "#,
+                &[&id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to cancel automation task: {error}"))
+            })?;
+        let Some(row) = row else {
+            let existing = transaction
+                .query_opt(
+                    r#"
+                    SELECT
+                        id,
+                        owner_subject,
+                        owner_issuer,
+                        owner_display_name,
+                        display_name,
+                        executor,
+                        state,
+                        session_id,
+                        session_source,
+                        input,
+                        output,
+                        error,
+                        artifact_refs,
+                        labels,
+                        cancel_requested_at,
+                        started_at,
+                        completed_at,
+                        created_at,
+                        updated_at
+                    FROM control_automation_tasks
+                    WHERE id = $1
+                      AND owner_subject = $2
+                      AND owner_issuer = $3
+                    "#,
+                    &[&id, &principal.subject, &principal.issuer],
+                )
+                .await
+                .map_err(|error| {
+                    SessionStoreError::Backend(format!(
+                        "failed to load automation task after cancel conflict: {error}"
+                    ))
+                })?;
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            if existing.is_some() {
+                return Err(SessionStoreError::Conflict(format!(
+                    "automation task {id} is already terminal"
+                )));
+            }
+            return Ok(None);
+        };
+
+        let now = Utc::now();
+        transaction
+            .execute(
+                r#"
+                INSERT INTO control_automation_task_events (
+                    id,
+                    task_id,
+                    event_type,
+                    message,
+                    data,
+                    created_at
+                )
+                VALUES ($1, $2, $3, $4, NULL, $5)
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &id,
+                    &"automation_task.cancelled",
+                    &"automation task cancelled",
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to insert automation task cancel event: {error}"
+                ))
+            })?;
+        transaction
+            .execute(
+                r#"
+                INSERT INTO control_automation_task_logs (
+                    id,
+                    task_id,
+                    stream,
+                    message,
+                    created_at
+                )
+                VALUES ($1, $2, $3, $4, $5)
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &id,
+                    &AutomationTaskLogStream::System.as_str(),
+                    &"automation task cancelled",
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to insert automation task cancel log: {error}"
+                ))
+            })?;
+
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+
+        row_to_stored_automation_task(&row).map(Some)
+    }
+
+    async fn list_automation_task_events_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredAutomationTaskEvent>, SessionStoreError> {
+        if self
+            .get_automation_task_for_owner(principal, id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    task_id,
+                    event_type,
+                    message,
+                    data,
+                    created_at
+                FROM control_automation_task_events
+                WHERE task_id = $1
+                ORDER BY created_at ASC, id ASC
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list automation task events: {error}"
+                ))
+            })?;
+        rows.iter()
+            .map(row_to_stored_automation_task_event)
+            .collect()
+    }
+
+    async fn list_automation_task_logs_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Vec<StoredAutomationTaskLog>, SessionStoreError> {
+        if self
+            .get_automation_task_for_owner(principal, id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    task_id,
+                    stream,
+                    message,
+                    created_at
+                FROM control_automation_task_logs
+                WHERE task_id = $1
+                ORDER BY created_at ASC, id ASC
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list automation task logs: {error}"))
+            })?;
+        rows.iter().map(row_to_stored_automation_task_log).collect()
+    }
+
+    async fn transition_automation_task(
+        &self,
+        id: Uuid,
+        request: AutomationTaskTransitionRequest,
+    ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
+        let mut client = self.client.lock().await;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+
+        let current_row = transaction
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_automation_tasks
+                WHERE id = $1
+                FOR UPDATE
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to lock automation task for transition: {error}"
+                ))
+            })?;
+        let Some(current_row) = current_row else {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Ok(None);
+        };
+        let current = row_to_stored_automation_task(&current_row)?;
+        if current.state.is_terminal() {
+            return Err(SessionStoreError::Conflict(format!(
+                "automation task {id} is already terminal"
+            )));
+        }
+        if !current.state.can_transition_to(request.state) {
+            return Err(SessionStoreError::Conflict(format!(
+                "automation task {id} cannot transition from {} to {}",
+                current.state.as_str(),
+                request.state.as_str()
+            )));
+        }
+
+        let now = Utc::now();
+        let started_at = if matches!(
+            request.state,
+            AutomationTaskState::Starting
+                | AutomationTaskState::Running
+                | AutomationTaskState::AwaitingInput
+        ) {
+            current.started_at.or(Some(now))
+        } else {
+            current.started_at
+        };
+        let completed_at = if request.state.is_terminal() {
+            Some(now)
+        } else {
+            current.completed_at
+        };
+        let artifact_refs = json_string_array(&request.artifact_refs);
+        let row = transaction
+            .query_one(
+                r#"
+                UPDATE control_automation_tasks
+                SET
+                    state = $2,
+                    output = $3::jsonb,
+                    error = $4,
+                    artifact_refs = $5::jsonb,
+                    started_at = $6,
+                    completed_at = $7,
+                    updated_at = $8
+                WHERE id = $1
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &id,
+                    &request.state.as_str(),
+                    &request.output,
+                    &request.error,
+                    &artifact_refs,
+                    &started_at,
+                    &completed_at,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to update automation task state: {error}"
+                ))
+            })?;
+
+        transaction
+            .execute(
+                r#"
+                INSERT INTO control_automation_task_events (
+                    id,
+                    task_id,
+                    event_type,
+                    message,
+                    data,
+                    created_at
+                )
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &id,
+                    &request.event_type,
+                    &request.event_message,
+                    &request.event_data,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to insert automation task transition event: {error}"
+                ))
+            })?;
+
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+
+        row_to_stored_automation_task(&row).map(Some)
+    }
+
+    async fn append_automation_task_log(
+        &self,
+        id: Uuid,
+        stream: AutomationTaskLogStream,
+        message: String,
+    ) -> Result<Option<StoredAutomationTaskLog>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                INSERT INTO control_automation_task_logs (
+                    id,
+                    task_id,
+                    stream,
+                    message,
+                    created_at
+                )
+                SELECT $2, $1, $3, $4, $5
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM control_automation_tasks
+                    WHERE id = $1
+                )
+                RETURNING
+                    id,
+                    task_id,
+                    stream,
+                    message,
+                    created_at
+                "#,
+                &[
+                    &id,
+                    &Uuid::now_v7(),
+                    &stream.as_str(),
+                    &message,
+                    &Utc::now(),
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to append automation task log: {error}"))
+            })?;
+        row.as_ref()
+            .map(row_to_stored_automation_task_log)
+            .transpose()
     }
 
     async fn create_recording_for_session(
@@ -3454,6 +4675,16 @@ fn json_labels(labels: &HashMap<String, String>) -> Value {
     Value::Object(object)
 }
 
+fn json_string_array(values: &[String]) -> Value {
+    Value::Array(
+        values
+            .iter()
+            .cloned()
+            .map(Value::String)
+            .collect::<Vec<_>>(),
+    )
+}
+
 fn recording_mime_type(format: SessionRecordingFormat) -> &'static str {
     match format {
         SessionRecordingFormat::Webm => "video/webm",
@@ -3480,6 +4711,10 @@ fn session_visible_to_principal(
 
     principal.client_id.as_deref() == Some(delegate.client_id.as_str())
         && principal.issuer == delegate.issuer
+}
+
+fn task_visible_to_principal(session: &StoredSession, principal: &AuthenticatedPrincipal) -> bool {
+    session.owner.subject == principal.subject && session.owner.issuer == principal.issuer
 }
 
 fn row_to_stored_session(row: &Row) -> Result<StoredSession, SessionStoreError> {
@@ -3590,6 +4825,96 @@ fn row_to_stored_session_recording(row: &Row) -> Result<StoredSessionRecording, 
         completed_at: row.get("completed_at"),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
+    })
+}
+
+fn row_to_stored_automation_task(row: &Row) -> Result<StoredAutomationTask, SessionStoreError> {
+    let state = row
+        .get::<_, String>("state")
+        .parse::<AutomationTaskState>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let session_source = row
+        .get::<_, String>("session_source")
+        .parse::<AutomationTaskSessionSource>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("automation task labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("automation task label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let artifact_refs_value: Value = row.get("artifact_refs");
+    let artifact_refs = artifact_refs_value
+        .as_array()
+        .context("automation task artifact_refs column must be a JSON array")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .context("automation task artifact_refs entries must be strings")
+                .map(|entry| entry.to_string())
+                .map_err(|error| SessionStoreError::Backend(error.to_string()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(StoredAutomationTask {
+        id: row.get("id"),
+        display_name: row.get("display_name"),
+        executor: row.get("executor"),
+        state,
+        session_id: row.get("session_id"),
+        session_source,
+        input: row.get("input"),
+        output: row.get("output"),
+        error: row.get("error"),
+        artifact_refs,
+        labels,
+        cancel_requested_at: row.get("cancel_requested_at"),
+        started_at: row.get("started_at"),
+        completed_at: row.get("completed_at"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
+fn row_to_stored_automation_task_event(
+    row: &Row,
+) -> Result<StoredAutomationTaskEvent, SessionStoreError> {
+    Ok(StoredAutomationTaskEvent {
+        id: row.get("id"),
+        task_id: row.get("task_id"),
+        event_type: row.get("event_type"),
+        message: row.get("message"),
+        data: row.get("data"),
+        created_at: row.get("created_at"),
+    })
+}
+
+fn row_to_stored_automation_task_log(
+    row: &Row,
+) -> Result<StoredAutomationTaskLog, SessionStoreError> {
+    let stream = row
+        .get::<_, String>("stream")
+        .parse::<AutomationTaskLogStream>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    Ok(StoredAutomationTaskLog {
+        id: row.get("id"),
+        task_id: row.get("task_id"),
+        stream,
+        message: row.get("message"),
+        created_at: row.get("created_at"),
     })
 }
 
@@ -3851,6 +5176,126 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(visible.id, created.id);
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_tracks_automation_task_lifecycle_logs_and_events() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let session = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+
+        let task = store
+            .create_automation_task(
+                &owner,
+                PersistAutomationTaskRequest {
+                    display_name: Some("demo task".to_string()),
+                    executor: "playwright".to_string(),
+                    session_id: session.id,
+                    session_source: AutomationTaskSessionSource::ExistingSession,
+                    input: Some(serde_json::json!({ "step": "login" })),
+                    labels: HashMap::from([("suite".to_string(), "workflow".to_string())]),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(task.state, AutomationTaskState::Pending);
+
+        let running = store
+            .transition_automation_task(
+                task.id,
+                AutomationTaskTransitionRequest {
+                    state: AutomationTaskState::Running,
+                    output: None,
+                    error: None,
+                    artifact_refs: Vec::new(),
+                    event_type: "automation_task.running".to_string(),
+                    event_message: "task entered running state".to_string(),
+                    event_data: None,
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(running.state, AutomationTaskState::Running);
+        assert!(running.started_at.is_some());
+
+        let log = store
+            .append_automation_task_log(
+                task.id,
+                AutomationTaskLogStream::Stdout,
+                "step 1 complete".to_string(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(log.stream, AutomationTaskLogStream::Stdout);
+
+        let succeeded = store
+            .transition_automation_task(
+                task.id,
+                AutomationTaskTransitionRequest {
+                    state: AutomationTaskState::Succeeded,
+                    output: Some(serde_json::json!({ "result": "ok" })),
+                    error: None,
+                    artifact_refs: vec!["artifact://trace.zip".to_string()],
+                    event_type: "automation_task.succeeded".to_string(),
+                    event_message: "task completed successfully".to_string(),
+                    event_data: Some(serde_json::json!({ "duration_ms": 1200 })),
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(succeeded.state, AutomationTaskState::Succeeded);
+        assert!(succeeded.completed_at.is_some());
+        assert_eq!(succeeded.artifact_refs.len(), 1);
+
+        let events = store
+            .list_automation_task_events_for_owner(&owner, task.id)
+            .await
+            .unwrap();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].event_type, "automation_task.created");
+        assert_eq!(events[2].event_type, "automation_task.succeeded");
+
+        let logs = store
+            .list_automation_task_logs_for_owner(&owner, task.id)
+            .await
+            .unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].message, "step 1 complete");
+
+        let error = store
+            .transition_automation_task(
+                task.id,
+                AutomationTaskTransitionRequest {
+                    state: AutomationTaskState::Running,
+                    output: None,
+                    error: None,
+                    artifact_refs: Vec::new(),
+                    event_type: "automation_task.running".to_string(),
+                    event_message: "task should not resume".to_string(),
+                    event_data: None,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, SessionStoreError::Conflict(_)));
     }
 
     #[tokio::test]

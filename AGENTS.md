@@ -119,6 +119,7 @@ Current product shape:
 
 Run these in `code/web/bpane-client`:
 - `npx tsc --noEmit`
+- `npm run smoke:automation-tasks -- --headless`
 - `npm test`
 - `npm run build`
 - `npm run smoke:recording -- --headless`
