@@ -21,6 +21,10 @@ use crate::credential_binding::{
     CredentialBindingProvider, CredentialInjectionMode, CredentialTotpMetadata,
     PersistCredentialBindingRequest, StoredCredentialBinding, WorkflowRunCredentialBinding,
 };
+use crate::extension::{
+    AppliedExtension, PersistExtensionDefinitionRequest, PersistExtensionVersionRequest,
+    StoredExtensionDefinition, StoredExtensionVersion,
+};
 use crate::file_workspace::{
     PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest, StoredFileWorkspace,
     StoredFileWorkspaceFile,
@@ -358,6 +362,7 @@ pub struct SessionResource {
     pub idle_timeout_sec: Option<u32>,
     pub labels: HashMap<String, String>,
     pub integration_context: Option<Value>,
+    pub extensions: Vec<crate::extension::AppliedExtensionResource>,
     pub recording: SessionRecordingPolicy,
     pub connect: SessionConnectInfo,
     pub runtime: SessionRuntimeInfo,
@@ -391,7 +396,7 @@ pub struct SessionRecordingListResponse {
     pub recordings: Vec<SessionRecordingResource>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CreateSessionRequest {
     #[serde(default)]
     pub template_id: Option<String>,
@@ -406,7 +411,11 @@ pub struct CreateSessionRequest {
     #[serde(default)]
     pub integration_context: Option<Value>,
     #[serde(default)]
+    pub extension_ids: Vec<Uuid>,
+    #[serde(default)]
     pub recording: SessionRecordingPolicy,
+    #[serde(skip)]
+    pub extensions: Vec<AppliedExtension>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -462,6 +471,7 @@ pub struct StoredSession {
     pub idle_timeout_sec: Option<u32>,
     pub labels: HashMap<String, String>,
     pub integration_context: Option<Value>,
+    pub extensions: Vec<AppliedExtension>,
     pub recording: SessionRecordingPolicy,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -592,6 +602,11 @@ impl StoredSession {
             idle_timeout_sec: self.idle_timeout_sec,
             labels: self.labels.clone(),
             integration_context: self.integration_context.clone(),
+            extensions: self
+                .extensions
+                .iter()
+                .map(AppliedExtension::to_resource)
+                .collect(),
             recording: self.recording.clone(),
             connect: SessionConnectInfo {
                 gateway_url: public_gateway_url.to_string(),
@@ -699,6 +714,7 @@ fn legacy_runtime_profile() -> SessionManagerProfile {
         compatibility_mode: "legacy_single_runtime".to_string(),
         max_runtime_sessions: 1,
         supports_legacy_global_routes: true,
+        supports_session_extensions: false,
     }
 }
 
@@ -721,6 +737,8 @@ impl SessionStore {
                 workflow_run_events: Mutex::new(Vec::new()),
                 workflow_run_logs: Mutex::new(Vec::new()),
                 credential_bindings: Mutex::new(Vec::new()),
+                extension_definitions: Mutex::new(Vec::new()),
+                extension_versions: Mutex::new(Vec::new()),
                 file_workspaces: Mutex::new(Vec::new()),
                 file_workspace_files: Mutex::new(Vec::new()),
                 recordings: Mutex::new(Vec::new()),
@@ -1316,6 +1334,106 @@ impl SessionStore {
         }
     }
 
+    pub async fn create_extension_definition(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistExtensionDefinitionRequest,
+    ) -> Result<StoredExtensionDefinition, SessionStoreError> {
+        validate_extension_definition_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_extension_definition(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_extension_definition(principal, request).await
+            }
+        }
+    }
+
+    pub async fn list_extension_definitions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredExtensionDefinition>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_extension_definitions_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_extension_definitions_for_owner(principal).await
+            }
+        }
+    }
+
+    pub async fn get_extension_definition_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_extension_definition_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_extension_definition_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn set_extension_definition_enabled_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        enabled: bool,
+    ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .set_extension_definition_enabled_for_owner(principal, id, enabled)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .set_extension_definition_enabled_for_owner(principal, id, enabled)
+                    .await
+            }
+        }
+    }
+
+    pub async fn create_extension_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistExtensionVersionRequest,
+    ) -> Result<StoredExtensionVersion, SessionStoreError> {
+        validate_extension_version_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_extension_version_for_owner(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_extension_version_for_owner(principal, request).await
+            }
+        }
+    }
+
+    pub async fn get_latest_extension_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        extension_definition_id: Uuid,
+    ) -> Result<Option<StoredExtensionVersion>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_latest_extension_version_for_owner(principal, extension_definition_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_latest_extension_version_for_owner(principal, extension_definition_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn list_file_workspaces_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -1843,6 +1961,31 @@ fn validate_create_request(request: &CreateSessionRequest) -> Result<(), Session
             ));
         }
     }
+    let mut requested_extension_ids = std::collections::HashSet::new();
+    for extension_id in &request.extension_ids {
+        if !requested_extension_ids.insert(*extension_id) {
+            return Err(SessionStoreError::InvalidRequest(
+                "extension_ids must not contain duplicates".to_string(),
+            ));
+        }
+    }
+    for extension in &request.extensions {
+        if extension.name.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "session extensions must not contain an empty name".to_string(),
+            ));
+        }
+        if extension.version.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "session extensions must not contain an empty version".to_string(),
+            ));
+        }
+        if extension.install_path.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "session extensions must not contain an empty install_path".to_string(),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -2240,6 +2383,57 @@ fn validate_credential_binding_request(
     Ok(())
 }
 
+fn validate_extension_definition_request(
+    request: &PersistExtensionDefinitionRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "extension name must not be empty".to_string(),
+        ));
+    }
+    if let Some(description) = &request.description {
+        if description.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "extension description must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    for (key, value) in &request.labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "extension label keys must not be empty".to_string(),
+            ));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "extension label values must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_extension_version_request(
+    request: &PersistExtensionVersionRequest,
+) -> Result<(), SessionStoreError> {
+    if request.version.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "extension version must not be empty".to_string(),
+        ));
+    }
+    if request.install_path.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "extension install_path must not be empty".to_string(),
+        ));
+    }
+    if !std::path::Path::new(&request.install_path).is_absolute() {
+        return Err(SessionStoreError::InvalidRequest(
+            "extension install_path must be an absolute path".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_file_workspace_request(
     request: &PersistFileWorkspaceRequest,
 ) -> Result<(), SessionStoreError> {
@@ -2356,6 +2550,8 @@ struct InMemorySessionStore {
     workflow_run_events: Mutex<Vec<StoredWorkflowRunEvent>>,
     workflow_run_logs: Mutex<Vec<StoredWorkflowRunLog>>,
     credential_bindings: Mutex<Vec<StoredCredentialBinding>>,
+    extension_definitions: Mutex<Vec<StoredExtensionDefinition>>,
+    extension_versions: Mutex<Vec<StoredExtensionVersion>>,
     file_workspaces: Mutex<Vec<StoredFileWorkspace>>,
     file_workspace_files: Mutex<Vec<StoredFileWorkspaceFile>>,
     recordings: Mutex<Vec<StoredSessionRecording>>,
@@ -2413,6 +2609,7 @@ impl InMemorySessionStore {
             idle_timeout_sec: request.idle_timeout_sec,
             labels: request.labels,
             integration_context: request.integration_context,
+            extensions: request.extensions,
             recording: request.recording,
             created_at: now,
             updated_at: now,
@@ -3134,6 +3331,7 @@ impl InMemorySessionStore {
             session_id: request.session_id,
             automation_task_id: request.automation_task_id,
             source_snapshot: request.source_snapshot,
+            extensions: request.extensions,
             credential_bindings: request.credential_bindings,
             workspace_inputs: request.workspace_inputs,
             state: WorkflowRunState::Pending,
@@ -3483,6 +3681,157 @@ impl InMemorySessionStore {
                     && binding.owner_issuer == principal.issuer
             })
             .cloned())
+    }
+
+    async fn create_extension_definition(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistExtensionDefinitionRequest,
+    ) -> Result<StoredExtensionDefinition, SessionStoreError> {
+        let now = Utc::now();
+        let definition = StoredExtensionDefinition {
+            id: Uuid::now_v7(),
+            owner_subject: principal.subject.clone(),
+            owner_issuer: principal.issuer.clone(),
+            name: request.name,
+            description: request.description,
+            enabled: true,
+            latest_version: None,
+            labels: request.labels,
+            created_at: now,
+            updated_at: now,
+        };
+        self.extension_definitions
+            .lock()
+            .await
+            .push(definition.clone());
+        Ok(definition)
+    }
+
+    async fn list_extension_definitions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredExtensionDefinition>, SessionStoreError> {
+        let mut definitions = self
+            .extension_definitions
+            .lock()
+            .await
+            .iter()
+            .filter(|definition| {
+                definition.owner_subject == principal.subject
+                    && definition.owner_issuer == principal.issuer
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        definitions.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+        Ok(definitions)
+    }
+
+    async fn get_extension_definition_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
+        Ok(self
+            .extension_definitions
+            .lock()
+            .await
+            .iter()
+            .find(|definition| {
+                definition.id == id
+                    && definition.owner_subject == principal.subject
+                    && definition.owner_issuer == principal.issuer
+            })
+            .cloned())
+    }
+
+    async fn set_extension_definition_enabled_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        enabled: bool,
+    ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
+        let mut definitions = self.extension_definitions.lock().await;
+        let Some(definition) = definitions.iter_mut().find(|definition| {
+            definition.id == id
+                && definition.owner_subject == principal.subject
+                && definition.owner_issuer == principal.issuer
+        }) else {
+            return Ok(None);
+        };
+        definition.enabled = enabled;
+        definition.updated_at = Utc::now();
+        Ok(Some(definition.clone()))
+    }
+
+    async fn create_extension_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistExtensionVersionRequest,
+    ) -> Result<StoredExtensionVersion, SessionStoreError> {
+        let mut definitions = self.extension_definitions.lock().await;
+        let Some(definition) = definitions.iter_mut().find(|definition| {
+            definition.id == request.extension_definition_id
+                && definition.owner_subject == principal.subject
+                && definition.owner_issuer == principal.issuer
+        }) else {
+            return Err(SessionStoreError::InvalidRequest(format!(
+                "extension {} not found",
+                request.extension_definition_id
+            )));
+        };
+        let versions = self.extension_versions.lock().await;
+        if versions.iter().any(|version| {
+            version.extension_definition_id == request.extension_definition_id
+                && version.version == request.version
+        }) {
+            return Err(SessionStoreError::InvalidRequest(format!(
+                "extension {} already has version {}",
+                request.extension_definition_id, request.version
+            )));
+        }
+        drop(versions);
+        let now = Utc::now();
+        let version = StoredExtensionVersion {
+            id: Uuid::now_v7(),
+            extension_definition_id: request.extension_definition_id,
+            version: request.version,
+            install_path: request.install_path,
+            created_at: now,
+        };
+        self.extension_versions.lock().await.push(version.clone());
+        definition.latest_version = Some(version.version.clone());
+        definition.updated_at = now;
+        Ok(version)
+    }
+
+    async fn get_latest_extension_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        extension_definition_id: Uuid,
+    ) -> Result<Option<StoredExtensionVersion>, SessionStoreError> {
+        let definitions = self.extension_definitions.lock().await;
+        if !definitions.iter().any(|definition| {
+            definition.id == extension_definition_id
+                && definition.owner_subject == principal.subject
+                && definition.owner_issuer == principal.issuer
+        }) {
+            return Ok(None);
+        }
+        drop(definitions);
+        let latest = self
+            .extension_versions
+            .lock()
+            .await
+            .iter()
+            .filter(|version| version.extension_definition_id == extension_definition_id)
+            .cloned()
+            .max_by(|left, right| {
+                left.created_at
+                    .cmp(&right.created_at)
+                    .then_with(|| left.id.cmp(&right.id))
+            });
+        Ok(latest)
     }
 
     async fn create_file_workspace(
@@ -4037,6 +4386,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec INTEGER NULL CHECK (idle_timeout_sec IS NULL OR idle_timeout_sec > 0),
                     labels JSONB NOT NULL DEFAULT '{}'::jsonb,
                     integration_context JSONB NULL,
+                    extensions JSONB NOT NULL DEFAULT '[]'::jsonb,
                     recording JSONB NOT NULL DEFAULT '{"mode":"disabled","format":"webm","retention_sec":null}'::jsonb,
                     runtime_binding TEXT NOT NULL DEFAULT 'legacy_single_session',
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -4203,6 +4553,34 @@ impl PostgresSessionStore {
                 CREATE INDEX IF NOT EXISTS idx_control_credential_bindings_owner_created
                     ON control_credential_bindings (owner_subject, owner_issuer, created_at DESC);
 
+                CREATE TABLE IF NOT EXISTS control_extensions (
+                    id UUID PRIMARY KEY,
+                    owner_subject TEXT NOT NULL,
+                    owner_issuer TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                    latest_version TEXT NULL,
+                    labels JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_extensions_owner_created
+                    ON control_extensions (owner_subject, owner_issuer, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS control_extension_versions (
+                    id UUID PRIMARY KEY,
+                    extension_definition_id UUID NOT NULL REFERENCES control_extensions(id) ON DELETE CASCADE,
+                    version TEXT NOT NULL,
+                    install_path TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (extension_definition_id, version)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_extension_versions_extension_created
+                    ON control_extension_versions (extension_definition_id, created_at DESC);
+
                 CREATE TABLE IF NOT EXISTS control_workflow_runs (
                     id UUID PRIMARY KEY,
                     workflow_definition_id UUID NOT NULL REFERENCES control_workflow_definitions(id) ON DELETE CASCADE,
@@ -4212,6 +4590,7 @@ impl PostgresSessionStore {
                     automation_task_id UUID NOT NULL REFERENCES control_automation_tasks(id) ON DELETE CASCADE,
                     state TEXT NOT NULL DEFAULT 'pending',
                     source_snapshot JSONB NULL,
+                    extensions JSONB NOT NULL DEFAULT '[]'::jsonb,
                     credential_bindings JSONB NOT NULL DEFAULT '[]'::jsonb,
                     workspace_inputs JSONB NOT NULL DEFAULT '[]'::jsonb,
                     input JSONB NULL,
@@ -4305,6 +4684,8 @@ impl PostgresSessionStore {
                 ALTER TABLE control_sessions
                     ADD COLUMN IF NOT EXISTS automation_owner_display_name TEXT NULL;
                 ALTER TABLE control_sessions
+                    ADD COLUMN IF NOT EXISTS extensions JSONB NOT NULL DEFAULT '[]'::jsonb;
+                ALTER TABLE control_sessions
                     ADD COLUMN IF NOT EXISTS recording JSONB NOT NULL DEFAULT '{"mode":"disabled","format":"webm","retention_sec":null}'::jsonb;
                 ALTER TABLE control_session_recordings
                     ADD COLUMN IF NOT EXISTS previous_recording_id UUID NULL REFERENCES control_session_recordings(id) ON DELETE SET NULL;
@@ -4314,6 +4695,8 @@ impl PostgresSessionStore {
                     ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'pending';
                 ALTER TABLE control_workflow_runs
                     ADD COLUMN IF NOT EXISTS source_snapshot JSONB NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS extensions JSONB NOT NULL DEFAULT '[]'::jsonb;
                 ALTER TABLE control_workflow_runs
                     ADD COLUMN IF NOT EXISTS credential_bindings JSONB NOT NULL DEFAULT '[]'::jsonb;
                 ALTER TABLE control_workflow_runs
@@ -4374,6 +4757,7 @@ impl PostgresSessionStore {
         let viewport = request.viewport.unwrap_or_default();
         let now = Utc::now();
         let labels_value = json_labels(&request.labels);
+        let extensions_value = json_applied_extensions(&request.extensions)?;
         let recording_value = json_recording_policy(&request.recording)?;
         let session_id = Uuid::now_v7();
         let row = transaction
@@ -4392,12 +4776,13 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     runtime_binding,
                     created_at,
                     updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13::jsonb, $14, $15, $15)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13::jsonb, $14::jsonb, $15, $16, $16)
                 RETURNING
                     id,
                     owner_subject,
@@ -4414,6 +4799,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4432,6 +4818,7 @@ impl PostgresSessionStore {
                     &request.idle_timeout_sec.map(|value| value as i32),
                     &labels_value,
                     &request.integration_context,
+                    &extensions_value,
                     &recording_value,
                     &self.config.runtime_binding,
                     &now,
@@ -4473,6 +4860,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4518,6 +4906,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4560,6 +4949,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4603,6 +4993,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4657,6 +5048,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4713,6 +5105,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4760,6 +5153,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4807,6 +5201,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4849,6 +5244,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4929,6 +5325,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -4988,6 +5385,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -5045,6 +5443,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -6272,6 +6671,7 @@ impl PostgresSessionStore {
 
         let now = Utc::now();
         let source_snapshot = json_workflow_run_source_snapshot(request.source_snapshot.as_ref())?;
+        let extensions = json_applied_extensions(&request.extensions)?;
         let credential_bindings =
             json_workflow_run_credential_bindings(&request.credential_bindings)?;
         let workspace_inputs = json_workflow_run_workspace_inputs(&request.workspace_inputs)?;
@@ -6287,6 +6687,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    extensions,
                     credential_bindings,
                     workspace_inputs,
                     input,
@@ -6301,7 +6702,7 @@ impl PostgresSessionStore {
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7,
-                    $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, NULL, NULL, $12::jsonb, $13::jsonb, NULL, NULL, $14, $14
+                    $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, NULL, NULL, $13::jsonb, $14::jsonb, NULL, NULL, $15, $15
                 )
                 RETURNING
                     id,
@@ -6312,6 +6713,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    extensions,
                     credential_bindings,
                     workspace_inputs,
                     input,
@@ -6333,6 +6735,7 @@ impl PostgresSessionStore {
                     &request.automation_task_id,
                     &WorkflowRunState::Pending.as_str(),
                     &source_snapshot,
+                    &extensions,
                     &credential_bindings,
                     &workspace_inputs,
                     &request.input,
@@ -6406,6 +6809,7 @@ impl PostgresSessionStore {
                     run.automation_task_id,
                     run.state,
                     run.source_snapshot,
+                    run.extensions,
                     run.credential_bindings,
                     run.workspace_inputs,
                     run.input,
@@ -6452,6 +6856,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    extensions,
                     credential_bindings,
                     workspace_inputs,
                     input,
@@ -6657,6 +7062,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    extensions,
                     credential_bindings,
                     workspace_inputs,
                     input,
@@ -6864,6 +7270,7 @@ impl PostgresSessionStore {
                     automation_task_id,
                     state,
                     source_snapshot,
+                    extensions,
                     credential_bindings,
                     workspace_inputs,
                     input,
@@ -7166,6 +7573,304 @@ impl PostgresSessionStore {
                 SessionStoreError::Backend(format!("failed to fetch credential binding: {error}"))
             })?;
         row.map(|row| row_to_stored_credential_binding(&row)).transpose()
+    }
+
+    async fn create_extension_definition(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistExtensionDefinitionRequest,
+    ) -> Result<StoredExtensionDefinition, SessionStoreError> {
+        let now = Utc::now();
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_one(
+                r#"
+                INSERT INTO control_extensions (
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    description,
+                    enabled,
+                    latest_version,
+                    labels,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, TRUE, NULL, $6::jsonb, $7, $7)
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    description,
+                    enabled,
+                    latest_version,
+                    labels,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &principal.subject,
+                    &principal.issuer,
+                    &request.name,
+                    &request.description,
+                    &json_labels(&request.labels),
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to create extension: {error}"))
+            })?;
+        row_to_stored_extension_definition(&row)
+    }
+
+    async fn list_extension_definitions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredExtensionDefinition>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    description,
+                    enabled,
+                    latest_version,
+                    labels,
+                    created_at,
+                    updated_at
+                FROM control_extensions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                ORDER BY created_at DESC
+                "#,
+                &[&principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list extensions: {error}"))
+            })?;
+        rows.iter().map(row_to_stored_extension_definition).collect()
+    }
+
+    async fn get_extension_definition_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    description,
+                    enabled,
+                    latest_version,
+                    labels,
+                    created_at,
+                    updated_at
+                FROM control_extensions
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[&id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to fetch extension: {error}"))
+            })?;
+        row.map(|row| row_to_stored_extension_definition(&row)).transpose()
+    }
+
+    async fn set_extension_definition_enabled_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        enabled: bool,
+    ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                UPDATE control_extensions
+                SET enabled = $4, updated_at = NOW()
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    description,
+                    enabled,
+                    latest_version,
+                    labels,
+                    created_at,
+                    updated_at
+                "#,
+                &[&id, &principal.subject, &principal.issuer, &enabled],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to update extension: {error}"))
+            })?;
+        row.map(|row| row_to_stored_extension_definition(&row)).transpose()
+    }
+
+    async fn create_extension_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistExtensionVersionRequest,
+    ) -> Result<StoredExtensionVersion, SessionStoreError> {
+        let mut client = self.client.lock().await;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+        let definition = transaction
+            .query_opt(
+                r#"
+                SELECT id
+                FROM control_extensions
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[
+                    &request.extension_definition_id,
+                    &principal.subject,
+                    &principal.issuer,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to validate extension: {error}"))
+            })?;
+        if definition.is_none() {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Err(SessionStoreError::NotFound(format!(
+                "extension {} not found",
+                request.extension_definition_id
+            )));
+        }
+
+        let now = Utc::now();
+        let row = transaction
+            .query_one(
+                r#"
+                INSERT INTO control_extension_versions (
+                    id,
+                    extension_definition_id,
+                    version,
+                    install_path,
+                    created_at
+                )
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING
+                    id,
+                    extension_definition_id,
+                    version,
+                    install_path,
+                    created_at
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &request.extension_definition_id,
+                    &request.version,
+                    &request.install_path,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                if error.code().is_some_and(|code| code.code() == "23505") {
+                    return SessionStoreError::Conflict(format!(
+                        "extension {} already has version {}",
+                        request.extension_definition_id, request.version
+                    ));
+                }
+                SessionStoreError::Backend(format!("failed to create extension version: {error}"))
+            })?;
+
+        transaction
+            .execute(
+                r#"
+                UPDATE control_extensions
+                SET latest_version = $2, updated_at = $3
+                WHERE id = $1
+                "#,
+                &[&request.extension_definition_id, &request.version, &now],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to update extension latest_version: {error}"
+                ))
+            })?;
+
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+        row_to_stored_extension_version(&row)
+    }
+
+    async fn get_latest_extension_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        extension_definition_id: Uuid,
+    ) -> Result<Option<StoredExtensionVersion>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    version.id,
+                    version.extension_definition_id,
+                    version.version,
+                    version.install_path,
+                    version.created_at
+                FROM control_extension_versions version
+                JOIN control_extensions extension
+                  ON extension.id = version.extension_definition_id
+                WHERE version.extension_definition_id = $1
+                  AND extension.owner_subject = $2
+                  AND extension.owner_issuer = $3
+                ORDER BY version.created_at DESC, version.id DESC
+                LIMIT 1
+                "#,
+                &[&extension_definition_id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to fetch latest extension version: {error}"
+                ))
+            })?;
+        row.map(|row| row_to_stored_extension_version(&row)).transpose()
     }
 
     async fn create_file_workspace(
@@ -8379,6 +9084,7 @@ impl PostgresSessionStore {
                     idle_timeout_sec,
                     labels,
                     integration_context,
+                    extensions,
                     recording,
                     created_at,
                     updated_at,
@@ -8428,6 +9134,12 @@ fn json_workflow_run_source_snapshot(
             })
         })
         .transpose()
+}
+
+fn json_applied_extensions(extensions: &[AppliedExtension]) -> Result<Value, SessionStoreError> {
+    serde_json::to_value(extensions).map_err(|error| {
+        SessionStoreError::Backend(format!("failed to encode applied extensions: {error}"))
+    })
 }
 
 fn json_workflow_run_credential_bindings(
@@ -8551,6 +9263,10 @@ fn row_to_stored_session(row: &Row) -> Result<StoredSession, SessionStoreError> 
         .map_err(|error| {
             SessionStoreError::Backend(format!("failed to decode recording policy: {error}"))
         })?;
+    let extensions = serde_json::from_value::<Vec<AppliedExtension>>(row.get("extensions"))
+        .map_err(|error| {
+            SessionStoreError::Backend(format!("failed to decode session extensions: {error}"))
+        })?;
 
     let width = row.get::<_, i32>("viewport_width");
     let height = row.get::<_, i32>("viewport_height");
@@ -8584,6 +9300,7 @@ fn row_to_stored_session(row: &Row) -> Result<StoredSession, SessionStoreError> 
             .map(|value| value as u32),
         labels,
         integration_context: row.get("integration_context"),
+        extensions,
         recording,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
@@ -8780,6 +9497,51 @@ fn row_to_stored_credential_binding(row: &Row) -> Result<StoredCredentialBinding
     })
 }
 
+fn row_to_stored_extension_definition(
+    row: &Row,
+) -> Result<StoredExtensionDefinition, SessionStoreError> {
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("extension labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("extension label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+
+    Ok(StoredExtensionDefinition {
+        id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        description: row.get("description"),
+        enabled: row.get("enabled"),
+        latest_version: row.get("latest_version"),
+        labels,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
+fn row_to_stored_extension_version(row: &Row) -> Result<StoredExtensionVersion, SessionStoreError> {
+    Ok(StoredExtensionVersion {
+        id: row.get("id"),
+        extension_definition_id: row.get("extension_definition_id"),
+        version: row.get("version"),
+        install_path: row.get("install_path"),
+        created_at: row.get("created_at"),
+    })
+}
+
 fn row_to_stored_workflow_definition(
     row: &Row,
 ) -> Result<StoredWorkflowDefinition, SessionStoreError> {
@@ -8932,6 +9694,18 @@ fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionSto
             })
         })
         .transpose()?;
+    let extensions_value: Value = row.get("extensions");
+    extensions_value
+        .as_array()
+        .context("workflow run extensions column must be a JSON array")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let extensions = serde_json::from_value::<Vec<AppliedExtension>>(extensions_value).map_err(
+        |error| {
+            SessionStoreError::Backend(format!(
+                "workflow run extensions column must be valid extension json: {error}"
+            ))
+        },
+    )?;
     let credential_bindings_value: Value = row.get("credential_bindings");
     credential_bindings_value
         .as_array()
@@ -8987,6 +9761,7 @@ fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionSto
         automation_task_id: row.get("automation_task_id"),
         state,
         source_snapshot,
+        extensions,
         credential_bindings,
         workspace_inputs,
         input: row.get("input"),
@@ -9136,6 +9911,8 @@ mod tests {
                     idle_timeout_sec: Some(600),
                     labels: HashMap::from([("suite".to_string(), "smoke".to_string())]),
                     integration_context: Some(serde_json::json!({ "ticket": "BPANE-6" })),
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy {
                         mode: SessionRecordingMode::Manual,
                         format: SessionRecordingFormat::Webm,
@@ -9179,6 +9956,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9196,6 +9975,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9218,6 +9999,7 @@ mod tests {
             compatibility_mode: "session_runtime_pool".to_string(),
             max_runtime_sessions: 2,
             supports_legacy_global_routes: false,
+            supports_session_extensions: true,
         });
         let alpha = principal("alpha");
 
@@ -9232,6 +10014,8 @@ mod tests {
                         idle_timeout_sec: None,
                         labels: HashMap::new(),
                         integration_context: None,
+                        extension_ids: Vec::new(),
+                        extensions: Vec::new(),
                         recording: SessionRecordingPolicy::default(),
                     },
                     SessionOwnerMode::Collaborative,
@@ -9250,6 +10034,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9281,6 +10067,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9328,6 +10116,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9448,6 +10238,8 @@ mod tests {
                     idle_timeout_sec: Some(300),
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9472,6 +10264,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9518,6 +10312,8 @@ mod tests {
                     idle_timeout_sec: Some(300),
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9548,6 +10344,7 @@ mod tests {
             compatibility_mode: "session_runtime_pool".to_string(),
             max_runtime_sessions: 1,
             supports_legacy_global_routes: false,
+            supports_session_extensions: true,
         });
         let owner = principal("owner");
 
@@ -9561,6 +10358,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9586,6 +10385,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9613,6 +10414,7 @@ mod tests {
             compatibility_mode: "session_runtime_pool".to_string(),
             max_runtime_sessions: 2,
             supports_legacy_global_routes: false,
+            supports_session_extensions: true,
         });
         let owner = principal("owner");
         let session = store
@@ -9625,6 +10427,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9677,6 +10481,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy {
                         mode: SessionRecordingMode::Always,
                         format: SessionRecordingFormat::Webm,
@@ -9743,6 +10549,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9803,6 +10611,7 @@ mod tests {
                     session_id: session.id,
                     automation_task_id: task.id,
                     source_snapshot: None,
+                    extensions: Vec::new(),
                     credential_bindings: Vec::new(),
                     workspace_inputs: Vec::new(),
                     input: None,
@@ -9864,6 +10673,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy::default(),
                 },
                 SessionOwnerMode::Collaborative,
@@ -9900,6 +10711,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy {
                         mode: SessionRecordingMode::Manual,
                         format: SessionRecordingFormat::Webm,
@@ -10016,6 +10829,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy {
                         mode: SessionRecordingMode::Manual,
                         format: SessionRecordingFormat::Webm,
@@ -10085,6 +10900,8 @@ mod tests {
             idle_timeout_sec: None,
             labels: HashMap::new(),
             integration_context: Some(Value::String("bad".to_string())),
+            extension_ids: Vec::new(),
+            extensions: Vec::new(),
             recording: SessionRecordingPolicy::default(),
         })
         .unwrap_err();
@@ -10101,6 +10918,8 @@ mod tests {
             idle_timeout_sec: None,
             labels: HashMap::new(),
             integration_context: None,
+            extension_ids: Vec::new(),
+            extensions: Vec::new(),
             recording: SessionRecordingPolicy {
                 mode: SessionRecordingMode::Manual,
                 format: SessionRecordingFormat::Webm,

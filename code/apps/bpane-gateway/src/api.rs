@@ -35,6 +35,10 @@ use crate::credential_provider::{
     CredentialProvider, CredentialProviderError, StoreCredentialSecretRequest,
 };
 use crate::connect_ticket::SessionConnectTicketManager;
+use crate::extension::{
+    AppliedExtension, ExtensionDefinitionListResponse, ExtensionDefinitionResource,
+    ExtensionVersionResource, PersistExtensionDefinitionRequest, PersistExtensionVersionRequest,
+};
 use crate::file_workspace::{
     FileWorkspaceFileListResponse, FileWorkspaceFileResource, FileWorkspaceListResponse,
     FileWorkspaceResource, PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest,
@@ -269,6 +273,21 @@ struct CreateCredentialBindingRequest {
 }
 
 #[derive(Deserialize)]
+struct CreateExtensionDefinitionRequest {
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct CreateExtensionVersionRequest {
+    version: String,
+    install_path: String,
+}
+
+#[derive(Deserialize)]
 struct TransitionAutomationTaskRequest {
     state: AutomationTaskState,
     #[serde(default)]
@@ -358,7 +377,7 @@ async fn create_session(
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
     let owner_mode = resolve_owner_mode(&state, request.owner_mode)?;
-    let stored = create_owned_session(&state, &principal, request, owner_mode).await?;
+    let stored = create_owned_session(&state, &principal, request, owner_mode, None).await?;
 
     Ok((
         StatusCode::CREATED,
@@ -421,8 +440,8 @@ async fn create_automation_task(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    let (session_id, session_source) =
-        resolve_task_session_binding(&state, &principal, Some(request.session), None).await?;
+    let (session, session_source) =
+        resolve_task_session_binding(&state, &principal, Some(request.session), None, None).await?;
 
     let task = state
         .session_store
@@ -431,7 +450,7 @@ async fn create_automation_task(
             PersistAutomationTaskRequest {
                 display_name: request.display_name,
                 executor: request.executor,
-                session_id,
+                session_id: session.id,
                 session_source,
                 input: request.input,
                 labels: request.labels,
@@ -953,6 +972,141 @@ async fn resolve_workflow_run_credential_bindings(
     Ok(bindings)
 }
 
+fn validate_session_extensions_allowed(
+    workflow_version: &str,
+    allowed_extension_ids: &[String],
+    extensions: &[AppliedExtension],
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    if extensions.is_empty() {
+        return Ok(());
+    }
+
+    let allowed_ids = allowed_extension_ids
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
+    if allowed_ids.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow definition version {workflow_version} does not allow browser extensions"
+                ),
+            }),
+        ));
+    }
+
+    for extension in extensions {
+        if !allowed_ids.contains(&extension.extension_id.to_string()) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {workflow_version} does not allow extension {}",
+                        extension.extension_id
+                    ),
+                }),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+async fn resolve_session_extensions(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    extension_ids: &[Uuid],
+    allowed_extension_ids: Option<&[String]>,
+) -> Result<Vec<AppliedExtension>, (StatusCode, Json<ErrorResponse>)> {
+    if extension_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if !state.session_manager.profile().supports_session_extensions {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "the current runtime backend does not support session extensions"
+                    .to_string(),
+            }),
+        ));
+    }
+
+    let allowed_set = allowed_extension_ids.map(|ids| ids.iter().cloned().collect::<HashSet<_>>());
+    let mut seen_ids = HashSet::new();
+    let mut extensions = Vec::with_capacity(extension_ids.len());
+    for extension_id in extension_ids {
+        if !seen_ids.insert(*extension_id) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!("session extension {extension_id} is duplicated"),
+                }),
+            ));
+        }
+
+        if let Some(allowed_ids) = allowed_set.as_ref() {
+            if !allowed_ids.contains(&extension_id.to_string()) {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: format!(
+                            "workflow definition does not allow extension {extension_id}"
+                        ),
+                    }),
+                ));
+            }
+        }
+
+        let definition = state
+            .session_store
+            .get_extension_definition_for_owner(principal, *extension_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("extension {extension_id} not found"),
+                    }),
+                )
+            })?;
+        if !definition.enabled {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: format!("extension {extension_id} is disabled"),
+                }),
+            ));
+        }
+        let version = state
+            .session_store
+            .get_latest_extension_version_for_owner(principal, *extension_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::CONFLICT,
+                    Json(ErrorResponse {
+                        error: format!(
+                            "extension {extension_id} does not have an installed version"
+                        ),
+                    }),
+                )
+            })?;
+        extensions.push(AppliedExtension {
+            extension_id: definition.id,
+            extension_version_id: version.id,
+            name: definition.name,
+            version: version.version,
+            install_path: version.install_path,
+        });
+    }
+
+    Ok(extensions)
+}
+
 async fn resolve_workflow_run_workspace_inputs(
     state: &Arc<ApiState>,
     principal: &AuthenticatedPrincipal,
@@ -1163,11 +1317,12 @@ async fn create_workflow_run(
     let workspace_inputs =
         resolve_workflow_run_workspace_inputs(&state, &principal, &version, workspace_inputs)
             .await?;
-    let (session_id, session_source) = resolve_task_session_binding(
+    let (session, session_source) = resolve_task_session_binding(
         &state,
         &principal,
         session,
         version.default_session.as_ref(),
+        Some(&version.allowed_extension_ids),
     )
     .await?;
     let task = state
@@ -1177,7 +1332,7 @@ async fn create_workflow_run(
             PersistAutomationTaskRequest {
                 display_name: Some(format!("{} {}", workflow.name, version.version)),
                 executor: version.executor.clone(),
-                session_id,
+                session_id: session.id,
                 session_source,
                 input: input.clone(),
                 labels: labels.clone(),
@@ -1193,9 +1348,10 @@ async fn create_workflow_run(
                 workflow_definition_id: workflow.id,
                 workflow_definition_version_id: version.id,
                 workflow_version: version.version.clone(),
-                session_id,
+                session_id: session.id,
                 automation_task_id: task.id,
                 source_snapshot,
+                extensions: session.extensions.clone(),
                 credential_bindings,
                 workspace_inputs,
                 input,
@@ -1743,6 +1899,136 @@ async fn get_workflow_run_credential_binding_resolved(
         binding: binding.to_resource(run.id),
         payload: resolved.payload,
     }))
+}
+
+async fn list_extensions(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ExtensionDefinitionListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let extensions = state
+        .session_store
+        .list_extension_definitions_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|definition| definition.to_resource())
+        .collect();
+    Ok(Json(ExtensionDefinitionListResponse { extensions }))
+}
+
+async fn create_extension(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateExtensionDefinitionRequest>,
+) -> Result<(StatusCode, Json<ExtensionDefinitionResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let extension = state
+        .session_store
+        .create_extension_definition(
+            &principal,
+            PersistExtensionDefinitionRequest {
+                name: request.name,
+                description: request.description,
+                labels: request.labels,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(extension.to_resource())))
+}
+
+async fn get_extension(
+    headers: HeaderMap,
+    Path(extension_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ExtensionDefinitionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let extension = state
+        .session_store
+        .get_extension_definition_for_owner(&principal, extension_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("extension {extension_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(extension.to_resource()))
+}
+
+async fn create_extension_version(
+    headers: HeaderMap,
+    Path(extension_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateExtensionVersionRequest>,
+) -> Result<(StatusCode, Json<ExtensionVersionResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let version = state
+        .session_store
+        .create_extension_version_for_owner(
+            &principal,
+            PersistExtensionVersionRequest {
+                extension_definition_id: extension_id,
+                version: request.version,
+                install_path: request.install_path,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(version.to_resource())))
+}
+
+async fn enable_extension(
+    headers: HeaderMap,
+    Path(extension_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ExtensionDefinitionResource>, (StatusCode, Json<ErrorResponse>)> {
+    set_extension_enabled(headers, extension_id, state, true).await
+}
+
+async fn disable_extension(
+    headers: HeaderMap,
+    Path(extension_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ExtensionDefinitionResource>, (StatusCode, Json<ErrorResponse>)> {
+    set_extension_enabled(headers, extension_id, state, false).await
+}
+
+async fn set_extension_enabled(
+    headers: HeaderMap,
+    extension_id: Uuid,
+    state: Arc<ApiState>,
+    enabled: bool,
+) -> Result<Json<ExtensionDefinitionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let extension = state
+        .session_store
+        .set_extension_definition_enabled_for_owner(&principal, extension_id, enabled)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("extension {extension_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(extension.to_resource()))
 }
 
 async fn list_file_workspaces(
@@ -2949,9 +3235,35 @@ pub async fn run_api_server(
 async fn create_owned_session(
     state: &ApiState,
     principal: &AuthenticatedPrincipal,
-    request: CreateSessionRequest,
+    mut request: CreateSessionRequest,
     owner_mode: SessionOwnerMode,
+    allowed_extension_ids: Option<&[String]>,
 ) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    if request.extensions.is_empty() {
+        request.extensions = resolve_session_extensions(
+            state,
+            principal,
+            &request.extension_ids,
+            allowed_extension_ids,
+        )
+        .await?;
+    }
+    if !request.extensions.is_empty() && !state.session_manager.profile().supports_session_extensions {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "the current runtime backend does not support session extensions"
+                    .to_string(),
+            }),
+        ));
+    }
+    if let Some(allowed_extension_ids) = allowed_extension_ids {
+        validate_session_extensions_allowed(
+            "session_create_payload",
+            allowed_extension_ids,
+            &request.extensions,
+        )?;
+    }
     state
         .recording_lifecycle
         .validate_mode(request.recording.mode)
@@ -2992,7 +3304,8 @@ async fn resolve_task_session_binding(
     principal: &AuthenticatedPrincipal,
     session: Option<AutomationTaskSessionRequest>,
     default_session: Option<&Value>,
-) -> Result<(Uuid, AutomationTaskSessionSource), (StatusCode, Json<ErrorResponse>)> {
+    allowed_extension_ids: Option<&[String]>,
+) -> Result<(StoredSession, AutomationTaskSessionSource), (StatusCode, Json<ErrorResponse>)> {
     match session {
         Some(AutomationTaskSessionRequest {
             existing_session_id: Some(session_id),
@@ -3011,16 +3324,29 @@ async fn resolve_task_session_binding(
                         }),
                     )
                 })?;
-            Ok((visible.id, AutomationTaskSessionSource::ExistingSession))
+            if let Some(allowed_extension_ids) = allowed_extension_ids {
+                validate_session_extensions_allowed(
+                    "existing_session_binding",
+                    allowed_extension_ids,
+                    &visible.extensions,
+                )?;
+            }
+            Ok((visible, AutomationTaskSessionSource::ExistingSession))
         }
         Some(AutomationTaskSessionRequest {
             existing_session_id: None,
             create_session: Some(create_session_request),
         }) => {
             let owner_mode = resolve_owner_mode(state, create_session_request.owner_mode)?;
-            let created =
-                create_owned_session(state, principal, create_session_request, owner_mode).await?;
-            Ok((created.id, AutomationTaskSessionSource::CreatedSession))
+            let created = create_owned_session(
+                state,
+                principal,
+                create_session_request,
+                owner_mode,
+                allowed_extension_ids,
+            )
+            .await?;
+            Ok((created, AutomationTaskSessionSource::CreatedSession))
         }
         Some(_) => Err((
             StatusCode::BAD_REQUEST,
@@ -3053,9 +3379,15 @@ async fn resolve_task_session_binding(
                 )
             })?;
             let owner_mode = resolve_owner_mode(state, create_session_request.owner_mode)?;
-            let created =
-                create_owned_session(state, principal, create_session_request, owner_mode).await?;
-            Ok((created.id, AutomationTaskSessionSource::CreatedSession))
+            let created = create_owned_session(
+                state,
+                principal,
+                create_session_request,
+                owner_mode,
+                allowed_extension_ids,
+            )
+            .await?;
+            Ok((created, AutomationTaskSessionSource::CreatedSession))
         }
     }
 }
@@ -3402,6 +3734,20 @@ fn sanitize_content_disposition_filename(file_name: &str) -> String {
 fn build_api_router(state: Arc<ApiState>) -> Router {
     Router::new()
         .route("/api/v1/sessions", post(create_session).get(list_sessions))
+        .route("/api/v1/extensions", post(create_extension).get(list_extensions))
+        .route("/api/v1/extensions/{extension_id}", get(get_extension))
+        .route(
+            "/api/v1/extensions/{extension_id}/versions",
+            post(create_extension_version),
+        )
+        .route(
+            "/api/v1/extensions/{extension_id}/enable",
+            post(enable_extension),
+        )
+        .route(
+            "/api/v1/extensions/{extension_id}/disable",
+            post(disable_extension),
+        )
         .route(
             "/api/v1/credential-bindings",
             post(create_credential_binding).get(list_credential_bindings),

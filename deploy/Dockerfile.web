@@ -20,6 +20,7 @@ COPY dev/test-embed.html /usr/share/nginx/html/index.html
 COPY dev/benchmark-scroll.html /usr/share/nginx/html/benchmark-scroll.html
 COPY dev/benchmark-article.html /usr/share/nginx/html/benchmark-article.html
 COPY dev/workflow-credential-fixture.html /usr/share/nginx/html/workflow-credential-fixture.html
+COPY dev/workflow-extension-fixture.html /usr/share/nginx/html/workflow-extension-fixture.html
 COPY dev/auth-config.template.json /usr/share/nginx/html/auth-config.template.json
 COPY --from=build /app/dist/ /usr/share/nginx/html/dist/
 

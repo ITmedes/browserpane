@@ -13,6 +13,7 @@
     "smoke:recording": "node scripts/run-recording-smoke.mjs",
     "smoke:workflows": "node scripts/run-workflow-smoke.mjs",
     "smoke:workflow-credentials": "node scripts/run-workflow-credential-smoke.mjs",
+    "smoke:workflow-extension": "node scripts/run-workflow-extension-smoke.mjs",
     "smoke:workflow-workspace": "node scripts/run-workflow-workspace-smoke.mjs",
     "smoke:multisession": "node scripts/run-multi-session-smoke.mjs",
     "test": "vitest run",

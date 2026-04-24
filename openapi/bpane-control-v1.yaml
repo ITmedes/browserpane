@@ -19,6 +19,7 @@ tags:
   - name: Session Automation
   - name: Automation Tasks
   - name: Credential Bindings
+  - name: Extensions
   - name: File Workspaces
   - name: Workflows
 security:
@@ -622,6 +623,133 @@ paths:
                 $ref: '#/components/schemas/WorkflowRunLogResource'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/extensions:
+    get:
+      tags: [Extensions]
+      summary: List extension definitions visible to the authenticated owner
+      operationId: listExtensions
+      responses:
+        '200':
+          description: Extension definition list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDefinitionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Extensions]
+      summary: Create an approved browser extension reference
+      operationId: createExtension
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExtensionDefinitionRequest'
+      responses:
+        '201':
+          description: Extension definition created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDefinitionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/extensions/{extension_id}:
+    parameters:
+      - $ref: '#/components/parameters/ExtensionId'
+    get:
+      tags: [Extensions]
+      summary: Fetch one extension definition visible to the authenticated owner
+      operationId: getExtension
+      responses:
+        '200':
+          description: Extension definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDefinitionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/extensions/{extension_id}/versions:
+    parameters:
+      - $ref: '#/components/parameters/ExtensionId'
+    post:
+      tags: [Extensions]
+      summary: Publish a new installed version for an extension definition
+      operationId: createExtensionVersion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExtensionVersionRequest'
+      responses:
+        '201':
+          description: Extension version created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionVersionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/extensions/{extension_id}/enable:
+    parameters:
+      - $ref: '#/components/parameters/ExtensionId'
+    post:
+      tags: [Extensions]
+      summary: Enable an extension definition for future session use
+      operationId: enableExtension
+      responses:
+        '200':
+          description: Extension definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDefinitionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/extensions/{extension_id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/ExtensionId'
+    post:
+      tags: [Extensions]
+      summary: Disable an extension definition for future session use
+      operationId: disableExtension
+      responses:
+        '200':
+          description: Extension definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDefinitionResource'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1379,6 +1507,13 @@ components:
       schema:
         type: string
         format: uuid
+    ExtensionId:
+      name: extension_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     WorkspaceId:
       name: workspace_id
       in: path
@@ -1884,6 +2019,112 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CredentialBindingResource'
+    CreateExtensionDefinitionRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    CreateExtensionVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [version, install_path]
+      properties:
+        version:
+          type: string
+        install_path:
+          type: string
+    ExtensionDefinitionResource:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - enabled
+        - latest_version
+        - labels
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        latest_version:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ExtensionDefinitionListResponse:
+      type: object
+      required: [extensions]
+      properties:
+        extensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionDefinitionResource'
+    ExtensionVersionResource:
+      type: object
+      required:
+        - id
+        - extension_definition_id
+        - version
+        - install_path
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        extension_definition_id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        install_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    AppliedExtensionResource:
+      type: object
+      required:
+        - extension_id
+        - extension_version_id
+        - name
+        - version
+      properties:
+        extension_id:
+          type: string
+          format: uuid
+        extension_version_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        version:
+          type: string
     CreateFileWorkspaceRequest:
       type: object
       additionalProperties: false
@@ -2092,6 +2333,7 @@ components:
           type: array
           items:
             type: string
+            format: uuid
         allowed_file_workspace_ids:
           type: array
           items:
@@ -2144,6 +2386,7 @@ components:
           type: array
           items:
             type: string
+            format: uuid
         allowed_file_workspace_ids:
           type: array
           items:
@@ -2381,6 +2624,7 @@ components:
         - error
         - artifact_refs
         - source_snapshot
+        - extensions
         - credential_bindings
         - workspace_inputs
         - labels
@@ -2425,6 +2669,10 @@ components:
           allOf:
             - $ref: '#/components/schemas/WorkflowRunSourceSnapshotResource'
           nullable: true
+        extensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppliedExtensionResource'
         credential_bindings:
           type: array
           items:
@@ -2645,6 +2893,7 @@ components:
         - idle_timeout_sec
         - labels
         - integration_context
+        - extensions
         - recording
         - connect
         - runtime
@@ -2684,6 +2933,10 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        extensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppliedExtensionResource'
         recording:
           $ref: '#/components/schemas/SessionRecordingPolicy'
         connect:
@@ -2723,6 +2976,11 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        extension_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
         recording:
           $ref: '#/components/schemas/SessionRecordingPolicy'
     SessionListResponse:

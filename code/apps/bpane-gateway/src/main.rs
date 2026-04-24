@@ -6,6 +6,7 @@ mod config;
 mod connect_ticket;
 mod credential_binding;
 mod credential_provider;
+mod extension;
 mod file_workspace;
 mod idle_stop;
 mod recording_artifact_store;

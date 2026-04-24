@@ -13,6 +13,7 @@ use crate::automation_task::{
 use crate::credential_binding::{
     WorkflowRunCredentialBinding, WorkflowRunCredentialBindingResource,
 };
+use crate::extension::{AppliedExtension, AppliedExtensionResource};
 use crate::workflow_source::WorkflowSource;
 
 #[derive(Debug, Clone)]
@@ -45,6 +46,7 @@ pub struct PersistWorkflowRunRequest {
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
     pub source_snapshot: Option<WorkflowRunSourceSnapshot>,
+    pub extensions: Vec<AppliedExtension>,
     pub credential_bindings: Vec<WorkflowRunCredentialBinding>,
     pub workspace_inputs: Vec<WorkflowRunWorkspaceInput>,
     pub input: Option<Value>,
@@ -113,6 +115,7 @@ pub struct StoredWorkflowRun {
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
     pub source_snapshot: Option<WorkflowRunSourceSnapshot>,
+    pub extensions: Vec<AppliedExtension>,
     pub credential_bindings: Vec<WorkflowRunCredentialBinding>,
     pub workspace_inputs: Vec<WorkflowRunWorkspaceInput>,
     pub state: WorkflowRunState,
@@ -339,6 +342,7 @@ pub struct WorkflowRunResource {
     pub error: Option<String>,
     pub artifact_refs: Vec<String>,
     pub source_snapshot: Option<WorkflowRunSourceSnapshotResource>,
+    pub extensions: Vec<AppliedExtensionResource>,
     pub credential_bindings: Vec<WorkflowRunCredentialBindingResource>,
     pub workspace_inputs: Vec<WorkflowRunWorkspaceInputResource>,
     pub labels: HashMap<String, String>,
@@ -435,6 +439,11 @@ impl StoredWorkflowRun {
                 .source_snapshot
                 .as_ref()
                 .map(|snapshot| snapshot.to_resource(self.id)),
+            extensions: self
+                .extensions
+                .iter()
+                .map(AppliedExtension::to_resource)
+                .collect(),
             credential_bindings: self
                 .credential_bindings
                 .iter()

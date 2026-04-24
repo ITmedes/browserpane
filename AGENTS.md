@@ -38,6 +38,7 @@ Current product shape:
 - Exclusive browser-owner mode: optional in `bpane-gateway` via `--exclusive-browser-owner`; default is disabled.
 - Viewer cap: configurable in `bpane-gateway` via `--max-viewers`, default `10` when exclusive-owner mode or MCP ownership is active.
 - MCP automation: supported via `mcp-bridge` and gateway ownership APIs.
+- Browser extensions: owner-approved unpacked extensions are supported for docker-backed sessions and workflow runs; `static_single` does not support session extension sets.
 - Camera ingress: disabled by default in compose; requires browser H.264 encode support and a mapped `v4l2loopback` device on the host.
 - In exclusive-owner or MCP-owned sessions, restricted browser viewers are view-only: no input, clipboard, microphone, camera, upload, download, or resize.
 
@@ -54,7 +55,7 @@ Current product shape:
   - WebTransport gateway and shared-session coordinator.
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
-  - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
+  - `session_control.rs`: versioned session-control store and Postgres integration, including workflows, credential bindings, file workspaces, and approved extension metadata.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
   - `credential_provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2.
   - `workflow_source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
@@ -138,6 +139,7 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:workflow-credentials -- --headless`
 - `npm run smoke:workflow-workspace -- --headless`
 - `npm run smoke:workflows -- --headless`
+- `npm run smoke:workflow-extension -- --headless`
 - `npm run smoke:multisession -- --headless`
 - `npm run test:coverage`
 

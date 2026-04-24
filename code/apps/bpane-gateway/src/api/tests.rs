@@ -220,6 +220,63 @@ async fn test_router_with_live_agent() -> (Router, String, TestAgentServer) {
     (build_api_router(state), token, agent_server)
 }
 
+async fn test_router_with_docker_pool() -> (Router, String) {
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
+    let token = auth_validator
+        .generate_token()
+        .expect("hmac auth validator should generate dev token");
+    let session_manager = Arc::new(
+        SessionManager::new(SessionManagerConfig::DockerPool(
+            crate::session_manager::SessionManagerDockerConfig {
+                docker_bin: "docker".to_string(),
+                image: "deploy-host".to_string(),
+                network: "deploy_bpane-internal".to_string(),
+                shared_run_volume: "deploy_agent-socket".to_string(),
+                container_name_prefix: "bpane-runtime".to_string(),
+                socket_root: "/run/bpane/sessions".to_string(),
+                cdp_proxy_port: 9223,
+                shm_size: "128m".to_string(),
+                start_timeout: Duration::from_secs(30),
+                idle_timeout: Duration::from_secs(300),
+                max_active_runtimes: 2,
+                max_starting_runtimes: 1,
+                seccomp_unconfined: true,
+                env_file: None,
+            },
+        ))
+        .unwrap(),
+    );
+    let session_store = SessionStore::in_memory_with_config(session_manager.profile().clone());
+    session_manager
+        .attach_session_store(session_store.clone())
+        .await;
+    let state = Arc::new(ApiState {
+        registry: Arc::new(SessionRegistry::new(10, false)),
+        auth_validator,
+        connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
+            vec![5; 32],
+            Duration::from_secs(300),
+        )),
+        automation_access_token_manager: Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![6; 32],
+            Duration::from_secs(300),
+        )),
+        session_store,
+        session_manager,
+        credential_provider: Some(test_credential_provider()),
+        recording_artifact_store: test_artifact_store(),
+        workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
+        recording_observability: Arc::new(RecordingObservability::default()),
+        recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
+        idle_stop_timeout: Duration::from_secs(300),
+        public_gateway_url: "https://localhost:4433".to_string(),
+        default_owner_mode: SessionOwnerMode::Collaborative,
+    });
+    (build_api_router(state), token)
+}
+
 fn bearer(token: &str) -> String {
     format!("Bearer {token}")
 }
@@ -530,6 +587,287 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     assert_eq!(stopped["id"], session_id);
     assert_eq!(stopped["state"], "stopped");
     assert!(stopped["stopped_at"].is_string());
+}
+
+#[tokio::test]
+async fn rejects_extension_bound_sessions_on_legacy_runtime_backends() {
+    let (app, token) = test_router();
+
+    let create_extension_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/extensions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "adblock",
+                        "description": "Policy-approved extension",
+                        "labels": { "suite": "contract" }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_extension_response.status(), StatusCode::CREATED);
+    let extension = response_json(create_extension_response).await;
+    let extension_id = extension["id"].as_str().unwrap();
+
+    let create_version_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/extensions/{extension_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "1.0.0",
+                        "install_path": "/home/bpane/bpane-test-extension"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version_response.status(), StatusCode::CREATED);
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "extension_ids": [extension_id]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CONFLICT);
+    let error = response_json(create_session_response).await;
+    assert_eq!(
+        error["error"],
+        "the current runtime backend does not support session extensions"
+    );
+}
+
+#[tokio::test]
+async fn creates_extensions_and_applies_them_to_docker_sessions() {
+    let (app, token) = test_router_with_docker_pool().await;
+
+    let create_extension_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/extensions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "workflow-extension",
+                        "description": "Approved workflow extension",
+                        "labels": { "suite": "contract" }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_extension_response.status(), StatusCode::CREATED);
+    let extension = response_json(create_extension_response).await;
+    let extension_id = extension["id"].as_str().unwrap().to_string();
+
+    let create_version_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/extensions/{extension_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "1.0.0",
+                        "install_path": "/home/bpane/bpane-test-extension"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version_response.status(), StatusCode::CREATED);
+    let version = response_json(create_version_response).await;
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "labels": { "suite": "contract" },
+                        "extension_ids": [extension_id]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let session = response_json(create_session_response).await;
+    assert_eq!(session["extensions"].as_array().unwrap().len(), 1);
+    assert_eq!(session["extensions"][0]["extension_id"], extension_id);
+    assert_eq!(session["extensions"][0]["name"], "workflow-extension");
+    assert_eq!(session["extensions"][0]["version"], "1.0.0");
+    assert_eq!(
+        session["extensions"][0]["extension_version_id"],
+        version["id"].as_str().unwrap()
+    );
+}
+
+#[tokio::test]
+async fn workflow_runs_inherit_session_extensions() {
+    let (app, token) = test_router_with_docker_pool().await;
+
+    let create_extension_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/extensions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "workflow-extension",
+                        "description": "Approved workflow extension",
+                        "labels": { "suite": "contract" }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_extension_response.status(), StatusCode::CREATED);
+    let extension = response_json(create_extension_response).await;
+    let extension_id = extension["id"].as_str().unwrap().to_string();
+
+    let create_version_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/extensions/{extension_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "1.0.0",
+                        "install_path": "/home/bpane/bpane-test-extension"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version_response.status(), StatusCode::CREATED);
+
+    let create_workflow_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflows")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "extension-smoke",
+                        "description": "Workflow extension test",
+                        "labels": { "suite": "contract" }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_workflow_response.status(), StatusCode::CREATED);
+    let workflow = response_json(create_workflow_response).await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_workflow_version_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/extensions/run.mjs",
+                        "default_session": {
+                            "extension_ids": [extension_id]
+                        },
+                        "allowed_extension_ids": [extension_id]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_workflow_version_response.status(), StatusCode::CREATED);
+
+    let create_run_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_run_response.status(), StatusCode::CREATED);
+    let run = response_json(create_run_response).await;
+    assert_eq!(run["extensions"].as_array().unwrap().len(), 1);
+    assert_eq!(run["extensions"][0]["extension_id"], extension_id);
+    assert_eq!(run["extensions"][0]["name"], "workflow-extension");
 }
 
 #[tokio::test]
