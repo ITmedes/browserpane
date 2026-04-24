@@ -30,6 +30,22 @@ export interface GatewaySessionResource {
   integration_context?: Record<string, unknown> | null;
 }
 
+export interface GatewaySessionAutomationAccessResponse {
+  session_id: string;
+  token_type: "session_automation_access_token";
+  token: string;
+  expires_at: string;
+  automation: {
+    endpoint_url: string;
+    protocol: "chrome_devtools_protocol";
+    auth_type: "session_automation_access_token";
+    auth_header: string;
+    status_path: string;
+    mcp_owner_path: string;
+    compatibility_mode: string;
+  };
+}
+
 interface SessionListResponse {
   sessions: GatewaySessionResource[];
 }
@@ -147,6 +163,17 @@ export class SessionControlClient {
       }
       throw error;
     }
+  }
+
+  async issueAutomationAccess(
+    sessionId: string,
+  ): Promise<GatewaySessionAutomationAccessResponse> {
+    return this.fetchJson<GatewaySessionAutomationAccessResponse>(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-access`,
+      {
+        method: "POST",
+      },
+    );
   }
 
   private async createSession(): Promise<GatewaySessionResource> {

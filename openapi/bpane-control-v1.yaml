@@ -374,6 +374,28 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/automation-access:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Session Automation]
+      summary: Mint short-lived automation access for one session runtime
+      operationId: issueSessionAutomationAccess
+      responses:
+        '200':
+          description: Session-scoped automation access issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionAutomationAccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/status:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -381,6 +403,9 @@ paths:
       tags: [Session Runtime]
       summary: Get live runtime telemetry for a runtime-compatible session
       operationId: getSessionStatus
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       responses:
         '200':
           description: Live runtime telemetry snapshot
@@ -446,6 +471,9 @@ paths:
       tags: [Session Automation]
       summary: Claim MCP ownership for a runtime-compatible session
       operationId: setSessionMcpOwner
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       requestBody:
         required: true
         content:
@@ -471,6 +499,9 @@ paths:
       tags: [Session Automation]
       summary: Release MCP ownership for a runtime-compatible session
       operationId: clearSessionMcpOwner
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       responses:
         '200':
           description: MCP ownership released
@@ -492,6 +523,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    sessionAutomationAccessToken:
+      type: apiKey
+      in: header
+      name: x-bpane-automation-access-token
   parameters:
     SessionId:
       name: session_id
@@ -670,6 +705,60 @@ components:
           enum:
             - legacy_single_runtime
             - session_runtime_pool
+    SessionAutomationAccessInfo:
+      type: object
+      required:
+        - endpoint_url
+        - protocol
+        - auth_type
+        - auth_header
+        - status_path
+        - mcp_owner_path
+        - compatibility_mode
+      properties:
+        endpoint_url:
+          type: string
+          format: uri
+        protocol:
+          type: string
+          enum: [chrome_devtools_protocol]
+        auth_type:
+          type: string
+          enum: [session_automation_access_token]
+        auth_header:
+          type: string
+          enum: [x-bpane-automation-access-token]
+        status_path:
+          type: string
+        mcp_owner_path:
+          type: string
+        compatibility_mode:
+          type: string
+          enum:
+            - legacy_single_runtime
+            - session_runtime_pool
+    SessionAutomationAccessResponse:
+      type: object
+      required:
+        - session_id
+        - token_type
+        - token
+        - expires_at
+        - automation
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        token_type:
+          type: string
+          enum: [session_automation_access_token]
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        automation:
+          $ref: '#/components/schemas/SessionAutomationAccessInfo'
     SessionRuntimeInfo:
       type: object
       required: [binding, compatibility_mode, cdp_endpoint]

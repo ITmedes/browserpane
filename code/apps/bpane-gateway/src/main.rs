@@ -1,5 +1,6 @@
 mod api;
 mod auth;
+mod automation_access_token;
 mod config;
 mod connect_ticket;
 mod idle_stop;
@@ -28,6 +29,7 @@ use tracing_subscriber::EnvFilter;
 use wtransport::Identity;
 
 use auth::{AuthValidator, OidcConfig};
+use automation_access_token::SessionAutomationAccessTokenManager;
 use config::Config;
 use connect_ticket::SessionConnectTicketManager;
 use recording_artifact_store::RecordingArtifactStore;
@@ -94,6 +96,10 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let connect_ticket_manager = Arc::new(SessionConnectTicketManager::new(
+        shared_secret.clone(),
+        Duration::from_secs(config.session_ticket_ttl_secs),
+    ));
+    let automation_access_token_manager = Arc::new(SessionAutomationAccessTokenManager::new(
         shared_secret,
         Duration::from_secs(config.session_ticket_ttl_secs),
     ));
@@ -280,6 +286,7 @@ async fn main() -> anyhow::Result<()> {
             registry,
             auth_validator,
             connect_ticket_manager,
+            automation_access_token_manager,
             session_store,
             session_manager,
             recording_artifact_store,

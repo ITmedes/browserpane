@@ -13,6 +13,9 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
+use crate::automation_access_token::{
+    SessionAutomationAccessTokenClaims, SessionAutomationAccessTokenManager,
+};
 use crate::connect_ticket::SessionConnectTicketManager;
 use crate::idle_stop::schedule_idle_session_stop;
 use crate::recording_artifact_store::{
@@ -41,6 +44,7 @@ struct ApiState {
     registry: Arc<SessionRegistry>,
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
+    automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
     session_store: SessionStore,
     session_manager: Arc<SessionManager>,
     recording_artifact_store: Arc<RecordingArtifactStore>,
@@ -50,6 +54,8 @@ struct ApiState {
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
 }
+
+const AUTOMATION_ACCESS_TOKEN_HEADER: &str = "x-bpane-automation-access-token";
 
 #[derive(Serialize)]
 struct SessionStatus {
@@ -132,6 +138,26 @@ struct SessionAccessTokenResponse {
     token: String,
     expires_at: chrono::DateTime<chrono::Utc>,
     connect: crate::session_control::SessionConnectInfo,
+}
+
+#[derive(Serialize)]
+struct SessionAutomationAccessInfo {
+    endpoint_url: String,
+    protocol: String,
+    auth_type: String,
+    auth_header: String,
+    status_path: String,
+    mcp_owner_path: String,
+    compatibility_mode: String,
+}
+
+#[derive(Serialize)]
+struct SessionAutomationAccessResponse {
+    session_id: Uuid,
+    token_type: String,
+    token: String,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    automation: SessionAutomationAccessInfo,
 }
 
 async fn create_session(
@@ -632,72 +658,7 @@ async fn issue_session_access_token(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    let stored = state
-        .session_store
-        .get_session_for_principal(&principal, session_id)
-        .await
-        .map_err(map_session_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: format!("session {session_id} not found"),
-                }),
-            )
-        })?;
-    let was_stopped = stored.state == SessionLifecycleState::Stopped;
-
-    let connectable = if was_stopped {
-        let prepared = state
-            .session_store
-            .prepare_session_for_connect(session_id)
-            .await
-            .map_err(map_session_store_error)?
-            .ok_or_else(|| {
-                (
-                    StatusCode::NOT_FOUND,
-                    Json(ErrorResponse {
-                        error: format!("session {session_id} not found"),
-                    }),
-                )
-            })?;
-        schedule_idle_session_stop(
-            session_id,
-            state.idle_stop_timeout,
-            state.registry.clone(),
-            state.session_store.clone(),
-            state.session_manager.clone(),
-            state.recording_lifecycle.clone(),
-        );
-        prepared
-    } else {
-        stored
-    };
-
-    if let Err(error) = state
-        .recording_lifecycle
-        .ensure_auto_recording(&connectable)
-        .await
-    {
-        if was_stopped {
-            let _ = state.session_store.stop_session_if_idle(session_id).await;
-            state.session_manager.release(session_id).await;
-            state.registry.remove_session(session_id).await;
-        }
-        return Err(map_recording_lifecycle_error(error));
-    }
-
-    if !connectable.state.is_runtime_candidate() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: format!(
-                    "session {session_id} is not connectable in state {}",
-                    connectable.state.as_str()
-                ),
-            }),
-        ));
-    }
+    let connectable = prepare_runtime_access_session(&state, &principal, session_id).await?;
 
     let issued = state
         .connect_ticket_manager
@@ -721,12 +682,64 @@ async fn issue_session_access_token(
     }))
 }
 
+async fn issue_session_automation_access(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionAutomationAccessResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let connectable = prepare_runtime_access_session(&state, &principal, session_id).await?;
+    resolve_runtime(&state, session_id).await?;
+    let resource = session_resource(&state, &connectable, None);
+    let endpoint_url = resource.runtime.cdp_endpoint.ok_or_else(|| {
+        (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "session {session_id} does not expose an automation endpoint for the current runtime"
+                ),
+            }),
+        )
+    })?;
+    let issued = state
+        .automation_access_token_manager
+        .issue_token(session_id, &principal)
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to issue session automation access token: {error}"),
+                }),
+            )
+        })?;
+
+    Ok(Json(SessionAutomationAccessResponse {
+        session_id,
+        token_type: "session_automation_access_token".to_string(),
+        token: issued.token,
+        expires_at: issued.expires_at,
+        automation: SessionAutomationAccessInfo {
+            endpoint_url,
+            protocol: "chrome_devtools_protocol".to_string(),
+            auth_type: "session_automation_access_token".to_string(),
+            auth_header: AUTOMATION_ACCESS_TOKEN_HEADER.to_string(),
+            status_path: format!("/api/v1/sessions/{session_id}/status"),
+            mcp_owner_path: format!("/api/v1/sessions/{session_id}/mcp-owner"),
+            compatibility_mode: resource.connect.compatibility_mode,
+        },
+    }))
+}
+
 async fn get_session_status(
     headers: HeaderMap,
     Path(session_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<SessionStatus>, (StatusCode, Json<ErrorResponse>)> {
-    let session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let session =
+        authorize_runtime_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
     let hub = state
         .registry
         .ensure_hub_for_session(
@@ -1009,7 +1022,9 @@ async fn set_session_mcp_owner(
     State(state): State<Arc<ApiState>>,
     Json(req): Json<McpOwnerRequest>,
 ) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let _session =
+        authorize_runtime_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
     let runtime = resolve_runtime(&state, session_id).await?;
     let hub = state
         .registry
@@ -1081,7 +1096,9 @@ async fn clear_session_mcp_owner(
     Path(session_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let _session =
+        authorize_runtime_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
     let runtime = resolve_runtime(&state, session_id).await?;
     let hub = state
         .registry
@@ -1120,6 +1137,7 @@ pub async fn run_api_server(
     registry: Arc<SessionRegistry>,
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
+    automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
     session_store: SessionStore,
     session_manager: Arc<SessionManager>,
     recording_artifact_store: Arc<RecordingArtifactStore>,
@@ -1133,6 +1151,7 @@ pub async fn run_api_server(
         registry,
         auth_validator,
         connect_ticket_manager,
+        automation_access_token_manager,
         session_store,
         session_manager,
         recording_artifact_store,
@@ -1187,6 +1206,15 @@ fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
     value.strip_prefix("Bearer ")
 }
 
+fn extract_automation_access_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(AUTOMATION_ACCESS_TOKEN_HEADER)?
+        .to_str()
+        .ok()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
 fn build_api_router(state: Arc<ApiState>) -> Router {
     Router::new()
         .route("/api/v1/sessions", post(create_session).get(list_sessions))
@@ -1233,6 +1261,10 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         .route(
             "/api/v1/sessions/{session_id}/access-tokens",
             post(issue_session_access_token),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/automation-access",
+            post(issue_session_automation_access),
         )
         .route(
             "/api/v1/sessions/{session_id}/automation-owner",
@@ -1384,6 +1416,25 @@ async fn authorize_runtime_session_request(
 ) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
     let session = authorize_visible_session_request(headers, state, session_id).await?;
 
+    ensure_runtime_candidate_session(session, session_id)
+}
+
+async fn authorize_runtime_session_request_with_automation_access(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    let session =
+        authorize_visible_session_request_with_automation_access(headers, state, session_id)
+            .await?;
+
+    ensure_runtime_candidate_session(session, session_id)
+}
+
+fn ensure_runtime_candidate_session(
+    session: StoredSession,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
     if !matches!(
         session.state,
         SessionLifecycleState::Pending
@@ -1403,6 +1454,171 @@ async fn authorize_runtime_session_request(
     }
 
     Ok(session)
+}
+
+async fn prepare_runtime_access_session(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    let stored = state
+        .session_store
+        .get_session_for_principal(principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+    let was_stopped = stored.state == SessionLifecycleState::Stopped;
+
+    let connectable = if was_stopped {
+        let prepared = state
+            .session_store
+            .prepare_session_for_connect(session_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("session {session_id} not found"),
+                    }),
+                )
+            })?;
+        schedule_idle_session_stop(
+            session_id,
+            state.idle_stop_timeout,
+            state.registry.clone(),
+            state.session_store.clone(),
+            state.session_manager.clone(),
+            state.recording_lifecycle.clone(),
+        );
+        prepared
+    } else {
+        stored
+    };
+
+    if let Err(error) = state
+        .recording_lifecycle
+        .ensure_auto_recording(&connectable)
+        .await
+    {
+        if was_stopped {
+            let _ = state.session_store.stop_session_if_idle(session_id).await;
+            state.session_manager.release(session_id).await;
+            state.registry.remove_session(session_id).await;
+        }
+        return Err(map_recording_lifecycle_error(error));
+    }
+
+    if !connectable.state.is_runtime_candidate() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "session {session_id} is not connectable in state {}",
+                    connectable.state.as_str()
+                ),
+            }),
+        ));
+    }
+
+    Ok(connectable)
+}
+
+async fn authorize_visible_session_request_with_automation_access(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    if extract_bearer_token(headers).is_some() {
+        match authorize_visible_session_request(headers, state, session_id).await {
+            Ok(session) => return Ok(session),
+            Err(error) if extract_automation_access_token(headers).is_none() => return Err(error),
+            Err(_) => {}
+        }
+    }
+
+    let claims = validate_automation_access_request(headers, state, session_id)?;
+    let session = state
+        .session_store
+        .get_session_by_id(session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+    if !automation_access_claims_match_session(&claims, &session) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "automation access token is no longer valid for this session".to_string(),
+            }),
+        ));
+    }
+
+    Ok(session)
+}
+
+fn validate_automation_access_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<SessionAutomationAccessTokenClaims, (StatusCode, Json<ErrorResponse>)> {
+    let token = extract_automation_access_token(headers).ok_or_else(|| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "missing bearer token or session automation access token".to_string(),
+            }),
+        )
+    })?;
+    let claims = state
+        .automation_access_token_manager
+        .validate_token(token)
+        .map_err(|error| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: format!("invalid session automation access token: {error}"),
+                }),
+            )
+        })?;
+    if claims.session_id != session_id {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "session automation access token does not match the requested session"
+                    .to_string(),
+            }),
+        ));
+    }
+    Ok(claims)
+}
+
+fn automation_access_claims_match_session(
+    claims: &SessionAutomationAccessTokenClaims,
+    session: &StoredSession,
+) -> bool {
+    if session.owner.subject == claims.subject && session.owner.issuer == claims.issuer {
+        return true;
+    }
+
+    let Some(delegate) = &session.automation_delegate else {
+        return false;
+    };
+    claims.issuer == delegate.issuer
+        && claims.client_id.as_deref() == Some(delegate.client_id.as_str())
 }
 
 async fn load_session_recording(

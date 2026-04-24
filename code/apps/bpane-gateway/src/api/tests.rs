@@ -8,6 +8,7 @@ use tower::ServiceExt;
 
 use super::*;
 use crate::auth::AuthValidator;
+use crate::automation_access_token::SessionAutomationAccessTokenManager;
 use crate::connect_ticket::SessionConnectTicketManager;
 use crate::recording_artifact_store::RecordingArtifactStore;
 use crate::recording_lifecycle::RecordingLifecycleManager;
@@ -32,6 +33,10 @@ fn test_router() -> (Router, String) {
             vec![5; 32],
             Duration::from_secs(300),
         )),
+        automation_access_token_manager: Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![6; 32],
+            Duration::from_secs(300),
+        )),
         session_store: SessionStore::in_memory(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -54,6 +59,83 @@ fn test_router() -> (Router, String) {
 fn test_artifact_store() -> Arc<RecordingArtifactStore> {
     let root = std::env::temp_dir().join(format!("bpane-artifacts-test-{}", uuid::Uuid::now_v7()));
     Arc::new(RecordingArtifactStore::local_fs(root))
+}
+
+struct TestAgentServer {
+    socket_path: std::path::PathBuf,
+    accept_task: tokio::task::JoinHandle<()>,
+}
+
+impl TestAgentServer {
+    async fn start() -> Self {
+        let socket_path = std::path::PathBuf::from(format!(
+            "/tmp/bpane-agent-{}.sock",
+            uuid::Uuid::now_v7().simple()
+        ));
+        let _ = std::fs::remove_file(&socket_path);
+        let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+        let accept_task = tokio::spawn(async move {
+            let mut connections = Vec::new();
+            loop {
+                match listener.accept().await {
+                    Ok((stream, _)) => connections.push(stream),
+                    Err(_) => break,
+                }
+            }
+        });
+
+        Self {
+            socket_path,
+            accept_task,
+        }
+    }
+
+    fn socket_path(&self) -> String {
+        self.socket_path.to_string_lossy().into_owned()
+    }
+}
+
+impl Drop for TestAgentServer {
+    fn drop(&mut self) {
+        self.accept_task.abort();
+        let _ = std::fs::remove_file(&self.socket_path);
+    }
+}
+
+async fn test_router_with_live_agent() -> (Router, String, TestAgentServer) {
+    let agent_server = TestAgentServer::start().await;
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
+    let token = auth_validator
+        .generate_token()
+        .expect("hmac auth validator should generate dev token");
+    let state = Arc::new(ApiState {
+        registry: Arc::new(SessionRegistry::new(10, false)),
+        auth_validator,
+        connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
+            vec![5; 32],
+            Duration::from_secs(300),
+        )),
+        automation_access_token_manager: Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![6; 32],
+            Duration::from_secs(300),
+        )),
+        session_store: SessionStore::in_memory(),
+        session_manager: Arc::new(
+            SessionManager::new(SessionManagerConfig::StaticSingle {
+                agent_socket_path: agent_server.socket_path(),
+                cdp_endpoint: Some("http://host:9223".to_string()),
+                idle_timeout: Duration::from_secs(300),
+            })
+            .unwrap(),
+        ),
+        recording_artifact_store: test_artifact_store(),
+        recording_observability: Arc::new(RecordingObservability::default()),
+        recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        idle_stop_timeout: Duration::from_secs(300),
+        public_gateway_url: "https://localhost:4433".to_string(),
+        default_owner_mode: SessionOwnerMode::Collaborative,
+    });
+    (build_api_router(state), token, agent_server)
 }
 
 fn bearer(token: &str) -> String {
@@ -369,6 +451,167 @@ async fn rejects_always_mode_when_recording_worker_is_not_configured() {
 }
 
 #[tokio::test]
+async fn issues_session_automation_access_descriptor() {
+    let (app, token) = test_router();
+
+    let created = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let issue_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/automation-access"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(issue_response.status(), StatusCode::OK);
+    let issued = response_json(issue_response).await;
+    assert_eq!(issued["session_id"], session_id);
+    assert_eq!(issued["token_type"], "session_automation_access_token");
+    assert!(issued["token"].as_str().unwrap().starts_with("v1."));
+    assert!(issued["expires_at"].is_string());
+    assert_eq!(issued["automation"]["endpoint_url"], "http://host:9223");
+    assert_eq!(issued["automation"]["protocol"], "chrome_devtools_protocol");
+    assert_eq!(
+        issued["automation"]["auth_type"],
+        "session_automation_access_token"
+    );
+    assert_eq!(
+        issued["automation"]["auth_header"],
+        "x-bpane-automation-access-token"
+    );
+    assert_eq!(
+        issued["automation"]["status_path"],
+        format!("/api/v1/sessions/{session_id}/status")
+    );
+    assert_eq!(
+        issued["automation"]["mcp_owner_path"],
+        format!("/api/v1/sessions/{session_id}/mcp-owner")
+    );
+    assert_eq!(
+        issued["automation"]["compatibility_mode"],
+        "legacy_single_runtime"
+    );
+}
+
+#[tokio::test]
+async fn automation_access_token_can_drive_status_and_mcp_owner_routes() {
+    let (app, token, _agent_server) = test_router_with_live_agent().await;
+
+    let created = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let issued = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/sessions/{session_id}/automation-access"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let automation_token = issued["token"].as_str().unwrap();
+
+    let status_before = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/status"))
+                .header("x-bpane-automation-access-token", automation_token)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(status_before.status(), StatusCode::OK);
+    let status_before_body = response_json(status_before).await;
+    assert_eq!(status_before_body["mcp_owner"], false);
+
+    let claim_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/mcp-owner"))
+                .header("x-bpane-automation-access-token", automation_token)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "width": 1280, "height": 720 }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(claim_response.status(), StatusCode::OK);
+
+    let status_after_claim = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/status"))
+                .header("x-bpane-automation-access-token", automation_token)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(status_after_claim.status(), StatusCode::OK);
+    let status_after_claim_body = response_json(status_after_claim).await;
+    assert_eq!(status_after_claim_body["mcp_owner"], true);
+
+    let clear_response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/sessions/{session_id}/mcp-owner"))
+                .header("x-bpane-automation-access-token", automation_token)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(clear_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn creates_lists_gets_and_stops_session_recording_metadata() {
     let (app, token) = test_router();
 
@@ -613,6 +856,10 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
             vec![5; 32],
             Duration::from_secs(300),
         )),
+        automation_access_token_manager: Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![6; 32],
+            Duration::from_secs(300),
+        )),
         session_store: session_store.clone(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -849,6 +1096,10 @@ async fn recording_operations_snapshot_tracks_finalize_playback_and_failures() {
             vec![5; 32],
             Duration::from_secs(300),
         )),
+        automation_access_token_manager: Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![6; 32],
+            Duration::from_secs(300),
+        )),
         session_store: SessionStore::in_memory(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -1048,6 +1299,10 @@ async fn expired_recording_artifacts_return_gone() {
         auth_validator,
         connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
             vec![5; 32],
+            Duration::from_secs(300),
+        )),
+        automation_access_token_manager: Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![6; 32],
             Duration::from_secs(300),
         )),
         session_store: session_store.clone(),
@@ -1302,6 +1557,10 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
             vec![5; 32],
             Duration::from_secs(300),
         )),
+        automation_access_token_manager: Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![6; 32],
+            Duration::from_secs(300),
+        )),
         session_store: SessionStore::in_memory(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -1363,6 +1622,10 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
         auth_validator,
         connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
             vec![5; 32],
+            Duration::from_secs(300),
+        )),
+        automation_access_token_manager: Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![6; 32],
             Duration::from_secs(300),
         )),
         session_store: SessionStore::in_memory(),
