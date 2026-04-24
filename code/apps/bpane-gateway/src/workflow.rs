@@ -41,6 +41,7 @@ pub struct PersistWorkflowRunRequest {
     pub workflow_version: String,
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
+    pub source_snapshot: Option<WorkflowRunSourceSnapshot>,
     pub input: Option<Value>,
     pub labels: HashMap<String, String>,
 }
@@ -106,6 +107,7 @@ pub struct StoredWorkflowRun {
     pub workflow_version: String,
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
+    pub source_snapshot: Option<WorkflowRunSourceSnapshot>,
     pub state: WorkflowRunState,
     pub input: Option<Value>,
     pub output: Option<Value>,
@@ -135,6 +137,27 @@ pub struct StoredWorkflowRunLog {
     pub stream: AutomationTaskLogStream,
     pub message: String,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowRunSourceSnapshot {
+    pub source: WorkflowSource,
+    pub entrypoint: String,
+    pub workspace_id: Uuid,
+    pub file_id: Uuid,
+    pub file_name: String,
+    pub media_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowRunSourceSnapshotResource {
+    pub source: WorkflowSource,
+    pub entrypoint: String,
+    pub workspace_id: Uuid,
+    pub file_id: Uuid,
+    pub file_name: String,
+    pub media_type: Option<String>,
+    pub content_path: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -280,6 +303,7 @@ pub struct WorkflowRunResource {
     pub output: Option<Value>,
     pub error: Option<String>,
     pub artifact_refs: Vec<String>,
+    pub source_snapshot: Option<WorkflowRunSourceSnapshotResource>,
     pub labels: HashMap<String, String>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -370,6 +394,10 @@ impl StoredWorkflowRun {
             output: self.output.clone(),
             error: self.error.clone(),
             artifact_refs: self.artifact_refs.clone(),
+            source_snapshot: self
+                .source_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.to_resource(self.id)),
             labels: self.labels.clone(),
             started_at: self.started_at,
             completed_at: self.completed_at,
@@ -377,6 +405,20 @@ impl StoredWorkflowRun {
             logs_path: format!("/api/v1/workflow-runs/{}/logs", self.id),
             created_at: self.created_at,
             updated_at: self.updated_at,
+        }
+    }
+}
+
+impl WorkflowRunSourceSnapshot {
+    pub fn to_resource(&self, run_id: Uuid) -> WorkflowRunSourceSnapshotResource {
+        WorkflowRunSourceSnapshotResource {
+            source: self.source.clone(),
+            entrypoint: self.entrypoint.clone(),
+            workspace_id: self.workspace_id,
+            file_id: self.file_id,
+            file_name: self.file_name.clone(),
+            media_type: self.media_type.clone(),
+            content_path: format!("/api/v1/workflow-runs/{run_id}/source-snapshot/content"),
         }
     }
 }

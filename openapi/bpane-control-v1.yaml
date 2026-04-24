@@ -420,6 +420,36 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/source-snapshot/content:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Workflows]
+      summary: Download the immutable source snapshot archive for a workflow run
+      operationId: getWorkflowRunSourceSnapshotContent
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run source snapshot archive
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflow-runs/{run_id}/state:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -1957,6 +1987,34 @@ components:
           $ref: '#/components/schemas/AutomationTaskLogStream'
         message:
           type: string
+    WorkflowRunSourceSnapshotResource:
+      type: object
+      required:
+        - source
+        - entrypoint
+        - workspace_id
+        - file_id
+        - file_name
+        - media_type
+        - content_path
+      properties:
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+        entrypoint:
+          type: string
+        workspace_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+        media_type:
+          type: string
+          nullable: true
+        content_path:
+          type: string
     WorkflowRunResource:
       type: object
       required:
@@ -1971,6 +2029,7 @@ components:
         - output
         - error
         - artifact_refs
+        - source_snapshot
         - labels
         - started_at
         - completed_at
@@ -2009,6 +2068,10 @@ components:
           type: array
           items:
             type: string
+        source_snapshot:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunSourceSnapshotResource'
+          nullable: true
         labels:
           type: object
           additionalProperties:

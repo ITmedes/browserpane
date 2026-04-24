@@ -1,4 +1,6 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
@@ -196,6 +198,35 @@ async function fetchJson(url, init) {
   return await response.json();
 }
 
+async function fetchBytes(url, init) {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+async function inspectZipEntries(bytes) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-workflow-source-'));
+  const archivePath = path.join(tempDir, 'source.zip');
+  try {
+    await fs.writeFile(archivePath, bytes);
+    const output = execFileSync(
+      'python3',
+      [
+        '-c',
+        'import json, sys, zipfile; archive = zipfile.ZipFile(sys.argv[1]); print(json.dumps(archive.namelist()))',
+        archivePath,
+      ],
+      { encoding: 'utf8' },
+    );
+    return JSON.parse(output);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function createWorkflow(accessToken, options) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflows`, {
     method: 'POST',
@@ -214,10 +245,6 @@ async function createWorkflow(accessToken, options) {
 }
 
 async function createWorkflowVersion(accessToken, options, workflowId) {
-  const resolvedCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: new URL('../../../..', import.meta.url),
-    encoding: 'utf8',
-  }).trim();
   return await fetchJson(`${options.pageUrl}/api/v1/workflows/${workflowId}/versions`, {
     method: 'POST',
     headers: {
@@ -227,13 +254,12 @@ async function createWorkflowVersion(accessToken, options, workflowId) {
     body: JSON.stringify({
       version: 'v1',
       executor: 'playwright',
-      entrypoint: 'workflows/smoke/export.ts',
+      entrypoint: 'openapi/bpane-control-v1.yaml',
       source: {
         kind: 'git',
         repository_url: 'https://github.com/ITmedes/browserpane.git',
-        ref: 'refs/heads/feature/BPANE-0045',
-        resolved_commit: resolvedCommit,
-        root_path: 'workflows',
+        ref: 'refs/heads/main',
+        root_path: 'openapi',
       },
       input_schema: {
         type: 'object',
@@ -433,6 +459,9 @@ async function main() {
     if (pendingRun.workflow_version !== 'v1') {
       throw new Error(`Expected workflow run version v1, got ${pendingRun.workflow_version}.`);
     }
+    if (!pendingRun.source_snapshot?.content_path) {
+      throw new Error('Workflow run did not expose a source snapshot download path.');
+    }
 
     const session = await fetchSession(accessToken, options, createdSessionId);
     if (session.labels?.origin !== 'workflow-smoke') {
@@ -447,6 +476,24 @@ async function main() {
     automationToken = issuedAutomationAccess.token ?? '';
     if (!automationToken) {
       throw new Error('Failed to acquire a session automation access token.');
+    }
+    const sourceSnapshotBytes = await fetchBytes(
+      `${options.pageUrl}${pendingRun.source_snapshot.content_path}`,
+      {
+        headers: {
+          'x-bpane-automation-access-token': automationToken,
+        },
+      },
+    );
+    if (sourceSnapshotBytes.length === 0) {
+      throw new Error('Workflow source snapshot download returned an empty archive.');
+    }
+    const sourceSnapshotEntries = await inspectZipEntries(sourceSnapshotBytes);
+    if (!sourceSnapshotEntries.includes('openapi/bpane-control-v1.yaml')) {
+      throw new Error('Workflow source snapshot archive is missing the pinned entrypoint file.');
+    }
+    if (sourceSnapshotEntries.includes('README.md')) {
+      throw new Error('Workflow source snapshot archive leaked files outside the configured root_path.');
     }
 
     log(`Driving workflow run ${runId} through automation access`);
@@ -518,6 +565,8 @@ async function main() {
       state: succeededRun.state,
       sessionId: createdSessionId,
       automationTaskId: succeededRun.automation_task_id,
+      sourceSnapshotBytes: sourceSnapshotBytes.length,
+      sourceSnapshotEntries: sourceSnapshotEntries.length,
       events: events.events.length,
       logs: logs.logs.length,
       outputCsvFileId: succeededRun.output?.csv_file_id ?? null,

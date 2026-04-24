@@ -1,3 +1,6 @@
+use std::fs;
+use std::io::Cursor;
+use std::process::Command as StdCommand;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -5,7 +8,9 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use tempfile::tempdir;
 use tower::ServiceExt;
+use zip::ZipArchive;
 
 use super::*;
 use crate::auth::AuthValidator;
@@ -164,6 +169,39 @@ fn bearer(token: &str) -> String {
 async fn response_json(response: axum::response::Response) -> Value {
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     serde_json::from_slice(&bytes).unwrap()
+}
+
+async fn response_bytes(response: axum::response::Response) -> Vec<u8> {
+    to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap()
+        .to_vec()
+}
+
+fn git(args: &[&str], cwd: &std::path::Path) {
+    let output = StdCommand::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}",
+        args,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn git_head(cwd: &std::path::Path) -> String {
+    let output = StdCommand::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(cwd)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .to_ascii_lowercase()
 }
 
 #[tokio::test]
@@ -2461,6 +2499,172 @@ async fn creates_workflow_definitions_versions_and_runs_with_default_sessions() 
         .await
         .unwrap();
     assert_eq!(get_task.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn workflow_runs_expose_source_snapshot_content_to_owner_and_automation_access() {
+    let (app, token) = test_router();
+    let source_repo = tempdir().unwrap();
+    git(&["init", "--initial-branch=main"], source_repo.path());
+    git(
+        &["config", "user.email", "workflow@test.local"],
+        source_repo.path(),
+    );
+    git(
+        &["config", "user.name", "Workflow Test"],
+        source_repo.path(),
+    );
+    fs::create_dir_all(source_repo.path().join("workflows")).unwrap();
+    fs::write(source_repo.path().join("README.md"), "root\n").unwrap();
+    fs::write(
+        source_repo.path().join("workflows/demo.ts"),
+        "export default async function demo() {}\n",
+    )
+    .unwrap();
+    fs::write(source_repo.path().join("workflows/helper.txt"), "helper\n").unwrap();
+    git(&["add", "."], source_repo.path());
+    git(&["commit", "-m", "init"], source_repo.path());
+    let resolved_commit = git_head(source_repo.path());
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "snapshot-workflow"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/demo.ts",
+                        "source": {
+                            "kind": "git",
+                            "repository_url": source_repo.path().to_string_lossy(),
+                            "resolved_commit": resolved_commit.clone(),
+                            "root_path": "workflows"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let create_run = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-runs")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "workflow_id": workflow_id,
+                            "version": "v1",
+                            "session": {
+                                "create_session": {}
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let run_id = create_run["id"].as_str().unwrap().to_string();
+    let session_id = create_run["session_id"].as_str().unwrap().to_string();
+    let source_snapshot = create_run["source_snapshot"].clone();
+    assert_eq!(source_snapshot["entrypoint"], "workflows/demo.ts");
+    assert_eq!(
+        source_snapshot["source"]["resolved_commit"],
+        resolved_commit
+    );
+    let content_path = source_snapshot["content_path"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let owner_download = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&content_path)
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(owner_download.status(), StatusCode::OK);
+    let owner_bytes = response_bytes(owner_download).await;
+    let mut owner_zip = ZipArchive::new(Cursor::new(owner_bytes.clone())).unwrap();
+    let owner_names = (0..owner_zip.len())
+        .map(|index| owner_zip.by_index(index).unwrap().name().to_string())
+        .collect::<Vec<_>>();
+    assert!(owner_names.contains(&"workflows/demo.ts".to_string()));
+    assert!(owner_names.contains(&"workflows/helper.txt".to_string()));
+    assert!(!owner_names.contains(&"README.md".to_string()));
+
+    let automation_access = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/sessions/{session_id}/automation-access"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let automation_token = automation_access["token"].as_str().unwrap().to_string();
+    let automation_download = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/workflow-runs/{run_id}/source-snapshot/content"
+                ))
+                .header("x-bpane-automation-access-token", &automation_token)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(automation_download.status(), StatusCode::OK);
+    let automation_bytes = response_bytes(automation_download).await;
+    assert_eq!(automation_bytes, owner_bytes);
 }
 
 #[tokio::test]
