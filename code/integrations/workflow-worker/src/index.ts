@@ -12,6 +12,7 @@ function requiredEnv(name: string): string {
 
 async function main(): Promise<void> {
   const tokenManager = new GatewayTokenManager({
+    staticAutomationAccessToken: process.env.BPANE_SESSION_AUTOMATION_ACCESS_TOKEN ?? "",
     staticBearerToken: process.env.BPANE_WORKFLOW_BEARER_TOKEN ?? "",
     tokenUrl: process.env.BPANE_GATEWAY_OIDC_TOKEN_URL ?? "",
     clientId: process.env.BPANE_GATEWAY_OIDC_CLIENT_ID ?? "",

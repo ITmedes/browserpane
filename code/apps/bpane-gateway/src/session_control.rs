@@ -528,6 +528,46 @@ pub struct PersistedSessionRecordingWorkerAssignment {
     pub process_id: Option<u32>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowRunWorkerAssignmentStatus {
+    Starting,
+    Running,
+    Stopping,
+}
+
+impl WorkflowRunWorkerAssignmentStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::Stopping => "stopping",
+        }
+    }
+}
+
+impl FromStr for WorkflowRunWorkerAssignmentStatus {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "starting" => Ok(Self::Starting),
+            "running" => Ok(Self::Running),
+            "stopping" => Ok(Self::Stopping),
+            _ => Err("unknown workflow run worker assignment status"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistedWorkflowRunWorkerAssignment {
+    pub run_id: Uuid,
+    pub session_id: Uuid,
+    pub automation_task_id: Uuid,
+    pub status: WorkflowRunWorkerAssignmentStatus,
+    pub process_id: Option<u32>,
+    pub container_name: Option<String>,
+}
+
 impl StoredSession {
     pub fn to_resource(
         &self,
@@ -680,6 +720,7 @@ impl SessionStore {
                 recordings: Mutex::new(Vec::new()),
                 runtime_assignments: Mutex::new(HashMap::new()),
                 recording_worker_assignments: Mutex::new(HashMap::new()),
+                workflow_run_worker_assignments: Mutex::new(HashMap::new()),
                 config: SessionStoreConfig::from(runtime_profile),
             })),
         }
@@ -1616,6 +1657,61 @@ impl SessionStore {
         }
     }
 
+    pub async fn upsert_workflow_run_worker_assignment(
+        &self,
+        assignment: PersistedWorkflowRunWorkerAssignment,
+    ) -> Result<(), SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.upsert_workflow_run_worker_assignment(assignment).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.upsert_workflow_run_worker_assignment(assignment).await
+            }
+        }
+    }
+
+    pub async fn clear_workflow_run_worker_assignment(
+        &self,
+        run_id: Uuid,
+    ) -> Result<(), SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.clear_workflow_run_worker_assignment(run_id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.clear_workflow_run_worker_assignment(run_id).await
+            }
+        }
+    }
+
+    pub async fn get_workflow_run_worker_assignment(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Option<PersistedWorkflowRunWorkerAssignment>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_workflow_run_worker_assignment(run_id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_workflow_run_worker_assignment(run_id).await
+            }
+        }
+    }
+
+    pub async fn list_workflow_run_worker_assignments(
+        &self,
+    ) -> Result<Vec<PersistedWorkflowRunWorkerAssignment>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_workflow_run_worker_assignments().await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_workflow_run_worker_assignments().await
+            }
+        }
+    }
+
     pub async fn list_runtime_assignments(
         &self,
         runtime_binding: &str,
@@ -2098,6 +2194,7 @@ struct InMemorySessionStore {
     recordings: Mutex<Vec<StoredSessionRecording>>,
     runtime_assignments: Mutex<HashMap<Uuid, PersistedSessionRuntimeAssignment>>,
     recording_worker_assignments: Mutex<HashMap<Uuid, PersistedSessionRecordingWorkerAssignment>>,
+    workflow_run_worker_assignments: Mutex<HashMap<Uuid, PersistedWorkflowRunWorkerAssignment>>,
     config: SessionStoreConfig,
 }
 
@@ -3606,6 +3703,49 @@ impl InMemorySessionStore {
         Ok(values)
     }
 
+    async fn upsert_workflow_run_worker_assignment(
+        &self,
+        assignment: PersistedWorkflowRunWorkerAssignment,
+    ) -> Result<(), SessionStoreError> {
+        self.workflow_run_worker_assignments
+            .lock()
+            .await
+            .insert(assignment.run_id, assignment);
+        Ok(())
+    }
+
+    async fn clear_workflow_run_worker_assignment(
+        &self,
+        run_id: Uuid,
+    ) -> Result<(), SessionStoreError> {
+        self.workflow_run_worker_assignments
+            .lock()
+            .await
+            .remove(&run_id);
+        Ok(())
+    }
+
+    async fn get_workflow_run_worker_assignment(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Option<PersistedWorkflowRunWorkerAssignment>, SessionStoreError> {
+        Ok(self
+            .workflow_run_worker_assignments
+            .lock()
+            .await
+            .get(&run_id)
+            .cloned())
+    }
+
+    async fn list_workflow_run_worker_assignments(
+        &self,
+    ) -> Result<Vec<PersistedWorkflowRunWorkerAssignment>, SessionStoreError> {
+        let assignments = self.workflow_run_worker_assignments.lock().await;
+        let mut values = assignments.values().cloned().collect::<Vec<_>>();
+        values.sort_by_key(|assignment| assignment.run_id);
+        Ok(values)
+    }
+
     async fn list_runtime_assignments(
         &self,
         runtime_binding: &str,
@@ -3838,6 +3978,20 @@ impl PostgresSessionStore {
 
                 CREATE INDEX IF NOT EXISTS idx_control_workflow_runs_task
                     ON control_workflow_runs (automation_task_id);
+
+                CREATE TABLE IF NOT EXISTS control_workflow_run_workers (
+                    run_id UUID PRIMARY KEY REFERENCES control_workflow_runs(id) ON DELETE CASCADE,
+                    session_id UUID NOT NULL REFERENCES control_sessions(id) ON DELETE CASCADE,
+                    automation_task_id UUID NOT NULL REFERENCES control_automation_tasks(id) ON DELETE CASCADE,
+                    status TEXT NOT NULL,
+                    process_id BIGINT NULL,
+                    container_name TEXT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_workflow_run_workers_updated
+                    ON control_workflow_run_workers (updated_at DESC);
 
                 CREATE TABLE IF NOT EXISTS control_workflow_run_events (
                     id UUID PRIMARY KEY,
@@ -7600,6 +7754,140 @@ impl PostgresSessionStore {
             .collect()
     }
 
+    async fn upsert_workflow_run_worker_assignment(
+        &self,
+        assignment: PersistedWorkflowRunWorkerAssignment,
+    ) -> Result<(), SessionStoreError> {
+        let process_id = assignment.process_id.map(i64::from);
+        self.client
+            .lock()
+            .await
+            .execute(
+                r#"
+                INSERT INTO control_workflow_run_workers (
+                    run_id,
+                    session_id,
+                    automation_task_id,
+                    status,
+                    process_id,
+                    container_name,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+                ON CONFLICT (run_id)
+                DO UPDATE SET
+                    session_id = EXCLUDED.session_id,
+                    automation_task_id = EXCLUDED.automation_task_id,
+                    status = EXCLUDED.status,
+                    process_id = EXCLUDED.process_id,
+                    container_name = EXCLUDED.container_name,
+                    updated_at = NOW()
+                "#,
+                &[
+                    &assignment.run_id,
+                    &assignment.session_id,
+                    &assignment.automation_task_id,
+                    &assignment.status.as_str(),
+                    &process_id,
+                    &assignment.container_name,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to upsert workflow run worker assignment: {error}"
+                ))
+            })?;
+        Ok(())
+    }
+
+    async fn clear_workflow_run_worker_assignment(
+        &self,
+        run_id: Uuid,
+    ) -> Result<(), SessionStoreError> {
+        self.client
+            .lock()
+            .await
+            .execute(
+                "DELETE FROM control_workflow_run_workers WHERE run_id = $1",
+                &[&run_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to clear workflow run worker assignment: {error}"
+                ))
+            })?;
+        Ok(())
+    }
+
+    async fn get_workflow_run_worker_assignment(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Option<PersistedWorkflowRunWorkerAssignment>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    run_id,
+                    session_id,
+                    automation_task_id,
+                    status,
+                    process_id,
+                    container_name
+                FROM control_workflow_run_workers
+                WHERE run_id = $1
+                "#,
+                &[&run_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to load workflow run worker assignment: {error}"
+                ))
+            })?;
+        row.as_ref()
+            .map(row_to_workflow_run_worker_assignment)
+            .transpose()
+    }
+
+    async fn list_workflow_run_worker_assignments(
+        &self,
+    ) -> Result<Vec<PersistedWorkflowRunWorkerAssignment>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    run_id,
+                    session_id,
+                    automation_task_id,
+                    status,
+                    process_id,
+                    container_name
+                FROM control_workflow_run_workers
+                ORDER BY updated_at DESC, created_at DESC
+                "#,
+                &[],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list workflow run worker assignments: {error}"
+                ))
+            })?;
+
+        rows.iter()
+            .map(row_to_workflow_run_worker_assignment)
+            .collect()
+    }
+
     async fn list_runtime_assignments(
         &self,
         runtime_binding: &str,
@@ -8247,6 +8535,32 @@ fn row_to_recording_worker_assignment(
     })
 }
 
+fn row_to_workflow_run_worker_assignment(
+    row: &Row,
+) -> Result<PersistedWorkflowRunWorkerAssignment, SessionStoreError> {
+    let status = row
+        .get::<_, String>("status")
+        .parse::<WorkflowRunWorkerAssignmentStatus>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let process_id = row
+        .get::<_, Option<i64>>("process_id")
+        .map(|value| u32::try_from(value))
+        .transpose()
+        .map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "workflow run worker process_id is out of range: {error}"
+            ))
+        })?;
+    Ok(PersistedWorkflowRunWorkerAssignment {
+        run_id: row.get("run_id"),
+        session_id: row.get("session_id"),
+        automation_task_id: row.get("automation_task_id"),
+        status,
+        process_id,
+        container_name: row.get("container_name"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -8876,6 +9190,125 @@ mod tests {
             .unwrap();
         assert!(store
             .list_recording_worker_assignments()
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_persists_workflow_run_worker_assignments() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let session = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                    recording: SessionRecordingPolicy::default(),
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+        let task = store
+            .create_automation_task(
+                &owner,
+                PersistAutomationTaskRequest {
+                    display_name: Some("Workflow Task".to_string()),
+                    executor: "playwright".to_string(),
+                    session_id: session.id,
+                    session_source: AutomationTaskSessionSource::CreatedSession,
+                    input: None,
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+        let workflow = store
+            .create_workflow_definition(
+                &owner,
+                PersistWorkflowDefinitionRequest {
+                    name: "Smoke Workflow".to_string(),
+                    description: None,
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+        let version = store
+            .create_workflow_definition_version(
+                &owner,
+                PersistWorkflowDefinitionVersionRequest {
+                    workflow_definition_id: workflow.id,
+                    version: "v1".to_string(),
+                    executor: "playwright".to_string(),
+                    entrypoint: "workflows/smoke/run.mjs".to_string(),
+                    source: None,
+                    input_schema: None,
+                    output_schema: None,
+                    default_session: None,
+                    allowed_credential_binding_ids: Vec::new(),
+                    allowed_extension_ids: Vec::new(),
+                    allowed_file_workspace_ids: Vec::new(),
+                },
+            )
+            .await
+            .unwrap();
+        let run = store
+            .create_workflow_run(
+                &owner,
+                PersistWorkflowRunRequest {
+                    workflow_definition_id: workflow.id,
+                    workflow_definition_version_id: version.id,
+                    workflow_version: version.version.clone(),
+                    session_id: session.id,
+                    automation_task_id: task.id,
+                    source_snapshot: None,
+                    input: None,
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+
+        store
+            .upsert_workflow_run_worker_assignment(PersistedWorkflowRunWorkerAssignment {
+                run_id: run.id,
+                session_id: session.id,
+                automation_task_id: task.id,
+                status: WorkflowRunWorkerAssignmentStatus::Running,
+                process_id: Some(5151),
+                container_name: Some("bpane-workflow-test".to_string()),
+            })
+            .await
+            .unwrap();
+
+        let loaded = store
+            .get_workflow_run_worker_assignment(run.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.session_id, session.id);
+        assert_eq!(loaded.automation_task_id, task.id);
+        assert_eq!(loaded.status, WorkflowRunWorkerAssignmentStatus::Running);
+        assert_eq!(loaded.process_id, Some(5151));
+        assert_eq!(loaded.container_name.as_deref(), Some("bpane-workflow-test"));
+
+        let listed = store.list_workflow_run_worker_assignments().await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].run_id, run.id);
+
+        store
+            .clear_workflow_run_worker_assignment(run.id)
+            .await
+            .unwrap();
+        assert!(store
+            .list_workflow_run_worker_assignments()
             .await
             .unwrap()
             .is_empty());

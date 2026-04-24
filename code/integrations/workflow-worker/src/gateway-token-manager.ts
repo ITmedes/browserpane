@@ -1,4 +1,5 @@
 type GatewayTokenManagerOptions = {
+  staticAutomationAccessToken: string;
   staticBearerToken: string;
   tokenUrl: string;
   clientId: string;
@@ -7,6 +8,7 @@ type GatewayTokenManagerOptions = {
 };
 
 export class GatewayTokenManager {
+  private readonly staticAutomationAccessToken: string;
   private readonly staticBearerToken: string;
   private readonly tokenUrl: string;
   private readonly clientId: string;
@@ -16,6 +18,7 @@ export class GatewayTokenManager {
   private expiresAtMs = 0;
 
   constructor(options: GatewayTokenManagerOptions) {
+    this.staticAutomationAccessToken = options.staticAutomationAccessToken.trim();
     this.staticBearerToken = options.staticBearerToken.trim();
     this.tokenUrl = options.tokenUrl.trim();
     this.clientId = options.clientId.trim();
@@ -26,6 +29,12 @@ export class GatewayTokenManager {
   async getAuthHeaders(
     extraHeaders: Record<string, string> = {},
   ): Promise<Record<string, string>> {
+    if (this.staticAutomationAccessToken) {
+      return {
+        ...extraHeaders,
+        "x-bpane-automation-access-token": this.staticAutomationAccessToken,
+      };
+    }
     const token = await this.getAccessToken();
     if (!token) {
       return extraHeaders;

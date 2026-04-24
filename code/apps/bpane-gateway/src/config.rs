@@ -181,6 +181,50 @@ pub struct Config {
     #[arg(long, default_value = "git")]
     pub workflow_git_bin: PathBuf,
 
+    /// Docker CLI binary used to launch short-lived workflow worker jobs.
+    #[arg(long, default_value = "docker")]
+    pub workflow_worker_docker_bin: PathBuf,
+
+    /// Docker image used for automatic workflow worker execution.
+    #[arg(long)]
+    pub workflow_worker_image: Option<String>,
+
+    /// Docker network used by automatic workflow worker jobs.
+    #[arg(long)]
+    pub workflow_worker_network: Option<String>,
+
+    /// Container name prefix used by automatic workflow worker jobs.
+    #[arg(long, default_value = "bpane-workflow")]
+    pub workflow_worker_container_name_prefix: String,
+
+    /// API base URL used by automatic workflow workers to talk back to the gateway.
+    #[arg(long, default_value = "http://gateway:8932")]
+    pub workflow_worker_api_url: String,
+
+    /// Work root inside the workflow worker container for downloaded source snapshots and runner state.
+    #[arg(long, default_value = "/tmp/bpane-workflows")]
+    pub workflow_worker_work_root: PathBuf,
+
+    /// Optional static bearer token forwarded to workflow workers for gateway API access.
+    #[arg(long)]
+    pub workflow_worker_bearer_token: Option<String>,
+
+    /// Optional OIDC token URL forwarded to workflow workers when gateway auth is OIDC.
+    #[arg(long)]
+    pub workflow_worker_oidc_token_url: Option<String>,
+
+    /// Optional OIDC client id forwarded to workflow workers when gateway auth is OIDC.
+    #[arg(long)]
+    pub workflow_worker_oidc_client_id: Option<String>,
+
+    /// Optional OIDC client secret forwarded to workflow workers when gateway auth is OIDC.
+    #[arg(long)]
+    pub workflow_worker_oidc_client_secret: Option<String>,
+
+    /// Optional OIDC scopes forwarded to workflow workers when gateway auth is OIDC.
+    #[arg(long)]
+    pub workflow_worker_oidc_scopes: Option<String>,
+
     /// Optional SPKI pin forwarded to the recorder worker Chromium process.
     #[arg(long)]
     pub recording_worker_cert_spki: Option<String>,

@@ -26,6 +26,7 @@ use crate::session_control::{
     SessionRecordingState as StoredSessionRecordingState, StoredSessionRecording,
 };
 use crate::session_manager::{SessionManager, SessionManagerConfig};
+use crate::workflow_lifecycle::WorkflowLifecycleManager;
 use crate::workflow_source::WorkflowSourceResolver;
 use crate::workspace_file_store::WorkspaceFileStore;
 
@@ -59,6 +60,7 @@ fn test_router() -> (Router, String) {
         workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
@@ -155,6 +157,7 @@ async fn test_router_with_live_agent() -> (Router, String, TestAgentServer) {
         workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
@@ -1130,6 +1133,7 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
         workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
@@ -1372,6 +1376,7 @@ async fn recording_operations_snapshot_tracks_finalize_playback_and_failures() {
         workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: observability.clone(),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
@@ -1579,6 +1584,7 @@ async fn expired_recording_artifacts_return_gone() {
         workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
@@ -1837,6 +1843,7 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
         workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
@@ -1906,6 +1913,7 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
         workflow_source_resolver: test_workflow_source_resolver(),
         recording_observability: Arc::new(RecordingObservability::default()),
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,

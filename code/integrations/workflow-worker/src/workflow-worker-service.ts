@@ -37,15 +37,6 @@ export class WorkflowWorkerService {
 
   async run(): Promise<void> {
     const run = await this.controlClient.getWorkflowRun(this.runId);
-    const version = await this.controlClient.getWorkflowDefinitionVersion(
-      run.workflow_definition_id,
-      run.workflow_version,
-    );
-    if (version.executor !== "playwright") {
-      throw new Error(
-        `workflow worker only supports executor=playwright, got ${version.executor}`,
-      );
-    }
     if (!run.source_snapshot) {
       throw new Error(`workflow run ${run.id} does not expose a source snapshot`);
     }

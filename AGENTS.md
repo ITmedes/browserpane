@@ -64,6 +64,7 @@ Current product shape:
   - `recording_playback.rs`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.
   - `recording_observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
   - `recording_retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
+  - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers as short-lived Docker jobs, persist run-worker assignments, and fail stale active runs after restart instead of leaving them orphaned.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions. Docker-backed workers carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile, and Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
@@ -91,6 +92,7 @@ Current product shape:
   - Local auth in compose is OIDC via Keycloak on `:8091`.
   - Local session-control persistence in compose is Postgres on `:5433`.
   - Local compose can now be switched to `docker_pool` for browser-session workers via gateway env overrides; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
+  - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 
 ## Protocol and media facts

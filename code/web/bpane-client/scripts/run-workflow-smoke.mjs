@@ -422,31 +422,6 @@ function buildWorkflowWorkerImage() {
   );
 }
 
-function runWorkflowWorker(runId, accessToken) {
-  execFileSync(
-    'docker',
-    [
-      'compose',
-      '-f',
-      'deploy/compose.yml',
-      '--profile',
-      'workflow',
-      'run',
-      '--rm',
-      '--no-deps',
-      '-e',
-      `BPANE_WORKFLOW_RUN_ID=${runId}`,
-      '-e',
-      `BPANE_WORKFLOW_BEARER_TOKEN=${accessToken}`,
-      'workflow-worker',
-    ],
-    {
-      cwd: PROJECT_ROOT,
-      stdio: 'inherit',
-    },
-  );
-}
-
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const executablePath = await resolveChromeExecutable();
@@ -490,6 +465,9 @@ async function main() {
     log('Preparing local git-backed workflow source');
     localWorkflowSource = await createLocalWorkflowRepo();
 
+    log('Building workflow-worker image');
+    buildWorkflowWorkerImage();
+
     log('Creating workflow definition and immutable version');
     const workflow = await createWorkflow(accessToken, options);
     const version = await createWorkflowVersion(
@@ -516,16 +494,16 @@ async function main() {
       throw new Error('Workflow run creation did not return run and session ids.');
     }
 
-    const pendingRun = await poll(
+    const initialRun = await poll(
       'workflow run visibility',
       () => fetchWorkflowRun(accessToken, options, runId),
-      (run) => run?.state === 'pending',
+      (run) => Boolean(run?.source_snapshot?.content_path),
       options.connectTimeoutMs,
     );
-    if (pendingRun.workflow_version !== 'v1') {
-      throw new Error(`Expected workflow run version v1, got ${pendingRun.workflow_version}.`);
+    if (initialRun.workflow_version !== 'v1') {
+      throw new Error(`Expected workflow run version v1, got ${initialRun.workflow_version}.`);
     }
-    if (!pendingRun.source_snapshot?.content_path) {
+    if (!initialRun.source_snapshot?.content_path) {
       throw new Error('Workflow run did not expose a source snapshot download path.');
     }
 
@@ -544,7 +522,7 @@ async function main() {
       throw new Error('Failed to acquire a session automation access token.');
     }
     const sourceSnapshotBytes = await fetchBytes(
-      `${options.pageUrl}${pendingRun.source_snapshot.content_path}`,
+      `${options.pageUrl}${initialRun.source_snapshot.content_path}`,
       {
         headers: {
           'x-bpane-automation-access-token': automationToken,
@@ -564,10 +542,7 @@ async function main() {
       );
     }
 
-    log('Building workflow-worker image');
-    buildWorkflowWorkerImage();
-    log(`Executing workflow run ${runId} through workflow-worker`);
-    runWorkflowWorker(runId, accessToken);
+    log(`Waiting for control-plane workflow execution of run ${runId}`);
 
     const succeededRun = await poll(
       'workflow run success',

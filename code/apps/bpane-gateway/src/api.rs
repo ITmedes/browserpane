@@ -13,7 +13,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
@@ -59,6 +59,7 @@ use crate::workflow::{
     WorkflowRunEventResource, WorkflowRunLogListResponse, WorkflowRunLogResource,
     WorkflowRunResource, WorkflowRunSourceSnapshot, WorkflowRunState, WorkflowRunTransitionRequest,
 };
+use crate::workflow_lifecycle::WorkflowLifecycleManager;
 use crate::workflow_source::{
     validate_workflow_source_entrypoint, WorkflowSource, WorkflowSourceArchive,
     WorkflowSourceError, WorkflowSourceResolver,
@@ -80,6 +81,7 @@ struct ApiState {
     workflow_source_resolver: Arc<WorkflowSourceResolver>,
     recording_observability: Arc<RecordingObservability>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
+    workflow_lifecycle: Arc<WorkflowLifecycleManager>,
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
@@ -912,6 +914,24 @@ async fn create_workflow_run(
         )
         .await
         .map_err(map_session_store_error)?;
+    if let Err(error) = state
+        .workflow_lifecycle
+        .ensure_run_started(&version.executor, run.id)
+        .await
+    {
+        warn!(
+            run_id = %run.id,
+            workflow_definition_id = %workflow.id,
+            workflow_version = %version.version,
+            "failed to auto-launch workflow worker: {error}"
+        );
+    }
+    let run = state
+        .session_store
+        .get_workflow_run_by_id(run.id)
+        .await
+        .map_err(map_session_store_error)?
+        .unwrap_or(run);
     Ok((StatusCode::CREATED, Json(run.to_resource())))
 }
 
@@ -1047,6 +1067,9 @@ async fn cancel_workflow_run(
         )
         .await
         .map_err(map_session_store_error)?;
+    if let Err(error) = state.workflow_lifecycle.cancel_run(run.id).await {
+        warn!(run_id = %run.id, "failed to stop workflow worker after cancel request: {error}");
+    }
     let run = state
         .session_store
         .get_workflow_run_for_owner(&principal, run_id)
@@ -1907,9 +1930,9 @@ async fn issue_session_automation_access(
     Path(session_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<SessionAutomationAccessResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let principal = authorize_api_request(&headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let principal =
+        authorize_runtime_access_principal_with_automation_access(&headers, &state, session_id)
+            .await?;
     let connectable = prepare_runtime_access_session(&state, &principal, session_id).await?;
     resolve_runtime(&state, session_id).await?;
     let resource = session_resource(&state, &connectable, None);
@@ -2365,6 +2388,7 @@ pub async fn run_api_server(
     workflow_source_resolver: Arc<WorkflowSourceResolver>,
     recording_observability: Arc<RecordingObservability>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
+    workflow_lifecycle: Arc<WorkflowLifecycleManager>,
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
@@ -2381,6 +2405,7 @@ pub async fn run_api_server(
         workflow_source_resolver,
         recording_observability,
         recording_lifecycle,
+        workflow_lifecycle,
         idle_stop_timeout,
         public_gateway_url,
         default_owner_mode,
@@ -3343,6 +3368,29 @@ async fn authorize_visible_session_request_with_automation_access(
     }
 
     Ok(session)
+}
+
+async fn authorize_runtime_access_principal_with_automation_access(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<AuthenticatedPrincipal, (StatusCode, Json<ErrorResponse>)> {
+    match authorize_api_request(headers, &state.auth_validator).await {
+        Ok(principal) => Ok(principal),
+        Err(error) if extract_automation_access_token(headers).is_none() => Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse { error }),
+        )),
+        Err(_) => {
+            let claims = validate_automation_access_request(headers, state, session_id)?;
+            Ok(AuthenticatedPrincipal {
+                subject: claims.subject,
+                issuer: claims.issuer,
+                display_name: None,
+                client_id: claims.client_id,
+            })
+        }
+    }
 }
 
 fn validate_automation_access_request(

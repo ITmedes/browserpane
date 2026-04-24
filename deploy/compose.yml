@@ -108,6 +108,15 @@ services:
       --public-gateway-url https://localhost:4433
       --cert /certs/cert.pem
       --key /certs/cert.key
+      --workflow-worker-docker-bin ${BPANE_WORKFLOW_WORKER_DOCKER_BIN:-docker}
+      --workflow-worker-image ${BPANE_WORKFLOW_WORKER_IMAGE:-deploy-workflow-worker}
+      --workflow-worker-network ${BPANE_WORKFLOW_WORKER_NETWORK:-deploy_bpane-internal}
+      --workflow-worker-container-name-prefix ${BPANE_WORKFLOW_WORKER_CONTAINER_NAME_PREFIX:-bpane-workflow}
+      --workflow-worker-api-url ${BPANE_WORKFLOW_WORKER_API_URL:-http://gateway:8932}
+      --workflow-worker-work-root ${BPANE_WORKFLOW_WORKER_WORK_ROOT:-/tmp/bpane-workflows}
+      --workflow-worker-oidc-token-url ${BPANE_WORKFLOW_WORKER_OIDC_TOKEN_URL:-http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token}
+      --workflow-worker-oidc-client-id ${BPANE_WORKFLOW_WORKER_OIDC_CLIENT_ID:-bpane-mcp-bridge}
+      --workflow-worker-oidc-client-secret ${BPANE_WORKFLOW_WORKER_OIDC_CLIENT_SECRET:-bpane-mcp-bridge-secret}
     ports:
       - "4433:4433/udp"
       - "4433:4433/tcp"

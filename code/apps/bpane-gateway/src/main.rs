@@ -20,6 +20,7 @@ mod session_manager;
 mod session_registry;
 mod transport;
 mod workflow;
+mod workflow_lifecycle;
 mod workflow_source;
 mod workspace_file_store;
 
@@ -45,6 +46,7 @@ use session_control::{SessionOwnerMode, SessionStore};
 use session_manager::{SessionManager, SessionManagerConfig, SessionManagerDockerConfig};
 use session_registry::SessionRegistry;
 use transport::TransportServer;
+use workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
 use workflow_source::WorkflowSourceResolver;
 use workspace_file_store::WorkspaceFileStore;
 
@@ -256,6 +258,29 @@ async fn main() -> anyhow::Result<()> {
     ));
     let workflow_source_resolver =
         Arc::new(WorkflowSourceResolver::new(config.workflow_git_bin.clone()));
+    let workflow_worker_config = config
+        .workflow_worker_image
+        .clone()
+        .map(|image| WorkflowWorkerConfig {
+            docker_bin: config.workflow_worker_docker_bin.clone(),
+            image,
+            network: config.workflow_worker_network.clone(),
+            container_name_prefix: config.workflow_worker_container_name_prefix.clone(),
+            gateway_api_url: config.workflow_worker_api_url.clone(),
+            work_root: config.workflow_worker_work_root.clone(),
+            bearer_token: config.workflow_worker_bearer_token.clone(),
+            oidc_token_url: config.workflow_worker_oidc_token_url.clone(),
+            oidc_client_id: config.workflow_worker_oidc_client_id.clone(),
+            oidc_client_secret: config.workflow_worker_oidc_client_secret.clone(),
+            oidc_scopes: config.workflow_worker_oidc_scopes.clone(),
+        });
+    let workflow_lifecycle = Arc::new(WorkflowLifecycleManager::new(
+        workflow_worker_config,
+        auth_validator.clone(),
+        automation_access_token_manager.clone(),
+        session_store.clone(),
+    )?);
+    workflow_lifecycle.reconcile_persisted_state().await?;
     let recording_observability = Arc::new(RecordingObservability::default());
     if config.recording_artifact_cleanup_interval_secs > 0 {
         let recording_retention = Arc::new(RecordingRetentionManager::new(
@@ -306,6 +331,7 @@ async fn main() -> anyhow::Result<()> {
             workflow_source_resolver,
             recording_observability,
             recording_lifecycle,
+            workflow_lifecycle,
             Duration::from_secs(config.runtime_idle_timeout_secs),
             config.public_gateway_url,
             if config.exclusive_browser_owner {
