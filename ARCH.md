@@ -9,6 +9,8 @@ resolution pixel-for-pixel.
 
 The canonical frozen v1 session-control contract is [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
 
+A whole-system Mermaid topology view now lives in [ARCHITECTURE.mmd](ARCHITECTURE.mmd). It is intended to track the current repo shape across browser, gateway, runtime, automation, recording, and persistence boundaries.
+
 The system has five runtime components connected by two transport layers plus a persistent control-plane store:
 
 ```
