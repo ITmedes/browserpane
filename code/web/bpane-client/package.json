@@ -9,6 +9,7 @@
     "benchmark:stress": "node scripts/run-scroll-benchmark.mjs --profile stress",
     "benchmark:realistic": "node scripts/run-scroll-benchmark.mjs --profile realistic",
     "smoke:automation-tasks": "node scripts/run-automation-task-smoke.mjs",
+    "smoke:file-workspaces": "node scripts/run-file-workspace-smoke.mjs",
     "smoke:recording": "node scripts/run-recording-smoke.mjs",
     "smoke:workflows": "node scripts/run-workflow-smoke.mjs",
     "smoke:multisession": "node scripts/run-multi-session-smoke.mjs",

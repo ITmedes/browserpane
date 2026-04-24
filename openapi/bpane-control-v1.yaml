@@ -18,6 +18,7 @@ tags:
   - name: Session Recordings
   - name: Session Automation
   - name: Automation Tasks
+  - name: File Workspaces
   - name: Workflows
 security:
   - bearerAuth: []
@@ -548,6 +549,176 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/file-workspaces:
+    get:
+      tags: [File Workspaces]
+      summary: List file workspaces visible to the authenticated owner
+      operationId: listFileWorkspaces
+      responses:
+        '200':
+          description: File workspace list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [File Workspaces]
+      summary: Create a file workspace for reusable workflow inputs or outputs
+      operationId: createFileWorkspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFileWorkspaceRequest'
+      responses:
+        '201':
+          description: File workspace created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/file-workspaces/{workspace_id}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [File Workspaces]
+      summary: Fetch one file workspace
+      operationId: getFileWorkspace
+      responses:
+        '200':
+          description: File workspace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/file-workspaces/{workspace_id}/files:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [File Workspaces]
+      summary: List file metadata within one workspace
+      operationId: listFileWorkspaceFiles
+      responses:
+        '200':
+          description: File workspace file list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceFileListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [File Workspaces]
+      summary: Upload raw file content into one workspace
+      operationId: uploadFileWorkspaceFile
+      parameters:
+        - $ref: '#/components/parameters/BPaneFileName'
+        - $ref: '#/components/parameters/BPaneFileProvenance'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '201':
+          description: File metadata created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceFileResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/file-workspaces/{workspace_id}/files/{file_id}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [File Workspaces]
+      summary: Fetch one workspace file metadata resource
+      operationId: getFileWorkspaceFile
+      responses:
+        '200':
+          description: File metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceFileResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    delete:
+      tags: [File Workspaces]
+      summary: Delete one workspace file and its stored artifact
+      operationId: deleteFileWorkspaceFile
+      responses:
+        '200':
+          description: Deleted file metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceFileResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/file-workspaces/{workspace_id}/files/{file_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [File Workspaces]
+      summary: Download raw file content for one workspace file
+      operationId: getFileWorkspaceFileContent
+      responses:
+        '200':
+          description: Raw file bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -1056,6 +1227,33 @@ components:
       schema:
         type: string
         format: uuid
+    WorkspaceId:
+      name: workspace_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FileId:
+      name: file_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BPaneFileName:
+      name: x-bpane-file-name
+      in: header
+      required: true
+      schema:
+        type: string
+    BPaneFileProvenance:
+      name: x-bpane-file-provenance
+      in: header
+      required: false
+      schema:
+        type: string
+      description: JSON-encoded provenance object associated with the uploaded file
   responses:
     BadRequest:
       description: Request validation failed
@@ -1414,6 +1612,109 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AutomationTaskLogResource'
+    CreateFileWorkspaceRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    FileWorkspaceResource:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - labels
+        - files_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        files_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    FileWorkspaceListResponse:
+      type: object
+      required: [workspaces]
+      properties:
+        workspaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileWorkspaceResource'
+    FileWorkspaceFileResource:
+      type: object
+      required:
+        - id
+        - workspace_id
+        - name
+        - media_type
+        - byte_count
+        - sha256_hex
+        - provenance
+        - content_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        media_type:
+          type: string
+          nullable: true
+        byte_count:
+          type: integer
+          minimum: 0
+        sha256_hex:
+          type: string
+        provenance:
+          type: object
+          nullable: true
+          additionalProperties: true
+        content_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    FileWorkspaceFileListResponse:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileWorkspaceFileResource'
     WorkflowRunState:
       type: string
       enum:

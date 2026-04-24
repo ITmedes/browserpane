@@ -17,6 +17,10 @@ use crate::automation_task::{
     AutomationTaskTransitionRequest, PersistAutomationTaskRequest, StoredAutomationTask,
     StoredAutomationTaskEvent, StoredAutomationTaskLog,
 };
+use crate::file_workspace::{
+    PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest, StoredFileWorkspace,
+    StoredFileWorkspaceFile,
+};
 use crate::session_manager::{
     PersistedSessionRuntimeAssignment, SessionManagerProfile, SessionRuntimeAccess,
     SessionRuntimeAssignmentStatus,
@@ -669,6 +673,8 @@ impl SessionStore {
                 workflow_runs: Mutex::new(Vec::new()),
                 workflow_run_events: Mutex::new(Vec::new()),
                 workflow_run_logs: Mutex::new(Vec::new()),
+                file_workspaces: Mutex::new(Vec::new()),
+                file_workspace_files: Mutex::new(Vec::new()),
                 recordings: Mutex::new(Vec::new()),
                 runtime_assignments: Mutex::new(HashMap::new()),
                 recording_worker_assignments: Mutex::new(HashMap::new()),
@@ -1196,6 +1202,130 @@ impl SessionStore {
             }
             SessionStoreBackend::Postgres(store) => {
                 store.append_workflow_run_log(id, request).await
+            }
+        }
+    }
+
+    pub async fn create_file_workspace(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistFileWorkspaceRequest,
+    ) -> Result<StoredFileWorkspace, SessionStoreError> {
+        validate_file_workspace_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_file_workspace(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_file_workspace(principal, request).await
+            }
+        }
+    }
+
+    pub async fn list_file_workspaces_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredFileWorkspace>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_file_workspaces_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_file_workspaces_for_owner(principal).await
+            }
+        }
+    }
+
+    pub async fn get_file_workspace_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredFileWorkspace>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_file_workspace_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_file_workspace_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn create_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistFileWorkspaceFileRequest,
+    ) -> Result<StoredFileWorkspaceFile, SessionStoreError> {
+        validate_file_workspace_file_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .create_file_workspace_file_for_owner(principal, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .create_file_workspace_file_for_owner(principal, request)
+                    .await
+            }
+        }
+    }
+
+    pub async fn list_file_workspace_files_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+    ) -> Result<Vec<StoredFileWorkspaceFile>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .list_file_workspace_files_for_owner(principal, workspace_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .list_file_workspace_files_for_owner(principal, workspace_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn get_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredFileWorkspaceFile>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_file_workspace_file_for_owner(principal, workspace_id, file_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_file_workspace_file_for_owner(principal, workspace_id, file_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn delete_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredFileWorkspaceFile>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .delete_file_workspace_file_for_owner(principal, workspace_id, file_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .delete_file_workspace_file_for_owner(principal, workspace_id, file_id)
+                    .await
             }
         }
     }
@@ -1797,6 +1927,64 @@ fn validate_workflow_run_log_request(
     validate_automation_task_log_message(&request.message)
 }
 
+fn validate_file_workspace_request(
+    request: &PersistFileWorkspaceRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "file workspace name must not be empty".to_string(),
+        ));
+    }
+    for (key, value) in &request.labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "file workspace label keys must not be empty".to_string(),
+            ));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "file workspace label values must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_file_workspace_file_request(
+    request: &PersistFileWorkspaceFileRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "file workspace file name must not be empty".to_string(),
+        ));
+    }
+    if let Some(media_type) = &request.media_type {
+        if media_type.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "file workspace file media_type must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    if request.sha256_hex.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "file workspace file sha256_hex must not be empty".to_string(),
+        ));
+    }
+    if let Some(provenance) = &request.provenance {
+        if !provenance.is_object() {
+            return Err(SessionStoreError::InvalidRequest(
+                "file workspace file provenance must be a JSON object when provided".to_string(),
+            ));
+        }
+    }
+    if request.artifact_ref.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "file workspace file artifact_ref must not be empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_complete_recording_request(
     request: &CompleteSessionRecordingRequest,
 ) -> Result<(), SessionStoreError> {
@@ -1854,6 +2042,8 @@ struct InMemorySessionStore {
     workflow_runs: Mutex<Vec<StoredWorkflowRun>>,
     workflow_run_events: Mutex<Vec<StoredWorkflowRunEvent>>,
     workflow_run_logs: Mutex<Vec<StoredWorkflowRunLog>>,
+    file_workspaces: Mutex<Vec<StoredFileWorkspace>>,
+    file_workspace_files: Mutex<Vec<StoredFileWorkspaceFile>>,
     recordings: Mutex<Vec<StoredSessionRecording>>,
     runtime_assignments: Mutex<HashMap<Uuid, PersistedSessionRuntimeAssignment>>,
     recording_worker_assignments: Mutex<HashMap<Uuid, PersistedSessionRecordingWorkerAssignment>>,
@@ -2914,6 +3104,167 @@ impl InMemorySessionStore {
         Ok(Some(log))
     }
 
+    async fn create_file_workspace(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistFileWorkspaceRequest,
+    ) -> Result<StoredFileWorkspace, SessionStoreError> {
+        let now = Utc::now();
+        let workspace = StoredFileWorkspace {
+            id: Uuid::now_v7(),
+            owner_subject: principal.subject.clone(),
+            owner_issuer: principal.issuer.clone(),
+            name: request.name,
+            description: request.description,
+            labels: request.labels,
+            created_at: now,
+            updated_at: now,
+        };
+        self.file_workspaces.lock().await.push(workspace.clone());
+        Ok(workspace)
+    }
+
+    async fn list_file_workspaces_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredFileWorkspace>, SessionStoreError> {
+        let mut workspaces = self
+            .file_workspaces
+            .lock()
+            .await
+            .iter()
+            .filter(|workspace| {
+                workspace.owner_subject == principal.subject
+                    && workspace.owner_issuer == principal.issuer
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        workspaces.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+        Ok(workspaces)
+    }
+
+    async fn get_file_workspace_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredFileWorkspace>, SessionStoreError> {
+        Ok(self
+            .file_workspaces
+            .lock()
+            .await
+            .iter()
+            .find(|workspace| {
+                workspace.id == id
+                    && workspace.owner_subject == principal.subject
+                    && workspace.owner_issuer == principal.issuer
+            })
+            .cloned())
+    }
+
+    async fn create_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistFileWorkspaceFileRequest,
+    ) -> Result<StoredFileWorkspaceFile, SessionStoreError> {
+        let Some(workspace) = self
+            .get_file_workspace_for_owner(principal, request.workspace_id)
+            .await?
+        else {
+            return Err(SessionStoreError::NotFound(format!(
+                "file workspace {} not found",
+                request.workspace_id
+            )));
+        };
+
+        let now = Utc::now();
+        let file = StoredFileWorkspaceFile {
+            id: request.id,
+            workspace_id: workspace.id,
+            name: request.name,
+            media_type: request.media_type,
+            byte_count: request.byte_count,
+            sha256_hex: request.sha256_hex,
+            provenance: request.provenance,
+            artifact_ref: request.artifact_ref,
+            created_at: now,
+            updated_at: now,
+        };
+        self.file_workspace_files.lock().await.push(file.clone());
+        Ok(file)
+    }
+
+    async fn list_file_workspace_files_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+    ) -> Result<Vec<StoredFileWorkspaceFile>, SessionStoreError> {
+        if self
+            .get_file_workspace_for_owner(principal, workspace_id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+
+        let mut files = self
+            .file_workspace_files
+            .lock()
+            .await
+            .iter()
+            .filter(|file| file.workspace_id == workspace_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        files.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+        Ok(files)
+    }
+
+    async fn get_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredFileWorkspaceFile>, SessionStoreError> {
+        if self
+            .get_file_workspace_for_owner(principal, workspace_id)
+            .await?
+            .is_none()
+        {
+            return Ok(None);
+        }
+
+        Ok(self
+            .file_workspace_files
+            .lock()
+            .await
+            .iter()
+            .find(|file| file.workspace_id == workspace_id && file.id == file_id)
+            .cloned())
+    }
+
+    async fn delete_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredFileWorkspaceFile>, SessionStoreError> {
+        if self
+            .get_file_workspace_for_owner(principal, workspace_id)
+            .await?
+            .is_none()
+        {
+            return Ok(None);
+        }
+
+        let mut files = self.file_workspace_files.lock().await;
+        let Some(index) = files
+            .iter()
+            .position(|file| file.workspace_id == workspace_id && file.id == file_id)
+        else {
+            return Ok(None);
+        };
+        Ok(Some(files.remove(index)))
+    }
+
     async fn create_recording_for_session(
         &self,
         session_id: Uuid,
@@ -3455,6 +3806,36 @@ impl PostgresSessionStore {
 
                 CREATE INDEX IF NOT EXISTS idx_control_workflow_run_logs_run_created
                     ON control_workflow_run_logs (run_id, created_at ASC);
+
+                CREATE TABLE IF NOT EXISTS control_file_workspaces (
+                    id UUID PRIMARY KEY,
+                    owner_subject TEXT NOT NULL,
+                    owner_issuer TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT NULL,
+                    labels JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_file_workspaces_owner_created
+                    ON control_file_workspaces (owner_subject, owner_issuer, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS control_file_workspace_files (
+                    id UUID PRIMARY KEY,
+                    workspace_id UUID NOT NULL REFERENCES control_file_workspaces(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    media_type TEXT NULL,
+                    byte_count BIGINT NOT NULL CHECK (byte_count >= 0),
+                    sha256_hex TEXT NOT NULL,
+                    provenance JSONB NULL,
+                    artifact_ref TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_control_file_workspace_files_workspace_created
+                    ON control_file_workspace_files (workspace_id, created_at DESC);
 
                 ALTER TABLE control_sessions
                     ADD COLUMN IF NOT EXISTS automation_owner_client_id TEXT NULL;
@@ -6133,6 +6514,322 @@ impl PostgresSessionStore {
         row_to_stored_workflow_run_log(&log_row).map(Some)
     }
 
+    async fn create_file_workspace(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistFileWorkspaceRequest,
+    ) -> Result<StoredFileWorkspace, SessionStoreError> {
+        let now = Utc::now();
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_one(
+                r#"
+                INSERT INTO control_file_workspaces (
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    description,
+                    labels,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+                RETURNING
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    description,
+                    labels,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &Uuid::now_v7(),
+                    &principal.subject,
+                    &principal.issuer,
+                    &request.name,
+                    &request.description,
+                    &json_labels(&request.labels),
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to create file workspace: {error}"))
+            })?;
+        row_to_stored_file_workspace(&row)
+    }
+
+    async fn list_file_workspaces_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredFileWorkspace>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    description,
+                    labels,
+                    created_at,
+                    updated_at
+                FROM control_file_workspaces
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                ORDER BY created_at DESC
+                "#,
+                &[&principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list file workspaces: {error}"))
+            })?;
+        rows.iter().map(row_to_stored_file_workspace).collect()
+    }
+
+    async fn get_file_workspace_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredFileWorkspace>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    description,
+                    labels,
+                    created_at,
+                    updated_at
+                FROM control_file_workspaces
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[&id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to fetch file workspace: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_file_workspace).transpose()
+    }
+
+    async fn create_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistFileWorkspaceFileRequest,
+    ) -> Result<StoredFileWorkspaceFile, SessionStoreError> {
+        let Some(_) = self
+            .get_file_workspace_for_owner(principal, request.workspace_id)
+            .await?
+        else {
+            return Err(SessionStoreError::NotFound(format!(
+                "file workspace {} not found",
+                request.workspace_id
+            )));
+        };
+
+        let now = Utc::now();
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_one(
+                r#"
+                INSERT INTO control_file_workspace_files (
+                    id,
+                    workspace_id,
+                    name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    provenance,
+                    artifact_ref,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+                RETURNING
+                    id,
+                    workspace_id,
+                    name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    provenance,
+                    artifact_ref,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &request.id,
+                    &request.workspace_id,
+                    &request.name,
+                    &request.media_type,
+                    &(request.byte_count as i64),
+                    &request.sha256_hex,
+                    &request.provenance,
+                    &request.artifact_ref,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to create workspace file: {error}"))
+            })?;
+        row_to_stored_file_workspace_file(&row)
+    }
+
+    async fn list_file_workspace_files_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+    ) -> Result<Vec<StoredFileWorkspaceFile>, SessionStoreError> {
+        if self
+            .get_file_workspace_for_owner(principal, workspace_id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    file.id,
+                    file.workspace_id,
+                    file.name,
+                    file.media_type,
+                    file.byte_count,
+                    file.sha256_hex,
+                    file.provenance,
+                    file.artifact_ref,
+                    file.created_at,
+                    file.updated_at
+                FROM control_file_workspace_files file
+                WHERE file.workspace_id = $1
+                ORDER BY file.created_at DESC
+                "#,
+                &[&workspace_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list workspace files: {error}"))
+            })?;
+        rows.iter().map(row_to_stored_file_workspace_file).collect()
+    }
+
+    async fn get_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredFileWorkspaceFile>, SessionStoreError> {
+        let Some(_) = self
+            .get_file_workspace_for_owner(principal, workspace_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    workspace_id,
+                    name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    provenance,
+                    artifact_ref,
+                    created_at,
+                    updated_at
+                FROM control_file_workspace_files
+                WHERE workspace_id = $1
+                  AND id = $2
+                "#,
+                &[&workspace_id, &file_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to fetch workspace file: {error}"))
+            })?;
+        row.as_ref()
+            .map(row_to_stored_file_workspace_file)
+            .transpose()
+    }
+
+    async fn delete_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredFileWorkspaceFile>, SessionStoreError> {
+        let Some(_) = self
+            .get_file_workspace_for_owner(principal, workspace_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                DELETE FROM control_file_workspace_files
+                WHERE workspace_id = $1
+                  AND id = $2
+                RETURNING
+                    id,
+                    workspace_id,
+                    name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    provenance,
+                    artifact_ref,
+                    created_at,
+                    updated_at
+                "#,
+                &[&workspace_id, &file_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to delete workspace file: {error}"))
+            })?;
+        row.as_ref()
+            .map(row_to_stored_file_workspace_file)
+            .transpose()
+    }
+
     async fn create_recording_for_session(
         &self,
         session_id: Uuid,
@@ -7254,6 +7951,66 @@ fn row_to_stored_workflow_definition_version(
         allowed_extension_ids,
         allowed_file_workspace_ids,
         created_at: row.get("created_at"),
+    })
+}
+
+fn row_to_stored_file_workspace(row: &Row) -> Result<StoredFileWorkspace, SessionStoreError> {
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("file workspace labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("file workspace label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+
+    Ok(StoredFileWorkspace {
+        id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        description: row.get("description"),
+        labels,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
+fn row_to_stored_file_workspace_file(
+    row: &Row,
+) -> Result<StoredFileWorkspaceFile, SessionStoreError> {
+    let byte_count = u64::try_from(row.get::<_, i64>("byte_count")).map_err(|error| {
+        SessionStoreError::Backend(format!(
+            "workspace file byte_count must be non-negative and fit u64: {error}"
+        ))
+    })?;
+    let provenance: Option<Value> = row.get("provenance");
+    if provenance.as_ref().is_some_and(|value| !value.is_object()) {
+        return Err(SessionStoreError::Backend(
+            "workspace file provenance column must be a JSON object".to_string(),
+        ));
+    }
+
+    Ok(StoredFileWorkspaceFile {
+        id: row.get("id"),
+        workspace_id: row.get("workspace_id"),
+        name: row.get("name"),
+        media_type: row.get("media_type"),
+        byte_count,
+        sha256_hex: row.get("sha256_hex"),
+        provenance,
+        artifact_ref: row.get("artifact_ref"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
     })
 }
 

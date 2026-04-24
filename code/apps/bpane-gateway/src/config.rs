@@ -173,6 +173,10 @@ pub struct Config {
     #[arg(long, default_value = "/tmp/bpane-recording-artifacts")]
     pub recording_artifact_local_root: PathBuf,
 
+    /// Managed local root for persisted file workspace content served by the gateway's local_fs workspace file store.
+    #[arg(long, default_value = "/tmp/bpane-file-workspaces")]
+    pub file_workspace_local_root: PathBuf,
+
     /// Optional SPKI pin forwarded to the recorder worker Chromium process.
     #[arg(long)]
     pub recording_worker_cert_spki: Option<String>,
