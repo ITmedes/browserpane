@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
 import type {
+  GatewayWorkflowRunProducedFileResource,
   WorkflowResolvedCredentialBinding,
   WorkflowRunnerContext,
   WorkflowRunnerCredentialBinding,
@@ -15,6 +16,22 @@ type WorkflowExecutionContext = {
   browser: Browser;
   context: BrowserContext;
   page: Page;
+  artifacts: {
+    uploadFile: (request: {
+      workspaceId: string;
+      fileName: string;
+      bytes: Uint8Array | Buffer;
+      mediaType?: string | null;
+      provenance?: Record<string, unknown> | null;
+    }) => Promise<GatewayWorkflowRunProducedFileResource>;
+    uploadTextFile: (request: {
+      workspaceId: string;
+      fileName: string;
+      text: string;
+      mediaType?: string | null;
+      provenance?: Record<string, unknown> | null;
+    }) => Promise<GatewayWorkflowRunProducedFileResource>;
+  };
   credentialBindings: WorkflowRunnerCredentialBinding[];
   credentials: {
     bindings: WorkflowRunnerCredentialBinding[];
@@ -56,6 +73,7 @@ async function main(): Promise<void> {
       browser,
       context: page.context(),
       page,
+      artifacts: createWorkflowArtifactApi(context),
       credentialBindings: context.credentialBindings,
       credentials: {
         bindings: context.credentialBindings,
@@ -148,6 +166,82 @@ async function loadResolvedCredentialBinding(
 
 function normalizeOrigin(value: string): string {
   return new URL(value).origin;
+}
+
+function createWorkflowArtifactApi(context: WorkflowRunnerContext) {
+  return {
+    uploadFile: async (request: {
+      workspaceId: string;
+      fileName: string;
+      bytes: Uint8Array | Buffer;
+      mediaType?: string | null;
+      provenance?: Record<string, unknown> | null;
+    }) =>
+      uploadWorkflowProducedFile(context, {
+        workspaceId: request.workspaceId,
+        fileName: request.fileName,
+        bytes: request.bytes instanceof Uint8Array ? request.bytes : new Uint8Array(request.bytes),
+        mediaType: request.mediaType,
+        provenance: request.provenance,
+      }),
+    uploadTextFile: async (request: {
+      workspaceId: string;
+      fileName: string;
+      text: string;
+      mediaType?: string | null;
+      provenance?: Record<string, unknown> | null;
+    }) =>
+      uploadWorkflowProducedFile(context, {
+        workspaceId: request.workspaceId,
+        fileName: request.fileName,
+        bytes: new TextEncoder().encode(request.text),
+        mediaType: request.mediaType ?? "text/plain; charset=utf-8",
+        provenance: request.provenance,
+      }),
+  };
+}
+
+async function uploadWorkflowProducedFile(
+  context: WorkflowRunnerContext,
+  request: {
+    workspaceId: string;
+    fileName: string;
+    bytes: Uint8Array;
+    mediaType?: string | null;
+    provenance?: Record<string, unknown> | null;
+  },
+): Promise<GatewayWorkflowRunProducedFileResource> {
+  const response = await fetch(
+    `${context.gatewayApiUrl.replace(/\/$/, "")}/api/v1/workflow-runs/${encodeURIComponent(context.workflowRunId)}/produced-files`,
+    {
+      method: "POST",
+      headers: {
+        "x-bpane-automation-access-token": context.authToken,
+        "x-bpane-workflow-workspace-id": request.workspaceId,
+        "x-bpane-file-name": request.fileName,
+        ...(request.mediaType ? { "Content-Type": request.mediaType } : {}),
+        ...(request.provenance
+          ? {
+              "x-bpane-file-provenance": JSON.stringify(request.provenance),
+            }
+          : {}),
+      },
+      body: Buffer.from(request.bytes),
+    },
+  );
+  if (!response.ok) {
+    let message = `${response.status} ${response.statusText}`.trim();
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (payload?.error) {
+        message = payload.error;
+      }
+    } catch {
+      // Ignore malformed error bodies.
+    }
+    throw new Error(`failed to upload workflow produced file: ${message}`);
+  }
+  return (await response.json()) as GatewayWorkflowRunProducedFileResource;
 }
 
 function ensureJsonSerializable(value: unknown): unknown {

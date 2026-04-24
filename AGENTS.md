@@ -67,6 +67,8 @@ Current product shape:
   - `recording_observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
   - `recording_retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
   - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers as short-lived Docker jobs, persist run-worker assignments, and fail stale active runs after restart instead of leaving them orphaned.
+  - `workflow_observability.rs`: gateway-local counters/timestamps for workflow-produced file uploads and workflow retention passes.
+  - `workflow_retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions. Docker-backed workers carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile, and Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
@@ -88,7 +90,7 @@ Current product shape:
   - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals, then hands a temporary local file path back to the gateway for artifact-store finalization.
 - `code/integrations/workflow-worker`
   - One-off workflow executor worker for owner-scoped workflow runs with git-backed source snapshots.
-  - Loads the workflow run through the gateway using an owner bearer token, mints session automation access, downloads the run source snapshot, materializes it locally, and executes the pinned Playwright entrypoint against the bound BrowserPane session.
+  - Loads the workflow run through the gateway using an owner bearer token, mints session automation access, downloads the run source snapshot and workspace inputs, materializes them locally, uploads produced files back through run-scoped artifact APIs, and executes the pinned Playwright entrypoint against the bound BrowserPane session.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
@@ -136,6 +138,7 @@ Run these in `code/web/bpane-client`:
 - `npm test`
 - `npm run build`
 - `npm run smoke:recording -- --headless`
+- `npm run smoke:workflow-embed -- --headless`
 - `npm run smoke:workflow-credentials -- --headless`
 - `npm run smoke:workflow-workspace -- --headless`
 - `npm run smoke:workflows -- --headless`

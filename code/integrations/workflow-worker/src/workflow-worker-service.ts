@@ -193,6 +193,7 @@ export class WorkflowWorkerService {
     await fs.mkdir(path.dirname(request.resultPath), { recursive: true });
     const contextPath = path.join(this.resolveWorkDir(request.run.id), "context.json");
     const runnerContext: WorkflowRunnerContext = {
+      gatewayApiUrl: this.controlClient.getGatewayApiUrl(),
       endpointUrl: request.endpointUrl,
       authHeader: request.authHeader,
       authToken: request.authToken,

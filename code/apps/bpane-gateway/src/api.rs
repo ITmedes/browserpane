@@ -10,7 +10,7 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use chrono::Utc;
+use chrono::{Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -66,14 +66,17 @@ use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime
 use crate::session_registry::SessionRegistry;
 use crate::workflow::{
     PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
-    PersistWorkflowRunEventRequest, PersistWorkflowRunLogRequest, PersistWorkflowRunRequest,
-    StoredWorkflowDefinition, StoredWorkflowDefinitionVersion, WorkflowDefinitionListResponse,
+    PersistWorkflowRunEventRequest, PersistWorkflowRunLogRequest,
+    PersistWorkflowRunProducedFileRequest, PersistWorkflowRunRequest, StoredWorkflowDefinition,
+    StoredWorkflowDefinitionVersion, StoredWorkflowRun, WorkflowDefinitionListResponse,
     WorkflowDefinitionResource, WorkflowDefinitionVersionResource, WorkflowRunEventListResponse,
     WorkflowRunEventResource, WorkflowRunLogListResponse, WorkflowRunLogResource,
-    WorkflowRunResource, WorkflowRunSourceSnapshot, WorkflowRunState, WorkflowRunTransitionRequest,
-    WorkflowRunWorkspaceInput,
+    WorkflowRunProducedFileResource, WorkflowRunRecordingResource, WorkflowRunResource,
+    WorkflowRunRetentionResource, WorkflowRunSourceSnapshot, WorkflowRunState,
+    WorkflowRunTransitionRequest, WorkflowRunWorkspaceInput,
 };
 use crate::workflow_lifecycle::WorkflowLifecycleManager;
+use crate::workflow_observability::{WorkflowObservability, WorkflowObservabilitySnapshot};
 use crate::workflow_source::{
     validate_workflow_source_entrypoint, WorkflowSource, WorkflowSourceArchive,
     WorkflowSourceError, WorkflowSourceResolver,
@@ -97,6 +100,9 @@ struct ApiState {
     recording_observability: Arc<RecordingObservability>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
     workflow_lifecycle: Arc<WorkflowLifecycleManager>,
+    workflow_observability: Arc<WorkflowObservability>,
+    workflow_log_retention: Option<ChronoDuration>,
+    workflow_output_retention: Option<ChronoDuration>,
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
@@ -105,6 +111,7 @@ struct ApiState {
 const AUTOMATION_ACCESS_TOKEN_HEADER: &str = "x-bpane-automation-access-token";
 const FILE_WORKSPACE_FILE_NAME_HEADER: &str = "x-bpane-file-name";
 const FILE_WORKSPACE_FILE_PROVENANCE_HEADER: &str = "x-bpane-file-provenance";
+const WORKFLOW_RUN_WORKSPACE_ID_HEADER: &str = "x-bpane-workflow-workspace-id";
 
 #[derive(Serialize)]
 struct SessionStatus {
@@ -242,6 +249,11 @@ struct CreateWorkflowRunWorkspaceInputRequest {
     file_id: Uuid,
     #[serde(default)]
     mount_path: Option<String>,
+}
+
+#[derive(Serialize)]
+struct WorkflowRunProducedFileListResponse {
+    files: Vec<WorkflowRunProducedFileResource>,
 }
 
 #[derive(Deserialize)]
@@ -1378,7 +1390,10 @@ async fn create_workflow_run(
         .await
         .map_err(map_session_store_error)?
         .unwrap_or(run);
-    Ok((StatusCode::CREATED, Json(run.to_resource())))
+    Ok((
+        StatusCode::CREATED,
+        Json(build_workflow_run_resource(&state, &run).await?),
+    ))
 }
 
 async fn get_workflow_run(
@@ -1389,7 +1404,7 @@ async fn get_workflow_run(
     let run =
         authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
             .await?;
-    Ok(Json(run.to_resource()))
+    Ok(Json(build_workflow_run_resource(&state, &run).await?))
 }
 
 async fn get_workflow_run_source_snapshot_content(
@@ -1515,6 +1530,277 @@ async fn get_workflow_run_workspace_input_content(
     Ok(response)
 }
 
+async fn list_workflow_run_produced_files(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunProducedFileListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    Ok(Json(WorkflowRunProducedFileListResponse {
+        files: run
+            .produced_files
+            .iter()
+            .map(|file| file.to_resource(run.id))
+            .collect(),
+    }))
+}
+
+async fn upload_workflow_run_produced_file(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    body: Bytes,
+) -> Result<(StatusCode, Json<WorkflowRunProducedFileResource>), (StatusCode, Json<ErrorResponse>)>
+{
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let owner = load_session_owner_principal(&state, run.session_id).await?;
+    let version = state
+        .session_store
+        .get_workflow_definition_version_for_owner(
+            &owner,
+            run.workflow_definition_id,
+            &run.workflow_version,
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {} for workflow {} not found",
+                        run.workflow_version, run.workflow_definition_id
+                    ),
+                }),
+            )
+        })?;
+    let workspace_id = required_header_string(&headers, WORKFLOW_RUN_WORKSPACE_ID_HEADER)?
+        .parse::<Uuid>()
+        .map_err(|error| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "header {WORKFLOW_RUN_WORKSPACE_ID_HEADER} must be a valid UUID: {error}"
+                    ),
+                }),
+            )
+        })?;
+    if !version
+        .allowed_file_workspace_ids
+        .iter()
+        .any(|entry| entry == &workspace_id.to_string())
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow definition version {} does not allow file workspace {}",
+                    version.version, workspace_id
+                ),
+            }),
+        ));
+    }
+    let _workspace = state
+        .session_store
+        .get_file_workspace_for_owner(&owner, workspace_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("file workspace {workspace_id} not found"),
+                }),
+            )
+        })?;
+    let file_name = required_header_string(&headers, FILE_WORKSPACE_FILE_NAME_HEADER)?;
+    let provenance =
+        parse_optional_json_object_header(&headers, FILE_WORKSPACE_FILE_PROVENANCE_HEADER)?;
+    let media_type = headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let file_id = Uuid::now_v7();
+    let sha256_hex = hex::encode(Sha256::digest(body.as_ref()));
+    let stored_artifact = state
+        .workspace_file_store
+        .write(StoreWorkspaceFileRequest {
+            workspace_id,
+            file_id,
+            file_name: file_name.clone(),
+            bytes: body.to_vec(),
+        })
+        .await
+        .map_err(|error| {
+            state.workflow_observability.record_produced_file_upload_failure();
+            map_workspace_file_store_error(error)
+        })?;
+    let persisted_file = state
+        .session_store
+        .create_file_workspace_file_for_owner(
+            &owner,
+            PersistFileWorkspaceFileRequest {
+                id: file_id,
+                workspace_id,
+                name: file_name.clone(),
+                media_type: media_type.clone(),
+                byte_count: body.len() as u64,
+                sha256_hex: sha256_hex.clone(),
+                provenance: provenance.clone(),
+                artifact_ref: stored_artifact.artifact_ref.clone(),
+            },
+        )
+        .await;
+    let persisted_file = match persisted_file {
+        Ok(file) => file,
+        Err(error) => {
+            state.workflow_observability.record_produced_file_upload_failure();
+            let _ = state
+                .workspace_file_store
+                .delete(&stored_artifact.artifact_ref)
+                .await;
+            return Err(map_session_store_error(error));
+        }
+    };
+    let updated_run = state
+        .session_store
+        .append_workflow_run_produced_file(
+            run.id,
+            PersistWorkflowRunProducedFileRequest {
+                workspace_id,
+                file_id,
+                file_name,
+                media_type,
+                byte_count: body.len() as u64,
+                sha256_hex,
+                provenance,
+                artifact_ref: stored_artifact.artifact_ref.clone(),
+            },
+        )
+        .await;
+    match updated_run {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            state.workflow_observability.record_produced_file_upload_failure();
+            let _ = state
+                .session_store
+                .delete_file_workspace_file_for_owner(&owner, workspace_id, file_id)
+                .await;
+            let _ = state
+                .workspace_file_store
+                .delete(&stored_artifact.artifact_ref)
+                .await;
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            ));
+        }
+        Err(error) => {
+            state.workflow_observability.record_produced_file_upload_failure();
+            let _ = state
+                .session_store
+                .delete_file_workspace_file_for_owner(&owner, workspace_id, file_id)
+                .await;
+            let _ = state
+                .workspace_file_store
+                .delete(&stored_artifact.artifact_ref)
+                .await;
+            return Err(map_session_store_error(error));
+        }
+    }
+    state.workflow_observability.record_produced_file_upload();
+    Ok((
+        StatusCode::CREATED,
+        Json(WorkflowRunProducedFileResource {
+            workspace_id,
+            file_id,
+            file_name: persisted_file.name,
+            media_type: persisted_file.media_type,
+            byte_count: persisted_file.byte_count,
+            sha256_hex: persisted_file.sha256_hex,
+            provenance: persisted_file.provenance,
+            content_path: format!(
+                "/api/v1/workflow-runs/{}/produced-files/{file_id}/content",
+                run.id
+            ),
+            created_at: persisted_file.created_at,
+        }),
+    ))
+}
+
+async fn get_workflow_run_produced_file_content(
+    headers: HeaderMap,
+    Path((run_id, file_id)): Path<(Uuid, Uuid)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let produced_file = run
+        .produced_files
+        .iter()
+        .find(|file| file.file_id == file_id)
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow run produced file {file_id} was not found for run {run_id}"
+                    ),
+                }),
+            )
+        })?;
+    let bytes = state
+        .workspace_file_store
+        .read(&produced_file.artifact_ref)
+        .await
+        .map_err(|error| match error.io_kind() {
+            Some(std::io::ErrorKind::NotFound) => (
+                StatusCode::GONE,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow run produced file {file_id} is no longer available"
+                    ),
+                }),
+            ),
+            _ => map_workspace_file_content_error(error),
+        })?;
+    let media_type = produced_file
+        .media_type
+        .clone()
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    let mut response = Response::new(axum::body::Body::from(bytes.clone()));
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        header_value_or_default(&media_type, "application/octet-stream"),
+    );
+    response.headers_mut().insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&bytes.len().to_string())
+            .unwrap_or_else(|_| HeaderValue::from_static("0")),
+    );
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        header_value_or_default(
+            &format!(
+                "attachment; filename=\"{}\"",
+                sanitize_content_disposition_filename(&produced_file.file_name)
+            ),
+            "attachment",
+        ),
+    );
+    Ok(response)
+}
+
 async fn cancel_workflow_run(
     headers: HeaderMap,
     Path(run_id): Path<Uuid>,
@@ -1583,7 +1869,7 @@ async fn cancel_workflow_run(
                 }),
             )
         })?;
-    Ok(Json(run.to_resource()))
+    Ok(Json(build_workflow_run_resource(&state, &run).await?))
 }
 
 async fn transition_workflow_run_state(
@@ -1618,7 +1904,7 @@ async fn transition_workflow_run_state(
                 }),
             )
         })?;
-    Ok(Json(run.to_resource()))
+    Ok(Json(build_workflow_run_resource(&state, &run).await?))
 }
 
 async fn append_workflow_run_log(
@@ -2651,6 +2937,16 @@ async fn get_recording_operations(
     Ok(Json(state.recording_observability.snapshot().await))
 }
 
+async fn get_workflow_operations(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowObservabilitySnapshot>, (StatusCode, Json<ErrorResponse>)> {
+    authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    Ok(Json(state.workflow_observability.snapshot().await))
+}
+
 async fn set_automation_owner(
     headers: HeaderMap,
     Path(session_id): Path<Uuid>,
@@ -3199,6 +3495,9 @@ pub async fn run_api_server(
     recording_observability: Arc<RecordingObservability>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
     workflow_lifecycle: Arc<WorkflowLifecycleManager>,
+    workflow_observability: Arc<WorkflowObservability>,
+    workflow_log_retention: Option<ChronoDuration>,
+    workflow_output_retention: Option<ChronoDuration>,
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
@@ -3217,6 +3516,9 @@ pub async fn run_api_server(
         recording_observability,
         recording_lifecycle,
         workflow_lifecycle,
+        workflow_observability,
+        workflow_log_retention,
+        workflow_output_retention,
         idle_stop_timeout,
         public_gateway_url,
         default_owner_mode,
@@ -3807,6 +4109,14 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
             get(get_workflow_run_workspace_input_content),
         )
         .route(
+            "/api/v1/workflow-runs/{run_id}/produced-files",
+            post(upload_workflow_run_produced_file).get(list_workflow_run_produced_files),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/produced-files/{file_id}/content",
+            get(get_workflow_run_produced_file_content),
+        )
+        .route(
             "/api/v1/workflow-runs/{run_id}/state",
             post(transition_workflow_run_state),
         )
@@ -3909,6 +4219,10 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         .route(
             "/api/v1/recording/operations",
             get(get_recording_operations),
+        )
+        .route(
+            "/api/v1/workflow/operations",
+            get(get_workflow_operations),
         )
         .route("/api/session/status", get(session_status))
         .route("/api/session/mcp-owner", post(set_mcp_owner))
@@ -4401,6 +4715,79 @@ fn latest_recording(recordings: &[StoredSessionRecording]) -> Option<&StoredSess
             .cmp(&right.updated_at)
             .then_with(|| left.created_at.cmp(&right.created_at))
     })
+}
+
+async fn build_workflow_run_resource(
+    state: &ApiState,
+    run: &StoredWorkflowRun,
+) -> Result<WorkflowRunResource, (StatusCode, Json<ErrorResponse>)> {
+    let recordings = state
+        .session_store
+        .list_recordings_for_session(run.session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .filter(|recording| workflow_run_recording_matches(run, recording, Utc::now()))
+        .map(workflow_run_recording_resource)
+        .collect::<Vec<_>>();
+    Ok(run.to_resource(
+        recordings,
+        workflow_run_retention_resource(state, run),
+    ))
+}
+
+fn workflow_run_recording_matches(
+    run: &StoredWorkflowRun,
+    recording: &StoredSessionRecording,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    let run_started_at = run.started_at.unwrap_or(run.created_at);
+    let run_ended_at = run.completed_at.unwrap_or(now);
+    let recording_ended_at = recording.completed_at.unwrap_or(now);
+    recording.started_at <= run_ended_at && recording_ended_at >= run_started_at
+}
+
+fn workflow_run_recording_resource(
+    recording: StoredSessionRecording,
+) -> WorkflowRunRecordingResource {
+    WorkflowRunRecordingResource {
+        id: recording.id,
+        session_id: recording.session_id,
+        state: recording.state.as_str().to_string(),
+        format: recording.format.as_str().to_string(),
+        mime_type: recording.mime_type,
+        bytes: recording.bytes,
+        duration_ms: recording.duration_ms,
+        error: recording.error,
+        termination_reason: recording
+            .termination_reason
+            .map(|reason| reason.as_str().to_string()),
+        previous_recording_id: recording.previous_recording_id,
+        started_at: recording.started_at,
+        completed_at: recording.completed_at,
+        content_path: format!(
+            "/api/v1/sessions/{}/recordings/{}/content",
+            recording.session_id, recording.id
+        ),
+        created_at: recording.created_at,
+        updated_at: recording.updated_at,
+    }
+}
+
+fn workflow_run_retention_resource(
+    state: &ApiState,
+    run: &StoredWorkflowRun,
+) -> WorkflowRunRetentionResource {
+    let output_expire_at = run
+        .completed_at
+        .and_then(|completed_at| state.workflow_output_retention.map(|retention| completed_at + retention));
+    let logs_expire_at = run
+        .completed_at
+        .and_then(|completed_at| state.workflow_log_retention.map(|retention| completed_at + retention));
+    WorkflowRunRetentionResource {
+        logs_expire_at,
+        output_expire_at,
+    }
 }
 
 async fn authorize_visible_session_request(

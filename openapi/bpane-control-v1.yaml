@@ -500,6 +500,89 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/produced-files:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Workflows]
+      summary: List workflow-run produced files linked to a visible run
+      operationId: listWorkflowRunProducedFiles
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run produced file list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunProducedFileListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Workflows]
+      summary: Upload a produced file and link it to a workflow run
+      operationId: uploadWorkflowRunProducedFile
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/BPaneWorkflowWorkspaceId'
+        - $ref: '#/components/parameters/BPaneFileName'
+        - $ref: '#/components/parameters/BPaneFileProvenance'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '201':
+          description: Produced file metadata created and linked to the workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunProducedFileResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/produced-files/{file_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [Workflows]
+      summary: Download one workflow-run produced file
+      operationId: getWorkflowRunProducedFileContent
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run produced file content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflow-runs/{run_id}/state:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -627,6 +710,22 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow/operations:
+    get:
+      tags: [Workflows]
+      summary: Read gateway-local workflow artifact and retention counters
+      operationId: getWorkflowOperations
+      responses:
+        '200':
+          description: Workflow operation snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowObservabilitySnapshot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/extensions:
@@ -1541,6 +1640,14 @@ components:
       schema:
         type: string
       description: JSON-encoded provenance object associated with the uploaded file
+    BPaneWorkflowWorkspaceId:
+      name: x-bpane-workflow-workspace-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Allowed file workspace that should receive the uploaded workflow artifact
   responses:
     BadRequest:
       description: Request validation failed
@@ -2627,6 +2734,9 @@ components:
         - extensions
         - credential_bindings
         - workspace_inputs
+        - produced_files
+        - recordings
+        - retention
         - labels
         - started_at
         - completed_at
@@ -2681,6 +2791,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkflowRunWorkspaceInputResource'
+        produced_files:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunProducedFileResource'
+        recordings:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunRecordingResource'
+        retention:
+          $ref: '#/components/schemas/WorkflowRunRetentionResource'
         labels:
           type: object
           additionalProperties:
@@ -2782,6 +2902,133 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkflowRunLogResource'
+    WorkflowRunProducedFileResource:
+      type: object
+      required:
+        - workspace_id
+        - file_id
+        - file_name
+        - media_type
+        - byte_count
+        - sha256_hex
+        - provenance
+        - content_path
+        - created_at
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+        media_type:
+          type: string
+          nullable: true
+        byte_count:
+          type: integer
+          format: int64
+          minimum: 0
+        sha256_hex:
+          type: string
+        provenance:
+          nullable: true
+        content_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    WorkflowRunProducedFileListResponse:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunProducedFileResource'
+    WorkflowRunRecordingResource:
+      type: object
+      required:
+        - id
+        - session_id
+        - state
+        - format
+        - mime_type
+        - bytes
+        - duration_ms
+        - error
+        - termination_reason
+        - previous_recording_id
+        - started_at
+        - completed_at
+        - content_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/SessionRecordingResourceState'
+        format:
+          $ref: '#/components/schemas/SessionRecordingFormat'
+        mime_type:
+          type: string
+          nullable: true
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        termination_reason:
+          allOf:
+            - $ref: '#/components/schemas/SessionRecordingTerminationReason'
+          nullable: true
+        previous_recording_id:
+          type: string
+          format: uuid
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        content_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowRunRetentionResource:
+      type: object
+      required:
+        - logs_expire_at
+        - output_expire_at
+      properties:
+        logs_expire_at:
+          type: string
+          format: date-time
+          nullable: true
+        output_expire_at:
+          type: string
+          format: date-time
+          nullable: true
     SessionConnectInfo:
       type: object
       required:
@@ -3547,6 +3794,47 @@ components:
           type: string
           format: date-time
           nullable: true
+        last_retention_pass_at:
+          type: string
+          format: date-time
+          nullable: true
+    WorkflowObservabilitySnapshot:
+      type: object
+      required:
+        - produced_file_uploads_total
+        - produced_file_upload_failures_total
+        - retention_passes_total
+        - log_retention_candidates_total
+        - output_retention_candidates_total
+        - retention_deleted_logs_total
+        - retention_cleared_outputs_total
+        - retention_failures_total
+        - last_retention_pass_at
+      properties:
+        produced_file_uploads_total:
+          type: integer
+          minimum: 0
+        produced_file_upload_failures_total:
+          type: integer
+          minimum: 0
+        retention_passes_total:
+          type: integer
+          minimum: 0
+        log_retention_candidates_total:
+          type: integer
+          minimum: 0
+        output_retention_candidates_total:
+          type: integer
+          minimum: 0
+        retention_deleted_logs_total:
+          type: integer
+          minimum: 0
+        retention_cleared_outputs_total:
+          type: integer
+          minimum: 0
+        retention_failures_total:
+          type: integer
+          minimum: 0
         last_retention_pass_at:
           type: string
           format: date-time

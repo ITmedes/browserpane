@@ -86,6 +86,41 @@ export type GatewayWorkflowRunWorkspaceInput = {
   content_path: string;
 };
 
+export type GatewayWorkflowRunProducedFile = {
+  workspace_id: string;
+  file_id: string;
+  file_name: string;
+  media_type: string | null;
+  byte_count: number;
+  sha256_hex: string;
+  provenance: unknown;
+  content_path: string;
+  created_at: string;
+};
+
+export type GatewayWorkflowRunRecording = {
+  id: string;
+  session_id: string;
+  state: string;
+  format: string;
+  mime_type: string | null;
+  bytes: number | null;
+  duration_ms: number | null;
+  error: string | null;
+  termination_reason: string | null;
+  previous_recording_id: string | null;
+  started_at: string;
+  completed_at: string | null;
+  content_path: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GatewayWorkflowRunRetention = {
+  logs_expire_at: string | null;
+  output_expire_at: string | null;
+};
+
 export type GatewayWorkflowRunResource = {
   id: string;
   workflow_definition_id: string;
@@ -101,6 +136,9 @@ export type GatewayWorkflowRunResource = {
   source_snapshot: GatewayWorkflowRunSourceSnapshot | null;
   credential_bindings: GatewayWorkflowRunCredentialBinding[];
   workspace_inputs: GatewayWorkflowRunWorkspaceInput[];
+  produced_files: GatewayWorkflowRunProducedFile[];
+  recordings: GatewayWorkflowRunRecording[];
+  retention: GatewayWorkflowRunRetention;
   labels: Record<string, string>;
   started_at: string | null;
   completed_at: string | null;
@@ -109,6 +147,8 @@ export type GatewayWorkflowRunResource = {
   created_at: string;
   updated_at: string;
 };
+
+export type GatewayWorkflowRunProducedFileResource = GatewayWorkflowRunProducedFile;
 
 export type GatewayWorkflowDefinitionVersionResource = {
   id: string;
@@ -131,6 +171,7 @@ export type WorkflowEntrypointResult = {
 };
 
 export type WorkflowRunnerContext = {
+  gatewayApiUrl: string;
   endpointUrl: string;
   authHeader: string;
   authToken: string;
@@ -171,4 +212,12 @@ export type WorkflowRunnerCredentialBinding = {
 
 export type WorkflowResolvedCredentialBinding = WorkflowRunnerCredentialBinding & {
   payload: unknown;
+};
+
+export type WorkflowProducedFileUploadRequest = {
+  workspaceId: string;
+  fileName: string;
+  bytes: Uint8Array;
+  mediaType?: string | null;
+  provenance?: Record<string, unknown> | null;
 };

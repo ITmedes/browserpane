@@ -3,7 +3,9 @@ import type {
   GatewayResolvedWorkflowRunCredentialBinding,
   GatewaySessionAutomationAccessResponse,
   GatewayWorkflowDefinitionVersionResource,
+  GatewayWorkflowRunProducedFileResource,
   GatewayWorkflowRunResource,
+  WorkflowProducedFileUploadRequest,
 } from "./types.js";
 
 type WorkflowControlClientOptions = {
@@ -29,6 +31,10 @@ export class WorkflowControlClient {
   constructor(options: WorkflowControlClientOptions) {
     this.gatewayApiUrl = options.gatewayApiUrl.replace(/\/$/, "");
     this.getHeaders = options.getHeaders;
+  }
+
+  getGatewayApiUrl(): string {
+    return this.gatewayApiUrl;
   }
 
   async getWorkflowRun(runId: string): Promise<GatewayWorkflowRunResource> {
@@ -134,6 +140,31 @@ export class WorkflowControlClient {
       automationToken,
     );
     return new Uint8Array(await response.arrayBuffer());
+  }
+
+  async uploadWorkflowRunProducedFile(
+    runId: string,
+    automationToken: string,
+    request: WorkflowProducedFileUploadRequest,
+  ): Promise<GatewayWorkflowRunProducedFileResource> {
+    return this.fetchJsonWithAutomationAccess<GatewayWorkflowRunProducedFileResource>(
+      `/api/v1/workflow-runs/${encodeURIComponent(runId)}/produced-files`,
+      automationToken,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": request.mediaType ?? "application/octet-stream",
+          "x-bpane-file-name": request.fileName,
+          "x-bpane-workflow-workspace-id": request.workspaceId,
+          ...(request.provenance
+            ? {
+                "x-bpane-file-provenance": JSON.stringify(request.provenance),
+              }
+            : {}),
+        },
+        body: Buffer.from(request.bytes),
+      },
+    );
   }
 
   private async fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {

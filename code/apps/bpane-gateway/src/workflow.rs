@@ -54,6 +54,18 @@ pub struct PersistWorkflowRunRequest {
 }
 
 #[derive(Debug, Clone)]
+pub struct PersistWorkflowRunProducedFileRequest {
+    pub workspace_id: Uuid,
+    pub file_id: Uuid,
+    pub file_name: String,
+    pub media_type: Option<String>,
+    pub byte_count: u64,
+    pub sha256_hex: String,
+    pub provenance: Option<Value>,
+    pub artifact_ref: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct PersistWorkflowRunEventRequest {
     pub event_type: String,
     pub message: String,
@@ -118,6 +130,7 @@ pub struct StoredWorkflowRun {
     pub extensions: Vec<AppliedExtension>,
     pub credential_bindings: Vec<WorkflowRunCredentialBinding>,
     pub workspace_inputs: Vec<WorkflowRunWorkspaceInput>,
+    pub produced_files: Vec<WorkflowRunProducedFile>,
     pub state: WorkflowRunState,
     pub input: Option<Value>,
     pub output: Option<Value>,
@@ -173,6 +186,19 @@ pub struct WorkflowRunWorkspaceInput {
     pub artifact_ref: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowRunProducedFile {
+    pub workspace_id: Uuid,
+    pub file_id: Uuid,
+    pub file_name: String,
+    pub media_type: Option<String>,
+    pub byte_count: u64,
+    pub sha256_hex: String,
+    pub provenance: Option<Value>,
+    pub artifact_ref: String,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct WorkflowRunSourceSnapshotResource {
     pub source: WorkflowSource,
@@ -196,6 +222,44 @@ pub struct WorkflowRunWorkspaceInputResource {
     pub provenance: Option<Value>,
     pub mount_path: String,
     pub content_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowRunProducedFileResource {
+    pub workspace_id: Uuid,
+    pub file_id: Uuid,
+    pub file_name: String,
+    pub media_type: Option<String>,
+    pub byte_count: u64,
+    pub sha256_hex: String,
+    pub provenance: Option<Value>,
+    pub content_path: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowRunRecordingResource {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub state: String,
+    pub format: String,
+    pub mime_type: Option<String>,
+    pub bytes: Option<u64>,
+    pub duration_ms: Option<u64>,
+    pub error: Option<String>,
+    pub termination_reason: Option<String>,
+    pub previous_recording_id: Option<Uuid>,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub content_path: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowRunRetentionResource {
+    pub logs_expire_at: Option<DateTime<Utc>>,
+    pub output_expire_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -345,6 +409,9 @@ pub struct WorkflowRunResource {
     pub extensions: Vec<AppliedExtensionResource>,
     pub credential_bindings: Vec<WorkflowRunCredentialBindingResource>,
     pub workspace_inputs: Vec<WorkflowRunWorkspaceInputResource>,
+    pub produced_files: Vec<WorkflowRunProducedFileResource>,
+    pub recordings: Vec<WorkflowRunRecordingResource>,
+    pub retention: WorkflowRunRetentionResource,
     pub labels: HashMap<String, String>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -422,7 +489,11 @@ impl StoredWorkflowDefinitionVersion {
 }
 
 impl StoredWorkflowRun {
-    pub fn to_resource(&self) -> WorkflowRunResource {
+    pub fn to_resource(
+        &self,
+        recordings: Vec<WorkflowRunRecordingResource>,
+        retention: WorkflowRunRetentionResource,
+    ) -> WorkflowRunResource {
         WorkflowRunResource {
             id: self.id,
             workflow_definition_id: self.workflow_definition_id,
@@ -454,6 +525,13 @@ impl StoredWorkflowRun {
                 .iter()
                 .map(|input| input.to_resource(self.id))
                 .collect(),
+            produced_files: self
+                .produced_files
+                .iter()
+                .map(|file| file.to_resource(self.id))
+                .collect(),
+            recordings,
+            retention,
             labels: self.labels.clone(),
             started_at: self.started_at,
             completed_at: self.completed_at,
@@ -495,6 +573,25 @@ impl WorkflowRunWorkspaceInput {
                 "/api/v1/workflow-runs/{run_id}/workspace-inputs/{}/content",
                 self.id
             ),
+        }
+    }
+}
+
+impl WorkflowRunProducedFile {
+    pub fn to_resource(&self, run_id: Uuid) -> WorkflowRunProducedFileResource {
+        WorkflowRunProducedFileResource {
+            workspace_id: self.workspace_id,
+            file_id: self.file_id,
+            file_name: self.file_name.clone(),
+            media_type: self.media_type.clone(),
+            byte_count: self.byte_count,
+            sha256_hex: self.sha256_hex.clone(),
+            provenance: self.provenance.clone(),
+            content_path: format!(
+                "/api/v1/workflow-runs/{run_id}/produced-files/{}/content",
+                self.file_id
+            ),
+            created_at: self.created_at,
         }
     }
 }

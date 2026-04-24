@@ -254,14 +254,32 @@ async function createLocalWorkflowRepo() {
   await fs.mkdir(workflowDir, { recursive: true });
   await fs.writeFile(
     path.join(workflowDir, 'run.mjs'),
-    `export default async function run({ page, input, sessionId, workflowRunId, automationTaskId }) {
+    `export default async function run({ page, input, sessionId, workflowRunId, automationTaskId, artifacts }) {
   const targetUrl =
     input && typeof input.target_url === 'string' && input.target_url.trim()
       ? input.target_url.trim()
       : 'http://web:8080';
+  const outputWorkspaceId =
+    input && typeof input.output_workspace_id === 'string' && input.output_workspace_id.trim()
+      ? input.output_workspace_id.trim()
+      : null;
+  if (!outputWorkspaceId) {
+    throw new Error('workflow smoke requires input.output_workspace_id');
+  }
   console.log(\`workflow visiting \${targetUrl}\`);
+  await page.waitForTimeout(1000);
   await page.goto(targetUrl, { waitUntil: 'networkidle' });
   const title = await page.title();
+  const producedFile = await artifacts.uploadTextFile({
+    workspaceId: outputWorkspaceId,
+    fileName: 'workflow-smoke-summary.txt',
+    mediaType: 'text/plain; charset=utf-8',
+    provenance: {
+      origin: 'workflow-smoke',
+      kind: 'produced_file',
+    },
+    text: \`title=\${title}\\nurl=\${page.url()}\\nsession=\${sessionId}\\nrun=\${workflowRunId}\\n\`,
+  });
   console.error(\`workflow captured title \${title}\`);
   return {
     title,
@@ -269,6 +287,9 @@ async function createLocalWorkflowRepo() {
     session_id: sessionId,
     workflow_run_id: workflowRunId,
     automation_task_id: automationTaskId,
+    output_file_name: producedFile.file_name,
+    output_file_id: producedFile.file_id,
+    output_workspace_id: producedFile.workspace_id,
   };
 }
 `,
@@ -304,7 +325,24 @@ async function createWorkflow(accessToken, options) {
   });
 }
 
-async function createWorkflowVersion(accessToken, options, workflowId, source) {
+async function createFileWorkspace(accessToken, options) {
+  return await fetchJson(`${options.pageUrl}/api/v1/file-workspaces`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'workflow-smoke-outputs',
+      description: 'Workflow smoke outputs',
+      labels: {
+        suite: 'workflow-smoke',
+      },
+    }),
+  });
+}
+
+async function createWorkflowVersion(accessToken, options, workflowId, source, workspaceId) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflows/${workflowId}/versions`, {
     method: 'POST',
     headers: {
@@ -328,22 +366,37 @@ async function createWorkflowVersion(accessToken, options, workflowId, source) {
           target_url: {
             type: 'string',
           },
+          output_workspace_id: {
+            type: 'string',
+          },
         },
       },
       output_schema: {
         type: 'object',
-        required: ['title', 'final_url', 'session_id', 'workflow_run_id', 'automation_task_id'],
+        required: [
+          'title',
+          'final_url',
+          'session_id',
+          'workflow_run_id',
+          'automation_task_id',
+          'output_file_name',
+        ],
       },
       default_session: {
         labels: {
           origin: 'workflow-smoke',
         },
+        recording: {
+          mode: 'manual',
+          format: 'webm',
+        },
       },
+      allowed_file_workspace_ids: [workspaceId],
     }),
   });
 }
 
-async function createWorkflowRun(accessToken, options, workflowId) {
+async function createWorkflowRun(accessToken, options, workflowId, workspaceId) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs`, {
     method: 'POST',
     headers: {
@@ -355,6 +408,7 @@ async function createWorkflowRun(accessToken, options, workflowId) {
       version: 'v1',
       input: {
         target_url: 'http://web:8080',
+        output_workspace_id: workspaceId,
       },
       labels: {
         suite: 'smoke',
@@ -382,6 +436,32 @@ async function issueAutomationAccess(accessToken, options, sessionId) {
   });
 }
 
+async function createSessionRecording(accessToken, options, sessionId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/sessions/${sessionId}/recordings`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+async function stopSessionRecording(accessToken, options, sessionId, recordingId) {
+  return await fetchJson(
+    `${options.pageUrl}/api/v1/sessions/${sessionId}/recordings/${recordingId}/stop`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+async function fetchSessionRecording(accessToken, options, sessionId, recordingId) {
+  return await fetchJson(
+    `${options.pageUrl}/api/v1/sessions/${sessionId}/recordings/${recordingId}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
 async function fetchWorkflowRunEventsWithAutomationToken(automationToken, options, runId) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/events`, {
     headers: { 'x-bpane-automation-access-token': automationToken },
@@ -391,6 +471,12 @@ async function fetchWorkflowRunEventsWithAutomationToken(automationToken, option
 async function fetchWorkflowRunLogsWithAutomationToken(automationToken, options, runId) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/logs`, {
     headers: { 'x-bpane-automation-access-token': automationToken },
+  });
+}
+
+async function fetchWorkflowOperations(accessToken, options) {
+  return await fetchJson(`${options.pageUrl}/api/v1/workflow/operations`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
 
@@ -448,6 +534,7 @@ async function main() {
   let automationToken = '';
   let createdSessionId = '';
   let localWorkflowSource = null;
+  let outputWorkspaceId = '';
 
   try {
     context = await browser.newContext({
@@ -469,12 +556,18 @@ async function main() {
     buildWorkflowWorkerImage();
 
     log('Creating workflow definition and immutable version');
+    const outputWorkspace = await createFileWorkspace(accessToken, options);
+    outputWorkspaceId = outputWorkspace.id ?? '';
+    if (!outputWorkspaceId) {
+      throw new Error('Failed to create the workflow output workspace.');
+    }
     const workflow = await createWorkflow(accessToken, options);
     const version = await createWorkflowVersion(
       accessToken,
       options,
       workflow.id,
       localWorkflowSource,
+      outputWorkspaceId,
     );
     if (version.version !== 'v1') {
       throw new Error(`Expected workflow version v1, got ${version.version ?? 'missing'}.`);
@@ -487,7 +580,12 @@ async function main() {
     }
 
     log('Creating workflow run');
-    const createdRun = await createWorkflowRun(accessToken, options, workflow.id);
+    const createdRun = await createWorkflowRun(
+      accessToken,
+      options,
+      workflow.id,
+      outputWorkspaceId,
+    );
     const runId = createdRun.id;
     createdSessionId = createdRun.session_id ?? '';
     if (!runId || !createdSessionId) {
@@ -542,6 +640,12 @@ async function main() {
       );
     }
 
+    log(`Starting manual session recording for workflow session ${createdSessionId}`);
+    const recording = await createSessionRecording(accessToken, options, createdSessionId);
+    if (!recording.id) {
+      throw new Error('Workflow session recording creation did not return an id.');
+    }
+
     log(`Waiting for control-plane workflow execution of run ${runId}`);
 
     const succeededRun = await poll(
@@ -564,6 +668,20 @@ async function main() {
     }
     if (succeededRun.output?.automation_task_id !== succeededRun.automation_task_id) {
       throw new Error('Workflow run did not persist the expected automation task id.');
+    }
+    if (succeededRun.output?.output_file_name !== 'workflow-smoke-summary.txt') {
+      throw new Error('Workflow run did not persist the expected produced file name.');
+    }
+
+    log(`Stopping workflow session recording ${recording.id}`);
+    const stoppedRecording = await stopSessionRecording(
+      accessToken,
+      options,
+      createdSessionId,
+      recording.id,
+    );
+    if (!['finalizing', 'ready', 'failed'].includes(String(stoppedRecording.state ?? ''))) {
+      throw new Error('Workflow session recording did not enter a stopped control-plane state.');
     }
 
     const events = await fetchWorkflowRunEventsWithAutomationToken(
@@ -624,6 +742,53 @@ async function main() {
       throw new Error('Workflow run logs are missing the workflow stderr message.');
     }
 
+    const completedRun = await fetchWorkflowRun(accessToken, options, runId);
+    if (!Array.isArray(completedRun.produced_files) || completedRun.produced_files.length !== 1) {
+      throw new Error('Workflow run did not expose exactly one produced file.');
+    }
+    const producedFile = completedRun.produced_files[0];
+    if (producedFile.file_name !== 'workflow-smoke-summary.txt') {
+      throw new Error('Workflow run produced file metadata has the wrong file name.');
+    }
+    const producedFileBytes = await fetchBytes(
+      `${options.pageUrl}${producedFile.content_path}`,
+      {
+        headers: {
+          'x-bpane-automation-access-token': automationToken,
+        },
+      },
+    );
+    const producedFileText = producedFileBytes.toString('utf8');
+    if (!producedFileText.includes('title=BrowserPane Test Embed')) {
+      throw new Error('Workflow produced file content is missing the page title.');
+    }
+    if (!Array.isArray(completedRun.recordings) || !completedRun.recordings.length) {
+      throw new Error('Workflow run did not expose linked recordings.');
+    }
+    if (!completedRun.recordings.some((entry) => entry.id === recording.id)) {
+      throw new Error('Workflow run recordings did not include the completed session recording.');
+    }
+    const linkedRecording = await fetchSessionRecording(
+      accessToken,
+      options,
+      createdSessionId,
+      recording.id,
+    );
+    if (!completedRun.recordings.some((entry) => entry.state === linkedRecording.state)) {
+      throw new Error('Workflow run recordings did not reflect the control-plane recording state.');
+    }
+    if (!completedRun.retention?.logs_expire_at || !completedRun.retention?.output_expire_at) {
+      throw new Error('Workflow run did not expose retention metadata.');
+    }
+
+    const operations = await fetchWorkflowOperations(accessToken, options);
+    if ((operations.produced_file_uploads_total ?? 0) < 1) {
+      throw new Error('Workflow operations did not record the produced file upload.');
+    }
+    if ((operations.retention_passes_total ?? 0) < 1) {
+      throw new Error('Workflow operations did not expose workflow retention pass data.');
+    }
+
     const summary = {
       workflowId: workflow.id,
       workflowVersion: version.version,
@@ -638,6 +803,10 @@ async function main() {
       logs: logs.logs.length,
       outputTitle: succeededRun.output?.title ?? null,
       outputFinalUrl: succeededRun.output?.final_url ?? null,
+      producedFileId: producedFile.file_id,
+      producedFileBytes: producedFileBytes.length,
+      recordings: completedRun.recordings.length,
+      workflowProducedFileUploads: operations.produced_file_uploads_total ?? 0,
     };
 
     if (options.outputPath) {

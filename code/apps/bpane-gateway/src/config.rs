@@ -266,6 +266,21 @@ pub struct Config {
     #[arg(long, default_value_t = 60)]
     pub recording_artifact_cleanup_interval_secs: u64,
 
+    /// How often the gateway scans for completed workflow runs whose retained logs or outputs have expired.
+    /// Set to 0 to disable workflow retention cleanup.
+    #[arg(long, default_value_t = 300)]
+    pub workflow_retention_cleanup_interval_secs: u64,
+
+    /// How long completed workflow run logs remain queryable before cleanup removes them.
+    /// Set to 0 to disable workflow log cleanup.
+    #[arg(long, default_value_t = 604800)]
+    pub workflow_log_retention_secs: u64,
+
+    /// How long completed workflow outputs remain queryable before cleanup clears them.
+    /// Set to 0 to disable workflow output cleanup.
+    #[arg(long, default_value_t = 2592000)]
+    pub workflow_output_retention_secs: u64,
+
     /// Optional static bearer token forwarded to the recorder worker for gateway API access.
     #[arg(long)]
     pub recording_worker_bearer_token: Option<String>,

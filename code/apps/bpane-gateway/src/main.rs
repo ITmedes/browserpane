@@ -24,6 +24,8 @@ mod session_registry;
 mod transport;
 mod workflow;
 mod workflow_lifecycle;
+mod workflow_observability;
+mod workflow_retention;
 mod workflow_source;
 mod workspace_file_store;
 
@@ -51,6 +53,8 @@ use session_manager::{SessionManager, SessionManagerConfig, SessionManagerDocker
 use session_registry::SessionRegistry;
 use transport::TransportServer;
 use workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
+use workflow_observability::WorkflowObservability;
+use workflow_retention::WorkflowRetentionManager;
 use workflow_source::WorkflowSourceResolver;
 use workspace_file_store::WorkspaceFileStore;
 
@@ -303,6 +307,7 @@ async fn main() -> anyhow::Result<()> {
     )?);
     workflow_lifecycle.reconcile_persisted_state().await?;
     let recording_observability = Arc::new(RecordingObservability::default());
+    let workflow_observability = Arc::new(WorkflowObservability::default());
     if config.recording_artifact_cleanup_interval_secs > 0 {
         let recording_retention = Arc::new(RecordingRetentionManager::new(
             session_store.clone(),
@@ -312,6 +317,41 @@ async fn main() -> anyhow::Result<()> {
         ));
         recording_retention.run_cleanup_pass(Utc::now()).await?;
         recording_retention.start();
+    }
+    let workflow_log_retention = if config.workflow_log_retention_secs == 0 {
+        None
+    } else {
+        Some(chrono::Duration::seconds(
+            i64::try_from(config.workflow_log_retention_secs).map_err(|error| {
+                anyhow::anyhow!(
+                    "--workflow-log-retention-secs is out of range for chrono duration: {error}"
+                )
+            })?,
+        ))
+    };
+    let workflow_output_retention = if config.workflow_output_retention_secs == 0 {
+        None
+    } else {
+        Some(chrono::Duration::seconds(
+            i64::try_from(config.workflow_output_retention_secs).map_err(|error| {
+                anyhow::anyhow!(
+                    "--workflow-output-retention-secs is out of range for chrono duration: {error}"
+                )
+            })?,
+        ))
+    };
+    if config.workflow_retention_cleanup_interval_secs > 0
+        && (workflow_log_retention.is_some() || workflow_output_retention.is_some())
+    {
+        let workflow_retention = Arc::new(WorkflowRetentionManager::new(
+            session_store.clone(),
+            workflow_observability.clone(),
+            Duration::from_secs(config.workflow_retention_cleanup_interval_secs),
+            workflow_log_retention,
+            workflow_output_retention,
+        ));
+        workflow_retention.run_cleanup_pass(Utc::now()).await?;
+        workflow_retention.start();
     }
 
     let server = TransportServer::new(
@@ -354,6 +394,9 @@ async fn main() -> anyhow::Result<()> {
             recording_observability,
             recording_lifecycle,
             workflow_lifecycle,
+            workflow_observability,
+            workflow_log_retention,
+            workflow_output_retention,
             Duration::from_secs(config.runtime_idle_timeout_secs),
             config.public_gateway_url,
             if config.exclusive_browser_owner {
