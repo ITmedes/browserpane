@@ -8,7 +8,7 @@ It runs a real Chromium session inside a Linux environment, captures that surfac
 
 ![BrowserPane example](example.png)
 
-The frozen v1 session-control contract now lives in [openapi/bpane-control-v1.yaml](/Users/cfinkelstein/workspace/pane/openapi/bpane-control-v1.yaml).
+The frozen v1 session-control contract now lives in [openapi/bpane-control-v1.yaml](pane/openapi/bpane-control-v1.yaml).
 
 ## Why BrowserPane
 
