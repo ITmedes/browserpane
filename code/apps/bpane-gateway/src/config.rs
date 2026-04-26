@@ -63,6 +63,22 @@ pub struct Config {
     #[arg(long)]
     pub database_url: Option<String>,
 
+    /// Vault base URL used for credential binding storage and resolution.
+    #[arg(long)]
+    pub credential_vault_addr: Option<String>,
+
+    /// Vault token used for credential binding storage and resolution.
+    #[arg(long)]
+    pub credential_vault_token: Option<String>,
+
+    /// Vault KV v2 mount path used for credential binding storage and resolution.
+    #[arg(long, default_value = "secret")]
+    pub credential_vault_mount_path: String,
+
+    /// Vault key prefix used for managed credential binding secrets.
+    #[arg(long, default_value = "browserpane/credential-bindings")]
+    pub credential_vault_prefix: String,
+
     /// Public browser-facing gateway URL returned in session connect metadata.
     #[arg(long, default_value = "https://localhost:4433")]
     pub public_gateway_url: String,
@@ -173,6 +189,58 @@ pub struct Config {
     #[arg(long, default_value = "/tmp/bpane-recording-artifacts")]
     pub recording_artifact_local_root: PathBuf,
 
+    /// Managed local root for persisted file workspace content served by the gateway's local_fs workspace file store.
+    #[arg(long, default_value = "/tmp/bpane-file-workspaces")]
+    pub file_workspace_local_root: PathBuf,
+
+    /// Git executable used to resolve workflow git sources to immutable commits.
+    #[arg(long, default_value = "git")]
+    pub workflow_git_bin: PathBuf,
+
+    /// Docker CLI binary used to launch short-lived workflow worker jobs.
+    #[arg(long, default_value = "docker")]
+    pub workflow_worker_docker_bin: PathBuf,
+
+    /// Docker image used for automatic workflow worker execution.
+    #[arg(long)]
+    pub workflow_worker_image: Option<String>,
+
+    /// Docker network used by automatic workflow worker jobs.
+    #[arg(long)]
+    pub workflow_worker_network: Option<String>,
+
+    /// Container name prefix used by automatic workflow worker jobs.
+    #[arg(long, default_value = "bpane-workflow")]
+    pub workflow_worker_container_name_prefix: String,
+
+    /// API base URL used by automatic workflow workers to talk back to the gateway.
+    #[arg(long, default_value = "http://gateway:8932")]
+    pub workflow_worker_api_url: String,
+
+    /// Work root inside the workflow worker container for downloaded source snapshots and runner state.
+    #[arg(long, default_value = "/tmp/bpane-workflows")]
+    pub workflow_worker_work_root: PathBuf,
+
+    /// Optional static bearer token forwarded to workflow workers for gateway API access.
+    #[arg(long)]
+    pub workflow_worker_bearer_token: Option<String>,
+
+    /// Optional OIDC token URL forwarded to workflow workers when gateway auth is OIDC.
+    #[arg(long)]
+    pub workflow_worker_oidc_token_url: Option<String>,
+
+    /// Optional OIDC client id forwarded to workflow workers when gateway auth is OIDC.
+    #[arg(long)]
+    pub workflow_worker_oidc_client_id: Option<String>,
+
+    /// Optional OIDC client secret forwarded to workflow workers when gateway auth is OIDC.
+    #[arg(long)]
+    pub workflow_worker_oidc_client_secret: Option<String>,
+
+    /// Optional OIDC scopes forwarded to workflow workers when gateway auth is OIDC.
+    #[arg(long)]
+    pub workflow_worker_oidc_scopes: Option<String>,
+
     /// Optional SPKI pin forwarded to the recorder worker Chromium process.
     #[arg(long)]
     pub recording_worker_cert_spki: Option<String>,
@@ -197,6 +265,21 @@ pub struct Config {
     /// Set to 0 to disable artifact retention cleanup.
     #[arg(long, default_value_t = 60)]
     pub recording_artifact_cleanup_interval_secs: u64,
+
+    /// How often the gateway scans for completed workflow runs whose retained logs or outputs have expired.
+    /// Set to 0 to disable workflow retention cleanup.
+    #[arg(long, default_value_t = 300)]
+    pub workflow_retention_cleanup_interval_secs: u64,
+
+    /// How long completed workflow run logs remain queryable before cleanup removes them.
+    /// Set to 0 to disable workflow log cleanup.
+    #[arg(long, default_value_t = 604800)]
+    pub workflow_log_retention_secs: u64,
+
+    /// How long completed workflow outputs remain queryable before cleanup clears them.
+    /// Set to 0 to disable workflow output cleanup.
+    #[arg(long, default_value_t = 2592000)]
+    pub workflow_output_retention_secs: u64,
 
     /// Optional static bearer token forwarded to the recorder worker for gateway API access.
     #[arg(long)]

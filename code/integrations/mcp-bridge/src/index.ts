@@ -10,6 +10,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import http from "node:http";
 import {
+  GatewaySessionAutomationAccessResponse,
   GatewaySessionResource,
   SessionControlClient,
 } from "./session-control-client.js";
@@ -115,6 +116,49 @@ class GatewayTokenManager {
 
 const gatewayTokenManager = new GatewayTokenManager();
 
+class SessionAutomationAccessManager {
+  private cachedAccess: GatewaySessionAutomationAccessResponse | null = null;
+
+  constructor(private sessionControlClient: SessionControlClient) {}
+
+  clear(sessionId?: string | null): void {
+    if (!this.cachedAccess) {
+      return;
+    }
+    if (sessionId && this.cachedAccess.session_id !== sessionId) {
+      return;
+    }
+    this.cachedAccess = null;
+  }
+
+  getCached(session: GatewaySessionResource | null): GatewaySessionAutomationAccessResponse | null {
+    if (!session || !this.cachedAccess) {
+      return null;
+    }
+    if (this.cachedAccess.session_id !== session.id) {
+      return null;
+    }
+    return this.cachedAccess;
+  }
+
+  async get(session: GatewaySessionResource | null): Promise<GatewaySessionAutomationAccessResponse | null> {
+    if (!session) {
+      this.cachedAccess = null;
+      return null;
+    }
+    const now = Date.now();
+    if (this.cachedAccess && this.cachedAccess.session_id === session.id) {
+      const expiresAtMs = Date.parse(this.cachedAccess.expires_at);
+      if (Number.isFinite(expiresAtMs) && now < expiresAtMs - 30_000) {
+        return this.cachedAccess;
+      }
+    }
+    const issued = await this.sessionControlClient.issueAutomationAccess(session.id);
+    this.cachedAccess = issued;
+    return issued;
+  }
+}
+
 // ── Register MCP owner with gateway ──────────────────────────────────
 
 function sessionStatusPath(session: GatewaySessionResource | null): string {
@@ -127,6 +171,20 @@ function sessionMcpOwnerPath(session: GatewaySessionResource | null): string {
   return session
     ? `/api/v1/sessions/${encodeURIComponent(session.id)}/mcp-owner`
     : "/api/session/mcp-owner";
+}
+
+function automationStatusPath(
+  session: GatewaySessionResource | null,
+  access: GatewaySessionAutomationAccessResponse | null,
+): string {
+  return access?.automation.status_path ?? sessionStatusPath(session);
+}
+
+function automationMcpOwnerPath(
+  session: GatewaySessionResource | null,
+  access: GatewaySessionAutomationAccessResponse | null,
+): string {
+  return access?.automation.mcp_owner_path ?? sessionMcpOwnerPath(session);
 }
 
 function runtimeCdpEndpoint(session: GatewaySessionResource | null): string | null {
@@ -143,7 +201,14 @@ function runtimeCdpEndpoint(session: GatewaySessionResource | null): string | nu
   return null;
 }
 
-function resolveManagedCdpEndpoint(session: GatewaySessionResource | null): string {
+function resolveManagedCdpEndpoint(
+  session: GatewaySessionResource | null,
+  access: GatewaySessionAutomationAccessResponse | null,
+): string {
+  const automationEndpoint = access?.automation.endpoint_url?.trim();
+  if (automationEndpoint) {
+    return automationEndpoint;
+  }
   const runtimeEndpoint = runtimeCdpEndpoint(session);
   if (runtimeEndpoint) {
     return runtimeEndpoint;
@@ -161,31 +226,53 @@ function resolveManagedCdpEndpoint(session: GatewaySessionResource | null): stri
   );
 }
 
-function describeManagedCdpEndpoint(session: GatewaySessionResource | null): string | null {
+function describeManagedCdpEndpoint(
+  session: GatewaySessionResource | null,
+  access: GatewaySessionAutomationAccessResponse | null = null,
+): string | null {
   try {
-    return resolveManagedCdpEndpoint(session);
+    return resolveManagedCdpEndpoint(session, access);
   } catch {
     return null;
   }
 }
 
+async function gatewaySessionHeaders(
+  session: GatewaySessionResource | null,
+  automationAccessManager: SessionAutomationAccessManager,
+  extra: Record<string, string> = {},
+): Promise<Record<string, string>> {
+  const access = await automationAccessManager.get(session);
+  if (access) {
+    return {
+      ...extra,
+      [access.automation.auth_header]: access.token,
+    };
+  }
+  return gatewayTokenManager.getAuthHeaders(extra);
+}
+
 async function registerMcpOwner(
   session: GatewaySessionResource | null,
+  automationAccessManager: SessionAutomationAccessManager,
   width: number,
   height: number,
 ): Promise<void> {
   const maxRetries = 30;
-  const path = sessionMcpOwnerPath(session);
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const headers = await gatewayTokenManager.getAuthHeaders({
+      const access = await automationAccessManager.get(session);
+      const headers = await gatewaySessionHeaders(session, automationAccessManager, {
         "Content-Type": "application/json",
       });
-      const resp = await fetch(`${GATEWAY_API_URL}${path}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ width, height }),
-      });
+      const resp = await fetch(
+        `${GATEWAY_API_URL}${automationMcpOwnerPath(session, access)}`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ width, height }),
+        },
+      );
       if (resp.ok) {
         const sessionSuffix = session ? ` for session ${session.id}` : "";
         console.log(
@@ -202,10 +289,14 @@ async function registerMcpOwner(
   throw new Error("Failed to register MCP owner with gateway after retries");
 }
 
-async function unregisterMcpOwner(session: GatewaySessionResource | null): Promise<void> {
+async function unregisterMcpOwner(
+  session: GatewaySessionResource | null,
+  automationAccessManager: SessionAutomationAccessManager,
+): Promise<void> {
   try {
-    const headers = await gatewayTokenManager.getAuthHeaders();
-    await fetch(`${GATEWAY_API_URL}${sessionMcpOwnerPath(session)}`, {
+    const headers = await gatewaySessionHeaders(session, automationAccessManager);
+    const access = await automationAccessManager.get(session);
+    await fetch(`${GATEWAY_API_URL}${automationMcpOwnerPath(session, access)}`, {
       method: "DELETE",
       headers,
     });
@@ -232,8 +323,12 @@ class PlaywrightRuntimeController {
   private client: Client | null = null;
   private cdpEndpoint: string | null = null;
 
-  async ensureConnected(session: GatewaySessionResource | null): Promise<Client> {
-    const nextEndpoint = resolveManagedCdpEndpoint(session);
+  async ensureConnected(
+    session: GatewaySessionResource | null,
+    automationAccessManager: SessionAutomationAccessManager,
+  ): Promise<Client> {
+    const access = await automationAccessManager.get(session);
+    const nextEndpoint = resolveManagedCdpEndpoint(session, access);
     if (this.client && this.cdpEndpoint === nextEndpoint) {
       return this.client;
     }
@@ -367,6 +462,7 @@ async function main() {
       source: "mcp-bridge",
     },
   });
+  const automationAccessManager = new SessionAutomationAccessManager(sessionControlClient);
   let managedSession = await sessionControlClient.resolveManagedSession();
   const playwrightRuntime = new PlaywrightRuntimeController();
 
@@ -377,20 +473,27 @@ async function main() {
   const monitor = new SupervisorMonitor(
     GATEWAY_API_URL,
     POLL_INTERVAL_MS,
-    () => gatewayTokenManager.getAuthHeaders(),
-    sessionStatusPath(managedSession),
+    () => gatewaySessionHeaders(managedSession, automationAccessManager),
+    automationStatusPath(managedSession, automationAccessManager.getCached(managedSession)),
   );
   monitor.start();
 
   function setManagedSession(next: GatewaySessionResource | null): void {
+    const previousSessionId = managedSession?.id ?? null;
     managedSession = next;
-    monitor.setStatusPath(sessionStatusPath(managedSession));
+    automationAccessManager.clear(previousSessionId);
+    monitor.setStatusPath(
+      automationStatusPath(managedSession, automationAccessManager.getCached(managedSession)),
+    );
   }
   if (managedSession) {
     console.log(
       `[mcp-bridge] resolved control session ${managedSession.id} (${managedSession.state}, ${managedSession.connect.compatibility_mode})`,
     );
-    const cdpEndpoint = describeManagedCdpEndpoint(managedSession);
+    const cdpEndpoint = describeManagedCdpEndpoint(
+      managedSession,
+      automationAccessManager.getCached(managedSession),
+    );
     if (cdpEndpoint) {
       console.log(`[mcp-bridge] control session runtime endpoint: ${cdpEndpoint}`);
     }
@@ -435,7 +538,10 @@ async function main() {
           control_session_id: managedSession?.id ?? null,
           control_session_state: managedSession?.state ?? null,
           control_session_mode: managedSession?.connect.compatibility_mode ?? null,
-          control_session_cdp_endpoint: describeManagedCdpEndpoint(managedSession),
+          control_session_cdp_endpoint: describeManagedCdpEndpoint(
+            managedSession,
+            automationAccessManager.getCached(managedSession),
+          ),
           playwright_cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
         }),
       );
@@ -448,7 +554,10 @@ async function main() {
         JSON.stringify({
           locked: managedSessionLocked,
           session: managedSession,
-          cdp_endpoint: describeManagedCdpEndpoint(managedSession),
+          cdp_endpoint: describeManagedCdpEndpoint(
+            managedSession,
+            automationAccessManager.getCached(managedSession),
+          ),
           playwright_cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
         }),
       );
@@ -482,7 +591,8 @@ async function main() {
           res.end(JSON.stringify({ error: `session ${sessionId} not found or not delegated` }));
           return;
         }
-        const nextCdpEndpoint = resolveManagedCdpEndpoint(resolved);
+        const nextAccess = await automationAccessManager.get(resolved);
+        const nextCdpEndpoint = resolveManagedCdpEndpoint(resolved, nextAccess);
         await playwrightRuntime.close();
         setManagedSession(resolved);
         console.log(
@@ -523,9 +633,12 @@ async function main() {
       const needsBridgeBootstrap = servers.size === 0;
       try {
         if (needsBridgeBootstrap) {
-          await registerMcpOwner(managedSession, width, height);
+          await registerMcpOwner(managedSession, automationAccessManager, width, height);
         }
-        const playwrightClient = await playwrightRuntime.ensureConnected(managedSession);
+        const playwrightClient = await playwrightRuntime.ensureConnected(
+          managedSession,
+          automationAccessManager,
+        );
         const transport = new SSEServerTransport("/messages", res);
         const sessionId = transport.sessionId;
         const server = createServerForConnection(playwrightClient, monitor);
@@ -545,7 +658,7 @@ async function main() {
           // When all MCP clients disconnect, clear ownership so resolution unlocks
           if (servers.size === 0) {
             console.log("[mcp-bridge] no MCP clients remaining — clearing ownership");
-            await unregisterMcpOwner(managedSession);
+            await unregisterMcpOwner(managedSession, automationAccessManager);
             await playwrightRuntime.close();
           }
         });
@@ -553,7 +666,7 @@ async function main() {
         await server.connect(transport);
       } catch (error) {
         if (needsBridgeBootstrap) {
-          await unregisterMcpOwner(managedSession);
+          await unregisterMcpOwner(managedSession, automationAccessManager);
         }
         const message = error instanceof Error ? error.message : String(error);
         res.writeHead(503, { "Content-Type": "application/json" });
@@ -577,8 +690,8 @@ async function main() {
     // POST /register — re-register MCP owner (e.g. after reconnect)
     if (url.pathname === "/register" && req.method === "POST") {
       try {
-        await registerMcpOwner(managedSession, width, height);
-        await playwrightRuntime.ensureConnected(managedSession);
+        await registerMcpOwner(managedSession, automationAccessManager, width, height);
+        await playwrightRuntime.ensureConnected(managedSession, automationAccessManager);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
@@ -609,7 +722,7 @@ async function main() {
   const shutdown = async () => {
     console.log("\n[mcp-bridge] shutting down...");
     monitor.stop();
-    await unregisterMcpOwner(managedSession);
+    await unregisterMcpOwner(managedSession, automationAccessManager);
     await playwrightRuntime.close();
     httpServer.close();
     process.exit(0);
@@ -621,19 +734,27 @@ async function main() {
   // Safety net: clear MCP ownership on unexpected crash
   process.on("uncaughtException", async (err) => {
     console.error("[mcp-bridge] uncaught exception:", err);
-    await unregisterMcpOwner(managedSession);
+    await unregisterMcpOwner(managedSession, automationAccessManager);
     process.exit(1);
   });
 
   process.on("unhandledRejection", async (reason) => {
     console.error("[mcp-bridge] unhandled rejection:", reason);
-    await unregisterMcpOwner(managedSession);
+    await unregisterMcpOwner(managedSession, automationAccessManager);
     process.exit(1);
   });
 }
 
 main().catch(async (err) => {
   console.error("[mcp-bridge] fatal:", err);
-  await unregisterMcpOwner(null);
+  try {
+    const headers = await gatewayTokenManager.getAuthHeaders();
+    await fetch(`${GATEWAY_API_URL}/api/session/mcp-owner`, {
+      method: "DELETE",
+      headers,
+    });
+  } catch {
+    // ignore cleanup failures during fatal startup
+  }
   process.exit(1);
 });

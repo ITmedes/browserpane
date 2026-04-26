@@ -1,19 +1,48 @@
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
+use std::path::{Component, Path as FsPath};
 use std::sync::Arc;
 
+use axum::body::Bytes;
 use axum::extract::{Path, State};
 use axum::http::header::{CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use chrono::Utc;
+use chrono::{Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
+use crate::automation_access_token::{
+    SessionAutomationAccessTokenClaims, SessionAutomationAccessTokenManager,
+};
+use crate::automation_task::{
+    AutomationTaskEventListResponse, AutomationTaskListResponse, AutomationTaskLogListResponse,
+    AutomationTaskLogStream, AutomationTaskResource, AutomationTaskSessionSource,
+    AutomationTaskState, AutomationTaskTransitionRequest, PersistAutomationTaskRequest,
+};
+use crate::credential_binding::{
+    CredentialBindingListResponse, CredentialBindingProvider, CredentialBindingResource,
+    CredentialInjectionMode, CredentialTotpMetadata, PersistCredentialBindingRequest,
+    ResolvedWorkflowRunCredentialBindingResource, WorkflowRunCredentialBinding,
+};
+use crate::credential_provider::{
+    CredentialProvider, CredentialProviderError, StoreCredentialSecretRequest,
+};
 use crate::connect_ticket::SessionConnectTicketManager;
+use crate::extension::{
+    AppliedExtension, ExtensionDefinitionListResponse, ExtensionDefinitionResource,
+    ExtensionVersionResource, PersistExtensionDefinitionRequest, PersistExtensionVersionRequest,
+};
+use crate::file_workspace::{
+    FileWorkspaceFileListResponse, FileWorkspaceFileResource, FileWorkspaceListResponse,
+    FileWorkspaceResource, PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest,
+};
 use crate::idle_stop::schedule_idle_session_stop;
 use crate::recording_artifact_store::{
     FinalizeRecordingArtifactRequest, RecordingArtifactStore, RecordingArtifactStoreError,
@@ -35,21 +64,54 @@ use crate::session_control::{
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime};
 use crate::session_registry::SessionRegistry;
+use crate::workflow::{
+    PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
+    PersistWorkflowRunEventRequest, PersistWorkflowRunLogRequest,
+    PersistWorkflowRunProducedFileRequest, PersistWorkflowRunRequest, StoredWorkflowDefinition,
+    StoredWorkflowDefinitionVersion, StoredWorkflowRun, WorkflowDefinitionListResponse,
+    WorkflowDefinitionResource, WorkflowDefinitionVersionResource, WorkflowRunEventListResponse,
+    WorkflowRunEventResource, WorkflowRunLogListResponse, WorkflowRunLogResource,
+    WorkflowRunProducedFileResource, WorkflowRunRecordingResource, WorkflowRunResource,
+    WorkflowRunRetentionResource, WorkflowRunSourceSnapshot, WorkflowRunState,
+    WorkflowRunTransitionRequest, WorkflowRunWorkspaceInput,
+};
+use crate::workflow_lifecycle::WorkflowLifecycleManager;
+use crate::workflow_observability::{WorkflowObservability, WorkflowObservabilitySnapshot};
+use crate::workflow_source::{
+    validate_workflow_source_entrypoint, WorkflowSource, WorkflowSourceArchive,
+    WorkflowSourceError, WorkflowSourceResolver,
+};
+use crate::workspace_file_store::{
+    StoreWorkspaceFileRequest, WorkspaceFileStore, WorkspaceFileStoreError,
+};
 
 /// Shared state for the HTTP API.
 struct ApiState {
     registry: Arc<SessionRegistry>,
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
+    automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
     session_store: SessionStore,
     session_manager: Arc<SessionManager>,
+    credential_provider: Option<Arc<CredentialProvider>>,
     recording_artifact_store: Arc<RecordingArtifactStore>,
+    workspace_file_store: Arc<WorkspaceFileStore>,
+    workflow_source_resolver: Arc<WorkflowSourceResolver>,
     recording_observability: Arc<RecordingObservability>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
+    workflow_lifecycle: Arc<WorkflowLifecycleManager>,
+    workflow_observability: Arc<WorkflowObservability>,
+    workflow_log_retention: Option<ChronoDuration>,
+    workflow_output_retention: Option<ChronoDuration>,
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
 }
+
+const AUTOMATION_ACCESS_TOKEN_HEADER: &str = "x-bpane-automation-access-token";
+const FILE_WORKSPACE_FILE_NAME_HEADER: &str = "x-bpane-file-name";
+const FILE_WORKSPACE_FILE_PROVENANCE_HEADER: &str = "x-bpane-file-provenance";
+const WORKFLOW_RUN_WORKSPACE_ID_HEADER: &str = "x-bpane-workflow-workspace-id";
 
 #[derive(Serialize)]
 struct SessionStatus {
@@ -115,6 +177,170 @@ struct McpOwnerRequest {
     height: u16,
 }
 
+#[derive(Deserialize)]
+struct AutomationTaskSessionRequest {
+    #[serde(default)]
+    existing_session_id: Option<Uuid>,
+    #[serde(default)]
+    create_session: Option<CreateSessionRequest>,
+}
+
+#[derive(Deserialize)]
+struct CreateAutomationTaskRequest {
+    #[serde(default)]
+    display_name: Option<String>,
+    executor: String,
+    session: AutomationTaskSessionRequest,
+    #[serde(default)]
+    input: Option<Value>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct CreateWorkflowDefinitionRequest {
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct CreateWorkflowDefinitionVersionRequest {
+    version: String,
+    executor: String,
+    entrypoint: String,
+    #[serde(default)]
+    source: Option<WorkflowSource>,
+    #[serde(default)]
+    input_schema: Option<Value>,
+    #[serde(default)]
+    output_schema: Option<Value>,
+    #[serde(default)]
+    default_session: Option<Value>,
+    #[serde(default)]
+    allowed_credential_binding_ids: Vec<String>,
+    #[serde(default)]
+    allowed_extension_ids: Vec<String>,
+    #[serde(default)]
+    allowed_file_workspace_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct CreateWorkflowRunRequest {
+    workflow_id: Uuid,
+    version: String,
+    #[serde(default)]
+    session: Option<AutomationTaskSessionRequest>,
+    #[serde(default)]
+    input: Option<Value>,
+    #[serde(default)]
+    credential_binding_ids: Vec<Uuid>,
+    #[serde(default)]
+    workspace_inputs: Vec<CreateWorkflowRunWorkspaceInputRequest>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct CreateWorkflowRunWorkspaceInputRequest {
+    workspace_id: Uuid,
+    file_id: Uuid,
+    #[serde(default)]
+    mount_path: Option<String>,
+}
+
+#[derive(Serialize)]
+struct WorkflowRunProducedFileListResponse {
+    files: Vec<WorkflowRunProducedFileResource>,
+}
+
+#[derive(Deserialize)]
+struct CreateFileWorkspaceRequest {
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct CreateCredentialBindingRequest {
+    name: String,
+    provider: CredentialBindingProvider,
+    #[serde(default)]
+    external_ref: Option<String>,
+    #[serde(default)]
+    namespace: Option<String>,
+    #[serde(default)]
+    allowed_origins: Vec<String>,
+    injection_mode: CredentialInjectionMode,
+    #[serde(default)]
+    totp: Option<CredentialTotpMetadata>,
+    #[serde(default)]
+    secret_payload: Option<Value>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct CreateExtensionDefinitionRequest {
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    labels: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct CreateExtensionVersionRequest {
+    version: String,
+    install_path: String,
+}
+
+#[derive(Deserialize)]
+struct TransitionAutomationTaskRequest {
+    state: AutomationTaskState,
+    #[serde(default)]
+    output: Option<Value>,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
+    artifact_refs: Vec<String>,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    data: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct AppendAutomationTaskLogRequest {
+    stream: AutomationTaskLogStream,
+    message: String,
+}
+
+#[derive(Deserialize)]
+struct TransitionWorkflowRunRequest {
+    state: WorkflowRunState,
+    #[serde(default)]
+    output: Option<Value>,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
+    artifact_refs: Vec<String>,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    data: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct AppendWorkflowRunLogRequest {
+    stream: AutomationTaskLogStream,
+    message: String,
+}
+
 #[derive(Serialize)]
 struct OkResponse {
     ok: bool,
@@ -134,6 +360,26 @@ struct SessionAccessTokenResponse {
     connect: crate::session_control::SessionConnectInfo,
 }
 
+#[derive(Serialize)]
+struct SessionAutomationAccessInfo {
+    endpoint_url: String,
+    protocol: String,
+    auth_type: String,
+    auth_header: String,
+    status_path: String,
+    mcp_owner_path: String,
+    compatibility_mode: String,
+}
+
+#[derive(Serialize)]
+struct SessionAutomationAccessResponse {
+    session_id: Uuid,
+    token_type: String,
+    token: String,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    automation: SessionAutomationAccessInfo,
+}
+
 async fn create_session(
     headers: HeaderMap,
     State(state): State<Arc<ApiState>>,
@@ -142,38 +388,8 @@ async fn create_session(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    state
-        .recording_lifecycle
-        .validate_mode(request.recording.mode)
-        .map_err(map_recording_lifecycle_error)?;
     let owner_mode = resolve_owner_mode(&state, request.owner_mode)?;
-    let stored = state
-        .session_store
-        .create_session(&principal, request, owner_mode)
-        .await
-        .map_err(map_session_store_error)?;
-    if let Err(error) = state
-        .recording_lifecycle
-        .ensure_auto_recording(&stored)
-        .await
-    {
-        let _ = state
-            .session_store
-            .stop_session_for_owner(&principal, stored.id)
-            .await;
-        state.session_manager.release(stored.id).await;
-        state.registry.remove_session(stored.id).await;
-        return Err(map_recording_lifecycle_error(error));
-    }
-
-    schedule_idle_session_stop(
-        stored.id,
-        state.idle_stop_timeout,
-        state.registry.clone(),
-        state.session_store.clone(),
-        state.session_manager.clone(),
-        state.recording_lifecycle.clone(),
-    );
+    let stored = create_owned_session(&state, &principal, request, owner_mode, None).await?;
 
     Ok((
         StatusCode::CREATED,
@@ -208,6 +424,2154 @@ async fn get_session(
     let stored = authorize_visible_session_request(&headers, &state, session_id).await?;
 
     Ok(Json(session_resource(&state, &stored, None)))
+}
+
+async fn list_automation_tasks(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<AutomationTaskListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let tasks = state
+        .session_store
+        .list_automation_tasks_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|task| task.to_resource())
+        .collect();
+    Ok(Json(AutomationTaskListResponse { tasks }))
+}
+
+async fn create_automation_task(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateAutomationTaskRequest>,
+) -> Result<(StatusCode, Json<AutomationTaskResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let (session, session_source) =
+        resolve_task_session_binding(&state, &principal, Some(request.session), None, None).await?;
+
+    let task = state
+        .session_store
+        .create_automation_task(
+            &principal,
+            PersistAutomationTaskRequest {
+                display_name: request.display_name,
+                executor: request.executor,
+                session_id: session.id,
+                session_source,
+                input: request.input,
+                labels: request.labels,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+
+    Ok((StatusCode::CREATED, Json(task.to_resource())))
+}
+
+async fn get_automation_task(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<AutomationTaskResource>, (StatusCode, Json<ErrorResponse>)> {
+    let task =
+        authorize_visible_automation_task_request_with_automation_access(&headers, &state, task_id)
+            .await?;
+    Ok(Json(task.to_resource()))
+}
+
+async fn cancel_automation_task(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<AutomationTaskResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let task = state
+        .session_store
+        .cancel_automation_task_for_owner(&principal, task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("automation task {task_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(task.to_resource()))
+}
+
+async fn transition_automation_task_state(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<TransitionAutomationTaskRequest>,
+) -> Result<Json<AutomationTaskResource>, (StatusCode, Json<ErrorResponse>)> {
+    let _task =
+        authorize_visible_automation_task_request_with_automation_access(&headers, &state, task_id)
+            .await?;
+    let message = request.message.unwrap_or_else(|| match request.state {
+        AutomationTaskState::Pending => "automation task returned to pending state".to_string(),
+        AutomationTaskState::Starting => "automation task started".to_string(),
+        AutomationTaskState::Running => "automation task entered running state".to_string(),
+        AutomationTaskState::AwaitingInput => "automation task is awaiting input".to_string(),
+        AutomationTaskState::Succeeded => "automation task completed successfully".to_string(),
+        AutomationTaskState::Failed => "automation task failed".to_string(),
+        AutomationTaskState::Cancelled => "automation task cancelled".to_string(),
+        AutomationTaskState::TimedOut => "automation task timed out".to_string(),
+    });
+    let event_type = match request.state {
+        AutomationTaskState::Pending => "automation_task.pending",
+        AutomationTaskState::Starting => "automation_task.starting",
+        AutomationTaskState::Running => "automation_task.running",
+        AutomationTaskState::AwaitingInput => "automation_task.awaiting_input",
+        AutomationTaskState::Succeeded => "automation_task.succeeded",
+        AutomationTaskState::Failed => "automation_task.failed",
+        AutomationTaskState::Cancelled => "automation_task.cancelled",
+        AutomationTaskState::TimedOut => "automation_task.timed_out",
+    };
+    let task = state
+        .session_store
+        .transition_automation_task(
+            task_id,
+            AutomationTaskTransitionRequest {
+                state: request.state,
+                output: request.output,
+                error: request.error,
+                artifact_refs: request.artifact_refs,
+                event_type: event_type.to_string(),
+                event_message: message,
+                event_data: request.data,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("automation task {task_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(task.to_resource()))
+}
+
+async fn append_automation_task_log(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<AppendAutomationTaskLogRequest>,
+) -> Result<
+    Json<crate::automation_task::AutomationTaskLogLineResource>,
+    (StatusCode, Json<ErrorResponse>),
+> {
+    let _task =
+        authorize_visible_automation_task_request_with_automation_access(&headers, &state, task_id)
+            .await?;
+    let log = state
+        .session_store
+        .append_automation_task_log(task_id, request.stream, request.message)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("automation task {task_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(log.to_resource()))
+}
+
+async fn get_automation_task_events(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<AutomationTaskEventListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let task =
+        authorize_visible_automation_task_request_with_automation_access(&headers, &state, task_id)
+            .await?;
+    let principal = load_session_owner_principal(&state, task.session_id).await?;
+    let events = state
+        .session_store
+        .list_automation_task_events_for_owner(&principal, task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|event| event.to_resource())
+        .collect();
+    Ok(Json(AutomationTaskEventListResponse { events }))
+}
+
+async fn get_automation_task_logs(
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<AutomationTaskLogListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let task =
+        authorize_visible_automation_task_request_with_automation_access(&headers, &state, task_id)
+            .await?;
+    let principal = load_session_owner_principal(&state, task.session_id).await?;
+    let logs = state
+        .session_store
+        .list_automation_task_logs_for_owner(&principal, task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|log| log.to_resource())
+        .collect();
+    Ok(Json(AutomationTaskLogListResponse { logs }))
+}
+
+async fn list_workflow_definitions(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowDefinitionListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workflows = state
+        .session_store
+        .list_workflow_definitions_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|workflow| workflow.to_resource())
+        .collect();
+    Ok(Json(WorkflowDefinitionListResponse { workflows }))
+}
+
+async fn create_workflow_definition(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateWorkflowDefinitionRequest>,
+) -> Result<(StatusCode, Json<WorkflowDefinitionResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workflow = state
+        .session_store
+        .create_workflow_definition(
+            &principal,
+            PersistWorkflowDefinitionRequest {
+                name: request.name,
+                description: request.description,
+                labels: request.labels,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(workflow.to_resource())))
+}
+
+async fn get_workflow_definition(
+    headers: HeaderMap,
+    Path(workflow_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowDefinitionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workflow = state
+        .session_store
+        .get_workflow_definition_for_owner(&principal, workflow_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow definition {workflow_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(workflow.to_resource()))
+}
+
+async fn create_workflow_definition_version(
+    headers: HeaderMap,
+    Path(workflow_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateWorkflowDefinitionVersionRequest>,
+) -> Result<(StatusCode, Json<WorkflowDefinitionVersionResource>), (StatusCode, Json<ErrorResponse>)>
+{
+    let CreateWorkflowDefinitionVersionRequest {
+        version,
+        executor,
+        entrypoint,
+        source,
+        input_schema,
+        output_schema,
+        default_session,
+        allowed_credential_binding_ids,
+        allowed_extension_ids,
+        allowed_file_workspace_ids,
+    } = request;
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let resolved_source = state
+        .workflow_source_resolver
+        .resolve(source)
+        .await
+        .map_err(map_workflow_source_error)?;
+    validate_workflow_source_entrypoint(resolved_source.as_ref(), &entrypoint)
+        .map_err(map_workflow_source_error)?;
+    let version = state
+        .session_store
+        .create_workflow_definition_version(
+            &principal,
+            PersistWorkflowDefinitionVersionRequest {
+                workflow_definition_id: workflow_id,
+                version,
+                executor,
+                entrypoint,
+                source: resolved_source,
+                input_schema,
+                output_schema,
+                default_session,
+                allowed_credential_binding_ids,
+                allowed_extension_ids,
+                allowed_file_workspace_ids,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(version.to_resource())))
+}
+
+async fn get_workflow_definition_version(
+    headers: HeaderMap,
+    Path((workflow_id, version)): Path<(Uuid, String)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowDefinitionVersionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let version_resource = state
+        .session_store
+        .get_workflow_definition_version_for_owner(&principal, workflow_id, &version)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {version} for workflow {workflow_id} not found"
+                    ),
+                }),
+            )
+        })?;
+    Ok(Json(version_resource.to_resource()))
+}
+
+async fn prepare_workflow_run_source_snapshot(
+    state: &Arc<ApiState>,
+    principal: &AuthenticatedPrincipal,
+    workflow: &StoredWorkflowDefinition,
+    version: &StoredWorkflowDefinitionVersion,
+) -> Result<Option<WorkflowRunSourceSnapshot>, (StatusCode, Json<ErrorResponse>)> {
+    let Some(source) = version.source.as_ref() else {
+        return Ok(None);
+    };
+    let archive = state
+        .workflow_source_resolver
+        .materialize_archive(source, &version.entrypoint)
+        .await
+        .map_err(map_workflow_source_error)?;
+    let archive_source = archive.source.clone();
+    let archive_file_name = archive.file_name.clone();
+    let archive_media_type = Some(archive.media_type.clone());
+    let workspace = state
+        .session_store
+        .create_file_workspace(
+            principal,
+            PersistFileWorkspaceRequest {
+                name: format!("{} {} source", workflow.name, version.version),
+                description: Some(format!(
+                    "Immutable source snapshot for workflow {} {}",
+                    workflow.name, version.version
+                )),
+                labels: HashMap::from([
+                    ("managed_by".to_string(), "workflow_run".to_string()),
+                    (
+                        "workflow_definition_id".to_string(),
+                        workflow.id.to_string(),
+                    ),
+                    (
+                        "workflow_definition_version_id".to_string(),
+                        version.id.to_string(),
+                    ),
+                    ("workflow_version".to_string(), version.version.clone()),
+                ]),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    let file = persist_workflow_source_archive_file(
+        state,
+        principal,
+        workspace.id,
+        workflow,
+        version,
+        archive,
+    )
+    .await?;
+    Ok(Some(WorkflowRunSourceSnapshot {
+        source: archive_source,
+        entrypoint: version.entrypoint.clone(),
+        workspace_id: workspace.id,
+        file_id: file.id,
+        file_name: archive_file_name,
+        media_type: archive_media_type,
+    }))
+}
+
+async fn persist_workflow_source_archive_file(
+    state: &Arc<ApiState>,
+    principal: &AuthenticatedPrincipal,
+    workspace_id: Uuid,
+    workflow: &StoredWorkflowDefinition,
+    version: &StoredWorkflowDefinitionVersion,
+    archive: WorkflowSourceArchive,
+) -> Result<crate::file_workspace::StoredFileWorkspaceFile, (StatusCode, Json<ErrorResponse>)> {
+    let WorkflowSourceArchive {
+        source,
+        file_name,
+        media_type,
+        bytes,
+    } = archive;
+    let file_id = Uuid::now_v7();
+    let byte_count = bytes.len() as u64;
+    let sha256_hex = hex::encode(Sha256::digest(bytes.as_slice()));
+    let provenance = Some(serde_json::json!({
+        "kind": "workflow_source_snapshot",
+        "workflow_definition_id": workflow.id,
+        "workflow_definition_version_id": version.id,
+        "workflow_version": version.version,
+        "entrypoint": version.entrypoint,
+        "source": source,
+        "created_at": Utc::now(),
+    }));
+    let stored_artifact = state
+        .workspace_file_store
+        .write(StoreWorkspaceFileRequest {
+            workspace_id,
+            file_id,
+            file_name: file_name.clone(),
+            bytes,
+        })
+        .await
+        .map_err(map_workspace_file_store_error)?;
+    let persisted = state
+        .session_store
+        .create_file_workspace_file_for_owner(
+            principal,
+            PersistFileWorkspaceFileRequest {
+                id: file_id,
+                workspace_id,
+                name: file_name,
+                media_type: Some(media_type),
+                byte_count,
+                sha256_hex,
+                provenance,
+                artifact_ref: stored_artifact.artifact_ref.clone(),
+            },
+        )
+        .await;
+    match persisted {
+        Ok(file) => Ok(file),
+        Err(error) => {
+            let _ = state
+                .workspace_file_store
+                .delete(&stored_artifact.artifact_ref)
+                .await;
+            Err(map_session_store_error(error))
+        }
+    }
+}
+
+fn require_credential_provider(
+    state: &ApiState,
+) -> Result<&CredentialProvider, (StatusCode, Json<ErrorResponse>)> {
+    state.credential_provider.as_deref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: "credential bindings are not configured on this gateway".to_string(),
+            }),
+        )
+    })
+}
+
+async fn resolve_workflow_run_credential_bindings(
+    state: &Arc<ApiState>,
+    principal: &AuthenticatedPrincipal,
+    version: &StoredWorkflowDefinitionVersion,
+    requested_ids: Vec<Uuid>,
+) -> Result<Vec<WorkflowRunCredentialBinding>, (StatusCode, Json<ErrorResponse>)> {
+    if requested_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let allowed_binding_ids = version
+        .allowed_credential_binding_ids
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
+    if allowed_binding_ids.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow definition version {} does not allow credential bindings",
+                    version.version
+                ),
+            }),
+        ));
+    }
+
+    let mut seen_ids = HashSet::new();
+    let mut bindings = Vec::with_capacity(requested_ids.len());
+    for binding_id in requested_ids {
+        if !seen_ids.insert(binding_id) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow run credential binding {binding_id} is duplicated"
+                    ),
+                }),
+            ));
+        }
+        if !allowed_binding_ids.contains(&binding_id.to_string()) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {} does not allow credential binding {}",
+                        version.version, binding_id
+                    ),
+                }),
+            ));
+        }
+        let binding = state
+            .session_store
+            .get_credential_binding_for_owner(principal, binding_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("credential binding {binding_id} not found"),
+                    }),
+                )
+            })?;
+        bindings.push(binding.to_workflow_run_binding());
+    }
+    Ok(bindings)
+}
+
+fn validate_session_extensions_allowed(
+    workflow_version: &str,
+    allowed_extension_ids: &[String],
+    extensions: &[AppliedExtension],
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    if extensions.is_empty() {
+        return Ok(());
+    }
+
+    let allowed_ids = allowed_extension_ids
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
+    if allowed_ids.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow definition version {workflow_version} does not allow browser extensions"
+                ),
+            }),
+        ));
+    }
+
+    for extension in extensions {
+        if !allowed_ids.contains(&extension.extension_id.to_string()) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {workflow_version} does not allow extension {}",
+                        extension.extension_id
+                    ),
+                }),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+async fn resolve_session_extensions(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    extension_ids: &[Uuid],
+    allowed_extension_ids: Option<&[String]>,
+) -> Result<Vec<AppliedExtension>, (StatusCode, Json<ErrorResponse>)> {
+    if extension_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if !state.session_manager.profile().supports_session_extensions {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "the current runtime backend does not support session extensions"
+                    .to_string(),
+            }),
+        ));
+    }
+
+    let allowed_set = allowed_extension_ids.map(|ids| ids.iter().cloned().collect::<HashSet<_>>());
+    let mut seen_ids = HashSet::new();
+    let mut extensions = Vec::with_capacity(extension_ids.len());
+    for extension_id in extension_ids {
+        if !seen_ids.insert(*extension_id) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!("session extension {extension_id} is duplicated"),
+                }),
+            ));
+        }
+
+        if let Some(allowed_ids) = allowed_set.as_ref() {
+            if !allowed_ids.contains(&extension_id.to_string()) {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: format!(
+                            "workflow definition does not allow extension {extension_id}"
+                        ),
+                    }),
+                ));
+            }
+        }
+
+        let definition = state
+            .session_store
+            .get_extension_definition_for_owner(principal, *extension_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("extension {extension_id} not found"),
+                    }),
+                )
+            })?;
+        if !definition.enabled {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: format!("extension {extension_id} is disabled"),
+                }),
+            ));
+        }
+        let version = state
+            .session_store
+            .get_latest_extension_version_for_owner(principal, *extension_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::CONFLICT,
+                    Json(ErrorResponse {
+                        error: format!(
+                            "extension {extension_id} does not have an installed version"
+                        ),
+                    }),
+                )
+            })?;
+        extensions.push(AppliedExtension {
+            extension_id: definition.id,
+            extension_version_id: version.id,
+            name: definition.name,
+            version: version.version,
+            install_path: version.install_path,
+        });
+    }
+
+    Ok(extensions)
+}
+
+async fn resolve_workflow_run_workspace_inputs(
+    state: &Arc<ApiState>,
+    principal: &AuthenticatedPrincipal,
+    version: &StoredWorkflowDefinitionVersion,
+    requests: Vec<CreateWorkflowRunWorkspaceInputRequest>,
+) -> Result<Vec<WorkflowRunWorkspaceInput>, (StatusCode, Json<ErrorResponse>)> {
+    if requests.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let allowed_workspace_ids = version
+        .allowed_file_workspace_ids
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
+    if allowed_workspace_ids.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow definition version {} does not allow file workspace inputs",
+                    version.version
+                ),
+            }),
+        ));
+    }
+
+    let mut mount_paths = HashSet::new();
+    let mut inputs = Vec::with_capacity(requests.len());
+    for request in requests {
+        if !allowed_workspace_ids.contains(&request.workspace_id.to_string()) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {} does not allow file workspace {}",
+                        version.version, request.workspace_id
+                    ),
+                }),
+            ));
+        }
+
+        let file = state
+            .session_store
+            .get_file_workspace_file_for_owner(principal, request.workspace_id, request.file_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!(
+                            "file workspace file {} for workspace {} not found",
+                            request.file_id, request.workspace_id
+                        ),
+                    }),
+                )
+            })?;
+        let mount_path = normalize_workflow_run_workspace_input_mount_path(
+            request.mount_path.as_deref().unwrap_or(file.name.as_str()),
+        )?;
+        if !mount_paths.insert(mount_path.clone()) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow run workspace input mount path {mount_path} is duplicated"
+                    ),
+                }),
+            ));
+        }
+
+        inputs.push(WorkflowRunWorkspaceInput {
+            id: Uuid::now_v7(),
+            workspace_id: request.workspace_id,
+            file_id: request.file_id,
+            file_name: file.name.clone(),
+            media_type: file.media_type.clone(),
+            byte_count: file.byte_count,
+            sha256_hex: file.sha256_hex.clone(),
+            provenance: file.provenance.clone(),
+            mount_path,
+            artifact_ref: file.artifact_ref.clone(),
+        });
+    }
+
+    Ok(inputs)
+}
+
+fn normalize_workflow_run_workspace_input_mount_path(
+    mount_path: &str,
+) -> Result<String, (StatusCode, Json<ErrorResponse>)> {
+    let trimmed = mount_path.trim();
+    if trimmed.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "workflow run workspace input mount_path must not be empty".to_string(),
+            }),
+        ));
+    }
+    let path = FsPath::new(trimmed);
+    if path.is_absolute() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "workflow run workspace input mount_path must be relative".to_string(),
+            }),
+        ));
+    }
+
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => {
+                let value = part.to_string_lossy().trim().to_string();
+                if value.is_empty() {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(ErrorResponse {
+                            error: "workflow run workspace input mount_path contains an empty component"
+                                .to_string(),
+                        }),
+                    ));
+                }
+                parts.push(value);
+            }
+            _ => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: "workflow run workspace input mount_path must not contain traversal or non-normal path components"
+                            .to_string(),
+                    }),
+                ));
+            }
+        }
+    }
+
+    if parts.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "workflow run workspace input mount_path must contain a relative file path"
+                    .to_string(),
+            }),
+        ));
+    }
+
+    Ok(parts.join("/"))
+}
+
+async fn create_workflow_run(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateWorkflowRunRequest>,
+) -> Result<(StatusCode, Json<WorkflowRunResource>), (StatusCode, Json<ErrorResponse>)> {
+    let CreateWorkflowRunRequest {
+        workflow_id,
+        version: workflow_version_name,
+        session,
+        input,
+        credential_binding_ids,
+        workspace_inputs,
+        labels,
+    } = request;
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workflow = state
+        .session_store
+        .get_workflow_definition_for_owner(&principal, workflow_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow definition {workflow_id} not found"),
+                }),
+            )
+        })?;
+    let version = state
+        .session_store
+        .get_workflow_definition_version_for_owner(&principal, workflow_id, &workflow_version_name)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {} for workflow {} not found",
+                        workflow_version_name, workflow_id
+                    ),
+                }),
+            )
+        })?;
+    let source_snapshot =
+        prepare_workflow_run_source_snapshot(&state, &principal, &workflow, &version).await?;
+    let credential_bindings = resolve_workflow_run_credential_bindings(
+        &state,
+        &principal,
+        &version,
+        credential_binding_ids,
+    )
+    .await?;
+    let workspace_inputs =
+        resolve_workflow_run_workspace_inputs(&state, &principal, &version, workspace_inputs)
+            .await?;
+    let (session, session_source) = resolve_task_session_binding(
+        &state,
+        &principal,
+        session,
+        version.default_session.as_ref(),
+        Some(&version.allowed_extension_ids),
+    )
+    .await?;
+    let task = state
+        .session_store
+        .create_automation_task(
+            &principal,
+            PersistAutomationTaskRequest {
+                display_name: Some(format!("{} {}", workflow.name, version.version)),
+                executor: version.executor.clone(),
+                session_id: session.id,
+                session_source,
+                input: input.clone(),
+                labels: labels.clone(),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    let run = state
+        .session_store
+        .create_workflow_run(
+            &principal,
+            PersistWorkflowRunRequest {
+                workflow_definition_id: workflow.id,
+                workflow_definition_version_id: version.id,
+                workflow_version: version.version.clone(),
+                session_id: session.id,
+                automation_task_id: task.id,
+                source_snapshot,
+                extensions: session.extensions.clone(),
+                credential_bindings,
+                workspace_inputs,
+                input,
+                labels,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    if let Err(error) = state
+        .workflow_lifecycle
+        .ensure_run_started(&version.executor, run.id)
+        .await
+    {
+        warn!(
+            run_id = %run.id,
+            workflow_definition_id = %workflow.id,
+            workflow_version = %version.version,
+            "failed to auto-launch workflow worker: {error}"
+        );
+    }
+    let run = state
+        .session_store
+        .get_workflow_run_by_id(run.id)
+        .await
+        .map_err(map_session_store_error)?
+        .unwrap_or(run);
+    Ok((
+        StatusCode::CREATED,
+        Json(build_workflow_run_resource(&state, &run).await?),
+    ))
+}
+
+async fn get_workflow_run(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    Ok(Json(build_workflow_run_resource(&state, &run).await?))
+}
+
+async fn get_workflow_run_source_snapshot_content(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let source_snapshot = run.source_snapshot.as_ref().ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("workflow run {run_id} does not have a source snapshot"),
+            }),
+        )
+    })?;
+    let principal = load_session_owner_principal(&state, run.session_id).await?;
+    let file = state
+        .session_store
+        .get_file_workspace_file_for_owner(
+            &principal,
+            source_snapshot.workspace_id,
+            source_snapshot.file_id,
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow run source snapshot file {} for workspace {} was not found",
+                        source_snapshot.file_id, source_snapshot.workspace_id
+                    ),
+                }),
+            )
+        })?;
+    let bytes = state
+        .workspace_file_store
+        .read(&file.artifact_ref)
+        .await
+        .map_err(map_workspace_file_content_error)?;
+    let media_type = file
+        .media_type
+        .clone()
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    let mut response = Response::new(axum::body::Body::from(bytes.clone()));
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        header_value_or_default(&media_type, "application/octet-stream"),
+    );
+    response.headers_mut().insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&bytes.len().to_string())
+            .unwrap_or_else(|_| HeaderValue::from_static("0")),
+    );
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        header_value_or_default(
+            &format!(
+                "attachment; filename=\"{}\"",
+                sanitize_content_disposition_filename(&file.name)
+            ),
+            "attachment",
+        ),
+    );
+    Ok(response)
+}
+
+async fn get_workflow_run_workspace_input_content(
+    headers: HeaderMap,
+    Path((run_id, input_id)): Path<(Uuid, Uuid)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let workspace_input = run
+        .workspace_inputs
+        .iter()
+        .find(|input| input.id == input_id)
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow run workspace input {input_id} was not found for run {run_id}"
+                    ),
+                }),
+            )
+        })?;
+    let bytes = state
+        .workspace_file_store
+        .read(&workspace_input.artifact_ref)
+        .await
+        .map_err(map_workspace_file_content_error)?;
+    let media_type = workspace_input
+        .media_type
+        .clone()
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    let mut response = Response::new(axum::body::Body::from(bytes.clone()));
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        header_value_or_default(&media_type, "application/octet-stream"),
+    );
+    response.headers_mut().insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&bytes.len().to_string())
+            .unwrap_or_else(|_| HeaderValue::from_static("0")),
+    );
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        header_value_or_default(
+            &format!(
+                "attachment; filename=\"{}\"",
+                sanitize_content_disposition_filename(&workspace_input.file_name)
+            ),
+            "attachment",
+        ),
+    );
+    Ok(response)
+}
+
+async fn list_workflow_run_produced_files(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunProducedFileListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    Ok(Json(WorkflowRunProducedFileListResponse {
+        files: run
+            .produced_files
+            .iter()
+            .map(|file| file.to_resource(run.id))
+            .collect(),
+    }))
+}
+
+async fn upload_workflow_run_produced_file(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    body: Bytes,
+) -> Result<(StatusCode, Json<WorkflowRunProducedFileResource>), (StatusCode, Json<ErrorResponse>)>
+{
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let owner = load_session_owner_principal(&state, run.session_id).await?;
+    let version = state
+        .session_store
+        .get_workflow_definition_version_for_owner(
+            &owner,
+            run.workflow_definition_id,
+            &run.workflow_version,
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {} for workflow {} not found",
+                        run.workflow_version, run.workflow_definition_id
+                    ),
+                }),
+            )
+        })?;
+    let workspace_id = required_header_string(&headers, WORKFLOW_RUN_WORKSPACE_ID_HEADER)?
+        .parse::<Uuid>()
+        .map_err(|error| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "header {WORKFLOW_RUN_WORKSPACE_ID_HEADER} must be a valid UUID: {error}"
+                    ),
+                }),
+            )
+        })?;
+    if !version
+        .allowed_file_workspace_ids
+        .iter()
+        .any(|entry| entry == &workspace_id.to_string())
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow definition version {} does not allow file workspace {}",
+                    version.version, workspace_id
+                ),
+            }),
+        ));
+    }
+    let _workspace = state
+        .session_store
+        .get_file_workspace_for_owner(&owner, workspace_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("file workspace {workspace_id} not found"),
+                }),
+            )
+        })?;
+    let file_name = required_header_string(&headers, FILE_WORKSPACE_FILE_NAME_HEADER)?;
+    let provenance =
+        parse_optional_json_object_header(&headers, FILE_WORKSPACE_FILE_PROVENANCE_HEADER)?;
+    let media_type = headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let file_id = Uuid::now_v7();
+    let sha256_hex = hex::encode(Sha256::digest(body.as_ref()));
+    let stored_artifact = state
+        .workspace_file_store
+        .write(StoreWorkspaceFileRequest {
+            workspace_id,
+            file_id,
+            file_name: file_name.clone(),
+            bytes: body.to_vec(),
+        })
+        .await
+        .map_err(|error| {
+            state.workflow_observability.record_produced_file_upload_failure();
+            map_workspace_file_store_error(error)
+        })?;
+    let persisted_file = state
+        .session_store
+        .create_file_workspace_file_for_owner(
+            &owner,
+            PersistFileWorkspaceFileRequest {
+                id: file_id,
+                workspace_id,
+                name: file_name.clone(),
+                media_type: media_type.clone(),
+                byte_count: body.len() as u64,
+                sha256_hex: sha256_hex.clone(),
+                provenance: provenance.clone(),
+                artifact_ref: stored_artifact.artifact_ref.clone(),
+            },
+        )
+        .await;
+    let persisted_file = match persisted_file {
+        Ok(file) => file,
+        Err(error) => {
+            state.workflow_observability.record_produced_file_upload_failure();
+            let _ = state
+                .workspace_file_store
+                .delete(&stored_artifact.artifact_ref)
+                .await;
+            return Err(map_session_store_error(error));
+        }
+    };
+    let updated_run = state
+        .session_store
+        .append_workflow_run_produced_file(
+            run.id,
+            PersistWorkflowRunProducedFileRequest {
+                workspace_id,
+                file_id,
+                file_name,
+                media_type,
+                byte_count: body.len() as u64,
+                sha256_hex,
+                provenance,
+                artifact_ref: stored_artifact.artifact_ref.clone(),
+            },
+        )
+        .await;
+    match updated_run {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            state.workflow_observability.record_produced_file_upload_failure();
+            let _ = state
+                .session_store
+                .delete_file_workspace_file_for_owner(&owner, workspace_id, file_id)
+                .await;
+            let _ = state
+                .workspace_file_store
+                .delete(&stored_artifact.artifact_ref)
+                .await;
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            ));
+        }
+        Err(error) => {
+            state.workflow_observability.record_produced_file_upload_failure();
+            let _ = state
+                .session_store
+                .delete_file_workspace_file_for_owner(&owner, workspace_id, file_id)
+                .await;
+            let _ = state
+                .workspace_file_store
+                .delete(&stored_artifact.artifact_ref)
+                .await;
+            return Err(map_session_store_error(error));
+        }
+    }
+    state.workflow_observability.record_produced_file_upload();
+    Ok((
+        StatusCode::CREATED,
+        Json(WorkflowRunProducedFileResource {
+            workspace_id,
+            file_id,
+            file_name: persisted_file.name,
+            media_type: persisted_file.media_type,
+            byte_count: persisted_file.byte_count,
+            sha256_hex: persisted_file.sha256_hex,
+            provenance: persisted_file.provenance,
+            content_path: format!(
+                "/api/v1/workflow-runs/{}/produced-files/{file_id}/content",
+                run.id
+            ),
+            created_at: persisted_file.created_at,
+        }),
+    ))
+}
+
+async fn get_workflow_run_produced_file_content(
+    headers: HeaderMap,
+    Path((run_id, file_id)): Path<(Uuid, Uuid)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let produced_file = run
+        .produced_files
+        .iter()
+        .find(|file| file.file_id == file_id)
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow run produced file {file_id} was not found for run {run_id}"
+                    ),
+                }),
+            )
+        })?;
+    let bytes = state
+        .workspace_file_store
+        .read(&produced_file.artifact_ref)
+        .await
+        .map_err(|error| match error.io_kind() {
+            Some(std::io::ErrorKind::NotFound) => (
+                StatusCode::GONE,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow run produced file {file_id} is no longer available"
+                    ),
+                }),
+            ),
+            _ => map_workspace_file_content_error(error),
+        })?;
+    let media_type = produced_file
+        .media_type
+        .clone()
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    let mut response = Response::new(axum::body::Body::from(bytes.clone()));
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        header_value_or_default(&media_type, "application/octet-stream"),
+    );
+    response.headers_mut().insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&bytes.len().to_string())
+            .unwrap_or_else(|_| HeaderValue::from_static("0")),
+    );
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        header_value_or_default(
+            &format!(
+                "attachment; filename=\"{}\"",
+                sanitize_content_disposition_filename(&produced_file.file_name)
+            ),
+            "attachment",
+        ),
+    );
+    Ok(response)
+}
+
+async fn cancel_workflow_run(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let run = state
+        .session_store
+        .get_workflow_run_for_owner(&principal, run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    let _task = state
+        .session_store
+        .cancel_automation_task_for_owner(&principal, run.automation_task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "automation task {} for workflow run {run_id} not found",
+                        run.automation_task_id
+                    ),
+                }),
+            )
+        })?;
+    let _ = state
+        .session_store
+        .append_workflow_run_event_for_owner(
+            &principal,
+            run.id,
+            PersistWorkflowRunEventRequest {
+                event_type: "workflow_run.cancel_requested".to_string(),
+                message: "workflow run cancellation requested".to_string(),
+                data: Some(serde_json::json!({
+                    "automation_task_id": run.automation_task_id,
+                })),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    if let Err(error) = state.workflow_lifecycle.cancel_run(run.id).await {
+        warn!(run_id = %run.id, "failed to stop workflow worker after cancel request: {error}");
+    }
+    let run = state
+        .session_store
+        .get_workflow_run_for_owner(&principal, run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(build_workflow_run_resource(&state, &run).await?))
+}
+
+async fn transition_workflow_run_state(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<TransitionWorkflowRunRequest>,
+) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
+    let _run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let run = state
+        .session_store
+        .transition_workflow_run(
+            run_id,
+            WorkflowRunTransitionRequest {
+                state: request.state,
+                output: request.output,
+                error: request.error,
+                artifact_refs: request.artifact_refs,
+                message: request.message,
+                data: request.data,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(build_workflow_run_resource(&state, &run).await?))
+}
+
+async fn append_workflow_run_log(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<AppendWorkflowRunLogRequest>,
+) -> Result<Json<WorkflowRunLogResource>, (StatusCode, Json<ErrorResponse>)> {
+    let _run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let log = state
+        .session_store
+        .append_workflow_run_log(
+            run_id,
+            PersistWorkflowRunLogRequest {
+                stream: request.stream,
+                message: request.message,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(WorkflowRunLogResource::from_run(run_id, &log)))
+}
+
+async fn get_workflow_run_events(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunEventListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let principal = load_session_owner_principal(&state, run.session_id).await?;
+    let mut events = state
+        .session_store
+        .list_workflow_run_events_for_owner(&principal, run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|event| event.to_resource())
+        .collect::<Vec<WorkflowRunEventResource>>();
+    let task_events = state
+        .session_store
+        .list_automation_task_events_for_owner(&principal, run.automation_task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|event| {
+            WorkflowRunEventResource::from_automation_task(run.id, run.automation_task_id, &event)
+        });
+    events.extend(task_events);
+    events.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    Ok(Json(WorkflowRunEventListResponse { events }))
+}
+
+async fn get_workflow_run_logs(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowRunLogListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let run =
+        authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
+            .await?;
+    let principal = load_session_owner_principal(&state, run.session_id).await?;
+    let mut logs = state
+        .session_store
+        .list_workflow_run_logs_for_owner(&principal, run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|log| WorkflowRunLogResource::from_run(run.id, &log))
+        .collect::<Vec<_>>();
+    let task_logs = state
+        .session_store
+        .list_automation_task_logs_for_owner(&principal, run.automation_task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|log| {
+            WorkflowRunLogResource::from_automation_task(run.id, run.automation_task_id, &log)
+        });
+    logs.extend(task_logs);
+    logs.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    Ok(Json(WorkflowRunLogListResponse { logs }))
+}
+
+async fn list_credential_bindings(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<CredentialBindingListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let credential_bindings = state
+        .session_store
+        .list_credential_bindings_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|binding| binding.to_resource())
+        .collect();
+    Ok(Json(CredentialBindingListResponse { credential_bindings }))
+}
+
+async fn create_credential_binding(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateCredentialBindingRequest>,
+) -> Result<(StatusCode, Json<CredentialBindingResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let provider = require_credential_provider(&state)?;
+    let binding_id = Uuid::now_v7();
+    let stored_secret = match (request.secret_payload, request.external_ref.clone()) {
+        (Some(secret_payload), external_ref) => provider
+            .store_secret(StoreCredentialSecretRequest {
+                binding_id,
+                external_ref,
+                payload: secret_payload,
+            })
+            .await
+            .map_err(map_credential_provider_error)?,
+        (None, Some(external_ref)) => crate::credential_provider::StoredCredentialSecret {
+            external_ref,
+        },
+        (None, None) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "credential binding requires secret_payload or external_ref"
+                        .to_string(),
+                }),
+            ));
+        }
+    };
+    let binding = state
+        .session_store
+        .create_credential_binding(
+            &principal,
+            PersistCredentialBindingRequest {
+                id: binding_id,
+                name: request.name,
+                provider: request.provider,
+                external_ref: stored_secret.external_ref,
+                namespace: request.namespace,
+                allowed_origins: request.allowed_origins,
+                injection_mode: request.injection_mode,
+                totp: request.totp,
+                labels: request.labels,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(binding.to_resource())))
+}
+
+async fn get_credential_binding(
+    headers: HeaderMap,
+    Path(binding_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<CredentialBindingResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let binding = state
+        .session_store
+        .get_credential_binding_for_owner(&principal, binding_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("credential binding {binding_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(binding.to_resource()))
+}
+
+async fn get_workflow_run_credential_binding_resolved(
+    headers: HeaderMap,
+    Path((run_id, binding_id)): Path<(Uuid, Uuid)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ResolvedWorkflowRunCredentialBindingResource>, (StatusCode, Json<ErrorResponse>)> {
+    let run = state
+        .session_store
+        .get_workflow_run_by_id(run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    let session = state
+        .session_store
+        .get_session_by_id(run.session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {} not found", run.session_id),
+                }),
+            )
+        })?;
+    let claims = validate_automation_access_request(&headers, &state, run.session_id)?;
+    if !automation_access_claims_match_session(&claims, &session) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "automation access token is no longer valid for this session".to_string(),
+            }),
+        ));
+    }
+    let binding = run
+        .credential_bindings
+        .iter()
+        .find(|binding| binding.id == binding_id)
+        .cloned()
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "credential binding {binding_id} is not attached to workflow run {run_id}"
+                    ),
+                }),
+            )
+        })?;
+    let provider = require_credential_provider(&state)?;
+    let resolved = provider
+        .resolve_secret(&binding.external_ref)
+        .await
+        .map_err(map_credential_provider_error)?;
+    let owner = load_session_owner_principal(&state, run.session_id).await?;
+    let _ = state
+        .session_store
+        .append_workflow_run_event_for_owner(
+            &owner,
+            run.id,
+            PersistWorkflowRunEventRequest {
+                event_type: "workflow_run.credential_binding_resolved".to_string(),
+                message: format!("credential binding {} resolved for workflow run", binding.id),
+                data: Some(serde_json::json!({
+                    "credential_binding_id": binding.id,
+                    "provider": binding.provider,
+                    "injection_mode": binding.injection_mode,
+                })),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok(Json(ResolvedWorkflowRunCredentialBindingResource {
+        binding: binding.to_resource(run.id),
+        payload: resolved.payload,
+    }))
+}
+
+async fn list_extensions(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ExtensionDefinitionListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let extensions = state
+        .session_store
+        .list_extension_definitions_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|definition| definition.to_resource())
+        .collect();
+    Ok(Json(ExtensionDefinitionListResponse { extensions }))
+}
+
+async fn create_extension(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateExtensionDefinitionRequest>,
+) -> Result<(StatusCode, Json<ExtensionDefinitionResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let extension = state
+        .session_store
+        .create_extension_definition(
+            &principal,
+            PersistExtensionDefinitionRequest {
+                name: request.name,
+                description: request.description,
+                labels: request.labels,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(extension.to_resource())))
+}
+
+async fn get_extension(
+    headers: HeaderMap,
+    Path(extension_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ExtensionDefinitionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let extension = state
+        .session_store
+        .get_extension_definition_for_owner(&principal, extension_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("extension {extension_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(extension.to_resource()))
+}
+
+async fn create_extension_version(
+    headers: HeaderMap,
+    Path(extension_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateExtensionVersionRequest>,
+) -> Result<(StatusCode, Json<ExtensionVersionResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let version = state
+        .session_store
+        .create_extension_version_for_owner(
+            &principal,
+            PersistExtensionVersionRequest {
+                extension_definition_id: extension_id,
+                version: request.version,
+                install_path: request.install_path,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(version.to_resource())))
+}
+
+async fn enable_extension(
+    headers: HeaderMap,
+    Path(extension_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ExtensionDefinitionResource>, (StatusCode, Json<ErrorResponse>)> {
+    set_extension_enabled(headers, extension_id, state, true).await
+}
+
+async fn disable_extension(
+    headers: HeaderMap,
+    Path(extension_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<ExtensionDefinitionResource>, (StatusCode, Json<ErrorResponse>)> {
+    set_extension_enabled(headers, extension_id, state, false).await
+}
+
+async fn set_extension_enabled(
+    headers: HeaderMap,
+    extension_id: Uuid,
+    state: Arc<ApiState>,
+    enabled: bool,
+) -> Result<Json<ExtensionDefinitionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let extension = state
+        .session_store
+        .set_extension_definition_enabled_for_owner(&principal, extension_id, enabled)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("extension {extension_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(extension.to_resource()))
+}
+
+async fn list_file_workspaces(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<FileWorkspaceListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workspaces = state
+        .session_store
+        .list_file_workspaces_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|workspace| workspace.to_resource())
+        .collect();
+    Ok(Json(FileWorkspaceListResponse { workspaces }))
+}
+
+async fn create_file_workspace(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateFileWorkspaceRequest>,
+) -> Result<(StatusCode, Json<FileWorkspaceResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workspace = state
+        .session_store
+        .create_file_workspace(
+            &principal,
+            PersistFileWorkspaceRequest {
+                name: request.name,
+                description: request.description,
+                labels: request.labels,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(workspace.to_resource())))
+}
+
+async fn get_file_workspace(
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<FileWorkspaceResource>, (StatusCode, Json<ErrorResponse>)> {
+    let workspace = authorize_file_workspace_request(&headers, &state, workspace_id).await?;
+    Ok(Json(workspace.to_resource()))
+}
+
+async fn list_file_workspace_files(
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<FileWorkspaceFileListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let _workspace = state
+        .session_store
+        .get_file_workspace_for_owner(&principal, workspace_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("file workspace {workspace_id} not found"),
+                }),
+            )
+        })?;
+    let files = state
+        .session_store
+        .list_file_workspace_files_for_owner(&principal, workspace_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|file| file.to_resource())
+        .collect();
+    Ok(Json(FileWorkspaceFileListResponse { files }))
+}
+
+async fn upload_file_workspace_file(
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    body: Bytes,
+) -> Result<(StatusCode, Json<FileWorkspaceFileResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let _workspace = state
+        .session_store
+        .get_file_workspace_for_owner(&principal, workspace_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("file workspace {workspace_id} not found"),
+                }),
+            )
+        })?;
+    let file_name = required_header_string(&headers, FILE_WORKSPACE_FILE_NAME_HEADER)?;
+    let provenance =
+        parse_optional_json_object_header(&headers, FILE_WORKSPACE_FILE_PROVENANCE_HEADER)?;
+    let media_type = headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let file_id = Uuid::now_v7();
+    let sha256_hex = hex::encode(Sha256::digest(body.as_ref()));
+    let stored_artifact = state
+        .workspace_file_store
+        .write(StoreWorkspaceFileRequest {
+            workspace_id,
+            file_id,
+            file_name: file_name.clone(),
+            bytes: body.to_vec(),
+        })
+        .await
+        .map_err(map_workspace_file_store_error)?;
+    let persisted = state
+        .session_store
+        .create_file_workspace_file_for_owner(
+            &principal,
+            PersistFileWorkspaceFileRequest {
+                id: file_id,
+                workspace_id,
+                name: file_name,
+                media_type,
+                byte_count: body.len() as u64,
+                sha256_hex,
+                provenance,
+                artifact_ref: stored_artifact.artifact_ref.clone(),
+            },
+        )
+        .await;
+    let persisted = match persisted {
+        Ok(file) => file,
+        Err(error) => {
+            let _ = state
+                .workspace_file_store
+                .delete(&stored_artifact.artifact_ref)
+                .await;
+            return Err(map_session_store_error(error));
+        }
+    };
+    Ok((StatusCode::CREATED, Json(persisted.to_resource())))
+}
+
+async fn get_file_workspace_file(
+    headers: HeaderMap,
+    Path((workspace_id, file_id)): Path<(Uuid, Uuid)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<FileWorkspaceFileResource>, (StatusCode, Json<ErrorResponse>)> {
+    let file =
+        authorize_file_workspace_file_request(&headers, &state, workspace_id, file_id).await?;
+    Ok(Json(file.to_resource()))
+}
+
+async fn get_file_workspace_file_content(
+    headers: HeaderMap,
+    Path((workspace_id, file_id)): Path<(Uuid, Uuid)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
+    let file =
+        authorize_file_workspace_file_request(&headers, &state, workspace_id, file_id).await?;
+    let bytes = state
+        .workspace_file_store
+        .read(&file.artifact_ref)
+        .await
+        .map_err(map_workspace_file_content_error)?;
+    let media_type = file
+        .media_type
+        .clone()
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    let mut response = Response::new(axum::body::Body::from(bytes.clone()));
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        header_value_or_default(&media_type, "application/octet-stream"),
+    );
+    response.headers_mut().insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&bytes.len().to_string())
+            .unwrap_or_else(|_| HeaderValue::from_static("0")),
+    );
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        header_value_or_default(
+            &format!(
+                "attachment; filename=\"{}\"",
+                sanitize_content_disposition_filename(&file.name)
+            ),
+            "attachment",
+        ),
+    );
+    Ok(response)
+}
+
+async fn delete_file_workspace_file(
+    headers: HeaderMap,
+    Path((workspace_id, file_id)): Path<(Uuid, Uuid)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<FileWorkspaceFileResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let file = state
+        .session_store
+        .get_file_workspace_file_for_owner(&principal, workspace_id, file_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "file workspace file {file_id} for workspace {workspace_id} not found"
+                    ),
+                }),
+            )
+        })?;
+    state
+        .workspace_file_store
+        .delete(&file.artifact_ref)
+        .await
+        .or_else(|error| match error {
+            WorkspaceFileStoreError::Backend(inner)
+                if inner.kind() == std::io::ErrorKind::NotFound =>
+            {
+                Ok(())
+            }
+            other => Err(other),
+        })
+        .map_err(map_workspace_file_content_error)?;
+    let deleted = state
+        .session_store
+        .delete_file_workspace_file_for_owner(&principal, workspace_id, file_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "file workspace file {file_id} for workspace {workspace_id} not found"
+                    ),
+                }),
+            )
+        })?;
+    Ok(Json(deleted.to_resource()))
 }
 
 async fn list_session_recordings(
@@ -573,6 +2937,16 @@ async fn get_recording_operations(
     Ok(Json(state.recording_observability.snapshot().await))
 }
 
+async fn get_workflow_operations(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowObservabilitySnapshot>, (StatusCode, Json<ErrorResponse>)> {
+    authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    Ok(Json(state.workflow_observability.snapshot().await))
+}
+
 async fn set_automation_owner(
     headers: HeaderMap,
     Path(session_id): Path<Uuid>,
@@ -632,72 +3006,7 @@ async fn issue_session_access_token(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    let stored = state
-        .session_store
-        .get_session_for_principal(&principal, session_id)
-        .await
-        .map_err(map_session_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: format!("session {session_id} not found"),
-                }),
-            )
-        })?;
-    let was_stopped = stored.state == SessionLifecycleState::Stopped;
-
-    let connectable = if was_stopped {
-        let prepared = state
-            .session_store
-            .prepare_session_for_connect(session_id)
-            .await
-            .map_err(map_session_store_error)?
-            .ok_or_else(|| {
-                (
-                    StatusCode::NOT_FOUND,
-                    Json(ErrorResponse {
-                        error: format!("session {session_id} not found"),
-                    }),
-                )
-            })?;
-        schedule_idle_session_stop(
-            session_id,
-            state.idle_stop_timeout,
-            state.registry.clone(),
-            state.session_store.clone(),
-            state.session_manager.clone(),
-            state.recording_lifecycle.clone(),
-        );
-        prepared
-    } else {
-        stored
-    };
-
-    if let Err(error) = state
-        .recording_lifecycle
-        .ensure_auto_recording(&connectable)
-        .await
-    {
-        if was_stopped {
-            let _ = state.session_store.stop_session_if_idle(session_id).await;
-            state.session_manager.release(session_id).await;
-            state.registry.remove_session(session_id).await;
-        }
-        return Err(map_recording_lifecycle_error(error));
-    }
-
-    if !connectable.state.is_runtime_candidate() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: format!(
-                    "session {session_id} is not connectable in state {}",
-                    connectable.state.as_str()
-                ),
-            }),
-        ));
-    }
+    let connectable = prepare_runtime_access_session(&state, &principal, session_id).await?;
 
     let issued = state
         .connect_ticket_manager
@@ -721,12 +3030,64 @@ async fn issue_session_access_token(
     }))
 }
 
+async fn issue_session_automation_access(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<SessionAutomationAccessResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal =
+        authorize_runtime_access_principal_with_automation_access(&headers, &state, session_id)
+            .await?;
+    let connectable = prepare_runtime_access_session(&state, &principal, session_id).await?;
+    resolve_runtime(&state, session_id).await?;
+    let resource = session_resource(&state, &connectable, None);
+    let endpoint_url = resource.runtime.cdp_endpoint.ok_or_else(|| {
+        (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "session {session_id} does not expose an automation endpoint for the current runtime"
+                ),
+            }),
+        )
+    })?;
+    let issued = state
+        .automation_access_token_manager
+        .issue_token(session_id, &principal)
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to issue session automation access token: {error}"),
+                }),
+            )
+        })?;
+
+    Ok(Json(SessionAutomationAccessResponse {
+        session_id,
+        token_type: "session_automation_access_token".to_string(),
+        token: issued.token,
+        expires_at: issued.expires_at,
+        automation: SessionAutomationAccessInfo {
+            endpoint_url,
+            protocol: "chrome_devtools_protocol".to_string(),
+            auth_type: "session_automation_access_token".to_string(),
+            auth_header: AUTOMATION_ACCESS_TOKEN_HEADER.to_string(),
+            status_path: format!("/api/v1/sessions/{session_id}/status"),
+            mcp_owner_path: format!("/api/v1/sessions/{session_id}/mcp-owner"),
+            compatibility_mode: resource.connect.compatibility_mode,
+        },
+    }))
+}
+
 async fn get_session_status(
     headers: HeaderMap,
     Path(session_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<SessionStatus>, (StatusCode, Json<ErrorResponse>)> {
-    let session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let session =
+        authorize_runtime_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
     let hub = state
         .registry
         .ensure_hub_for_session(
@@ -1009,7 +3370,9 @@ async fn set_session_mcp_owner(
     State(state): State<Arc<ApiState>>,
     Json(req): Json<McpOwnerRequest>,
 ) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let _session =
+        authorize_runtime_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
     let runtime = resolve_runtime(&state, session_id).await?;
     let hub = state
         .registry
@@ -1081,7 +3444,9 @@ async fn clear_session_mcp_owner(
     Path(session_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<OkResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let _session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let _session =
+        authorize_runtime_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
     let runtime = resolve_runtime(&state, session_id).await?;
     let hub = state
         .registry
@@ -1120,11 +3485,19 @@ pub async fn run_api_server(
     registry: Arc<SessionRegistry>,
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
+    automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
     session_store: SessionStore,
     session_manager: Arc<SessionManager>,
+    credential_provider: Option<Arc<CredentialProvider>>,
     recording_artifact_store: Arc<RecordingArtifactStore>,
+    workspace_file_store: Arc<WorkspaceFileStore>,
+    workflow_source_resolver: Arc<WorkflowSourceResolver>,
     recording_observability: Arc<RecordingObservability>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
+    workflow_lifecycle: Arc<WorkflowLifecycleManager>,
+    workflow_observability: Arc<WorkflowObservability>,
+    workflow_log_retention: Option<ChronoDuration>,
+    workflow_output_retention: Option<ChronoDuration>,
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
@@ -1133,11 +3506,19 @@ pub async fn run_api_server(
         registry,
         auth_validator,
         connect_ticket_manager,
+        automation_access_token_manager,
         session_store,
         session_manager,
+        credential_provider,
         recording_artifact_store,
+        workspace_file_store,
+        workflow_source_resolver,
         recording_observability,
         recording_lifecycle,
+        workflow_lifecycle,
+        workflow_observability,
+        workflow_log_retention,
+        workflow_output_retention,
         idle_stop_timeout,
         public_gateway_url,
         default_owner_mode,
@@ -1151,6 +3532,380 @@ pub async fn run_api_server(
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+async fn create_owned_session(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    mut request: CreateSessionRequest,
+    owner_mode: SessionOwnerMode,
+    allowed_extension_ids: Option<&[String]>,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    if request.extensions.is_empty() {
+        request.extensions = resolve_session_extensions(
+            state,
+            principal,
+            &request.extension_ids,
+            allowed_extension_ids,
+        )
+        .await?;
+    }
+    if !request.extensions.is_empty() && !state.session_manager.profile().supports_session_extensions {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "the current runtime backend does not support session extensions"
+                    .to_string(),
+            }),
+        ));
+    }
+    if let Some(allowed_extension_ids) = allowed_extension_ids {
+        validate_session_extensions_allowed(
+            "session_create_payload",
+            allowed_extension_ids,
+            &request.extensions,
+        )?;
+    }
+    state
+        .recording_lifecycle
+        .validate_mode(request.recording.mode)
+        .map_err(map_recording_lifecycle_error)?;
+    let stored = state
+        .session_store
+        .create_session(principal, request, owner_mode)
+        .await
+        .map_err(map_session_store_error)?;
+    if let Err(error) = state
+        .recording_lifecycle
+        .ensure_auto_recording(&stored)
+        .await
+    {
+        let _ = state
+            .session_store
+            .stop_session_for_owner(principal, stored.id)
+            .await;
+        state.session_manager.release(stored.id).await;
+        state.registry.remove_session(stored.id).await;
+        return Err(map_recording_lifecycle_error(error));
+    }
+
+    schedule_idle_session_stop(
+        stored.id,
+        state.idle_stop_timeout,
+        state.registry.clone(),
+        state.session_store.clone(),
+        state.session_manager.clone(),
+        state.recording_lifecycle.clone(),
+    );
+
+    Ok(stored)
+}
+
+async fn resolve_task_session_binding(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    session: Option<AutomationTaskSessionRequest>,
+    default_session: Option<&Value>,
+    allowed_extension_ids: Option<&[String]>,
+) -> Result<(StoredSession, AutomationTaskSessionSource), (StatusCode, Json<ErrorResponse>)> {
+    match session {
+        Some(AutomationTaskSessionRequest {
+            existing_session_id: Some(session_id),
+            create_session: None,
+        }) => {
+            let visible = state
+                .session_store
+                .get_session_for_owner(principal, session_id)
+                .await
+                .map_err(map_session_store_error)?
+                .ok_or_else(|| {
+                    (
+                        StatusCode::NOT_FOUND,
+                        Json(ErrorResponse {
+                            error: format!("session {session_id} not found"),
+                        }),
+                    )
+                })?;
+            if let Some(allowed_extension_ids) = allowed_extension_ids {
+                validate_session_extensions_allowed(
+                    "existing_session_binding",
+                    allowed_extension_ids,
+                    &visible.extensions,
+                )?;
+            }
+            Ok((visible, AutomationTaskSessionSource::ExistingSession))
+        }
+        Some(AutomationTaskSessionRequest {
+            existing_session_id: None,
+            create_session: Some(create_session_request),
+        }) => {
+            let owner_mode = resolve_owner_mode(state, create_session_request.owner_mode)?;
+            let created = create_owned_session(
+                state,
+                principal,
+                create_session_request,
+                owner_mode,
+                allowed_extension_ids,
+            )
+            .await?;
+            Ok((created, AutomationTaskSessionSource::CreatedSession))
+        }
+        Some(_) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "session must provide exactly one of existing_session_id or create_session"
+                    .to_string(),
+            }),
+        )),
+        None => {
+            let Some(default_session) = default_session else {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: "workflow run requires a session binding or version.default_session"
+                            .to_string(),
+                    }),
+                ));
+            };
+            let create_session_request = serde_json::from_value::<CreateSessionRequest>(
+                default_session.clone(),
+            )
+            .map_err(|error| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: format!(
+                            "workflow version default_session is not a valid session create payload: {error}"
+                        ),
+                    }),
+                )
+            })?;
+            let owner_mode = resolve_owner_mode(state, create_session_request.owner_mode)?;
+            let created = create_owned_session(
+                state,
+                principal,
+                create_session_request,
+                owner_mode,
+                allowed_extension_ids,
+            )
+            .await?;
+            Ok((created, AutomationTaskSessionSource::CreatedSession))
+        }
+    }
+}
+
+async fn load_session_owner_principal(
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<AuthenticatedPrincipal, (StatusCode, Json<ErrorResponse>)> {
+    let session = state
+        .session_store
+        .get_session_by_id(session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+    Ok(AuthenticatedPrincipal {
+        subject: session.owner.subject,
+        issuer: session.owner.issuer,
+        display_name: session.owner.display_name,
+        client_id: None,
+    })
+}
+
+async fn authorize_visible_automation_task_request_with_automation_access(
+    headers: &HeaderMap,
+    state: &ApiState,
+    task_id: Uuid,
+) -> Result<crate::automation_task::StoredAutomationTask, (StatusCode, Json<ErrorResponse>)> {
+    if extract_bearer_token(headers).is_some() {
+        match authorize_api_request(headers, &state.auth_validator).await {
+            Ok(principal) => {
+                if let Some(task) = state
+                    .session_store
+                    .get_automation_task_for_owner(&principal, task_id)
+                    .await
+                    .map_err(map_session_store_error)?
+                {
+                    return Ok(task);
+                }
+                if extract_automation_access_token(headers).is_none() {
+                    return Err((
+                        StatusCode::NOT_FOUND,
+                        Json(ErrorResponse {
+                            error: format!("automation task {task_id} not found"),
+                        }),
+                    ));
+                }
+            }
+            Err(error) if extract_automation_access_token(headers).is_none() => {
+                return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })));
+            }
+            Err(_) => {}
+        }
+    }
+
+    let claims = validate_any_automation_access_request(headers, state)?;
+    let task = state
+        .session_store
+        .get_automation_task_by_id(task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("automation task {task_id} not found"),
+                }),
+            )
+        })?;
+    let session = state
+        .session_store
+        .get_session_by_id(task.session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {} not found", task.session_id),
+                }),
+            )
+        })?;
+    if !automation_access_claims_match_session(&claims, &session) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "automation access token is no longer valid for this session".to_string(),
+            }),
+        ));
+    }
+    Ok(task)
+}
+
+async fn authorize_visible_workflow_run_request_with_automation_access(
+    headers: &HeaderMap,
+    state: &ApiState,
+    run_id: Uuid,
+) -> Result<crate::workflow::StoredWorkflowRun, (StatusCode, Json<ErrorResponse>)> {
+    if extract_bearer_token(headers).is_some() {
+        match authorize_api_request(headers, &state.auth_validator).await {
+            Ok(principal) => {
+                if let Some(run) = state
+                    .session_store
+                    .get_workflow_run_for_owner(&principal, run_id)
+                    .await
+                    .map_err(map_session_store_error)?
+                {
+                    return Ok(run);
+                }
+                if extract_automation_access_token(headers).is_none() {
+                    return Err((
+                        StatusCode::NOT_FOUND,
+                        Json(ErrorResponse {
+                            error: format!("workflow run {run_id} not found"),
+                        }),
+                    ));
+                }
+            }
+            Err(error) if extract_automation_access_token(headers).is_none() => {
+                return Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })));
+            }
+            Err(_) => {}
+        }
+    }
+
+    let claims = validate_any_automation_access_request(headers, state)?;
+    let run = state
+        .session_store
+        .get_workflow_run_by_id(run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    let session = state
+        .session_store
+        .get_session_by_id(run.session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {} not found", run.session_id),
+                }),
+            )
+        })?;
+    if !automation_access_claims_match_session(&claims, &session) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "automation access token is no longer valid for this session".to_string(),
+            }),
+        ));
+    }
+    Ok(run)
+}
+
+async fn authorize_file_workspace_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+    workspace_id: Uuid,
+) -> Result<crate::file_workspace::StoredFileWorkspace, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    state
+        .session_store
+        .get_file_workspace_for_owner(&principal, workspace_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("file workspace {workspace_id} not found"),
+                }),
+            )
+        })
+}
+
+async fn authorize_file_workspace_file_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+    workspace_id: Uuid,
+    file_id: Uuid,
+) -> Result<crate::file_workspace::StoredFileWorkspaceFile, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    state
+        .session_store
+        .get_file_workspace_file_for_owner(&principal, workspace_id, file_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "file workspace file {file_id} for workspace {workspace_id} not found"
+                    ),
+                }),
+            )
+        })
 }
 
 async fn authorize_api_request(
@@ -1187,9 +3942,220 @@ fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
     value.strip_prefix("Bearer ")
 }
 
+fn extract_automation_access_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(AUTOMATION_ACCESS_TOKEN_HEADER)?
+        .to_str()
+        .ok()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn required_header_string(
+    headers: &HeaderMap,
+    name: &str,
+) -> Result<String, (StatusCode, Json<ErrorResponse>)> {
+    let value = headers
+        .get(name)
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!("missing required header {name}"),
+                }),
+            )
+        })?
+        .to_str()
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!("header {name} must be valid UTF-8"),
+                }),
+            )
+        })?
+        .trim()
+        .to_string();
+    if value.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!("header {name} must not be empty"),
+            }),
+        ));
+    }
+    Ok(value)
+}
+
+fn parse_optional_json_object_header(
+    headers: &HeaderMap,
+    name: &str,
+) -> Result<Option<Value>, (StatusCode, Json<ErrorResponse>)> {
+    let Some(raw) = headers.get(name) else {
+        return Ok(None);
+    };
+    let raw = raw.to_str().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!("header {name} must be valid UTF-8"),
+            }),
+        )
+    })?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let value = serde_json::from_str::<Value>(trimmed).map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!("header {name} must contain valid JSON: {error}"),
+            }),
+        )
+    })?;
+    if !value.is_object() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!("header {name} must contain a JSON object"),
+            }),
+        ));
+    }
+    Ok(Some(value))
+}
+
+fn header_value_or_default(value: &str, fallback: &'static str) -> HeaderValue {
+    HeaderValue::from_str(value).unwrap_or_else(|_| HeaderValue::from_static(fallback))
+}
+
+fn sanitize_content_disposition_filename(file_name: &str) -> String {
+    file_name.replace(['"', '\\'], "_")
+}
+
 fn build_api_router(state: Arc<ApiState>) -> Router {
     Router::new()
         .route("/api/v1/sessions", post(create_session).get(list_sessions))
+        .route("/api/v1/extensions", post(create_extension).get(list_extensions))
+        .route("/api/v1/extensions/{extension_id}", get(get_extension))
+        .route(
+            "/api/v1/extensions/{extension_id}/versions",
+            post(create_extension_version),
+        )
+        .route(
+            "/api/v1/extensions/{extension_id}/enable",
+            post(enable_extension),
+        )
+        .route(
+            "/api/v1/extensions/{extension_id}/disable",
+            post(disable_extension),
+        )
+        .route(
+            "/api/v1/credential-bindings",
+            post(create_credential_binding).get(list_credential_bindings),
+        )
+        .route(
+            "/api/v1/credential-bindings/{binding_id}",
+            get(get_credential_binding),
+        )
+        .route(
+            "/api/v1/file-workspaces",
+            post(create_file_workspace).get(list_file_workspaces),
+        )
+        .route(
+            "/api/v1/file-workspaces/{workspace_id}",
+            get(get_file_workspace),
+        )
+        .route(
+            "/api/v1/file-workspaces/{workspace_id}/files",
+            post(upload_file_workspace_file).get(list_file_workspace_files),
+        )
+        .route(
+            "/api/v1/file-workspaces/{workspace_id}/files/{file_id}",
+            get(get_file_workspace_file).delete(delete_file_workspace_file),
+        )
+        .route(
+            "/api/v1/file-workspaces/{workspace_id}/files/{file_id}/content",
+            get(get_file_workspace_file_content),
+        )
+        .route(
+            "/api/v1/workflows",
+            post(create_workflow_definition).get(list_workflow_definitions),
+        )
+        .route(
+            "/api/v1/workflows/{workflow_id}",
+            get(get_workflow_definition),
+        )
+        .route(
+            "/api/v1/workflows/{workflow_id}/versions",
+            post(create_workflow_definition_version),
+        )
+        .route(
+            "/api/v1/workflows/{workflow_id}/versions/{version}",
+            get(get_workflow_definition_version),
+        )
+        .route("/api/v1/workflow-runs", post(create_workflow_run))
+        .route("/api/v1/workflow-runs/{run_id}", get(get_workflow_run))
+        .route(
+            "/api/v1/workflow-runs/{run_id}/source-snapshot/content",
+            get(get_workflow_run_source_snapshot_content),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/credential-bindings/{binding_id}/resolved",
+            get(get_workflow_run_credential_binding_resolved),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/workspace-inputs/{input_id}/content",
+            get(get_workflow_run_workspace_input_content),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/produced-files",
+            post(upload_workflow_run_produced_file).get(list_workflow_run_produced_files),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/produced-files/{file_id}/content",
+            get(get_workflow_run_produced_file_content),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/state",
+            post(transition_workflow_run_state),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/cancel",
+            post(cancel_workflow_run),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/events",
+            get(get_workflow_run_events),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/logs",
+            get(get_workflow_run_logs).post(append_workflow_run_log),
+        )
+        .route(
+            "/api/v1/automation-tasks",
+            post(create_automation_task).get(list_automation_tasks),
+        )
+        .route(
+            "/api/v1/automation-tasks/{task_id}",
+            get(get_automation_task),
+        )
+        .route(
+            "/api/v1/automation-tasks/{task_id}/state",
+            post(transition_automation_task_state),
+        )
+        .route(
+            "/api/v1/automation-tasks/{task_id}/cancel",
+            post(cancel_automation_task),
+        )
+        .route(
+            "/api/v1/automation-tasks/{task_id}/events",
+            get(get_automation_task_events),
+        )
+        .route(
+            "/api/v1/automation-tasks/{task_id}/logs",
+            get(get_automation_task_logs).post(append_automation_task_log),
+        )
         .route(
             "/api/v1/sessions/{session_id}",
             get(get_session).delete(delete_session),
@@ -1235,6 +4201,10 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
             post(issue_session_access_token),
         )
         .route(
+            "/api/v1/sessions/{session_id}/automation-access",
+            post(issue_session_automation_access),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/automation-owner",
             post(set_automation_owner).delete(clear_automation_owner),
         )
@@ -1249,6 +4219,10 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         .route(
             "/api/v1/recording/operations",
             get(get_recording_operations),
+        )
+        .route(
+            "/api/v1/workflow/operations",
+            get(get_workflow_operations),
         )
         .route("/api/session/status", get(session_status))
         .route("/api/session/mcp-owner", post(set_mcp_owner))
@@ -1289,6 +4263,12 @@ fn map_session_store_error(error: SessionStoreError) -> (StatusCode, Json<ErrorR
                 error: error.to_string(),
             }),
         ),
+        SessionStoreError::NotFound(_) => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
         SessionStoreError::InvalidRequest(_) => (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -1316,6 +4296,78 @@ fn map_recording_artifact_store_error(
             }),
         ),
         RecordingArtifactStoreError::Backend(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+    }
+}
+
+fn map_workspace_file_store_error(
+    error: WorkspaceFileStoreError,
+) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        WorkspaceFileStoreError::InvalidReference(_)
+        | WorkspaceFileStoreError::InvalidFileName(_) => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+        WorkspaceFileStoreError::Backend(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+    }
+}
+
+fn map_workspace_file_content_error(
+    error: WorkspaceFileStoreError,
+) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        WorkspaceFileStoreError::Backend(inner) if inner.kind() == std::io::ErrorKind::NotFound => {
+            (
+                StatusCode::GONE,
+                Json(ErrorResponse {
+                    error: "workspace file content is no longer available".to_string(),
+                }),
+            )
+        }
+        other => map_workspace_file_store_error(other),
+    }
+}
+
+fn map_credential_provider_error(
+    error: CredentialProviderError,
+) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        CredentialProviderError::InvalidRequest(_) => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+        CredentialProviderError::Backend(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+    }
+}
+
+fn map_workflow_source_error(error: WorkflowSourceError) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        WorkflowSourceError::Invalid(_) => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        ),
+        WorkflowSourceError::Resolve(_) | WorkflowSourceError::Materialize(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorResponse {
                 error: error.to_string(),
@@ -1384,6 +4436,25 @@ async fn authorize_runtime_session_request(
 ) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
     let session = authorize_visible_session_request(headers, state, session_id).await?;
 
+    ensure_runtime_candidate_session(session, session_id)
+}
+
+async fn authorize_runtime_session_request_with_automation_access(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    let session =
+        authorize_visible_session_request_with_automation_access(headers, state, session_id)
+            .await?;
+
+    ensure_runtime_candidate_session(session, session_id)
+}
+
+fn ensure_runtime_candidate_session(
+    session: StoredSession,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
     if !matches!(
         session.state,
         SessionLifecycleState::Pending
@@ -1403,6 +4474,201 @@ async fn authorize_runtime_session_request(
     }
 
     Ok(session)
+}
+
+async fn prepare_runtime_access_session(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    let stored = state
+        .session_store
+        .get_session_for_principal(principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+    let was_stopped = stored.state == SessionLifecycleState::Stopped;
+
+    let connectable = if was_stopped {
+        let prepared = state
+            .session_store
+            .prepare_session_for_connect(session_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("session {session_id} not found"),
+                    }),
+                )
+            })?;
+        schedule_idle_session_stop(
+            session_id,
+            state.idle_stop_timeout,
+            state.registry.clone(),
+            state.session_store.clone(),
+            state.session_manager.clone(),
+            state.recording_lifecycle.clone(),
+        );
+        prepared
+    } else {
+        stored
+    };
+
+    if let Err(error) = state
+        .recording_lifecycle
+        .ensure_auto_recording(&connectable)
+        .await
+    {
+        if was_stopped {
+            let _ = state.session_store.stop_session_if_idle(session_id).await;
+            state.session_manager.release(session_id).await;
+            state.registry.remove_session(session_id).await;
+        }
+        return Err(map_recording_lifecycle_error(error));
+    }
+
+    if !connectable.state.is_runtime_candidate() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "session {session_id} is not connectable in state {}",
+                    connectable.state.as_str()
+                ),
+            }),
+        ));
+    }
+
+    Ok(connectable)
+}
+
+async fn authorize_visible_session_request_with_automation_access(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
+    if extract_bearer_token(headers).is_some() {
+        match authorize_visible_session_request(headers, state, session_id).await {
+            Ok(session) => return Ok(session),
+            Err(error) if extract_automation_access_token(headers).is_none() => return Err(error),
+            Err(_) => {}
+        }
+    }
+
+    let claims = validate_automation_access_request(headers, state, session_id)?;
+    let session = state
+        .session_store
+        .get_session_by_id(session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+    if !automation_access_claims_match_session(&claims, &session) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "automation access token is no longer valid for this session".to_string(),
+            }),
+        ));
+    }
+
+    Ok(session)
+}
+
+async fn authorize_runtime_access_principal_with_automation_access(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<AuthenticatedPrincipal, (StatusCode, Json<ErrorResponse>)> {
+    match authorize_api_request(headers, &state.auth_validator).await {
+        Ok(principal) => Ok(principal),
+        Err(error) if extract_automation_access_token(headers).is_none() => Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse { error }),
+        )),
+        Err(_) => {
+            let claims = validate_automation_access_request(headers, state, session_id)?;
+            Ok(AuthenticatedPrincipal {
+                subject: claims.subject,
+                issuer: claims.issuer,
+                display_name: None,
+                client_id: claims.client_id,
+            })
+        }
+    }
+}
+
+fn validate_automation_access_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+) -> Result<SessionAutomationAccessTokenClaims, (StatusCode, Json<ErrorResponse>)> {
+    let claims = validate_any_automation_access_request(headers, state)?;
+    if claims.session_id != session_id {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "session automation access token does not match the requested session"
+                    .to_string(),
+            }),
+        ));
+    }
+    Ok(claims)
+}
+
+fn validate_any_automation_access_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+) -> Result<SessionAutomationAccessTokenClaims, (StatusCode, Json<ErrorResponse>)> {
+    let token = extract_automation_access_token(headers).ok_or_else(|| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorResponse {
+                error: "missing bearer token or session automation access token".to_string(),
+            }),
+        )
+    })?;
+    state
+        .automation_access_token_manager
+        .validate_token(token)
+        .map_err(|error| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: format!("invalid session automation access token: {error}"),
+                }),
+            )
+        })
+}
+
+fn automation_access_claims_match_session(
+    claims: &SessionAutomationAccessTokenClaims,
+    session: &StoredSession,
+) -> bool {
+    if session.owner.subject == claims.subject && session.owner.issuer == claims.issuer {
+        return true;
+    }
+
+    let Some(delegate) = &session.automation_delegate else {
+        return false;
+    };
+    claims.issuer == delegate.issuer
+        && claims.client_id.as_deref() == Some(delegate.client_id.as_str())
 }
 
 async fn load_session_recording(
@@ -1449,6 +4715,79 @@ fn latest_recording(recordings: &[StoredSessionRecording]) -> Option<&StoredSess
             .cmp(&right.updated_at)
             .then_with(|| left.created_at.cmp(&right.created_at))
     })
+}
+
+async fn build_workflow_run_resource(
+    state: &ApiState,
+    run: &StoredWorkflowRun,
+) -> Result<WorkflowRunResource, (StatusCode, Json<ErrorResponse>)> {
+    let recordings = state
+        .session_store
+        .list_recordings_for_session(run.session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .filter(|recording| workflow_run_recording_matches(run, recording, Utc::now()))
+        .map(workflow_run_recording_resource)
+        .collect::<Vec<_>>();
+    Ok(run.to_resource(
+        recordings,
+        workflow_run_retention_resource(state, run),
+    ))
+}
+
+fn workflow_run_recording_matches(
+    run: &StoredWorkflowRun,
+    recording: &StoredSessionRecording,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    let run_started_at = run.started_at.unwrap_or(run.created_at);
+    let run_ended_at = run.completed_at.unwrap_or(now);
+    let recording_ended_at = recording.completed_at.unwrap_or(now);
+    recording.started_at <= run_ended_at && recording_ended_at >= run_started_at
+}
+
+fn workflow_run_recording_resource(
+    recording: StoredSessionRecording,
+) -> WorkflowRunRecordingResource {
+    WorkflowRunRecordingResource {
+        id: recording.id,
+        session_id: recording.session_id,
+        state: recording.state.as_str().to_string(),
+        format: recording.format.as_str().to_string(),
+        mime_type: recording.mime_type,
+        bytes: recording.bytes,
+        duration_ms: recording.duration_ms,
+        error: recording.error,
+        termination_reason: recording
+            .termination_reason
+            .map(|reason| reason.as_str().to_string()),
+        previous_recording_id: recording.previous_recording_id,
+        started_at: recording.started_at,
+        completed_at: recording.completed_at,
+        content_path: format!(
+            "/api/v1/sessions/{}/recordings/{}/content",
+            recording.session_id, recording.id
+        ),
+        created_at: recording.created_at,
+        updated_at: recording.updated_at,
+    }
+}
+
+fn workflow_run_retention_resource(
+    state: &ApiState,
+    run: &StoredWorkflowRun,
+) -> WorkflowRunRetentionResource {
+    let output_expire_at = run
+        .completed_at
+        .and_then(|completed_at| state.workflow_output_retention.map(|retention| completed_at + retention));
+    let logs_expire_at = run
+        .completed_at
+        .and_then(|completed_at| state.workflow_log_retention.map(|retention| completed_at + retention));
+    WorkflowRunRetentionResource {
+        logs_expire_at,
+        output_expire_at,
+    }
 }
 
 async fn authorize_visible_session_request(

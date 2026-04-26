@@ -94,6 +94,7 @@ COPY deploy/xorg-dummy.conf /etc/X11/xorg-dummy.conf
 COPY deploy/chromium-policies/managed /etc/chromium/policies/managed
 COPY deploy/start-host.sh /usr/local/bin/start-host.sh
 COPY deploy/bpane-ext /home/bpane/bpane-ext
+COPY deploy/bpane-test-extension /home/bpane/bpane-test-extension
 RUN chmod +x /usr/local/bin/start-host.sh
 
 USER bpane

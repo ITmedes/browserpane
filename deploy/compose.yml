@@ -43,6 +43,20 @@ services:
     networks:
       - bpane-internal
 
+  vault:
+    image: hashicorp/vault:1.19
+    command:
+      - server
+      - -dev
+      - -dev-root-token-id=browserpane-dev-root
+      - -dev-listen-address=0.0.0.0:8200
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - bpane-internal
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.2
     command:
@@ -105,9 +119,22 @@ services:
       --oidc-audience bpane-gateway
       --oidc-jwks-url http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/certs
       --database-url postgres://browserpane:browserpane-dev@postgres:5432/browserpane
+      --credential-vault-addr ${BPANE_CREDENTIAL_VAULT_ADDR:-http://vault:8200}
+      --credential-vault-token ${BPANE_CREDENTIAL_VAULT_TOKEN:-browserpane-dev-root}
+      --credential-vault-mount-path ${BPANE_CREDENTIAL_VAULT_MOUNT_PATH:-secret}
+      --credential-vault-prefix ${BPANE_CREDENTIAL_VAULT_PREFIX:-browserpane/credential-bindings}
       --public-gateway-url https://localhost:4433
       --cert /certs/cert.pem
       --key /certs/cert.key
+      --workflow-worker-docker-bin ${BPANE_WORKFLOW_WORKER_DOCKER_BIN:-docker}
+      --workflow-worker-image ${BPANE_WORKFLOW_WORKER_IMAGE:-deploy-workflow-worker}
+      --workflow-worker-network ${BPANE_WORKFLOW_WORKER_NETWORK:-deploy_bpane-internal}
+      --workflow-worker-container-name-prefix ${BPANE_WORKFLOW_WORKER_CONTAINER_NAME_PREFIX:-bpane-workflow}
+      --workflow-worker-api-url ${BPANE_WORKFLOW_WORKER_API_URL:-http://gateway:8932}
+      --workflow-worker-work-root ${BPANE_WORKFLOW_WORKER_WORK_ROOT:-/tmp/bpane-workflows}
+      --workflow-worker-oidc-token-url ${BPANE_WORKFLOW_WORKER_OIDC_TOKEN_URL:-http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token}
+      --workflow-worker-oidc-client-id ${BPANE_WORKFLOW_WORKER_OIDC_CLIENT_ID:-bpane-mcp-bridge}
+      --workflow-worker-oidc-client-secret ${BPANE_WORKFLOW_WORKER_OIDC_CLIENT_SECRET:-bpane-mcp-bridge-secret}
     ports:
       - "4433:4433/udp"
       - "4433:4433/tcp"
@@ -117,6 +144,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./host-runtime.env:/runtime/host-runtime.env:ro
       - ../dev/certs:/certs:ro
+      - ..:/workspace:ro
     depends_on:
       host:
         condition: service_started
@@ -124,6 +152,8 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
+      vault:
+        condition: service_started
     networks:
       - bpane-internal
 
@@ -173,6 +203,25 @@ services:
       - gateway
       - host
       - keycloak
+    networks:
+      - bpane-internal
+
+  workflow-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.workflow-worker
+    profiles: ["workflow"]
+    environment:
+      BPANE_GATEWAY_API_URL: "http://gateway:8932"
+      BPANE_GATEWAY_OIDC_TOKEN_URL: "http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token"
+      BPANE_GATEWAY_OIDC_CLIENT_ID: "bpane-mcp-bridge"
+      BPANE_GATEWAY_OIDC_CLIENT_SECRET: "bpane-mcp-bridge-secret"
+      BPANE_GATEWAY_OIDC_SCOPES: ""
+      BPANE_WORKFLOW_WORK_ROOT: "/tmp/bpane-workflows"
+    depends_on:
+      - gateway
+      - keycloak
+      - host
     networks:
       - bpane-internal
 

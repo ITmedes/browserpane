@@ -17,6 +17,11 @@ tags:
   - name: Session Runtime
   - name: Session Recordings
   - name: Session Automation
+  - name: Automation Tasks
+  - name: Credential Bindings
+  - name: Extensions
+  - name: File Workspaces
+  - name: Workflows
 security:
   - bearerAuth: []
 paths:
@@ -59,6 +64,1024 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks:
+    get:
+      tags: [Automation Tasks]
+      summary: List automation tasks visible to the authenticated owner
+      operationId: listAutomationTasks
+      responses:
+        '200':
+          description: Automation task list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Automation Tasks]
+      summary: Create a new automation task
+      operationId: createAutomationTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAutomationTaskRequest'
+      responses:
+        '201':
+          description: Automation task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks/{task_id}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Automation Tasks]
+      summary: Fetch one automation task
+      operationId: getAutomationTask
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Automation task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks/{task_id}/state:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [Automation Tasks]
+      summary: Transition an automation task through executor-owned state updates
+      operationId: transitionAutomationTaskState
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitionAutomationTaskRequest'
+      responses:
+        '200':
+          description: Updated automation task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks/{task_id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [Automation Tasks]
+      summary: Cancel an automation task that is not yet terminal
+      operationId: cancelAutomationTask
+      responses:
+        '200':
+          description: Updated automation task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks/{task_id}/events:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Automation Tasks]
+      summary: List persisted events for one automation task
+      operationId: getAutomationTaskEvents
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Automation task event list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskEventListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/automation-tasks/{task_id}/logs:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Automation Tasks]
+      summary: List persisted log lines for one automation task
+      operationId: getAutomationTaskLogs
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Automation task log list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskLogListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Automation Tasks]
+      summary: Append a persisted log line for one automation task
+      operationId: appendAutomationTaskLog
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppendAutomationTaskLogRequest'
+      responses:
+        '200':
+          description: Persisted automation task log line
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationTaskLogResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows:
+    get:
+      tags: [Workflows]
+      summary: List workflow definitions visible to the authenticated owner
+      operationId: listWorkflowDefinitions
+      responses:
+        '200':
+          description: Workflow definition list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Workflows]
+      summary: Create a workflow definition
+      operationId: createWorkflowDefinition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkflowDefinitionRequest'
+      responses:
+        '201':
+          description: Workflow definition created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    get:
+      tags: [Workflows]
+      summary: Fetch one workflow definition
+      operationId: getWorkflowDefinition
+      responses:
+        '200':
+          description: Workflow definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}/versions:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    post:
+      tags: [Workflows]
+      summary: Create an immutable workflow definition version
+      operationId: createWorkflowDefinitionVersion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkflowDefinitionVersionRequest'
+      responses:
+        '201':
+          description: Workflow definition version created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionVersionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}/versions/{version}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/WorkflowVersion'
+    get:
+      tags: [Workflows]
+      summary: Fetch one workflow definition version
+      operationId: getWorkflowDefinitionVersion
+      responses:
+        '200':
+          description: Workflow definition version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionVersionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs:
+    post:
+      tags: [Workflows]
+      summary: Invoke a workflow definition version
+      operationId: createWorkflowRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkflowRunRequest'
+      responses:
+        '201':
+          description: Workflow run created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Workflows]
+      summary: Fetch one workflow run
+      operationId: getWorkflowRun
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/source-snapshot/content:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Workflows]
+      summary: Download the immutable source snapshot archive for a workflow run
+      operationId: getWorkflowRunSourceSnapshotContent
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run source snapshot archive
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/credential-bindings/{binding_id}/resolved:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/CredentialBindingId'
+    get:
+      tags: [Workflows]
+      summary: Resolve one workflow run credential binding through session automation access
+      operationId: getWorkflowRunCredentialBindingResolved
+      security:
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run credential binding with resolved secret payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolvedWorkflowRunCredentialBindingResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/workspace-inputs/{input_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/RunWorkspaceInputId'
+    get:
+      tags: [Workflows]
+      summary: Download one workflow run workspace input
+      operationId: getWorkflowRunWorkspaceInputContent
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run workspace input content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/produced-files:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Workflows]
+      summary: List workflow-run produced files linked to a visible run
+      operationId: listWorkflowRunProducedFiles
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run produced file list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunProducedFileListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Workflows]
+      summary: Upload a produced file and link it to a workflow run
+      operationId: uploadWorkflowRunProducedFile
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/BPaneWorkflowWorkspaceId'
+        - $ref: '#/components/parameters/BPaneFileName'
+        - $ref: '#/components/parameters/BPaneFileProvenance'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '201':
+          description: Produced file metadata created and linked to the workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunProducedFileResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/produced-files/{file_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [Workflows]
+      summary: Download one workflow-run produced file
+      operationId: getWorkflowRunProducedFileContent
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run produced file content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/state:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Workflows]
+      summary: Transition a workflow run through executor-owned state updates
+      operationId: transitionWorkflowRunState
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitionWorkflowRunRequest'
+      responses:
+        '200':
+          description: Updated workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Workflows]
+      summary: Cancel a workflow run by cancelling its active automation task
+      operationId: cancelWorkflowRun
+      responses:
+        '200':
+          description: Updated workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/events:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Workflows]
+      summary: List workflow run events, including child automation task events
+      operationId: getWorkflowRunEvents
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run event list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunEventListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/logs:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Workflows]
+      summary: List workflow run logs, including child automation task logs
+      operationId: getWorkflowRunLogs
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Workflow run log list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunLogListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Workflows]
+      summary: Append a persisted workflow-run log line
+      operationId: appendWorkflowRunLog
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppendWorkflowRunLogRequest'
+      responses:
+        '200':
+          description: Persisted workflow run log line
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunLogResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow/operations:
+    get:
+      tags: [Workflows]
+      summary: Read gateway-local workflow artifact and retention counters
+      operationId: getWorkflowOperations
+      responses:
+        '200':
+          description: Workflow operation snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowObservabilitySnapshot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/extensions:
+    get:
+      tags: [Extensions]
+      summary: List extension definitions visible to the authenticated owner
+      operationId: listExtensions
+      responses:
+        '200':
+          description: Extension definition list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDefinitionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Extensions]
+      summary: Create an approved browser extension reference
+      operationId: createExtension
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExtensionDefinitionRequest'
+      responses:
+        '201':
+          description: Extension definition created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDefinitionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/extensions/{extension_id}:
+    parameters:
+      - $ref: '#/components/parameters/ExtensionId'
+    get:
+      tags: [Extensions]
+      summary: Fetch one extension definition visible to the authenticated owner
+      operationId: getExtension
+      responses:
+        '200':
+          description: Extension definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDefinitionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/extensions/{extension_id}/versions:
+    parameters:
+      - $ref: '#/components/parameters/ExtensionId'
+    post:
+      tags: [Extensions]
+      summary: Publish a new installed version for an extension definition
+      operationId: createExtensionVersion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExtensionVersionRequest'
+      responses:
+        '201':
+          description: Extension version created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionVersionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/extensions/{extension_id}/enable:
+    parameters:
+      - $ref: '#/components/parameters/ExtensionId'
+    post:
+      tags: [Extensions]
+      summary: Enable an extension definition for future session use
+      operationId: enableExtension
+      responses:
+        '200':
+          description: Extension definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDefinitionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/extensions/{extension_id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/ExtensionId'
+    post:
+      tags: [Extensions]
+      summary: Disable an extension definition for future session use
+      operationId: disableExtension
+      responses:
+        '200':
+          description: Extension definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionDefinitionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/credential-bindings:
+    get:
+      tags: [Credential Bindings]
+      summary: List credential bindings visible to the authenticated owner
+      operationId: listCredentialBindings
+      responses:
+        '200':
+          description: Credential binding list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialBindingListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Credential Bindings]
+      summary: Create a credential binding and optionally store its secret payload
+      operationId: createCredentialBinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCredentialBindingRequest'
+      responses:
+        '201':
+          description: Credential binding created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialBindingResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/credential-bindings/{binding_id}:
+    parameters:
+      - $ref: '#/components/parameters/CredentialBindingId'
+    get:
+      tags: [Credential Bindings]
+      summary: Fetch one credential binding visible to the authenticated owner
+      operationId: getCredentialBinding
+      responses:
+        '200':
+          description: Credential binding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialBindingResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/file-workspaces:
+    get:
+      tags: [File Workspaces]
+      summary: List file workspaces visible to the authenticated owner
+      operationId: listFileWorkspaces
+      responses:
+        '200':
+          description: File workspace list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [File Workspaces]
+      summary: Create a file workspace for reusable workflow inputs or outputs
+      operationId: createFileWorkspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFileWorkspaceRequest'
+      responses:
+        '201':
+          description: File workspace created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/file-workspaces/{workspace_id}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [File Workspaces]
+      summary: Fetch one file workspace
+      operationId: getFileWorkspace
+      responses:
+        '200':
+          description: File workspace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/file-workspaces/{workspace_id}/files:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags: [File Workspaces]
+      summary: List file metadata within one workspace
+      operationId: listFileWorkspaceFiles
+      responses:
+        '200':
+          description: File workspace file list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceFileListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [File Workspaces]
+      summary: Upload raw file content into one workspace
+      operationId: uploadFileWorkspaceFile
+      parameters:
+        - $ref: '#/components/parameters/BPaneFileName'
+        - $ref: '#/components/parameters/BPaneFileProvenance'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '201':
+          description: File metadata created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceFileResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/file-workspaces/{workspace_id}/files/{file_id}:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [File Workspaces]
+      summary: Fetch one workspace file metadata resource
+      operationId: getFileWorkspaceFile
+      responses:
+        '200':
+          description: File metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceFileResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    delete:
+      tags: [File Workspaces]
+      summary: Delete one workspace file and its stored artifact
+      operationId: deleteFileWorkspaceFile
+      responses:
+        '200':
+          description: Deleted file metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileWorkspaceFileResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/file-workspaces/{workspace_id}/files/{file_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/WorkspaceId'
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [File Workspaces]
+      summary: Download raw file content for one workspace file
+      operationId: getFileWorkspaceFileContent
+      responses:
+        '200':
+          description: Raw file bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}:
@@ -374,6 +1397,28 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/automation-access:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Session Automation]
+      summary: Mint short-lived automation access for one session runtime
+      operationId: issueSessionAutomationAccess
+      responses:
+        '200':
+          description: Session-scoped automation access issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionAutomationAccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/status:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -381,6 +1426,9 @@ paths:
       tags: [Session Runtime]
       summary: Get live runtime telemetry for a runtime-compatible session
       operationId: getSessionStatus
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       responses:
         '200':
           description: Live runtime telemetry snapshot
@@ -446,6 +1494,9 @@ paths:
       tags: [Session Automation]
       summary: Claim MCP ownership for a runtime-compatible session
       operationId: setSessionMcpOwner
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       requestBody:
         required: true
         content:
@@ -471,6 +1522,9 @@ paths:
       tags: [Session Automation]
       summary: Release MCP ownership for a runtime-compatible session
       operationId: clearSessionMcpOwner
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
       responses:
         '200':
           description: MCP ownership released
@@ -492,6 +1546,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    sessionAutomationAccessToken:
+      type: apiKey
+      in: header
+      name: x-bpane-automation-access-token
   parameters:
     SessionId:
       name: session_id
@@ -507,6 +1565,89 @@ components:
       schema:
         type: string
         format: uuid
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WorkflowId:
+      name: workflow_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WorkflowVersion:
+      name: version
+      in: path
+      required: true
+      schema:
+        type: string
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RunWorkspaceInputId:
+      name: input_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CredentialBindingId:
+      name: binding_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ExtensionId:
+      name: extension_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WorkspaceId:
+      name: workspace_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FileId:
+      name: file_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BPaneFileName:
+      name: x-bpane-file-name
+      in: header
+      required: true
+      schema:
+        type: string
+    BPaneFileProvenance:
+      name: x-bpane-file-provenance
+      in: header
+      required: false
+      schema:
+        type: string
+      description: JSON-encoded provenance object associated with the uploaded file
+    BPaneWorkflowWorkspaceId:
+      name: x-bpane-workflow-workspace-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Allowed file workspace that should receive the uploaded workflow artifact
   responses:
     BadRequest:
       description: Request validation failed
@@ -645,6 +1786,1249 @@ components:
           type: integer
           nullable: true
           minimum: 1
+    AutomationTaskState:
+      type: string
+      enum:
+        - pending
+        - starting
+        - running
+        - awaiting_input
+        - succeeded
+        - failed
+        - cancelled
+        - timed_out
+    AutomationTaskSessionSource:
+      type: string
+      enum:
+        - existing_session
+        - created_session
+    AutomationTaskLogStream:
+      type: string
+      enum:
+        - stdout
+        - stderr
+        - system
+    AutomationTaskSessionBinding:
+      type: object
+      required: [source, session_id]
+      properties:
+        source:
+          $ref: '#/components/schemas/AutomationTaskSessionSource'
+        session_id:
+          type: string
+          format: uuid
+    CreateAutomationTaskSessionRequest:
+      type: object
+      properties:
+        existing_session_id:
+          type: string
+          format: uuid
+          nullable: true
+        create_session:
+          allOf:
+            - $ref: '#/components/schemas/CreateSessionRequest'
+          nullable: true
+    CreateAutomationTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [executor, session]
+      properties:
+        display_name:
+          type: string
+          nullable: true
+        executor:
+          type: string
+        session:
+          $ref: '#/components/schemas/CreateAutomationTaskSessionRequest'
+        input:
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    TransitionAutomationTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state:
+          $ref: '#/components/schemas/AutomationTaskState'
+        output:
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        artifact_refs:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+          nullable: true
+        data:
+          nullable: true
+    AppendAutomationTaskLogRequest:
+      type: object
+      additionalProperties: false
+      required: [stream, message]
+      properties:
+        stream:
+          $ref: '#/components/schemas/AutomationTaskLogStream'
+        message:
+          type: string
+    AutomationTaskResource:
+      type: object
+      required:
+        - id
+        - display_name
+        - executor
+        - state
+        - session
+        - input
+        - output
+        - error
+        - artifact_refs
+        - labels
+        - cancel_requested_at
+        - started_at
+        - completed_at
+        - logs_path
+        - events_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+          nullable: true
+        executor:
+          type: string
+        state:
+          $ref: '#/components/schemas/AutomationTaskState'
+        session:
+          $ref: '#/components/schemas/AutomationTaskSessionBinding'
+        input:
+          nullable: true
+        output:
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        artifact_refs:
+          type: array
+          items:
+            type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        cancel_requested_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        logs_path:
+          type: string
+        events_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AutomationTaskListResponse:
+      type: object
+      required: [tasks]
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationTaskResource'
+    AutomationTaskEventResource:
+      type: object
+      required: [id, task_id, event_type, message, data, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        message:
+          type: string
+        data:
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    AutomationTaskEventListResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationTaskEventResource'
+    AutomationTaskLogResource:
+      type: object
+      required: [id, task_id, stream, message, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        stream:
+          $ref: '#/components/schemas/AutomationTaskLogStream'
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    AutomationTaskLogListResponse:
+      type: object
+      required: [logs]
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationTaskLogResource'
+    CredentialBindingProvider:
+      type: string
+      enum:
+        - vault_kv_v2
+    CredentialInjectionMode:
+      type: string
+      enum:
+        - form_fill
+        - cookie_seed
+        - storage_seed
+        - totp_fill
+    CredentialTotpMetadata:
+      type: object
+      properties:
+        issuer:
+          type: string
+          nullable: true
+        account_name:
+          type: string
+          nullable: true
+        period_sec:
+          type: integer
+          nullable: true
+          minimum: 1
+        digits:
+          type: integer
+          nullable: true
+          minimum: 1
+    CreateCredentialBindingRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - provider
+        - injection_mode
+      properties:
+        name:
+          type: string
+        provider:
+          $ref: '#/components/schemas/CredentialBindingProvider'
+        external_ref:
+          type: string
+          nullable: true
+          description: >
+            Existing provider reference. If omitted, `secret_payload` must be supplied and
+            the gateway will create a provider-managed reference.
+        namespace:
+          type: string
+          nullable: true
+        allowed_origins:
+          type: array
+          items:
+            type: string
+        injection_mode:
+          $ref: '#/components/schemas/CredentialInjectionMode'
+        totp:
+          allOf:
+            - $ref: '#/components/schemas/CredentialTotpMetadata'
+          nullable: true
+        secret_payload:
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    CredentialBindingResource:
+      type: object
+      required:
+        - id
+        - name
+        - provider
+        - external_ref
+        - namespace
+        - allowed_origins
+        - injection_mode
+        - totp
+        - labels
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        provider:
+          $ref: '#/components/schemas/CredentialBindingProvider'
+        external_ref:
+          type: string
+        namespace:
+          type: string
+          nullable: true
+        allowed_origins:
+          type: array
+          items:
+            type: string
+        injection_mode:
+          $ref: '#/components/schemas/CredentialInjectionMode'
+        totp:
+          allOf:
+            - $ref: '#/components/schemas/CredentialTotpMetadata'
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CredentialBindingListResponse:
+      type: object
+      required: [credential_bindings]
+      properties:
+        credential_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/CredentialBindingResource'
+    CreateExtensionDefinitionRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    CreateExtensionVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [version, install_path]
+      properties:
+        version:
+          type: string
+        install_path:
+          type: string
+    ExtensionDefinitionResource:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - enabled
+        - latest_version
+        - labels
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        latest_version:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ExtensionDefinitionListResponse:
+      type: object
+      required: [extensions]
+      properties:
+        extensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtensionDefinitionResource'
+    ExtensionVersionResource:
+      type: object
+      required:
+        - id
+        - extension_definition_id
+        - version
+        - install_path
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        extension_definition_id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        install_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    AppliedExtensionResource:
+      type: object
+      required:
+        - extension_id
+        - extension_version_id
+        - name
+        - version
+      properties:
+        extension_id:
+          type: string
+          format: uuid
+        extension_version_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        version:
+          type: string
+    CreateFileWorkspaceRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    FileWorkspaceResource:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - labels
+        - files_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        files_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    FileWorkspaceListResponse:
+      type: object
+      required: [workspaces]
+      properties:
+        workspaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileWorkspaceResource'
+    FileWorkspaceFileResource:
+      type: object
+      required:
+        - id
+        - workspace_id
+        - name
+        - media_type
+        - byte_count
+        - sha256_hex
+        - provenance
+        - content_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        media_type:
+          type: string
+          nullable: true
+        byte_count:
+          type: integer
+          minimum: 0
+        sha256_hex:
+          type: string
+        provenance:
+          type: object
+          nullable: true
+          additionalProperties: true
+        content_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    FileWorkspaceFileListResponse:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileWorkspaceFileResource'
+    WorkflowRunState:
+      type: string
+      enum:
+        - pending
+        - starting
+        - running
+        - awaiting_input
+        - succeeded
+        - failed
+        - cancelled
+        - timed_out
+    WorkflowRunEventSource:
+      type: string
+      enum:
+        - run
+        - automation_task
+    WorkflowRunLogSource:
+      type: string
+      enum:
+        - run
+        - automation_task
+    CreateWorkflowDefinitionRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    WorkflowDefinitionResource:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - labels
+        - latest_version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        latest_version:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowDefinitionListResponse:
+      type: object
+      required: [workflows]
+      properties:
+        workflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowDefinitionResource'
+    CreateWorkflowDefinitionVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [version, executor, entrypoint]
+      properties:
+        version:
+          type: string
+        executor:
+          type: string
+        entrypoint:
+          type: string
+        source:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowSource'
+          nullable: true
+        input_schema:
+          nullable: true
+        output_schema:
+          nullable: true
+        default_session:
+          nullable: true
+        allowed_credential_binding_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        allowed_extension_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        allowed_file_workspace_ids:
+          type: array
+          items:
+            type: string
+    WorkflowDefinitionVersionResource:
+      type: object
+      required:
+        - id
+        - workflow_definition_id
+        - version
+        - executor
+        - entrypoint
+        - source
+        - input_schema
+        - output_schema
+        - default_session
+        - allowed_credential_binding_ids
+        - allowed_extension_ids
+        - allowed_file_workspace_ids
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_definition_id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        executor:
+          type: string
+        entrypoint:
+          type: string
+        source:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowSource'
+          nullable: true
+        input_schema:
+          nullable: true
+        output_schema:
+          nullable: true
+        default_session:
+          nullable: true
+        allowed_credential_binding_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        allowed_extension_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        allowed_file_workspace_ids:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+    WorkflowSource:
+      oneOf:
+        - $ref: '#/components/schemas/WorkflowGitSource'
+      discriminator:
+        propertyName: kind
+        mapping:
+          git: '#/components/schemas/WorkflowGitSource'
+    WorkflowGitSource:
+      type: object
+      required:
+        - kind
+        - repository_url
+        - ref
+        - resolved_commit
+        - root_path
+      properties:
+        kind:
+          type: string
+          enum: [git]
+        repository_url:
+          type: string
+        ref:
+          type: string
+          nullable: true
+        resolved_commit:
+          type: string
+          nullable: true
+        root_path:
+          type: string
+          nullable: true
+    CreateWorkflowRunRequest:
+      type: object
+      additionalProperties: false
+      required: [workflow_id, version]
+      properties:
+        workflow_id:
+          type: string
+          format: uuid
+        version:
+          type: string
+        session:
+          allOf:
+            - $ref: '#/components/schemas/CreateAutomationTaskSessionRequest'
+          nullable: true
+        input:
+          nullable: true
+        credential_binding_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        workspace_inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateWorkflowRunWorkspaceInputRequest'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    CreateWorkflowRunWorkspaceInputRequest:
+      type: object
+      additionalProperties: false
+      required: [workspace_id, file_id]
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        mount_path:
+          type: string
+          nullable: true
+    TransitionWorkflowRunRequest:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state:
+          $ref: '#/components/schemas/WorkflowRunState'
+        output:
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        artifact_refs:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+          nullable: true
+        data:
+          nullable: true
+    AppendWorkflowRunLogRequest:
+      type: object
+      additionalProperties: false
+      required: [stream, message]
+      properties:
+        stream:
+          $ref: '#/components/schemas/AutomationTaskLogStream'
+        message:
+          type: string
+    WorkflowRunSourceSnapshotResource:
+      type: object
+      required:
+        - source
+        - entrypoint
+        - workspace_id
+        - file_id
+        - file_name
+        - media_type
+        - content_path
+      properties:
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+        entrypoint:
+          type: string
+        workspace_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+        media_type:
+          type: string
+          nullable: true
+        content_path:
+          type: string
+    WorkflowRunWorkspaceInputResource:
+      type: object
+      required:
+        - id
+        - workspace_id
+        - file_id
+        - file_name
+        - media_type
+        - byte_count
+        - sha256_hex
+        - provenance
+        - mount_path
+        - content_path
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+        media_type:
+          type: string
+          nullable: true
+        byte_count:
+          type: integer
+          format: int64
+          minimum: 0
+        sha256_hex:
+          type: string
+        provenance:
+          nullable: true
+        mount_path:
+          type: string
+        content_path:
+          type: string
+    WorkflowRunCredentialBindingResource:
+      type: object
+      required:
+        - id
+        - name
+        - provider
+        - namespace
+        - allowed_origins
+        - injection_mode
+        - totp
+        - resolve_path
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        provider:
+          $ref: '#/components/schemas/CredentialBindingProvider'
+        namespace:
+          type: string
+          nullable: true
+        allowed_origins:
+          type: array
+          items:
+            type: string
+        injection_mode:
+          $ref: '#/components/schemas/CredentialInjectionMode'
+        totp:
+          allOf:
+            - $ref: '#/components/schemas/CredentialTotpMetadata'
+          nullable: true
+        resolve_path:
+          type: string
+    ResolvedWorkflowRunCredentialBindingResource:
+      type: object
+      required:
+        - binding
+        - payload
+      properties:
+        binding:
+          $ref: '#/components/schemas/WorkflowRunCredentialBindingResource'
+        payload:
+          nullable: true
+    WorkflowRunResource:
+      type: object
+      required:
+        - id
+        - workflow_definition_id
+        - workflow_definition_version_id
+        - workflow_version
+        - state
+        - session_id
+        - automation_task_id
+        - input
+        - output
+        - error
+        - artifact_refs
+        - source_snapshot
+        - extensions
+        - credential_bindings
+        - workspace_inputs
+        - produced_files
+        - recordings
+        - retention
+        - labels
+        - started_at
+        - completed_at
+        - events_path
+        - logs_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_definition_id:
+          type: string
+          format: uuid
+        workflow_definition_version_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: string
+        state:
+          $ref: '#/components/schemas/WorkflowRunState'
+        session_id:
+          type: string
+          format: uuid
+        automation_task_id:
+          type: string
+          format: uuid
+        input:
+          nullable: true
+        output:
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        artifact_refs:
+          type: array
+          items:
+            type: string
+        source_snapshot:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunSourceSnapshotResource'
+          nullable: true
+        extensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppliedExtensionResource'
+        credential_bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunCredentialBindingResource'
+        workspace_inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunWorkspaceInputResource'
+        produced_files:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunProducedFileResource'
+        recordings:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunRecordingResource'
+        retention:
+          $ref: '#/components/schemas/WorkflowRunRetentionResource'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        events_path:
+          type: string
+        logs_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowRunEventResource:
+      type: object
+      required:
+        - id
+        - run_id
+        - source
+        - automation_task_id
+        - event_type
+        - message
+        - data
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        source:
+          $ref: '#/components/schemas/WorkflowRunEventSource'
+        automation_task_id:
+          type: string
+          format: uuid
+          nullable: true
+        event_type:
+          type: string
+        message:
+          type: string
+        data:
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    WorkflowRunEventListResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunEventResource'
+    WorkflowRunLogResource:
+      type: object
+      required:
+        - id
+        - run_id
+        - source
+        - automation_task_id
+        - stream
+        - message
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        source:
+          $ref: '#/components/schemas/WorkflowRunLogSource'
+        automation_task_id:
+          type: string
+          format: uuid
+          nullable: true
+        stream:
+          $ref: '#/components/schemas/AutomationTaskLogStream'
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    WorkflowRunLogListResponse:
+      type: object
+      required: [logs]
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunLogResource'
+    WorkflowRunProducedFileResource:
+      type: object
+      required:
+        - workspace_id
+        - file_id
+        - file_name
+        - media_type
+        - byte_count
+        - sha256_hex
+        - provenance
+        - content_path
+        - created_at
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+        media_type:
+          type: string
+          nullable: true
+        byte_count:
+          type: integer
+          format: int64
+          minimum: 0
+        sha256_hex:
+          type: string
+        provenance:
+          nullable: true
+        content_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    WorkflowRunProducedFileListResponse:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunProducedFileResource'
+    WorkflowRunRecordingResource:
+      type: object
+      required:
+        - id
+        - session_id
+        - state
+        - format
+        - mime_type
+        - bytes
+        - duration_ms
+        - error
+        - termination_reason
+        - previous_recording_id
+        - started_at
+        - completed_at
+        - content_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/SessionRecordingResourceState'
+        format:
+          $ref: '#/components/schemas/SessionRecordingFormat'
+        mime_type:
+          type: string
+          nullable: true
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        termination_reason:
+          allOf:
+            - $ref: '#/components/schemas/SessionRecordingTerminationReason'
+          nullable: true
+        previous_recording_id:
+          type: string
+          format: uuid
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        content_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowRunRetentionResource:
+      type: object
+      required:
+        - logs_expire_at
+        - output_expire_at
+      properties:
+        logs_expire_at:
+          type: string
+          format: date-time
+          nullable: true
+        output_expire_at:
+          type: string
+          format: date-time
+          nullable: true
     SessionConnectInfo:
       type: object
       required:
@@ -670,6 +3054,60 @@ components:
           enum:
             - legacy_single_runtime
             - session_runtime_pool
+    SessionAutomationAccessInfo:
+      type: object
+      required:
+        - endpoint_url
+        - protocol
+        - auth_type
+        - auth_header
+        - status_path
+        - mcp_owner_path
+        - compatibility_mode
+      properties:
+        endpoint_url:
+          type: string
+          format: uri
+        protocol:
+          type: string
+          enum: [chrome_devtools_protocol]
+        auth_type:
+          type: string
+          enum: [session_automation_access_token]
+        auth_header:
+          type: string
+          enum: [x-bpane-automation-access-token]
+        status_path:
+          type: string
+        mcp_owner_path:
+          type: string
+        compatibility_mode:
+          type: string
+          enum:
+            - legacy_single_runtime
+            - session_runtime_pool
+    SessionAutomationAccessResponse:
+      type: object
+      required:
+        - session_id
+        - token_type
+        - token
+        - expires_at
+        - automation
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        token_type:
+          type: string
+          enum: [session_automation_access_token]
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        automation:
+          $ref: '#/components/schemas/SessionAutomationAccessInfo'
     SessionRuntimeInfo:
       type: object
       required: [binding, compatibility_mode, cdp_endpoint]
@@ -702,6 +3140,7 @@ components:
         - idle_timeout_sec
         - labels
         - integration_context
+        - extensions
         - recording
         - connect
         - runtime
@@ -741,6 +3180,10 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        extensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppliedExtensionResource'
         recording:
           $ref: '#/components/schemas/SessionRecordingPolicy'
         connect:
@@ -780,6 +3223,11 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        extension_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
         recording:
           $ref: '#/components/schemas/SessionRecordingPolicy'
     SessionListResponse:
@@ -1346,6 +3794,47 @@ components:
           type: string
           format: date-time
           nullable: true
+        last_retention_pass_at:
+          type: string
+          format: date-time
+          nullable: true
+    WorkflowObservabilitySnapshot:
+      type: object
+      required:
+        - produced_file_uploads_total
+        - produced_file_upload_failures_total
+        - retention_passes_total
+        - log_retention_candidates_total
+        - output_retention_candidates_total
+        - retention_deleted_logs_total
+        - retention_cleared_outputs_total
+        - retention_failures_total
+        - last_retention_pass_at
+      properties:
+        produced_file_uploads_total:
+          type: integer
+          minimum: 0
+        produced_file_upload_failures_total:
+          type: integer
+          minimum: 0
+        retention_passes_total:
+          type: integer
+          minimum: 0
+        log_retention_candidates_total:
+          type: integer
+          minimum: 0
+        output_retention_candidates_total:
+          type: integer
+          minimum: 0
+        retention_deleted_logs_total:
+          type: integer
+          minimum: 0
+        retention_cleared_outputs_total:
+          type: integer
+          minimum: 0
+        retention_failures_total:
+          type: integer
+          minimum: 0
         last_retention_pass_at:
           type: string
           format: date-time
