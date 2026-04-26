@@ -1,8 +1,10 @@
 # BrowserPane
 
-BrowserPane is planned to be a self-hostable remote browser and workflow platform for humans and agents.
+BrowserPane is planned to be a self-hostable remote browser and workflow execution platform for humans and agents.
 
 Most browser automation products stop at managed browsers, CDP endpoints, or live debug links. BrowserPane treats the live browser session itself as the product surface: a real Chromium session that browser users, supervisors, and automation can all attach to with shared-session policy, owner/viewer controls, and persistent session resources.
+
+BrowserPane is intended to be integrated into larger automation and workflow systems. Its workflow layer is primarily about browser-run execution, supervision, artifacts, and human intervention around a live browser session, not about replacing a general scheduler or DAG orchestrator.
 
 It runs a real Chromium session inside a Linux environment, captures that surface on the host, transports it over WebTransport, and renders it in a browser client with a tile-first pipeline plus optional ROI H.264 video for media-heavy regions.
 
@@ -28,6 +30,7 @@ BrowserPane is a strong fit for:
 - collaborative investigation, support, or review sessions
 - regulated or private deployments that need self-hosted browser access
 - workflow systems that need durable session identity, artifacts, logs, and audit history
+- platforms that need a governed browser execution target inside a larger orchestration stack
 
 ## Current Status
 
@@ -42,6 +45,7 @@ Current support and scope:
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
 - Control plane: owner-scoped v1 APIs now cover sessions, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
+- Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 
 ## How The System Is Shaped
 
@@ -268,7 +272,7 @@ Local manual flow:
 
 ### Workflow Platform
 
-BrowserPane now exposes a first-class workflow layer on top of session automation access.
+BrowserPane now exposes a first-class workflow execution layer on top of session automation access.
 
 Current workflow capabilities:
 
@@ -297,6 +301,11 @@ Reusable workflow inputs:
 - `POST /api/v1/file-workspaces`
 - `POST /api/v1/credential-bindings`
 - `POST /api/v1/extensions`
+
+Workflow boundary:
+
+- BrowserPane owns browser-run execution, run state, recordings/artifacts, reusable runtime inputs, and human intervention around the run.
+- External workflow systems should usually own schedules, DAGs, broad retry policy, and cross-system orchestration.
 
 Local usage options:
 
