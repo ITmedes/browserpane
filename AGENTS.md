@@ -137,9 +137,12 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:file-workspaces -- --headless`
 - `npm test`
 - `npm run build`
+- `npm run workflow:cli -- --help`
 - `npm run smoke:recording -- --headless`
 - `npm run smoke:workflow-embed -- --headless`
 - `npm run smoke:workflow-cancel -- --headless`
+- `npm run smoke:workflow-cli -- --headless`
+- `npm run smoke:workflow-credential-injection -- --headless`
 - `npm run smoke:workflow-credentials -- --headless`
 - `npm run smoke:workflow-workspace -- --headless`
 - `npm run smoke:workflows -- --headless`

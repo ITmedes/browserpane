@@ -303,6 +303,9 @@ export async function createLocalWorkflowRepo(prefix, files) {
     repoDir,
     repositoryUrl: `/workspace/${path.basename(repoDir)}`,
     commit,
+    cleanup: async () => {
+      await fs.rm(repoDir, { recursive: true, force: true });
+    },
   };
 }
 
