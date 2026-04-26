@@ -139,10 +139,13 @@ Run these in `code/web/bpane-client`:
 - `npm run build`
 - `npm run smoke:recording -- --headless`
 - `npm run smoke:workflow-embed -- --headless`
+- `npm run smoke:workflow-cancel -- --headless`
 - `npm run smoke:workflow-credentials -- --headless`
 - `npm run smoke:workflow-workspace -- --headless`
 - `npm run smoke:workflows -- --headless`
 - `npm run smoke:workflow-extension -- --headless`
+- `npm run smoke:workflow-failure -- --headless`
+- `npm run smoke:workflow-reconnect -- --headless`
 - `npm run smoke:multisession -- --headless`
 - `npm run test:coverage`
 

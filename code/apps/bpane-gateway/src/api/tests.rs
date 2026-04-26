@@ -4239,7 +4239,7 @@ async fn workflow_runs_can_be_cancelled_and_surface_task_logs() {
         .unwrap();
     assert_eq!(events.status(), StatusCode::OK);
     let events_body = response_json(events).await;
-    assert_eq!(events_body["events"].as_array().unwrap().len(), 4);
+    assert_eq!(events_body["events"].as_array().unwrap().len(), 5);
     let event_types = events_body["events"]
         .as_array()
         .unwrap()
@@ -4249,6 +4249,7 @@ async fn workflow_runs_can_be_cancelled_and_surface_task_logs() {
     assert!(event_types.contains(&"workflow_run.created".to_string()));
     assert!(event_types.contains(&"automation_task.created".to_string()));
     assert!(event_types.contains(&"workflow_run.cancel_requested".to_string()));
+    assert!(event_types.contains(&"workflow_run.cancelled".to_string()));
     assert!(event_types.contains(&"automation_task.cancelled".to_string()));
 
     let logs = app
@@ -4263,6 +4264,10 @@ async fn workflow_runs_can_be_cancelled_and_surface_task_logs() {
         .unwrap();
     assert_eq!(logs.status(), StatusCode::OK);
     let logs_body = response_json(logs).await;
-    assert_eq!(logs_body["logs"].as_array().unwrap().len(), 1);
-    assert_eq!(logs_body["logs"][0]["stream"], "system");
+    let logs = logs_body["logs"].as_array().unwrap();
+    assert_eq!(logs.len(), 2);
+    assert!(logs.iter().all(|log| log["stream"] == "system"));
+    assert!(logs
+        .iter()
+        .any(|log| log["message"] == "workflow run cancelled"));
 }

@@ -3072,7 +3072,7 @@ impl InMemorySessionStore {
         let task = task.clone();
         drop(tasks);
 
-        if let Some(run) = self
+        let workflow_run_id = if let Some(run) = self
             .workflow_runs
             .lock()
             .await
@@ -3080,7 +3080,10 @@ impl InMemorySessionStore {
             .find(|run| run.automation_task_id == id)
         {
             sync_workflow_run_with_task(run, &task);
-        }
+            Some(run.id)
+        } else {
+            None
+        };
 
         self.automation_task_events
             .lock()
@@ -3103,6 +3106,29 @@ impl InMemorySessionStore {
                 message: "automation task cancelled".to_string(),
                 created_at: now,
             });
+        if let Some(run_id) = workflow_run_id {
+            self.workflow_run_events
+                .lock()
+                .await
+                .push(StoredWorkflowRunEvent {
+                    id: Uuid::now_v7(),
+                    run_id,
+                    event_type: "workflow_run.cancelled".to_string(),
+                    message: "workflow run cancelled".to_string(),
+                    data: None,
+                    created_at: now,
+                });
+            self.workflow_run_logs
+                .lock()
+                .await
+                .push(StoredWorkflowRunLog {
+                    id: Uuid::now_v7(),
+                    run_id,
+                    stream: AutomationTaskLogStream::System,
+                    message: "workflow run cancelled".to_string(),
+                    created_at: now,
+                });
+        }
         Ok(Some(task))
     }
 
@@ -6156,7 +6182,7 @@ impl PostgresSessionStore {
             })?;
 
         let task = row_to_stored_automation_task(&row)?;
-        transaction
+        let workflow_run_row = transaction
             .execute(
                 r#"
                 UPDATE control_workflow_runs
@@ -6170,7 +6196,7 @@ impl PostgresSessionStore {
                     updated_at = $8
                 WHERE automation_task_id = $1
                 "#,
-                &[
+                &[ 
                     &task.id,
                     &WorkflowRunState::from(task.state).as_str(),
                     &task.output,
@@ -6187,6 +6213,83 @@ impl PostgresSessionStore {
                     "failed to sync workflow run after automation task cancel: {error}"
                 ))
             })?;
+
+        let workflow_run_id = if workflow_run_row > 0 {
+            transaction
+                .query_opt(
+                    r#"
+                    SELECT id
+                    FROM control_workflow_runs
+                    WHERE automation_task_id = $1
+                    "#,
+                    &[&task.id],
+                )
+                .await
+                .map_err(|error| {
+                    SessionStoreError::Backend(format!(
+                        "failed to load workflow run after automation task cancel: {error}"
+                    ))
+                })?
+                .map(|row| row.get::<_, Uuid>("id"))
+        } else {
+            None
+        };
+
+        if let Some(run_id) = workflow_run_id {
+            transaction
+                .execute(
+                    r#"
+                    INSERT INTO control_workflow_run_events (
+                        id,
+                        run_id,
+                        event_type,
+                        message,
+                        data,
+                        created_at
+                    )
+                    VALUES ($1, $2, $3, $4, NULL, $5)
+                    "#,
+                    &[
+                        &Uuid::now_v7(),
+                        &run_id,
+                        &"workflow_run.cancelled",
+                        &"workflow run cancelled",
+                        &now,
+                    ],
+                )
+                .await
+                .map_err(|error| {
+                    SessionStoreError::Backend(format!(
+                        "failed to insert workflow run cancel event: {error}"
+                    ))
+                })?;
+            transaction
+                .execute(
+                    r#"
+                    INSERT INTO control_workflow_run_logs (
+                        id,
+                        run_id,
+                        stream,
+                        message,
+                        created_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5)
+                    "#,
+                    &[
+                        &Uuid::now_v7(),
+                        &run_id,
+                        &AutomationTaskLogStream::System.as_str(),
+                        &"workflow run cancelled",
+                        &now,
+                    ],
+                )
+                .await
+                .map_err(|error| {
+                    SessionStoreError::Backend(format!(
+                        "failed to insert workflow run cancel log: {error}"
+                    ))
+                })?;
+        }
 
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))

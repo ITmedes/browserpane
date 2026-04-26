@@ -236,10 +236,7 @@ export class WorkflowWorkerService {
         output: null,
         stdoutLines,
         stderrLines,
-        error:
-          stderrLines[stderrLines.length - 1] ??
-          stdoutLines[stdoutLines.length - 1] ??
-          `workflow entrypoint exited with code ${exitCode}`,
+        error: summarizeWorkflowExecutionError(stderrLines, stdoutLines, exitCode),
       };
     }
 
@@ -372,6 +369,32 @@ function splitLogLines(value: string): string[] {
     .split(/\r?\n/u)
     .map((line) => line.trimEnd())
     .filter((line) => line.length > 0);
+}
+
+function summarizeWorkflowExecutionError(
+  stderrLines: string[],
+  stdoutLines: string[],
+  exitCode: number | null,
+): string {
+  const explicitErrorLine = [...stderrLines, ...stdoutLines].find((line) =>
+    /\b[a-zA-Z]*Error:/u.test(line),
+  );
+  if (explicitErrorLine) {
+    return explicitErrorLine;
+  }
+
+  const trailingStderrMessage = [...stderrLines]
+    .reverse()
+    .find((line) => !/^\s*at\s+/u.test(line));
+  if (trailingStderrMessage) {
+    return trailingStderrMessage;
+  }
+
+  return (
+    stderrLines[stderrLines.length - 1] ??
+    stdoutLines[stdoutLines.length - 1] ??
+    `workflow entrypoint exited with code ${exitCode}`
+  );
 }
 
 function resolveWorkspaceInputPath(root: string, mountPath: string): string {
