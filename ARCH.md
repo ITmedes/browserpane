@@ -2,33 +2,44 @@
 
 ## What It Is
 
-BrowserPane is a browser-native remote desktop protocol. It renders a Linux desktop
-inside a browser `<div>` using WebTransport, WebCodecs, and WebGL 2 — no
-plugins, no Electron, no VNC viewer. The container size drives the remote
-resolution pixel-for-pixel.
+BrowserPane is a browser-native remote browser and workflow platform. It renders
+a Linux desktop inside a browser `<div>` using WebTransport, WebCodecs, and
+WebGL 2 while exposing owner-scoped control-plane APIs for sessions,
+recordings, workflows, files, credentials, and approved extensions. The
+container size drives the remote resolution pixel-for-pixel.
 
 The canonical frozen v1 session-control contract is [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
 
-The system has five runtime components connected by two transport layers plus a persistent control-plane store:
+A whole-system Mermaid topology view now lives in [ARCHITECTURE.mmd](ARCHITECTURE.mmd). It is intended to track the current repo shape across browser, gateway, runtime, automation, recording, and persistence boundaries.
+
+The system has seven primary runtime roles plus persistent control-plane stores:
 
 ```
 ┌─────────────┐   Unix Socket   ┌─────────────┐   WebTransport   ┌─────────────┐
 │  bpane-host │ <─────────────> │bpane-gateway│ <──────────────> │   Browser    │
 │  (Rust)     │   binary frames │  (Rust)     │   QUIC streams   │  (TS)       │
 └─────────────┘                 └─────────────┘                   └─────────────┘
-       │                              │
-       │ CDP (ws://9222)              │ HTTP API (:8932)
-       v                              v
-┌─────────────┐                ┌─────────────┐
-│  Chromium   │                │ mcp-bridge  │
-│  (headless) │                │  (Node.js)  │
-└─────────────┘                └─────────────┘
-                                      │
-                                      v
-                               ┌─────────────┐
-                               │  Postgres   │
-                               │ control API │
-                               └─────────────┘
+       │                              │   │   │
+       │ CDP (ws://9222)              │   │   └─ HTTP API (:8932)
+       v                              │   │
+┌─────────────┐                       │   ├──────────────┐
+│  Chromium   │                       │   │              │
+│  (desktop)  │                       │   v              v
+└─────────────┘                ┌─────────────┐   ┌─────────────┐
+                               │ mcp-bridge  │   │ workflow-   │
+                               │  (Node.js)  │   │ worker      │
+                               └─────────────┘   └─────────────┘
+                                      │                 │
+                                      │         ┌─────────────┐
+                                      │         │ recording-  │
+                                      │         │ worker      │
+                                      │         └─────────────┘
+                                      └─────────┬─────────────┘
+                                             v
+                                 ┌───────────────────────┐
+                                 │ Postgres + Vault KV   │
+                                 │ control-plane stores  │
+                                 └───────────────────────┘
 ```
 
 ---
@@ -46,14 +57,18 @@ The system has five runtime components connected by two transport layers plus a 
 | Tile compression | QOI or Zstd (configurable) | QOI: fast decode, good for UI; Zstd: better ratio for complex content |
 | Audio | PipeWire -> FFmpeg -> Opus or IMA-ADPCM | 48 kHz stereo, silence-gated; Opus default (64 kbps CBR), ADPCM fallback |
 | MCP bridge | Node.js + @playwright/mcp | SSE proxy for browser automation with live supervision |
-| Session store | PostgreSQL 16 | Durable owner-scoped `/api/v1/sessions` resources |
-| Deployment | Docker Compose, 6 containers | Isolated services on a bridge network |
+| Session store | PostgreSQL 16 | Durable owner-scoped `/api/v1/sessions`, workflows, recordings, and reusable runtime inputs |
+| Secret store | HashiCorp Vault KV v2 | Externalized workflow credential payloads |
+| Deployment | Docker Compose, 7 long-lived services + on-demand workers | Isolated services on a bridge network |
 
 ---
 
 ## Deployment Topology
 
-Six containers on a Docker bridge network (`172.28.0.0/24`):
+Seven long-lived services on a Docker bridge network (`172.28.0.0/24`), plus an
+on-demand `workflow-worker` image profile launched by the gateway. Recording
+workers are launched separately by the gateway and are not modeled as a
+long-lived compose service.
 
 ```
               Browser / E2E Test
@@ -71,23 +86,23 @@ Six containers on a Docker bridge network (`172.28.0.0/24`):
                     │
            Docker Bridge Network
                     │
-   ┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
-   │              │              │              │              │              │
-   v              v              v              v              v              v
-┌──────────┐ ┌──────────────┐ ┌───────────────┐ ┌──────────────┐ ┌──────────────┐
-│bpane-host│ │bpane-gateway │ │  mcp-bridge   │ │   Keycloak   │ │   Postgres   │
-│ .0.10    │ │ :4433 (QUIC) │ │ :8931 (SSE)   │ │ :8080/.8091  │ │ :5432/.5433  │
-│          │ │ :8932 (HTTP) │ │               │ │ local OIDC   │ │ control-plane│
-│ Xorg :99 │ │              │ │ @playwright/  │ │ realm        │ │ state        │
-│ OpenBox  │ │ Unix socket  │ │ mcp (STDIO)   │ │              │ │              │
-│ Chromium │ │ <-> host IPC │ │               │ │              │ │              │
-│ PipeWire │ │              │ │ Supervisor    │ │              │ │              │
-│ FFmpeg   │ │ Session store │ │ monitor       │ │              │ │              │
-│bpane-host│ │ + auth API    │ │ (polls API)   │ │              │ │              │
-│          │ │               │ │               │ │              │ │              │
-│ CDP :9222│ │ Max 10        │ │ MCP clients   │ │              │ │              │
-│ -> :9223 │ │ viewers       │ │ connect here  │ │              │ │              │
-└──────────┘ └──────────────┘ └───────────────┘ └──────────────┘ └──────────────┘
+   ┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
+   │              │              │              │              │              │              │
+   v              v              v              v              v              v              v
+┌──────────┐ ┌──────────────┐ ┌───────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────┐
+│bpane-host│ │bpane-gateway │ │  mcp-bridge   │ │   Keycloak   │ │   Postgres   │ │  Vault   │
+│ .0.10    │ │ :4433 (QUIC) │ │ :8931 (SSE)   │ │ :8080/.8091  │ │ :5432/.5433  │ │ :8200    │
+│          │ │ :8932 (HTTP) │ │               │ │ local OIDC   │ │ control-plane│ │ KV v2    │
+│ Xorg :99 │ │              │ │ @playwright/  │ │ realm        │ │ state        │ │ secrets   │
+│ OpenBox  │ │ Unix socket  │ │ mcp (STDIO)   │ │              │ │              │ │          │
+│ Chromium │ │ <-> host IPC │ │               │ │              │ │              │ │          │
+│ PipeWire │ │              │ │ Supervisor    │ │              │ │              │ │          │
+│ FFmpeg   │ │ Session +    │ │ monitor       │ │              │ │ Session,     │ │          │
+│bpane-host│ │ workflow API │ │ (polls API)   │ │              │ │ workflow,    │ │          │
+│          │ │              │ │               │ │              │ │ recording    │ │          │
+│ CDP :9222│ │ Max 10       │ │ MCP clients   │ │              │ │ metadata     │ │          │
+│ -> :9223 │ │ viewers      │ │ connect here  │ │              │ │              │ │          │
+└──────────┘ └──────────────┘ └───────────────┘ └──────────────┘ └──────────────┘ └──────────┘
       │               ^
       └───────────────┘
        /run/bpane/agent.sock
@@ -100,6 +115,7 @@ Six containers on a Docker bridge network (`172.28.0.0/24`):
 - `8091/tcp` — local Keycloak realm for dev/testing
 - `8931/tcp` — MCP bridge (SSE)
 - `5433/tcp` — local Postgres for the session control plane
+- `8200/tcp` — local Vault dev server for credential bindings
 
 **Host container internals:** Xorg with dummy video driver (3840x2160 virtual
 framebuffer, runtime resizable via xrandr), OpenBox WM (locked down, no
@@ -241,6 +257,9 @@ Stateless relay between host agent and browser clients.
   - `GET /api/v1/sessions/{id}/status` — session-scoped runtime telemetry for compatibility mode
   - `POST /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership claim
   - `DELETE /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership release
+  - session-scoped recording routes expose segment lifecycle, playback/export, and artifact download
+  - workflow routes expose definitions, immutable versions, runs, logs, events, and run-scoped automation access
+  - reusable workflow input routes expose file workspaces, credential bindings, and approved extensions
   - `GET /api/session/status` — client counts, resolution, telemetry
   - `POST /api/session/mcp-owner` — claim session, lock resolution
   - `DELETE /api/session/mcp-owner` — release ownership
@@ -248,6 +267,14 @@ Stateless relay between host agent and browser clients.
   - the `/api/session/*` routes are compatibility-only and are intentionally outside the frozen v1 contract
 - **Relay** (`relay.rs`): bidirectional Unix socket <-> async bridge, 64 KB read
   buffer, zero-copy frame slicing with `Bytes`
+- **Recording lifecycle** (`recording_lifecycle.rs`, `recording_retention.rs`, `recording_artifact_store.rs`):
+  - starts/stops passive recorder workers for `recording.mode=always`
+  - persists per-segment metadata, linkage, termination reasons, and artifact refs
+  - enforces retention and playback/export visibility through the control plane
+- **Workflow lifecycle** (`workflow_lifecycle.rs`, `workflow_observability.rs`, `workflow_retention.rs`):
+  - resolves git-backed workflow versions to immutable snapshots
+  - launches gateway-managed workflow workers with run-scoped automation access
+  - persists run logs, events, outputs, produced files, and linked recordings
 
 ### bpane-client (~6,500 lines TypeScript)
 
@@ -342,6 +369,30 @@ running against the Chromium instance inside the host container.
   the bridge at an explicitly delegated session without restarting the service
 - Graceful shutdown: always releases ownership on SIGINT/SIGTERM
 
+### workflow-worker (~1,100 lines TypeScript)
+
+On-demand executor launched and supervised by the gateway for workflow runs.
+
+- Downloads the workflow run, pinned source snapshot, and workspace inputs from the gateway
+- Mints or adopts session automation access for the run's backing session
+- Resolves Vault-backed credential bindings through gateway-owned APIs
+- Exposes worker runtime helpers to the workflow entrypoint:
+  - `credentials.load(...)`
+  - `credentials.apply(...)`
+  - `credentials.generateTotp(...)`
+- Runs the pinned Playwright entrypoint from the materialized source tree
+- Streams task/run logs, state transitions, outputs, and produced files back to the gateway
+
+### recording-worker (~350 lines TypeScript)
+
+Gateway-supervised passive session recorder.
+
+- Attaches as a `recorder` client to the selected session
+- Captures WebM output from the browser-facing recording surface
+- Finalizes recording segments back into gateway-managed artifact storage
+- Supports manual session recordings and `recording.mode=always` auto-recording
+- Reports completion/failure into the control plane so playback/export reflects real segment state
+
 ---
 
 ## Local Auth Flow
@@ -358,6 +409,7 @@ The default dev stack no longer uses a shared token file.
 - `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via `PUT /control-session`
 - the console shows whether the currently selected session is the exact session delegated to `mcp-bridge`
 - `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource and lazily binds Playwright MCP on first client connect
+- `workflow-worker` uses OIDC client credentials in local compose for gateway API bootstrap and then switches to run-scoped automation access
 - the resulting access token is sent to `bpane-gateway` as:
   - HTTP API bearer token for authenticated control calls
 - the browser transport then uses the minted ticket as:
@@ -382,6 +434,18 @@ The default imported local realm contains:
 - gateway audience client: `bpane-gateway`
 - service-account client: `bpane-mcp-bridge`
 - example user: `demo / demo-demo`
+
+### Workflow Control Plane
+
+The workflow layer sits on top of the owner-scoped session APIs.
+
+- workflow definitions are durable owner-scoped resources with immutable versions
+- workflow versions can pin git sources by repository, ref, resolved commit, and entrypoint
+- workflow runs materialize a source snapshot archive before execution
+- runs can bind reusable file workspace inputs, Vault-backed credential bindings, and approved extensions
+- the current execution model is Playwright-first, but the control-plane contract is executor-oriented rather than CDP-specific
+- the gateway persists run logs, events, outputs, produced files, linked recordings, and retention metadata
+- local workflow CLI commands live in `code/web/bpane-client/scripts/workflow-cli.mjs` and exercise the same v1 HTTP routes as the browser UI
 
 ### Wire Protocol (bpane-protocol, ~2,800 lines Rust)
 

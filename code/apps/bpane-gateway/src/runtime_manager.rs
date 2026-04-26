@@ -69,6 +69,7 @@ pub struct RuntimeProfile {
     pub compatibility_mode: String,
     pub max_runtime_sessions: usize,
     pub supports_legacy_global_routes: bool,
+    pub supports_session_extensions: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -178,6 +179,7 @@ impl SessionRuntimeManager {
                     compatibility_mode: "legacy_single_runtime".to_string(),
                     max_runtime_sessions: 1,
                     supports_legacy_global_routes: true,
+                    supports_session_extensions: false,
                 };
                 Ok(Self {
                     backend: RuntimeBackend::StaticSingle(Arc::new(
@@ -196,6 +198,7 @@ impl SessionRuntimeManager {
                     compatibility_mode: "legacy_single_runtime".to_string(),
                     max_runtime_sessions: 1,
                     supports_legacy_global_routes: true,
+                    supports_session_extensions: true,
                 };
                 let manager = DockerRuntimeManager::new(
                     DockerRuntimeConfig {
@@ -217,6 +220,7 @@ impl SessionRuntimeManager {
                     compatibility_mode: "session_runtime_pool".to_string(),
                     max_runtime_sessions,
                     supports_legacy_global_routes: false,
+                    supports_session_extensions: true,
                 };
                 let manager = DockerRuntimeManager::new(config, profile.clone())?;
                 Ok(Self {
@@ -813,6 +817,7 @@ impl DockerRuntimeManager {
 
         let _ = self.stop_container(container_name).await;
         let _ = remove_socket_path(&lease.agent_socket_path).await;
+        let extension_dirs = self.session_extension_dirs(lease.session_id).await?;
 
         let mut command = Command::new(&self.config.docker_bin);
         command.arg("run").arg("-d").arg("--rm");
@@ -833,6 +838,11 @@ impl DockerRuntimeManager {
             .arg(format!("BPANE_SESSION_ID={}", lease.session_id))
             .arg("-e")
             .arg(format!("BPANE_SOCKET_PATH={}", lease.agent_socket_path));
+        if !extension_dirs.is_empty() {
+            command
+                .arg("-e")
+                .arg(format!("BPANE_EXTENSION_DIRS={}", extension_dirs.join(",")));
+        }
 
         if self.config.seccomp_unconfined {
             command.arg("--security-opt").arg("seccomp=unconfined");
@@ -855,6 +865,29 @@ impl DockerRuntimeManager {
 
         self.wait_for_socket(&lease.agent_socket_path, container_name)
             .await
+    }
+
+    async fn session_extension_dirs(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<String>, RuntimeManagerError> {
+        let Some(store) = self.session_store().await else {
+            return Ok(Vec::new());
+        };
+        let session = store
+            .get_session_by_id(session_id)
+            .await
+            .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?
+            .ok_or_else(|| {
+                RuntimeManagerError::PersistenceFailed(format!(
+                    "session {session_id} not found while starting docker runtime"
+                ))
+            })?;
+        Ok(session
+            .extensions
+            .into_iter()
+            .map(|extension| extension.install_path)
+            .collect())
     }
 
     async fn stop_container(&self, container_name: &str) -> Result<(), RuntimeManagerError> {
@@ -1193,6 +1226,7 @@ mod tests {
                     compatibility_mode: "session_runtime_pool".to_string(),
                     max_runtime_sessions: 2,
                     supports_legacy_global_routes: false,
+                    supports_session_extensions: true,
                 },
             )
             .unwrap(),

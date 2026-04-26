@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Workflow Extension Fixture</title>
+    <style>
+      body {
+        margin: 0;
+        font: 16px/1.5 system-ui, sans-serif;
+        background: linear-gradient(180deg, #f7fbff 0%, #dbeafe 100%);
+        color: #123;
+      }
+
+      main {
+        max-width: 720px;
+        margin: 64px auto;
+        padding: 32px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(17, 24, 39, 0.08);
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
+      }
+
+      h1 {
+        margin-top: 0;
+        font-size: 2rem;
+      }
+
+      code {
+        padding: 0.15rem 0.35rem;
+        background: rgba(15, 23, 42, 0.08);
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Workflow Extension Fixture</h1>
+      <p>This page is used by the BrowserPane workflow extension smoke.</p>
+      <p>
+        A successfully loaded unpacked extension will set
+        <code>document.body.dataset.extensionReady</code> to <code>1</code>
+        and inject a visible marker.
+      </p>
+    </main>
+  </body>
+  </html>

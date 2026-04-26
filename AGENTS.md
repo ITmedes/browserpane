@@ -7,7 +7,7 @@ Project-wide Rust coding standards live in `RUST_STANDARDS.md`.
 - Update that file instead of expanding this one with detailed Rust style rules.
 
 Project-wide TypeScript and Node.js coding standards live in `NODEJS_STANDARDS.md`.
-- Apply them to `code/web/bpane-client`, `code/integrations/mcp-bridge`, and future TS/Node packages.
+- Apply them to `code/web/bpane-client`, `code/integrations/mcp-bridge`, `code/integrations/recording-worker`, `code/integrations/workflow-worker`, and future TS/Node packages.
 - Update that file instead of expanding this one with detailed TS/Node style rules.
 
 When docs disagree, prefer:
@@ -38,6 +38,7 @@ Current product shape:
 - Exclusive browser-owner mode: optional in `bpane-gateway` via `--exclusive-browser-owner`; default is disabled.
 - Viewer cap: configurable in `bpane-gateway` via `--max-viewers`, default `10` when exclusive-owner mode or MCP ownership is active.
 - MCP automation: supported via `mcp-bridge` and gateway ownership APIs.
+- Browser extensions: owner-approved unpacked extensions are supported for docker-backed sessions and workflow runs; `static_single` does not support session extension sets.
 - Camera ingress: disabled by default in compose; requires browser H.264 encode support and a mapped `v4l2loopback` device on the host.
 - In exclusive-owner or MCP-owned sessions, restricted browser viewers are view-only: no input, clipboard, microphone, camera, upload, download, or resize.
 
@@ -54,13 +55,20 @@ Current product shape:
   - WebTransport gateway and shared-session coordinator.
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
-  - `session_control.rs`: Phase 0 versioned session-resource store and Postgres integration.
+  - `session_control.rs`: versioned session-control store and Postgres integration, including workflows, credential bindings, file workspaces, and approved extension metadata.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
+  - `credential_provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2.
+  - `workflow_source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
+  - `file_workspace.rs`: owner-scoped file workspace and workspace-file resource shapes persisted by the control plane.
+  - `workspace_file_store.rs`: workspace file content storage boundary. `local_fs` is the current implementation; workspace files carry opaque artifact refs plus optional provenance metadata instead of raw filesystem paths.
   - `recording_artifact_store.rs`: recording artifact storage boundary. `local_fs` is the current implementation; the gateway persists opaque artifact refs instead of raw filesystem paths.
   - `recording_lifecycle.rs`: recorder-worker launch, persisted assignment tracking, and restart reconciliation for session-scoped recording, including `recording.mode=always`. Recording resources are contiguous segments; restart recovery fails the stale in-flight segment and starts a linked fresh one instead of pretending the artifact is continuous.
   - `recording_playback.rs`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.
   - `recording_observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
   - `recording_retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
+  - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers as short-lived Docker jobs, persist run-worker assignments, and fail stale active runs after restart instead of leaving them orphaned.
+  - `workflow_observability.rs`: gateway-local counters/timestamps for workflow-produced file uploads and workflow retention passes.
+  - `workflow_retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions. Docker-backed workers carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile, and Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
@@ -80,11 +88,17 @@ Current product shape:
 - `code/integrations/recording-worker`
   - Playwright-driven recorder worker that attaches as a `recorder` browser client through the control plane.
   - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals, then hands a temporary local file path back to the gateway for artifact-store finalization.
+- `code/integrations/workflow-worker`
+  - One-off workflow executor worker for owner-scoped workflow runs with git-backed source snapshots.
+  - Loads the workflow run through the gateway using an owner bearer token, mints session automation access, downloads the run source snapshot and workspace inputs, materializes them locally, uploads produced files back through run-scoped artifact APIs, and executes the pinned Playwright entrypoint against the bound BrowserPane session.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
   - Local session-control persistence in compose is Postgres on `:5433`.
+  - Local workflow credential binding dev/testing uses HashiCorp Vault dev mode on `:8200`.
   - Local compose can now be switched to `docker_pool` for browser-session workers via gateway env overrides; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
+  - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
+  - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 
 ## Protocol and media facts
 
@@ -119,15 +133,29 @@ Current product shape:
 
 Run these in `code/web/bpane-client`:
 - `npx tsc --noEmit`
+- `npm run smoke:automation-tasks -- --headless`
+- `npm run smoke:file-workspaces -- --headless`
 - `npm test`
 - `npm run build`
+- `npm run workflow:cli -- --help`
 - `npm run smoke:recording -- --headless`
+- `npm run smoke:workflow-embed -- --headless`
+- `npm run smoke:workflow-cancel -- --headless`
+- `npm run smoke:workflow-cli -- --headless`
+- `npm run smoke:workflow-credential-injection -- --headless`
+- `npm run smoke:workflow-credentials -- --headless`
+- `npm run smoke:workflow-workspace -- --headless`
+- `npm run smoke:workflows -- --headless`
+- `npm run smoke:workflow-extension -- --headless`
+- `npm run smoke:workflow-failure -- --headless`
+- `npm run smoke:workflow-reconnect -- --headless`
 - `npm run smoke:multisession -- --headless`
 - `npm run test:coverage`
 
 Run these where applicable:
 - `cd code/integrations/mcp-bridge && npm run build`
 - `cd code/integrations/recording-worker && npm run build`
+- `cd code/integrations/workflow-worker && npm run build`
 
 ## Local development flow
 
@@ -140,7 +168,7 @@ Run these where applicable:
 6. The test page will mint a short-lived session-scoped connect ticket before WebTransport connect.
 7. Use `Delegate MCP` if you want the local `mcp-bridge` to adopt that same session.
 8. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
-9. `keycloak` listens on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
+9. `vault` listens on `:8200`, `keycloak` on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
 
 ## Guardrails for contributors and agents
 

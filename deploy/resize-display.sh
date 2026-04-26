@@ -152,9 +152,21 @@ CHROMIUM_FLAGS=(
   "--window-size=${WIDTH},${HEIGHT}"
 )
 
+CHROMIUM_EXTENSION_DIRS=()
+if [ -n "${BPANE_EXTENSION_DIRS:-}" ]; then
+  IFS=',' read -r -a REQUESTED_EXTENSION_DIRS <<< "${BPANE_EXTENSION_DIRS}"
+  for extension_dir in "${REQUESTED_EXTENSION_DIRS[@]}"; do
+    if [ -d "${extension_dir}" ]; then
+      CHROMIUM_EXTENSION_DIRS+=("${extension_dir}")
+    fi
+  done
+fi
 BPANE_EXTENSION_DIR="${BPANE_EXTENSION_DIR:-/home/bpane/bpane-ext}"
 if [ -d "${BPANE_EXTENSION_DIR}" ]; then
-  CHROMIUM_FLAGS+=("--load-extension=${BPANE_EXTENSION_DIR}")
+  CHROMIUM_EXTENSION_DIRS+=("${BPANE_EXTENSION_DIR}")
+fi
+if [ "${#CHROMIUM_EXTENSION_DIRS[@]}" -gt 0 ]; then
+  CHROMIUM_FLAGS+=("--load-extension=$(IFS=,; echo "${CHROMIUM_EXTENSION_DIRS[*]}")")
 fi
 
 chromium_log_filter() {

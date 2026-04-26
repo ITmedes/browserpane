@@ -1,7 +1,13 @@
 mod api;
 mod auth;
+mod automation_access_token;
+mod automation_task;
 mod config;
 mod connect_ticket;
+mod credential_binding;
+mod credential_provider;
+mod extension;
+mod file_workspace;
 mod idle_stop;
 mod recording_artifact_store;
 mod recording_lifecycle;
@@ -16,6 +22,12 @@ mod session_hub;
 mod session_manager;
 mod session_registry;
 mod transport;
+mod workflow;
+mod workflow_lifecycle;
+mod workflow_observability;
+mod workflow_retention;
+mod workflow_source;
+mod workspace_file_store;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,8 +40,10 @@ use tracing_subscriber::EnvFilter;
 use wtransport::Identity;
 
 use auth::{AuthValidator, OidcConfig};
+use automation_access_token::SessionAutomationAccessTokenManager;
 use config::Config;
 use connect_ticket::SessionConnectTicketManager;
+use credential_provider::{CredentialProvider, VaultKvV2CredentialProvider};
 use recording_artifact_store::RecordingArtifactStore;
 use recording_lifecycle::{RecordingLifecycleManager, RecordingWorkerConfig};
 use recording_observability::RecordingObservability;
@@ -38,6 +52,11 @@ use session_control::{SessionOwnerMode, SessionStore};
 use session_manager::{SessionManager, SessionManagerConfig, SessionManagerDockerConfig};
 use session_registry::SessionRegistry;
 use transport::TransportServer;
+use workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
+use workflow_observability::WorkflowObservability;
+use workflow_retention::WorkflowRetentionManager;
+use workflow_source::WorkflowSourceResolver;
+use workspace_file_store::WorkspaceFileStore;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -94,6 +113,10 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let connect_ticket_manager = Arc::new(SessionConnectTicketManager::new(
+        shared_secret.clone(),
+        Duration::from_secs(config.session_ticket_ttl_secs),
+    ));
+    let automation_access_token_manager = Arc::new(SessionAutomationAccessTokenManager::new(
         shared_secret,
         Duration::from_secs(config.session_ticket_ttl_secs),
     ));
@@ -203,6 +226,23 @@ async fn main() -> anyhow::Result<()> {
         .attach_session_store(session_store.clone())
         .await;
     session_manager.reconcile_persisted_state().await?;
+    let credential_provider = match (
+        config.credential_vault_addr.clone(),
+        config.credential_vault_token.clone(),
+    ) {
+        (Some(addr), Some(token)) => Some(Arc::new(CredentialProvider::new(Arc::new(
+            VaultKvV2CredentialProvider::new(
+                addr,
+                token,
+                config.credential_vault_mount_path.clone(),
+                Some(config.credential_vault_prefix.clone()),
+            )?,
+        )))),
+        (None, None) => None,
+        _ => anyhow::bail!(
+            "--credential-vault-addr and --credential-vault-token must be set together"
+        ),
+    };
     let recording_worker_config = if let Some(bin) = config.recording_worker_bin.clone() {
         Some(RecordingWorkerConfig {
             bin,
@@ -238,7 +278,36 @@ async fn main() -> anyhow::Result<()> {
     let recording_artifact_store = Arc::new(RecordingArtifactStore::local_fs(
         config.recording_artifact_local_root.clone(),
     ));
+    let workspace_file_store = Arc::new(WorkspaceFileStore::local_fs(
+        config.file_workspace_local_root.clone(),
+    ));
+    let workflow_source_resolver =
+        Arc::new(WorkflowSourceResolver::new(config.workflow_git_bin.clone()));
+    let workflow_worker_config = config
+        .workflow_worker_image
+        .clone()
+        .map(|image| WorkflowWorkerConfig {
+            docker_bin: config.workflow_worker_docker_bin.clone(),
+            image,
+            network: config.workflow_worker_network.clone(),
+            container_name_prefix: config.workflow_worker_container_name_prefix.clone(),
+            gateway_api_url: config.workflow_worker_api_url.clone(),
+            work_root: config.workflow_worker_work_root.clone(),
+            bearer_token: config.workflow_worker_bearer_token.clone(),
+            oidc_token_url: config.workflow_worker_oidc_token_url.clone(),
+            oidc_client_id: config.workflow_worker_oidc_client_id.clone(),
+            oidc_client_secret: config.workflow_worker_oidc_client_secret.clone(),
+            oidc_scopes: config.workflow_worker_oidc_scopes.clone(),
+        });
+    let workflow_lifecycle = Arc::new(WorkflowLifecycleManager::new(
+        workflow_worker_config,
+        auth_validator.clone(),
+        automation_access_token_manager.clone(),
+        session_store.clone(),
+    )?);
+    workflow_lifecycle.reconcile_persisted_state().await?;
     let recording_observability = Arc::new(RecordingObservability::default());
+    let workflow_observability = Arc::new(WorkflowObservability::default());
     if config.recording_artifact_cleanup_interval_secs > 0 {
         let recording_retention = Arc::new(RecordingRetentionManager::new(
             session_store.clone(),
@@ -248,6 +317,41 @@ async fn main() -> anyhow::Result<()> {
         ));
         recording_retention.run_cleanup_pass(Utc::now()).await?;
         recording_retention.start();
+    }
+    let workflow_log_retention = if config.workflow_log_retention_secs == 0 {
+        None
+    } else {
+        Some(chrono::Duration::seconds(
+            i64::try_from(config.workflow_log_retention_secs).map_err(|error| {
+                anyhow::anyhow!(
+                    "--workflow-log-retention-secs is out of range for chrono duration: {error}"
+                )
+            })?,
+        ))
+    };
+    let workflow_output_retention = if config.workflow_output_retention_secs == 0 {
+        None
+    } else {
+        Some(chrono::Duration::seconds(
+            i64::try_from(config.workflow_output_retention_secs).map_err(|error| {
+                anyhow::anyhow!(
+                    "--workflow-output-retention-secs is out of range for chrono duration: {error}"
+                )
+            })?,
+        ))
+    };
+    if config.workflow_retention_cleanup_interval_secs > 0
+        && (workflow_log_retention.is_some() || workflow_output_retention.is_some())
+    {
+        let workflow_retention = Arc::new(WorkflowRetentionManager::new(
+            session_store.clone(),
+            workflow_observability.clone(),
+            Duration::from_secs(config.workflow_retention_cleanup_interval_secs),
+            workflow_log_retention,
+            workflow_output_retention,
+        ));
+        workflow_retention.run_cleanup_pass(Utc::now()).await?;
+        workflow_retention.start();
     }
 
     let server = TransportServer::new(
@@ -280,11 +384,19 @@ async fn main() -> anyhow::Result<()> {
             registry,
             auth_validator,
             connect_ticket_manager,
+            automation_access_token_manager,
             session_store,
             session_manager,
+            credential_provider,
             recording_artifact_store,
+            workspace_file_store,
+            workflow_source_resolver,
             recording_observability,
             recording_lifecycle,
+            workflow_lifecycle,
+            workflow_observability,
+            workflow_log_retention,
+            workflow_output_retention,
             Duration::from_secs(config.runtime_idle_timeout_secs),
             config.public_gateway_url,
             if config.exclusive_browser_owner {

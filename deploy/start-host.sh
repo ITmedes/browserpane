@@ -184,11 +184,24 @@ CHROMIUM_FLAGS=(
   "--window-size=${BPANE_WINDOW_SIZE:-1280,720}"
 )
 
-# Load the local scroll override extension when present. Keep this additive so
-# policy-installed extensions such as AdBlock remain active.
+# Load unpacked extensions from runtime-provided directories plus the default
+# local override extension when present. Keep this additive so policy-installed
+# extensions such as AdBlock remain active.
+CHROMIUM_EXTENSION_DIRS=()
+if [ -n "${BPANE_EXTENSION_DIRS:-}" ]; then
+  IFS=',' read -r -a REQUESTED_EXTENSION_DIRS <<< "${BPANE_EXTENSION_DIRS}"
+  for extension_dir in "${REQUESTED_EXTENSION_DIRS[@]}"; do
+    if [ -d "${extension_dir}" ]; then
+      CHROMIUM_EXTENSION_DIRS+=("${extension_dir}")
+    fi
+  done
+fi
 BPANE_EXTENSION_DIR="${BPANE_EXTENSION_DIR:-/home/bpane/bpane-ext}"
 if [ -d "${BPANE_EXTENSION_DIR}" ]; then
-  CHROMIUM_FLAGS+=("--load-extension=${BPANE_EXTENSION_DIR}")
+  CHROMIUM_EXTENSION_DIRS+=("${BPANE_EXTENSION_DIR}")
+fi
+if [ "${#CHROMIUM_EXTENSION_DIRS[@]}" -gt 0 ]; then
+  CHROMIUM_FLAGS+=("--load-extension=$(IFS=,; echo "${CHROMIUM_EXTENSION_DIRS[*]}")")
 fi
 
 if [ "${BPANE_CHROMIUM_DEBUG_ENABLE:-1}" != "0" ]; then

@@ -144,6 +144,8 @@ mod tests {
                     idle_timeout_sec: None,
                     labels: HashMap::new(),
                     integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
                     recording: SessionRecordingPolicy {
                         mode: SessionRecordingMode::Manual,
                         format: SessionRecordingFormat::Webm,

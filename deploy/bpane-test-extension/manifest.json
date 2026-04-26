@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "BrowserPane Workflow Smoke Extension",
+  "version": "1.0.0",
+  "description": "Marks the workflow extension fixture page when loaded by BrowserPane workflow smoke tests.",
+  "content_scripts": [
+    {
+      "matches": [
+        "http://web:8080/workflow-extension-fixture.html*",
+        "http://localhost:8080/workflow-extension-fixture.html*",
+        "http://127.0.0.1:8080/workflow-extension-fixture.html*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

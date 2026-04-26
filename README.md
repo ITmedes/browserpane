@@ -1,6 +1,6 @@
 # BrowserPane
 
-BrowserPane is planed to be a self-hostable remote browser platform for humans and agents.
+BrowserPane is planned to be a self-hostable remote browser and workflow platform for humans and agents.
 
 Most browser automation products stop at managed browsers, CDP endpoints, or live debug links. BrowserPane treats the live browser session itself as the product surface: a real Chromium session that browser users, supervisors, and automation can all attach to with shared-session policy, owner/viewer controls, and persistent session resources.
 
@@ -40,6 +40,8 @@ Current support and scope:
 - Shared sessions: collaborative by default, intended for small curated groups rather than broadcast-scale delivery.
 - Owner/viewer mode: optional exclusive-owner mode is supported in the gateway; restricted viewers are read-only.
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
+- Control plane: owner-scoped v1 APIs now cover sessions, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
+- Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
 
 ## How The System Is Shaped
 
@@ -70,6 +72,8 @@ browser client <-> bpane-gateway <-> bpane-host <-> Chromium inside Linux contai
 | `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
 | `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Integrates with gateway ownership APIs so automation can drive a session while humans observe. |
+| `code/integrations/workflow-worker` | On-demand workflow executor. Downloads pinned workflow source snapshots, attaches with session automation access, runs Playwright workflow entrypoints, resolves credential/workspace inputs, and writes logs, outputs, and produced files back to the gateway. |
+| `code/integrations/recording-worker` | On-demand recording executor. Attaches as a passive recorder client, captures WebM output, and finalizes recording metadata into gateway-managed artifact storage. |
 | `deploy/` | Local runtime manifests and container images. This is the practical source of truth for how the dev stack is assembled and started. |
 
 ## Rendering Model
@@ -138,9 +142,12 @@ The compose stack starts:
 - `host`: Linux host runtime with Xorg dummy, Openbox, Chromium, and `bpane-host`
 - `gateway`: WebTransport relay on `:4433` and HTTP APIs on `:8932`
 - `postgres`: session-control database on `:5433`
+- `vault`: local HashiCorp Vault dev server on `:8200` for workflow credential bindings
 - `keycloak`: local OIDC provider on `:8091`
 - `web`: local frontend on `:8080`
 - `mcp-bridge`: MCP bridge on `:8931`
+
+The local compose file also defines a `workflow-worker` image profile. The gateway launches workflow-worker containers on demand; you normally do not start that container as a long-lived service yourself.
 
 The gateway supports three runtime backends:
 
@@ -235,6 +242,92 @@ Current limitation:
 - the default compose stack still runs the single-runtime backend unless you opt into `docker_pool`
 - global compatibility routes like `/api/session/status` and `/api/session/mcp-owner` are compatibility-only and are not part of the frozen v1 contract; multi-runtime backends should use session-scoped `/api/v1/sessions/{id}/...` routes
 
+### Recordings
+
+BrowserPane session recording is now a control-plane feature rather than only a browser-local blob download.
+
+- Session recording policy supports `disabled`, `manual`, and `always`.
+- Recording resources are session-scoped and persist segment metadata, runtime state, termination reason, and artifact linkage.
+- Recordings can be downloaded from the dev page recording library or through the v1 API.
+- Playback/export is modeled separately from raw recording segments, so multi-segment sessions stay explicit.
+
+Primary routes:
+
+- `POST /api/v1/sessions/{id}/recordings`
+- `GET /api/v1/sessions/{id}/recordings`
+- `GET /api/v1/sessions/{id}/recordings/{recording_id}`
+- `POST /api/v1/sessions/{id}/recordings/{recording_id}/stop`
+- `GET /api/v1/sessions/{id}/recordings/{recording_id}/content`
+
+Local manual flow:
+
+1. Open `http://localhost:8080`
+2. Start or reconnect a session
+3. Use the recording controls in `test-embed.html`
+4. Download individual segments or the playback export bundle from the recording library
+
+### Workflow Platform
+
+BrowserPane now exposes a first-class workflow layer on top of session automation access.
+
+Current workflow capabilities:
+
+- owner-scoped workflow definitions and immutable versions
+- workflow runs with logs, events, outputs, recordings, and produced files
+- git-backed workflow sources pinned to resolved commits
+- source snapshot materialization per run
+- file workspaces for reusable inputs and durable outputs
+- Vault-backed credential bindings
+- approved extension references on workflow versions and sessions
+- local workflow CLI for owner-token-driven testing and automation
+
+Primary routes:
+
+- `POST /api/v1/workflows`
+- `GET /api/v1/workflows`
+- `POST /api/v1/workflows/{id}/versions`
+- `POST /api/v1/workflow-runs`
+- `GET /api/v1/workflow-runs/{id}`
+- `GET /api/v1/workflow-runs/{id}/logs`
+- `GET /api/v1/workflow-runs/{id}/events`
+- `GET /api/v1/workflow-runs/{id}/produced-files`
+
+Reusable workflow inputs:
+
+- `POST /api/v1/file-workspaces`
+- `POST /api/v1/credential-bindings`
+- `POST /api/v1/extensions`
+
+Local usage options:
+
+- UI: use the workflow panel in `test-embed.html`
+- CLI: use `code/web/bpane-client/scripts/workflow-cli.mjs`
+- raw API: use the OpenAPI contract in `openapi/bpane-control-v1.yaml`
+
+Typical local workflow path:
+
+1. Start the local compose stack and log in at `http://localhost:8080`
+2. Create or reconnect a browser session from `test-embed.html`
+3. Create reusable inputs as needed:
+   - file workspace for reusable input/output files
+   - credential binding for Vault-backed secrets
+   - approved extension if the workflow needs a Chromium extension
+4. Create a workflow definition and a pinned version that points at a git-backed Playwright entrypoint
+5. Start a workflow run from the workflow panel, the CLI, or the raw v1 API
+6. Inspect logs, events, outputs, recordings, and produced files from the run resource
+
+Minimal CLI flow with an owner bearer token:
+
+```bash
+cd code/web/bpane-client
+export BPANE_API_URL=http://localhost:8932
+export BPANE_ACCESS_TOKEN=<owner bearer token>
+npm run workflow:cli -- workflow list
+npm run workflow:cli -- workflow run get <run-id>
+```
+
+The CLI is intentionally thin. It wraps the existing owner-scoped v1 workflow routes rather than introducing a second control-plane contract.
+
 ### Build And Test Without Running The Full Stack
 
 Rust:
@@ -252,7 +345,10 @@ npm ci
 npx tsc --noEmit
 npm test
 npm run build
+npm run workflow:cli -- --help
 npm run smoke:recording -- --headless
+npm run smoke:workflow-cli -- --headless
+npm run smoke:workflow-credential-injection -- --headless
 ```
 
 Other useful checks:
@@ -262,7 +358,10 @@ cargo test -p bpane-protocol
 cargo test -p bpane-host
 cargo test -p bpane-gateway
 cd code/integrations/mcp-bridge && npm run build
+cd code/integrations/workflow-worker && npm run build
 cd code/web/bpane-client && npm run smoke:recording -- --headless
+cd code/web/bpane-client && npm run smoke:workflow-cli -- --headless
+cd code/web/bpane-client && npm run smoke:workflow-credential-injection -- --headless
 cd code/web/bpane-client && npm run smoke:multisession -- --headless
 ```
 
