@@ -307,6 +307,8 @@ async fn main() -> anyhow::Result<()> {
         auth_validator.clone(),
         automation_access_token_manager.clone(),
         session_store.clone(),
+        session_manager.clone(),
+        registry.clone(),
     )?);
     workflow_lifecycle.reconcile_persisted_state().await?;
     let recording_observability = Arc::new(RecordingObservability::default());

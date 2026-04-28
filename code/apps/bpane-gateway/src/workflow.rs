@@ -14,6 +14,7 @@ use crate::credential_binding::{
     WorkflowRunCredentialBinding, WorkflowRunCredentialBindingResource,
 };
 use crate::extension::{AppliedExtension, AppliedExtensionResource};
+use crate::session_control::SessionLifecycleState;
 use crate::workflow_source::WorkflowSource;
 
 #[derive(Debug, Clone)]
@@ -324,6 +325,23 @@ pub struct WorkflowRunAdmissionResource {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum WorkflowRunResumeMode {
+    LiveRuntime,
+    ProfileRestart,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowRunRuntimeResource {
+    pub resume_mode: WorkflowRunResumeMode,
+    pub exact_runtime_available: bool,
+    pub hold_until: Option<DateTime<Utc>>,
+    pub released_at: Option<DateTime<Utc>>,
+    pub release_reason: Option<String>,
+    pub session_state: Option<SessionLifecycleState>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WorkflowRunState {
     Pending,
     Queued,
@@ -482,6 +500,7 @@ pub struct WorkflowRunResource {
     pub retention: WorkflowRunRetentionResource,
     pub admission: Option<WorkflowRunAdmissionResource>,
     pub intervention: WorkflowRunInterventionResource,
+    pub runtime: Option<WorkflowRunRuntimeResource>,
     pub labels: HashMap<String, String>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -571,6 +590,7 @@ impl StoredWorkflowRun {
         retention: WorkflowRunRetentionResource,
         admission: Option<WorkflowRunAdmissionResource>,
         intervention: WorkflowRunInterventionResource,
+        runtime: Option<WorkflowRunRuntimeResource>,
     ) -> WorkflowRunResource {
         WorkflowRunResource {
             id: self.id,
@@ -615,6 +635,7 @@ impl StoredWorkflowRun {
             retention,
             admission,
             intervention,
+            runtime,
             labels: self.labels.clone(),
             started_at: self.started_at,
             completed_at: self.completed_at,
@@ -813,6 +834,146 @@ pub fn derive_workflow_run_admission_resource(
         reason,
         details,
         queued_at: event.created_at,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowRunRuntimeHoldMode {
+    Live,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowRunRuntimeHoldRequest {
+    pub mode: WorkflowRunRuntimeHoldMode,
+    pub timeout_sec: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowRunRuntimeRelease {
+    pub reason: String,
+    pub released_at: DateTime<Utc>,
+}
+
+pub fn parse_workflow_run_runtime_hold_request(
+    value: &Value,
+) -> Result<Option<WorkflowRunRuntimeHoldRequest>, &'static str> {
+    let Some(object) = value.as_object() else {
+        return Ok(None);
+    };
+    let Some(runtime_hold) = object.get("runtime_hold") else {
+        return Ok(None);
+    };
+    let hold_object = runtime_hold
+        .as_object()
+        .ok_or("workflow runtime_hold must be a JSON object")?;
+    let mode = hold_object
+        .get("mode")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("live");
+    let mode = match mode {
+        "live" => WorkflowRunRuntimeHoldMode::Live,
+        _ => return Err("workflow runtime_hold.mode must currently be \"live\""),
+    };
+    let timeout_sec = hold_object
+        .get("timeout_sec")
+        .and_then(Value::as_u64)
+        .ok_or("workflow runtime_hold.timeout_sec must be a positive integer")?;
+    if timeout_sec == 0 {
+        return Err("workflow runtime_hold.timeout_sec must be greater than zero");
+    }
+    Ok(Some(WorkflowRunRuntimeHoldRequest { mode, timeout_sec }))
+}
+
+fn parse_workflow_run_runtime_release(
+    value: &Value,
+    fallback_released_at: DateTime<Utc>,
+) -> Option<WorkflowRunRuntimeRelease> {
+    let object = value.as_object()?;
+    let nested = object
+        .get("runtime_release")
+        .and_then(Value::as_object)
+        .unwrap_or(object);
+    let reason = nested
+        .get("reason")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("runtime_released")
+        .to_string();
+    Some(WorkflowRunRuntimeRelease {
+        reason,
+        released_at: fallback_released_at,
+    })
+}
+
+fn latest_awaiting_input_event<'a>(
+    events: &'a [WorkflowRunEventResource],
+) -> Option<&'a WorkflowRunEventResource> {
+    events.iter().rev().find(|event| {
+        event.event_type == "workflow_run.awaiting_input"
+            || event.event_type == "automation_task.awaiting_input"
+    })
+}
+
+pub fn derive_workflow_run_runtime_resource(
+    run_state: WorkflowRunState,
+    session_state: Option<SessionLifecycleState>,
+    events: &[WorkflowRunEventResource],
+) -> Option<WorkflowRunRuntimeResource> {
+    let awaiting_input = latest_awaiting_input_event(events)?;
+    if run_state != WorkflowRunState::AwaitingInput
+        && !events.iter().rev().any(|event| {
+            event.created_at >= awaiting_input.created_at
+                && event.event_type == "workflow_run.runtime_released"
+        })
+    {
+        return None;
+    }
+
+    let hold_request = awaiting_input
+        .data
+        .as_ref()
+        .and_then(|value| parse_workflow_run_runtime_hold_request(value).ok())
+        .flatten();
+    let hold_until = hold_request.as_ref().and_then(|request| {
+        chrono::Duration::from_std(std::time::Duration::from_secs(request.timeout_sec))
+            .ok()
+            .map(|duration| awaiting_input.created_at + duration)
+    });
+    let released = events.iter().rev().find_map(|event| {
+        if event.created_at < awaiting_input.created_at
+            || event.event_type != "workflow_run.runtime_released"
+        {
+            return None;
+        }
+        event
+            .data
+            .as_ref()
+            .and_then(|value| parse_workflow_run_runtime_release(value, event.created_at))
+            .or_else(|| {
+                Some(WorkflowRunRuntimeRelease {
+                    reason: "runtime_released".to_string(),
+                    released_at: event.created_at,
+                })
+            })
+    });
+    let exact_runtime_available = released.is_none()
+        && session_state
+            .map(SessionLifecycleState::is_runtime_candidate)
+            .unwrap_or(false);
+    Some(WorkflowRunRuntimeResource {
+        resume_mode: if exact_runtime_available {
+            WorkflowRunResumeMode::LiveRuntime
+        } else {
+            WorkflowRunResumeMode::ProfileRestart
+        },
+        exact_runtime_available,
+        hold_until,
+        released_at: released.as_ref().map(|value| value.released_at),
+        release_reason: released.map(|value| value.reason),
+        session_state,
     })
 }
 
@@ -1056,6 +1217,104 @@ mod tests {
                 "max_active_workers": 1,
             }))
         );
+    }
+
+    #[test]
+    fn parses_live_runtime_hold_request() {
+        let request = parse_workflow_run_runtime_hold_request(&serde_json::json!({
+            "runtime_hold": {
+                "mode": "live",
+                "timeout_sec": 120
+            }
+        }))
+        .expect("runtime hold request should parse")
+        .expect("runtime hold request should be present");
+
+        assert_eq!(request.mode, WorkflowRunRuntimeHoldMode::Live);
+        assert_eq!(request.timeout_sec, 120);
+    }
+
+    #[test]
+    fn derives_live_runtime_resource_for_awaiting_input_run() {
+        let awaiting_at = Utc::now();
+        let resource = derive_workflow_run_runtime_resource(
+            WorkflowRunState::AwaitingInput,
+            Some(SessionLifecycleState::Ready),
+            &[WorkflowRunEventResource {
+                id: Uuid::now_v7(),
+                run_id: Uuid::now_v7(),
+                source: WorkflowRunEventSource::Run,
+                automation_task_id: None,
+                event_type: "workflow_run.awaiting_input".to_string(),
+                message: "workflow run is awaiting input".to_string(),
+                data: Some(serde_json::json!({
+                    "runtime_hold": {
+                        "mode": "live",
+                        "timeout_sec": 30
+                    }
+                })),
+                created_at: awaiting_at,
+            }],
+        )
+        .expect("runtime resource");
+
+        assert_eq!(resource.resume_mode, WorkflowRunResumeMode::LiveRuntime);
+        assert!(resource.exact_runtime_available);
+        assert_eq!(resource.session_state, Some(SessionLifecycleState::Ready));
+        assert_eq!(
+            resource.hold_until,
+            Some(awaiting_at + chrono::Duration::seconds(30))
+        );
+        assert!(resource.released_at.is_none());
+        assert!(resource.release_reason.is_none());
+    }
+
+    #[test]
+    fn derives_profile_restart_runtime_resource_after_release() {
+        let awaiting_at = Utc::now();
+        let released_at = awaiting_at + chrono::Duration::seconds(45);
+        let resource = derive_workflow_run_runtime_resource(
+            WorkflowRunState::AwaitingInput,
+            Some(SessionLifecycleState::Stopped),
+            &[
+                WorkflowRunEventResource {
+                    id: Uuid::now_v7(),
+                    run_id: Uuid::now_v7(),
+                    source: WorkflowRunEventSource::Run,
+                    automation_task_id: None,
+                    event_type: "workflow_run.awaiting_input".to_string(),
+                    message: "workflow run is awaiting input".to_string(),
+                    data: Some(serde_json::json!({
+                        "runtime_hold": {
+                            "mode": "live",
+                            "timeout_sec": 30
+                        }
+                    })),
+                    created_at: awaiting_at,
+                },
+                WorkflowRunEventResource {
+                    id: Uuid::now_v7(),
+                    run_id: Uuid::now_v7(),
+                    source: WorkflowRunEventSource::Run,
+                    automation_task_id: None,
+                    event_type: "workflow_run.runtime_released".to_string(),
+                    message: "workflow run released exact live runtime".to_string(),
+                    data: Some(serde_json::json!({
+                        "runtime_release": {
+                            "reason": "hold_expired"
+                        }
+                    })),
+                    created_at: released_at,
+                },
+            ],
+        )
+        .expect("runtime resource");
+
+        assert_eq!(resource.resume_mode, WorkflowRunResumeMode::ProfileRestart);
+        assert!(!resource.exact_runtime_available);
+        assert_eq!(resource.session_state, Some(SessionLifecycleState::Stopped));
+        assert_eq!(resource.released_at, Some(released_at));
+        assert_eq!(resource.release_reason.as_deref(), Some("hold_expired"));
     }
 }
 
