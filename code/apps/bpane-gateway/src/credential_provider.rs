@@ -115,7 +115,11 @@ impl VaultKvV2CredentialProvider {
         })
     }
 
-    fn secret_path(&self, binding_id: Uuid, external_ref: Option<&str>) -> Result<String, CredentialProviderError> {
+    fn secret_path(
+        &self,
+        binding_id: Uuid,
+        external_ref: Option<&str>,
+    ) -> Result<String, CredentialProviderError> {
         match external_ref {
             Some(value) => normalize_vault_path(value),
             None => Ok(format!("{}/{}", self.key_prefix, binding_id)),

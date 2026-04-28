@@ -74,22 +74,6 @@ where
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::recorder_role_suppresses_bitrate_feedback;
-    use crate::session_hub::BrowserClientRole;
-
-    #[test]
-    fn recorder_role_disables_bitrate_feedback() {
-        assert!(!recorder_role_suppresses_bitrate_feedback(
-            BrowserClientRole::Interactive
-        ));
-        assert!(recorder_role_suppresses_bitrate_feedback(
-            BrowserClientRole::Recorder
-        ));
-    }
-}
-
 pub(super) fn spawn_gateway_pinger<S>(
     session: Arc<Session>,
     send_stream: Arc<Mutex<S>>,
@@ -124,6 +108,9 @@ where
         }
     })
 }
+
+#[cfg(test)]
+mod tests;
 
 pub(super) fn spawn_direct_control_task<S>(
     session: Arc<Session>,

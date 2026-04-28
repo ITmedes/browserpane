@@ -103,9 +103,7 @@ impl WorkflowObservability {
 
     pub async fn snapshot(&self) -> WorkflowObservabilitySnapshot {
         WorkflowObservabilitySnapshot {
-            produced_file_uploads_total: self
-                .produced_file_uploads_total
-                .load(Ordering::Relaxed),
+            produced_file_uploads_total: self.produced_file_uploads_total.load(Ordering::Relaxed),
             produced_file_upload_failures_total: self
                 .produced_file_upload_failures_total
                 .load(Ordering::Relaxed),
@@ -115,9 +113,7 @@ impl WorkflowObservability {
             event_delivery_successes_total: self
                 .event_delivery_successes_total
                 .load(Ordering::Relaxed),
-            event_delivery_retries_total: self
-                .event_delivery_retries_total
-                .load(Ordering::Relaxed),
+            event_delivery_retries_total: self.event_delivery_retries_total.load(Ordering::Relaxed),
             event_delivery_failures_total: self
                 .event_delivery_failures_total
                 .load(Ordering::Relaxed),
@@ -128,9 +124,7 @@ impl WorkflowObservability {
             output_retention_candidates_total: self
                 .output_retention_candidates_total
                 .load(Ordering::Relaxed),
-            retention_deleted_logs_total: self
-                .retention_deleted_logs_total
-                .load(Ordering::Relaxed),
+            retention_deleted_logs_total: self.retention_deleted_logs_total.load(Ordering::Relaxed),
             retention_cleared_outputs_total: self
                 .retention_cleared_outputs_total
                 .load(Ordering::Relaxed),

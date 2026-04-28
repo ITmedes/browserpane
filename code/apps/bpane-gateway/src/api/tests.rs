@@ -35,10 +35,10 @@ use crate::session_control::{
     SessionRecordingState as StoredSessionRecordingState, StoredSessionRecording,
 };
 use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerProfile};
-use crate::workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
 use crate::workflow_event_delivery::{
     sign_workflow_event_delivery, WorkflowEventDeliveryConfig, WorkflowEventDeliveryManager,
 };
+use crate::workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
 use crate::workflow_observability::WorkflowObservability;
 use crate::workflow_source::WorkflowSourceResolver;
 use crate::workspace_file_store::WorkspaceFileStore;
@@ -284,7 +284,8 @@ impl TestWebhookReceiver {
                             "x-bpane-signature-timestamp",
                             "x-bpane-signature-v1",
                         ] {
-                            if let Some(value) = headers.get(name).and_then(|value| value.to_str().ok())
+                            if let Some(value) =
+                                headers.get(name).and_then(|value| value.to_str().ok())
                             {
                                 captured_headers.insert(name.to_string(), value.to_string());
                             }
@@ -356,11 +357,8 @@ impl TestAgentServer {
         let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
         let accept_task = tokio::spawn(async move {
             let mut connections = Vec::new();
-            loop {
-                match listener.accept().await {
-                    Ok((stream, _)) => connections.push(stream),
-                    Err(_) => break,
-                }
+            while let Ok((stream, _)) = listener.accept().await {
+                connections.push(stream);
             }
         });
 
@@ -1050,7 +1048,10 @@ async fn workflow_runs_inherit_session_extensions() {
         )
         .await
         .unwrap();
-    assert_eq!(create_workflow_version_response.status(), StatusCode::CREATED);
+    assert_eq!(
+        create_workflow_version_response.status(),
+        StatusCode::CREATED
+    );
 
     let create_run_response = app
         .clone()
@@ -3378,12 +3379,12 @@ async fn workflow_run_create_supports_external_correlation_and_safe_idempotent_r
     let first_run = response_json(first_create).await;
     let run_id = first_run["id"].as_str().unwrap().to_string();
     let session_id = first_run["session_id"].as_str().unwrap().to_string();
-    let task_id = first_run["automation_task_id"].as_str().unwrap().to_string();
+    let task_id = first_run["automation_task_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert_eq!(first_run["source_system"], "camunda-prod");
-    assert_eq!(
-        first_run["source_reference"],
-        "process-instance-123/task-7"
-    );
+    assert_eq!(first_run["source_reference"], "process-instance-123/task-7");
     assert_eq!(first_run["client_request_id"], "job-123-attempt-1");
 
     let second_create = app
@@ -3538,12 +3539,10 @@ async fn workflow_run_create_rejects_conflicting_idempotent_retry() {
     let conflicting_status = conflicting_create.status();
     let body = response_json(conflicting_create).await;
     assert_eq!(conflicting_status, StatusCode::CONFLICT, "{body:#}");
-    assert!(
-        body["error"]
-            .as_str()
-            .unwrap()
-            .contains("client_request_id")
-    );
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("client_request_id"));
 }
 
 #[tokio::test]
@@ -3599,7 +3598,9 @@ async fn workflow_event_subscriptions_dispatch_signed_run_events_and_expose_diag
                     .uri("/api/v1/workflows")
                     .header("authorization", bearer(&token))
                     .header("content-type", "application/json")
-                    .body(Body::from(json!({ "name": "evented-workflow" }).to_string()))
+                    .body(Body::from(
+                        json!({ "name": "evented-workflow" }).to_string(),
+                    ))
                     .unwrap(),
             )
             .await
@@ -3690,7 +3691,11 @@ async fn workflow_event_subscriptions_dispatch_signed_run_events_and_expose_diag
         .get("x-bpane-signature-timestamp")
         .unwrap()
         .to_string();
-    let signature = request.headers.get("x-bpane-signature-v1").unwrap().to_string();
+    let signature = request
+        .headers
+        .get("x-bpane-signature-v1")
+        .unwrap()
+        .to_string();
     let expected_signature = sign_workflow_event_delivery(
         "super-secret",
         &timestamp,
@@ -3743,7 +3748,9 @@ async fn workflow_event_subscriptions_dispatch_signed_run_events_and_expose_diag
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(format!("/api/v1/workflow-event-subscriptions/{subscription_id}"))
+                .uri(format!(
+                    "/api/v1/workflow-event-subscriptions/{subscription_id}"
+                ))
                 .header("authorization", bearer(&token))
                 .body(Body::empty())
                 .unwrap(),
@@ -3756,8 +3763,7 @@ async fn workflow_event_subscriptions_dispatch_signed_run_events_and_expose_diag
 #[tokio::test]
 async fn workflow_event_delivery_retries_retryable_failures_and_then_succeeds() {
     let (app, token, state) = test_router_with_state();
-    let receiver =
-        TestWebhookReceiver::start(vec![StatusCode::BAD_GATEWAY, StatusCode::OK]).await;
+    let receiver = TestWebhookReceiver::start(vec![StatusCode::BAD_GATEWAY, StatusCode::OK]).await;
 
     let subscription = response_json(
         app.clone()
@@ -3917,12 +3923,8 @@ async fn workflow_event_delivery_retries_retryable_failures_and_then_succeeds() 
 #[tokio::test]
 async fn workflow_event_subscriptions_preserve_lifecycle_delivery_order() {
     let (app, token, state) = test_router_with_state();
-    let receiver = TestWebhookReceiver::start(vec![
-        StatusCode::OK,
-        StatusCode::OK,
-        StatusCode::OK,
-    ])
-    .await;
+    let receiver =
+        TestWebhookReceiver::start(vec![StatusCode::OK, StatusCode::OK, StatusCode::OK]).await;
 
     let subscription = response_json(
         app.clone()
@@ -3961,7 +3963,9 @@ async fn workflow_event_subscriptions_preserve_lifecycle_delivery_order() {
                     .uri("/api/v1/workflows")
                     .header("authorization", bearer(&token))
                     .header("content-type", "application/json")
-                    .body(Body::from(json!({ "name": "ordered-event-workflow" }).to_string()))
+                    .body(Body::from(
+                        json!({ "name": "ordered-event-workflow" }).to_string(),
+                    ))
                     .unwrap(),
             )
             .await
@@ -4261,7 +4265,10 @@ async fn workflow_run_create_exposes_queued_admission_when_worker_capacity_is_ex
     let queued_run_id = queued_run["id"].as_str().unwrap().to_string();
     assert_eq!(queued_run["state"], "queued");
     assert_eq!(queued_run["admission"]["state"], "queued");
-    assert_eq!(queued_run["admission"]["reason"], "workflow_worker_capacity");
+    assert_eq!(
+        queued_run["admission"]["reason"],
+        "workflow_worker_capacity"
+    );
     assert_eq!(queued_run["admission"]["details"]["active_workers"], 1);
     assert_eq!(queued_run["admission"]["details"]["max_active_workers"], 1);
 
@@ -5169,7 +5176,10 @@ async fn workflow_runs_expose_runtime_hold_and_release_semantics() {
     )
     .await;
     let immediate_release_run_id = immediate_release_run["id"].as_str().unwrap().to_string();
-    let immediate_release_session_id = immediate_release_run["session_id"].as_str().unwrap().to_string();
+    let immediate_release_session_id = immediate_release_run["session_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     let second_automation_access = response_json(
         app.clone()
@@ -5197,7 +5207,9 @@ async fn workflow_runs_expose_runtime_hold_and_release_semantics() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/workflow-runs/{immediate_release_run_id}/state"))
+                .uri(format!(
+                    "/api/v1/workflow-runs/{immediate_release_run_id}/state"
+                ))
                 .header("x-bpane-automation-access-token", &second_automation_token)
                 .header("content-type", "application/json")
                 .body(Body::from(
@@ -5218,7 +5230,9 @@ async fn workflow_runs_expose_runtime_hold_and_release_semantics() {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(format!("/api/v1/workflow-runs/{immediate_release_run_id}/state"))
+                    .uri(format!(
+                        "/api/v1/workflow-runs/{immediate_release_run_id}/state"
+                    ))
                     .header("x-bpane-automation-access-token", &second_automation_token)
                     .header("content-type", "application/json")
                     .body(Body::from(
@@ -5404,7 +5418,10 @@ async fn workflow_runs_expose_workspace_input_content_to_owner_and_automation_ac
     assert_eq!(workspace_input["file_id"], file_id);
     assert_eq!(workspace_input["mount_path"], "inputs/monthly-report.csv");
 
-    let content_path = workspace_input["content_path"].as_str().unwrap().to_string();
+    let content_path = workspace_input["content_path"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let owner_download = app
         .clone()
         .oneshot(
@@ -5495,7 +5512,10 @@ async fn creates_lists_and_gets_credential_bindings() {
     assert_eq!(created["namespace"], "smoke");
     assert_eq!(created["allowed_origins"], json!(["http://web:8080"]));
     assert_eq!(created["injection_mode"], "form_fill");
-    assert!(created["external_ref"].as_str().unwrap().starts_with("test/"));
+    assert!(created["external_ref"]
+        .as_str()
+        .unwrap()
+        .starts_with("test/"));
     assert!(created.get("secret_payload").is_none());
 
     let listed = response_json(

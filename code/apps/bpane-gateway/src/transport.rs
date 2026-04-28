@@ -27,6 +27,19 @@ use crate::session_control::SessionStore;
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 
+pub struct TransportServerConfig {
+    pub bind_addr: SocketAddr,
+    pub identity: Identity,
+    pub session_manager: Arc<SessionManager>,
+    pub auth_validator: Arc<AuthValidator>,
+    pub connect_ticket_manager: Arc<SessionConnectTicketManager>,
+    pub session_store: SessionStore,
+    pub recording_lifecycle: Arc<RecordingLifecycleManager>,
+    pub idle_stop_timeout: Duration,
+    pub heartbeat_timeout: Duration,
+    pub registry: Arc<SessionRegistry>,
+}
+
 pub struct TransportServer {
     bind_addr: SocketAddr,
     identity: Identity,
@@ -41,29 +54,18 @@ pub struct TransportServer {
 }
 
 impl TransportServer {
-    pub fn new(
-        bind_addr: SocketAddr,
-        identity: Identity,
-        session_manager: Arc<SessionManager>,
-        auth_validator: Arc<AuthValidator>,
-        connect_ticket_manager: Arc<SessionConnectTicketManager>,
-        session_store: SessionStore,
-        recording_lifecycle: Arc<RecordingLifecycleManager>,
-        idle_stop_timeout: Duration,
-        heartbeat_timeout: Duration,
-        registry: Arc<SessionRegistry>,
-    ) -> Self {
+    pub fn new(config: TransportServerConfig) -> Self {
         Self {
-            bind_addr,
-            identity,
-            session_manager,
-            auth_validator,
-            connect_ticket_manager,
-            session_store,
-            recording_lifecycle,
-            idle_stop_timeout,
-            heartbeat_timeout,
-            registry,
+            bind_addr: config.bind_addr,
+            identity: config.identity,
+            session_manager: config.session_manager,
+            auth_validator: config.auth_validator,
+            connect_ticket_manager: config.connect_ticket_manager,
+            session_store: config.session_store,
+            recording_lifecycle: config.recording_lifecycle,
+            idle_stop_timeout: config.idle_stop_timeout,
+            heartbeat_timeout: config.heartbeat_timeout,
+            registry: config.registry,
         }
     }
 
@@ -195,18 +197,18 @@ impl TransportServer {
             );
 
             tokio::spawn(async move {
-                if let Err(e) = handle_session(
+                if let Err(e) = handle_session(session_task::SessionTaskContext {
                     connection,
                     session_id,
-                    validated_request,
+                    connect_request: validated_request,
                     session_manager,
                     session_store,
                     idle_stop_timeout,
-                    &agent_path,
+                    agent_socket_path: agent_path,
                     heartbeat_timeout,
-                    registry.clone(),
+                    registry: registry.clone(),
                     recording_lifecycle,
-                )
+                })
                 .await
                 {
                     error!(session_id, "session error: {e}");

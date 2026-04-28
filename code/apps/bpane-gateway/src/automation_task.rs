@@ -49,10 +49,7 @@ impl AutomationTaskState {
                 Self::Pending,
                 Self::Queued | Self::Starting | Self::Running | Self::Cancelled | Self::Failed,
             )
-            | (
-                Self::Queued,
-                Self::Starting | Self::Running | Self::Cancelled | Self::Failed,
-            )
+            | (Self::Queued, Self::Starting | Self::Running | Self::Cancelled | Self::Failed)
             | (
                 Self::Starting,
                 Self::Running

@@ -47,17 +47,19 @@ impl WorkflowRetentionManager {
 
     pub async fn run_cleanup_pass(&self, now: DateTime<Utc>) -> Result<(), SessionStoreError> {
         let log_candidates = match self.log_retention {
-            Some(retention) => self
-                .session_store
-                .list_workflow_run_log_retention_candidates(now, retention)
-                .await?,
+            Some(retention) => {
+                self.session_store
+                    .list_workflow_run_log_retention_candidates(now, retention)
+                    .await?
+            }
             None => Vec::new(),
         };
         let output_candidates = match self.output_retention {
-            Some(retention) => self
-                .session_store
-                .list_workflow_run_output_retention_candidates(now, retention)
-                .await?,
+            Some(retention) => {
+                self.session_store
+                    .list_workflow_run_output_retention_candidates(now, retention)
+                    .await?
+            }
             None => Vec::new(),
         };
 
@@ -96,7 +98,11 @@ impl WorkflowRetentionManager {
         }
 
         for candidate in output_candidates {
-            match self.session_store.clear_workflow_run_output(candidate.run_id).await {
+            match self
+                .session_store
+                .clear_workflow_run_output(candidate.run_id)
+                .await
+            {
                 Ok(Some(_)) => {
                     self.observability.record_retention_cleared_output();
                     info!(
@@ -133,9 +139,7 @@ mod tests {
     use crate::automation_task::{
         AutomationTaskLogStream, AutomationTaskSessionSource, PersistAutomationTaskRequest,
     };
-    use crate::session_control::{
-        CreateSessionRequest, SessionOwnerMode, SessionRecordingPolicy,
-    };
+    use crate::session_control::{CreateSessionRequest, SessionOwnerMode, SessionRecordingPolicy};
     use crate::workflow::{
         PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
         PersistWorkflowRunLogRequest, PersistWorkflowRunRequest, WorkflowRunState,
