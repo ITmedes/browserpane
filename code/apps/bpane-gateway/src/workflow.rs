@@ -272,6 +272,42 @@ pub struct WorkflowRunRetentionResource {
     pub output_expire_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowRunInterventionRequest {
+    pub request_id: Uuid,
+    pub kind: String,
+    pub prompt: Option<String>,
+    pub details: Option<Value>,
+    pub requested_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowRunInterventionAction {
+    SubmitInput,
+    Resume,
+    Reject,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowRunInterventionResolution {
+    pub request_id: Option<Uuid>,
+    pub action: WorkflowRunInterventionAction,
+    pub input: Option<Value>,
+    pub reason: Option<String>,
+    pub actor_subject: String,
+    pub actor_issuer: String,
+    pub actor_display_name: Option<String>,
+    pub details: Option<Value>,
+    pub resolved_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowRunInterventionResource {
+    pub pending_request: Option<WorkflowRunInterventionRequest>,
+    pub last_resolution: Option<WorkflowRunInterventionResolution>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowRunState {
@@ -425,6 +461,7 @@ pub struct WorkflowRunResource {
     pub produced_files: Vec<WorkflowRunProducedFileResource>,
     pub recordings: Vec<WorkflowRunRecordingResource>,
     pub retention: WorkflowRunRetentionResource,
+    pub intervention: WorkflowRunInterventionResource,
     pub labels: HashMap<String, String>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -512,6 +549,7 @@ impl StoredWorkflowRun {
         &self,
         recordings: Vec<WorkflowRunRecordingResource>,
         retention: WorkflowRunRetentionResource,
+        intervention: WorkflowRunInterventionResource,
     ) -> WorkflowRunResource {
         WorkflowRunResource {
             id: self.id,
@@ -554,6 +592,7 @@ impl StoredWorkflowRun {
                 .collect(),
             recordings,
             retention,
+            intervention,
             labels: self.labels.clone(),
             started_at: self.started_at,
             completed_at: self.completed_at,
@@ -562,6 +601,157 @@ impl StoredWorkflowRun {
             created_at: self.created_at,
             updated_at: self.updated_at,
         }
+    }
+}
+
+fn parse_intervention_request_value(
+    value: &Value,
+    fallback_request_id: Uuid,
+    fallback_requested_at: DateTime<Utc>,
+) -> Option<WorkflowRunInterventionRequest> {
+    let object = value.as_object()?;
+    let nested = object
+        .get("intervention_request")
+        .and_then(Value::as_object)
+        .unwrap_or(object);
+    let kind = nested
+        .get("kind")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("generic_input")
+        .to_string();
+    let prompt = nested
+        .get("prompt")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+    let request_id = nested
+        .get("request_id")
+        .and_then(Value::as_str)
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .unwrap_or(fallback_request_id);
+    let details = nested
+        .get("details")
+        .cloned()
+        .or_else(|| Some(value.clone()));
+    Some(WorkflowRunInterventionRequest {
+        request_id,
+        kind,
+        prompt,
+        details,
+        requested_at: fallback_requested_at,
+    })
+}
+
+fn parse_intervention_resolution_value(
+    value: &Value,
+    fallback_resolved_at: DateTime<Utc>,
+) -> Option<WorkflowRunInterventionResolution> {
+    let object = value.as_object()?;
+    let nested = object
+        .get("intervention_resolution")
+        .and_then(Value::as_object)
+        .unwrap_or(object);
+    let action = nested
+        .get("action")
+        .and_then(Value::as_str)
+        .and_then(|value| match value {
+            "submit_input" => Some(WorkflowRunInterventionAction::SubmitInput),
+            "resume" => Some(WorkflowRunInterventionAction::Resume),
+            "reject" => Some(WorkflowRunInterventionAction::Reject),
+            _ => None,
+        })?;
+    let actor_subject = nested
+        .get("actor_subject")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let actor_issuer = nested
+        .get("actor_issuer")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let request_id = nested
+        .get("request_id")
+        .and_then(Value::as_str)
+        .and_then(|value| Uuid::parse_str(value).ok());
+    let reason = nested
+        .get("reason")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+    let actor_display_name = nested
+        .get("actor_display_name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+    Some(WorkflowRunInterventionResolution {
+        request_id,
+        action,
+        input: nested.get("input").cloned(),
+        reason,
+        actor_subject,
+        actor_issuer,
+        actor_display_name,
+        details: nested.get("details").cloned(),
+        resolved_at: fallback_resolved_at,
+    })
+}
+
+pub fn derive_workflow_run_intervention_resource(
+    run_state: WorkflowRunState,
+    events: &[WorkflowRunEventResource],
+) -> WorkflowRunInterventionResource {
+    let pending_request = if run_state == WorkflowRunState::AwaitingInput {
+        events
+            .iter()
+            .rev()
+            .find(|event| {
+                event.event_type == "workflow_run.awaiting_input"
+                    || event.event_type == "automation_task.awaiting_input"
+            })
+            .and_then(|event| {
+                event
+                    .data
+                    .as_ref()
+                    .and_then(|value| {
+                        parse_intervention_request_value(value, event.id, event.created_at)
+                    })
+                    .or_else(|| {
+                        Some(WorkflowRunInterventionRequest {
+                            request_id: event.id,
+                            kind: "generic_input".to_string(),
+                            prompt: Some(event.message.clone()),
+                            details: event.data.clone(),
+                            requested_at: event.created_at,
+                        })
+                    })
+            })
+    } else {
+        None
+    };
+
+    let last_resolution = events.iter().rev().find_map(|event| {
+        if !matches!(
+            event.event_type.as_str(),
+            "workflow_run.input_submitted" | "workflow_run.resumed" | "workflow_run.rejected"
+        ) {
+            return None;
+        }
+        event.data
+            .as_ref()
+            .and_then(|value| parse_intervention_resolution_value(value, event.created_at))
+    });
+
+    WorkflowRunInterventionResource {
+        pending_request,
+        last_resolution,
     }
 }
 
@@ -692,6 +882,80 @@ pub fn workflow_run_event_type(state: WorkflowRunState) -> &'static str {
         WorkflowRunState::Failed => "workflow_run.failed",
         WorkflowRunState::Cancelled => "workflow_run.cancelled",
         WorkflowRunState::TimedOut => "workflow_run.timed_out",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn derives_pending_intervention_request_from_awaiting_input_event() {
+        let request_id = Uuid::now_v7();
+        let event = WorkflowRunEventResource {
+            id: Uuid::now_v7(),
+            run_id: Uuid::now_v7(),
+            source: WorkflowRunEventSource::Run,
+            automation_task_id: None,
+            event_type: "workflow_run.awaiting_input".to_string(),
+            message: "workflow run is awaiting input".to_string(),
+            data: Some(serde_json::json!({
+                "intervention_request": {
+                    "request_id": request_id,
+                    "kind": "approval",
+                    "prompt": "Approve payout export",
+                    "details": {
+                        "task": "review"
+                    }
+                }
+            })),
+            created_at: Utc::now(),
+        };
+
+        let resource =
+            derive_workflow_run_intervention_resource(WorkflowRunState::AwaitingInput, &[event]);
+        let pending = resource.pending_request.expect("pending request");
+        assert_eq!(pending.request_id, request_id);
+        assert_eq!(pending.kind, "approval");
+        assert_eq!(pending.prompt.as_deref(), Some("Approve payout export"));
+        assert_eq!(pending.details, Some(serde_json::json!({ "task": "review" })));
+        assert!(resource.last_resolution.is_none());
+    }
+
+    #[test]
+    fn derives_last_intervention_resolution_from_resolution_event() {
+        let request_id = Uuid::now_v7();
+        let event = WorkflowRunEventResource {
+            id: Uuid::now_v7(),
+            run_id: Uuid::now_v7(),
+            source: WorkflowRunEventSource::Run,
+            automation_task_id: None,
+            event_type: "workflow_run.input_submitted".to_string(),
+            message: "operator submitted input".to_string(),
+            data: Some(serde_json::json!({
+                "intervention_resolution": {
+                    "request_id": request_id,
+                    "action": "submit_input",
+                    "input": {
+                        "approved": true
+                    },
+                    "actor_subject": "owner",
+                    "actor_issuer": "bpane-gateway",
+                    "actor_display_name": "Owner"
+                }
+            })),
+            created_at: Utc::now(),
+        };
+
+        let resource = derive_workflow_run_intervention_resource(WorkflowRunState::Running, &[event]);
+        assert!(resource.pending_request.is_none());
+        let resolution = resource.last_resolution.expect("resolution");
+        assert_eq!(resolution.request_id, Some(request_id));
+        assert_eq!(resolution.action, WorkflowRunInterventionAction::SubmitInput);
+        assert_eq!(resolution.input, Some(serde_json::json!({ "approved": true })));
+        assert_eq!(resolution.actor_subject, "owner");
+        assert_eq!(resolution.actor_issuer, "bpane-gateway");
+        assert_eq!(resolution.actor_display_name.as_deref(), Some("Owner"));
     }
 }
 

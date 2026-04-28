@@ -20,6 +20,7 @@
     "smoke:workflow-credentials": "node scripts/run-workflow-credential-smoke.mjs",
     "smoke:workflow-extension": "node scripts/run-workflow-extension-smoke.mjs",
     "smoke:workflow-failure": "node scripts/run-workflow-failure-smoke.mjs",
+    "smoke:workflow-intervention": "node scripts/run-workflow-intervention-smoke.mjs",
     "smoke:workflow-reconnect": "node scripts/run-workflow-reconnect-smoke.mjs",
     "smoke:workflow-workspace": "node scripts/run-workflow-workspace-smoke.mjs",
     "smoke:multisession": "node scripts/run-multi-session-smoke.mjs",

@@ -644,6 +644,96 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/submit-input:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Workflows]
+      summary: Submit owner-provided input to a workflow run that is awaiting input
+      operationId: submitWorkflowRunInput
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitWorkflowRunInputRequest'
+      responses:
+        '200':
+          description: Updated workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/resume:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Workflows]
+      summary: Resume a workflow run that is awaiting operator action without submitting new input
+      operationId: resumeWorkflowRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResumeWorkflowRunRequest'
+      responses:
+        '200':
+          description: Updated workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Workflows]
+      summary: Reject a workflow run that is awaiting operator action and fail the run
+      operationId: rejectWorkflowRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectWorkflowRunRequest'
+      responses:
+        '200':
+          description: Updated workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflow-runs/{run_id}/events:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -2610,6 +2700,36 @@ components:
           nullable: true
         data:
           nullable: true
+    SubmitWorkflowRunInputRequest:
+      type: object
+      additionalProperties: false
+      required: [input]
+      properties:
+        input:
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+        details:
+          nullable: true
+    ResumeWorkflowRunRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        comment:
+          type: string
+          nullable: true
+        details:
+          nullable: true
+    RejectWorkflowRunRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+        details:
+          nullable: true
     AppendWorkflowRunLogRequest:
       type: object
       additionalProperties: false
@@ -2731,6 +2851,77 @@ components:
           $ref: '#/components/schemas/WorkflowRunCredentialBindingResource'
         payload:
           nullable: true
+    WorkflowRunInterventionRequest:
+      type: object
+      required: [request_id, kind, prompt, details, requested_at]
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        prompt:
+          type: string
+          nullable: true
+        details:
+          nullable: true
+        requested_at:
+          type: string
+          format: date-time
+    WorkflowRunInterventionAction:
+      type: string
+      enum:
+        - submit_input
+        - resume
+        - reject
+    WorkflowRunInterventionResolution:
+      type: object
+      required:
+        - request_id
+        - action
+        - input
+        - reason
+        - actor_subject
+        - actor_issuer
+        - actor_display_name
+        - details
+        - resolved_at
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          nullable: true
+        action:
+          $ref: '#/components/schemas/WorkflowRunInterventionAction'
+        input:
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        actor_subject:
+          type: string
+        actor_issuer:
+          type: string
+        actor_display_name:
+          type: string
+          nullable: true
+        details:
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+    WorkflowRunInterventionResource:
+      type: object
+      required: [pending_request, last_resolution]
+      properties:
+        pending_request:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunInterventionRequest'
+          nullable: true
+        last_resolution:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunInterventionResolution'
+          nullable: true
     WorkflowRunResource:
       type: object
       required:
@@ -2755,6 +2946,7 @@ components:
         - produced_files
         - recordings
         - retention
+        - intervention
         - labels
         - started_at
         - completed_at
@@ -2828,6 +3020,8 @@ components:
             $ref: '#/components/schemas/WorkflowRunRecordingResource'
         retention:
           $ref: '#/components/schemas/WorkflowRunRetentionResource'
+        intervention:
+          $ref: '#/components/schemas/WorkflowRunInterventionResource'
         labels:
           type: object
           additionalProperties:
