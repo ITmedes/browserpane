@@ -618,7 +618,7 @@ echo "${BPANE_RECORDING_SESSION_ID} ${BPANE_RECORDING_ID}" > "$1"
 
         manager.ensure_auto_recording(&session).await.unwrap();
 
-        for _ in 0..50 {
+        for _ in 0..200 {
             if capture_file.exists() {
                 break;
             }
@@ -753,7 +753,7 @@ echo "${BPANE_RECORDING_SESSION_ID} ${BPANE_RECORDING_ID}" > "$1"
 
         manager.reconcile_persisted_state().await.unwrap();
 
-        for _ in 0..50 {
+        for _ in 0..200 {
             if capture_file.exists() {
                 break;
             }

@@ -811,7 +811,7 @@ paths:
   /api/v1/workflow/operations:
     get:
       tags: [Workflows]
-      summary: Read gateway-local workflow artifact and retention counters
+      summary: Read gateway-local workflow delivery, artifact, and retention counters
       operationId: getWorkflowOperations
       responses:
         '200':
@@ -822,6 +822,102 @@ paths:
                 $ref: '#/components/schemas/WorkflowObservabilitySnapshot'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-event-subscriptions:
+    get:
+      tags: [Workflows]
+      summary: List owner-scoped outbound workflow event subscriptions
+      operationId: listWorkflowEventSubscriptions
+      responses:
+        '200':
+          description: Workflow event subscription list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventSubscriptionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Workflows]
+      summary: Create an outbound workflow event subscription
+      operationId: createWorkflowEventSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkflowEventSubscriptionRequest'
+      responses:
+        '201':
+          description: Workflow event subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventSubscriptionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-event-subscriptions/{subscription_id}:
+    parameters:
+      - $ref: '#/components/parameters/SubscriptionId'
+    get:
+      tags: [Workflows]
+      summary: Read one owner-scoped outbound workflow event subscription
+      operationId: getWorkflowEventSubscription
+      responses:
+        '200':
+          description: Workflow event subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventSubscriptionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    delete:
+      tags: [Workflows]
+      summary: Delete an outbound workflow event subscription
+      operationId: deleteWorkflowEventSubscription
+      responses:
+        '200':
+          description: Deleted workflow event subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventSubscriptionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-event-subscriptions/{subscription_id}/deliveries:
+    parameters:
+      - $ref: '#/components/parameters/SubscriptionId'
+    get:
+      tags: [Workflows]
+      summary: List persisted outbound workflow event deliveries for a subscription
+      operationId: listWorkflowEventDeliveries
+      responses:
+        '200':
+          description: Workflow event delivery list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventDeliveryListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/extensions:
@@ -1683,6 +1779,13 @@ components:
         type: string
     RunId:
       name: run_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SubscriptionId:
+      name: subscription_id
       in: path
       required: true
       schema:
@@ -3147,6 +3250,183 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkflowRunLogResource'
+    CreateWorkflowEventSubscriptionRequest:
+      type: object
+      required:
+        - name
+        - target_url
+        - event_types
+        - signing_secret
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        target_url:
+          type: string
+        event_types:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        signing_secret:
+          type: string
+    WorkflowEventSubscriptionResource:
+      type: object
+      required:
+        - id
+        - name
+        - target_url
+        - event_types
+        - has_signing_secret
+        - deliveries_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        target_url:
+          type: string
+        event_types:
+          type: array
+          items:
+            type: string
+        has_signing_secret:
+          type: boolean
+        deliveries_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowEventSubscriptionListResponse:
+      type: object
+      required: [subscriptions]
+      properties:
+        subscriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEventSubscriptionResource'
+    WorkflowEventDeliveryState:
+      type: string
+      enum:
+        - pending
+        - delivering
+        - delivered
+        - failed
+    WorkflowEventDeliveryAttemptResource:
+      type: object
+      required:
+        - id
+        - delivery_id
+        - attempt_number
+        - response_status
+        - error
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        delivery_id:
+          type: string
+          format: uuid
+        attempt_number:
+          type: integer
+          minimum: 0
+        response_status:
+          type: integer
+          minimum: 100
+          maximum: 599
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    WorkflowEventDeliveryResource:
+      type: object
+      required:
+        - id
+        - subscription_id
+        - run_id
+        - event_id
+        - event_type
+        - state
+        - attempt_count
+        - next_attempt_at
+        - last_attempt_at
+        - delivered_at
+        - last_response_status
+        - last_error
+        - payload
+        - attempts
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        subscription_id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        state:
+          $ref: '#/components/schemas/WorkflowEventDeliveryState'
+        attempt_count:
+          type: integer
+          minimum: 0
+        next_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_response_status:
+          type: integer
+          minimum: 100
+          maximum: 599
+          nullable: true
+        last_error:
+          type: string
+          nullable: true
+        payload:
+          nullable: false
+        attempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEventDeliveryAttemptResource'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowEventDeliveryListResponse:
+      type: object
+      required: [deliveries]
+      properties:
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEventDeliveryResource'
     WorkflowRunProducedFileResource:
       type: object
       required:
@@ -4048,18 +4328,35 @@ components:
       required:
         - produced_file_uploads_total
         - produced_file_upload_failures_total
+        - event_delivery_attempts_total
+        - event_delivery_successes_total
+        - event_delivery_retries_total
+        - event_delivery_failures_total
         - retention_passes_total
         - log_retention_candidates_total
         - output_retention_candidates_total
         - retention_deleted_logs_total
         - retention_cleared_outputs_total
         - retention_failures_total
+        - last_event_delivery_at
         - last_retention_pass_at
       properties:
         produced_file_uploads_total:
           type: integer
           minimum: 0
         produced_file_upload_failures_total:
+          type: integer
+          minimum: 0
+        event_delivery_attempts_total:
+          type: integer
+          minimum: 0
+        event_delivery_successes_total:
+          type: integer
+          minimum: 0
+        event_delivery_retries_total:
+          type: integer
+          minimum: 0
+        event_delivery_failures_total:
           type: integer
           minimum: 0
         retention_passes_total:
@@ -4080,6 +4377,10 @@ components:
         retention_failures_total:
           type: integer
           minimum: 0
+        last_event_delivery_at:
+          type: string
+          format: date-time
+          nullable: true
         last_retention_pass_at:
           type: string
           format: date-time
