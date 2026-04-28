@@ -246,6 +246,26 @@ pub struct Config {
     #[arg(long)]
     pub workflow_worker_oidc_scopes: Option<String>,
 
+    /// Poll interval in milliseconds for outbound workflow event delivery.
+    #[arg(long, default_value_t = 1000)]
+    pub workflow_event_delivery_poll_interval_ms: u64,
+
+    /// HTTP timeout in seconds for outbound workflow event delivery.
+    #[arg(long, default_value_t = 10)]
+    pub workflow_event_delivery_timeout_secs: u64,
+
+    /// Maximum number of attempts for each outbound workflow event delivery.
+    #[arg(long, default_value_t = 6)]
+    pub workflow_event_delivery_max_attempts: u32,
+
+    /// Maximum number of due workflow event deliveries claimed per dispatch pass.
+    #[arg(long, default_value_t = 32)]
+    pub workflow_event_delivery_batch_size: usize,
+
+    /// Base backoff in seconds for retrying outbound workflow event delivery.
+    #[arg(long, default_value_t = 2)]
+    pub workflow_event_delivery_base_backoff_secs: u64,
+
     /// Optional SPKI pin forwarded to the recorder worker Chromium process.
     #[arg(long)]
     pub recording_worker_cert_spki: Option<String>,

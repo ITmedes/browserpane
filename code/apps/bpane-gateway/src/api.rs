@@ -78,6 +78,11 @@ use crate::workflow::{
     WorkflowRunRetentionResource, WorkflowRunSourceSnapshot, WorkflowRunState,
     WorkflowRunTransitionRequest, WorkflowRunWorkspaceInput,
 };
+use crate::workflow_event_delivery::{
+    group_attempts_by_delivery, PersistWorkflowEventSubscriptionRequest,
+    WorkflowEventDeliveryListResponse, WorkflowEventSubscriptionListResponse,
+    WorkflowEventSubscriptionResource,
+};
 use crate::workflow_lifecycle::WorkflowLifecycleManager;
 use crate::workflow_observability::{WorkflowObservability, WorkflowObservabilitySnapshot};
 use crate::workflow_source::{
@@ -372,6 +377,14 @@ struct RejectWorkflowRunRequest {
 struct AppendWorkflowRunLogRequest {
     stream: AutomationTaskLogStream,
     message: String,
+}
+
+#[derive(Deserialize)]
+struct CreateWorkflowEventSubscriptionRequest {
+    name: String,
+    target_url: String,
+    event_types: Vec<String>,
+    signing_secret: String,
 }
 
 #[derive(Serialize)]
@@ -1388,6 +1401,143 @@ fn workflow_run_request_fingerprint(
         )
     })?;
     Ok(Some(hex::encode(Sha256::digest(bytes))))
+}
+
+async fn create_workflow_event_subscription(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CreateWorkflowEventSubscriptionRequest>,
+) -> Result<(StatusCode, Json<WorkflowEventSubscriptionResource>), (StatusCode, Json<ErrorResponse>)>
+{
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let subscription = state
+        .session_store
+        .create_workflow_event_subscription(
+            &principal,
+            PersistWorkflowEventSubscriptionRequest {
+                name: request.name,
+                target_url: request.target_url,
+                event_types: request.event_types,
+                signing_secret: request.signing_secret,
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::CREATED, Json(subscription.to_resource())))
+}
+
+async fn list_workflow_event_subscriptions(
+    headers: HeaderMap,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowEventSubscriptionListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let subscriptions = state
+        .session_store
+        .list_workflow_event_subscriptions_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|subscription| subscription.to_resource())
+        .collect();
+    Ok(Json(WorkflowEventSubscriptionListResponse { subscriptions }))
+}
+
+async fn get_workflow_event_subscription(
+    headers: HeaderMap,
+    Path(subscription_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowEventSubscriptionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let subscription = state
+        .session_store
+        .get_workflow_event_subscription_for_owner(&principal, subscription_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow event subscription {subscription_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(subscription.to_resource()))
+}
+
+async fn delete_workflow_event_subscription(
+    headers: HeaderMap,
+    Path(subscription_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowEventSubscriptionResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let subscription = state
+        .session_store
+        .delete_workflow_event_subscription_for_owner(&principal, subscription_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow event subscription {subscription_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(subscription.to_resource()))
+}
+
+async fn list_workflow_event_deliveries(
+    headers: HeaderMap,
+    Path(subscription_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowEventDeliveryListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    if state
+        .session_store
+        .get_workflow_event_subscription_for_owner(&principal, subscription_id)
+        .await
+        .map_err(map_session_store_error)?
+        .is_none()
+    {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("workflow event subscription {subscription_id} not found"),
+            }),
+        ));
+    }
+    let deliveries = state
+        .session_store
+        .list_workflow_event_deliveries_for_owner(&principal, subscription_id)
+        .await
+        .map_err(map_session_store_error)?;
+    let attempts = state
+        .session_store
+        .list_workflow_event_delivery_attempts_for_owner(&principal, subscription_id)
+        .await
+        .map_err(map_session_store_error)?;
+    let attempts_by_delivery = group_attempts_by_delivery(attempts);
+    let deliveries = deliveries
+        .into_iter()
+        .map(|delivery| {
+            let attempts = attempts_by_delivery
+                .get(&delivery.id)
+                .cloned()
+                .unwrap_or_default();
+            delivery.to_resource(attempts)
+        })
+        .collect();
+    Ok(Json(WorkflowEventDeliveryListResponse { deliveries }))
 }
 
 async fn create_workflow_run(
@@ -4450,6 +4600,18 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         .route(
             "/api/v1/file-workspaces/{workspace_id}/files/{file_id}/content",
             get(get_file_workspace_file_content),
+        )
+        .route(
+            "/api/v1/workflow-event-subscriptions",
+            post(create_workflow_event_subscription).get(list_workflow_event_subscriptions),
+        )
+        .route(
+            "/api/v1/workflow-event-subscriptions/{subscription_id}",
+            get(get_workflow_event_subscription).delete(delete_workflow_event_subscription),
+        )
+        .route(
+            "/api/v1/workflow-event-subscriptions/{subscription_id}/deliveries",
+            get(list_workflow_event_deliveries),
         )
         .route(
             "/api/v1/workflows",
