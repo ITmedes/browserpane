@@ -4101,6 +4101,7 @@ impl InMemorySessionStore {
         deliveries.sort_by(|left, right| {
             left.created_at
                 .cmp(&right.created_at)
+                .then_with(|| left.event_id.cmp(&right.event_id))
                 .then_with(|| left.id.cmp(&right.id))
         });
         Ok(deliveries)
@@ -4156,7 +4157,17 @@ impl InMemorySessionStore {
                 delivery.state == WorkflowEventDeliveryState::Pending
                     && delivery.next_attempt_at.map(|value| value <= now).unwrap_or(true)
             })
-            .map(|(index, _)| index)
+            .map(|(index, delivery)| (index, delivery.created_at, delivery.event_id, delivery.id))
+            .collect::<Vec<_>>();
+        due_indexes.sort_by(|left, right| {
+            left.1
+                .cmp(&right.1)
+                .then_with(|| left.2.cmp(&right.2))
+                .then_with(|| left.3.cmp(&right.3))
+        });
+        let mut due_indexes = due_indexes
+            .into_iter()
+            .map(|(index, _, _, _)| index)
             .take(limit)
             .collect::<Vec<_>>();
         let mut claimed = Vec::with_capacity(due_indexes.len());
@@ -8771,7 +8782,7 @@ impl PostgresSessionStore {
                     updated_at
                 FROM control_workflow_event_deliveries
                 WHERE subscription_id = $1
-                ORDER BY created_at ASC, id ASC
+                ORDER BY created_at ASC, event_id ASC, id ASC
                 "#,
                 &[&subscription_id],
             )
@@ -8873,7 +8884,7 @@ impl PostgresSessionStore {
                     FROM control_workflow_event_deliveries
                     WHERE state = 'pending'
                       AND (next_attempt_at IS NULL OR next_attempt_at <= $2)
-                    ORDER BY created_at ASC, id ASC
+                    ORDER BY created_at ASC, event_id ASC, id ASC
                     FOR UPDATE SKIP LOCKED
                     LIMIT $1
                 )
@@ -8910,7 +8921,17 @@ impl PostgresSessionStore {
                     "failed to claim due workflow event deliveries: {error}"
                 ))
             })?;
-        rows.iter().map(row_to_stored_workflow_event_delivery).collect()
+        let mut deliveries = rows
+            .iter()
+            .map(row_to_stored_workflow_event_delivery)
+            .collect::<Result<Vec<_>, _>>()?;
+        deliveries.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then_with(|| left.event_id.cmp(&right.event_id))
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        Ok(deliveries)
     }
 
     async fn record_workflow_event_delivery_attempt(
