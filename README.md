@@ -278,6 +278,12 @@ Current workflow capabilities:
 
 - owner-scoped workflow definitions and immutable versions
 - workflow runs with logs, events, outputs, recordings, and produced files
+- external correlation fields on runs (`source_system`, `source_reference`, `client_request_id`)
+- safe idempotent run creation for retried upstream requests
+- durable queued/admission state when BrowserPane worker capacity is exhausted
+- durable operator intervention state with `submit-input`, `resume`, `reject`, and `cancel`
+- explicit runtime hold/release semantics for paused runs (`live_runtime` vs `profile_restart`)
+- signed outbound workflow lifecycle webhook delivery
 - git-backed workflow sources pinned to resolved commits
 - source snapshot materialization per run
 - file workspaces for reusable inputs and durable outputs
@@ -292,9 +298,16 @@ Primary routes:
 - `POST /api/v1/workflows/{id}/versions`
 - `POST /api/v1/workflow-runs`
 - `GET /api/v1/workflow-runs/{id}`
+- `POST /api/v1/workflow-runs/{id}/cancel`
+- `POST /api/v1/workflow-runs/{id}/submit-input`
+- `POST /api/v1/workflow-runs/{id}/resume`
+- `POST /api/v1/workflow-runs/{id}/reject`
 - `GET /api/v1/workflow-runs/{id}/logs`
 - `GET /api/v1/workflow-runs/{id}/events`
 - `GET /api/v1/workflow-runs/{id}/produced-files`
+- `POST /api/v1/workflow-event-subscriptions`
+- `GET /api/v1/workflow-event-subscriptions`
+- `GET /api/v1/workflow-event-subscriptions/{id}/deliveries`
 
 Reusable workflow inputs:
 
@@ -305,6 +318,7 @@ Reusable workflow inputs:
 Workflow boundary:
 
 - BrowserPane owns browser-run execution, run state, recordings/artifacts, reusable runtime inputs, and human intervention around the run.
+- BrowserPane also owns browser-native admission/backpressure, paused-run runtime semantics, and signed lifecycle delivery for external systems.
 - External workflow systems should usually own schedules, DAGs, broad retry policy, and cross-system orchestration.
 
 Local usage options:
@@ -323,7 +337,17 @@ Typical local workflow path:
    - approved extension if the workflow needs a Chromium extension
 4. Create a workflow definition and a pinned version that points at a git-backed Playwright entrypoint
 5. Start a workflow run from the workflow panel, the CLI, or the raw v1 API
-6. Inspect logs, events, outputs, recordings, and produced files from the run resource
+6. If the run pauses, resolve operator input or approval from the UI, CLI, or API
+7. Inspect logs, events, outputs, recordings, produced files, and webhook deliveries from the run resource and subscription diagnostics
+
+Workflow run operations available to external systems:
+
+- create runs idempotently with a stable `client_request_id`
+- poll or subscribe to run lifecycle changes
+- detect admission/backpressure through `queued` run state and the `admission` block
+- hand work to a human with durable `awaiting_input` plus `intervention.pending_request`
+- resume or reject paused runs through explicit owner actions
+- distinguish live-runtime resume from profile-backed restart through the `runtime` block on the run resource
 
 Minimal CLI flow with an owner bearer token:
 
@@ -333,6 +357,8 @@ export BPANE_API_URL=http://localhost:8932
 export BPANE_ACCESS_TOKEN=<owner bearer token>
 npm run workflow:cli -- workflow list
 npm run workflow:cli -- workflow run get <run-id>
+npm run workflow:cli -- workflow run cancel <run-id>
+npm run workflow:cli -- workflow run resume <run-id> --comment "approved"
 ```
 
 The CLI is intentionally thin. It wraps the existing owner-scoped v1 workflow routes rather than introducing a second control-plane contract.
@@ -358,6 +384,10 @@ npm run workflow:cli -- --help
 npm run smoke:recording -- --headless
 npm run smoke:workflow-cli -- --headless
 npm run smoke:workflow-credential-injection -- --headless
+npm run smoke:workflow-events -- --headless
+npm run smoke:workflow-runtime-hold -- --headless
+npm run smoke:workflow-restart-safety -- --headless
+npm run smoke:workflow-queued-cancel -- --headless
 ```
 
 Other useful checks:
@@ -371,6 +401,10 @@ cd code/integrations/workflow-worker && npm run build
 cd code/web/bpane-client && npm run smoke:recording -- --headless
 cd code/web/bpane-client && npm run smoke:workflow-cli -- --headless
 cd code/web/bpane-client && npm run smoke:workflow-credential-injection -- --headless
+cd code/web/bpane-client && npm run smoke:workflow-events -- --headless
+cd code/web/bpane-client && npm run smoke:workflow-runtime-hold -- --headless
+cd code/web/bpane-client && npm run smoke:workflow-restart-safety -- --headless
+cd code/web/bpane-client && npm run smoke:workflow-queued-cancel -- --headless
 cd code/web/bpane-client && npm run smoke:multisession -- --headless
 ```
 
