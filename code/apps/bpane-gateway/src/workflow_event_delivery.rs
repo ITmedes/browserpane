@@ -283,10 +283,11 @@ impl WorkflowEventDeliveryManager {
     }
 
     pub async fn run_dispatch_pass(&self) -> Result<(), SessionStoreError> {
-        let deliveries = self
+        let mut deliveries = self
             .session_store
             .claim_due_workflow_event_deliveries(self.config.batch_size, Utc::now())
             .await?;
+        sort_workflow_event_deliveries(&mut deliveries);
         for delivery in deliveries {
             self.deliver(delivery).await?;
         }
@@ -513,6 +514,15 @@ fn should_retry_http_status(status: u16) -> bool {
     status == 429 || (500..=599).contains(&status)
 }
 
+pub fn sort_workflow_event_deliveries(deliveries: &mut [StoredWorkflowEventDelivery]) {
+    deliveries.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then_with(|| left.event_id.cmp(&right.event_id))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+}
+
 pub fn group_attempts_by_delivery(
     attempts: Vec<StoredWorkflowEventDeliveryAttempt>,
 ) -> HashMap<Uuid, Vec<WorkflowEventDeliveryAttemptResource>> {
@@ -575,6 +585,92 @@ mod tests {
         assert_eq!(
             backoff_for_attempt(Duration::from_secs(120), 8),
             Duration::from_secs(300)
+        );
+    }
+
+    #[test]
+    fn workflow_event_deliveries_sort_by_lifecycle_order() {
+        let created_at = Utc::now();
+        let subscription_id = Uuid::now_v7();
+        let run_id = Uuid::now_v7();
+        let created_event_id = Uuid::parse_str("00000000-0000-7000-8000-000000000001").unwrap();
+        let running_event_id = Uuid::parse_str("00000000-0000-7000-8000-000000000002").unwrap();
+        let succeeded_event_id = Uuid::parse_str("00000000-0000-7000-8000-000000000003").unwrap();
+        let mut deliveries = vec![
+            StoredWorkflowEventDelivery {
+                id: Uuid::now_v7(),
+                subscription_id,
+                run_id,
+                event_id: succeeded_event_id,
+                event_type: "workflow_run.succeeded".to_string(),
+                target_url: "http://example.test/hook".to_string(),
+                signing_secret: "secret".to_string(),
+                payload: serde_json::json!({ "event_type": "workflow_run.succeeded" }),
+                state: WorkflowEventDeliveryState::Pending,
+                attempt_count: 0,
+                next_attempt_at: Some(created_at),
+                last_attempt_at: None,
+                delivered_at: None,
+                last_response_status: None,
+                last_error: None,
+                created_at,
+                updated_at: created_at,
+            },
+            StoredWorkflowEventDelivery {
+                id: Uuid::now_v7(),
+                subscription_id,
+                run_id,
+                event_id: created_event_id,
+                event_type: "workflow_run.created".to_string(),
+                target_url: "http://example.test/hook".to_string(),
+                signing_secret: "secret".to_string(),
+                payload: serde_json::json!({ "event_type": "workflow_run.created" }),
+                state: WorkflowEventDeliveryState::Pending,
+                attempt_count: 0,
+                next_attempt_at: Some(created_at),
+                last_attempt_at: None,
+                delivered_at: None,
+                last_response_status: None,
+                last_error: None,
+                created_at,
+                updated_at: created_at,
+            },
+            StoredWorkflowEventDelivery {
+                id: Uuid::now_v7(),
+                subscription_id,
+                run_id,
+                event_id: running_event_id,
+                event_type: "workflow_run.running".to_string(),
+                target_url: "http://example.test/hook".to_string(),
+                signing_secret: "secret".to_string(),
+                payload: serde_json::json!({ "event_type": "workflow_run.running" }),
+                state: WorkflowEventDeliveryState::Pending,
+                attempt_count: 0,
+                next_attempt_at: Some(created_at),
+                last_attempt_at: None,
+                delivered_at: None,
+                last_response_status: None,
+                last_error: None,
+                created_at,
+                updated_at: created_at,
+            },
+        ];
+
+        deliveries.swap(0, 1);
+
+        sort_workflow_event_deliveries(&mut deliveries);
+
+        let event_types = deliveries
+            .iter()
+            .map(|delivery| delivery.event_type.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            event_types,
+            vec![
+                "workflow_run.created",
+                "workflow_run.running",
+                "workflow_run.succeeded"
+            ]
         );
     }
 }
