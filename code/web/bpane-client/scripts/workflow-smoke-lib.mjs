@@ -229,7 +229,19 @@ export async function deleteSession(accessToken, options, sessionId) {
 }
 
 export async function cleanupWorkflowSmokeSessions(accessToken, options, log = () => {}) {
-  const response = await listSessions(accessToken, options);
+  const response = await poll(
+    'workflow control-plane readiness',
+    async () => {
+      try {
+        return await listSessions(accessToken, options);
+      } catch (error) {
+        return error;
+      }
+    },
+    (value) => !(value instanceof Error),
+    Math.min(options.connectTimeoutMs, 15000),
+    500,
+  );
   const sessions = Array.isArray(response.sessions) ? response.sessions : [];
   let removed = 0;
   for (const session of sessions) {

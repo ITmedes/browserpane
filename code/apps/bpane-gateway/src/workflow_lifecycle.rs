@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use tokio::process::Command;
-use tokio::sync::Mutex;
+use tokio::sync::Mutex as AsyncMutex;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -21,6 +21,7 @@ use crate::workflow::{WorkflowRunState, WorkflowRunTransitionRequest};
 pub struct WorkflowWorkerConfig {
     pub docker_bin: PathBuf,
     pub image: String,
+    pub max_active_workers: usize,
     pub network: Option<String>,
     pub container_name_prefix: String,
     pub gateway_api_url: String,
@@ -67,7 +68,8 @@ struct WorkflowLifecycleInner {
     auth_validator: Arc<AuthValidator>,
     automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
     session_store: SessionStore,
-    launched: Mutex<HashMap<Uuid, LaunchedWorkflowWorker>>,
+    launched: StdMutex<HashMap<Uuid, LaunchedWorkflowWorker>>,
+    dispatch_lock: AsyncMutex<()>,
 }
 
 #[derive(Debug, Clone)]
@@ -96,7 +98,8 @@ impl WorkflowLifecycleManager {
                 auth_validator,
                 automation_access_token_manager,
                 session_store,
-                launched: Mutex::new(HashMap::new()),
+                launched: StdMutex::new(HashMap::new()),
+                dispatch_lock: AsyncMutex::new(()),
             })),
         })
     }
@@ -113,6 +116,7 @@ impl WorkflowLifecycleManager {
         for assignment in assignments {
             inner.reconcile_assignment(assignment).await?;
         }
+        inner.dispatch_waiting_runs_serialized().await?;
         Ok(())
     }
 
@@ -135,6 +139,13 @@ impl WorkflowLifecycleManager {
             return Ok(());
         };
         inner.cancel_run(run_id).await
+    }
+
+    pub async fn reconcile_waiting_runs(&self) -> Result<(), WorkflowLifecycleError> {
+        let Some(inner) = &self.inner else {
+            return Ok(());
+        };
+        inner.dispatch_waiting_runs_serialized().await
     }
 }
 
@@ -183,8 +194,22 @@ impl WorkflowLifecycleInner {
             return Ok(());
         }
 
+        if let Some(task) = self
+            .session_store
+            .get_automation_task_by_id(run.automation_task_id)
+            .await?
         {
-            let launched = self.launched.lock().await;
+            if task.state.is_terminal() {
+                let _ = self
+                    .session_store
+                    .reconcile_workflow_run_from_task(run_id)
+                    .await?;
+                return Ok(());
+            }
+        }
+
+        {
+            let launched = self.launched.lock().expect("workflow launched mutex poisoned");
             if launched.contains_key(&run_id) {
                 return Ok(());
             }
@@ -199,15 +224,7 @@ impl WorkflowLifecycleInner {
             return Ok(());
         }
 
-        if let Err(error) = self.spawn_worker(&run).await {
-            self.fail_run_if_active(
-                run_id,
-                format!("failed to launch workflow worker: {error}"),
-            )
-            .await?;
-            return Err(error);
-        }
-        Ok(())
+        self.dispatch_waiting_runs_serialized().await
     }
 
     async fn cancel_run(&self, run_id: Uuid) -> Result<(), WorkflowLifecycleError> {
@@ -265,6 +282,17 @@ impl WorkflowLifecycleInner {
             self.config.container_name_prefix,
             run.id.simple()
         );
+
+        self.session_store
+            .upsert_workflow_run_worker_assignment(PersistedWorkflowRunWorkerAssignment {
+                run_id: run.id,
+                session_id: run.session_id,
+                automation_task_id: run.automation_task_id,
+                status: WorkflowRunWorkerAssignmentStatus::Starting,
+                process_id: None,
+                container_name: Some(container_name.clone()),
+            })
+            .await?;
 
         let mut command = Command::new(&self.config.docker_bin);
         command.arg("run");
@@ -331,32 +359,24 @@ impl WorkflowLifecycleInner {
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
 
-        let mut child = command.spawn().map_err(|error| {
-            WorkflowLifecycleError::LaunchFailed(format!(
-                "failed to spawn workflow worker for run {}: {error}",
-                run.id
-            ))
-        })?;
-        let process_id = child.id();
+        let child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = self
+                    .session_store
+                    .clear_workflow_run_worker_assignment(run.id)
+                    .await;
+                return Err(WorkflowLifecycleError::LaunchFailed(format!(
+                    "failed to spawn workflow worker for run {}: {error}",
+                    run.id
+                )));
+            }
+        };
 
-        if let Err(error) = self
-            .session_store
-            .upsert_workflow_run_worker_assignment(PersistedWorkflowRunWorkerAssignment {
-                run_id: run.id,
-                session_id: run.session_id,
-                automation_task_id: run.automation_task_id,
-                status: WorkflowRunWorkerAssignmentStatus::Running,
-                process_id,
-                container_name: Some(container_name.clone()),
-            })
-            .await
-        {
-            let _ = child.start_kill();
-            let _ = self.remove_container(&container_name).await;
-            return Err(error.into());
-        }
-
-        self.launched.lock().await.insert(
+        self.launched
+            .lock()
+            .expect("workflow launched mutex poisoned")
+            .insert(
             run.id,
             LaunchedWorkflowWorker {
                 container_name: container_name.clone(),
@@ -380,6 +400,155 @@ impl WorkflowLifecycleInner {
         Ok(())
     }
 
+    async fn dispatch_waiting_runs_serialized(
+        self: &Arc<Self>,
+    ) -> Result<(), WorkflowLifecycleError> {
+        let _guard = self.dispatch_lock.lock().await;
+        self.dispatch_waiting_runs().await
+    }
+
+    async fn dispatch_waiting_runs(self: &Arc<Self>) -> Result<(), WorkflowLifecycleError> {
+        let runs = self.session_store.list_dispatchable_workflow_runs().await?;
+        for run in runs {
+            if run.state.is_terminal() {
+                continue;
+            }
+            if let Some(task) = self
+                .session_store
+                .get_automation_task_by_id(run.automation_task_id)
+                .await?
+            {
+                if task.state.is_terminal() {
+                    let _ = self
+                        .session_store
+                        .reconcile_workflow_run_from_task(run.id)
+                        .await?;
+                    continue;
+                }
+            }
+            if self
+                .session_store
+                .get_workflow_run_worker_assignment(run.id)
+                .await?
+                .is_some()
+            {
+                continue;
+            }
+
+            let Some(version) = self
+                .session_store
+                .get_workflow_definition_version_by_id(run.workflow_definition_version_id)
+                .await?
+            else {
+                warn!(
+                    run_id = %run.id,
+                    workflow_definition_version_id = %run.workflow_definition_version_id,
+                    "skipping workflow run dispatch because the definition version is missing"
+                );
+                continue;
+            };
+            if !supports_executor(&version.executor) {
+                continue;
+            }
+
+            let capacity = self.workflow_worker_capacity().await?;
+            if !capacity.available {
+                self.queue_run(&run, &capacity).await?;
+                continue;
+            }
+
+            if let Err(error) = self.spawn_worker(&run).await {
+                self.fail_run_if_active(
+                    run.id,
+                    format!("failed to launch workflow worker: {error}"),
+                )
+                .await?;
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    async fn workflow_worker_capacity(&self) -> Result<WorkflowWorkerCapacity, WorkflowLifecycleError> {
+        if self.config.max_active_workers == 0 {
+            return Ok(WorkflowWorkerCapacity {
+                available: true,
+                active_workers: self.active_worker_count().await?,
+                max_active_workers: None,
+            });
+        }
+
+        let active_workers = self.active_worker_count().await?;
+        Ok(WorkflowWorkerCapacity {
+            available: active_workers < self.config.max_active_workers,
+            active_workers,
+            max_active_workers: Some(self.config.max_active_workers),
+        })
+    }
+
+    async fn active_worker_count(&self) -> Result<usize, WorkflowLifecycleError> {
+        Ok(self
+            .session_store
+            .list_workflow_run_worker_assignments()
+            .await?
+            .into_iter()
+            .filter(|assignment| {
+                matches!(
+                    assignment.status,
+                    WorkflowRunWorkerAssignmentStatus::Starting
+                        | WorkflowRunWorkerAssignmentStatus::Running
+                        | WorkflowRunWorkerAssignmentStatus::Stopping
+                )
+            })
+            .count())
+    }
+
+    async fn queue_run(
+        &self,
+        run: &crate::workflow::StoredWorkflowRun,
+        capacity: &WorkflowWorkerCapacity,
+    ) -> Result<(), WorkflowLifecycleError> {
+        if run.state == WorkflowRunState::Queued {
+            return Ok(());
+        }
+
+        let admission_data = serde_json::json!({
+            "admission": {
+                "reason": "workflow_worker_capacity",
+                "details": {
+                    "active_workers": capacity.active_workers,
+                    "max_active_workers": capacity.max_active_workers,
+                }
+            }
+        });
+        let _ = self
+            .session_store
+            .append_workflow_run_log(
+                run.id,
+                crate::workflow::PersistWorkflowRunLogRequest {
+                    stream: crate::automation_task::AutomationTaskLogStream::System,
+                    message: "workflow run queued until worker capacity is available".to_string(),
+                },
+            )
+            .await;
+        self.session_store
+            .transition_workflow_run(
+                run.id,
+                WorkflowRunTransitionRequest {
+                    state: WorkflowRunState::Queued,
+                    output: None,
+                    error: None,
+                    artifact_refs: Vec::new(),
+                    message: Some(
+                        "workflow run queued until worker capacity is available".to_string(),
+                    ),
+                    data: Some(admission_data),
+                },
+            )
+            .await?;
+        Ok(())
+    }
+
     fn resolve_bearer_token(&self) -> Option<String> {
         self.config
             .bearer_token
@@ -395,7 +564,7 @@ impl WorkflowLifecycleInner {
         let container_name = self
             .launched
             .lock()
-            .await
+            .expect("workflow launched mutex poisoned")
             .remove(&run_id)
             .map(|worker| worker.container_name);
 
@@ -559,6 +728,13 @@ fn validate_config(
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy)]
+struct WorkflowWorkerCapacity {
+    available: bool,
+    active_workers: usize,
+    max_active_workers: Option<usize>,
+}
+
 fn supports_executor(executor: &str) -> bool {
     executor == "playwright"
 }
@@ -592,6 +768,7 @@ mod tests {
     use crate::automation_access_token::SessionAutomationAccessTokenManager;
     use crate::auth::{AuthValidator, AuthenticatedPrincipal};
     use crate::automation_task::{AutomationTaskSessionSource, PersistAutomationTaskRequest};
+    use crate::session_manager::SessionManagerProfile;
     use crate::session_control::{
         CreateSessionRequest, SessionOwnerMode, SessionRecordingPolicy, SessionStore,
     };
@@ -613,6 +790,7 @@ mod tests {
         WorkflowWorkerConfig {
             docker_bin: script,
             image: "deploy-workflow-worker:test".to_string(),
+            max_active_workers: 0,
             network: Some("deploy_bpane-internal".to_string()),
             container_name_prefix: "bpane-workflow".to_string(),
             gateway_api_url: "http://gateway:8932".to_string(),
@@ -733,6 +911,30 @@ printf '%s\n' "$@" >> "{}"
         script_path
     }
 
+    fn create_sleep_capture_script(
+        dir: &tempfile::TempDir,
+        capture_file: &std::path::Path,
+        sleep_seconds: f32,
+    ) -> PathBuf {
+        let script_path = dir.path().join("sleep-capture-docker.sh");
+        fs::write(
+            &script_path,
+            format!(
+                r#"#!/bin/sh
+printf '%s\n' "$@" >> "{}"
+sleep {}
+"#,
+                capture_file.display(),
+                sleep_seconds,
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+        script_path
+    }
+
     #[tokio::test]
     async fn launches_worker_and_marks_unfinished_run_failed() {
         let temp_dir = tempdir().unwrap();
@@ -748,6 +950,7 @@ printf '%s\n' "$@" >> "{}"
             Some(WorkflowWorkerConfig {
                 docker_bin: script,
                 image: "deploy-workflow-worker:test".to_string(),
+                max_active_workers: 0,
                 network: Some("deploy_bpane-internal".to_string()),
                 container_name_prefix: "bpane-workflow".to_string(),
                 gateway_api_url: "http://gateway:8932".to_string(),
@@ -835,5 +1038,142 @@ printf '%s\n' "$@" >> "{}"
             .await
             .unwrap()
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn ensure_run_started_reconciles_stale_terminal_task_before_dispatch() {
+        let temp_dir = tempdir().unwrap();
+        let capture_file = temp_dir.path().join("capture.txt");
+        let script = create_capture_script(&temp_dir, &capture_file);
+        let store = SessionStore::in_memory();
+        let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
+        let automation_access_token_manager = Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![7; 32],
+            Duration::from_secs(300),
+        ));
+        let manager = WorkflowLifecycleManager::new(
+            Some(test_config(script)),
+            auth,
+            automation_access_token_manager,
+            store.clone(),
+        )
+        .unwrap();
+        let run = create_workflow_run(&store).await;
+
+        store
+            .cancel_automation_task_for_owner(&test_principal(), run.automation_task_id)
+            .await
+            .unwrap()
+            .unwrap();
+
+        manager.ensure_run_started("playwright", run.id).await.unwrap();
+
+        let current = store.get_workflow_run_by_id(run.id).await.unwrap().unwrap();
+        assert_eq!(current.state, WorkflowRunState::Cancelled);
+        assert!(!capture_file.exists());
+    }
+
+    #[tokio::test]
+    async fn queues_waiting_run_when_worker_capacity_is_exhausted() {
+        let temp_dir = tempdir().unwrap();
+        let capture_file = temp_dir.path().join("capture.txt");
+        let script = create_sleep_capture_script(&temp_dir, &capture_file, 0.3);
+        let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+            runtime_binding: "workflow_test_pool".to_string(),
+            compatibility_mode: "session_runtime_pool".to_string(),
+            max_runtime_sessions: 4,
+            supports_legacy_global_routes: false,
+            supports_session_extensions: true,
+        });
+        let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
+        let automation_access_token_manager = Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![7; 32],
+            Duration::from_secs(300),
+        ));
+        let manager = WorkflowLifecycleManager::new(
+            Some(WorkflowWorkerConfig {
+                max_active_workers: 1,
+                ..test_config(script)
+            }),
+            auth,
+            automation_access_token_manager,
+            store.clone(),
+        )
+        .unwrap();
+        let first_run = create_workflow_run(&store).await;
+        let queued_run = create_workflow_run(&store).await;
+
+        manager
+            .ensure_run_started("playwright", first_run.id)
+            .await
+            .unwrap();
+        manager
+            .ensure_run_started("playwright", queued_run.id)
+            .await
+            .unwrap();
+
+        let queued = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let current = store
+                    .get_workflow_run_by_id(queued_run.id)
+                    .await
+                    .unwrap()
+                    .expect("queued workflow run should exist");
+                if current.state == WorkflowRunState::Queued {
+                    break current;
+                }
+                sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("queued run should enter queued state");
+        assert_eq!(queued.state, WorkflowRunState::Queued);
+
+        let queued_events = store
+            .list_workflow_run_events_for_owner(&test_principal(), queued_run.id)
+            .await
+            .unwrap();
+        assert!(queued_events
+            .iter()
+            .any(|event| event.event_type == "workflow_run.queued"));
+
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let current = store
+                    .get_workflow_run_by_id(first_run.id)
+                    .await
+                    .unwrap()
+                    .expect("first workflow run should exist");
+                if current.state.is_terminal() {
+                    break;
+                }
+                sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("first workflow run should complete");
+
+        manager.reconcile_waiting_runs().await.unwrap();
+
+        let dispatched = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let current = store
+                    .get_workflow_run_by_id(queued_run.id)
+                    .await
+                    .unwrap()
+                    .expect("queued workflow run should exist");
+                if current.state.is_terminal() {
+                    break current;
+                }
+                sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("queued run should eventually dispatch and complete");
+        assert!(matches!(dispatched.state, WorkflowRunState::Failed));
+
+        let capture = fs::read_to_string(&capture_file).unwrap();
+        assert!(capture.contains(&first_run.id.to_string()));
+        assert!(capture.contains(&queued_run.id.to_string()));
     }
 }

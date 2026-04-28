@@ -14,6 +14,7 @@
     "smoke:recording": "node scripts/run-recording-smoke.mjs",
     "smoke:workflows": "node scripts/run-workflow-smoke.mjs",
     "smoke:workflow-cancel": "node scripts/run-workflow-cancel-smoke.mjs",
+    "smoke:workflow-admission": "node scripts/run-workflow-admission-smoke.mjs",
     "smoke:workflow-cli": "node scripts/run-workflow-cli-smoke.mjs",
     "smoke:workflow-embed": "node scripts/run-workflow-embed-smoke.mjs",
     "smoke:workflow-credential-injection": "node scripts/run-workflow-credential-injection-smoke.mjs",

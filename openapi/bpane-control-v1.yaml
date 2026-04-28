@@ -1886,6 +1886,7 @@ components:
       type: string
       enum:
         - pending
+        - queued
         - starting
         - running
         - awaiting_input
@@ -2435,6 +2436,7 @@ components:
       type: string
       enum:
         - pending
+        - queued
         - starting
         - running
         - awaiting_input
@@ -2922,6 +2924,23 @@ components:
           allOf:
             - $ref: '#/components/schemas/WorkflowRunInterventionResolution'
           nullable: true
+    WorkflowRunAdmissionState:
+      type: string
+      enum:
+        - queued
+    WorkflowRunAdmissionResource:
+      type: object
+      required: [state, reason, details, queued_at]
+      properties:
+        state:
+          $ref: '#/components/schemas/WorkflowRunAdmissionState'
+        reason:
+          type: string
+        details:
+          nullable: true
+        queued_at:
+          type: string
+          format: date-time
     WorkflowRunResource:
       type: object
       required:
@@ -2946,6 +2965,7 @@ components:
         - produced_files
         - recordings
         - retention
+        - admission
         - intervention
         - labels
         - started_at
@@ -3020,6 +3040,10 @@ components:
             $ref: '#/components/schemas/WorkflowRunRecordingResource'
         retention:
           $ref: '#/components/schemas/WorkflowRunRetentionResource'
+        admission:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunAdmissionResource'
+          nullable: true
         intervention:
           $ref: '#/components/schemas/WorkflowRunInterventionResource'
         labels:

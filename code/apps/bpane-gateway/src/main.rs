@@ -289,6 +289,7 @@ async fn main() -> anyhow::Result<()> {
         .map(|image| WorkflowWorkerConfig {
             docker_bin: config.workflow_worker_docker_bin.clone(),
             image,
+            max_active_workers: config.workflow_worker_max_active,
             network: config.workflow_worker_network.clone(),
             container_name_prefix: config.workflow_worker_container_name_prefix.clone(),
             gateway_api_url: config.workflow_worker_api_url.clone(),
