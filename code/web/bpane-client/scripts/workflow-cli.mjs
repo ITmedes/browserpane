@@ -16,6 +16,9 @@ function printUsage() {
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow run wait <run-id> [--target-state <state>]',
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow run logs <run-id>',
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow run events <run-id>',
+    '  node scripts/workflow-cli.mjs [--api-url URL] workflow run submit-input <run-id> --body-json <json>',
+    '  node scripts/workflow-cli.mjs [--api-url URL] workflow run resume <run-id> --body-json <json>',
+    '  node scripts/workflow-cli.mjs [--api-url URL] workflow run reject <run-id> --body-json <json>',
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow run cancel <run-id>',
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow run produced-files <run-id>',
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow run download-produced-file <run-id> <file-id> --output <path>',
@@ -314,6 +317,54 @@ async function main() {
           baseUrl,
           accessToken,
           `/api/v1/workflow-runs/${encodeURIComponent(runId)}/events`,
+        ),
+      );
+      return;
+    }
+
+    if (action === 'submit-input') {
+      const body = await readJsonBody(options);
+      printJson(
+        await requestJson(
+          baseUrl,
+          accessToken,
+          `/api/v1/workflow-runs/${encodeURIComponent(runId)}/submit-input`,
+          {
+            method: 'POST',
+            body: JSON.stringify(body),
+          },
+        ),
+      );
+      return;
+    }
+
+    if (action === 'resume') {
+      const body = await readJsonBody(options);
+      printJson(
+        await requestJson(
+          baseUrl,
+          accessToken,
+          `/api/v1/workflow-runs/${encodeURIComponent(runId)}/resume`,
+          {
+            method: 'POST',
+            body: JSON.stringify(body),
+          },
+        ),
+      );
+      return;
+    }
+
+    if (action === 'reject') {
+      const body = await readJsonBody(options);
+      printJson(
+        await requestJson(
+          baseUrl,
+          accessToken,
+          `/api/v1/workflow-runs/${encodeURIComponent(runId)}/reject`,
+          {
+            method: 'POST',
+            body: JSON.stringify(body),
+          },
         ),
       );
       return;
