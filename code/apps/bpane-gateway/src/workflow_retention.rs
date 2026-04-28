@@ -228,6 +228,10 @@ mod tests {
                     workflow_version: version.version.clone(),
                     session_id: session.id,
                     automation_task_id: task.id,
+                    source_system: None,
+                    source_reference: None,
+                    client_request_id: None,
+                    create_request_fingerprint: None,
                     source_snapshot: None,
                     extensions: Vec::new(),
                     credential_bindings: Vec::new(),
@@ -237,7 +241,8 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .unwrap()
+            .run;
         store
             .append_workflow_run_log(
                 run.id,

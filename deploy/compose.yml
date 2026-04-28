@@ -128,6 +128,7 @@ services:
       --key /certs/cert.key
       --workflow-worker-docker-bin ${BPANE_WORKFLOW_WORKER_DOCKER_BIN:-docker}
       --workflow-worker-image ${BPANE_WORKFLOW_WORKER_IMAGE:-deploy-workflow-worker}
+      --workflow-worker-max-active ${BPANE_WORKFLOW_WORKER_MAX_ACTIVE:-0}
       --workflow-worker-network ${BPANE_WORKFLOW_WORKER_NETWORK:-deploy_bpane-internal}
       --workflow-worker-container-name-prefix ${BPANE_WORKFLOW_WORKER_CONTAINER_NAME_PREFIX:-bpane-workflow}
       --workflow-worker-api-url ${BPANE_WORKFLOW_WORKER_API_URL:-http://gateway:8932}

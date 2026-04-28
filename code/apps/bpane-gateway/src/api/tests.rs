@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,7 +12,8 @@ use axum::http::{Request, StatusCode};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
-use tokio::sync::Mutex;
+use tokio::sync::{oneshot, Mutex};
+use tokio::time::sleep;
 use tower::ServiceExt;
 use zip::ZipArchive;
 
@@ -32,8 +34,11 @@ use crate::session_control::{
     SessionRecordingFormat, SessionRecordingMode, SessionRecordingPolicy,
     SessionRecordingState as StoredSessionRecordingState, StoredSessionRecording,
 };
-use crate::session_manager::{SessionManager, SessionManagerConfig};
-use crate::workflow_lifecycle::WorkflowLifecycleManager;
+use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerProfile};
+use crate::workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
+use crate::workflow_event_delivery::{
+    sign_workflow_event_delivery, WorkflowEventDeliveryConfig, WorkflowEventDeliveryManager,
+};
 use crate::workflow_observability::WorkflowObservability;
 use crate::workflow_source::WorkflowSourceResolver;
 use crate::workspace_file_store::WorkspaceFileStore;
@@ -78,7 +83,7 @@ impl CredentialProviderBackend for TestCredentialProviderBackend {
     }
 }
 
-fn test_router() -> (Router, String) {
+fn test_router_with_state() -> (Router, String, Arc<ApiState>) {
     let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
     let token = auth_validator
         .generate_token()
@@ -117,7 +122,101 @@ fn test_router() -> (Router, String) {
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
     });
-    (build_api_router(state), token)
+    (build_api_router(state.clone()), token, state)
+}
+
+fn test_router() -> (Router, String) {
+    let (router, token, _) = test_router_with_state();
+    (router, token)
+}
+
+fn test_router_with_workflow_lifecycle(
+    config: WorkflowWorkerConfig,
+) -> (Router, String, Arc<ApiState>) {
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
+    let token = auth_validator
+        .generate_token()
+        .expect("hmac auth validator should generate dev token");
+    let automation_access_token_manager = Arc::new(SessionAutomationAccessTokenManager::new(
+        vec![6; 32],
+        Duration::from_secs(300),
+    ));
+    let session_store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "workflow_test_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 4,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let session_manager = Arc::new(
+        SessionManager::new(SessionManagerConfig::StaticSingle {
+            agent_socket_path: "/tmp/test.sock".to_string(),
+            cdp_endpoint: Some("http://host:9223".to_string()),
+            idle_timeout: Duration::from_secs(300),
+        })
+        .unwrap(),
+    );
+    let registry = Arc::new(SessionRegistry::new(10, false));
+    let workflow_lifecycle = Arc::new(
+        WorkflowLifecycleManager::new(
+            Some(config),
+            auth_validator.clone(),
+            automation_access_token_manager.clone(),
+            session_store.clone(),
+            session_manager.clone(),
+            registry.clone(),
+        )
+        .expect("workflow lifecycle test config should be valid"),
+    );
+    let state = Arc::new(ApiState {
+        registry,
+        auth_validator,
+        connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
+            vec![5; 32],
+            Duration::from_secs(300),
+        )),
+        automation_access_token_manager,
+        session_store,
+        session_manager,
+        credential_provider: Some(test_credential_provider()),
+        recording_artifact_store: test_artifact_store(),
+        workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
+        recording_observability: Arc::new(RecordingObservability::default()),
+        recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        workflow_lifecycle,
+        workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_log_retention: None,
+        workflow_output_retention: None,
+        idle_stop_timeout: Duration::from_secs(300),
+        public_gateway_url: "https://localhost:4433".to_string(),
+        default_owner_mode: SessionOwnerMode::Collaborative,
+    });
+    (build_api_router(state.clone()), token, state)
+}
+
+fn create_sleep_workflow_worker_script(
+    dir: &tempfile::TempDir,
+    capture_file: &std::path::Path,
+    sleep_seconds: f32,
+) -> std::path::PathBuf {
+    let script_path = dir.path().join("workflow-worker-test.sh");
+    fs::write(
+        &script_path,
+        format!(
+            r#"#!/bin/sh
+printf '%s\n' "$@" >> "{}"
+sleep {}
+"#,
+            capture_file.display(),
+            sleep_seconds,
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
 }
 
 fn test_artifact_store() -> Arc<RecordingArtifactStore> {
@@ -141,6 +240,105 @@ fn test_credential_provider() -> Arc<CredentialProvider> {
 
 fn test_workflow_source_resolver() -> Arc<WorkflowSourceResolver> {
     Arc::new(WorkflowSourceResolver::new(std::path::PathBuf::from("git")))
+}
+
+#[derive(Debug, Clone)]
+struct CapturedWebhookRequest {
+    headers: HashMap<String, String>,
+    body: Value,
+}
+
+#[derive(Clone, Default)]
+struct TestWebhookReceiverState {
+    requests: Arc<Mutex<Vec<CapturedWebhookRequest>>>,
+    statuses: Arc<Mutex<Vec<StatusCode>>>,
+}
+
+struct TestWebhookReceiver {
+    url: String,
+    state: TestWebhookReceiverState,
+    shutdown: Option<oneshot::Sender<()>>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl TestWebhookReceiver {
+    async fn start(statuses: Vec<StatusCode>) -> Self {
+        let state = TestWebhookReceiverState {
+            requests: Arc::new(Mutex::new(Vec::new())),
+            statuses: Arc::new(Mutex::new(statuses)),
+        };
+        let app = axum::Router::new().route(
+            "/events",
+            axum::routing::post({
+                let state = state.clone();
+                move |headers: axum::http::HeaderMap, body: axum::body::Bytes| {
+                    let state = state.clone();
+                    async move {
+                        let body = serde_json::from_slice::<Value>(&body).unwrap();
+                        let mut captured_headers = HashMap::new();
+                        for name in [
+                            "x-bpane-event-id",
+                            "x-bpane-event-type",
+                            "x-bpane-delivery-id",
+                            "x-bpane-subscription-id",
+                            "x-bpane-signature-timestamp",
+                            "x-bpane-signature-v1",
+                        ] {
+                            if let Some(value) = headers.get(name).and_then(|value| value.to_str().ok())
+                            {
+                                captured_headers.insert(name.to_string(), value.to_string());
+                            }
+                        }
+                        state.requests.lock().await.push(CapturedWebhookRequest {
+                            headers: captured_headers,
+                            body,
+                        });
+                        let status = {
+                            let mut statuses = state.statuses.lock().await;
+                            if statuses.is_empty() {
+                                StatusCode::OK
+                            } else {
+                                statuses.remove(0)
+                            }
+                        };
+                        (status, "ok")
+                    }
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test webhook receiver");
+        let address = listener.local_addr().expect("receiver addr");
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async move {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .expect("run webhook receiver");
+        });
+        Self {
+            url: format!("http://{address}/events"),
+            state,
+            shutdown: Some(shutdown_tx),
+            task,
+        }
+    }
+
+    async fn requests(&self) -> Vec<CapturedWebhookRequest> {
+        self.state.requests.lock().await.clone()
+    }
+}
+
+impl Drop for TestWebhookReceiver {
+    fn drop(&mut self) {
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ = shutdown.send(());
+        }
+        self.task.abort();
+    }
 }
 
 struct TestAgentServer {
@@ -3096,6 +3294,1984 @@ async fn workflow_runs_expose_source_snapshot_content_to_owner_and_automation_ac
     assert_eq!(automation_download.status(), StatusCode::OK);
     let automation_bytes = response_bytes(automation_download).await;
     assert_eq!(automation_bytes, owner_bytes);
+}
+
+#[tokio::test]
+async fn workflow_run_create_supports_external_correlation_and_safe_idempotent_retry() {
+    let (app, token) = test_router();
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "idempotent-workflow"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/idempotent/run.mjs"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let request_body = json!({
+        "workflow_id": workflow_id,
+        "version": "v1",
+        "session": {
+            "create_session": {}
+        },
+        "source_system": "camunda-prod",
+        "source_reference": "process-instance-123/task-7",
+        "client_request_id": "job-123-attempt-1",
+        "input": {
+            "customer_id": "cust-42"
+        },
+        "labels": {
+            "suite": "contract"
+        }
+    });
+
+    let first_create = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(request_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first_create.status(), StatusCode::CREATED);
+    let first_run = response_json(first_create).await;
+    let run_id = first_run["id"].as_str().unwrap().to_string();
+    let session_id = first_run["session_id"].as_str().unwrap().to_string();
+    let task_id = first_run["automation_task_id"].as_str().unwrap().to_string();
+    assert_eq!(first_run["source_system"], "camunda-prod");
+    assert_eq!(
+        first_run["source_reference"],
+        "process-instance-123/task-7"
+    );
+    assert_eq!(first_run["client_request_id"], "job-123-attempt-1");
+
+    let second_create = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(request_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let second_status = second_create.status();
+    let second_run = response_json(second_create).await;
+    assert_eq!(second_status, StatusCode::OK, "{second_run:#}");
+    assert_eq!(second_run["id"], run_id);
+    assert_eq!(second_run["session_id"], session_id);
+    assert_eq!(second_run["automation_task_id"], task_id);
+    assert_eq!(second_run["source_system"], "camunda-prod");
+    assert_eq!(
+        second_run["source_reference"],
+        "process-instance-123/task-7"
+    );
+    assert_eq!(second_run["client_request_id"], "job-123-attempt-1");
+
+    let run_events = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/workflow-runs/{run_id}/events"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(run_events.status(), StatusCode::OK);
+    let events = response_json(run_events).await;
+    let created_count = events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["event_type"] == "workflow_run.created")
+        .count();
+    assert_eq!(created_count, 1);
+}
+
+#[tokio::test]
+async fn workflow_run_create_rejects_conflicting_idempotent_retry() {
+    let (app, token) = test_router();
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "idempotent-conflict"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/idempotent/run.mjs"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let first_request = json!({
+        "workflow_id": workflow_id,
+        "version": "v1",
+        "session": {
+            "create_session": {}
+        },
+        "source_system": "camunda-prod",
+        "source_reference": "task-1",
+        "client_request_id": "job-999-attempt-1",
+        "input": {
+            "customer_id": "cust-42"
+        }
+    });
+    let first_create = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(first_request.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first_create.status(), StatusCode::CREATED);
+
+    let conflicting_request = json!({
+        "workflow_id": workflow_id,
+        "version": "v1",
+        "session": {
+            "create_session": {}
+        },
+        "source_system": "camunda-prod",
+        "source_reference": "task-2",
+        "client_request_id": "job-999-attempt-1",
+        "input": {
+            "customer_id": "cust-77"
+        }
+    });
+    let conflicting_create = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(conflicting_request.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let conflicting_status = conflicting_create.status();
+    let body = response_json(conflicting_create).await;
+    assert_eq!(conflicting_status, StatusCode::CONFLICT, "{body:#}");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("client_request_id")
+    );
+}
+
+#[tokio::test]
+async fn workflow_event_subscriptions_dispatch_signed_run_events_and_expose_diagnostics() {
+    let (app, token, state) = test_router_with_state();
+    let receiver = TestWebhookReceiver::start(vec![StatusCode::OK]).await;
+
+    let subscription_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-event-subscriptions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "run-events",
+                        "target_url": receiver.url,
+                        "event_types": ["workflow_run.created"],
+                        "signing_secret": "super-secret"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(subscription_response.status(), StatusCode::CREATED);
+    let subscription = response_json(subscription_response).await;
+    let subscription_id = subscription["id"].as_str().unwrap().to_string();
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/workflow-event-subscriptions")
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let subscriptions = response_json(list_response).await;
+    assert_eq!(subscriptions["subscriptions"].as_array().unwrap().len(), 1);
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "name": "evented-workflow" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/evented/run.mjs"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let create_run = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "session": {
+                            "create_session": {}
+                        },
+                        "source_system": "test-suite",
+                        "source_reference": "run-1"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_run.status(), StatusCode::CREATED);
+    let run = response_json(create_run).await;
+    let run_id = run["id"].as_str().unwrap().to_string();
+
+    let manager = WorkflowEventDeliveryManager::new(
+        state.session_store.clone(),
+        state.workflow_observability.clone(),
+        WorkflowEventDeliveryConfig {
+            poll_interval: Duration::from_millis(5),
+            request_timeout: Duration::from_secs(2),
+            max_attempts: 3,
+            batch_size: 8,
+            base_backoff: Duration::from_millis(5),
+        },
+    )
+    .unwrap();
+    manager.reconcile_persisted_state().await.unwrap();
+    manager.run_dispatch_pass().await.unwrap();
+
+    for _ in 0..20 {
+        if receiver.requests().await.len() == 1 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    let requests = receiver.requests().await;
+    assert_eq!(requests.len(), 1);
+    let request = &requests[0];
+    assert_eq!(request.body["run_id"], run_id);
+    assert_eq!(request.body["event_type"], "workflow_run.created");
+    let timestamp = request
+        .headers
+        .get("x-bpane-signature-timestamp")
+        .unwrap()
+        .to_string();
+    let signature = request.headers.get("x-bpane-signature-v1").unwrap().to_string();
+    let expected_signature = sign_workflow_event_delivery(
+        "super-secret",
+        &timestamp,
+        &serde_json::to_vec(&request.body).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(signature, expected_signature);
+
+    let deliveries_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/workflow-event-subscriptions/{subscription_id}/deliveries"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(deliveries_response.status(), StatusCode::OK);
+    let deliveries = response_json(deliveries_response).await;
+    assert_eq!(deliveries["deliveries"].as_array().unwrap().len(), 1);
+    let delivery = &deliveries["deliveries"][0];
+    assert_eq!(delivery["event_type"], "workflow_run.created");
+    assert_eq!(delivery["state"], "delivered");
+    assert_eq!(delivery["attempt_count"], 1);
+    assert_eq!(delivery["attempts"].as_array().unwrap().len(), 1);
+    assert_eq!(delivery["attempts"][0]["response_status"], 200);
+
+    let ops_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/workflow/operations")
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ops_response.status(), StatusCode::OK);
+    let ops = response_json(ops_response).await;
+    assert_eq!(ops["event_delivery_attempts_total"], 1);
+    assert_eq!(ops["event_delivery_successes_total"], 1);
+
+    let delete_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/workflow-event-subscriptions/{subscription_id}"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn workflow_event_delivery_retries_retryable_failures_and_then_succeeds() {
+    let (app, token, state) = test_router_with_state();
+    let receiver =
+        TestWebhookReceiver::start(vec![StatusCode::BAD_GATEWAY, StatusCode::OK]).await;
+
+    let subscription = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-event-subscriptions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "retry-events",
+                            "target_url": receiver.url,
+                            "event_types": ["workflow_run.created"],
+                            "signing_secret": "retry-secret"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let subscription_id = subscription["id"].as_str().unwrap().to_string();
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "name": "retry-workflow" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/retry/run.mjs"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let create_run = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "session": {
+                            "create_session": {}
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_run.status(), StatusCode::CREATED);
+
+    let manager = WorkflowEventDeliveryManager::new(
+        state.session_store.clone(),
+        state.workflow_observability.clone(),
+        WorkflowEventDeliveryConfig {
+            poll_interval: Duration::from_millis(5),
+            request_timeout: Duration::from_secs(2),
+            max_attempts: 3,
+            batch_size: 8,
+            base_backoff: Duration::from_millis(1),
+        },
+    )
+    .unwrap();
+    manager.reconcile_persisted_state().await.unwrap();
+    manager.run_dispatch_pass().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    manager.run_dispatch_pass().await.unwrap();
+
+    for _ in 0..20 {
+        if receiver.requests().await.len() == 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    let requests = receiver.requests().await;
+    assert_eq!(requests.len(), 2);
+
+    let deliveries_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/workflow-event-subscriptions/{subscription_id}/deliveries"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(deliveries_response.status(), StatusCode::OK);
+    let deliveries = response_json(deliveries_response).await;
+    let delivery = &deliveries["deliveries"][0];
+    assert_eq!(delivery["state"], "delivered");
+    assert_eq!(delivery["attempt_count"], 2);
+    assert_eq!(delivery["attempts"].as_array().unwrap().len(), 2);
+    assert_eq!(delivery["attempts"][0]["response_status"], 502);
+    assert_eq!(delivery["attempts"][1]["response_status"], 200);
+
+    let ops_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/workflow/operations")
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let ops = response_json(ops_response).await;
+    assert_eq!(ops["event_delivery_attempts_total"], 2);
+    assert_eq!(ops["event_delivery_successes_total"], 1);
+    assert_eq!(ops["event_delivery_retries_total"], 1);
+    assert_eq!(ops["event_delivery_failures_total"], 0);
+}
+
+#[tokio::test]
+async fn workflow_event_subscriptions_preserve_lifecycle_delivery_order() {
+    let (app, token, state) = test_router_with_state();
+    let receiver = TestWebhookReceiver::start(vec![
+        StatusCode::OK,
+        StatusCode::OK,
+        StatusCode::OK,
+    ])
+    .await;
+
+    let subscription = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-event-subscriptions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "ordered-events",
+                            "target_url": receiver.url,
+                            "event_types": [
+                                "workflow_run.created",
+                                "workflow_run.running",
+                                "workflow_run.succeeded"
+                            ],
+                            "signing_secret": "ordered-secret"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let subscription_id = subscription["id"].as_str().unwrap().to_string();
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "name": "ordered-event-workflow" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "version": "v1",
+                            "executor": "manual",
+                            "entrypoint": "workflows/ordered-events/run.mjs"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+
+    let run = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-runs")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "workflow_id": workflow_id,
+                            "version": "v1",
+                            "session": {
+                                "create_session": {}
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let run_id = run["id"].as_str().unwrap().to_string();
+    let session_id = run["session_id"].as_str().unwrap().to_string();
+
+    let automation_access = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/sessions/{session_id}/automation-access"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let automation_token = automation_access["token"].as_str().unwrap().to_string();
+
+    let running_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflow-runs/{run_id}/state"))
+                .header("x-bpane-automation-access-token", automation_token.as_str())
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "state": "running",
+                        "message": "manual executor started"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(running_response.status(), StatusCode::OK);
+
+    let succeeded_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflow-runs/{run_id}/state"))
+                .header("x-bpane-automation-access-token", automation_token.as_str())
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "state": "succeeded",
+                        "message": "manual executor finished"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(succeeded_response.status(), StatusCode::OK);
+
+    let manager = WorkflowEventDeliveryManager::new(
+        state.session_store.clone(),
+        state.workflow_observability.clone(),
+        WorkflowEventDeliveryConfig {
+            poll_interval: Duration::from_millis(5),
+            request_timeout: Duration::from_secs(2),
+            max_attempts: 3,
+            batch_size: 8,
+            base_backoff: Duration::from_millis(5),
+        },
+    )
+    .unwrap();
+    manager.reconcile_persisted_state().await.unwrap();
+    manager.run_dispatch_pass().await.unwrap();
+
+    for _ in 0..20 {
+        if receiver.requests().await.len() == 3 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    let requests = receiver.requests().await;
+    assert_eq!(requests.len(), 3);
+    let event_types = requests
+        .iter()
+        .map(|request| request.body["event_type"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec![
+            "workflow_run.created".to_string(),
+            "workflow_run.running".to_string(),
+            "workflow_run.succeeded".to_string()
+        ]
+    );
+
+    let deliveries = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/workflow-event-subscriptions/{subscription_id}/deliveries"
+                    ))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let delivered_event_types = deliveries["deliveries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|delivery| delivery["event_type"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(delivered_event_types, event_types);
+}
+
+#[tokio::test]
+async fn workflow_run_create_exposes_queued_admission_when_worker_capacity_is_exhausted() {
+    let temp_dir = tempdir().unwrap();
+    let capture_file = temp_dir.path().join("workflow-worker-capture.txt");
+    let script = create_sleep_workflow_worker_script(&temp_dir, &capture_file, 0.3);
+    let (app, token, _state) = test_router_with_workflow_lifecycle(WorkflowWorkerConfig {
+        docker_bin: script,
+        image: "deploy-workflow-worker:test".to_string(),
+        max_active_workers: 1,
+        network: Some("deploy_bpane-internal".to_string()),
+        container_name_prefix: "bpane-workflow".to_string(),
+        gateway_api_url: "http://gateway:8932".to_string(),
+        work_root: std::path::PathBuf::from("/tmp/bpane-workflows"),
+        bearer_token: Some("token".to_string()),
+        oidc_token_url: None,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_scopes: None,
+    });
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "queued-admission"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/queued/run.mjs",
+                        "default_session": {
+                            "labels": {
+                                "suite": "queued-admission"
+                            }
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let first_run = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-runs")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "workflow_id": workflow_id,
+                            "version": "v1",
+                            "session": {
+                                "create_session": {}
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let first_run_id = first_run["id"].as_str().unwrap().to_string();
+
+    let queued_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "session": {
+                            "create_session": {}
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(queued_response.status(), StatusCode::CREATED);
+    let queued_run = response_json(queued_response).await;
+    let queued_run_id = queued_run["id"].as_str().unwrap().to_string();
+    assert_eq!(queued_run["state"], "queued");
+    assert_eq!(queued_run["admission"]["state"], "queued");
+    assert_eq!(queued_run["admission"]["reason"], "workflow_worker_capacity");
+    assert_eq!(queued_run["admission"]["details"]["active_workers"], 1);
+    assert_eq!(queued_run["admission"]["details"]["max_active_workers"], 1);
+
+    let queued_events = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/workflow-runs/{queued_run_id}/events"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(queued_events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|event| event["event_type"] == "workflow_run.queued"));
+
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let first = response_json(
+                app.clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri(format!("/api/v1/workflow-runs/{first_run_id}"))
+                            .header("authorization", bearer(&token))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            if first["state"] == "failed" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("first run should finish");
+
+    let resumed = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let run = response_json(
+                app.clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri(format!("/api/v1/workflow-runs/{queued_run_id}"))
+                            .header("authorization", bearer(&token))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            if run["state"] == "failed" {
+                break run;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("queued run should eventually dispatch");
+    assert!(resumed["admission"].is_null());
+
+    let capture = fs::read_to_string(&capture_file).unwrap();
+    assert!(capture.contains(&first_run_id));
+    assert!(capture.contains(&queued_run_id));
+}
+
+#[tokio::test]
+async fn workflow_run_owner_can_cancel_queued_run_before_dispatch() {
+    let temp_dir = tempdir().unwrap();
+    let capture_file = temp_dir.path().join("workflow-worker-capture.txt");
+    let script = create_sleep_workflow_worker_script(&temp_dir, &capture_file, 0.3);
+    let (app, token, _state) = test_router_with_workflow_lifecycle(WorkflowWorkerConfig {
+        docker_bin: script,
+        image: "deploy-workflow-worker:test".to_string(),
+        max_active_workers: 1,
+        network: Some("deploy_bpane-internal".to_string()),
+        container_name_prefix: "bpane-workflow".to_string(),
+        gateway_api_url: "http://gateway:8932".to_string(),
+        work_root: std::path::PathBuf::from("/tmp/bpane-workflows"),
+        bearer_token: Some("token".to_string()),
+        oidc_token_url: None,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_scopes: None,
+    });
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "queued-cancel"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/queued-cancel/run.mjs",
+                        "default_session": {
+                            "labels": {
+                                "suite": "queued-cancel"
+                            }
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let active_run = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-runs")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "workflow_id": workflow_id,
+                            "version": "v1",
+                            "session": {
+                                "create_session": {}
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let active_run_id = active_run["id"].as_str().unwrap().to_string();
+
+    let queued_run = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-runs")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "workflow_id": workflow_id,
+                            "version": "v1",
+                            "session": {
+                                "create_session": {}
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let queued_run_id = queued_run["id"].as_str().unwrap().to_string();
+    assert_eq!(queued_run["state"], "queued");
+    assert_eq!(queued_run["admission"]["state"], "queued");
+
+    let cancel_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflow-runs/{queued_run_id}/cancel"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cancel_response.status(), StatusCode::OK);
+    let cancelled = response_json(cancel_response).await;
+    assert_eq!(cancelled["state"], "cancelled");
+
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let first = response_json(
+                app.clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri(format!("/api/v1/workflow-runs/{active_run_id}"))
+                            .header("authorization", bearer(&token))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            if first["state"] == "failed" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("active run should finish");
+
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    let stable_cancelled = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/workflow-runs/{queued_run_id}"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(stable_cancelled["state"], "cancelled");
+
+    let queued_events = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/workflow-runs/{queued_run_id}/events"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let event_types = queued_events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|event| event["event_type"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert!(event_types.contains(&"workflow_run.queued".to_string()));
+    assert!(event_types.contains(&"workflow_run.cancel_requested".to_string()));
+    assert!(event_types.contains(&"workflow_run.cancelled".to_string()));
+    assert!(!event_types.contains(&"workflow_run.running".to_string()));
+    assert!(!event_types.contains(&"automation_task.running".to_string()));
+    assert!(!event_types.contains(&"workflow_run.succeeded".to_string()));
+
+    let capture = fs::read_to_string(&capture_file).unwrap();
+    assert!(capture.contains(&active_run_id));
+    assert!(!capture.contains(&queued_run_id));
+}
+
+#[tokio::test]
+async fn workflow_run_owner_can_submit_input_resume_and_reject_interventions() {
+    let (app, token) = test_router();
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "operator-intervention"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/operator/run.mjs"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let run = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-runs")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "workflow_id": workflow_id,
+                            "version": "v1",
+                            "session": {
+                                "create_session": {}
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let run_id = run["id"].as_str().unwrap().to_string();
+    let session_id = run["session_id"].as_str().unwrap().to_string();
+
+    let automation_access = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/sessions/{session_id}/automation-access"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let automation_token = automation_access["token"].as_str().unwrap().to_string();
+
+    let running = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflow-runs/{run_id}/state"))
+                .header("x-bpane-automation-access-token", &automation_token)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "state": "running",
+                        "message": "executor attached"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(running.status(), StatusCode::OK);
+
+    let first_request_id = Uuid::now_v7();
+    let awaiting_input = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflow-runs/{run_id}/state"))
+                    .header("x-bpane-automation-access-token", &automation_token)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "state": "awaiting_input",
+                            "message": "approval required",
+                            "data": {
+                                "intervention_request": {
+                                    "request_id": first_request_id,
+                                    "kind": "approval",
+                                    "prompt": "Approve payout export",
+                                    "details": {
+                                        "step": "review"
+                                    }
+                                }
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        awaiting_input["state"].is_string(),
+        "unexpected awaiting_input response: {awaiting_input}"
+    );
+    assert_eq!(awaiting_input["state"], "awaiting_input");
+    assert_eq!(
+        awaiting_input["intervention"]["pending_request"]["request_id"],
+        first_request_id.to_string()
+    );
+    assert_eq!(
+        awaiting_input["intervention"]["pending_request"]["kind"],
+        "approval"
+    );
+
+    let submitted = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflow-runs/{run_id}/submit-input"))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "input": {
+                                "approved": true
+                            },
+                            "comment": "operator approved"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(submitted["state"], "running");
+    assert!(submitted["intervention"]["pending_request"].is_null());
+    assert_eq!(
+        submitted["intervention"]["last_resolution"]["action"],
+        "submit_input"
+    );
+    assert_eq!(
+        submitted["intervention"]["last_resolution"]["request_id"],
+        first_request_id.to_string()
+    );
+    assert_eq!(
+        submitted["intervention"]["last_resolution"]["input"],
+        json!({ "approved": true })
+    );
+
+    let second_request_id = Uuid::now_v7();
+    let awaiting_resume = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflow-runs/{run_id}/state"))
+                    .header("x-bpane-automation-access-token", &automation_token)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "state": "awaiting_input",
+                            "message": "resume required",
+                            "data": {
+                                "intervention_request": {
+                                    "request_id": second_request_id,
+                                    "kind": "confirmation",
+                                    "prompt": "Resume the run"
+                                }
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(awaiting_resume["state"], "awaiting_input");
+    assert_eq!(
+        awaiting_resume["intervention"]["pending_request"]["request_id"],
+        second_request_id.to_string()
+    );
+
+    let resumed = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflow-runs/{run_id}/resume"))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "comment": "operator resumed"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(resumed["state"], "running");
+    assert_eq!(
+        resumed["intervention"]["last_resolution"]["action"],
+        "resume"
+    );
+    assert_eq!(
+        resumed["intervention"]["last_resolution"]["request_id"],
+        second_request_id.to_string()
+    );
+
+    let third_request_id = Uuid::now_v7();
+    let awaiting_reject = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflow-runs/{run_id}/state"))
+                    .header("x-bpane-automation-access-token", &automation_token)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "state": "awaiting_input",
+                            "message": "approval required again",
+                            "data": {
+                                "intervention_request": {
+                                    "request_id": third_request_id,
+                                    "kind": "approval",
+                                    "prompt": "Reject this run"
+                                }
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(awaiting_reject["state"], "awaiting_input");
+
+    let rejected = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflow-runs/{run_id}/reject"))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "reason": "operator denied approval"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(rejected["state"], "failed");
+    assert_eq!(rejected["error"], "operator denied approval");
+    assert_eq!(
+        rejected["intervention"]["last_resolution"]["action"],
+        "reject"
+    );
+    assert_eq!(
+        rejected["intervention"]["last_resolution"]["request_id"],
+        third_request_id.to_string()
+    );
+    assert_eq!(
+        rejected["intervention"]["last_resolution"]["reason"],
+        "operator denied approval"
+    );
+
+    let events = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/workflow-runs/{run_id}/events"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let event_types = events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|event| event["event_type"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert!(event_types.contains(&"workflow_run.input_submitted".to_string()));
+    assert!(event_types.contains(&"workflow_run.resumed".to_string()));
+    assert!(event_types.contains(&"workflow_run.rejected".to_string()));
+}
+
+#[tokio::test]
+async fn workflow_runs_expose_runtime_hold_and_release_semantics() {
+    let (app, token, _) = test_router_with_workflow_lifecycle(WorkflowWorkerConfig {
+        docker_bin: std::path::PathBuf::from("/bin/sh"),
+        image: "deploy-workflow-worker:test".to_string(),
+        max_active_workers: 1,
+        network: Some("deploy_bpane-internal".to_string()),
+        container_name_prefix: "bpane-workflow".to_string(),
+        gateway_api_url: "http://gateway:8932".to_string(),
+        work_root: std::path::PathBuf::from("/tmp/bpane-workflows"),
+        bearer_token: Some("token".to_string()),
+        oidc_token_url: None,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_scopes: None,
+    });
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "Runtime Hold Workflow"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "version": "v1",
+                            "executor": "manual_test",
+                            "entrypoint": "workflows/runtime-hold/run.mjs"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+
+    let live_hold_run = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-runs")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "workflow_id": workflow_id,
+                            "version": "v1",
+                            "session": {
+                                "create_session": {}
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        live_hold_run.get("id").is_some(),
+        "unexpected workflow run create response: {live_hold_run}"
+    );
+    let live_hold_run_id = live_hold_run["id"].as_str().unwrap().to_string();
+    let live_hold_session_id = live_hold_run["session_id"].as_str().unwrap().to_string();
+
+    let automation_access = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "/api/v1/sessions/{live_hold_session_id}/automation-access"
+                    ))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let automation_token = automation_access["token"].as_str().unwrap().to_string();
+
+    let running = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflow-runs/{live_hold_run_id}/state"))
+                .header("x-bpane-automation-access-token", &automation_token)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "state": "running",
+                        "message": "executor attached"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(running.status(), StatusCode::OK);
+
+    let awaiting_input = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflow-runs/{live_hold_run_id}/state"))
+                    .header("x-bpane-automation-access-token", &automation_token)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "state": "awaiting_input",
+                            "message": "approval required",
+                            "data": {
+                                "intervention_request": {
+                                    "kind": "approval"
+                                },
+                                "runtime_hold": {
+                                    "mode": "live",
+                                    "timeout_sec": 1
+                                }
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        awaiting_input["state"].is_string(),
+        "unexpected awaiting_input response: {awaiting_input}"
+    );
+    assert_eq!(awaiting_input["state"], "awaiting_input");
+
+    let live_runtime = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let current = response_json(
+                app.clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri(format!("/api/v1/workflow-runs/{live_hold_run_id}"))
+                            .header("authorization", bearer(&token))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            if current["runtime"]["resume_mode"] == json!("live_runtime") {
+                break current;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("live runtime hold should become visible");
+    assert_eq!(
+        live_runtime["runtime"]["exact_runtime_available"],
+        json!(true)
+    );
+    assert!(live_runtime["runtime"]["hold_until"].is_string());
+
+    let released_live_hold = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let current = response_json(
+                app.clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri(format!("/api/v1/workflow-runs/{live_hold_run_id}"))
+                            .header("authorization", bearer(&token))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            if current["runtime"]["released_at"].is_string() {
+                break current;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("live-hold workflow run should release after timeout");
+    assert_eq!(
+        released_live_hold["runtime"]["resume_mode"],
+        json!("profile_restart")
+    );
+    assert_eq!(
+        released_live_hold["runtime"]["release_reason"],
+        json!("hold_expired")
+    );
+
+    let released_session = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/sessions/{live_hold_session_id}"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(released_session["state"], "stopped");
+
+    let immediate_release_run = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-runs")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "workflow_id": workflow_id,
+                            "version": "v1",
+                            "session": {
+                                "create_session": {}
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let immediate_release_run_id = immediate_release_run["id"].as_str().unwrap().to_string();
+    let immediate_release_session_id = immediate_release_run["session_id"].as_str().unwrap().to_string();
+
+    let second_automation_access = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "/api/v1/sessions/{immediate_release_session_id}/automation-access"
+                    ))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let second_automation_token = second_automation_access["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let second_running = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflow-runs/{immediate_release_run_id}/state"))
+                .header("x-bpane-automation-access-token", &second_automation_token)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "state": "running",
+                        "message": "executor attached"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second_running.status(), StatusCode::OK);
+
+    response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflow-runs/{immediate_release_run_id}/state"))
+                    .header("x-bpane-automation-access-token", &second_automation_token)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "state": "awaiting_input",
+                            "message": "approval required",
+                            "data": {
+                                "intervention_request": {
+                                    "kind": "approval"
+                                }
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+
+    let immediately_released = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let current = response_json(
+                app.clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri(format!("/api/v1/workflow-runs/{immediate_release_run_id}"))
+                            .header("authorization", bearer(&token))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            if current["runtime"]["released_at"].is_string() {
+                break current;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("awaiting-input run without live hold should release immediately");
+
+    assert_eq!(
+        immediately_released["runtime"]["resume_mode"],
+        json!("profile_restart")
+    );
+    assert_eq!(
+        immediately_released["runtime"]["release_reason"],
+        json!("awaiting_input_no_live_hold")
+    );
 }
 
 #[tokio::test]
