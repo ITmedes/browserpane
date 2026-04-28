@@ -229,19 +229,7 @@ export async function deleteSession(accessToken, options, sessionId) {
 }
 
 export async function cleanupWorkflowSmokeSessions(accessToken, options, log = () => {}) {
-  const response = await poll(
-    'workflow control-plane readiness',
-    async () => {
-      try {
-        return await listSessions(accessToken, options);
-      } catch (error) {
-        return error;
-      }
-    },
-    (value) => !(value instanceof Error),
-    Math.min(options.connectTimeoutMs, 15000),
-    500,
-  );
+  const response = await waitForWorkflowControlPlane(accessToken, options);
   const sessions = Array.isArray(response.sessions) ? response.sessions : [];
   let removed = 0;
   for (const session of sessions) {
@@ -259,6 +247,56 @@ export async function cleanupWorkflowSmokeSessions(accessToken, options, log = (
   if (removed > 0) {
     log(`Removed ${removed} stale visible sessions before the smoke run.`);
   }
+}
+
+export async function waitForWorkflowControlPlane(accessToken, options) {
+  return await poll(
+    'workflow control-plane readiness',
+    async () => {
+      try {
+        return await listSessions(accessToken, options);
+      } catch (error) {
+        return error;
+      }
+    },
+    (value) => !(value instanceof Error),
+    Math.min(options.connectTimeoutMs, 15000),
+    500,
+  );
+}
+
+export function restartComposeService(service, { profile = null } = {}) {
+  const args = ['compose', '-f', 'deploy/compose.yml'];
+  if (profile) {
+    args.push('--profile', profile);
+  }
+  args.push('restart', service);
+  execFileSync('docker', args, {
+    cwd: PROJECT_ROOT,
+    stdio: 'inherit',
+  });
+}
+
+export function recreateComposeServices(
+  services,
+  {
+    profile = null,
+    envOverrides = {},
+  } = {},
+) {
+  const args = ['compose', '-f', 'deploy/compose.yml'];
+  if (profile) {
+    args.push('--profile', profile);
+  }
+  args.push('up', '-d', '--force-recreate', ...services);
+  execFileSync('docker', args, {
+    cwd: PROJECT_ROOT,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      ...envOverrides,
+    },
+  });
 }
 
 export async function launchChrome(chromium, options) {

@@ -150,6 +150,7 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:workflow-extension -- --headless`
 - `npm run smoke:workflow-failure -- --headless`
 - `npm run smoke:workflow-reconnect -- --headless`
+- `npm run smoke:workflow-restart-safety -- --headless`
 - `npm run smoke:workflow-runtime-hold -- --headless`
 - `npm run smoke:workflow-embed-operations -- --headless`
 - `npm run smoke:multisession -- --headless`

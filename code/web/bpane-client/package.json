@@ -25,6 +25,7 @@
     "smoke:workflow-failure": "node scripts/run-workflow-failure-smoke.mjs",
     "smoke:workflow-intervention": "node scripts/run-workflow-intervention-smoke.mjs",
     "smoke:workflow-reconnect": "node scripts/run-workflow-reconnect-smoke.mjs",
+    "smoke:workflow-restart-safety": "node scripts/run-workflow-restart-safety-smoke.mjs",
     "smoke:workflow-runtime-hold": "node scripts/run-workflow-runtime-hold-smoke.mjs",
     "smoke:workflow-workspace": "node scripts/run-workflow-workspace-smoke.mjs",
     "smoke:multisession": "node scripts/run-multi-session-smoke.mjs",
