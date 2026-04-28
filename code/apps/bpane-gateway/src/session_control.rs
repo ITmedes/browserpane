@@ -1273,6 +1273,16 @@ impl SessionStore {
         }
     }
 
+    pub async fn list_workflow_run_events(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<StoredWorkflowRunEvent>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.list_workflow_run_events(id).await,
+            SessionStoreBackend::Postgres(store) => store.list_workflow_run_events(id).await,
+        }
+    }
+
     pub async fn list_workflow_run_logs_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -1466,6 +1476,18 @@ impl SessionStore {
         }
     }
 
+    pub async fn append_workflow_run_event(
+        &self,
+        id: Uuid,
+        request: PersistWorkflowRunEventRequest,
+    ) -> Result<Option<StoredWorkflowRunEvent>, SessionStoreError> {
+        validate_workflow_run_event_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.append_workflow_run_event(id, request).await,
+            SessionStoreBackend::Postgres(store) => store.append_workflow_run_event(id, request).await,
+        }
+    }
+
     pub async fn transition_workflow_run(
         &self,
         id: Uuid,
@@ -1493,6 +1515,15 @@ impl SessionStore {
             SessionStoreBackend::Postgres(store) => {
                 store.reconcile_workflow_run_from_task(id).await
             }
+        }
+    }
+
+    pub async fn list_awaiting_input_workflow_runs(
+        &self,
+    ) -> Result<Vec<StoredWorkflowRun>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.list_awaiting_input_workflow_runs().await,
+            SessionStoreBackend::Postgres(store) => store.list_awaiting_input_workflow_runs().await,
         }
     }
 
@@ -2648,6 +2679,24 @@ fn validate_workflow_run_transition_request(
         event_data: request.data.clone(),
     };
     validate_automation_task_transition_request(&task_request)
+        .and_then(|_| match (&request.state, request.data.as_ref()) {
+            (WorkflowRunState::AwaitingInput, Some(data)) => {
+                crate::workflow::parse_workflow_run_runtime_hold_request(data)
+                    .map(|_| ())
+                    .map_err(|error| SessionStoreError::InvalidRequest(error.to_string()))
+            }
+            (_, Some(data)) if data
+                .as_object()
+                .and_then(|value| value.get("runtime_hold"))
+                .is_some() =>
+            {
+                Err(SessionStoreError::InvalidRequest(
+                    "workflow runtime_hold is only valid when transitioning to awaiting_input"
+                        .to_string(),
+                ))
+            }
+            _ => Ok(()),
+        })
 }
 
 fn validate_workflow_run_log_request(
@@ -4180,6 +4229,22 @@ impl InMemorySessionStore {
         Ok(events)
     }
 
+    async fn list_workflow_run_events(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<StoredWorkflowRunEvent>, SessionStoreError> {
+        let mut events = self
+            .workflow_run_events
+            .lock()
+            .await
+            .iter()
+            .filter(|event| event.run_id == id)
+            .cloned()
+            .collect::<Vec<_>>();
+        events.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+        Ok(events)
+    }
+
     async fn list_workflow_run_logs_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -4216,6 +4281,38 @@ impl InMemorySessionStore {
             .await?
             .is_none()
         {
+            return Ok(None);
+        }
+        let event = StoredWorkflowRunEvent {
+            id: Uuid::now_v7(),
+            run_id: id,
+            event_type: request.event_type,
+            message: request.message,
+            data: request.data,
+            created_at: Utc::now(),
+        };
+        self.workflow_run_events.lock().await.push(event.clone());
+        let mut updated_run = None;
+        {
+            let mut runs = self.workflow_runs.lock().await;
+            if let Some(run) = runs.iter_mut().find(|run| run.id == id) {
+                run.updated_at = event.created_at;
+                updated_run = Some(run.clone());
+            }
+        }
+        if let Some(run) = updated_run.as_ref() {
+            self.queue_workflow_event_deliveries_for_run_event(run, &event)
+                .await;
+        }
+        Ok(Some(event))
+    }
+
+    async fn append_workflow_run_event(
+        &self,
+        id: Uuid,
+        request: PersistWorkflowRunEventRequest,
+    ) -> Result<Option<StoredWorkflowRunEvent>, SessionStoreError> {
+        if self.get_workflow_run_by_id(id).await?.is_none() {
             return Ok(None);
         }
         let event = StoredWorkflowRunEvent {
@@ -4348,6 +4445,25 @@ impl InMemorySessionStore {
             .await;
 
         Ok(Some(run))
+    }
+
+    async fn list_awaiting_input_workflow_runs(
+        &self,
+    ) -> Result<Vec<StoredWorkflowRun>, SessionStoreError> {
+        let mut runs = self
+            .workflow_runs
+            .lock()
+            .await
+            .iter()
+            .filter(|run| run.state == WorkflowRunState::AwaitingInput)
+            .cloned()
+            .collect::<Vec<_>>();
+        runs.sort_by(|left, right| {
+            left.updated_at
+                .cmp(&right.updated_at)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        Ok(runs)
     }
 
     async fn reconcile_workflow_run_from_task(
@@ -8940,6 +9056,36 @@ impl PostgresSessionStore {
         rows.iter().map(row_to_stored_workflow_run_event).collect()
     }
 
+    async fn list_workflow_run_events(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<StoredWorkflowRunEvent>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    run_id,
+                    event_type,
+                    message,
+                    data,
+                    created_at
+                FROM control_workflow_run_events
+                WHERE run_id = $1
+                ORDER BY created_at ASC, id ASC
+                "#,
+                &[&id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list workflow run events: {error}"))
+            })?;
+        rows.iter().map(row_to_stored_workflow_run_event).collect()
+    }
+
     async fn list_workflow_run_logs_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -8984,6 +9130,86 @@ impl PostgresSessionStore {
         request: PersistWorkflowRunEventRequest,
     ) -> Result<Option<StoredWorkflowRunEvent>, SessionStoreError> {
         let Some(run) = self.get_workflow_run_for_owner(principal, id).await? else {
+            return Ok(None);
+        };
+        let now = Utc::now();
+        let mut client = self.client.lock().await;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+        let event_id = Uuid::now_v7();
+        let event = StoredWorkflowRunEvent {
+            id: event_id,
+            run_id: id,
+            event_type: request.event_type,
+            message: request.message,
+            data: request.data,
+            created_at: now,
+        };
+        let row = transaction
+            .query_opt(
+                r#"
+                WITH inserted AS (
+                    INSERT INTO control_workflow_run_events (
+                        id,
+                        run_id,
+                        event_type,
+                        message,
+                        data,
+                        created_at
+                    )
+                    VALUES ($2, $1, $3, $4, $5::jsonb, $6)
+                    RETURNING
+                        id,
+                        run_id,
+                        event_type,
+                        message,
+                        data,
+                        created_at
+                )
+                UPDATE control_workflow_runs
+                SET updated_at = $6
+                WHERE id = $1
+                RETURNING (SELECT id FROM inserted) AS inserted_id
+                "#,
+                &[
+                    &id,
+                    &event_id,
+                    &event.event_type,
+                    &event.message,
+                    &event.data,
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to append workflow run event: {error}"))
+            })?;
+        let Some(row) = row else {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Ok(None);
+        };
+        let inserted_id: Uuid = row.get("inserted_id");
+        if inserted_id != event.id {
+            return Err(SessionStoreError::Backend(
+                "workflow run event insert returned unexpected id".to_string(),
+            ));
+        }
+        Self::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+        Ok(Some(event))
+    }
+
+    async fn append_workflow_run_event(
+        &self,
+        id: Uuid,
+        request: PersistWorkflowRunEventRequest,
+    ) -> Result<Option<StoredWorkflowRunEvent>, SessionStoreError> {
+        let Some(run) = self.get_workflow_run_by_id(id).await? else {
             return Ok(None);
         };
         let now = Utc::now();
@@ -9605,6 +9831,60 @@ impl PostgresSessionStore {
         })?;
 
         Ok(Some(run))
+    }
+
+    async fn list_awaiting_input_workflow_runs(
+        &self,
+    ) -> Result<Vec<StoredWorkflowRun>, SessionStoreError> {
+        let rows = self
+            .client
+            .lock()
+            .await
+            .query(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    workflow_definition_id,
+                    workflow_definition_version_id,
+                    workflow_version,
+                    session_id,
+                    automation_task_id,
+                    state,
+                    source_system,
+                    source_reference,
+                    client_request_id,
+                    create_request_fingerprint,
+                    source_snapshot,
+                    extensions,
+                    credential_bindings,
+                    workspace_inputs,
+                    produced_files,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_workflow_runs
+                WHERE state = 'awaiting_input'
+                ORDER BY updated_at ASC, id ASC
+                "#,
+                &[],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list awaiting-input workflow runs: {error}"
+                ))
+            })?;
+        rows.into_iter()
+            .map(|row| row_to_stored_workflow_run(&row))
+            .collect()
     }
 
     async fn append_workflow_run_log(

@@ -3044,6 +3044,40 @@ components:
         queued_at:
           type: string
           format: date-time
+    WorkflowRunResumeMode:
+      type: string
+      enum:
+        - live_runtime
+        - profile_restart
+    WorkflowRunRuntimeResource:
+      type: object
+      required:
+        - resume_mode
+        - exact_runtime_available
+        - hold_until
+        - released_at
+        - release_reason
+        - session_state
+      properties:
+        resume_mode:
+          $ref: '#/components/schemas/WorkflowRunResumeMode'
+        exact_runtime_available:
+          type: boolean
+        hold_until:
+          type: string
+          format: date-time
+          nullable: true
+        released_at:
+          type: string
+          format: date-time
+          nullable: true
+        release_reason:
+          type: string
+          nullable: true
+        session_state:
+          allOf:
+            - $ref: '#/components/schemas/SessionLifecycleState'
+          nullable: true
     WorkflowRunResource:
       type: object
       required:
@@ -3070,6 +3104,7 @@ components:
         - retention
         - admission
         - intervention
+        - runtime
         - labels
         - started_at
         - completed_at
@@ -3149,6 +3184,10 @@ components:
           nullable: true
         intervention:
           $ref: '#/components/schemas/WorkflowRunInterventionResource'
+        runtime:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunRuntimeResource'
+          nullable: true
         labels:
           type: object
           additionalProperties:

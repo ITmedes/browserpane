@@ -67,6 +67,7 @@ use crate::session_registry::SessionRegistry;
 use crate::workflow::{
     derive_workflow_run_admission_resource,
     derive_workflow_run_intervention_resource,
+    derive_workflow_run_runtime_resource,
     PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
     PersistWorkflowRunEventRequest, PersistWorkflowRunLogRequest,
     PersistWorkflowRunProducedFileRequest, PersistWorkflowRunRequest, StoredWorkflowDefinition,
@@ -2173,6 +2174,9 @@ async fn cancel_workflow_run(
         )
         .await
         .map_err(map_session_store_error)?;
+    if let Err(error) = state.workflow_lifecycle.reconcile_runtime_hold(run.id).await {
+        warn!(run_id = %run.id, "failed to reconcile workflow runtime hold after cancellation: {error}");
+    }
     if let Err(error) = state.workflow_lifecycle.cancel_run(run.id).await {
         warn!(run_id = %run.id, "failed to stop workflow worker after cancel request: {error}");
     }
@@ -2262,6 +2266,9 @@ async fn submit_workflow_run_input(
                 }),
             )
         })?;
+    if let Err(error) = state.workflow_lifecycle.reconcile_runtime_hold(run_id).await {
+        warn!(run_id = %run_id, "failed to reconcile workflow runtime hold after operator input: {error}");
+    }
     let run = load_owner_workflow_run(&state, &principal, run_id).await?;
     Ok(Json(build_workflow_run_resource(&state, &run).await?))
 }
@@ -2336,6 +2343,9 @@ async fn resume_workflow_run(
                 }),
             )
         })?;
+    if let Err(error) = state.workflow_lifecycle.reconcile_runtime_hold(run_id).await {
+        warn!(run_id = %run_id, "failed to reconcile workflow runtime hold after resume: {error}");
+    }
     let run = load_owner_workflow_run(&state, &principal, run_id).await?;
     Ok(Json(build_workflow_run_resource(&state, &run).await?))
 }
@@ -2414,6 +2424,9 @@ async fn reject_workflow_run(
                 }),
             )
         })?;
+    if let Err(error) = state.workflow_lifecycle.reconcile_runtime_hold(run_id).await {
+        warn!(run_id = %run_id, "failed to reconcile workflow runtime hold after rejection: {error}");
+    }
     let run = load_owner_workflow_run(&state, &principal, run_id).await?;
     Ok(Json(build_workflow_run_resource(&state, &run).await?))
 }
@@ -2450,6 +2463,9 @@ async fn transition_workflow_run_state(
                 }),
             )
         })?;
+    if let Err(error) = state.workflow_lifecycle.reconcile_runtime_hold(run.id).await {
+        warn!(run_id = %run.id, "failed to reconcile workflow runtime hold after run transition: {error}");
+    }
     Ok(Json(build_workflow_run_resource(&state, &run).await?))
 }
 
@@ -5280,11 +5296,19 @@ async fn build_workflow_run_resource(
     let events = workflow_run_event_resources(state, run).await?;
     let admission = derive_workflow_run_admission_resource(run.state, &events);
     let intervention = derive_workflow_run_intervention_resource(run.state, &events);
+    let session_state = state
+        .session_store
+        .get_session_by_id(run.session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .map(|session| session.state);
+    let runtime = derive_workflow_run_runtime_resource(run.state, session_state, &events);
     Ok(run.to_resource(
         recordings,
         workflow_run_retention_resource(state, run),
         admission,
         intervention,
+        runtime,
     ))
 }
 

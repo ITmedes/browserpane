@@ -66,7 +66,7 @@ Current product shape:
   - `recording_playback.rs`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.
   - `recording_observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
   - `recording_retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
-  - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers as short-lived Docker jobs, persist run-worker assignments, and fail stale active runs after restart instead of leaving them orphaned.
+  - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers as short-lived Docker jobs, persist run-worker assignments, fail stale active runs after restart instead of leaving them orphaned, and manage awaiting-input runtime hold/release semantics for paused workflow runs.
   - `workflow_event_delivery.rs`: owner-scoped workflow event subscriptions, signed outbound webhook delivery, retry/backoff, and persisted delivery diagnostics.
   - `workflow_observability.rs`: gateway-local counters/timestamps for workflow event delivery, produced-file uploads, and workflow retention passes.
   - `workflow_retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
@@ -150,6 +150,7 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:workflow-extension -- --headless`
 - `npm run smoke:workflow-failure -- --headless`
 - `npm run smoke:workflow-reconnect -- --headless`
+- `npm run smoke:workflow-runtime-hold -- --headless`
 - `npm run smoke:multisession -- --headless`
 - `npm run test:coverage`
 
