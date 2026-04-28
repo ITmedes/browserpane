@@ -65,6 +65,7 @@ use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime};
 use crate::session_registry::SessionRegistry;
 use crate::workflow::{
+    derive_workflow_run_admission_resource,
     derive_workflow_run_intervention_resource,
     PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
     PersistWorkflowRunEventRequest, PersistWorkflowRunLogRequest,
@@ -552,6 +553,9 @@ async fn transition_automation_task_state(
             .await?;
     let message = request.message.unwrap_or_else(|| match request.state {
         AutomationTaskState::Pending => "automation task returned to pending state".to_string(),
+        AutomationTaskState::Queued => {
+            "automation task queued until worker capacity is available".to_string()
+        }
         AutomationTaskState::Starting => "automation task started".to_string(),
         AutomationTaskState::Running => "automation task entered running state".to_string(),
         AutomationTaskState::AwaitingInput => "automation task is awaiting input".to_string(),
@@ -562,6 +566,7 @@ async fn transition_automation_task_state(
     });
     let event_type = match request.state {
         AutomationTaskState::Pending => "automation_task.pending",
+        AutomationTaskState::Queued => "automation_task.queued",
         AutomationTaskState::Starting => "automation_task.starting",
         AutomationTaskState::Running => "automation_task.running",
         AutomationTaskState::AwaitingInput => "automation_task.awaiting_input",
@@ -1555,9 +1560,20 @@ async fn get_workflow_run(
     Path(run_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
-    let run =
+    let mut run =
         authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
             .await?;
+    if !run.state.is_terminal() {
+        let _ = state.workflow_lifecycle.reconcile_waiting_runs().await;
+        if let Some(updated) = state
+            .session_store
+            .get_workflow_run_by_id(run.id)
+            .await
+            .map_err(map_session_store_error)?
+        {
+            run = updated;
+        }
+    }
     Ok(Json(build_workflow_run_resource(&state, &run).await?))
 }
 
@@ -5099,10 +5115,13 @@ async fn build_workflow_run_resource(
         .filter(|recording| workflow_run_recording_matches(run, recording, Utc::now()))
         .map(workflow_run_recording_resource)
         .collect::<Vec<_>>();
-    let intervention = workflow_run_intervention_resource(state, run).await?;
+    let events = workflow_run_event_resources(state, run).await?;
+    let admission = derive_workflow_run_admission_resource(run.state, &events);
+    let intervention = derive_workflow_run_intervention_resource(run.state, &events);
     Ok(run.to_resource(
         recordings,
         workflow_run_retention_resource(state, run),
+        admission,
         intervention,
     ))
 }

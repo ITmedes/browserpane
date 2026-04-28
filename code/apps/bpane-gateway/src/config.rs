@@ -205,6 +205,11 @@ pub struct Config {
     #[arg(long)]
     pub workflow_worker_image: Option<String>,
 
+    /// Maximum number of automatic workflow workers that may run concurrently.
+    /// Set to 0 to disable workflow-worker admission limits.
+    #[arg(long, default_value_t = 0)]
+    pub workflow_worker_max_active: usize,
+
     /// Docker network used by automatic workflow worker jobs.
     #[arg(long)]
     pub workflow_worker_network: Option<String>,

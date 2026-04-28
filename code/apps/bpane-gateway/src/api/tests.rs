@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
 use std::time::Duration;
@@ -32,8 +33,8 @@ use crate::session_control::{
     SessionRecordingFormat, SessionRecordingMode, SessionRecordingPolicy,
     SessionRecordingState as StoredSessionRecordingState, StoredSessionRecording,
 };
-use crate::session_manager::{SessionManager, SessionManagerConfig};
-use crate::workflow_lifecycle::WorkflowLifecycleManager;
+use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerProfile};
+use crate::workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
 use crate::workflow_observability::WorkflowObservability;
 use crate::workflow_source::WorkflowSourceResolver;
 use crate::workspace_file_store::WorkspaceFileStore;
@@ -118,6 +119,91 @@ fn test_router() -> (Router, String) {
         default_owner_mode: SessionOwnerMode::Collaborative,
     });
     (build_api_router(state), token)
+}
+
+fn test_router_with_workflow_lifecycle(
+    config: WorkflowWorkerConfig,
+) -> (Router, String, Arc<ApiState>) {
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
+    let token = auth_validator
+        .generate_token()
+        .expect("hmac auth validator should generate dev token");
+    let automation_access_token_manager = Arc::new(SessionAutomationAccessTokenManager::new(
+        vec![6; 32],
+        Duration::from_secs(300),
+    ));
+    let session_store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "workflow_test_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 4,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let workflow_lifecycle = Arc::new(
+        WorkflowLifecycleManager::new(
+            Some(config),
+            auth_validator.clone(),
+            automation_access_token_manager.clone(),
+            session_store.clone(),
+        )
+        .expect("workflow lifecycle test config should be valid"),
+    );
+    let state = Arc::new(ApiState {
+        registry: Arc::new(SessionRegistry::new(10, false)),
+        auth_validator,
+        connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
+            vec![5; 32],
+            Duration::from_secs(300),
+        )),
+        automation_access_token_manager,
+        session_store,
+        session_manager: Arc::new(
+            SessionManager::new(SessionManagerConfig::StaticSingle {
+                agent_socket_path: "/tmp/test.sock".to_string(),
+                cdp_endpoint: Some("http://host:9223".to_string()),
+                idle_timeout: Duration::from_secs(300),
+            })
+            .unwrap(),
+        ),
+        credential_provider: Some(test_credential_provider()),
+        recording_artifact_store: test_artifact_store(),
+        workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
+        recording_observability: Arc::new(RecordingObservability::default()),
+        recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
+        workflow_lifecycle,
+        workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_log_retention: None,
+        workflow_output_retention: None,
+        idle_stop_timeout: Duration::from_secs(300),
+        public_gateway_url: "https://localhost:4433".to_string(),
+        default_owner_mode: SessionOwnerMode::Collaborative,
+    });
+    (build_api_router(state.clone()), token, state)
+}
+
+fn create_sleep_workflow_worker_script(
+    dir: &tempfile::TempDir,
+    capture_file: &std::path::Path,
+    sleep_seconds: f32,
+) -> std::path::PathBuf {
+    let script_path = dir.path().join("workflow-worker-test.sh");
+    fs::write(
+        &script_path,
+        format!(
+            r#"#!/bin/sh
+printf '%s\n' "$@" >> "{}"
+sleep {}
+"#,
+            capture_file.display(),
+            sleep_seconds,
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
 }
 
 fn test_artifact_store() -> Arc<RecordingArtifactStore> {
@@ -3346,6 +3432,205 @@ async fn workflow_run_create_rejects_conflicting_idempotent_retry() {
             .unwrap()
             .contains("client_request_id")
     );
+}
+
+#[tokio::test]
+async fn workflow_run_create_exposes_queued_admission_when_worker_capacity_is_exhausted() {
+    let temp_dir = tempdir().unwrap();
+    let capture_file = temp_dir.path().join("workflow-worker-capture.txt");
+    let script = create_sleep_workflow_worker_script(&temp_dir, &capture_file, 0.3);
+    let (app, token, _state) = test_router_with_workflow_lifecycle(WorkflowWorkerConfig {
+        docker_bin: script,
+        image: "deploy-workflow-worker:test".to_string(),
+        max_active_workers: 1,
+        network: Some("deploy_bpane-internal".to_string()),
+        container_name_prefix: "bpane-workflow".to_string(),
+        gateway_api_url: "http://gateway:8932".to_string(),
+        work_root: std::path::PathBuf::from("/tmp/bpane-workflows"),
+        bearer_token: Some("token".to_string()),
+        oidc_token_url: None,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_scopes: None,
+    });
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "queued-admission"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/queued/run.mjs",
+                        "default_session": {
+                            "labels": {
+                                "suite": "queued-admission"
+                            }
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let first_run = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-runs")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "workflow_id": workflow_id,
+                            "version": "v1",
+                            "session": {
+                                "create_session": {}
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let first_run_id = first_run["id"].as_str().unwrap().to_string();
+
+    let queued_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "session": {
+                            "create_session": {}
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(queued_response.status(), StatusCode::CREATED);
+    let queued_run = response_json(queued_response).await;
+    let queued_run_id = queued_run["id"].as_str().unwrap().to_string();
+    assert_eq!(queued_run["state"], "queued");
+    assert_eq!(queued_run["admission"]["state"], "queued");
+    assert_eq!(queued_run["admission"]["reason"], "workflow_worker_capacity");
+    assert_eq!(queued_run["admission"]["details"]["active_workers"], 1);
+    assert_eq!(queued_run["admission"]["details"]["max_active_workers"], 1);
+
+    let queued_events = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/workflow-runs/{queued_run_id}/events"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(queued_events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|event| event["event_type"] == "workflow_run.queued"));
+
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let first = response_json(
+                app.clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri(format!("/api/v1/workflow-runs/{first_run_id}"))
+                            .header("authorization", bearer(&token))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            if first["state"] == "failed" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("first run should finish");
+
+    let resumed = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let run = response_json(
+                app.clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri(format!("/api/v1/workflow-runs/{queued_run_id}"))
+                            .header("authorization", bearer(&token))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            if run["state"] == "failed" {
+                break run;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("queued run should eventually dispatch");
+    assert!(resumed["admission"].is_null());
+
+    let capture = fs::read_to_string(&capture_file).unwrap();
+    assert!(capture.contains(&first_run_id));
+    assert!(capture.contains(&queued_run_id));
 }
 
 #[tokio::test]

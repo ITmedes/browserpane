@@ -310,8 +310,23 @@ pub struct WorkflowRunInterventionResource {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum WorkflowRunAdmissionState {
+    Queued,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowRunAdmissionResource {
+    pub state: WorkflowRunAdmissionState,
+    pub reason: String,
+    pub details: Option<Value>,
+    pub queued_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WorkflowRunState {
     Pending,
+    Queued,
     Starting,
     Running,
     AwaitingInput,
@@ -325,6 +340,7 @@ impl From<AutomationTaskState> for WorkflowRunState {
     fn from(value: AutomationTaskState) -> Self {
         match value {
             AutomationTaskState::Pending => Self::Pending,
+            AutomationTaskState::Queued => Self::Queued,
             AutomationTaskState::Starting => Self::Starting,
             AutomationTaskState::Running => Self::Running,
             AutomationTaskState::AwaitingInput => Self::AwaitingInput,
@@ -340,6 +356,7 @@ impl From<WorkflowRunState> for AutomationTaskState {
     fn from(value: WorkflowRunState) -> Self {
         match value {
             WorkflowRunState::Pending => Self::Pending,
+            WorkflowRunState::Queued => Self::Queued,
             WorkflowRunState::Starting => Self::Starting,
             WorkflowRunState::Running => Self::Running,
             WorkflowRunState::AwaitingInput => Self::AwaitingInput,
@@ -357,6 +374,7 @@ impl FromStr for WorkflowRunState {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "pending" => Ok(Self::Pending),
+            "queued" => Ok(Self::Queued),
             "starting" => Ok(Self::Starting),
             "running" => Ok(Self::Running),
             "awaiting_input" => Ok(Self::AwaitingInput),
@@ -373,6 +391,7 @@ impl WorkflowRunState {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Pending => "pending",
+            Self::Queued => "queued",
             Self::Starting => "starting",
             Self::Running => "running",
             Self::AwaitingInput => "awaiting_input",
@@ -461,6 +480,7 @@ pub struct WorkflowRunResource {
     pub produced_files: Vec<WorkflowRunProducedFileResource>,
     pub recordings: Vec<WorkflowRunRecordingResource>,
     pub retention: WorkflowRunRetentionResource,
+    pub admission: Option<WorkflowRunAdmissionResource>,
     pub intervention: WorkflowRunInterventionResource,
     pub labels: HashMap<String, String>,
     pub started_at: Option<DateTime<Utc>>,
@@ -549,6 +569,7 @@ impl StoredWorkflowRun {
         &self,
         recordings: Vec<WorkflowRunRecordingResource>,
         retention: WorkflowRunRetentionResource,
+        admission: Option<WorkflowRunAdmissionResource>,
         intervention: WorkflowRunInterventionResource,
     ) -> WorkflowRunResource {
         WorkflowRunResource {
@@ -592,6 +613,7 @@ impl StoredWorkflowRun {
                 .collect(),
             recordings,
             retention,
+            admission,
             intervention,
             labels: self.labels.clone(),
             started_at: self.started_at,
@@ -755,6 +777,45 @@ pub fn derive_workflow_run_intervention_resource(
     }
 }
 
+pub fn derive_workflow_run_admission_resource(
+    run_state: WorkflowRunState,
+    events: &[WorkflowRunEventResource],
+) -> Option<WorkflowRunAdmissionResource> {
+    if run_state != WorkflowRunState::Queued {
+        return None;
+    }
+
+    let event = events.iter().rev().find(|event| {
+        event.event_type == "workflow_run.queued" || event.event_type == "automation_task.queued"
+    })?;
+    let admission = event
+        .data
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|value| value.get("admission"))
+        .or(event.data.as_ref());
+    let reason = admission
+        .and_then(Value::as_object)
+        .and_then(|value| value.get("reason"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("workflow_worker_capacity")
+        .to_string();
+    let details = admission
+        .and_then(Value::as_object)
+        .and_then(|value| value.get("details"))
+        .cloned()
+        .or_else(|| event.data.clone());
+
+    Some(WorkflowRunAdmissionResource {
+        state: WorkflowRunAdmissionState::Queued,
+        reason,
+        details,
+        queued_at: event.created_at,
+    })
+}
+
 impl WorkflowRunSourceSnapshot {
     pub fn to_resource(&self, run_id: Uuid) -> WorkflowRunSourceSnapshotResource {
         WorkflowRunSourceSnapshotResource {
@@ -875,6 +936,7 @@ impl WorkflowRunLogResource {
 pub fn workflow_run_event_type(state: WorkflowRunState) -> &'static str {
     match state {
         WorkflowRunState::Pending => "workflow_run.pending",
+        WorkflowRunState::Queued => "workflow_run.queued",
         WorkflowRunState::Starting => "workflow_run.starting",
         WorkflowRunState::Running => "workflow_run.running",
         WorkflowRunState::AwaitingInput => "workflow_run.awaiting_input",
@@ -957,11 +1019,50 @@ mod tests {
         assert_eq!(resolution.actor_issuer, "bpane-gateway");
         assert_eq!(resolution.actor_display_name.as_deref(), Some("Owner"));
     }
+
+    #[test]
+    fn derives_queued_admission_from_latest_queue_event() {
+        let queued_at = Utc::now();
+        let resource = derive_workflow_run_admission_resource(
+            WorkflowRunState::Queued,
+            &[WorkflowRunEventResource {
+                id: Uuid::now_v7(),
+                run_id: Uuid::now_v7(),
+                source: WorkflowRunEventSource::Run,
+                automation_task_id: None,
+                event_type: "workflow_run.queued".to_string(),
+                message: "workflow run queued until worker capacity is available".to_string(),
+                data: Some(serde_json::json!({
+                    "admission": {
+                        "reason": "workflow_worker_capacity",
+                        "details": {
+                            "active_workers": 1,
+                            "max_active_workers": 1,
+                        }
+                    }
+                })),
+                created_at: queued_at,
+            }],
+        )
+        .expect("queued admission");
+
+        assert_eq!(resource.state, WorkflowRunAdmissionState::Queued);
+        assert_eq!(resource.reason, "workflow_worker_capacity");
+        assert_eq!(resource.queued_at, queued_at);
+        assert_eq!(
+            resource.details,
+            Some(serde_json::json!({
+                "active_workers": 1,
+                "max_active_workers": 1,
+            }))
+        );
+    }
 }
 
 pub fn workflow_run_default_message(state: WorkflowRunState) -> &'static str {
     match state {
         WorkflowRunState::Pending => "workflow run returned to pending state",
+        WorkflowRunState::Queued => "workflow run queued until worker capacity is available",
         WorkflowRunState::Starting => "workflow run started",
         WorkflowRunState::Running => "workflow run entered running state",
         WorkflowRunState::AwaitingInput => "workflow run is awaiting input",
@@ -975,6 +1076,7 @@ pub fn workflow_run_default_message(state: WorkflowRunState) -> &'static str {
 pub fn automation_task_event_type_for_run_state(state: WorkflowRunState) -> &'static str {
     match state {
         WorkflowRunState::Pending => "automation_task.pending",
+        WorkflowRunState::Queued => "automation_task.queued",
         WorkflowRunState::Starting => "automation_task.starting",
         WorkflowRunState::Running => "automation_task.running",
         WorkflowRunState::AwaitingInput => "automation_task.awaiting_input",
@@ -988,6 +1090,7 @@ pub fn automation_task_event_type_for_run_state(state: WorkflowRunState) -> &'st
 pub fn automation_task_default_message_for_run_state(state: WorkflowRunState) -> &'static str {
     match state {
         WorkflowRunState::Pending => "automation task returned to pending state",
+        WorkflowRunState::Queued => "automation task queued until worker capacity is available",
         WorkflowRunState::Starting => "automation task started",
         WorkflowRunState::Running => "automation task entered running state",
         WorkflowRunState::AwaitingInput => "automation task is awaiting input",
