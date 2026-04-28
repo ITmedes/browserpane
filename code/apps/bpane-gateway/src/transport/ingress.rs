@@ -4,12 +4,12 @@ use bpane_protocol::channel::ChannelId;
 use bpane_protocol::frame::{Frame, FrameDecoder};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 use wtransport::RecvStream;
 
 use super::policy::viewer_can_forward_frame;
 use crate::session::Session;
-use crate::session_hub::SessionHub;
+use crate::session_hub::{ResizeResult, SessionHub};
 
 pub(super) fn spawn_browser_to_agent_task(
     session: Arc<Session>,
@@ -42,7 +42,19 @@ pub(super) fn spawn_browser_to_agent_task(
                                 let is_owner = hub.is_browser_owner(client_id);
 
                                 if let Some((req_w, req_h)) = resolution_request(&frame) {
-                                    let _ = hub.request_resize(client_id, req_w, req_h).await;
+                                    match hub.request_resize(client_id, req_w, req_h).await {
+                                        ResizeResult::Applied => {}
+                                        ResizeResult::Locked(width, height) => {
+                                            debug!(
+                                                client_id,
+                                                requested_width = req_w,
+                                                requested_height = req_h,
+                                                locked_width = width,
+                                                locked_height = height,
+                                                "ignored resize request because the session resolution is locked"
+                                            );
+                                        }
+                                    }
                                     continue;
                                 }
 

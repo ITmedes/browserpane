@@ -38,11 +38,10 @@ use crate::workflow::{
     workflow_run_default_message, workflow_run_event_type, CreateWorkflowRunResult,
     PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
     PersistWorkflowRunEventRequest, PersistWorkflowRunLogRequest,
-    PersistWorkflowRunProducedFileRequest, PersistWorkflowRunRequest,
-    StoredWorkflowDefinition, StoredWorkflowDefinitionVersion, StoredWorkflowRun,
-    StoredWorkflowRunEvent, StoredWorkflowRunLog, WorkflowRunProducedFile,
-    WorkflowRunSourceSnapshot, WorkflowRunState, WorkflowRunTransitionRequest,
-    WorkflowRunWorkspaceInput,
+    PersistWorkflowRunProducedFileRequest, PersistWorkflowRunRequest, StoredWorkflowDefinition,
+    StoredWorkflowDefinitionVersion, StoredWorkflowRun, StoredWorkflowRunEvent,
+    StoredWorkflowRunLog, WorkflowRunProducedFile, WorkflowRunSourceSnapshot, WorkflowRunState,
+    WorkflowRunTransitionRequest, WorkflowRunWorkspaceInput,
 };
 use crate::workflow_event_delivery::{
     build_workflow_event_delivery_payload, validate_workflow_event_subscription_request,
@@ -1324,10 +1323,14 @@ impl SessionStore {
     ) -> Result<Vec<StoredWorkflowEventSubscription>, SessionStoreError> {
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
-                store.list_workflow_event_subscriptions_for_owner(principal).await
+                store
+                    .list_workflow_event_subscriptions_for_owner(principal)
+                    .await
             }
             SessionStoreBackend::Postgres(store) => {
-                store.list_workflow_event_subscriptions_for_owner(principal).await
+                store
+                    .list_workflow_event_subscriptions_for_owner(principal)
+                    .await
             }
         }
     }
@@ -1483,8 +1486,12 @@ impl SessionStore {
     ) -> Result<Option<StoredWorkflowRunEvent>, SessionStoreError> {
         validate_workflow_run_event_request(&request)?;
         match &self.backend {
-            SessionStoreBackend::InMemory(store) => store.append_workflow_run_event(id, request).await,
-            SessionStoreBackend::Postgres(store) => store.append_workflow_run_event(id, request).await,
+            SessionStoreBackend::InMemory(store) => {
+                store.append_workflow_run_event(id, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.append_workflow_run_event(id, request).await
+            }
         }
     }
 
@@ -1585,10 +1592,14 @@ impl SessionStore {
     ) -> Result<usize, SessionStoreError> {
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
-                store.delete_workflow_run_logs(run_id, automation_task_id).await
+                store
+                    .delete_workflow_run_logs(run_id, automation_task_id)
+                    .await
             }
             SessionStoreBackend::Postgres(store) => {
-                store.delete_workflow_run_logs(run_id, automation_task_id).await
+                store
+                    .delete_workflow_run_logs(run_id, automation_task_id)
+                    .await
             }
         }
     }
@@ -1720,10 +1731,14 @@ impl SessionStore {
     ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
-                store.get_extension_definition_for_owner(principal, id).await
+                store
+                    .get_extension_definition_for_owner(principal, id)
+                    .await
             }
             SessionStoreBackend::Postgres(store) => {
-                store.get_extension_definition_for_owner(principal, id).await
+                store
+                    .get_extension_definition_for_owner(principal, id)
+                    .await
             }
         }
     }
@@ -1756,10 +1771,14 @@ impl SessionStore {
         validate_extension_version_request(&request)?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
-                store.create_extension_version_for_owner(principal, request).await
+                store
+                    .create_extension_version_for_owner(principal, request)
+                    .await
             }
             SessionStoreBackend::Postgres(store) => {
-                store.create_extension_version_for_owner(principal, request).await
+                store
+                    .create_extension_version_for_owner(principal, request)
+                    .await
             }
         }
     }
@@ -2181,10 +2200,14 @@ impl SessionStore {
     ) -> Result<(), SessionStoreError> {
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
-                store.upsert_workflow_run_worker_assignment(assignment).await
+                store
+                    .upsert_workflow_run_worker_assignment(assignment)
+                    .await
             }
             SessionStoreBackend::Postgres(store) => {
-                store.upsert_workflow_run_worker_assignment(assignment).await
+                store
+                    .upsert_workflow_run_worker_assignment(assignment)
+                    .await
             }
         }
     }
@@ -2678,17 +2701,18 @@ fn validate_workflow_run_transition_request(
             .unwrap_or_else(|| "workflow run transition".to_string()),
         event_data: request.data.clone(),
     };
-    validate_automation_task_transition_request(&task_request)
-        .and_then(|_| match (&request.state, request.data.as_ref()) {
+    validate_automation_task_transition_request(&task_request).and_then(|_| {
+        match (&request.state, request.data.as_ref()) {
             (WorkflowRunState::AwaitingInput, Some(data)) => {
                 crate::workflow::parse_workflow_run_runtime_hold_request(data)
                     .map(|_| ())
                     .map_err(|error| SessionStoreError::InvalidRequest(error.to_string()))
             }
-            (_, Some(data)) if data
-                .as_object()
-                .and_then(|value| value.get("runtime_hold"))
-                .is_some() =>
+            (_, Some(data))
+                if data
+                    .as_object()
+                    .and_then(|value| value.get("runtime_hold"))
+                    .is_some() =>
             {
                 Err(SessionStoreError::InvalidRequest(
                     "workflow runtime_hold is only valid when transitioning to awaiting_input"
@@ -2696,7 +2720,8 @@ fn validate_workflow_run_transition_request(
                 ))
             }
             _ => Ok(()),
-        })
+        }
+    })
 }
 
 fn validate_workflow_run_log_request(
@@ -2908,24 +2933,6 @@ fn validate_file_workspace_file_request(
     Ok(())
 }
 
-fn validate_complete_recording_request(
-    request: &CompleteSessionRecordingRequest,
-) -> Result<(), SessionStoreError> {
-    if request.source_path.trim().is_empty() {
-        return Err(SessionStoreError::InvalidRequest(
-            "source_path must not be empty".to_string(),
-        ));
-    }
-    if let Some(mime_type) = &request.mime_type {
-        if mime_type.trim().is_empty() {
-            return Err(SessionStoreError::InvalidRequest(
-                "mime_type must not be empty when provided".to_string(),
-            ));
-        }
-    }
-    Ok(())
-}
-
 fn validate_persist_completed_recording_request(
     request: &PersistCompletedSessionRecordingRequest,
 ) -> Result<(), SessionStoreError> {
@@ -3016,7 +3023,12 @@ impl InMemorySessionStore {
                 event_type: event.event_type.clone(),
                 target_url: subscription.target_url.clone(),
                 signing_secret: subscription.signing_secret.clone(),
-                payload: build_workflow_event_delivery_payload(subscription.id, delivery_id, run, event),
+                payload: build_workflow_event_delivery_payload(
+                    subscription.id,
+                    delivery_id,
+                    run,
+                    event,
+                ),
                 state: WorkflowEventDeliveryState::Pending,
                 attempt_count: 0,
                 next_attempt_at: Some(event.created_at),
@@ -3951,7 +3963,12 @@ impl InMemorySessionStore {
             .lock()
             .await
             .iter()
-            .filter(|run| matches!(run.state, WorkflowRunState::Pending | WorkflowRunState::Queued))
+            .filter(|run| {
+                matches!(
+                    run.state,
+                    WorkflowRunState::Pending | WorkflowRunState::Queued
+                )
+            })
             .cloned()
             .collect::<Vec<_>>();
         runs.sort_by(|left, right| {
@@ -4115,7 +4132,10 @@ impl InMemorySessionStore {
         let deliveries = self
             .list_workflow_event_deliveries_for_owner(principal, subscription_id)
             .await?;
-        let delivery_ids = deliveries.into_iter().map(|delivery| delivery.id).collect::<Vec<_>>();
+        let delivery_ids = deliveries
+            .into_iter()
+            .map(|delivery| delivery.id)
+            .collect::<Vec<_>>();
         let mut attempts = self
             .workflow_event_delivery_attempts
             .lock()
@@ -4155,7 +4175,10 @@ impl InMemorySessionStore {
             .enumerate()
             .filter(|(_, delivery)| {
                 delivery.state == WorkflowEventDeliveryState::Pending
-                    && delivery.next_attempt_at.map(|value| value <= now).unwrap_or(true)
+                    && delivery
+                        .next_attempt_at
+                        .map(|value| value <= now)
+                        .unwrap_or(true)
             })
             .map(|(index, delivery)| (index, delivery.created_at, delivery.event_id, delivery.id))
             .collect::<Vec<_>>();
@@ -4188,7 +4211,10 @@ impl InMemorySessionStore {
     ) -> Result<Option<StoredWorkflowEventDelivery>, SessionStoreError> {
         let now = request.attempted_at;
         let mut deliveries = self.workflow_event_deliveries.lock().await;
-        let Some(delivery) = deliveries.iter_mut().find(|delivery| delivery.id == delivery_id) else {
+        let Some(delivery) = deliveries
+            .iter_mut()
+            .find(|delivery| delivery.id == delivery_id)
+        else {
             return Ok(None);
         };
         delivery.state = request.state;
@@ -4202,17 +4228,16 @@ impl InMemorySessionStore {
         let updated = delivery.clone();
         drop(deliveries);
 
-        self.workflow_event_delivery_attempts
-            .lock()
-            .await
-            .push(StoredWorkflowEventDeliveryAttempt {
+        self.workflow_event_delivery_attempts.lock().await.push(
+            StoredWorkflowEventDeliveryAttempt {
                 id: Uuid::now_v7(),
                 delivery_id,
                 attempt_number: request.attempt_number,
                 response_status: request.response_status,
                 error: request.error,
                 created_at: now,
-            });
+            },
+        );
         Ok(Some(updated))
     }
 
@@ -4654,7 +4679,9 @@ impl InMemorySessionStore {
                     return None;
                 }
                 let has_logs = run_logs.iter().any(|log| log.run_id == run.id)
-                    || task_logs.iter().any(|log| log.task_id == run.automation_task_id);
+                    || task_logs
+                        .iter()
+                        .any(|log| log.task_id == run.automation_task_id);
                 if !has_logs {
                     return None;
                 }
@@ -7182,7 +7209,7 @@ impl PostgresSessionStore {
                     updated_at = $8
                 WHERE automation_task_id = $1
                 "#,
-                &[ 
+                &[
                     &task.id,
                     &WorkflowRunState::from(task.state).as_str(),
                     &task.output,
@@ -7286,13 +7313,7 @@ impl PostgresSessionStore {
                     )
                     VALUES ($1, $2, $3, $4, NULL, $5)
                     "#,
-                    &[
-                        &event.id,
-                        &run_id,
-                        &event.event_type,
-                        &event.message,
-                        &now,
-                    ],
+                    &[&event.id, &run_id, &event.event_type, &event.message, &now],
                 )
                 .await
                 .map_err(|error| {
@@ -8355,10 +8376,7 @@ impl PostgresSessionStore {
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
         })?;
-        Ok(CreateWorkflowRunResult {
-            run,
-            created: true,
-        })
+        Ok(CreateWorkflowRunResult { run, created: true })
     }
 
     async fn get_workflow_run_for_owner(
@@ -8515,7 +8533,9 @@ impl PostgresSessionStore {
                     "failed to list dispatchable workflow runs: {error}"
                 ))
             })?;
-        rows.into_iter().map(|row| row_to_stored_workflow_run(&row)).collect()
+        rows.into_iter()
+            .map(|row| row_to_stored_workflow_run(&row))
+            .collect()
     }
 
     async fn find_workflow_run_by_client_request_id_for_owner(
@@ -8792,7 +8812,9 @@ impl PostgresSessionStore {
                     "failed to list workflow event deliveries: {error}"
                 ))
             })?;
-        rows.iter().map(row_to_stored_workflow_event_delivery).collect()
+        rows.iter()
+            .map(row_to_stored_workflow_event_delivery)
+            .collect()
     }
 
     async fn list_workflow_event_delivery_attempts_for_owner(
@@ -10374,9 +10396,7 @@ impl PostgresSessionStore {
             )
             .await
             .map_err(|error| {
-                SessionStoreError::Backend(format!(
-                    "failed to clear workflow run output: {error}"
-                ))
+                SessionStoreError::Backend(format!("failed to clear workflow run output: {error}"))
             })?;
         row.as_ref().map(row_to_stored_workflow_run).transpose()
     }
@@ -10490,9 +10510,7 @@ impl PostgresSessionStore {
             )
             .await
             .map_err(|error| {
-                SessionStoreError::Backend(format!(
-                    "failed to list credential bindings: {error}"
-                ))
+                SessionStoreError::Backend(format!("failed to list credential bindings: {error}"))
             })?;
         rows.iter().map(row_to_stored_credential_binding).collect()
     }
@@ -10533,7 +10551,8 @@ impl PostgresSessionStore {
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to fetch credential binding: {error}"))
             })?;
-        row.map(|row| row_to_stored_credential_binding(&row)).transpose()
+        row.map(|row| row_to_stored_credential_binding(&row))
+            .transpose()
     }
 
     async fn create_extension_definition(
@@ -10622,7 +10641,9 @@ impl PostgresSessionStore {
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to list extensions: {error}"))
             })?;
-        rows.iter().map(row_to_stored_extension_definition).collect()
+        rows.iter()
+            .map(row_to_stored_extension_definition)
+            .collect()
     }
 
     async fn get_extension_definition_for_owner(
@@ -10658,7 +10679,8 @@ impl PostgresSessionStore {
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to fetch extension: {error}"))
             })?;
-        row.map(|row| row_to_stored_extension_definition(&row)).transpose()
+        row.map(|row| row_to_stored_extension_definition(&row))
+            .transpose()
     }
 
     async fn set_extension_definition_enabled_for_owner(
@@ -10696,7 +10718,8 @@ impl PostgresSessionStore {
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to update extension: {error}"))
             })?;
-        row.map(|row| row_to_stored_extension_definition(&row)).transpose()
+        row.map(|row| row_to_stored_extension_definition(&row))
+            .transpose()
     }
 
     async fn create_extension_version_for_owner(
@@ -10823,7 +10846,11 @@ impl PostgresSessionStore {
                 ORDER BY version.created_at DESC, version.id DESC
                 LIMIT 1
                 "#,
-                &[&extension_definition_id, &principal.subject, &principal.issuer],
+                &[
+                    &extension_definition_id,
+                    &principal.subject,
+                    &principal.issuer,
+                ],
             )
             .await
             .map_err(|error| {
@@ -10831,7 +10858,8 @@ impl PostgresSessionStore {
                     "failed to fetch latest extension version: {error}"
                 ))
             })?;
-        row.map(|row| row_to_stored_extension_version(&row)).transpose()
+        row.map(|row| row_to_stored_extension_version(&row))
+            .transpose()
     }
 
     async fn create_file_workspace(
@@ -12424,7 +12452,9 @@ fn row_to_stored_automation_task_log(
     })
 }
 
-fn row_to_stored_credential_binding(row: &Row) -> Result<StoredCredentialBinding, SessionStoreError> {
+fn row_to_stored_credential_binding(
+    row: &Row,
+) -> Result<StoredCredentialBinding, SessionStoreError> {
     let provider = row
         .get::<_, String>("provider")
         .parse::<CredentialBindingProvider>()
@@ -12684,26 +12714,24 @@ fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionSto
         .as_array()
         .context("workflow run extensions column must be a JSON array")
         .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
-    let extensions = serde_json::from_value::<Vec<AppliedExtension>>(extensions_value).map_err(
-        |error| {
+    let extensions =
+        serde_json::from_value::<Vec<AppliedExtension>>(extensions_value).map_err(|error| {
             SessionStoreError::Backend(format!(
                 "workflow run extensions column must be valid extension json: {error}"
             ))
-        },
-    )?;
+        })?;
     let credential_bindings_value: Value = row.get("credential_bindings");
     credential_bindings_value
         .as_array()
         .context("workflow run credential_bindings column must be a JSON array")
         .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
-    let credential_bindings = serde_json::from_value::<Vec<WorkflowRunCredentialBinding>>(
-        credential_bindings_value,
-    )
-    .map_err(|error| {
-        SessionStoreError::Backend(format!(
-            "workflow run credential_bindings column must be valid binding json: {error}"
-        ))
-    })?;
+    let credential_bindings =
+        serde_json::from_value::<Vec<WorkflowRunCredentialBinding>>(credential_bindings_value)
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "workflow run credential_bindings column must be valid binding json: {error}"
+                ))
+            })?;
     let workspace_inputs_value: Value = row.get("workspace_inputs");
     workspace_inputs_value
         .as_array()
@@ -12819,7 +12847,7 @@ fn row_to_stored_workflow_event_delivery(
         .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
     let last_response_status = row
         .get::<_, Option<i32>>("last_response_status")
-        .map(|value| u16::try_from(value))
+        .map(u16::try_from)
         .transpose()
         .map_err(|error| {
             SessionStoreError::Backend(format!(
@@ -12868,7 +12896,7 @@ fn row_to_stored_workflow_event_delivery_attempt(
         })?;
     let response_status = row
         .get::<_, Option<i32>>("response_status")
-        .map(|value| u16::try_from(value))
+        .map(u16::try_from)
         .transpose()
         .map_err(|error| {
             SessionStoreError::Backend(format!(
@@ -12925,7 +12953,7 @@ fn row_to_recording_worker_assignment(
         .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
     let process_id = row
         .get::<_, Option<i64>>("process_id")
-        .map(|value| u32::try_from(value))
+        .map(u32::try_from)
         .transpose()
         .map_err(|error| {
             SessionStoreError::Backend(format!(
@@ -12949,7 +12977,7 @@ fn row_to_workflow_run_worker_assignment(
         .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
     let process_id = row
         .get::<_, Option<i64>>("process_id")
-        .map(|value| u32::try_from(value))
+        .map(u32::try_from)
         .transpose()
         .map_err(|error| {
             SessionStoreError::Backend(format!(
@@ -13743,7 +13771,10 @@ mod tests {
         assert_eq!(loaded.automation_task_id, task.id);
         assert_eq!(loaded.status, WorkflowRunWorkerAssignmentStatus::Running);
         assert_eq!(loaded.process_id, Some(5151));
-        assert_eq!(loaded.container_name.as_deref(), Some("bpane-workflow-test"));
+        assert_eq!(
+            loaded.container_name.as_deref(),
+            Some("bpane-workflow-test")
+        );
 
         let listed = store.list_workflow_run_worker_assignments().await.unwrap();
         assert_eq!(listed.len(), 1);
@@ -14244,7 +14275,9 @@ mod tests {
             )
             .await
             .unwrap_err();
-        assert!(matches!(error, SessionStoreError::Conflict(message) if message.contains("client_request_id")));
+        assert!(
+            matches!(error, SessionStoreError::Conflict(message) if message.contains("client_request_id"))
+        );
     }
 
     #[tokio::test]
@@ -14513,19 +14546,6 @@ mod tests {
                 format: SessionRecordingFormat::Webm,
                 retention_sec: Some(0),
             },
-        })
-        .unwrap_err();
-
-        assert!(matches!(error, SessionStoreError::InvalidRequest(_)));
-    }
-
-    #[test]
-    fn rejects_empty_recording_source_path() {
-        let error = validate_complete_recording_request(&CompleteSessionRecordingRequest {
-            source_path: "   ".to_string(),
-            mime_type: None,
-            bytes: None,
-            duration_ms: None,
         })
         .unwrap_err();
 

@@ -123,12 +123,12 @@ pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
                 next_owner, "promoted existing viewer to session owner"
             );
         }
-    } else if hub.owner_id.load(Ordering::Relaxed) == 0 && !hub.mcp_is_owner.load(Ordering::Relaxed)
+    } else if hub.owner_id.load(Ordering::Relaxed) == 0
+        && !hub.mcp_is_owner.load(Ordering::Relaxed)
+        && next_owner != 0
     {
-        if next_owner != 0 {
-            hub.owner_id.store(next_owner, Ordering::Relaxed);
-            debug!(client_id, next_owner, "restored missing session owner");
-        }
+        hub.owner_id.store(next_owner, Ordering::Relaxed);
+        debug!(client_id, next_owner, "restored missing session owner");
     }
     drop(connected_clients);
 

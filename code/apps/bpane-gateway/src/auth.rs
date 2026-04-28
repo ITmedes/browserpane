@@ -68,10 +68,6 @@ impl AuthValidator {
         matches!(self.mode, AuthMode::Oidc(_))
     }
 
-    pub async fn validate_token(&self, token: &str) -> Result<(), AuthError> {
-        self.authenticate(token).await.map(|_| ())
-    }
-
     pub async fn authenticate(&self, token: &str) -> Result<AuthenticatedPrincipal, AuthError> {
         match &self.mode {
             AuthMode::Hmac(validator) => validator.authenticate(token),

@@ -93,27 +93,6 @@ impl SessionRegistry {
         Ok(self.insert_or_get_live_hub(session_id, new_hub).await)
     }
 
-    /// Join an existing session or create a new one.
-    /// Returns a ClientHandle for the browser client.
-    ///
-    /// The registry mutex is held only for the HashMap lookup/insert.
-    /// `subscribe()` and `SessionHub::new()` (which does async I/O) both
-    /// run outside the critical section so that concurrent client joins for
-    /// different sessions — or a late joiner onto an existing session — do
-    /// not serialize behind relay setup.
-    pub async fn join(
-        &self,
-        session_id: Uuid,
-        agent_socket_path: &str,
-    ) -> anyhow::Result<(ClientHandle, Arc<SessionHub>)> {
-        self.join_with_role(
-            session_id,
-            agent_socket_path,
-            BrowserClientRole::Interactive,
-        )
-        .await
-    }
-
     pub async fn join_with_role(
         &self,
         session_id: Uuid,
@@ -144,6 +123,20 @@ impl SessionRegistry {
         }
 
         Ok((handle, hub))
+    }
+
+    #[cfg(test)]
+    pub async fn join(
+        &self,
+        session_id: Uuid,
+        agent_socket_path: &str,
+    ) -> anyhow::Result<(ClientHandle, Arc<SessionHub>)> {
+        self.join_with_role(
+            session_id,
+            agent_socket_path,
+            BrowserClientRole::Interactive,
+        )
+        .await
     }
 
     /// Get or create a hub without subscribing a browser client.

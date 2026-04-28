@@ -132,18 +132,18 @@ impl SessionHub {
         })
     }
 
-    /// Subscribe a new client to the hub.
-    /// The first subscriber becomes the session owner.
-    pub async fn subscribe(&self) -> Result<ClientHandle, SubscribeError> {
-        membership::subscribe(self, BrowserClientRole::Interactive).await
-    }
-
     /// Subscribe a new client with an explicit runtime role.
     pub async fn subscribe_with_role(
         &self,
         client_role: BrowserClientRole,
     ) -> Result<ClientHandle, SubscribeError> {
         membership::subscribe(self, client_role).await
+    }
+
+    #[cfg(test)]
+    pub async fn subscribe(&self) -> Result<ClientHandle, SubscribeError> {
+        self.subscribe_with_role(BrowserClientRole::Interactive)
+            .await
     }
 
     /// Called when a client disconnects.

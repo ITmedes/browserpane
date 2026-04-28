@@ -53,8 +53,8 @@ use session_control::{SessionOwnerMode, SessionStore};
 use session_manager::{SessionManager, SessionManagerConfig, SessionManagerDockerConfig};
 use session_registry::SessionRegistry;
 use transport::TransportServer;
-use workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
 use workflow_event_delivery::{WorkflowEventDeliveryConfig, WorkflowEventDeliveryManager};
+use workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
 use workflow_observability::WorkflowObservability;
 use workflow_retention::WorkflowRetentionManager;
 use workflow_source::WorkflowSourceResolver;
@@ -285,23 +285,24 @@ async fn main() -> anyhow::Result<()> {
     ));
     let workflow_source_resolver =
         Arc::new(WorkflowSourceResolver::new(config.workflow_git_bin.clone()));
-    let workflow_worker_config = config
-        .workflow_worker_image
-        .clone()
-        .map(|image| WorkflowWorkerConfig {
-            docker_bin: config.workflow_worker_docker_bin.clone(),
-            image,
-            max_active_workers: config.workflow_worker_max_active,
-            network: config.workflow_worker_network.clone(),
-            container_name_prefix: config.workflow_worker_container_name_prefix.clone(),
-            gateway_api_url: config.workflow_worker_api_url.clone(),
-            work_root: config.workflow_worker_work_root.clone(),
-            bearer_token: config.workflow_worker_bearer_token.clone(),
-            oidc_token_url: config.workflow_worker_oidc_token_url.clone(),
-            oidc_client_id: config.workflow_worker_oidc_client_id.clone(),
-            oidc_client_secret: config.workflow_worker_oidc_client_secret.clone(),
-            oidc_scopes: config.workflow_worker_oidc_scopes.clone(),
-        });
+    let workflow_worker_config =
+        config
+            .workflow_worker_image
+            .clone()
+            .map(|image| WorkflowWorkerConfig {
+                docker_bin: config.workflow_worker_docker_bin.clone(),
+                image,
+                max_active_workers: config.workflow_worker_max_active,
+                network: config.workflow_worker_network.clone(),
+                container_name_prefix: config.workflow_worker_container_name_prefix.clone(),
+                gateway_api_url: config.workflow_worker_api_url.clone(),
+                work_root: config.workflow_worker_work_root.clone(),
+                bearer_token: config.workflow_worker_bearer_token.clone(),
+                oidc_token_url: config.workflow_worker_oidc_token_url.clone(),
+                oidc_client_id: config.workflow_worker_oidc_client_id.clone(),
+                oidc_client_secret: config.workflow_worker_oidc_client_secret.clone(),
+                oidc_scopes: config.workflow_worker_oidc_scopes.clone(),
+            });
     let workflow_lifecycle = Arc::new(WorkflowLifecycleManager::new(
         workflow_worker_config,
         auth_validator.clone(),
@@ -372,18 +373,18 @@ async fn main() -> anyhow::Result<()> {
         workflow_retention.start();
     }
 
-    let server = TransportServer::new(
+    let server = TransportServer::new(transport::TransportServerConfig {
         bind_addr,
         identity,
-        session_manager.clone(),
-        auth_validator.clone(),
-        connect_ticket_manager.clone(),
-        session_store.clone(),
-        recording_lifecycle.clone(),
-        Duration::from_secs(config.runtime_idle_timeout_secs),
-        Duration::from_secs(config.heartbeat_timeout_secs),
-        registry.clone(),
-    );
+        session_manager: session_manager.clone(),
+        auth_validator: auth_validator.clone(),
+        connect_ticket_manager: connect_ticket_manager.clone(),
+        session_store: session_store.clone(),
+        recording_lifecycle: recording_lifecycle.clone(),
+        idle_stop_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
+        heartbeat_timeout: Duration::from_secs(config.heartbeat_timeout_secs),
+        registry: registry.clone(),
+    });
 
     let api_bind_addr: std::net::SocketAddr = format!("{}:{}", config.bind, config.api_port)
         .parse()
@@ -397,8 +398,8 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::select! {
         result = server.run() => result,
-        result = api::run_api_server(
-            api_bind_addr,
+        result = api::run_api_server(api::ApiServerConfig {
+            bind_addr: api_bind_addr,
             registry,
             auth_validator,
             connect_ticket_manager,
@@ -415,13 +416,13 @@ async fn main() -> anyhow::Result<()> {
             workflow_observability,
             workflow_log_retention,
             workflow_output_retention,
-            Duration::from_secs(config.runtime_idle_timeout_secs),
-            config.public_gateway_url,
-            if config.exclusive_browser_owner {
+            idle_stop_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
+            public_gateway_url: config.public_gateway_url,
+            default_owner_mode: if config.exclusive_browser_owner {
                 SessionOwnerMode::ExclusiveBrowserOwner
             } else {
                 SessionOwnerMode::Collaborative
             },
-        ) => result,
+        }) => result,
     }
 }

@@ -11,15 +11,15 @@ use tokio::task::JoinHandle;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::automation_access_token::SessionAutomationAccessTokenManager;
-use crate::auth::AuthenticatedPrincipal;
 use crate::auth::AuthValidator;
-use crate::session_manager::SessionManager;
-use crate::session_registry::SessionRegistry;
+use crate::auth::AuthenticatedPrincipal;
+use crate::automation_access_token::SessionAutomationAccessTokenManager;
 use crate::session_control::{
     PersistedWorkflowRunWorkerAssignment, SessionLifecycleState, SessionStore, SessionStoreError,
     WorkflowRunWorkerAssignmentStatus,
 };
+use crate::session_manager::SessionManager;
+use crate::session_registry::SessionRegistry;
 use crate::workflow::{
     parse_workflow_run_runtime_hold_request, WorkflowRunRuntimeHoldRequest, WorkflowRunState,
     WorkflowRunTransitionRequest,
@@ -206,7 +206,10 @@ impl WorkflowLifecycleInner {
         Ok(())
     }
 
-    async fn ensure_run_started(self: &Arc<Self>, run_id: Uuid) -> Result<(), WorkflowLifecycleError> {
+    async fn ensure_run_started(
+        self: &Arc<Self>,
+        run_id: Uuid,
+    ) -> Result<(), WorkflowLifecycleError> {
         let Some(run) = self.session_store.get_workflow_run_by_id(run_id).await? else {
             return Ok(());
         };
@@ -233,7 +236,10 @@ impl WorkflowLifecycleInner {
         }
 
         {
-            let launched = self.launched.lock().expect("workflow launched mutex poisoned");
+            let launched = self
+                .launched
+                .lock()
+                .expect("workflow launched mutex poisoned");
             if launched.contains_key(&run_id) {
                 return Ok(());
             }
@@ -281,7 +287,10 @@ impl WorkflowLifecycleInner {
         Ok(())
     }
 
-    async fn reconcile_runtime_hold(self: &Arc<Self>, run_id: Uuid) -> Result<(), WorkflowLifecycleError> {
+    async fn reconcile_runtime_hold(
+        self: &Arc<Self>,
+        run_id: Uuid,
+    ) -> Result<(), WorkflowLifecycleError> {
         self.clear_runtime_hold_task(run_id).await;
 
         let Some(run) = self.session_store.get_workflow_run_by_id(run_id).await? else {
@@ -310,8 +319,13 @@ impl WorkflowLifecycleInner {
                 .await?;
         }
 
-        self.schedule_runtime_release(run.id, run.session_id, awaiting_input_event.created_at, hold_request)
-            .await;
+        self.schedule_runtime_release(
+            run.id,
+            run.session_id,
+            awaiting_input_event.created_at,
+            hold_request,
+        )
+        .await;
         Ok(())
     }
 
@@ -322,12 +336,13 @@ impl WorkflowLifecycleInner {
         requested_at: chrono::DateTime<Utc>,
     ) -> Result<(), WorkflowLifecycleError> {
         let hold_until = requested_at
-            + chrono::Duration::from_std(Duration::from_secs(hold_request.timeout_sec))
-                .map_err(|error| {
+            + chrono::Duration::from_std(Duration::from_secs(hold_request.timeout_sec)).map_err(
+                |error| {
                     WorkflowLifecycleError::InvalidConfiguration(format!(
                         "invalid workflow runtime hold timeout for run {run_id}: {error}"
                     ))
-                })?;
+                },
+            )?;
         let events = self.session_store.list_workflow_run_events(run_id).await?;
         let already_present = events.iter().rev().any(|event| {
             event.created_at >= requested_at && event.event_type == "workflow_run.runtime_held"
@@ -514,11 +529,7 @@ impl WorkflowLifecycleInner {
                     run.id
                 ))
             })?;
-        let container_name = format!(
-            "{}-{}",
-            self.config.container_name_prefix,
-            run.id.simple()
-        );
+        let container_name = format!("{}-{}", self.config.container_name_prefix, run.id.simple());
 
         self.session_store
             .upsert_workflow_run_worker_assignment(PersistedWorkflowRunWorkerAssignment {
@@ -540,11 +551,7 @@ impl WorkflowLifecycleInner {
             command.arg("--network");
             command.arg(network);
         }
-        append_container_env(
-            &mut command,
-            "BPANE_WORKFLOW_RUN_ID",
-            run.id.to_string(),
-        );
+        append_container_env(&mut command, "BPANE_WORKFLOW_RUN_ID", run.id.to_string());
         append_container_env(
             &mut command,
             "BPANE_GATEWAY_API_URL",
@@ -614,11 +621,11 @@ impl WorkflowLifecycleInner {
             .lock()
             .expect("workflow launched mutex poisoned")
             .insert(
-            run.id,
-            LaunchedWorkflowWorker {
-                container_name: container_name.clone(),
-            },
-        );
+                run.id,
+                LaunchedWorkflowWorker {
+                    container_name: container_name.clone(),
+                },
+            );
 
         let manager = Arc::clone(self);
         let run_id = run.id;
@@ -706,7 +713,9 @@ impl WorkflowLifecycleInner {
         Ok(())
     }
 
-    async fn workflow_worker_capacity(&self) -> Result<WorkflowWorkerCapacity, WorkflowLifecycleError> {
+    async fn workflow_worker_capacity(
+        &self,
+    ) -> Result<WorkflowWorkerCapacity, WorkflowLifecycleError> {
         if self.config.max_active_workers == 0 {
             return Ok(WorkflowWorkerCapacity {
                 available: true,
@@ -817,7 +826,10 @@ impl WorkflowLifecycleInner {
                 let detail = last_non_empty_line(&output.stderr)
                     .or_else(|| last_non_empty_line(&output.stdout))
                     .unwrap_or_else(|| {
-                        format!("workflow worker exited with status {:?}", output.status.code())
+                        format!(
+                            "workflow worker exited with status {:?}",
+                            output.status.code()
+                        )
                     });
                 format!("workflow worker exited before completing workflow run {run_id}: {detail}")
             }
@@ -1028,13 +1040,13 @@ mod tests {
     use tokio::time::sleep;
 
     use super::*;
-    use crate::automation_access_token::SessionAutomationAccessTokenManager;
     use crate::auth::{AuthValidator, AuthenticatedPrincipal};
+    use crate::automation_access_token::SessionAutomationAccessTokenManager;
     use crate::automation_task::{AutomationTaskSessionSource, PersistAutomationTaskRequest};
-    use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerProfile};
     use crate::session_control::{
         CreateSessionRequest, SessionOwnerMode, SessionRecordingPolicy, SessionStore,
     };
+    use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerProfile};
     use crate::session_registry::SessionRegistry;
     use crate::workflow::{
         PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
@@ -1249,7 +1261,10 @@ sleep {}
         .unwrap();
         let run = create_workflow_run(&store).await;
 
-        manager.ensure_run_started("playwright", run.id).await.unwrap();
+        manager
+            .ensure_run_started("playwright", run.id)
+            .await
+            .unwrap();
 
         for _ in 0..200 {
             if capture_file.exists() {
@@ -1351,7 +1366,10 @@ sleep {}
             .unwrap()
             .unwrap();
 
-        manager.ensure_run_started("playwright", run.id).await.unwrap();
+        manager
+            .ensure_run_started("playwright", run.id)
+            .await
+            .unwrap();
 
         let current = store.get_workflow_run_by_id(run.id).await.unwrap().unwrap();
         assert_eq!(current.state, WorkflowRunState::Cancelled);

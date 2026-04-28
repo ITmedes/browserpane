@@ -26,6 +26,7 @@ use crate::automation_task::{
     AutomationTaskLogStream, AutomationTaskResource, AutomationTaskSessionSource,
     AutomationTaskState, AutomationTaskTransitionRequest, PersistAutomationTaskRequest,
 };
+use crate::connect_ticket::SessionConnectTicketManager;
 use crate::credential_binding::{
     CredentialBindingListResponse, CredentialBindingProvider, CredentialBindingResource,
     CredentialInjectionMode, CredentialTotpMetadata, PersistCredentialBindingRequest,
@@ -34,7 +35,6 @@ use crate::credential_binding::{
 use crate::credential_provider::{
     CredentialProvider, CredentialProviderError, StoreCredentialSecretRequest,
 };
-use crate::connect_ticket::SessionConnectTicketManager;
 use crate::extension::{
     AppliedExtension, ExtensionDefinitionListResponse, ExtensionDefinitionResource,
     ExtensionVersionResource, PersistExtensionDefinitionRequest, PersistExtensionVersionRequest,
@@ -65,19 +65,17 @@ use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime};
 use crate::session_registry::SessionRegistry;
 use crate::workflow::{
-    derive_workflow_run_admission_resource,
-    derive_workflow_run_intervention_resource,
-    derive_workflow_run_runtime_resource,
-    PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
-    PersistWorkflowRunEventRequest, PersistWorkflowRunLogRequest,
-    PersistWorkflowRunProducedFileRequest, PersistWorkflowRunRequest, StoredWorkflowDefinition,
-    StoredWorkflowDefinitionVersion, StoredWorkflowRun, WorkflowDefinitionListResponse,
-    WorkflowDefinitionResource, WorkflowDefinitionVersionResource, WorkflowRunEventListResponse,
-    WorkflowRunEventResource, WorkflowRunInterventionResource, WorkflowRunLogListResponse,
-    WorkflowRunLogResource,
-    WorkflowRunProducedFileResource, WorkflowRunRecordingResource, WorkflowRunResource,
-    WorkflowRunRetentionResource, WorkflowRunSourceSnapshot, WorkflowRunState,
-    WorkflowRunTransitionRequest, WorkflowRunWorkspaceInput,
+    derive_workflow_run_admission_resource, derive_workflow_run_intervention_resource,
+    derive_workflow_run_runtime_resource, PersistWorkflowDefinitionRequest,
+    PersistWorkflowDefinitionVersionRequest, PersistWorkflowRunEventRequest,
+    PersistWorkflowRunLogRequest, PersistWorkflowRunProducedFileRequest, PersistWorkflowRunRequest,
+    StoredWorkflowDefinition, StoredWorkflowDefinitionVersion, StoredWorkflowRun,
+    WorkflowDefinitionListResponse, WorkflowDefinitionResource, WorkflowDefinitionVersionResource,
+    WorkflowRunEventListResponse, WorkflowRunEventResource, WorkflowRunInterventionResource,
+    WorkflowRunLogListResponse, WorkflowRunLogResource, WorkflowRunProducedFileResource,
+    WorkflowRunRecordingResource, WorkflowRunResource, WorkflowRunRetentionResource,
+    WorkflowRunSourceSnapshot, WorkflowRunState, WorkflowRunTransitionRequest,
+    WorkflowRunWorkspaceInput,
 };
 use crate::workflow_event_delivery::{
     group_attempts_by_delivery, PersistWorkflowEventSubscriptionRequest,
@@ -115,6 +113,29 @@ struct ApiState {
     idle_stop_timeout: std::time::Duration,
     public_gateway_url: String,
     default_owner_mode: SessionOwnerMode,
+}
+
+pub(crate) struct ApiServerConfig {
+    pub bind_addr: SocketAddr,
+    pub registry: Arc<SessionRegistry>,
+    pub auth_validator: Arc<AuthValidator>,
+    pub connect_ticket_manager: Arc<SessionConnectTicketManager>,
+    pub automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
+    pub session_store: SessionStore,
+    pub session_manager: Arc<SessionManager>,
+    pub credential_provider: Option<Arc<CredentialProvider>>,
+    pub recording_artifact_store: Arc<RecordingArtifactStore>,
+    pub workspace_file_store: Arc<WorkspaceFileStore>,
+    pub workflow_source_resolver: Arc<WorkflowSourceResolver>,
+    pub recording_observability: Arc<RecordingObservability>,
+    pub recording_lifecycle: Arc<RecordingLifecycleManager>,
+    pub workflow_lifecycle: Arc<WorkflowLifecycleManager>,
+    pub workflow_observability: Arc<WorkflowObservability>,
+    pub workflow_log_retention: Option<ChronoDuration>,
+    pub workflow_output_retention: Option<ChronoDuration>,
+    pub idle_stop_timeout: std::time::Duration,
+    pub public_gateway_url: String,
+    pub default_owner_mode: SessionOwnerMode,
 }
 
 const AUTOMATION_ACCESS_TOKEN_HEADER: &str = "x-bpane-automation-access-token";
@@ -1000,9 +1021,7 @@ async fn resolve_workflow_run_credential_bindings(
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
-                    error: format!(
-                        "workflow run credential binding {binding_id} is duplicated"
-                    ),
+                    error: format!("workflow run credential binding {binding_id} is duplicated"),
                 }),
             ));
         }
@@ -1444,7 +1463,9 @@ async fn list_workflow_event_subscriptions(
         .into_iter()
         .map(|subscription| subscription.to_resource())
         .collect();
-    Ok(Json(WorkflowEventSubscriptionListResponse { subscriptions }))
+    Ok(Json(WorkflowEventSubscriptionListResponse {
+        subscriptions,
+    }))
 }
 
 async fn get_workflow_event_subscription(
@@ -1562,7 +1583,9 @@ async fn create_workflow_run(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    if let Some(client_request_id) = client_request_id.as_deref().filter(|value| !value.is_empty())
+    if let Some(client_request_id) = client_request_id
+        .as_deref()
+        .filter(|value| !value.is_empty())
     {
         if let Some(existing_run) = state
             .session_store
@@ -1960,7 +1983,9 @@ async fn upload_workflow_run_produced_file(
         })
         .await
         .map_err(|error| {
-            state.workflow_observability.record_produced_file_upload_failure();
+            state
+                .workflow_observability
+                .record_produced_file_upload_failure();
             map_workspace_file_store_error(error)
         })?;
     let persisted_file = state
@@ -1982,7 +2007,9 @@ async fn upload_workflow_run_produced_file(
     let persisted_file = match persisted_file {
         Ok(file) => file,
         Err(error) => {
-            state.workflow_observability.record_produced_file_upload_failure();
+            state
+                .workflow_observability
+                .record_produced_file_upload_failure();
             let _ = state
                 .workspace_file_store
                 .delete(&stored_artifact.artifact_ref)
@@ -2009,7 +2036,9 @@ async fn upload_workflow_run_produced_file(
     match updated_run {
         Ok(Some(_)) => {}
         Ok(None) => {
-            state.workflow_observability.record_produced_file_upload_failure();
+            state
+                .workflow_observability
+                .record_produced_file_upload_failure();
             let _ = state
                 .session_store
                 .delete_file_workspace_file_for_owner(&owner, workspace_id, file_id)
@@ -2026,7 +2055,9 @@ async fn upload_workflow_run_produced_file(
             ));
         }
         Err(error) => {
-            state.workflow_observability.record_produced_file_upload_failure();
+            state
+                .workflow_observability
+                .record_produced_file_upload_failure();
             let _ = state
                 .session_store
                 .delete_file_workspace_file_for_owner(&owner, workspace_id, file_id)
@@ -2088,9 +2119,7 @@ async fn get_workflow_run_produced_file_content(
             Some(std::io::ErrorKind::NotFound) => (
                 StatusCode::GONE,
                 Json(ErrorResponse {
-                    error: format!(
-                        "workflow run produced file {file_id} is no longer available"
-                    ),
+                    error: format!("workflow run produced file {file_id} is no longer available"),
                 }),
             ),
             _ => map_workspace_file_content_error(error),
@@ -2174,7 +2203,11 @@ async fn cancel_workflow_run(
         )
         .await
         .map_err(map_session_store_error)?;
-    if let Err(error) = state.workflow_lifecycle.reconcile_runtime_hold(run.id).await {
+    if let Err(error) = state
+        .workflow_lifecycle
+        .reconcile_runtime_hold(run.id)
+        .await
+    {
         warn!(run_id = %run.id, "failed to reconcile workflow runtime hold after cancellation: {error}");
     }
     if let Err(error) = state.workflow_lifecycle.cancel_run(run.id).await {
@@ -2210,7 +2243,10 @@ async fn submit_workflow_run_input(
     let comment = trim_optional_comment(request.comment)?;
     let intervention = workflow_run_intervention_resource(&state, &run).await?;
     let resolution_data = workflow_run_intervention_resolution_data(
-        intervention.pending_request.as_ref().map(|request| request.request_id),
+        intervention
+            .pending_request
+            .as_ref()
+            .map(|request| request.request_id),
         "submit_input",
         Some(request.input),
         None,
@@ -2252,7 +2288,8 @@ async fn submit_workflow_run_input(
             run_id,
             PersistWorkflowRunEventRequest {
                 event_type: "workflow_run.input_submitted".to_string(),
-                message: comment.unwrap_or_else(|| "operator submitted workflow run input".to_string()),
+                message: comment
+                    .unwrap_or_else(|| "operator submitted workflow run input".to_string()),
                 data: Some(resolution_data),
             },
         )
@@ -2266,7 +2303,11 @@ async fn submit_workflow_run_input(
                 }),
             )
         })?;
-    if let Err(error) = state.workflow_lifecycle.reconcile_runtime_hold(run_id).await {
+    if let Err(error) = state
+        .workflow_lifecycle
+        .reconcile_runtime_hold(run_id)
+        .await
+    {
         warn!(run_id = %run_id, "failed to reconcile workflow runtime hold after operator input: {error}");
     }
     let run = load_owner_workflow_run(&state, &principal, run_id).await?;
@@ -2287,7 +2328,10 @@ async fn resume_workflow_run(
     let comment = trim_optional_comment(request.comment)?;
     let intervention = workflow_run_intervention_resource(&state, &run).await?;
     let resolution_data = workflow_run_intervention_resolution_data(
-        intervention.pending_request.as_ref().map(|request| request.request_id),
+        intervention
+            .pending_request
+            .as_ref()
+            .map(|request| request.request_id),
         "resume",
         None,
         None,
@@ -2343,7 +2387,11 @@ async fn resume_workflow_run(
                 }),
             )
         })?;
-    if let Err(error) = state.workflow_lifecycle.reconcile_runtime_hold(run_id).await {
+    if let Err(error) = state
+        .workflow_lifecycle
+        .reconcile_runtime_hold(run_id)
+        .await
+    {
         warn!(run_id = %run_id, "failed to reconcile workflow runtime hold after resume: {error}");
     }
     let run = load_owner_workflow_run(&state, &principal, run_id).await?;
@@ -2372,7 +2420,10 @@ async fn reject_workflow_run(
     }
     let intervention = workflow_run_intervention_resource(&state, &run).await?;
     let resolution_data = workflow_run_intervention_resolution_data(
-        intervention.pending_request.as_ref().map(|request| request.request_id),
+        intervention
+            .pending_request
+            .as_ref()
+            .map(|request| request.request_id),
         "reject",
         None,
         Some(reason.to_string()),
@@ -2424,7 +2475,11 @@ async fn reject_workflow_run(
                 }),
             )
         })?;
-    if let Err(error) = state.workflow_lifecycle.reconcile_runtime_hold(run_id).await {
+    if let Err(error) = state
+        .workflow_lifecycle
+        .reconcile_runtime_hold(run_id)
+        .await
+    {
         warn!(run_id = %run_id, "failed to reconcile workflow runtime hold after rejection: {error}");
     }
     let run = load_owner_workflow_run(&state, &principal, run_id).await?;
@@ -2463,7 +2518,11 @@ async fn transition_workflow_run_state(
                 }),
             )
         })?;
-    if let Err(error) = state.workflow_lifecycle.reconcile_runtime_hold(run.id).await {
+    if let Err(error) = state
+        .workflow_lifecycle
+        .reconcile_runtime_hold(run.id)
+        .await
+    {
         warn!(run_id = %run.id, "failed to reconcile workflow runtime hold after run transition: {error}");
     }
     Ok(Json(build_workflow_run_resource(&state, &run).await?))
@@ -2562,7 +2621,9 @@ async fn list_credential_bindings(
         .into_iter()
         .map(|binding| binding.to_resource())
         .collect();
-    Ok(Json(CredentialBindingListResponse { credential_bindings }))
+    Ok(Json(CredentialBindingListResponse {
+        credential_bindings,
+    }))
 }
 
 async fn create_credential_binding(
@@ -2584,15 +2645,14 @@ async fn create_credential_binding(
             })
             .await
             .map_err(map_credential_provider_error)?,
-        (None, Some(external_ref)) => crate::credential_provider::StoredCredentialSecret {
-            external_ref,
-        },
+        (None, Some(external_ref)) => {
+            crate::credential_provider::StoredCredentialSecret { external_ref }
+        }
         (None, None) => {
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
-                    error: "credential binding requires secret_payload or external_ref"
-                        .to_string(),
+                    error: "credential binding requires secret_payload or external_ref".to_string(),
                 }),
             ));
         }
@@ -2710,7 +2770,10 @@ async fn get_workflow_run_credential_binding_resolved(
             run.id,
             PersistWorkflowRunEventRequest {
                 event_type: "workflow_run.credential_binding_resolved".to_string(),
-                message: format!("credential binding {} resolved for workflow run", binding.id),
+                message: format!(
+                    "credential binding {} resolved for workflow run",
+                    binding.id
+                ),
                 data: Some(serde_json::json!({
                     "credential_binding_id": binding.id,
                     "provider": binding.provider,
@@ -3951,9 +4014,7 @@ async fn clear_mcp_owner(
     let Some(session_id) = legacy_runtime_session_id(&state).await else {
         return Err(StatusCode::NOT_FOUND);
     };
-    let runtime = resolve_runtime_compat(&state, session_id)
-        .await
-        .map_err(|status| status)?;
+    let runtime = resolve_runtime_compat(&state, session_id).await?;
     let hub = state
         .registry
         .ensure_hub_for_session(session_id, &runtime.agent_socket_path)
@@ -4019,48 +4080,28 @@ async fn clear_session_mcp_owner(
 }
 
 /// Runs the HTTP API server for MCP bridge communication.
-pub async fn run_api_server(
-    bind_addr: SocketAddr,
-    registry: Arc<SessionRegistry>,
-    auth_validator: Arc<AuthValidator>,
-    connect_ticket_manager: Arc<SessionConnectTicketManager>,
-    automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
-    session_store: SessionStore,
-    session_manager: Arc<SessionManager>,
-    credential_provider: Option<Arc<CredentialProvider>>,
-    recording_artifact_store: Arc<RecordingArtifactStore>,
-    workspace_file_store: Arc<WorkspaceFileStore>,
-    workflow_source_resolver: Arc<WorkflowSourceResolver>,
-    recording_observability: Arc<RecordingObservability>,
-    recording_lifecycle: Arc<RecordingLifecycleManager>,
-    workflow_lifecycle: Arc<WorkflowLifecycleManager>,
-    workflow_observability: Arc<WorkflowObservability>,
-    workflow_log_retention: Option<ChronoDuration>,
-    workflow_output_retention: Option<ChronoDuration>,
-    idle_stop_timeout: std::time::Duration,
-    public_gateway_url: String,
-    default_owner_mode: SessionOwnerMode,
-) -> anyhow::Result<()> {
+pub async fn run_api_server(config: ApiServerConfig) -> anyhow::Result<()> {
+    let bind_addr = config.bind_addr;
     let state = Arc::new(ApiState {
-        registry,
-        auth_validator,
-        connect_ticket_manager,
-        automation_access_token_manager,
-        session_store,
-        session_manager,
-        credential_provider,
-        recording_artifact_store,
-        workspace_file_store,
-        workflow_source_resolver,
-        recording_observability,
-        recording_lifecycle,
-        workflow_lifecycle,
-        workflow_observability,
-        workflow_log_retention,
-        workflow_output_retention,
-        idle_stop_timeout,
-        public_gateway_url,
-        default_owner_mode,
+        registry: config.registry,
+        auth_validator: config.auth_validator,
+        connect_ticket_manager: config.connect_ticket_manager,
+        automation_access_token_manager: config.automation_access_token_manager,
+        session_store: config.session_store,
+        session_manager: config.session_manager,
+        credential_provider: config.credential_provider,
+        recording_artifact_store: config.recording_artifact_store,
+        workspace_file_store: config.workspace_file_store,
+        workflow_source_resolver: config.workflow_source_resolver,
+        recording_observability: config.recording_observability,
+        recording_lifecycle: config.recording_lifecycle,
+        workflow_lifecycle: config.workflow_lifecycle,
+        workflow_observability: config.workflow_observability,
+        workflow_log_retention: config.workflow_log_retention,
+        workflow_output_retention: config.workflow_output_retention,
+        idle_stop_timeout: config.idle_stop_timeout,
+        public_gateway_url: config.public_gateway_url,
+        default_owner_mode: config.default_owner_mode,
     });
 
     let app = build_api_router(state);
@@ -4089,7 +4130,9 @@ async fn create_owned_session(
         )
         .await?;
     }
-    if !request.extensions.is_empty() && !state.session_manager.profile().supports_session_extensions {
+    if !request.extensions.is_empty()
+        && !state.session_manager.profile().supports_session_extensions
+    {
         return Err((
             StatusCode::CONFLICT,
             Json(ErrorResponse {
@@ -4575,7 +4618,10 @@ fn sanitize_content_disposition_filename(file_name: &str) -> String {
 fn build_api_router(state: Arc<ApiState>) -> Router {
     Router::new()
         .route("/api/v1/sessions", post(create_session).get(list_sessions))
-        .route("/api/v1/extensions", post(create_extension).get(list_extensions))
+        .route(
+            "/api/v1/extensions",
+            post(create_extension).get(list_extensions),
+        )
         .route("/api/v1/extensions/{extension_id}", get(get_extension))
         .route(
             "/api/v1/extensions/{extension_id}/versions",
@@ -4783,10 +4829,7 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
             "/api/v1/recording/operations",
             get(get_recording_operations),
         )
-        .route(
-            "/api/v1/workflow/operations",
-            get(get_workflow_operations),
-        )
+        .route("/api/v1/workflow/operations", get(get_workflow_operations))
         .route("/api/session/status", get(session_status))
         .route("/api/session/mcp-owner", post(set_mcp_owner))
         .route("/api/session/mcp-owner", delete(clear_mcp_owner))
@@ -5160,10 +5203,9 @@ async fn authorize_runtime_access_principal_with_automation_access(
 ) -> Result<AuthenticatedPrincipal, (StatusCode, Json<ErrorResponse>)> {
     match authorize_api_request(headers, &state.auth_validator).await {
         Ok(principal) => Ok(principal),
-        Err(error) if extract_automation_access_token(headers).is_none() => Err((
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorResponse { error }),
-        )),
+        Err(error) if extract_automation_access_token(headers).is_none() => {
+            Err((StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))
+        }
         Err(_) => {
             let claims = validate_automation_access_request(headers, state, session_id)?;
             Ok(AuthenticatedPrincipal {
@@ -5331,7 +5373,9 @@ async fn workflow_run_event_resources(
         .await
         .map_err(map_session_store_error)?
         .into_iter()
-        .map(|event| WorkflowRunEventResource::from_automation_task(run.id, run.automation_task_id, &event));
+        .map(|event| {
+            WorkflowRunEventResource::from_automation_task(run.id, run.automation_task_id, &event)
+        });
     events.extend(task_events);
     events.sort_by(|left, right| {
         left.created_at
@@ -5346,7 +5390,9 @@ async fn workflow_run_intervention_resource(
     run: &StoredWorkflowRun,
 ) -> Result<WorkflowRunInterventionResource, (StatusCode, Json<ErrorResponse>)> {
     let events = workflow_run_event_resources(state, run).await?;
-    Ok(derive_workflow_run_intervention_resource(run.state, &events))
+    Ok(derive_workflow_run_intervention_resource(
+        run.state, &events,
+    ))
 }
 
 async fn load_owner_workflow_run(
@@ -5462,12 +5508,16 @@ fn workflow_run_retention_resource(
     state: &ApiState,
     run: &StoredWorkflowRun,
 ) -> WorkflowRunRetentionResource {
-    let output_expire_at = run
-        .completed_at
-        .and_then(|completed_at| state.workflow_output_retention.map(|retention| completed_at + retention));
-    let logs_expire_at = run
-        .completed_at
-        .and_then(|completed_at| state.workflow_log_retention.map(|retention| completed_at + retention));
+    let output_expire_at = run.completed_at.and_then(|completed_at| {
+        state
+            .workflow_output_retention
+            .map(|retention| completed_at + retention)
+    });
+    let logs_expire_at = run.completed_at.and_then(|completed_at| {
+        state
+            .workflow_log_retention
+            .map(|retention| completed_at + retention)
+    });
     WorkflowRunRetentionResource {
         logs_expire_at,
         output_expire_at,
