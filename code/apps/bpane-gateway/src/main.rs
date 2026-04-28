@@ -23,6 +23,7 @@ mod session_manager;
 mod session_registry;
 mod transport;
 mod workflow;
+mod workflow_event_delivery;
 mod workflow_lifecycle;
 mod workflow_observability;
 mod workflow_retention;
@@ -53,6 +54,7 @@ use session_manager::{SessionManager, SessionManagerConfig, SessionManagerDocker
 use session_registry::SessionRegistry;
 use transport::TransportServer;
 use workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
+use workflow_event_delivery::{WorkflowEventDeliveryConfig, WorkflowEventDeliveryManager};
 use workflow_observability::WorkflowObservability;
 use workflow_retention::WorkflowRetentionManager;
 use workflow_source::WorkflowSourceResolver;
@@ -289,6 +291,7 @@ async fn main() -> anyhow::Result<()> {
         .map(|image| WorkflowWorkerConfig {
             docker_bin: config.workflow_worker_docker_bin.clone(),
             image,
+            max_active_workers: config.workflow_worker_max_active,
             network: config.workflow_worker_network.clone(),
             container_name_prefix: config.workflow_worker_container_name_prefix.clone(),
             gateway_api_url: config.workflow_worker_api_url.clone(),
@@ -304,10 +307,25 @@ async fn main() -> anyhow::Result<()> {
         auth_validator.clone(),
         automation_access_token_manager.clone(),
         session_store.clone(),
+        session_manager.clone(),
+        registry.clone(),
     )?);
     workflow_lifecycle.reconcile_persisted_state().await?;
     let recording_observability = Arc::new(RecordingObservability::default());
     let workflow_observability = Arc::new(WorkflowObservability::default());
+    let workflow_event_delivery = Arc::new(WorkflowEventDeliveryManager::new(
+        session_store.clone(),
+        workflow_observability.clone(),
+        WorkflowEventDeliveryConfig {
+            poll_interval: Duration::from_millis(config.workflow_event_delivery_poll_interval_ms),
+            request_timeout: Duration::from_secs(config.workflow_event_delivery_timeout_secs),
+            max_attempts: config.workflow_event_delivery_max_attempts,
+            batch_size: config.workflow_event_delivery_batch_size,
+            base_backoff: Duration::from_secs(config.workflow_event_delivery_base_backoff_secs),
+        },
+    )?);
+    workflow_event_delivery.reconcile_persisted_state().await?;
+    workflow_event_delivery.start();
     if config.recording_artifact_cleanup_interval_secs > 0 {
         let recording_retention = Arc::new(RecordingRetentionManager::new(
             session_store.clone(),

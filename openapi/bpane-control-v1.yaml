@@ -383,6 +383,12 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateWorkflowRunRequest'
       responses:
+        '200':
+          description: Existing workflow run returned for an idempotent retry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
         '201':
           description: Workflow run created
           content:
@@ -638,6 +644,96 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/submit-input:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Workflows]
+      summary: Submit owner-provided input to a workflow run that is awaiting input
+      operationId: submitWorkflowRunInput
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitWorkflowRunInputRequest'
+      responses:
+        '200':
+          description: Updated workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/resume:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Workflows]
+      summary: Resume a workflow run that is awaiting operator action without submitting new input
+      operationId: resumeWorkflowRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResumeWorkflowRunRequest'
+      responses:
+        '200':
+          description: Updated workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-runs/{run_id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Workflows]
+      summary: Reject a workflow run that is awaiting operator action and fail the run
+      operationId: rejectWorkflowRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectWorkflowRunRequest'
+      responses:
+        '200':
+          description: Updated workflow run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflow-runs/{run_id}/events:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -715,7 +811,7 @@ paths:
   /api/v1/workflow/operations:
     get:
       tags: [Workflows]
-      summary: Read gateway-local workflow artifact and retention counters
+      summary: Read gateway-local workflow delivery, artifact, and retention counters
       operationId: getWorkflowOperations
       responses:
         '200':
@@ -726,6 +822,102 @@ paths:
                 $ref: '#/components/schemas/WorkflowObservabilitySnapshot'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-event-subscriptions:
+    get:
+      tags: [Workflows]
+      summary: List owner-scoped outbound workflow event subscriptions
+      operationId: listWorkflowEventSubscriptions
+      responses:
+        '200':
+          description: Workflow event subscription list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventSubscriptionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Workflows]
+      summary: Create an outbound workflow event subscription
+      operationId: createWorkflowEventSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkflowEventSubscriptionRequest'
+      responses:
+        '201':
+          description: Workflow event subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventSubscriptionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-event-subscriptions/{subscription_id}:
+    parameters:
+      - $ref: '#/components/parameters/SubscriptionId'
+    get:
+      tags: [Workflows]
+      summary: Read one owner-scoped outbound workflow event subscription
+      operationId: getWorkflowEventSubscription
+      responses:
+        '200':
+          description: Workflow event subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventSubscriptionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    delete:
+      tags: [Workflows]
+      summary: Delete an outbound workflow event subscription
+      operationId: deleteWorkflowEventSubscription
+      responses:
+        '200':
+          description: Deleted workflow event subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventSubscriptionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflow-event-subscriptions/{subscription_id}/deliveries:
+    parameters:
+      - $ref: '#/components/parameters/SubscriptionId'
+    get:
+      tags: [Workflows]
+      summary: List persisted outbound workflow event deliveries for a subscription
+      operationId: listWorkflowEventDeliveries
+      responses:
+        '200':
+          description: Workflow event delivery list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventDeliveryListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/extensions:
@@ -1592,6 +1784,13 @@ components:
       schema:
         type: string
         format: uuid
+    SubscriptionId:
+      name: subscription_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     RunWorkspaceInputId:
       name: input_id
       in: path
@@ -1790,6 +1989,7 @@ components:
       type: string
       enum:
         - pending
+        - queued
         - starting
         - running
         - awaiting_input
@@ -2339,6 +2539,7 @@ components:
       type: string
       enum:
         - pending
+        - queued
         - starting
         - running
         - awaiting_input
@@ -2547,6 +2748,15 @@ components:
           nullable: true
         input:
           nullable: true
+        source_system:
+          type: string
+          nullable: true
+        source_reference:
+          type: string
+          nullable: true
+        client_request_id:
+          type: string
+          nullable: true
         credential_binding_ids:
           type: array
           items:
@@ -2594,6 +2804,36 @@ components:
           type: string
           nullable: true
         data:
+          nullable: true
+    SubmitWorkflowRunInputRequest:
+      type: object
+      additionalProperties: false
+      required: [input]
+      properties:
+        input:
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+        details:
+          nullable: true
+    ResumeWorkflowRunRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        comment:
+          type: string
+          nullable: true
+        details:
+          nullable: true
+    RejectWorkflowRunRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+        details:
           nullable: true
     AppendWorkflowRunLogRequest:
       type: object
@@ -2716,6 +2956,128 @@ components:
           $ref: '#/components/schemas/WorkflowRunCredentialBindingResource'
         payload:
           nullable: true
+    WorkflowRunInterventionRequest:
+      type: object
+      required: [request_id, kind, prompt, details, requested_at]
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        prompt:
+          type: string
+          nullable: true
+        details:
+          nullable: true
+        requested_at:
+          type: string
+          format: date-time
+    WorkflowRunInterventionAction:
+      type: string
+      enum:
+        - submit_input
+        - resume
+        - reject
+    WorkflowRunInterventionResolution:
+      type: object
+      required:
+        - request_id
+        - action
+        - input
+        - reason
+        - actor_subject
+        - actor_issuer
+        - actor_display_name
+        - details
+        - resolved_at
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          nullable: true
+        action:
+          $ref: '#/components/schemas/WorkflowRunInterventionAction'
+        input:
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        actor_subject:
+          type: string
+        actor_issuer:
+          type: string
+        actor_display_name:
+          type: string
+          nullable: true
+        details:
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+    WorkflowRunInterventionResource:
+      type: object
+      required: [pending_request, last_resolution]
+      properties:
+        pending_request:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunInterventionRequest'
+          nullable: true
+        last_resolution:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunInterventionResolution'
+          nullable: true
+    WorkflowRunAdmissionState:
+      type: string
+      enum:
+        - queued
+    WorkflowRunAdmissionResource:
+      type: object
+      required: [state, reason, details, queued_at]
+      properties:
+        state:
+          $ref: '#/components/schemas/WorkflowRunAdmissionState'
+        reason:
+          type: string
+        details:
+          nullable: true
+        queued_at:
+          type: string
+          format: date-time
+    WorkflowRunResumeMode:
+      type: string
+      enum:
+        - live_runtime
+        - profile_restart
+    WorkflowRunRuntimeResource:
+      type: object
+      required:
+        - resume_mode
+        - exact_runtime_available
+        - hold_until
+        - released_at
+        - release_reason
+        - session_state
+      properties:
+        resume_mode:
+          $ref: '#/components/schemas/WorkflowRunResumeMode'
+        exact_runtime_available:
+          type: boolean
+        hold_until:
+          type: string
+          format: date-time
+          nullable: true
+        released_at:
+          type: string
+          format: date-time
+          nullable: true
+        release_reason:
+          type: string
+          nullable: true
+        session_state:
+          allOf:
+            - $ref: '#/components/schemas/SessionLifecycleState'
+          nullable: true
     WorkflowRunResource:
       type: object
       required:
@@ -2723,6 +3085,9 @@ components:
         - workflow_definition_id
         - workflow_definition_version_id
         - workflow_version
+        - source_system
+        - source_reference
+        - client_request_id
         - state
         - session_id
         - automation_task_id
@@ -2737,6 +3102,9 @@ components:
         - produced_files
         - recordings
         - retention
+        - admission
+        - intervention
+        - runtime
         - labels
         - started_at
         - completed_at
@@ -2756,6 +3124,15 @@ components:
           format: uuid
         workflow_version:
           type: string
+        source_system:
+          type: string
+          nullable: true
+        source_reference:
+          type: string
+          nullable: true
+        client_request_id:
+          type: string
+          nullable: true
         state:
           $ref: '#/components/schemas/WorkflowRunState'
         session_id:
@@ -2801,6 +3178,16 @@ components:
             $ref: '#/components/schemas/WorkflowRunRecordingResource'
         retention:
           $ref: '#/components/schemas/WorkflowRunRetentionResource'
+        admission:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunAdmissionResource'
+          nullable: true
+        intervention:
+          $ref: '#/components/schemas/WorkflowRunInterventionResource'
+        runtime:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunRuntimeResource'
+          nullable: true
         labels:
           type: object
           additionalProperties:
@@ -2902,6 +3289,183 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkflowRunLogResource'
+    CreateWorkflowEventSubscriptionRequest:
+      type: object
+      required:
+        - name
+        - target_url
+        - event_types
+        - signing_secret
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        target_url:
+          type: string
+        event_types:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        signing_secret:
+          type: string
+    WorkflowEventSubscriptionResource:
+      type: object
+      required:
+        - id
+        - name
+        - target_url
+        - event_types
+        - has_signing_secret
+        - deliveries_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        target_url:
+          type: string
+        event_types:
+          type: array
+          items:
+            type: string
+        has_signing_secret:
+          type: boolean
+        deliveries_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowEventSubscriptionListResponse:
+      type: object
+      required: [subscriptions]
+      properties:
+        subscriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEventSubscriptionResource'
+    WorkflowEventDeliveryState:
+      type: string
+      enum:
+        - pending
+        - delivering
+        - delivered
+        - failed
+    WorkflowEventDeliveryAttemptResource:
+      type: object
+      required:
+        - id
+        - delivery_id
+        - attempt_number
+        - response_status
+        - error
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        delivery_id:
+          type: string
+          format: uuid
+        attempt_number:
+          type: integer
+          minimum: 0
+        response_status:
+          type: integer
+          minimum: 100
+          maximum: 599
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    WorkflowEventDeliveryResource:
+      type: object
+      required:
+        - id
+        - subscription_id
+        - run_id
+        - event_id
+        - event_type
+        - state
+        - attempt_count
+        - next_attempt_at
+        - last_attempt_at
+        - delivered_at
+        - last_response_status
+        - last_error
+        - payload
+        - attempts
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        subscription_id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        state:
+          $ref: '#/components/schemas/WorkflowEventDeliveryState'
+        attempt_count:
+          type: integer
+          minimum: 0
+        next_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_response_status:
+          type: integer
+          minimum: 100
+          maximum: 599
+          nullable: true
+        last_error:
+          type: string
+          nullable: true
+        payload:
+          nullable: false
+        attempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEventDeliveryAttemptResource'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowEventDeliveryListResponse:
+      type: object
+      required: [deliveries]
+      properties:
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEventDeliveryResource'
     WorkflowRunProducedFileResource:
       type: object
       required:
@@ -3803,18 +4367,35 @@ components:
       required:
         - produced_file_uploads_total
         - produced_file_upload_failures_total
+        - event_delivery_attempts_total
+        - event_delivery_successes_total
+        - event_delivery_retries_total
+        - event_delivery_failures_total
         - retention_passes_total
         - log_retention_candidates_total
         - output_retention_candidates_total
         - retention_deleted_logs_total
         - retention_cleared_outputs_total
         - retention_failures_total
+        - last_event_delivery_at
         - last_retention_pass_at
       properties:
         produced_file_uploads_total:
           type: integer
           minimum: 0
         produced_file_upload_failures_total:
+          type: integer
+          minimum: 0
+        event_delivery_attempts_total:
+          type: integer
+          minimum: 0
+        event_delivery_successes_total:
+          type: integer
+          minimum: 0
+        event_delivery_retries_total:
+          type: integer
+          minimum: 0
+        event_delivery_failures_total:
           type: integer
           minimum: 0
         retention_passes_total:
@@ -3835,6 +4416,10 @@ components:
         retention_failures_total:
           type: integer
           minimum: 0
+        last_event_delivery_at:
+          type: string
+          format: date-time
+          nullable: true
         last_retention_pass_at:
           type: string
           format: date-time

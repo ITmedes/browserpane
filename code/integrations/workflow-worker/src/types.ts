@@ -16,6 +16,7 @@ export type GatewaySessionAutomationAccessResponse = {
 
 export type GatewayWorkflowRunState =
   | "pending"
+  | "queued"
   | "starting"
   | "running"
   | "awaiting_input"
@@ -121,6 +122,32 @@ export type GatewayWorkflowRunRetention = {
   output_expire_at: string | null;
 };
 
+export type GatewayWorkflowRunAdmission = {
+  state: "queued";
+  reason: string;
+  details: unknown;
+  queued_at: string;
+};
+
+export type GatewayWorkflowRunRuntime = {
+  resume_mode: "live_runtime" | "profile_restart";
+  exact_runtime_available: boolean;
+  hold_until: string | null;
+  released_at: string | null;
+  release_reason: string | null;
+  session_state:
+    | "pending"
+    | "starting"
+    | "ready"
+    | "active"
+    | "idle"
+    | "stopping"
+    | "stopped"
+    | "failed"
+    | "expired"
+    | null;
+};
+
 export type GatewayWorkflowRunResource = {
   id: string;
   workflow_definition_id: string;
@@ -139,6 +166,8 @@ export type GatewayWorkflowRunResource = {
   produced_files: GatewayWorkflowRunProducedFile[];
   recordings: GatewayWorkflowRunRecording[];
   retention: GatewayWorkflowRunRetention;
+  admission: GatewayWorkflowRunAdmission | null;
+  runtime: GatewayWorkflowRunRuntime | null;
   labels: Record<string, string>;
   started_at: string | null;
   completed_at: string | null;

@@ -274,7 +274,13 @@ Stateless relay between host agent and browser clients.
 - **Workflow lifecycle** (`workflow_lifecycle.rs`, `workflow_observability.rs`, `workflow_retention.rs`):
   - resolves git-backed workflow versions to immutable snapshots
   - launches gateway-managed workflow workers with run-scoped automation access
-  - persists run logs, events, outputs, produced files, and linked recordings
+  - exposes queued/admission state when worker capacity is exhausted
+  - persists run logs, events, outputs, produced files, linked recordings, and correlation metadata
+  - reconciles runtime hold/release semantics for paused runs
+- **Workflow event delivery** (`workflow_event_delivery.rs`):
+  - persists owner-scoped outbound webhook subscriptions
+  - signs lifecycle deliveries and records attempt diagnostics
+  - preserves lifecycle ordering across `created`, `running`, `awaiting_input`, `resumed`, terminal states, and retries
 
 ### bpane-client (~6,500 lines TypeScript)
 
@@ -442,9 +448,13 @@ The workflow layer sits on top of the owner-scoped session APIs.
 - workflow definitions are durable owner-scoped resources with immutable versions
 - workflow versions can pin git sources by repository, ref, resolved commit, and entrypoint
 - workflow runs materialize a source snapshot archive before execution
+- run creation supports upstream correlation via `source_system`, `source_reference`, and idempotent `client_request_id`
+- run resources expose `admission`, `intervention`, and `runtime` subresources so external systems can reason about backpressure, operator handoff, and resume mode
 - runs can bind reusable file workspace inputs, Vault-backed credential bindings, and approved extensions
 - the current execution model is Playwright-first, but the control-plane contract is executor-oriented rather than CDP-specific
 - the gateway persists run logs, events, outputs, produced files, linked recordings, and retention metadata
+- owner actions now include durable `submit-input`, `resume`, `reject`, and `cancel` transitions on workflow runs
+- workflow lifecycle subscriptions provide signed outbound delivery plus persisted delivery diagnostics for external systems
 - local workflow CLI commands live in `code/web/bpane-client/scripts/workflow-cli.mjs` and exercise the same v1 HTTP routes as the browser UI
 
 ### Wire Protocol (bpane-protocol, ~2,800 lines Rust)

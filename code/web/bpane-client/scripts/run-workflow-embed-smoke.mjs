@@ -204,6 +204,48 @@ async function fetchJson(url, init) {
   return await response.json();
 }
 
+async function listSessions(accessToken, options) {
+  return await fetchJson(`${options.pageUrl.replace(/\/$/, '')}/api/v1/sessions`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+async function deleteSession(accessToken, options, sessionId) {
+  const response = await fetch(`${options.pageUrl.replace(/\/$/, '')}/api/v1/sessions/${sessionId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok && response.status !== 404) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+  }
+}
+
+async function cleanupWorkflowSmokeSessions(accessToken, options) {
+  const response = await poll(
+    'workflow control-plane readiness',
+    async () => {
+      try {
+        return await listSessions(accessToken, options);
+      } catch (error) {
+        return error;
+      }
+    },
+    (value) => !(value instanceof Error),
+    Math.min(options.connectTimeoutMs, 15000),
+    500,
+  );
+  const sessions = Array.isArray(response.sessions) ? response.sessions : [];
+  for (const session of sessions) {
+    const sessionId = typeof session?.id === 'string' ? session.id : '';
+    const sessionState = typeof session?.state === 'string' ? session.state : '';
+    if (!sessionId || sessionState === 'stopped') {
+      continue;
+    }
+    await deleteSession(accessToken, options, sessionId);
+  }
+}
+
 function runGitCommand(repoDir, args, options = {}) {
   return execFileSync('git', args, {
     cwd: repoDir,
@@ -413,6 +455,8 @@ async function main() {
     if (!accessToken) {
       throw new Error('No access token available after login.');
     }
+
+    await cleanupWorkflowSmokeSessions(accessToken, options);
 
     log('Creating workflow definition and immutable version');
     const workspace = await createFileWorkspace(accessToken, options);

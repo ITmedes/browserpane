@@ -229,7 +229,7 @@ export async function deleteSession(accessToken, options, sessionId) {
 }
 
 export async function cleanupWorkflowSmokeSessions(accessToken, options, log = () => {}) {
-  const response = await listSessions(accessToken, options);
+  const response = await waitForWorkflowControlPlane(accessToken, options);
   const sessions = Array.isArray(response.sessions) ? response.sessions : [];
   let removed = 0;
   for (const session of sessions) {
@@ -247,6 +247,56 @@ export async function cleanupWorkflowSmokeSessions(accessToken, options, log = (
   if (removed > 0) {
     log(`Removed ${removed} stale visible sessions before the smoke run.`);
   }
+}
+
+export async function waitForWorkflowControlPlane(accessToken, options) {
+  return await poll(
+    'workflow control-plane readiness',
+    async () => {
+      try {
+        return await listSessions(accessToken, options);
+      } catch (error) {
+        return error;
+      }
+    },
+    (value) => !(value instanceof Error),
+    Math.min(options.connectTimeoutMs, 15000),
+    500,
+  );
+}
+
+export function restartComposeService(service, { profile = null } = {}) {
+  const args = ['compose', '-f', 'deploy/compose.yml'];
+  if (profile) {
+    args.push('--profile', profile);
+  }
+  args.push('restart', service);
+  execFileSync('docker', args, {
+    cwd: PROJECT_ROOT,
+    stdio: 'inherit',
+  });
+}
+
+export function recreateComposeServices(
+  services,
+  {
+    profile = null,
+    envOverrides = {},
+  } = {},
+) {
+  const args = ['compose', '-f', 'deploy/compose.yml'];
+  if (profile) {
+    args.push('--profile', profile);
+  }
+  args.push('up', '-d', '--force-recreate', ...services);
+  execFileSync('docker', args, {
+    cwd: PROJECT_ROOT,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      ...envOverrides,
+    },
+  });
 }
 
 export async function launchChrome(chromium, options) {
@@ -318,6 +368,108 @@ export function buildWorkflowWorkerImage() {
       stdio: 'inherit',
     },
   );
+}
+
+export async function startWorkflowWebhookReceiver({
+  containerNamePrefix = 'bpane-workflow-webhook',
+  network = 'deploy_bpane-internal',
+  port = 9107,
+  statuses = [200],
+} = {}) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-workflow-webhook-'));
+  const scriptPath = path.join(tempDir, 'receiver.py');
+  const requestsPath = path.join(tempDir, 'requests.jsonl');
+  const containerName = `${containerNamePrefix}-${process.pid}-${Date.now()}`;
+  const script = `import http.server
+import json
+import os
+import pathlib
+
+statuses = [int(value) for value in os.environ.get("BPANE_WEBHOOK_STATUSES", "200").split(",") if value]
+requests_path = pathlib.Path("/out/requests.jsonl")
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        body_text = self.rfile.read(length).decode("utf-8")
+        try:
+            body = json.loads(body_text)
+        except json.JSONDecodeError:
+            body = {"raw": body_text}
+        entry = {
+            "path": self.path,
+            "headers": {key.lower(): value for key, value in self.headers.items()},
+            "body": body,
+        }
+        requests_path.parent.mkdir(parents=True, exist_ok=True)
+        with requests_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry) + "\\n")
+        status = statuses.pop(0) if statuses else 200
+        self.send_response(status)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"ok")
+
+    def log_message(self, format, *args):
+        return
+
+server = http.server.ThreadingHTTPServer(("0.0.0.0", ${port}), Handler)
+server.serve_forever()
+`;
+  await fs.writeFile(scriptPath, script, 'utf8');
+
+  execFileSync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '-d',
+      '--name',
+      containerName,
+      '--network',
+      network,
+      '-e',
+      `BPANE_WEBHOOK_STATUSES=${statuses.join(',')}`,
+      '-v',
+      `${tempDir}:/out`,
+      'python:3.12-alpine',
+      'python',
+      '/out/receiver.py',
+    ],
+    {
+      cwd: PROJECT_ROOT,
+      stdio: 'pipe',
+    },
+  );
+
+  return {
+    targetUrl: `http://${containerName}:${port}/events`,
+    async readRequests() {
+      try {
+        const content = await fs.readFile(requestsPath, 'utf8');
+        return content
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line));
+      } catch (error) {
+        if (error && typeof error === 'object' && error.code === 'ENOENT') {
+          return [];
+        }
+        throw error;
+      }
+    },
+    async cleanup() {
+      try {
+        execFileSync('docker', ['rm', '-f', containerName], {
+          cwd: PROJECT_ROOT,
+          stdio: 'pipe',
+        });
+      } catch {
+        // Ignore already-stopped containers.
+      }
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    },
+  };
 }
 
 export async function inspectZipEntries(bytes) {

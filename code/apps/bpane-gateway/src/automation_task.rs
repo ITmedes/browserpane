@@ -10,6 +10,7 @@ use uuid::Uuid;
 #[serde(rename_all = "snake_case")]
 pub enum AutomationTaskState {
     Pending,
+    Queued,
     Starting,
     Running,
     AwaitingInput,
@@ -23,6 +24,7 @@ impl AutomationTaskState {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Pending => "pending",
+            Self::Queued => "queued",
             Self::Starting => "starting",
             Self::Running => "running",
             Self::AwaitingInput => "awaiting_input",
@@ -43,7 +45,14 @@ impl AutomationTaskState {
     pub fn can_transition_to(self, next: Self) -> bool {
         match (self, next) {
             (current, target) if current == target => true,
-            (Self::Pending, Self::Starting | Self::Running | Self::Cancelled | Self::Failed)
+            (
+                Self::Pending,
+                Self::Queued | Self::Starting | Self::Running | Self::Cancelled | Self::Failed,
+            )
+            | (
+                Self::Queued,
+                Self::Starting | Self::Running | Self::Cancelled | Self::Failed,
+            )
             | (
                 Self::Starting,
                 Self::Running
@@ -75,6 +84,7 @@ impl FromStr for AutomationTaskState {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "pending" => Ok(Self::Pending),
+            "queued" => Ok(Self::Queued),
             "starting" => Ok(Self::Starting),
             "running" => Ok(Self::Running),
             "awaiting_input" => Ok(Self::AwaitingInput),
@@ -185,6 +195,21 @@ pub struct StoredAutomationTask {
     pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AutomationTaskState;
+
+    #[test]
+    fn queued_state_allows_launch_or_cancellation() {
+        assert!(AutomationTaskState::Pending.can_transition_to(AutomationTaskState::Queued));
+        assert!(AutomationTaskState::Queued.can_transition_to(AutomationTaskState::Starting));
+        assert!(AutomationTaskState::Queued.can_transition_to(AutomationTaskState::Running));
+        assert!(AutomationTaskState::Queued.can_transition_to(AutomationTaskState::Cancelled));
+        assert!(AutomationTaskState::Queued.can_transition_to(AutomationTaskState::Failed));
+        assert!(!AutomationTaskState::Queued.can_transition_to(AutomationTaskState::AwaitingInput));
+    }
 }
 
 #[derive(Debug, Clone)]
