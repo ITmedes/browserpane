@@ -1143,6 +1143,7 @@
           <button id="btn-workflow-load-version" disabled>Load Version</button>
           <button id="btn-workflow-run" disabled>Invoke Run</button>
           <button id="btn-workflow-run-refresh" disabled>Refresh Run</button>
+          <button id="btn-workflow-run-cancel" disabled>Cancel Run</button>
         </div>
 
         <div class="field">
@@ -1180,6 +1181,50 @@
           <span id="workflow-run-session">Run Session: --</span>
           <span id="workflow-run-produced-files">Produced Files: --</span>
           <span id="workflow-run-recordings">Recordings: --</span>
+          <span id="workflow-run-admission">Admission: --</span>
+          <span id="workflow-run-intervention">Intervention: --</span>
+          <span id="workflow-run-runtime">Runtime: --</span>
+        </div>
+
+        <div class="workflow-stack">
+          <div class="panel-heading">
+            <span class="panel-title">Operator Controls</span>
+            <p class="panel-copy">
+              Resolve runs that are waiting for human input, inspect hold semantics, or cancel the
+              current run from this page.
+            </p>
+          </div>
+
+          <div id="workflow-operator-note" class="helper-note info">
+            Invoke a workflow run to inspect admission, intervention, and runtime state here.
+          </div>
+
+          <div class="field">
+            <label for="workflow-operator-input-editor">Operator Input JSON</label>
+            <textarea
+              id="workflow-operator-input-editor"
+              class="code-editor"
+              spellcheck="false"
+              placeholder='{"approved": true}'
+              disabled
+            ></textarea>
+          </div>
+
+          <div class="field">
+            <label for="workflow-operator-comment-input">Comment / Reject Reason</label>
+            <input
+              id="workflow-operator-comment-input"
+              type="text"
+              placeholder="Operator note or rejection reason"
+              disabled
+            >
+          </div>
+
+          <div class="form-row">
+            <button id="btn-workflow-submit-input" disabled>Submit Input</button>
+            <button id="btn-workflow-resume" disabled>Resume Run</button>
+            <button id="btn-workflow-reject" disabled>Reject Run</button>
+          </div>
         </div>
 
         <div class="workflow-grid">
@@ -1326,15 +1371,25 @@
     const workflowLoadVersionBtn = document.getElementById('btn-workflow-load-version');
     const workflowRunBtn = document.getElementById('btn-workflow-run');
     const workflowRunRefreshBtn = document.getElementById('btn-workflow-run-refresh');
+    const workflowRunCancelBtn = document.getElementById('btn-workflow-run-cancel');
+    const workflowSubmitInputBtn = document.getElementById('btn-workflow-submit-input');
+    const workflowResumeBtn = document.getElementById('btn-workflow-resume');
+    const workflowRejectBtn = document.getElementById('btn-workflow-reject');
     const workflowSelect = document.getElementById('workflow-select');
     const workflowVersionInput = document.getElementById('workflow-version-input');
     const workflowInputEditor = document.getElementById('workflow-input-editor');
+    const workflowOperatorInputEditor = document.getElementById('workflow-operator-input-editor');
+    const workflowOperatorCommentInput = document.getElementById('workflow-operator-comment-input');
     const workflowNoteEl = document.getElementById('workflow-note');
+    const workflowOperatorNoteEl = document.getElementById('workflow-operator-note');
     const workflowVersionSummaryEl = document.getElementById('workflow-version-summary');
     const workflowRunStatusEl = document.getElementById('workflow-run-status');
     const workflowRunSessionEl = document.getElementById('workflow-run-session');
     const workflowRunProducedFilesEl = document.getElementById('workflow-run-produced-files');
     const workflowRunRecordingsEl = document.getElementById('workflow-run-recordings');
+    const workflowRunAdmissionEl = document.getElementById('workflow-run-admission');
+    const workflowRunInterventionEl = document.getElementById('workflow-run-intervention');
+    const workflowRunRuntimeEl = document.getElementById('workflow-run-runtime');
     const workflowOutputPanelEl = document.getElementById('workflow-output-panel');
     const workflowLogPanelEl = document.getElementById('workflow-log-panel');
     const workflowFileListEl = document.getElementById('workflow-file-list');
@@ -1943,6 +1998,8 @@
       selectedVersion: '',
       version: null,
       inputText: '{}',
+      operatorInputText: '',
+      operatorCommentText: '',
       run: null,
       logs: [],
       events: [],
@@ -1950,6 +2007,7 @@
       loadingVersion: false,
       invokingRun: false,
       refreshingRun: false,
+      actingOnRun: false,
       downloadingFileId: '',
       error: '',
       definitionRequestId: 0,
@@ -3421,6 +3479,7 @@
       workflowState.events = [];
       workflowState.refreshingRun = false;
       workflowState.invokingRun = false;
+      workflowState.actingOnRun = false;
       workflowState.downloadingFileId = '';
       if (render) {
         renderWorkflowState();
@@ -3434,6 +3493,8 @@
       workflowState.selectedVersion = '';
       workflowState.version = null;
       workflowState.inputText = workflowInputEditor?.value?.trim() ? workflowInputEditor.value : '{}';
+      workflowState.operatorInputText = '';
+      workflowState.operatorCommentText = '';
       workflowState.run = null;
       workflowState.logs = [];
       workflowState.events = [];
@@ -3441,6 +3502,7 @@
       workflowState.loadingVersion = false;
       workflowState.invokingRun = false;
       workflowState.refreshingRun = false;
+      workflowState.actingOnRun = false;
       workflowState.downloadingFileId = '';
       workflowState.error = '';
       renderWorkflowState();
@@ -3633,16 +3695,121 @@
       workflowLogPanelEl.scrollTop = workflowLogPanelEl.scrollHeight;
     }
 
+    function formatWorkflowAdmissionSummary(run) {
+      if (!run?.id) {
+        return 'Admission: --';
+      }
+      const admission = run.admission;
+      if (!admission) {
+        return 'Admission: immediate';
+      }
+      const reason = admission.reason ? ` · ${admission.reason}` : '';
+      const queuedAt = admission.queued_at ? ` @ ${formatTimestamp(admission.queued_at)}` : '';
+      return `Admission: ${admission.state ?? 'queued'}${reason}${queuedAt}`;
+    }
+
+    function formatWorkflowInterventionSummary(run) {
+      if (!run?.id) {
+        return 'Intervention: --';
+      }
+      const pending = run.intervention?.pending_request;
+      if (pending) {
+        const kind = pending.kind ?? 'input';
+        const prompt = pending.prompt ? ` · ${pending.prompt}` : '';
+        return `Intervention: awaiting ${kind}${prompt}`;
+      }
+      const resolution = run.intervention?.last_resolution;
+      if (resolution) {
+        const actor = resolution.actor_display_name || resolution.actor_subject || 'operator';
+        return `Intervention: ${resolution.action ?? 'resolved'} by ${actor}`;
+      }
+      return 'Intervention: none';
+    }
+
+    function formatWorkflowRuntimeSummary(run) {
+      if (!run?.id) {
+        return 'Runtime: --';
+      }
+      const runtime = run.runtime;
+      if (!runtime) {
+        return 'Runtime: not pinned';
+      }
+      const detail = runtime.exact_runtime_available
+        ? 'exact live runtime'
+        : 'profile restart';
+      const suffix = runtime.release_reason
+        ? ` · ${runtime.release_reason}`
+        : runtime.hold_until
+          ? ` · held until ${formatTimestamp(runtime.hold_until)}`
+          : '';
+      return `Runtime: ${runtime.resume_mode ?? 'unknown'} · ${detail}${suffix}`;
+    }
+
+    function formatWorkflowOperatorNote(run) {
+      if (!run?.id) {
+        return {
+          className: 'helper-note info',
+          text: 'Invoke a workflow run to inspect admission, intervention, and runtime state here.',
+        };
+      }
+      const pending = run.intervention?.pending_request;
+      if (run.state === 'awaiting_input' && pending) {
+        return {
+          className: 'helper-note warn',
+          text:
+            `Awaiting ${pending.kind ?? 'input'}${pending.prompt ? `: ${pending.prompt}` : '.'} ` +
+            'Use submit-input, resume, or reject to resolve the run.',
+        };
+      }
+      if (workflowState.actingOnRun) {
+        return {
+          className: 'helper-note info',
+          text: `Submitting an operator action for workflow run ${getShortSessionId(run.id)}…`,
+        };
+      }
+      const resolution = run.intervention?.last_resolution;
+      if (resolution) {
+        const suffix = resolution.reason ? ` (${resolution.reason})` : '';
+        return {
+          className: 'helper-note ok',
+          text: `Last operator action: ${resolution.action ?? 'resolved'}${suffix}`,
+        };
+      }
+      if (run.admission) {
+        return {
+          className: 'helper-note info',
+          text: 'This run is queued because worker capacity is saturated. Refresh to watch admission clear.',
+        };
+      }
+      if (run.runtime?.release_reason) {
+        return {
+          className: 'helper-note info',
+          text:
+            `This run no longer holds the exact runtime (${run.runtime.release_reason}). ` +
+            'Resume will reconnect from the persisted profile.',
+        };
+      }
+      return {
+        className: 'helper-note info',
+        text: 'No operator action is currently required for this workflow run.',
+      };
+    }
+
     function renderWorkflowState() {
       const canManageWorkflows = authState.config?.mode === 'oidc' && Boolean(authState.tokens?.access_token);
       const selectedDefinition = findSelectedWorkflowDefinition();
       const run = workflowState.run;
       const runState = run?.state ?? '';
+      const awaitingInput = runState === 'awaiting_input';
       const selectedVersion = workflowState.selectedVersion || selectedDefinition?.latest_version || '';
       renderWorkflowPicker();
       workflowVersionInput.value = selectedVersion;
       workflowInputEditor.value = workflowState.inputText;
+      workflowOperatorInputEditor.value = workflowState.operatorInputText;
+      workflowOperatorCommentInput.value = workflowState.operatorCommentText;
       workflowInputEditor.disabled = !canManageWorkflows || !workflowState.selectedWorkflowId;
+      workflowOperatorInputEditor.disabled = !canManageWorkflows || !run?.id || workflowState.actingOnRun;
+      workflowOperatorCommentInput.disabled = !canManageWorkflows || !run?.id || workflowState.actingOnRun;
 
       workflowRefreshBtn.disabled = !canManageWorkflows || workflowState.loadingDefinitions;
       workflowLoadVersionBtn.disabled = !canManageWorkflows
@@ -3656,6 +3823,22 @@
       workflowRunRefreshBtn.disabled = !canManageWorkflows
         || !run?.id
         || workflowState.refreshingRun;
+      workflowRunCancelBtn.disabled = !canManageWorkflows
+        || !run?.id
+        || isWorkflowRunTerminal(runState)
+        || workflowState.actingOnRun;
+      workflowSubmitInputBtn.disabled = !canManageWorkflows
+        || !run?.id
+        || !awaitingInput
+        || workflowState.actingOnRun;
+      workflowResumeBtn.disabled = !canManageWorkflows
+        || !run?.id
+        || !awaitingInput
+        || workflowState.actingOnRun;
+      workflowRejectBtn.disabled = !canManageWorkflows
+        || !run?.id
+        || !awaitingInput
+        || workflowState.actingOnRun;
 
       if (!canManageWorkflows) {
         workflowNoteEl.className = 'helper-note info';
@@ -3707,6 +3890,13 @@
       workflowRunRecordingsEl.textContent = run
         ? `Recordings: ${(run.recordings ?? []).length} · logs expire ${formatTimestamp(run.retention?.logs_expire_at)}`
         : 'Recordings: --';
+      workflowRunAdmissionEl.textContent = formatWorkflowAdmissionSummary(run);
+      workflowRunInterventionEl.textContent = formatWorkflowInterventionSummary(run);
+      workflowRunRuntimeEl.textContent = formatWorkflowRuntimeSummary(run);
+
+      const operatorNote = formatWorkflowOperatorNote(run);
+      workflowOperatorNoteEl.className = operatorNote.className;
+      workflowOperatorNoteEl.textContent = operatorNote.text;
 
       workflowOutputPanelEl.textContent = prettyJson(run?.output, '--');
       renderWorkflowVersionSummary();
@@ -3849,6 +4039,33 @@
       return Array.isArray(payload?.events) ? payload.events : [];
     }
 
+    async function postWorkflowRunAction(accessToken, runId, path, payload = undefined) {
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      };
+      if (payload !== undefined) {
+        headers['Content-Type'] = 'application/json';
+      }
+      const response = await fetch(path, {
+        method: 'POST',
+        headers,
+        cache: 'no-store',
+        body: payload === undefined ? undefined : JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const responsePayload = await response.json();
+          detail = responsePayload?.error ?? '';
+        } catch {
+          detail = await response.text().catch(() => '');
+        }
+        throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+      }
+      return await response.json();
+    }
+
     async function refreshWorkflowDefinitions({ preserveSelection = true, silent = false } = {}) {
       const accessToken = await getValidAccessToken();
       if (!accessToken) {
@@ -3962,9 +4179,31 @@
       }
     }
 
+    function parseWorkflowOperatorInputEditor() {
+      const raw = workflowState.operatorInputText.trim();
+      if (!raw) {
+        return null;
+      }
+      try {
+        return JSON.parse(raw);
+      } catch (error) {
+        throw new Error(`operator input must be valid JSON: ${error.message}`);
+      }
+    }
+
     function syncWorkflowInputState() {
       workflowState.inputText = workflowInputEditor.value;
       return workflowState.inputText;
+    }
+
+    function syncWorkflowOperatorInputState() {
+      workflowState.operatorInputText = workflowOperatorInputEditor.value;
+      return workflowState.operatorInputText;
+    }
+
+    function syncWorkflowOperatorCommentState() {
+      workflowState.operatorCommentText = workflowOperatorCommentInput.value;
+      return workflowState.operatorCommentText;
     }
 
     async function refreshWorkflowRunState({ silent = false } = {}) {
@@ -4090,6 +4329,199 @@
         renderWorkflowState();
         if (!silent) {
           log(`Workflow run invoke failed: ${error.message}`, 'error');
+        }
+        throw error;
+      }
+    }
+
+    async function submitWorkflowRunInput({
+      input,
+      comment = undefined,
+      details = undefined,
+      silent = false,
+    } = {}) {
+      const accessToken = await getValidAccessToken();
+      const runId = workflowState.run?.id;
+      if (!accessToken || !runId) {
+        throw new Error('login and workflow run are required');
+      }
+      const payload = {
+        input: input === undefined ? parseWorkflowOperatorInputEditor() : input,
+      };
+      const resolvedComment =
+        comment === undefined ? workflowState.operatorCommentText.trim() : String(comment ?? '').trim();
+      if (resolvedComment) {
+        payload.comment = resolvedComment;
+      }
+      if (details !== undefined) {
+        payload.details = details;
+      }
+
+      workflowState.actingOnRun = true;
+      workflowState.error = '';
+      renderWorkflowState();
+      try {
+        const run = await postWorkflowRunAction(
+          accessToken,
+          runId,
+          `/api/v1/workflow-runs/${encodeURIComponent(runId)}/submit-input`,
+          payload,
+        );
+        workflowState.run = run;
+        workflowState.operatorInputText = '';
+        workflowState.operatorCommentText = '';
+        workflowState.actingOnRun = false;
+        renderWorkflowState();
+        if (!silent) {
+          log(`Submitted operator input for workflow run ${getShortSessionId(run.id)}`, 'ok');
+        }
+        await refreshWorkflowRunState({ silent: true });
+        return workflowState.run;
+      } catch (error) {
+        workflowState.actingOnRun = false;
+        workflowState.error = `Workflow run submit-input failed: ${error.message}`;
+        renderWorkflowState();
+        if (!silent) {
+          log(`Workflow run submit-input failed: ${error.message}`, 'error');
+        }
+        throw error;
+      }
+    }
+
+    async function resumeWorkflowRun({
+      comment = undefined,
+      details = undefined,
+      silent = false,
+    } = {}) {
+      const accessToken = await getValidAccessToken();
+      const runId = workflowState.run?.id;
+      if (!accessToken || !runId) {
+        throw new Error('login and workflow run are required');
+      }
+      const payload = {};
+      const resolvedComment =
+        comment === undefined ? workflowState.operatorCommentText.trim() : String(comment ?? '').trim();
+      if (resolvedComment) {
+        payload.comment = resolvedComment;
+      }
+      if (details !== undefined) {
+        payload.details = details;
+      }
+
+      workflowState.actingOnRun = true;
+      workflowState.error = '';
+      renderWorkflowState();
+      try {
+        const run = await postWorkflowRunAction(
+          accessToken,
+          runId,
+          `/api/v1/workflow-runs/${encodeURIComponent(runId)}/resume`,
+          payload,
+        );
+        workflowState.run = run;
+        workflowState.operatorCommentText = '';
+        workflowState.actingOnRun = false;
+        renderWorkflowState();
+        if (!silent) {
+          log(`Resumed workflow run ${getShortSessionId(run.id)}`, 'ok');
+        }
+        await refreshWorkflowRunState({ silent: true });
+        return workflowState.run;
+      } catch (error) {
+        workflowState.actingOnRun = false;
+        workflowState.error = `Workflow run resume failed: ${error.message}`;
+        renderWorkflowState();
+        if (!silent) {
+          log(`Workflow run resume failed: ${error.message}`, 'error');
+        }
+        throw error;
+      }
+    }
+
+    async function rejectWorkflowRun({
+      reason = undefined,
+      details = undefined,
+      silent = false,
+    } = {}) {
+      const accessToken = await getValidAccessToken();
+      const runId = workflowState.run?.id;
+      if (!accessToken || !runId) {
+        throw new Error('login and workflow run are required');
+      }
+      const resolvedReason =
+        reason === undefined ? workflowState.operatorCommentText.trim() : String(reason ?? '').trim();
+      if (!resolvedReason) {
+        throw new Error('reject reason is required');
+      }
+      const payload = {
+        reason: resolvedReason,
+      };
+      if (details !== undefined) {
+        payload.details = details;
+      }
+
+      workflowState.actingOnRun = true;
+      workflowState.error = '';
+      renderWorkflowState();
+      try {
+        const run = await postWorkflowRunAction(
+          accessToken,
+          runId,
+          `/api/v1/workflow-runs/${encodeURIComponent(runId)}/reject`,
+          payload,
+        );
+        workflowState.run = run;
+        workflowState.operatorCommentText = '';
+        workflowState.actingOnRun = false;
+        renderWorkflowState();
+        if (!silent) {
+          log(`Rejected workflow run ${getShortSessionId(run.id)}`, 'warn');
+        }
+        await refreshWorkflowRunState({ silent: true });
+        return workflowState.run;
+      } catch (error) {
+        workflowState.actingOnRun = false;
+        workflowState.error = `Workflow run reject failed: ${error.message}`;
+        renderWorkflowState();
+        if (!silent) {
+          log(`Workflow run reject failed: ${error.message}`, 'error');
+        }
+        throw error;
+      }
+    }
+
+    async function cancelWorkflowRun({
+      silent = false,
+    } = {}) {
+      const accessToken = await getValidAccessToken();
+      const runId = workflowState.run?.id;
+      if (!accessToken || !runId) {
+        throw new Error('login and workflow run are required');
+      }
+
+      workflowState.actingOnRun = true;
+      workflowState.error = '';
+      renderWorkflowState();
+      try {
+        const run = await postWorkflowRunAction(
+          accessToken,
+          runId,
+          `/api/v1/workflow-runs/${encodeURIComponent(runId)}/cancel`,
+        );
+        workflowState.run = run;
+        workflowState.actingOnRun = false;
+        renderWorkflowState();
+        if (!silent) {
+          log(`Cancelled workflow run ${getShortSessionId(run.id)}`, 'warn');
+        }
+        await refreshWorkflowRunState({ silent: true });
+        return workflowState.run;
+      } catch (error) {
+        workflowState.actingOnRun = false;
+        workflowState.error = `Workflow run cancel failed: ${error.message}`;
+        renderWorkflowState();
+        if (!silent) {
+          log(`Workflow run cancel failed: ${error.message}`, 'error');
         }
         throw error;
       }
@@ -4546,6 +4978,14 @@
       syncWorkflowInputState();
       workflowState.error = '';
     });
+    workflowOperatorInputEditor.addEventListener('input', () => {
+      syncWorkflowOperatorInputState();
+      workflowState.error = '';
+    });
+    workflowOperatorCommentInput.addEventListener('input', () => {
+      syncWorkflowOperatorCommentState();
+      workflowState.error = '';
+    });
     workflowLoadVersionBtn.addEventListener('click', () => {
       void loadSelectedWorkflowVersion({ silent: false }).catch((error) => {
         log(`Workflow version load failed: ${error.message}`, 'error');
@@ -4560,6 +5000,30 @@
     workflowRunRefreshBtn.addEventListener('click', () => {
       void refreshWorkflowRunState({ silent: false }).catch((error) => {
         log(`Workflow run refresh failed: ${error.message}`, 'error');
+      });
+    });
+    workflowRunCancelBtn.addEventListener('click', () => {
+      void cancelWorkflowRun({ silent: false }).catch((error) => {
+        log(`Workflow run cancel failed: ${error.message}`, 'error');
+      });
+    });
+    workflowSubmitInputBtn.addEventListener('click', () => {
+      syncWorkflowOperatorInputState();
+      syncWorkflowOperatorCommentState();
+      void submitWorkflowRunInput({ silent: false }).catch((error) => {
+        log(`Workflow run submit-input failed: ${error.message}`, 'error');
+      });
+    });
+    workflowResumeBtn.addEventListener('click', () => {
+      syncWorkflowOperatorCommentState();
+      void resumeWorkflowRun({ silent: false }).catch((error) => {
+        log(`Workflow run resume failed: ${error.message}`, 'error');
+      });
+    });
+    workflowRejectBtn.addEventListener('click', () => {
+      syncWorkflowOperatorCommentState();
+      void rejectWorkflowRun({ silent: false }).catch((error) => {
+        log(`Workflow run reject failed: ${error.message}`, 'error');
       });
     });
     workflowFileListEl.addEventListener('click', (event) => {
@@ -4705,6 +5169,8 @@
         selectedVersion: workflowState.selectedVersion,
         version: cloneValue(workflowState.version),
         inputText: workflowState.inputText,
+        operatorInputText: workflowState.operatorInputText,
+        operatorCommentText: workflowState.operatorCommentText,
         run: cloneValue(workflowState.run),
         logs: cloneValue(workflowState.logs) ?? [],
         events: cloneValue(workflowState.events) ?? [],
@@ -4712,6 +5178,7 @@
         loadingVersion: workflowState.loadingVersion,
         invokingRun: workflowState.invokingRun,
         refreshingRun: workflowState.refreshingRun,
+        actingOnRun: workflowState.actingOnRun,
         downloadingFileId: workflowState.downloadingFileId,
         error: workflowState.error,
       }),
@@ -4750,6 +5217,16 @@
         renderWorkflowState();
         return workflowState.inputText;
       },
+      setOperatorInput: (value) => {
+        workflowState.operatorInputText = typeof value === 'string' ? value : prettyJson(value, '');
+        renderWorkflowState();
+        return workflowState.operatorInputText;
+      },
+      setOperatorComment: (value) => {
+        workflowState.operatorCommentText = typeof value === 'string' ? value : '';
+        renderWorkflowState();
+        return workflowState.operatorCommentText;
+      },
       invokeSelected: (options = {}) => {
         if (!Object.prototype.hasOwnProperty.call(options, 'input')) {
           syncWorkflowInputState();
@@ -4757,6 +5234,28 @@
         return invokeSelectedWorkflowRun(options);
       },
       refreshRun: (options = {}) => refreshWorkflowRunState(options),
+      submitInput: (options = {}) => {
+        if (!Object.prototype.hasOwnProperty.call(options, 'input')) {
+          syncWorkflowOperatorInputState();
+        }
+        if (!Object.prototype.hasOwnProperty.call(options, 'comment')) {
+          syncWorkflowOperatorCommentState();
+        }
+        return submitWorkflowRunInput(options);
+      },
+      resumeRun: (options = {}) => {
+        if (!Object.prototype.hasOwnProperty.call(options, 'comment')) {
+          syncWorkflowOperatorCommentState();
+        }
+        return resumeWorkflowRun(options);
+      },
+      rejectRun: (options = {}) => {
+        if (!Object.prototype.hasOwnProperty.call(options, 'reason')) {
+          syncWorkflowOperatorCommentState();
+        }
+        return rejectWorkflowRun(options);
+      },
+      cancelRun: (options = {}) => cancelWorkflowRun(options),
       downloadProducedFile: downloadWorkflowProducedFile,
     };
 
@@ -4778,7 +5277,7 @@
       'info',
     );
     log(
-      'Workflow API: window.__bpaneWorkflow.{listDefinitions,getState,refreshDefinitions,selectWorkflow,setVersion,loadVersion,setInput,invokeSelected,refreshRun,downloadProducedFile}',
+      'Workflow API: window.__bpaneWorkflow.{listDefinitions,getState,refreshDefinitions,selectWorkflow,setVersion,loadVersion,setInput,setOperatorInput,setOperatorComment,invokeSelected,refreshRun,submitInput,resumeRun,rejectRun,cancelRun,downloadProducedFile}',
       'info',
     );
     if (authState.config?.mode === 'oidc') {

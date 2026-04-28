@@ -12,11 +12,13 @@ import {
   configurePage,
   createLocalWorkflowRepo,
   createLogger,
+  deleteSession,
   ensureLoggedIn,
   fetchJson,
   getAccessToken,
   launchChrome,
   parseSmokeArgs,
+  poll,
 } from './workflow-smoke-lib.mjs';
 
 const log = createLogger('workflow-cli-smoke');
@@ -71,6 +73,24 @@ async function createFileWorkspace(accessToken, options) {
         suite: 'workflow-cli-smoke',
       },
     }),
+  });
+}
+
+async function issueAutomationAccess(accessToken, options, sessionId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/sessions/${sessionId}/automation-access`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+async function transitionRun(automationToken, options, runId, body) {
+  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/state`, {
+    method: 'POST',
+    headers: {
+      'x-bpane-automation-access-token': automationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
   });
 }
 
@@ -201,12 +221,13 @@ async function main() {
       throw new Error('Workflow CLI smoke failed to load the created workflow.');
     }
 
+    const clientRequestId = `workflow-cli-smoke-job-${crypto.randomUUID()}`;
     const runRequest = {
       workflow_id: workflow.id,
       version: 'v1',
       source_system: 'camunda-prod',
       source_reference: 'process-instance-123/task-7',
-      client_request_id: 'workflow-cli-smoke-job-123',
+      client_request_id: clientRequestId,
       input: {
         target_url: 'http://web:8080',
         workspace_id: workspace.id,
@@ -235,7 +256,7 @@ async function main() {
     if (run.source_reference !== 'process-instance-123/task-7') {
       throw new Error('Workflow CLI smoke did not persist source_reference on the created run.');
     }
-    if (run.client_request_id !== 'workflow-cli-smoke-job-123') {
+    if (run.client_request_id !== clientRequestId) {
       throw new Error('Workflow CLI smoke did not persist client_request_id on the created run.');
     }
 
@@ -320,6 +341,210 @@ async function main() {
       throw new Error('Workflow CLI smoke downloaded content does not match the workflow output.');
     }
 
+    if (waitedRun.session_id) {
+      await deleteSession(accessToken, options, waitedRun.session_id);
+    }
+
+    log('Validating workflow CLI intervention commands');
+    const manualWorkflow = runWorkflowCli({
+      cwd: cliCwd,
+      env: cliEnv,
+      args: [
+        'workflow',
+        'create',
+        '--body-json',
+        JSON.stringify({
+          name: 'workflow-cli-intervention-smoke',
+          description: 'Validate workflow CLI operator actions',
+          labels: {
+            suite: 'workflow-cli-smoke',
+            mode: 'intervention',
+          },
+        }),
+      ],
+    });
+
+    const manualVersion = runWorkflowCli({
+      cwd: cliCwd,
+      env: cliEnv,
+      args: [
+        'workflow',
+        'version',
+        'create',
+        manualWorkflow.id,
+        '--body-json',
+        JSON.stringify({
+          version: 'v1',
+          executor: 'manual',
+          entrypoint: 'workflows/operator/run.mjs',
+        }),
+      ],
+    });
+    if (manualVersion.executor !== 'manual') {
+      throw new Error('Workflow CLI smoke failed to create the manual workflow version.');
+    }
+
+    const manualRun = runWorkflowCli({
+      cwd: cliCwd,
+      env: cliEnv,
+      args: [
+        'workflow',
+        'run',
+        'create',
+        '--body-json',
+        JSON.stringify({
+          workflow_id: manualWorkflow.id,
+          version: 'v1',
+          session: {
+            create_session: {},
+          },
+          labels: {
+            suite: 'workflow-cli-smoke',
+            mode: 'intervention',
+          },
+        }),
+      ],
+    });
+    if (!manualRun.id || !manualRun.session_id) {
+      throw new Error('Workflow CLI smoke manual run creation did not return run and session ids.');
+    }
+
+    const automationAccess = await issueAutomationAccess(accessToken, options, manualRun.session_id);
+    const automationToken = automationAccess.token ?? '';
+    if (!automationToken) {
+      throw new Error('Workflow CLI smoke failed to issue automation access for the manual run.');
+    }
+
+    await transitionRun(automationToken, options, manualRun.id, {
+      state: 'running',
+      message: 'executor attached',
+    });
+
+    const firstRequestId = crypto.randomUUID();
+    await transitionRun(automationToken, options, manualRun.id, {
+      state: 'awaiting_input',
+      message: 'approval required',
+      data: {
+        intervention_request: {
+          request_id: firstRequestId,
+          kind: 'approval',
+          prompt: 'Approve the CLI smoke',
+        },
+        runtime_hold: {
+          mode: 'live',
+          timeout_sec: 5,
+        },
+      },
+    });
+
+    const awaitedManualRun = await poll(
+      'manual workflow run awaiting input',
+      async () =>
+        runWorkflowCli({
+          cwd: cliCwd,
+          env: cliEnv,
+          args: ['workflow', 'run', 'get', manualRun.id],
+        }),
+      (value) => value?.state === 'awaiting_input' && value?.runtime?.resume_mode === 'live_runtime',
+      options.connectTimeoutMs,
+      250,
+    );
+    if (awaitedManualRun.intervention?.pending_request?.request_id !== firstRequestId) {
+      throw new Error('Workflow CLI smoke did not expose the pending intervention request.');
+    }
+
+    const submittedRun = runWorkflowCli({
+      cwd: cliCwd,
+      env: cliEnv,
+      args: [
+        'workflow',
+        'run',
+        'submit-input',
+        manualRun.id,
+        '--body-json',
+        JSON.stringify({
+          input: {
+            approved: true,
+          },
+          comment: 'operator approved through CLI',
+        }),
+      ],
+    });
+    if (submittedRun.state !== 'running') {
+      throw new Error(`Workflow CLI smoke expected running after submit-input, got ${submittedRun.state ?? 'unknown'}.`);
+    }
+    if (submittedRun.intervention?.last_resolution?.action !== 'submit_input') {
+      throw new Error('Workflow CLI smoke did not persist the submit-input resolution.');
+    }
+
+    const secondRequestId = crypto.randomUUID();
+    await transitionRun(automationToken, options, manualRun.id, {
+      state: 'awaiting_input',
+      message: 'resume required',
+      data: {
+        intervention_request: {
+          request_id: secondRequestId,
+          kind: 'confirmation',
+          prompt: 'Resume the CLI smoke',
+        },
+      },
+    });
+
+    const resumedRun = runWorkflowCli({
+      cwd: cliCwd,
+      env: cliEnv,
+      args: [
+        'workflow',
+        'run',
+        'resume',
+        manualRun.id,
+        '--body-json',
+        JSON.stringify({
+          comment: 'operator resumed through CLI',
+        }),
+      ],
+    });
+    if (resumedRun.state !== 'running') {
+      throw new Error(`Workflow CLI smoke expected running after resume, got ${resumedRun.state ?? 'unknown'}.`);
+    }
+    if (resumedRun.intervention?.last_resolution?.action !== 'resume') {
+      throw new Error('Workflow CLI smoke did not persist the resume resolution.');
+    }
+
+    const thirdRequestId = crypto.randomUUID();
+    await transitionRun(automationToken, options, manualRun.id, {
+      state: 'awaiting_input',
+      message: 'reject required',
+      data: {
+        intervention_request: {
+          request_id: thirdRequestId,
+          kind: 'approval',
+          prompt: 'Reject the CLI smoke',
+        },
+      },
+    });
+
+    const rejectedRun = runWorkflowCli({
+      cwd: cliCwd,
+      env: cliEnv,
+      args: [
+        'workflow',
+        'run',
+        'reject',
+        manualRun.id,
+        '--body-json',
+        JSON.stringify({
+          reason: 'operator denied through CLI',
+        }),
+      ],
+    });
+    if (rejectedRun.state !== 'failed') {
+      throw new Error(`Workflow CLI smoke expected failed after reject, got ${rejectedRun.state ?? 'unknown'}.`);
+    }
+    if (rejectedRun.intervention?.last_resolution?.action !== 'reject') {
+      throw new Error('Workflow CLI smoke did not persist the reject resolution.');
+    }
+
     const summary = {
       workflowId: workflow.id,
       workflowVersion: version.version,
@@ -330,6 +555,8 @@ async function main() {
       producedFileId: producedFile.file_id,
       downloadedBytes: downloadSummary.byte_count,
       outputTitle: waitedRun.output?.title ?? null,
+      interventionRunId: manualRun.id,
+      interventionFinalState: rejectedRun.state,
     };
 
     if (options.outputPath) {
