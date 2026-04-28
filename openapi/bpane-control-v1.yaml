@@ -383,6 +383,12 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateWorkflowRunRequest'
       responses:
+        '200':
+          description: Existing workflow run returned for an idempotent retry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunResource'
         '201':
           description: Workflow run created
           content:
@@ -2547,6 +2553,15 @@ components:
           nullable: true
         input:
           nullable: true
+        source_system:
+          type: string
+          nullable: true
+        source_reference:
+          type: string
+          nullable: true
+        client_request_id:
+          type: string
+          nullable: true
         credential_binding_ids:
           type: array
           items:
@@ -2723,6 +2738,9 @@ components:
         - workflow_definition_id
         - workflow_definition_version_id
         - workflow_version
+        - source_system
+        - source_reference
+        - client_request_id
         - state
         - session_id
         - automation_task_id
@@ -2756,6 +2774,15 @@ components:
           format: uuid
         workflow_version:
           type: string
+        source_system:
+          type: string
+          nullable: true
+        source_reference:
+          type: string
+          nullable: true
+        client_request_id:
+          type: string
+          nullable: true
         state:
           $ref: '#/components/schemas/WorkflowRunState'
         session_id:
