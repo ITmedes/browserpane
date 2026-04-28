@@ -35,13 +35,14 @@ use crate::session_manager::{
 };
 use crate::workflow::{
     automation_task_default_message_for_run_state, automation_task_event_type_for_run_state,
-    workflow_run_default_message, workflow_run_event_type, PersistWorkflowDefinitionRequest,
-    PersistWorkflowDefinitionVersionRequest, PersistWorkflowRunEventRequest,
-    PersistWorkflowRunLogRequest, PersistWorkflowRunProducedFileRequest,
-    PersistWorkflowRunRequest, StoredWorkflowDefinition, StoredWorkflowDefinitionVersion,
-    StoredWorkflowRun, StoredWorkflowRunEvent, StoredWorkflowRunLog, WorkflowRunProducedFile,
-    WorkflowRunSourceSnapshot, WorkflowRunState, WorkflowRunWorkspaceInput,
-    WorkflowRunTransitionRequest,
+    workflow_run_default_message, workflow_run_event_type, CreateWorkflowRunResult,
+    PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
+    PersistWorkflowRunEventRequest, PersistWorkflowRunLogRequest,
+    PersistWorkflowRunProducedFileRequest, PersistWorkflowRunRequest,
+    StoredWorkflowDefinition, StoredWorkflowDefinitionVersion, StoredWorkflowRun,
+    StoredWorkflowRunEvent, StoredWorkflowRunLog, WorkflowRunProducedFile,
+    WorkflowRunSourceSnapshot, WorkflowRunState, WorkflowRunTransitionRequest,
+    WorkflowRunWorkspaceInput,
 };
 use crate::workflow_source::WorkflowSource;
 
@@ -1164,7 +1165,7 @@ impl SessionStore {
         &self,
         principal: &AuthenticatedPrincipal,
         request: PersistWorkflowRunRequest,
-    ) -> Result<StoredWorkflowRun, SessionStoreError> {
+    ) -> Result<CreateWorkflowRunResult, SessionStoreError> {
         validate_workflow_run_request(&request)?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
@@ -1198,6 +1199,25 @@ impl SessionStore {
         match &self.backend {
             SessionStoreBackend::InMemory(store) => store.get_workflow_run_by_id(id).await,
             SessionStoreBackend::Postgres(store) => store.get_workflow_run_by_id(id).await,
+        }
+    }
+
+    pub async fn find_workflow_run_by_client_request_id_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        client_request_id: &str,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .find_workflow_run_by_client_request_id_for_owner(principal, client_request_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .find_workflow_run_by_client_request_id_for_owner(principal, client_request_id)
+                    .await
+            }
         }
     }
 
@@ -2299,6 +2319,34 @@ fn validate_workflow_run_request(
         return Err(SessionStoreError::InvalidRequest(
             "workflow_version must not be empty".to_string(),
         ));
+    }
+    if let Some(source_system) = &request.source_system {
+        if source_system.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run source_system must not be empty".to_string(),
+            ));
+        }
+    }
+    if let Some(source_reference) = &request.source_reference {
+        if source_reference.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run source_reference must not be empty".to_string(),
+            ));
+        }
+    }
+    if let Some(client_request_id) = &request.client_request_id {
+        if client_request_id.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run client_request_id must not be empty".to_string(),
+            ));
+        }
+    }
+    if let Some(create_request_fingerprint) = &request.create_request_fingerprint {
+        if create_request_fingerprint.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run create_request_fingerprint must not be empty".to_string(),
+            ));
+        }
     }
     for label in &request.labels {
         if label.0.trim().is_empty() {
@@ -3419,7 +3467,7 @@ impl InMemorySessionStore {
         &self,
         principal: &AuthenticatedPrincipal,
         request: PersistWorkflowRunRequest,
-    ) -> Result<StoredWorkflowRun, SessionStoreError> {
+    ) -> Result<CreateWorkflowRunResult, SessionStoreError> {
         let Some(task) = self
             .get_automation_task_for_owner(principal, request.automation_task_id)
             .await?
@@ -3463,14 +3511,45 @@ impl InMemorySessionStore {
             ));
         }
 
+        if let Some(client_request_id) = request.client_request_id.as_deref() {
+            let existing_run = {
+                let runs = self.workflow_runs.lock().await;
+                runs.iter()
+                    .find(|run| {
+                        run.owner_subject == principal.subject
+                            && run.owner_issuer == principal.issuer
+                            && run.client_request_id.as_deref() == Some(client_request_id)
+                    })
+                    .cloned()
+            };
+            if let Some(existing_run) = existing_run {
+                if existing_run.create_request_fingerprint == request.create_request_fingerprint {
+                    return Ok(CreateWorkflowRunResult {
+                        run: existing_run,
+                        created: false,
+                    });
+                }
+                return Err(SessionStoreError::Conflict(format!(
+                    "workflow run client_request_id {} is already bound to a different request",
+                    client_request_id
+                )));
+            }
+        }
+
         let now = Utc::now();
         let run = StoredWorkflowRun {
             id: Uuid::now_v7(),
+            owner_subject: principal.subject.clone(),
+            owner_issuer: principal.issuer.clone(),
             workflow_definition_id: request.workflow_definition_id,
             workflow_definition_version_id: request.workflow_definition_version_id,
             workflow_version: request.workflow_version.clone(),
             session_id: request.session_id,
             automation_task_id: request.automation_task_id,
+            source_system: request.source_system.clone(),
+            source_reference: request.source_reference.clone(),
+            client_request_id: request.client_request_id.clone(),
+            create_request_fingerprint: request.create_request_fingerprint.clone(),
             source_snapshot: request.source_snapshot,
             extensions: request.extensions,
             credential_bindings: request.credential_bindings,
@@ -3502,10 +3581,13 @@ impl InMemorySessionStore {
                     "workflow_version": run.workflow_version,
                     "automation_task_id": run.automation_task_id,
                     "session_id": run.session_id,
+                    "source_system": run.source_system.clone(),
+                    "source_reference": run.source_reference.clone(),
+                    "client_request_id": run.client_request_id.clone(),
                 })),
                 created_at: now,
             });
-        Ok(run)
+        Ok(CreateWorkflowRunResult { run, created: true })
     }
 
     async fn get_workflow_run_for_owner(
@@ -3546,6 +3628,23 @@ impl InMemorySessionStore {
             .iter()
             .find(|run| run.id == id)
             .cloned())
+    }
+
+    async fn find_workflow_run_by_client_request_id_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        client_request_id: &str,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        let runs = self.workflow_runs.lock().await.clone();
+        for run in runs {
+            if run.owner_subject == principal.subject
+                && run.owner_issuer == principal.issuer
+                && run.client_request_id.as_deref() == Some(client_request_id)
+            {
+                return Ok(Some(run));
+            }
+        }
+        Ok(None)
     }
 
     async fn list_workflow_run_events_for_owner(
@@ -4895,12 +4994,18 @@ impl PostgresSessionStore {
 
                 CREATE TABLE IF NOT EXISTS control_workflow_runs (
                     id UUID PRIMARY KEY,
+                    owner_subject TEXT NOT NULL,
+                    owner_issuer TEXT NOT NULL,
                     workflow_definition_id UUID NOT NULL REFERENCES control_workflow_definitions(id) ON DELETE CASCADE,
                     workflow_definition_version_id UUID NOT NULL REFERENCES control_workflow_definition_versions(id) ON DELETE RESTRICT,
                     workflow_version TEXT NOT NULL,
                     session_id UUID NOT NULL REFERENCES control_sessions(id) ON DELETE CASCADE,
                     automation_task_id UUID NOT NULL REFERENCES control_automation_tasks(id) ON DELETE CASCADE,
                     state TEXT NOT NULL DEFAULT 'pending',
+                    source_system TEXT NULL,
+                    source_reference TEXT NULL,
+                    client_request_id TEXT NULL,
+                    create_request_fingerprint TEXT NULL,
                     source_snapshot JSONB NULL,
                     extensions JSONB NOT NULL DEFAULT '[]'::jsonb,
                     credential_bindings JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -5005,7 +5110,19 @@ impl PostgresSessionStore {
                 ALTER TABLE control_session_recordings
                     ADD COLUMN IF NOT EXISTS termination_reason TEXT NULL;
                 ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS owner_subject TEXT NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS owner_issuer TEXT NULL;
+                ALTER TABLE control_workflow_runs
                     ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'pending';
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS source_system TEXT NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS source_reference TEXT NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS client_request_id TEXT NULL;
+                ALTER TABLE control_workflow_runs
+                    ADD COLUMN IF NOT EXISTS create_request_fingerprint TEXT NULL;
                 ALTER TABLE control_workflow_runs
                     ADD COLUMN IF NOT EXISTS source_snapshot JSONB NULL;
                 ALTER TABLE control_workflow_runs
@@ -5026,6 +5143,19 @@ impl PostgresSessionStore {
                     ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NULL;
                 ALTER TABLE control_workflow_runs
                     ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ NULL;
+                UPDATE control_workflow_runs run
+                SET owner_subject = task.owner_subject,
+                    owner_issuer = task.owner_issuer
+                FROM control_automation_tasks task
+                WHERE task.id = run.automation_task_id
+                  AND (run.owner_subject IS NULL OR run.owner_issuer IS NULL);
+                ALTER TABLE control_workflow_runs
+                    ALTER COLUMN owner_subject SET NOT NULL;
+                ALTER TABLE control_workflow_runs
+                    ALTER COLUMN owner_issuer SET NOT NULL;
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_control_workflow_runs_owner_client_request
+                    ON control_workflow_runs (owner_subject, owner_issuer, client_request_id)
+                    WHERE client_request_id IS NOT NULL;
                 ALTER TABLE control_workflow_definition_versions
                     ADD COLUMN IF NOT EXISTS source JSONB NULL;
                 "#,
@@ -6947,7 +7077,7 @@ impl PostgresSessionStore {
         &self,
         principal: &AuthenticatedPrincipal,
         request: PersistWorkflowRunRequest,
-    ) -> Result<StoredWorkflowRun, SessionStoreError> {
+    ) -> Result<CreateWorkflowRunResult, SessionStoreError> {
         let mut client = self.client.lock().await;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
@@ -7068,17 +7198,85 @@ impl PostgresSessionStore {
             json_workflow_run_credential_bindings(&request.credential_bindings)?;
         let workspace_inputs = json_workflow_run_workspace_inputs(&request.workspace_inputs)?;
         let produced_files = json_workflow_run_produced_files(&Vec::new())?;
+        if let Some(client_request_id) = request.client_request_id.as_deref() {
+            let existing_row = transaction
+                .query_opt(
+                    r#"
+                    SELECT
+                        id,
+                        owner_subject,
+                        owner_issuer,
+                        workflow_definition_id,
+                        workflow_definition_version_id,
+                        workflow_version,
+                        session_id,
+                        automation_task_id,
+                        state,
+                        source_system,
+                        source_reference,
+                        client_request_id,
+                        create_request_fingerprint,
+                        source_snapshot,
+                        extensions,
+                        credential_bindings,
+                        workspace_inputs,
+                        produced_files,
+                        input,
+                        output,
+                        error,
+                        artifact_refs,
+                        labels,
+                        started_at,
+                        completed_at,
+                        created_at,
+                        updated_at
+                    FROM control_workflow_runs
+                    WHERE owner_subject = $1
+                      AND owner_issuer = $2
+                      AND client_request_id = $3
+                    "#,
+                    &[&principal.subject, &principal.issuer, &client_request_id],
+                )
+                .await
+                .map_err(|error| {
+                    SessionStoreError::Backend(format!(
+                        "failed to check existing workflow run by client_request_id: {error}"
+                    ))
+                })?;
+            if let Some(existing_row) = existing_row {
+                let existing_run = row_to_stored_workflow_run(&existing_row)?;
+                transaction.commit().await.map_err(|error| {
+                    SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+                })?;
+                if existing_run.create_request_fingerprint == request.create_request_fingerprint {
+                    return Ok(CreateWorkflowRunResult {
+                        run: existing_run,
+                        created: false,
+                    });
+                }
+                return Err(SessionStoreError::Conflict(format!(
+                    "workflow run client_request_id {} is already bound to a different request",
+                    client_request_id
+                )));
+            }
+        }
         let row = transaction
             .query_one(
                 r#"
                 INSERT INTO control_workflow_runs (
                     id,
+                    owner_subject,
+                    owner_issuer,
                     workflow_definition_id,
                     workflow_definition_version_id,
                     workflow_version,
                     session_id,
                     automation_task_id,
                     state,
+                    source_system,
+                    source_reference,
+                    client_request_id,
+                    create_request_fingerprint,
                     source_snapshot,
                     extensions,
                     credential_bindings,
@@ -7095,17 +7293,24 @@ impl PostgresSessionStore {
                     updated_at
                 )
                 VALUES (
-                    $1, $2, $3, $4, $5, $6, $7,
-                    $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, NULL, NULL, $14::jsonb, $15::jsonb, NULL, NULL, $16, $16
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+                    $10, $11, $12, $13,
+                    $14::jsonb, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, NULL, NULL, $20::jsonb, $21::jsonb, NULL, NULL, $22, $22
                 )
                 RETURNING
                     id,
+                    owner_subject,
+                    owner_issuer,
                     workflow_definition_id,
                     workflow_definition_version_id,
                     workflow_version,
                     session_id,
                     automation_task_id,
                     state,
+                    source_system,
+                    source_reference,
+                    client_request_id,
+                    create_request_fingerprint,
                     source_snapshot,
                     extensions,
                     credential_bindings,
@@ -7123,12 +7328,18 @@ impl PostgresSessionStore {
                 "#,
                 &[
                     &Uuid::now_v7(),
+                    &principal.subject,
+                    &principal.issuer,
                     &request.workflow_definition_id,
                     &request.workflow_definition_version_id,
                     &request.workflow_version,
                     &request.session_id,
                     &request.automation_task_id,
                     &WorkflowRunState::Pending.as_str(),
+                    &request.source_system,
+                    &request.source_reference,
+                    &request.client_request_id,
+                    &request.create_request_fingerprint,
                     &source_snapshot,
                     &extensions,
                     &credential_bindings,
@@ -7170,6 +7381,9 @@ impl PostgresSessionStore {
                         "workflow_version": request.workflow_version,
                         "session_id": request.session_id,
                         "automation_task_id": request.automation_task_id,
+                        "source_system": request.source_system,
+                        "source_reference": request.source_reference,
+                        "client_request_id": request.client_request_id,
                     })),
                     &now,
                 ],
@@ -7182,7 +7396,10 @@ impl PostgresSessionStore {
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
         })?;
-        row_to_stored_workflow_run(&row)
+        Ok(CreateWorkflowRunResult {
+            run: row_to_stored_workflow_run(&row)?,
+            created: true,
+        })
     }
 
     async fn get_workflow_run_for_owner(
@@ -7198,12 +7415,18 @@ impl PostgresSessionStore {
                 r#"
                 SELECT
                     run.id,
+                    run.owner_subject,
+                    run.owner_issuer,
                     run.workflow_definition_id,
                     run.workflow_definition_version_id,
                     run.workflow_version,
                     run.session_id,
                     run.automation_task_id,
                     run.state,
+                    run.source_system,
+                    run.source_reference,
+                    run.client_request_id,
+                    run.create_request_fingerprint,
                     run.source_snapshot,
                     run.extensions,
                     run.credential_bindings,
@@ -7246,12 +7469,18 @@ impl PostgresSessionStore {
                 r#"
                 SELECT
                     id,
+                    owner_subject,
+                    owner_issuer,
                     workflow_definition_id,
                     workflow_definition_version_id,
                     workflow_version,
                     session_id,
                     automation_task_id,
                     state,
+                    source_system,
+                    source_reference,
+                    client_request_id,
+                    create_request_fingerprint,
                     source_snapshot,
                     extensions,
                     credential_bindings,
@@ -7274,6 +7503,61 @@ impl PostgresSessionStore {
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to load workflow run by id: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_workflow_run).transpose()
+    }
+
+    async fn find_workflow_run_by_client_request_id_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        client_request_id: &str,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        let row = self
+            .client
+            .lock()
+            .await
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    workflow_definition_id,
+                    workflow_definition_version_id,
+                    workflow_version,
+                    session_id,
+                    automation_task_id,
+                    state,
+                    source_system,
+                    source_reference,
+                    client_request_id,
+                    create_request_fingerprint,
+                    source_snapshot,
+                    extensions,
+                    credential_bindings,
+                    workspace_inputs,
+                    produced_files,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_workflow_runs
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND client_request_id = $3
+                "#,
+                &[&principal.subject, &principal.issuer, &client_request_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to find workflow run by client_request_id: {error}"
+                ))
             })?;
         row.as_ref().map(row_to_stored_workflow_run).transpose()
     }
@@ -7453,12 +7737,18 @@ impl PostgresSessionStore {
                 r#"
                 SELECT
                     id,
+                    owner_subject,
+                    owner_issuer,
                     workflow_definition_id,
                     workflow_definition_version_id,
                     workflow_version,
                     session_id,
                     automation_task_id,
                     state,
+                    source_system,
+                    source_reference,
+                    client_request_id,
+                    create_request_fingerprint,
                     source_snapshot,
                     extensions,
                     credential_bindings,
@@ -7662,12 +7952,18 @@ impl PostgresSessionStore {
                 WHERE id = $1
                 RETURNING
                     id,
+                    owner_subject,
+                    owner_issuer,
                     workflow_definition_id,
                     workflow_definition_version_id,
                     workflow_version,
                     session_id,
                     automation_task_id,
                     state,
+                    source_system,
+                    source_reference,
+                    client_request_id,
+                    create_request_fingerprint,
                     source_snapshot,
                     extensions,
                     credential_bindings,
@@ -7835,12 +8131,18 @@ impl PostgresSessionStore {
                 r#"
                 SELECT
                     id,
+                    owner_subject,
+                    owner_issuer,
                     workflow_definition_id,
                     workflow_definition_version_id,
                     workflow_version,
                     session_id,
                     automation_task_id,
                     state,
+                    source_system,
+                    source_reference,
+                    client_request_id,
+                    create_request_fingerprint,
                     source_snapshot,
                     extensions,
                     credential_bindings,
@@ -7913,12 +8215,18 @@ impl PostgresSessionStore {
                 WHERE id = $1
                 RETURNING
                     id,
+                    owner_subject,
+                    owner_issuer,
                     workflow_definition_id,
                     workflow_definition_version_id,
                     workflow_version,
                     session_id,
                     automation_task_id,
                     state,
+                    source_system,
+                    source_reference,
+                    client_request_id,
+                    create_request_fingerprint,
                     source_snapshot,
                     extensions,
                     credential_bindings,
@@ -10560,12 +10868,18 @@ fn row_to_stored_workflow_run(row: &Row) -> Result<StoredWorkflowRun, SessionSto
 
     Ok(StoredWorkflowRun {
         id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
         workflow_definition_id: row.get("workflow_definition_id"),
         workflow_definition_version_id: row.get("workflow_definition_version_id"),
         workflow_version: row.get("workflow_version"),
         session_id: row.get("session_id"),
         automation_task_id: row.get("automation_task_id"),
         state,
+        source_system: row.get("source_system"),
+        source_reference: row.get("source_reference"),
+        client_request_id: row.get("client_request_id"),
+        create_request_fingerprint: row.get("create_request_fingerprint"),
         source_snapshot,
         extensions,
         credential_bindings,
@@ -11417,6 +11731,10 @@ mod tests {
                     workflow_version: version.version.clone(),
                     session_id: session.id,
                     automation_task_id: task.id,
+                    source_system: None,
+                    source_reference: None,
+                    client_request_id: None,
+                    create_request_fingerprint: None,
                     source_snapshot: None,
                     extensions: Vec::new(),
                     credential_bindings: Vec::new(),
@@ -11426,7 +11744,8 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .unwrap()
+            .run;
 
         store
             .upsert_workflow_run_worker_assignment(PersistedWorkflowRunWorkerAssignment {
@@ -11464,6 +11783,256 @@ mod tests {
             .await
             .unwrap()
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_deduplicates_workflow_runs_by_client_request_id() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let workflow = store
+            .create_workflow_definition(
+                &owner,
+                PersistWorkflowDefinitionRequest {
+                    name: "Workflow".to_string(),
+                    description: None,
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+        let version = store
+            .create_workflow_definition_version(
+                &owner,
+                PersistWorkflowDefinitionVersionRequest {
+                    workflow_definition_id: workflow.id,
+                    version: "v1".to_string(),
+                    executor: "playwright".to_string(),
+                    entrypoint: "workflows/run.mjs".to_string(),
+                    source: None,
+                    input_schema: None,
+                    output_schema: None,
+                    default_session: None,
+                    allowed_credential_binding_ids: Vec::new(),
+                    allowed_extension_ids: Vec::new(),
+                    allowed_file_workspace_ids: Vec::new(),
+                },
+            )
+            .await
+            .unwrap();
+
+        let session_one = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
+                    recording: SessionRecordingPolicy::default(),
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+        let task_one = store
+            .create_automation_task(
+                &owner,
+                PersistAutomationTaskRequest {
+                    display_name: Some("Workflow Task".to_string()),
+                    executor: "playwright".to_string(),
+                    session_id: session_one.id,
+                    session_source: AutomationTaskSessionSource::CreatedSession,
+                    input: Some(serde_json::json!({ "customer_id": "cust-42" })),
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+
+        let first = store
+            .create_workflow_run(
+                &owner,
+                PersistWorkflowRunRequest {
+                    workflow_definition_id: workflow.id,
+                    workflow_definition_version_id: version.id,
+                    workflow_version: version.version.clone(),
+                    session_id: session_one.id,
+                    automation_task_id: task_one.id,
+                    source_system: Some("camunda-prod".to_string()),
+                    source_reference: Some("task-1".to_string()),
+                    client_request_id: Some("job-123-attempt-1".to_string()),
+                    create_request_fingerprint: Some("fingerprint-a".to_string()),
+                    source_snapshot: None,
+                    extensions: Vec::new(),
+                    credential_bindings: Vec::new(),
+                    workspace_inputs: Vec::new(),
+                    input: Some(serde_json::json!({ "customer_id": "cust-42" })),
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(first.created);
+
+        let second = store
+            .create_workflow_run(
+                &owner,
+                PersistWorkflowRunRequest {
+                    workflow_definition_id: workflow.id,
+                    workflow_definition_version_id: version.id,
+                    workflow_version: version.version.clone(),
+                    session_id: session_one.id,
+                    automation_task_id: task_one.id,
+                    source_system: Some("camunda-prod".to_string()),
+                    source_reference: Some("task-1".to_string()),
+                    client_request_id: Some("job-123-attempt-1".to_string()),
+                    create_request_fingerprint: Some("fingerprint-a".to_string()),
+                    source_snapshot: None,
+                    extensions: Vec::new(),
+                    credential_bindings: Vec::new(),
+                    workspace_inputs: Vec::new(),
+                    input: Some(serde_json::json!({ "customer_id": "cust-42" })),
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!second.created);
+        assert_eq!(second.run.id, first.run.id);
+        assert_eq!(second.run.session_id, first.run.session_id);
+        assert_eq!(second.run.automation_task_id, first.run.automation_task_id);
+        assert_eq!(
+            store
+                .find_workflow_run_by_client_request_id_for_owner(&owner, "job-123-attempt-1")
+                .await
+                .unwrap()
+                .unwrap()
+                .id,
+            first.run.id
+        );
+    }
+
+    #[tokio::test]
+    async fn in_memory_store_rejects_conflicting_workflow_run_client_request_id() {
+        let store = SessionStore::in_memory();
+        let owner = principal("owner");
+        let session = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    template_id: None,
+                    owner_mode: None,
+                    viewport: None,
+                    idle_timeout_sec: None,
+                    labels: HashMap::new(),
+                    integration_context: None,
+                    extension_ids: Vec::new(),
+                    extensions: Vec::new(),
+                    recording: SessionRecordingPolicy::default(),
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+        let task = store
+            .create_automation_task(
+                &owner,
+                PersistAutomationTaskRequest {
+                    display_name: Some("Workflow Task".to_string()),
+                    executor: "playwright".to_string(),
+                    session_id: session.id,
+                    session_source: AutomationTaskSessionSource::CreatedSession,
+                    input: None,
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+        let workflow = store
+            .create_workflow_definition(
+                &owner,
+                PersistWorkflowDefinitionRequest {
+                    name: "Workflow".to_string(),
+                    description: None,
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+        let version = store
+            .create_workflow_definition_version(
+                &owner,
+                PersistWorkflowDefinitionVersionRequest {
+                    workflow_definition_id: workflow.id,
+                    version: "v1".to_string(),
+                    executor: "playwright".to_string(),
+                    entrypoint: "workflows/run.mjs".to_string(),
+                    source: None,
+                    input_schema: None,
+                    output_schema: None,
+                    default_session: None,
+                    allowed_credential_binding_ids: Vec::new(),
+                    allowed_extension_ids: Vec::new(),
+                    allowed_file_workspace_ids: Vec::new(),
+                },
+            )
+            .await
+            .unwrap();
+
+        let created = store
+            .create_workflow_run(
+                &owner,
+                PersistWorkflowRunRequest {
+                    workflow_definition_id: workflow.id,
+                    workflow_definition_version_id: version.id,
+                    workflow_version: version.version.clone(),
+                    session_id: session.id,
+                    automation_task_id: task.id,
+                    source_system: Some("camunda-prod".to_string()),
+                    source_reference: Some("task-1".to_string()),
+                    client_request_id: Some("job-123-attempt-1".to_string()),
+                    create_request_fingerprint: Some("fingerprint-a".to_string()),
+                    source_snapshot: None,
+                    extensions: Vec::new(),
+                    credential_bindings: Vec::new(),
+                    workspace_inputs: Vec::new(),
+                    input: None,
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(created.created);
+
+        let error = store
+            .create_workflow_run(
+                &owner,
+                PersistWorkflowRunRequest {
+                    workflow_definition_id: workflow.id,
+                    workflow_definition_version_id: version.id,
+                    workflow_version: version.version.clone(),
+                    session_id: session.id,
+                    automation_task_id: task.id,
+                    source_system: Some("camunda-prod".to_string()),
+                    source_reference: Some("task-2".to_string()),
+                    client_request_id: Some("job-123-attempt-1".to_string()),
+                    create_request_fingerprint: Some("fingerprint-b".to_string()),
+                    source_snapshot: None,
+                    extensions: Vec::new(),
+                    credential_bindings: Vec::new(),
+                    workspace_inputs: Vec::new(),
+                    input: Some(serde_json::json!({ "customer_id": "cust-77" })),
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, SessionStoreError::Conflict(message) if message.contains("client_request_id")));
     }
 
     #[tokio::test]

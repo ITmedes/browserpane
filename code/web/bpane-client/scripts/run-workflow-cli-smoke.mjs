@@ -201,6 +201,20 @@ async function main() {
       throw new Error('Workflow CLI smoke failed to load the created workflow.');
     }
 
+    const runRequest = {
+      workflow_id: workflow.id,
+      version: 'v1',
+      source_system: 'camunda-prod',
+      source_reference: 'process-instance-123/task-7',
+      client_request_id: 'workflow-cli-smoke-job-123',
+      input: {
+        target_url: 'http://web:8080',
+        workspace_id: workspace.id,
+      },
+      labels: {
+        suite: 'workflow-cli-smoke',
+      },
+    };
     const run = runWorkflowCli({
       cwd: cliCwd,
       env: cliEnv,
@@ -209,21 +223,38 @@ async function main() {
         'run',
         'create',
         '--body-json',
-        JSON.stringify({
-          workflow_id: workflow.id,
-          version: 'v1',
-          input: {
-            target_url: 'http://web:8080',
-            workspace_id: workspace.id,
-          },
-          labels: {
-            suite: 'workflow-cli-smoke',
-          },
-        }),
+        JSON.stringify(runRequest),
       ],
     });
     if (!run.id) {
       throw new Error('Workflow CLI smoke run creation did not return an id.');
+    }
+    if (run.source_system !== 'camunda-prod') {
+      throw new Error('Workflow CLI smoke did not persist source_system on the created run.');
+    }
+    if (run.source_reference !== 'process-instance-123/task-7') {
+      throw new Error('Workflow CLI smoke did not persist source_reference on the created run.');
+    }
+    if (run.client_request_id !== 'workflow-cli-smoke-job-123') {
+      throw new Error('Workflow CLI smoke did not persist client_request_id on the created run.');
+    }
+
+    const duplicateRun = runWorkflowCli({
+      cwd: cliCwd,
+      env: cliEnv,
+      args: [
+        'workflow',
+        'run',
+        'create',
+        '--body-json',
+        JSON.stringify(runRequest),
+      ],
+    });
+    if (duplicateRun.id !== run.id) {
+      throw new Error('Workflow CLI smoke idempotent retry returned a different workflow run id.');
+    }
+    if (duplicateRun.session_id !== run.session_id) {
+      throw new Error('Workflow CLI smoke idempotent retry returned a different session id.');
     }
 
     const waitedRun = runWorkflowCli({

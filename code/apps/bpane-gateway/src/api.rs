@@ -177,7 +177,7 @@ struct McpOwnerRequest {
     height: u16,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct AutomationTaskSessionRequest {
     #[serde(default)]
     existing_session_id: Option<Uuid>,
@@ -227,7 +227,7 @@ struct CreateWorkflowDefinitionVersionRequest {
     allowed_file_workspace_ids: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct CreateWorkflowRunRequest {
     workflow_id: Uuid,
     version: String,
@@ -236,6 +236,12 @@ struct CreateWorkflowRunRequest {
     #[serde(default)]
     input: Option<Value>,
     #[serde(default)]
+    source_system: Option<String>,
+    #[serde(default)]
+    source_reference: Option<String>,
+    #[serde(default)]
+    client_request_id: Option<String>,
+    #[serde(default)]
     credential_binding_ids: Vec<Uuid>,
     #[serde(default)]
     workspace_inputs: Vec<CreateWorkflowRunWorkspaceInputRequest>,
@@ -243,7 +249,7 @@ struct CreateWorkflowRunRequest {
     labels: std::collections::HashMap<String, String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct CreateWorkflowRunWorkspaceInputRequest {
     workspace_id: Uuid,
     file_id: Uuid,
@@ -1271,16 +1277,102 @@ fn normalize_workflow_run_workspace_input_mount_path(
     Ok(parts.join("/"))
 }
 
+fn canonicalize_json(value: Value) -> Value {
+    match value {
+        Value::Object(object) => {
+            let mut keys = object.keys().cloned().collect::<Vec<_>>();
+            keys.sort();
+            let mut normalized = serde_json::Map::new();
+            for key in keys {
+                if let Some(entry) = object.get(&key) {
+                    normalized.insert(key, canonicalize_json(entry.clone()));
+                }
+            }
+            Value::Object(normalized)
+        }
+        Value::Array(values) => Value::Array(values.into_iter().map(canonicalize_json).collect()),
+        other => other,
+    }
+}
+
+fn workflow_run_request_fingerprint(
+    request: &CreateWorkflowRunRequest,
+) -> Result<Option<String>, (StatusCode, Json<ErrorResponse>)> {
+    let Some(client_request_id) = request.client_request_id.as_ref() else {
+        return Ok(None);
+    };
+    if client_request_id.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let mut credential_binding_ids = request
+        .credential_binding_ids
+        .iter()
+        .map(Uuid::to_string)
+        .collect::<Vec<_>>();
+    credential_binding_ids.sort();
+
+    let mut workspace_inputs = request
+        .workspace_inputs
+        .iter()
+        .map(|input| {
+            serde_json::json!({
+                "workspace_id": input.workspace_id,
+                "file_id": input.file_id,
+                "mount_path": input.mount_path,
+            })
+        })
+        .collect::<Vec<_>>();
+    workspace_inputs.sort_by(|left, right| {
+        let left_key = (
+            left["workspace_id"].as_str().unwrap_or_default(),
+            left["file_id"].as_str().unwrap_or_default(),
+            left["mount_path"].as_str().unwrap_or_default(),
+        );
+        let right_key = (
+            right["workspace_id"].as_str().unwrap_or_default(),
+            right["file_id"].as_str().unwrap_or_default(),
+            right["mount_path"].as_str().unwrap_or_default(),
+        );
+        left_key.cmp(&right_key)
+    });
+
+    let descriptor = canonicalize_json(serde_json::json!({
+        "workflow_id": request.workflow_id,
+        "version": request.version,
+        "session": request.session,
+        "input": request.input,
+        "source_system": request.source_system,
+        "source_reference": request.source_reference,
+        "credential_binding_ids": credential_binding_ids,
+        "workspace_inputs": workspace_inputs,
+        "labels": request.labels,
+    }));
+    let bytes = serde_json::to_vec(&descriptor).map_err(|error| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: format!("failed to encode workflow run request fingerprint: {error}"),
+            }),
+        )
+    })?;
+    Ok(Some(hex::encode(Sha256::digest(bytes))))
+}
+
 async fn create_workflow_run(
     headers: HeaderMap,
     State(state): State<Arc<ApiState>>,
     Json(request): Json<CreateWorkflowRunRequest>,
 ) -> Result<(StatusCode, Json<WorkflowRunResource>), (StatusCode, Json<ErrorResponse>)> {
+    let request_fingerprint = workflow_run_request_fingerprint(&request)?;
     let CreateWorkflowRunRequest {
         workflow_id,
         version: workflow_version_name,
         session,
         input,
+        source_system,
+        source_reference,
+        client_request_id,
         credential_binding_ids,
         workspace_inputs,
         labels,
@@ -1288,6 +1380,31 @@ async fn create_workflow_run(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    if let Some(client_request_id) = client_request_id.as_deref().filter(|value| !value.is_empty())
+    {
+        if let Some(existing_run) = state
+            .session_store
+            .find_workflow_run_by_client_request_id_for_owner(&principal, client_request_id)
+            .await
+            .map_err(map_session_store_error)?
+        {
+            if existing_run.create_request_fingerprint == request_fingerprint {
+                return Ok((
+                    StatusCode::OK,
+                    Json(build_workflow_run_resource(&state, &existing_run).await?),
+                ));
+            }
+            return Err((
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow run client_request_id {} is already bound to a different request",
+                        client_request_id
+                    ),
+                }),
+            ));
+        }
+    }
     let workflow = state
         .session_store
         .get_workflow_definition_for_owner(&principal, workflow_id)
@@ -1362,6 +1479,10 @@ async fn create_workflow_run(
                 workflow_version: version.version.clone(),
                 session_id: session.id,
                 automation_task_id: task.id,
+                source_system,
+                source_reference,
+                client_request_id,
+                create_request_fingerprint: request_fingerprint,
                 source_snapshot,
                 extensions: session.extensions.clone(),
                 credential_bindings,
@@ -1372,26 +1493,33 @@ async fn create_workflow_run(
         )
         .await
         .map_err(map_session_store_error)?;
-    if let Err(error) = state
-        .workflow_lifecycle
-        .ensure_run_started(&version.executor, run.id)
-        .await
-    {
-        warn!(
-            run_id = %run.id,
-            workflow_definition_id = %workflow.id,
-            workflow_version = %version.version,
-            "failed to auto-launch workflow worker: {error}"
-        );
+    if run.created {
+        if let Err(error) = state
+            .workflow_lifecycle
+            .ensure_run_started(&version.executor, run.run.id)
+            .await
+        {
+            warn!(
+                run_id = %run.run.id,
+                workflow_definition_id = %workflow.id,
+                workflow_version = %version.version,
+                "failed to auto-launch workflow worker: {error}"
+            );
+        }
     }
+    let created = run.created;
     let run = state
         .session_store
-        .get_workflow_run_by_id(run.id)
+        .get_workflow_run_by_id(run.run.id)
         .await
         .map_err(map_session_store_error)?
-        .unwrap_or(run);
+        .unwrap_or(run.run);
     Ok((
-        StatusCode::CREATED,
+        if created {
+            StatusCode::CREATED
+        } else {
+            StatusCode::OK
+        },
         Json(build_workflow_run_resource(&state, &run).await?),
     ))
 }

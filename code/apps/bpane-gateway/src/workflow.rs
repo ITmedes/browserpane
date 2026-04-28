@@ -45,6 +45,10 @@ pub struct PersistWorkflowRunRequest {
     pub workflow_version: String,
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
+    pub source_system: Option<String>,
+    pub source_reference: Option<String>,
+    pub client_request_id: Option<String>,
+    pub create_request_fingerprint: Option<String>,
     pub source_snapshot: Option<WorkflowRunSourceSnapshot>,
     pub extensions: Vec<AppliedExtension>,
     pub credential_bindings: Vec<WorkflowRunCredentialBinding>,
@@ -121,11 +125,17 @@ pub struct StoredWorkflowDefinitionVersion {
 #[derive(Debug, Clone)]
 pub struct StoredWorkflowRun {
     pub id: Uuid,
+    pub owner_subject: String,
+    pub owner_issuer: String,
     pub workflow_definition_id: Uuid,
     pub workflow_definition_version_id: Uuid,
     pub workflow_version: String,
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
+    pub source_system: Option<String>,
+    pub source_reference: Option<String>,
+    pub client_request_id: Option<String>,
+    pub create_request_fingerprint: Option<String>,
     pub source_snapshot: Option<WorkflowRunSourceSnapshot>,
     pub extensions: Vec<AppliedExtension>,
     pub credential_bindings: Vec<WorkflowRunCredentialBinding>,
@@ -398,6 +408,9 @@ pub struct WorkflowRunResource {
     pub workflow_definition_id: Uuid,
     pub workflow_definition_version_id: Uuid,
     pub workflow_version: String,
+    pub source_system: Option<String>,
+    pub source_reference: Option<String>,
+    pub client_request_id: Option<String>,
     pub state: WorkflowRunState,
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
@@ -454,6 +467,12 @@ pub struct WorkflowRunLogListResponse {
     pub logs: Vec<WorkflowRunLogResource>,
 }
 
+#[derive(Debug, Clone)]
+pub struct CreateWorkflowRunResult {
+    pub run: StoredWorkflowRun,
+    pub created: bool,
+}
+
 impl StoredWorkflowDefinition {
     pub fn to_resource(&self) -> WorkflowDefinitionResource {
         WorkflowDefinitionResource {
@@ -499,6 +518,9 @@ impl StoredWorkflowRun {
             workflow_definition_id: self.workflow_definition_id,
             workflow_definition_version_id: self.workflow_definition_version_id,
             workflow_version: self.workflow_version.clone(),
+            source_system: self.source_system.clone(),
+            source_reference: self.source_reference.clone(),
+            client_request_id: self.client_request_id.clone(),
             state: self.state,
             session_id: self.session_id,
             automation_task_id: self.automation_task_id,
