@@ -65,12 +65,14 @@ use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime};
 use crate::session_registry::SessionRegistry;
 use crate::workflow::{
+    derive_workflow_run_intervention_resource,
     PersistWorkflowDefinitionRequest, PersistWorkflowDefinitionVersionRequest,
     PersistWorkflowRunEventRequest, PersistWorkflowRunLogRequest,
     PersistWorkflowRunProducedFileRequest, PersistWorkflowRunRequest, StoredWorkflowDefinition,
     StoredWorkflowDefinitionVersion, StoredWorkflowRun, WorkflowDefinitionListResponse,
     WorkflowDefinitionResource, WorkflowDefinitionVersionResource, WorkflowRunEventListResponse,
-    WorkflowRunEventResource, WorkflowRunLogListResponse, WorkflowRunLogResource,
+    WorkflowRunEventResource, WorkflowRunInterventionResource, WorkflowRunLogListResponse,
+    WorkflowRunLogResource,
     WorkflowRunProducedFileResource, WorkflowRunRecordingResource, WorkflowRunResource,
     WorkflowRunRetentionResource, WorkflowRunSourceSnapshot, WorkflowRunState,
     WorkflowRunTransitionRequest, WorkflowRunWorkspaceInput,
@@ -339,6 +341,30 @@ struct TransitionWorkflowRunRequest {
     message: Option<String>,
     #[serde(default)]
     data: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct SubmitWorkflowRunInputRequest {
+    input: Value,
+    #[serde(default)]
+    comment: Option<String>,
+    #[serde(default)]
+    details: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct ResumeWorkflowRunRequest {
+    #[serde(default)]
+    comment: Option<String>,
+    #[serde(default)]
+    details: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct RejectWorkflowRunRequest {
+    reason: String,
+    #[serde(default)]
+    details: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -2000,6 +2026,232 @@ async fn cancel_workflow_run(
     Ok(Json(build_workflow_run_resource(&state, &run).await?))
 }
 
+async fn submit_workflow_run_input(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<SubmitWorkflowRunInputRequest>,
+) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let run = load_owner_workflow_run(&state, &principal, run_id).await?;
+    ensure_run_awaiting_input(&run)?;
+    let comment = trim_optional_comment(request.comment)?;
+    let intervention = workflow_run_intervention_resource(&state, &run).await?;
+    let resolution_data = workflow_run_intervention_resolution_data(
+        intervention.pending_request.as_ref().map(|request| request.request_id),
+        "submit_input",
+        Some(request.input),
+        None,
+        &principal,
+        request.details,
+    );
+
+    state
+        .session_store
+        .transition_workflow_run(
+            run_id,
+            WorkflowRunTransitionRequest {
+                state: WorkflowRunState::Running,
+                output: run.output.clone(),
+                error: None,
+                artifact_refs: run.artifact_refs.clone(),
+                message: Some(
+                    comment
+                        .clone()
+                        .unwrap_or_else(|| "workflow run resumed with operator input".to_string()),
+                ),
+                data: Some(resolution_data.clone()),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    state
+        .session_store
+        .append_workflow_run_event_for_owner(
+            &principal,
+            run_id,
+            PersistWorkflowRunEventRequest {
+                event_type: "workflow_run.input_submitted".to_string(),
+                message: comment.unwrap_or_else(|| "operator submitted workflow run input".to_string()),
+                data: Some(resolution_data),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    let run = load_owner_workflow_run(&state, &principal, run_id).await?;
+    Ok(Json(build_workflow_run_resource(&state, &run).await?))
+}
+
+async fn resume_workflow_run(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<ResumeWorkflowRunRequest>,
+) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let run = load_owner_workflow_run(&state, &principal, run_id).await?;
+    ensure_run_awaiting_input(&run)?;
+    let comment = trim_optional_comment(request.comment)?;
+    let intervention = workflow_run_intervention_resource(&state, &run).await?;
+    let resolution_data = workflow_run_intervention_resolution_data(
+        intervention.pending_request.as_ref().map(|request| request.request_id),
+        "resume",
+        None,
+        None,
+        &principal,
+        request.details,
+    );
+
+    state
+        .session_store
+        .transition_workflow_run(
+            run_id,
+            WorkflowRunTransitionRequest {
+                state: WorkflowRunState::Running,
+                output: run.output.clone(),
+                error: None,
+                artifact_refs: run.artifact_refs.clone(),
+                message: Some(
+                    comment
+                        .clone()
+                        .unwrap_or_else(|| "workflow run resumed by operator".to_string()),
+                ),
+                data: Some(resolution_data.clone()),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    state
+        .session_store
+        .append_workflow_run_event_for_owner(
+            &principal,
+            run_id,
+            PersistWorkflowRunEventRequest {
+                event_type: "workflow_run.resumed".to_string(),
+                message: comment.unwrap_or_else(|| "operator resumed workflow run".to_string()),
+                data: Some(resolution_data),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    let run = load_owner_workflow_run(&state, &principal, run_id).await?;
+    Ok(Json(build_workflow_run_resource(&state, &run).await?))
+}
+
+async fn reject_workflow_run(
+    headers: HeaderMap,
+    Path(run_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<RejectWorkflowRunRequest>,
+) -> Result<Json<WorkflowRunResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let run = load_owner_workflow_run(&state, &principal, run_id).await?;
+    ensure_run_awaiting_input(&run)?;
+    let reason = request.reason.trim();
+    if reason.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "reason must not be empty".to_string(),
+            }),
+        ));
+    }
+    let intervention = workflow_run_intervention_resource(&state, &run).await?;
+    let resolution_data = workflow_run_intervention_resolution_data(
+        intervention.pending_request.as_ref().map(|request| request.request_id),
+        "reject",
+        None,
+        Some(reason.to_string()),
+        &principal,
+        request.details,
+    );
+
+    state
+        .session_store
+        .transition_workflow_run(
+            run_id,
+            WorkflowRunTransitionRequest {
+                state: WorkflowRunState::Failed,
+                output: run.output.clone(),
+                error: Some(reason.to_string()),
+                artifact_refs: run.artifact_refs.clone(),
+                message: Some("workflow run rejected by operator".to_string()),
+                data: Some(resolution_data.clone()),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    state
+        .session_store
+        .append_workflow_run_event_for_owner(
+            &principal,
+            run_id,
+            PersistWorkflowRunEventRequest {
+                event_type: "workflow_run.rejected".to_string(),
+                message: format!("operator rejected workflow run: {reason}"),
+                data: Some(resolution_data),
+            },
+        )
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })?;
+    let run = load_owner_workflow_run(&state, &principal, run_id).await?;
+    Ok(Json(build_workflow_run_resource(&state, &run).await?))
+}
+
 async fn transition_workflow_run_state(
     headers: HeaderMap,
     Path(run_id): Path<Uuid>,
@@ -2074,30 +2326,7 @@ async fn get_workflow_run_events(
     let run =
         authorize_visible_workflow_run_request_with_automation_access(&headers, &state, run_id)
             .await?;
-    let principal = load_session_owner_principal(&state, run.session_id).await?;
-    let mut events = state
-        .session_store
-        .list_workflow_run_events_for_owner(&principal, run_id)
-        .await
-        .map_err(map_session_store_error)?
-        .into_iter()
-        .map(|event| event.to_resource())
-        .collect::<Vec<WorkflowRunEventResource>>();
-    let task_events = state
-        .session_store
-        .list_automation_task_events_for_owner(&principal, run.automation_task_id)
-        .await
-        .map_err(map_session_store_error)?
-        .into_iter()
-        .map(|event| {
-            WorkflowRunEventResource::from_automation_task(run.id, run.automation_task_id, &event)
-        });
-    events.extend(task_events);
-    events.sort_by(|left, right| {
-        left.created_at
-            .cmp(&right.created_at)
-            .then_with(|| left.id.cmp(&right.id))
-    });
+    let events = workflow_run_event_resources(&state, &run).await?;
     Ok(Json(WorkflowRunEventListResponse { events }))
 }
 
@@ -4253,6 +4482,18 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
             post(cancel_workflow_run),
         )
         .route(
+            "/api/v1/workflow-runs/{run_id}/submit-input",
+            post(submit_workflow_run_input),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/resume",
+            post(resume_workflow_run),
+        )
+        .route(
+            "/api/v1/workflow-runs/{run_id}/reject",
+            post(reject_workflow_run),
+        )
+        .route(
             "/api/v1/workflow-runs/{run_id}/events",
             get(get_workflow_run_events),
         )
@@ -4858,10 +5099,120 @@ async fn build_workflow_run_resource(
         .filter(|recording| workflow_run_recording_matches(run, recording, Utc::now()))
         .map(workflow_run_recording_resource)
         .collect::<Vec<_>>();
+    let intervention = workflow_run_intervention_resource(state, run).await?;
     Ok(run.to_resource(
         recordings,
         workflow_run_retention_resource(state, run),
+        intervention,
     ))
+}
+
+async fn workflow_run_event_resources(
+    state: &ApiState,
+    run: &StoredWorkflowRun,
+) -> Result<Vec<WorkflowRunEventResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = load_session_owner_principal(state, run.session_id).await?;
+    let mut events = state
+        .session_store
+        .list_workflow_run_events_for_owner(&principal, run.id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|event| event.to_resource())
+        .collect::<Vec<WorkflowRunEventResource>>();
+    let task_events = state
+        .session_store
+        .list_automation_task_events_for_owner(&principal, run.automation_task_id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|event| WorkflowRunEventResource::from_automation_task(run.id, run.automation_task_id, &event));
+    events.extend(task_events);
+    events.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    Ok(events)
+}
+
+async fn workflow_run_intervention_resource(
+    state: &ApiState,
+    run: &StoredWorkflowRun,
+) -> Result<WorkflowRunInterventionResource, (StatusCode, Json<ErrorResponse>)> {
+    let events = workflow_run_event_resources(state, run).await?;
+    Ok(derive_workflow_run_intervention_resource(run.state, &events))
+}
+
+async fn load_owner_workflow_run(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    run_id: Uuid,
+) -> Result<StoredWorkflowRun, (StatusCode, Json<ErrorResponse>)> {
+    state
+        .session_store
+        .get_workflow_run_for_owner(principal, run_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow run {run_id} not found"),
+                }),
+            )
+        })
+}
+
+fn ensure_run_awaiting_input(
+    run: &StoredWorkflowRun,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    if run.state != WorkflowRunState::AwaitingInput {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!("workflow run {} is not awaiting input", run.id),
+            }),
+        ));
+    }
+    Ok(())
+}
+
+fn workflow_run_intervention_resolution_data(
+    request_id: Option<Uuid>,
+    action: &str,
+    input: Option<Value>,
+    reason: Option<String>,
+    principal: &AuthenticatedPrincipal,
+    details: Option<Value>,
+) -> Value {
+    serde_json::json!({
+        "intervention_resolution": {
+            "request_id": request_id.map(|value| value.to_string()),
+            "action": action,
+            "input": input,
+            "reason": reason,
+            "actor_subject": principal.subject,
+            "actor_issuer": principal.issuer,
+            "actor_display_name": principal.display_name,
+            "details": details
+        }
+    })
+}
+
+fn trim_optional_comment(
+    comment: Option<String>,
+) -> Result<Option<String>, (StatusCode, Json<ErrorResponse>)> {
+    match comment {
+        Some(comment) if comment.trim().is_empty() => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "comment must not be empty when provided".to_string(),
+            }),
+        )),
+        Some(comment) => Ok(Some(comment.trim().to_string())),
+        None => Ok(None),
+    }
 }
 
 fn workflow_run_recording_matches(
