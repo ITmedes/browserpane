@@ -2,7 +2,8 @@
 mod suite;
 
 use suite::{
-    credentials_extensions, sessions_recordings, support, workflows_events, workspaces_automation,
+    credentials_extensions, recording_artifacts, sessions_recordings, support, workflows_events,
+    workspaces_automation,
 };
 
 #[tokio::test]
@@ -39,4 +40,13 @@ async fn compose_credentials_and_extensions_api_surface() -> anyhow::Result<()> 
     let harness = support::ComposeHarness::connect().await?;
     harness.cleanup_active_sessions().await?;
     credentials_extensions::run(&harness).await
+}
+
+#[tokio::test]
+#[ignore = "requires running local compose stack"]
+async fn compose_recording_artifacts_and_playback_api_surface() -> anyhow::Result<()> {
+    let _guard = support::suite_lock().lock().await;
+    let harness = support::ComposeHarness::connect().await?;
+    harness.cleanup_active_sessions().await?;
+    recording_artifacts::run(&harness).await
 }

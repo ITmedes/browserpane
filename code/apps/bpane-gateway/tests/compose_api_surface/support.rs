@@ -40,6 +40,11 @@ pub struct LocalWorkflowRepo {
     pub commit: String,
 }
 
+pub struct ComposeVisibleFile {
+    _temp_dir: TempDir,
+    pub container_path: String,
+}
+
 impl ComposeHarness {
     pub async fn connect() -> Result<Self> {
         let client = reqwest::Client::builder()
@@ -334,6 +339,28 @@ impl ComposeHarness {
             _temp_dir: temp_dir,
             repository_url,
             commit,
+        })
+    }
+
+    pub fn create_compose_visible_file(
+        &self,
+        file_name: &str,
+        bytes: &[u8],
+    ) -> Result<ComposeVisibleFile> {
+        let temp_root = self.repo_root().join(".tmp");
+        std::fs::create_dir_all(&temp_root)
+            .with_context(|| format!("failed to create temp root {}", temp_root.display()))?;
+        let temp_dir = Builder::new()
+            .prefix("bpane-gateway-compose-file-")
+            .tempdir_in(&temp_root)
+            .context("failed to create compose visible temp dir")?;
+        let file_path = temp_dir.path().join(file_name);
+        std::fs::write(&file_path, bytes)
+            .with_context(|| format!("failed to write {}", file_path.display()))?;
+        let container_path = self.container_visible_path(&file_path)?;
+        Ok(ComposeVisibleFile {
+            _temp_dir: temp_dir,
+            container_path,
         })
     }
 
