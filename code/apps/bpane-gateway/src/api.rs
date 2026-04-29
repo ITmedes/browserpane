@@ -24,7 +24,7 @@ use crate::automation_tasks::{
 };
 use crate::credentials::{
     CredentialBindingListResponse, CredentialBindingProvider, CredentialBindingResource,
-    CredentialInjectionMode, CredentialProvider, CredentialProviderError, CredentialTotpMetadata,
+    CredentialInjectionMode, CredentialProvider, CredentialTotpMetadata,
     PersistCredentialBindingRequest, ResolvedWorkflowRunCredentialBindingResource,
     StoreCredentialSecretRequest, WorkflowRunCredentialBinding,
 };
@@ -35,11 +35,11 @@ use crate::extensions::{
 use crate::idle_stop::schedule_idle_session_stop;
 use crate::recording::{
     prepare_session_recording_playback, FinalizeRecordingArtifactRequest,
-    PreparedSessionRecordingPlayback, RecordingArtifactStore, RecordingArtifactStoreError,
-    RecordingObservability, RecordingObservabilitySnapshot, RecordingPlaybackError,
-    SessionRecordingPlaybackManifest, SessionRecordingPlaybackResource,
+    PreparedSessionRecordingPlayback, RecordingArtifactStore, RecordingObservability,
+    RecordingObservabilitySnapshot, SessionRecordingPlaybackManifest,
+    SessionRecordingPlaybackResource,
 };
-use crate::recording_lifecycle::{RecordingLifecycleError, RecordingLifecycleManager};
+use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{
     SessionAutomationAccessTokenClaims, SessionAutomationAccessTokenManager,
     SessionConnectTicketManager,
@@ -49,8 +49,8 @@ use crate::session_control::{
     PersistCompletedSessionRecordingRequest, SessionLifecycleState, SessionListResponse,
     SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
     SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
-    SessionRecordingTerminationReason, SessionResource, SessionStore, SessionStoreError,
-    SetAutomationDelegateRequest, StoredSession, StoredSessionRecording,
+    SessionRecordingTerminationReason, SessionResource, SessionStore, SetAutomationDelegateRequest,
+    StoredSession, StoredSessionRecording,
 };
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime};
@@ -70,7 +70,7 @@ use crate::workflow::{
 };
 use crate::workflow::{
     validate_workflow_source_entrypoint, WorkflowObservability, WorkflowObservabilitySnapshot,
-    WorkflowSource, WorkflowSourceArchive, WorkflowSourceError, WorkflowSourceResolver,
+    WorkflowSource, WorkflowSourceArchive, WorkflowSourceResolver,
 };
 use crate::workflow_event_delivery::{
     group_attempts_by_delivery, PersistWorkflowEventSubscriptionRequest,
@@ -87,6 +87,7 @@ use crate::workspaces::{
 mod authz;
 mod automation_tasks;
 mod credential_bindings;
+mod errors;
 mod extensions;
 mod file_workspaces;
 mod recordings;
@@ -100,6 +101,7 @@ mod workflow_run_operations;
 mod workflows;
 
 use authz::*;
+use errors::*;
 use resources::*;
 use runtime_access::*;
 
@@ -423,11 +425,6 @@ struct CreateWorkflowEventSubscriptionRequest {
 #[derive(Serialize)]
 struct OkResponse {
     ok: bool,
-}
-
-#[derive(Serialize)]
-struct ErrorResponse {
-    error: String,
 }
 
 #[derive(Serialize)]
@@ -935,186 +932,6 @@ fn resolve_owner_mode(
         ));
     }
     Ok(resolved)
-}
-
-fn map_session_store_error(error: SessionStoreError) -> (StatusCode, Json<ErrorResponse>) {
-    match error {
-        SessionStoreError::ActiveSessionConflict { .. } => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-        SessionStoreError::Conflict(_) => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-        SessionStoreError::NotFound(_) => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-        SessionStoreError::InvalidRequest(_) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-        SessionStoreError::Backend(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-    }
-}
-
-fn map_recording_artifact_store_error(
-    error: RecordingArtifactStoreError,
-) -> (StatusCode, Json<ErrorResponse>) {
-    match error {
-        RecordingArtifactStoreError::InvalidSourcePath(_)
-        | RecordingArtifactStoreError::InvalidReference(_) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-        RecordingArtifactStoreError::Backend(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-    }
-}
-
-fn map_workspace_file_store_error(
-    error: WorkspaceFileStoreError,
-) -> (StatusCode, Json<ErrorResponse>) {
-    match error {
-        WorkspaceFileStoreError::InvalidReference(_)
-        | WorkspaceFileStoreError::InvalidFileName(_) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-        WorkspaceFileStoreError::Backend(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-    }
-}
-
-fn map_workspace_file_content_error(
-    error: WorkspaceFileStoreError,
-) -> (StatusCode, Json<ErrorResponse>) {
-    match error {
-        WorkspaceFileStoreError::Backend(inner) if inner.kind() == std::io::ErrorKind::NotFound => {
-            (
-                StatusCode::GONE,
-                Json(ErrorResponse {
-                    error: "workspace file content is no longer available".to_string(),
-                }),
-            )
-        }
-        other => map_workspace_file_store_error(other),
-    }
-}
-
-fn map_credential_provider_error(
-    error: CredentialProviderError,
-) -> (StatusCode, Json<ErrorResponse>) {
-    match error {
-        CredentialProviderError::InvalidRequest(_) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-        CredentialProviderError::Backend(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-    }
-}
-
-fn map_workflow_source_error(error: WorkflowSourceError) -> (StatusCode, Json<ErrorResponse>) {
-    match error {
-        WorkflowSourceError::Invalid(_) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-        WorkflowSourceError::Resolve(_) | WorkflowSourceError::Materialize(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-    }
-}
-
-fn map_recording_playback_error(
-    error: RecordingPlaybackError,
-) -> (StatusCode, Json<ErrorResponse>) {
-    match error {
-        RecordingPlaybackError::Empty => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-        RecordingPlaybackError::Artifact(RecordingArtifactStoreError::Backend(inner))
-            if inner.kind() == std::io::ErrorKind::NotFound =>
-        {
-            (
-                StatusCode::GONE,
-                Json(ErrorResponse {
-                    error: "a playback segment artifact is no longer available".to_string(),
-                }),
-            )
-        }
-        RecordingPlaybackError::Artifact(inner) => map_recording_artifact_store_error(inner),
-        RecordingPlaybackError::ManifestEncode(_)
-        | RecordingPlaybackError::Io(_)
-        | RecordingPlaybackError::Package(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-    }
-}
-
-fn map_recording_lifecycle_error(
-    error: RecordingLifecycleError,
-) -> (StatusCode, Json<ErrorResponse>) {
-    match error {
-        RecordingLifecycleError::Disabled(_) => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-        RecordingLifecycleError::InvalidConfiguration(_)
-        | RecordingLifecycleError::LaunchFailed(_)
-        | RecordingLifecycleError::Store(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse {
-                error: error.to_string(),
-            }),
-        ),
-    }
 }
 
 #[cfg(test)]
