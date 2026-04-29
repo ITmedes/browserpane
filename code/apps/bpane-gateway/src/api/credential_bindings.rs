@@ -2,6 +2,19 @@ use axum::routing::{get, post};
 
 use super::*;
 
+fn require_credential_provider(
+    state: &ApiState,
+) -> Result<&CredentialProvider, (StatusCode, Json<ErrorResponse>)> {
+    state.credential_provider.as_deref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: "credential bindings are not configured on this gateway".to_string(),
+            }),
+        )
+    })
+}
+
 pub(super) fn credential_binding_routes() -> Router<Arc<ApiState>> {
     Router::new()
         .route(
