@@ -2,8 +2,8 @@
 mod suite;
 
 use suite::{
-    credentials_extensions, recording_artifacts, session_churn, sessions_recordings, support,
-    workflow_run_controls, workflows_events, workspaces_automation,
+    credentials_extensions, recording_artifacts, session_churn, session_compatibility,
+    sessions_recordings, support, workflow_run_controls, workflows_events, workspaces_automation,
 };
 
 #[tokio::test]
@@ -67,4 +67,13 @@ async fn compose_session_churn_api_surface() -> anyhow::Result<()> {
     let harness = support::ComposeHarness::connect().await?;
     harness.cleanup_active_sessions().await?;
     session_churn::run(&harness).await
+}
+
+#[tokio::test]
+#[ignore = "requires running local compose stack"]
+async fn compose_session_compatibility_and_mcp_bridge_api_surface() -> anyhow::Result<()> {
+    let _guard = support::suite_lock().lock().await;
+    let harness = support::ComposeHarness::connect().await?;
+    harness.cleanup_active_sessions().await?;
+    session_compatibility::run(&harness).await
 }
