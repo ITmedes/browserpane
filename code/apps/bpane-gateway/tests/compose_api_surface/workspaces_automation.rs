@@ -25,6 +25,13 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         return Err(anyhow!("workspace {workspace_id} missing from list endpoint"));
     }
 
+    let fetched_workspace = harness
+        .get_json(&format!("/api/v1/file-workspaces/{workspace_id}"))
+        .await?;
+    if fetched_workspace["id"] != json!(workspace_id) {
+        return Err(anyhow!("workspace lookup returned the wrong resource"));
+    }
+
     let file = harness
         .post_bytes(
             &format!("/api/v1/file-workspaces/{workspace_id}/files"),
@@ -209,6 +216,15 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     let _deleted_session = harness
         .delete_json(&format!("/api/v1/sessions/{session_id}"))
         .await?;
+
+    let refreshed_workspaces = harness.get_json("/api/v1/file-workspaces").await?;
+    let refreshed_workspaces = json_array(&refreshed_workspaces, "workspaces")?;
+    if !refreshed_workspaces
+        .iter()
+        .any(|candidate| candidate.get("id") == Some(&json!(workspace_id)))
+    {
+        return Err(anyhow!("workspace resource disappeared unexpectedly after file deletion"));
+    }
 
     Ok(())
 }

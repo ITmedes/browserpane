@@ -134,5 +134,17 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         return Err(anyhow!("session delete did not stop the session resource"));
     }
 
+    let refreshed_sessions = harness.get_json("/api/v1/sessions").await?;
+    let refreshed_sessions = json_array(&refreshed_sessions, "sessions")?;
+    let stopped_session = refreshed_sessions
+        .iter()
+        .find(|session| session.get("id") == Some(&json!(session_id)))
+        .ok_or_else(|| anyhow!("stopped session {session_id} disappeared from session list"))?;
+    if stopped_session["state"] != json!("stopped") {
+        return Err(anyhow!(
+            "stopped session {session_id} did not remain visible with stopped state"
+        ));
+    }
+
     Ok(())
 }

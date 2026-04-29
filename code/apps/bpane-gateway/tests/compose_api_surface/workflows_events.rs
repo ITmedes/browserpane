@@ -41,6 +41,15 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         ));
     }
 
+    let fetched_subscription = harness
+        .get_json(&format!(
+            "/api/v1/workflow-event-subscriptions/{subscription_id}"
+        ))
+        .await?;
+    if fetched_subscription["id"] != json!(subscription_id) {
+        return Err(anyhow!("workflow event subscription lookup returned the wrong resource"));
+    }
+
     let output_workspace = harness
         .post_json(
             "/api/v1/file-workspaces",
@@ -86,6 +95,22 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         )
         .await?;
     let workflow_id = json_id(&workflow, "id")?;
+
+    let listed_workflows = harness.get_json("/api/v1/workflows").await?;
+    let listed_workflows = json_array(&listed_workflows, "workflows")?;
+    if !listed_workflows
+        .iter()
+        .any(|candidate| candidate.get("id") == Some(&json!(workflow_id)))
+    {
+        return Err(anyhow!("workflow definition {workflow_id} missing from list endpoint"));
+    }
+
+    let fetched_workflow = harness
+        .get_json(&format!("/api/v1/workflows/{workflow_id}"))
+        .await?;
+    if fetched_workflow["id"] != json!(workflow_id) {
+        return Err(anyhow!("workflow definition lookup returned the wrong resource"));
+    }
 
     let version = harness
         .post_json(
@@ -237,6 +262,11 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         return Err(anyhow!("workflow event deliveries endpoint remained empty"));
     }
 
+    let workflow_operations = harness.get_json("/api/v1/workflow/operations").await?;
+    if !workflow_operations.is_object() {
+        return Err(anyhow!("workflow operations endpoint did not return an object"));
+    }
+
     let deleted_subscription = harness
         .delete_json(&format!(
             "/api/v1/workflow-event-subscriptions/{subscription_id}"
@@ -244,6 +274,19 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .await?;
     if deleted_subscription["id"] != json!(subscription_id) {
         return Err(anyhow!("workflow event subscription delete returned the wrong resource"));
+    }
+
+    let refreshed_subscriptions = harness
+        .get_json("/api/v1/workflow-event-subscriptions")
+        .await?;
+    let refreshed_subscriptions = json_array(&refreshed_subscriptions, "subscriptions")?;
+    if refreshed_subscriptions
+        .iter()
+        .any(|candidate| candidate.get("id") == Some(&json!(subscription_id)))
+    {
+        return Err(anyhow!(
+            "workflow event subscription {subscription_id} still appears after delete"
+        ));
     }
 
     let _deleted_session = harness
