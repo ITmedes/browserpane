@@ -1,6 +1,6 @@
 use super::*;
 
-impl PostgresSessionStore {
+impl WorkflowRunRepository<'_> {
     pub(in crate::session_control) async fn list_workflow_run_events_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -14,6 +14,7 @@ impl PostgresSessionStore {
             return Ok(Vec::new());
         }
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -44,6 +45,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Vec<StoredWorkflowRunEvent>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -78,7 +80,7 @@ impl PostgresSessionStore {
             return Ok(None);
         };
         let now = Utc::now();
-        let mut client = self.db.client().await?;
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -142,7 +144,7 @@ impl PostgresSessionStore {
                 "workflow run event insert returned unexpected id".to_string(),
             ));
         }
-        Self::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
+        PostgresSessionStore::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
         })?;
@@ -158,7 +160,7 @@ impl PostgresSessionStore {
             return Ok(None);
         };
         let now = Utc::now();
-        let mut client = self.db.client().await?;
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -222,7 +224,7 @@ impl PostgresSessionStore {
                 "workflow run event insert returned unexpected id".to_string(),
             ));
         }
-        Self::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
+        PostgresSessionStore::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
         })?;

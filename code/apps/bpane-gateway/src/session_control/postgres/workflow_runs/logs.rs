@@ -1,6 +1,6 @@
 use super::*;
 
-impl PostgresSessionStore {
+impl WorkflowRunRepository<'_> {
     pub(in crate::session_control) async fn list_workflow_run_logs_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -14,6 +14,7 @@ impl PostgresSessionStore {
             return Ok(Vec::new());
         }
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -44,6 +45,7 @@ impl PostgresSessionStore {
     ) -> Result<Option<StoredWorkflowRunLog>, SessionStoreError> {
         let now = Utc::now();
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -96,6 +98,7 @@ impl PostgresSessionStore {
             return Ok(None);
         };
         let log_row = self
+            .store
             .db
             .client()
             .await?
