@@ -40,9 +40,6 @@ impl PostgresSessionStore {
         };
         Ok((store, connection))
     }
-    pub(super) async fn migrate(&self) -> Result<(), SessionStoreError> {
-        run_postgres_migrations(&self.client).await
-    }
 
     pub(super) async fn enqueue_workflow_event_deliveries(
         transaction: &Transaction<'_>,
