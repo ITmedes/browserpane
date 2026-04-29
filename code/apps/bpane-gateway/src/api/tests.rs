@@ -37,7 +37,7 @@ use crate::session_control::{
 use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerProfile};
 use crate::workflow::{WorkflowObservability, WorkflowSourceResolver};
 use crate::workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
-use crate::workspace_file_store::WorkspaceFileStore;
+use crate::workspaces::WorkspaceFileStore;
 
 mod support;
 pub(crate) use support::*;

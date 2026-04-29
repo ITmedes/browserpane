@@ -5,7 +5,6 @@ mod automation_task;
 mod config;
 mod credentials;
 mod extension;
-mod file_workspace;
 mod idle_stop;
 mod recording;
 mod recording_lifecycle;
@@ -21,7 +20,7 @@ mod transport;
 mod workflow;
 mod workflow_event_delivery;
 mod workflow_lifecycle;
-mod workspace_file_store;
+mod workspaces;
 
 use app::GatewayApp;
 use clap::Parser;

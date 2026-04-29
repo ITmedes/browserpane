@@ -4,7 +4,7 @@ use std::time::Duration;
 use crate::api::{self, ApiServerConfig};
 use crate::config::Config;
 use crate::transport::{TransportServer, TransportServerConfig};
-use crate::workspace_file_store::WorkspaceFileStore;
+use crate::workspaces::WorkspaceFileStore;
 
 mod builders;
 

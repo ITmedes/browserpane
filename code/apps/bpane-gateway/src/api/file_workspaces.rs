@@ -287,7 +287,7 @@ async fn authorize_file_workspace_request(
     headers: &HeaderMap,
     state: &ApiState,
     workspace_id: Uuid,
-) -> Result<crate::file_workspace::StoredFileWorkspace, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<crate::workspaces::StoredFileWorkspace, (StatusCode, Json<ErrorResponse>)> {
     let principal = authorize_api_request(headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
@@ -311,7 +311,7 @@ async fn authorize_file_workspace_file_request(
     state: &ApiState,
     workspace_id: Uuid,
     file_id: Uuid,
-) -> Result<crate::file_workspace::StoredFileWorkspaceFile, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<crate::workspaces::StoredFileWorkspaceFile, (StatusCode, Json<ErrorResponse>)> {
     let principal = authorize_api_request(headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;

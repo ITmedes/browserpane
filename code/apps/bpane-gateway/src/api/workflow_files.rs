@@ -178,7 +178,7 @@ async fn persist_workflow_source_archive_file(
     workflow: &StoredWorkflowDefinition,
     version: &StoredWorkflowDefinitionVersion,
     archive: WorkflowSourceArchive,
-) -> Result<crate::file_workspace::StoredFileWorkspaceFile, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<crate::workspaces::StoredFileWorkspaceFile, (StatusCode, Json<ErrorResponse>)> {
     let WorkflowSourceArchive {
         source,
         file_name,

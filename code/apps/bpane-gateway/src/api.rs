@@ -32,10 +32,6 @@ use crate::extension::{
     AppliedExtension, ExtensionDefinitionListResponse, ExtensionDefinitionResource,
     ExtensionVersionResource, PersistExtensionDefinitionRequest, PersistExtensionVersionRequest,
 };
-use crate::file_workspace::{
-    FileWorkspaceFileListResponse, FileWorkspaceFileResource, FileWorkspaceListResponse,
-    FileWorkspaceResource, PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest,
-};
 use crate::idle_stop::schedule_idle_session_stop;
 use crate::recording::{
     prepare_session_recording_playback, FinalizeRecordingArtifactRequest,
@@ -82,7 +78,9 @@ use crate::workflow_event_delivery::{
     WorkflowEventSubscriptionResource,
 };
 use crate::workflow_lifecycle::WorkflowLifecycleManager;
-use crate::workspace_file_store::{
+use crate::workspaces::{
+    FileWorkspaceFileListResponse, FileWorkspaceFileResource, FileWorkspaceListResponse,
+    FileWorkspaceResource, PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest,
     StoreWorkspaceFileRequest, WorkspaceFileStore, WorkspaceFileStoreError,
 };
 
