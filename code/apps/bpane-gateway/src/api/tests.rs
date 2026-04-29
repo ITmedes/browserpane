@@ -19,9 +19,10 @@ use zip::ZipArchive;
 
 use super::*;
 use crate::auth::AuthValidator;
-use crate::credential_provider::{
-    CredentialProvider, CredentialProviderBackend, CredentialProviderError,
-    ResolvedCredentialSecret, StoreCredentialSecretRequest, StoredCredentialSecret,
+use crate::credentials::provider::{CredentialProviderBackend, ResolvedCredentialSecret};
+use crate::credentials::{
+    CredentialProvider, CredentialProviderError, StoreCredentialSecretRequest,
+    StoredCredentialSecret,
 };
 use crate::recording::{
     prepare_session_recording_playback, RecordingArtifactStore, RecordingObservability,

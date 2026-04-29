@@ -17,7 +17,7 @@ use crate::automation_task::{
     AutomationTaskTransitionRequest, PersistAutomationTaskRequest, StoredAutomationTask,
     StoredAutomationTaskEvent, StoredAutomationTaskLog,
 };
-use crate::credential_binding::{
+use crate::credentials::{
     CredentialBindingProvider, CredentialInjectionMode, CredentialTotpMetadata,
     PersistCredentialBindingRequest, StoredCredentialBinding, WorkflowRunCredentialBinding,
 };

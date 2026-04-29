@@ -9,7 +9,7 @@ use wtransport::Identity;
 
 use crate::auth::{AuthValidator, OidcConfig};
 use crate::config::Config;
-use crate::credential_provider::{CredentialProvider, VaultKvV2CredentialProvider};
+use crate::credentials::{CredentialProvider, VaultKvV2CredentialProvider};
 use crate::recording::{RecordingArtifactStore, RecordingObservability, RecordingRetentionManager};
 use crate::recording_lifecycle::{RecordingLifecycleManager, RecordingWorkerConfig};
 use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};

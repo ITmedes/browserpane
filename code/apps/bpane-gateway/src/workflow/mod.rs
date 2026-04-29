@@ -21,9 +21,7 @@ use crate::automation_task::{
     AutomationTaskLogStream, AutomationTaskState, StoredAutomationTaskEvent,
     StoredAutomationTaskLog,
 };
-use crate::credential_binding::{
-    WorkflowRunCredentialBinding, WorkflowRunCredentialBindingResource,
-};
+use crate::credentials::{WorkflowRunCredentialBinding, WorkflowRunCredentialBindingResource};
 use crate::extension::{AppliedExtension, AppliedExtensionResource};
 use crate::session_control::SessionLifecycleState;
 

@@ -22,13 +22,11 @@ use crate::automation_task::{
     AutomationTaskLogStream, AutomationTaskResource, AutomationTaskSessionSource,
     AutomationTaskState, AutomationTaskTransitionRequest, PersistAutomationTaskRequest,
 };
-use crate::credential_binding::{
+use crate::credentials::{
     CredentialBindingListResponse, CredentialBindingProvider, CredentialBindingResource,
-    CredentialInjectionMode, CredentialTotpMetadata, PersistCredentialBindingRequest,
-    ResolvedWorkflowRunCredentialBindingResource, WorkflowRunCredentialBinding,
-};
-use crate::credential_provider::{
-    CredentialProvider, CredentialProviderError, StoreCredentialSecretRequest,
+    CredentialInjectionMode, CredentialProvider, CredentialProviderError, CredentialTotpMetadata,
+    PersistCredentialBindingRequest, ResolvedWorkflowRunCredentialBindingResource,
+    StoreCredentialSecretRequest, WorkflowRunCredentialBinding,
 };
 use crate::extension::{
     AppliedExtension, ExtensionDefinitionListResponse, ExtensionDefinitionResource,

@@ -60,9 +60,7 @@ async fn create_credential_binding(
             })
             .await
             .map_err(map_credential_provider_error)?,
-        (None, Some(external_ref)) => {
-            crate::credential_provider::StoredCredentialSecret { external_ref }
-        }
+        (None, Some(external_ref)) => crate::credentials::StoredCredentialSecret { external_ref },
         (None, None) => {
             return Err((
                 StatusCode::BAD_REQUEST,
