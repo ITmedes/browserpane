@@ -1458,13 +1458,9 @@ impl InMemorySessionStore {
             return Ok(None);
         };
 
-        let task_state: AutomationTaskState = request.state.into();
-        let task_event_type = automation_task_event_type_for_run_state(request.state).to_string();
-        let task_event_message = request.message.clone().unwrap_or_else(|| {
-            automation_task_default_message_for_run_state(request.state).to_string()
-        });
         let now = Utc::now();
 
+        let plan;
         let task = {
             let mut tasks = self.automation_tasks.lock().await;
             let Some(task) = tasks
@@ -1476,71 +1472,52 @@ impl InMemorySessionStore {
                     run.automation_task_id, id
                 )));
             };
-            if task.state.is_terminal() {
-                return Err(SessionStoreError::Conflict(format!(
-                    "automation task {} is already terminal",
-                    task.id
-                )));
-            }
-            if !task.state.can_transition_to(task_state) {
-                return Err(SessionStoreError::Conflict(format!(
-                    "automation task {} cannot transition from {} to {}",
-                    task.id,
-                    task.state.as_str(),
-                    task_state.as_str()
-                )));
-            }
-            if matches!(
-                task_state,
-                AutomationTaskState::Starting
-                    | AutomationTaskState::Running
-                    | AutomationTaskState::AwaitingInput
-            ) && task.started_at.is_none()
-            {
-                task.started_at = Some(now);
-            }
-            if task_state.is_terminal() {
-                task.completed_at = Some(now);
-            }
-            task.state = task_state;
-            task.output = request.output.clone();
-            task.error = request.error.clone();
-            task.artifact_refs = request.artifact_refs.clone();
-            task.updated_at = now;
+            let current_task = task.clone();
+            let transition_plan = plan_workflow_run_transition(&current_task, &request, now)
+                .map_err(|error| SessionStoreError::Conflict(error.to_string()))?;
+            task.state = transition_plan.task_state;
+            task.output = transition_plan.task_output.clone();
+            task.error = transition_plan.task_error.clone();
+            task.artifact_refs = transition_plan.task_artifact_refs.clone();
+            task.started_at = transition_plan.task_started_at;
+            task.completed_at = transition_plan.task_completed_at;
+            task.updated_at = transition_plan.task_updated_at;
+            plan = transition_plan;
             task.clone()
         };
-
         self.automation_task_events
             .lock()
             .await
             .push(StoredAutomationTaskEvent {
                 id: Uuid::now_v7(),
                 task_id: task.id,
-                event_type: task_event_type,
-                message: task_event_message,
-                data: request.data.clone(),
+                event_type: plan.task_event_type.clone(),
+                message: plan.task_event_message.clone(),
+                data: plan.task_event_data.clone(),
                 created_at: now,
             });
 
-        let run_message = request
-            .message
-            .unwrap_or_else(|| workflow_run_default_message(request.state).to_string());
         let run = {
             let mut runs = self.workflow_runs.lock().await;
             let Some(run) = runs.iter_mut().find(|run| run.id == id) else {
                 return Ok(None);
             };
-            sync_workflow_run_with_task(run, &task);
-            run.updated_at = now;
+            run.state = plan.run_state;
+            run.output = plan.run_output.clone();
+            run.error = plan.run_error.clone();
+            run.artifact_refs = plan.run_artifact_refs.clone();
+            run.started_at = plan.run_started_at;
+            run.completed_at = plan.run_completed_at;
+            run.updated_at = plan.run_updated_at;
             run.clone()
         };
 
         let event = StoredWorkflowRunEvent {
             id: Uuid::now_v7(),
             run_id: id,
-            event_type: workflow_run_event_type(request.state).to_string(),
-            message: run_message,
-            data: request.data,
+            event_type: plan.run_event_type,
+            message: plan.run_event_message,
+            data: plan.run_event_data,
             created_at: now,
         };
         self.workflow_run_events.lock().await.push(event.clone());
@@ -1601,42 +1578,35 @@ impl InMemorySessionStore {
             return Ok(Some(current_run));
         }
 
-        let target_state: WorkflowRunState = task.state.into();
-        let artifact_refs = task.artifact_refs.clone();
-        if current_run.state == target_state
-            && current_run.output == task.output
-            && current_run.error == task.error
-            && current_run.artifact_refs == artifact_refs
-            && current_run.started_at == task.started_at
-            && current_run.completed_at == task.completed_at
-        {
-            return Ok(Some(current_run));
-        }
-
         let now = Utc::now();
+        let (decision, plan) = plan_workflow_run_reconciliation(&current_run, &task, now);
+        match decision {
+            WorkflowRunReconciliationDecision::NotTerminal
+            | WorkflowRunReconciliationDecision::Unchanged => return Ok(Some(current_run)),
+            WorkflowRunReconciliationDecision::Update => {}
+        }
+        let plan = plan.expect("workflow run reconciliation update plan must exist");
         let run = {
             let mut runs = self.workflow_runs.lock().await;
             let Some(run) = runs.iter_mut().find(|run| run.id == id) else {
                 return Ok(None);
             };
-            run.state = target_state;
-            run.output = task.output.clone();
-            run.error = task.error.clone();
-            run.artifact_refs = artifact_refs;
-            run.started_at = task.started_at;
-            run.completed_at = task.completed_at;
-            run.updated_at = now;
+            run.state = plan.run_state;
+            run.output = plan.run_output.clone();
+            run.error = plan.run_error.clone();
+            run.artifact_refs = plan.run_artifact_refs.clone();
+            run.started_at = plan.run_started_at;
+            run.completed_at = plan.run_completed_at;
+            run.updated_at = plan.run_updated_at;
             run.clone()
         };
 
         let event = StoredWorkflowRunEvent {
             id: Uuid::now_v7(),
             run_id: id,
-            event_type: workflow_run_event_type(target_state).to_string(),
-            message: "workflow run reconciled from terminal automation task state".to_string(),
-            data: Some(serde_json::json!({
-                "reconciled_from": "automation_task"
-            })),
+            event_type: plan.run_event_type,
+            message: plan.run_event_message,
+            data: plan.run_event_data,
             created_at: now,
         };
         self.workflow_run_events.lock().await.push(event.clone());

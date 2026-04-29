@@ -61,12 +61,14 @@ mod rows;
 mod store;
 mod types;
 mod validation;
+mod workflow_run_policy;
 
 use in_memory::*;
 use migrations::*;
 use postgres::*;
 use rows::*;
 use validation::*;
+use workflow_run_policy::*;
 
 pub use store::*;
 pub use types::*;

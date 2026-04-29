@@ -97,40 +97,11 @@ impl PostgresSessionStore {
                     "failed to lock automation task for workflow run transition: {error}"
                 ))
             })?;
-        let current_task = row_to_stored_automation_task(&task_row)?;
-        let task_state: AutomationTaskState = request.state.into();
-        if current_task.state.is_terminal() {
-            return Err(SessionStoreError::Conflict(format!(
-                "automation task {} is already terminal",
-                current_task.id
-            )));
-        }
-        if !current_task.state.can_transition_to(task_state) {
-            return Err(SessionStoreError::Conflict(format!(
-                "automation task {} cannot transition from {} to {}",
-                current_task.id,
-                current_task.state.as_str(),
-                task_state.as_str()
-            )));
-        }
-
         let now = Utc::now();
-        let started_at = if matches!(
-            task_state,
-            AutomationTaskState::Starting
-                | AutomationTaskState::Running
-                | AutomationTaskState::AwaitingInput
-        ) {
-            current_task.started_at.or(Some(now))
-        } else {
-            current_task.started_at
-        };
-        let completed_at = if task_state.is_terminal() {
-            Some(now)
-        } else {
-            current_task.completed_at
-        };
-        let artifact_refs = json_string_array(&request.artifact_refs);
+        let current_task = row_to_stored_automation_task(&task_row)?;
+        let plan = plan_workflow_run_transition(&current_task, &request, now)
+            .map_err(|error| SessionStoreError::Conflict(error.to_string()))?;
+        let artifact_refs = json_string_array(&plan.task_artifact_refs);
         let task_row = transaction
             .query_one(
                 r#"
@@ -167,13 +138,13 @@ impl PostgresSessionStore {
                 "#,
                 &[
                     &current_task.id,
-                    &task_state.as_str(),
-                    &request.output,
-                    &request.error,
+                    &plan.task_state.as_str(),
+                    &plan.task_output,
+                    &plan.task_error,
                     &artifact_refs,
-                    &started_at,
-                    &completed_at,
-                    &now,
+                    &plan.task_started_at,
+                    &plan.task_completed_at,
+                    &plan.task_updated_at,
                 ],
             )
             .await
@@ -184,9 +155,6 @@ impl PostgresSessionStore {
             })?;
         let task = row_to_stored_automation_task(&task_row)?;
 
-        let task_message = request.message.clone().unwrap_or_else(|| {
-            automation_task_default_message_for_run_state(request.state).to_string()
-        });
         transaction
             .execute(
                 r#"
@@ -203,9 +171,9 @@ impl PostgresSessionStore {
                 &[
                     &Uuid::now_v7(),
                     &task.id,
-                    &automation_task_event_type_for_run_state(request.state),
-                    &task_message,
-                    &request.data,
+                    &plan.task_event_type,
+                    &plan.task_event_message,
+                    &plan.task_event_data,
                     &now,
                 ],
             )
@@ -260,13 +228,13 @@ impl PostgresSessionStore {
                 "#,
                 &[
                     &id,
-                    &request.state.as_str(),
-                    &task.output,
-                    &task.error,
-                    &json_string_array(&task.artifact_refs),
-                    &task.started_at,
-                    &task.completed_at,
-                    &task.updated_at,
+                    &plan.run_state.as_str(),
+                    &plan.run_output,
+                    &plan.run_error,
+                    &json_string_array(&plan.run_artifact_refs),
+                    &plan.run_started_at,
+                    &plan.run_completed_at,
+                    &plan.run_updated_at,
                 ],
             )
             .await
@@ -274,15 +242,12 @@ impl PostgresSessionStore {
                 SessionStoreError::Backend(format!("failed to update workflow run state: {error}"))
             })?;
 
-        let run_message = request
-            .message
-            .unwrap_or_else(|| workflow_run_default_message(request.state).to_string());
         let event = StoredWorkflowRunEvent {
             id: Uuid::now_v7(),
             run_id: id,
-            event_type: workflow_run_event_type(request.state).to_string(),
-            message: run_message.clone(),
-            data: request.data.clone(),
+            event_type: plan.run_event_type,
+            message: plan.run_event_message.clone(),
+            data: plan.run_event_data,
             created_at: now,
         };
         transaction
@@ -302,7 +267,7 @@ impl PostgresSessionStore {
                     &event.id,
                     &id,
                     &event.event_type,
-                    &run_message,
+                    &event.message,
                     &event.data,
                     &now,
                 ],
@@ -419,29 +384,20 @@ impl PostgresSessionStore {
                 ))
             })?;
         let current_task = row_to_stored_automation_task(&task_row)?;
-        if !current_task.state.is_terminal() {
-            transaction.commit().await.map_err(|error| {
-                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
-            })?;
-            return Ok(Some(current_run));
-        }
-
-        let target_state: WorkflowRunState = current_task.state.into();
-        if current_run.state == target_state
-            && current_run.output == current_task.output
-            && current_run.error == current_task.error
-            && current_run.artifact_refs == current_task.artifact_refs
-            && current_run.started_at == current_task.started_at
-            && current_run.completed_at == current_task.completed_at
-        {
-            transaction.commit().await.map_err(|error| {
-                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
-            })?;
-            return Ok(Some(current_run));
-        }
-
         let now = Utc::now();
-        let artifact_refs = json_string_array(&current_task.artifact_refs);
+        let (decision, plan) = plan_workflow_run_reconciliation(&current_run, &current_task, now);
+        match decision {
+            WorkflowRunReconciliationDecision::NotTerminal
+            | WorkflowRunReconciliationDecision::Unchanged => {
+                transaction.commit().await.map_err(|error| {
+                    SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+                })?;
+                return Ok(Some(current_run));
+            }
+            WorkflowRunReconciliationDecision::Update => {}
+        }
+        let plan = plan.expect("workflow run reconciliation update plan must exist");
+        let artifact_refs = json_string_array(&plan.run_artifact_refs);
         let run_row = transaction
             .query_one(
                 r#"
@@ -486,13 +442,13 @@ impl PostgresSessionStore {
                 "#,
                 &[
                     &id,
-                    &target_state.as_str(),
-                    &current_task.output,
-                    &current_task.error,
+                    &plan.run_state.as_str(),
+                    &plan.run_output,
+                    &plan.run_error,
                     &artifact_refs,
-                    &current_task.started_at,
-                    &current_task.completed_at,
-                    &now,
+                    &plan.run_started_at,
+                    &plan.run_completed_at,
+                    &plan.run_updated_at,
                 ],
             )
             .await
@@ -505,11 +461,9 @@ impl PostgresSessionStore {
         let event = StoredWorkflowRunEvent {
             id: Uuid::now_v7(),
             run_id: id,
-            event_type: workflow_run_event_type(target_state).to_string(),
-            message: "workflow run reconciled from terminal automation task state".to_string(),
-            data: Some(serde_json::json!({
-                "reconciled_from": "automation_task"
-            })),
+            event_type: plan.run_event_type,
+            message: plan.run_event_message,
+            data: plan.run_event_data,
             created_at: now,
         };
         transaction
