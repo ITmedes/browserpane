@@ -52,6 +52,8 @@ use crate::workflow_event_delivery::{
 };
 use crate::workflow_source::WorkflowSource;
 
+mod extensions_store;
+mod file_workspaces_store;
 mod in_memory;
 mod migrations;
 mod postgres;
