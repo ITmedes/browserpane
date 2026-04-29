@@ -171,9 +171,9 @@ impl PostgresSessionStore {
     ) -> Result<StoredFileWorkspace, SessionStoreError> {
         let now = Utc::now();
         let row = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query_one(
                 r#"
                 INSERT INTO control_file_workspaces (
@@ -219,9 +219,9 @@ impl PostgresSessionStore {
         principal: &AuthenticatedPrincipal,
     ) -> Result<Vec<StoredFileWorkspace>, SessionStoreError> {
         let rows = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query(
                 r#"
                 SELECT
@@ -253,9 +253,9 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredFileWorkspace>, SessionStoreError> {
         let row = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query_opt(
                 r#"
                 SELECT
@@ -298,9 +298,9 @@ impl PostgresSessionStore {
 
         let now = Utc::now();
         let row = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query_one(
                 r#"
                 INSERT INTO control_file_workspace_files (
@@ -361,9 +361,9 @@ impl PostgresSessionStore {
         }
 
         let rows = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query(
                 r#"
                 SELECT
@@ -404,9 +404,9 @@ impl PostgresSessionStore {
         };
 
         let row = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query_opt(
                 r#"
                 SELECT
@@ -449,9 +449,9 @@ impl PostgresSessionStore {
         };
 
         let row = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query_opt(
                 r#"
                 DELETE FROM control_file_workspace_files

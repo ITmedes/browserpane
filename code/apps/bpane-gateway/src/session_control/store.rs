@@ -88,14 +88,9 @@ impl SessionStore {
         runtime_profile: SessionManagerProfile,
     ) -> Result<Self, SessionStoreError> {
         run_postgres_migrations(database_url).await?;
-        let (store, connection) =
+        let store =
             PostgresSessionStore::connect(database_url, SessionStoreConfig::from(runtime_profile))
                 .await?;
-        tokio::spawn(async move {
-            if let Err(error) = connection.await {
-                tracing::error!("postgres connection error: {error}");
-            }
-        });
         Ok(Self {
             backend: SessionStoreBackend::Postgres(Arc::new(store)),
         })

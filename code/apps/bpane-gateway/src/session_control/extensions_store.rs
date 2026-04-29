@@ -161,9 +161,9 @@ impl PostgresSessionStore {
     ) -> Result<StoredExtensionDefinition, SessionStoreError> {
         let now = Utc::now();
         let row = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query_one(
                 r#"
                 INSERT INTO control_extensions (
@@ -213,9 +213,9 @@ impl PostgresSessionStore {
         principal: &AuthenticatedPrincipal,
     ) -> Result<Vec<StoredExtensionDefinition>, SessionStoreError> {
         let rows = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query(
                 r#"
                 SELECT
@@ -251,9 +251,9 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
         let row = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query_opt(
                 r#"
                 SELECT
@@ -289,9 +289,9 @@ impl PostgresSessionStore {
         enabled: bool,
     ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
         let row = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query_opt(
                 r#"
                 UPDATE control_extensions
@@ -326,7 +326,7 @@ impl PostgresSessionStore {
         principal: &AuthenticatedPrincipal,
         request: PersistExtensionVersionRequest,
     ) -> Result<StoredExtensionVersion, SessionStoreError> {
-        let mut client = self.client.lock().await;
+        let mut client = self.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -425,9 +425,9 @@ impl PostgresSessionStore {
         extension_definition_id: Uuid,
     ) -> Result<Option<StoredExtensionVersion>, SessionStoreError> {
         let row = self
-            .client
-            .lock()
-            .await
+            .db
+            .client()
+            .await?
             .query_opt(
                 r#"
                 SELECT

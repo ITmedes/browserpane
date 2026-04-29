@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
-use tokio_postgres::{Client, Connection, NoTls, Row, Socket, Transaction};
+use tokio_postgres::{NoTls, Row, Transaction};
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
