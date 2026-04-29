@@ -317,7 +317,7 @@ pub struct SessionResource {
     pub idle_timeout_sec: Option<u32>,
     pub labels: HashMap<String, String>,
     pub integration_context: Option<Value>,
-    pub extensions: Vec<crate::extension::AppliedExtensionResource>,
+    pub extensions: Vec<crate::extensions::AppliedExtensionResource>,
     pub recording: SessionRecordingPolicy,
     pub connect: SessionConnectInfo,
     pub runtime: SessionRuntimeInfo,

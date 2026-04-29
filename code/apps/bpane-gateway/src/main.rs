@@ -4,7 +4,7 @@ mod auth;
 mod automation_task;
 mod config;
 mod credentials;
-mod extension;
+mod extensions;
 mod idle_stop;
 mod recording;
 mod recording_lifecycle;

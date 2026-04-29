@@ -22,7 +22,7 @@ use crate::automation_task::{
     StoredAutomationTaskLog,
 };
 use crate::credentials::{WorkflowRunCredentialBinding, WorkflowRunCredentialBindingResource};
-use crate::extension::{AppliedExtension, AppliedExtensionResource};
+use crate::extensions::{AppliedExtension, AppliedExtensionResource};
 use crate::session_control::SessionLifecycleState;
 
 #[derive(Debug, Clone)]
