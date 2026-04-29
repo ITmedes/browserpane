@@ -275,6 +275,11 @@ pub struct AutomationTaskEventListResponse {
     pub events: Vec<AutomationTaskEventResource>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct AutomationTaskLogListResponse {
+    pub logs: Vec<AutomationTaskLogLineResource>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AutomationTaskLogLineResource {
     pub id: Uuid,
@@ -282,11 +287,6 @@ pub struct AutomationTaskLogLineResource {
     pub stream: AutomationTaskLogStream,
     pub message: String,
     pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AutomationTaskLogListResponse {
-    pub logs: Vec<AutomationTaskLogLineResource>,
 }
 
 impl StoredAutomationTask {

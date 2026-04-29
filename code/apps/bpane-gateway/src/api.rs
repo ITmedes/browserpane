@@ -17,7 +17,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
-use crate::automation_task::{
+use crate::automation_tasks::{
     AutomationTaskEventListResponse, AutomationTaskListResponse, AutomationTaskLogListResponse,
     AutomationTaskLogStream, AutomationTaskResource, AutomationTaskSessionSource,
     AutomationTaskState, AutomationTaskTransitionRequest, PersistAutomationTaskRequest,

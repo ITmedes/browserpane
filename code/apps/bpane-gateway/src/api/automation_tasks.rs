@@ -179,7 +179,7 @@ async fn append_automation_task_log(
     State(state): State<Arc<ApiState>>,
     Json(request): Json<AppendAutomationTaskLogRequest>,
 ) -> Result<
-    Json<crate::automation_task::AutomationTaskLogLineResource>,
+    Json<crate::automation_tasks::AutomationTaskLogLineResource>,
     (StatusCode, Json<ErrorResponse>),
 > {
     let _task =

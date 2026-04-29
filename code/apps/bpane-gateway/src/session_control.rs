@@ -12,7 +12,7 @@ use tokio_postgres::{NoTls, Row, Transaction};
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
-use crate::automation_task::{
+use crate::automation_tasks::{
     AutomationTaskLogStream, AutomationTaskSessionSource, AutomationTaskState,
     AutomationTaskTransitionRequest, PersistAutomationTaskRequest, StoredAutomationTask,
     StoredAutomationTaskEvent, StoredAutomationTaskLog,

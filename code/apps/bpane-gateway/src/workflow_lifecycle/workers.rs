@@ -246,7 +246,7 @@ impl WorkflowLifecycleInner {
             .append_workflow_run_log(
                 run_id,
                 crate::workflow::PersistWorkflowRunLogRequest {
-                    stream: crate::automation_task::AutomationTaskLogStream::System,
+                    stream: crate::automation_tasks::AutomationTaskLogStream::System,
                     message: error.clone(),
                 },
             )

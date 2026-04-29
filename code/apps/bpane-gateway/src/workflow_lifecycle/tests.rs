@@ -10,7 +10,7 @@ use tokio::time::sleep;
 
 use super::*;
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
-use crate::automation_task::{AutomationTaskSessionSource, PersistAutomationTaskRequest};
+use crate::automation_tasks::{AutomationTaskSessionSource, PersistAutomationTaskRequest};
 use crate::session_access::SessionAutomationAccessTokenManager;
 use crate::session_control::{
     CreateSessionRequest, SessionOwnerMode, SessionRecordingPolicy, SessionStore,

@@ -140,7 +140,7 @@ impl WorkflowLifecycleInner {
             .append_workflow_run_log(
                 run.id,
                 crate::workflow::PersistWorkflowRunLogRequest {
-                    stream: crate::automation_task::AutomationTaskLogStream::System,
+                    stream: crate::automation_tasks::AutomationTaskLogStream::System,
                     message: "workflow run queued until worker capacity is available".to_string(),
                 },
             )
