@@ -26,9 +26,6 @@ mod transport;
 mod workflow;
 mod workflow_event_delivery;
 mod workflow_lifecycle;
-mod workflow_observability;
-mod workflow_retention;
-mod workflow_source;
 mod workspace_file_store;
 
 use app::GatewayApp;

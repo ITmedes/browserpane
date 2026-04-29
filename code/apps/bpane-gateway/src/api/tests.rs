@@ -35,9 +35,8 @@ use crate::session_control::{
     SessionRecordingState as StoredSessionRecordingState, StoredSessionRecording,
 };
 use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerProfile};
+use crate::workflow::{WorkflowObservability, WorkflowSourceResolver};
 use crate::workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
-use crate::workflow_observability::WorkflowObservability;
-use crate::workflow_source::WorkflowSourceResolver;
 use crate::workspace_file_store::WorkspaceFileStore;
 
 mod support;
