@@ -104,9 +104,13 @@ impl RecordingArtifactStoreBackend for LocalFsRecordingArtifactStore {
 
         match fs::rename(&source_path, &destination).await {
             Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::CrossesDevices => {
+            Err(error) if should_fallback_to_copy(&error) => {
                 fs::copy(&source_path, &destination).await?;
-                fs::remove_file(&source_path).await?;
+                if let Err(error) = fs::remove_file(&source_path).await {
+                    if !should_ignore_source_cleanup_error(&error) {
+                        return Err(error.into());
+                    }
+                }
             }
             Err(error) => return Err(error.into()),
         }
@@ -185,8 +189,21 @@ fn relative_artifact_path(
     PathBuf::from(session_id.to_string()).join(format!("{recording_id}.{extension}"))
 }
 
+fn should_fallback_to_copy(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::CrossesDevices
+        || error.kind() == std::io::ErrorKind::PermissionDenied
+        || error.raw_os_error() == Some(30)
+}
+
+fn should_ignore_source_cleanup_error(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::PermissionDenied || error.raw_os_error() == Some(30)
+}
+
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
     use tempfile::tempdir;
 
     use super::*;
@@ -233,5 +250,48 @@ mod tests {
             error,
             RecordingArtifactStoreError::InvalidReference(_)
         ));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn local_fs_store_copies_read_only_source_without_failing_finalize() {
+        let temp_dir = tempdir().unwrap();
+        let source_dir = temp_dir.path().join("source");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        let source = source_dir.join("source.webm");
+        std::fs::write(&source, b"artifact").unwrap();
+        let mut permissions = std::fs::metadata(&source_dir).unwrap().permissions();
+        permissions.set_mode(0o555);
+        std::fs::set_permissions(&source_dir, permissions).unwrap();
+
+        let root = temp_dir.path().join("artifacts");
+        let store = RecordingArtifactStore::local_fs(root.clone());
+        let session_id = Uuid::now_v7();
+        let recording_id = Uuid::now_v7();
+
+        let artifact = store
+            .finalize(FinalizeRecordingArtifactRequest {
+                session_id,
+                recording_id,
+                format: SessionRecordingFormat::Webm,
+                source_path: source.to_string_lossy().to_string(),
+            })
+            .await
+            .unwrap();
+
+        let mut restore_permissions = std::fs::metadata(&source_dir).unwrap().permissions();
+        restore_permissions.set_mode(0o755);
+        std::fs::set_permissions(&source_dir, restore_permissions).unwrap();
+
+        assert_eq!(
+            artifact.artifact_ref,
+            format!("{LOCAL_FS_REF_PREFIX}{session_id}/{recording_id}.webm")
+        );
+        let bytes = store.read(&artifact.artifact_ref).await.unwrap();
+        assert_eq!(bytes.as_slice(), b"artifact");
+        assert!(root
+            .join(session_id.to_string())
+            .join(format!("{recording_id}.webm"))
+            .exists());
     }
 }
