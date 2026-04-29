@@ -21,7 +21,7 @@ use crate::credentials::{
     CredentialBindingProvider, CredentialInjectionMode, CredentialTotpMetadata,
     PersistCredentialBindingRequest, StoredCredentialBinding, WorkflowRunCredentialBinding,
 };
-use crate::extension::{
+use crate::extensions::{
     AppliedExtension, PersistExtensionDefinitionRequest, PersistExtensionVersionRequest,
     StoredExtensionDefinition, StoredExtensionVersion,
 };

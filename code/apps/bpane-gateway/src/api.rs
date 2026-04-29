@@ -28,7 +28,7 @@ use crate::credentials::{
     PersistCredentialBindingRequest, ResolvedWorkflowRunCredentialBindingResource,
     StoreCredentialSecretRequest, WorkflowRunCredentialBinding,
 };
-use crate::extension::{
+use crate::extensions::{
     AppliedExtension, ExtensionDefinitionListResponse, ExtensionDefinitionResource,
     ExtensionVersionResource, PersistExtensionDefinitionRequest, PersistExtensionVersionRequest,
 };
