@@ -10,8 +10,9 @@ use wtransport::{Connection, SendStream};
 
 use super::bitrate::DatagramStats;
 use super::policy::{adapt_frame_for_client, viewer_can_receive_frame};
-use crate::session::Session;
 use crate::session_hub::SessionHub;
+
+use super::session::Session;
 
 pub(super) struct EgressTaskContext {
     pub session: Arc<Session>,

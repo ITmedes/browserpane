@@ -14,10 +14,11 @@ use super::tasks::{
 };
 use crate::idle_stop::schedule_idle_session_stop;
 use crate::recording_lifecycle::RecordingLifecycleManager;
-use crate::session::Session;
 use crate::session_control::SessionStore;
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
+
+use super::session::Session;
 
 pub(super) struct SessionTaskContext {
     pub connection: wtransport::Connection,
