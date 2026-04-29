@@ -1,151 +1,31 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use hmac::{Hmac, Mac};
 use jsonwebtoken::jwk::{AlgorithmParameters, JwkSet};
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
-use sha2::Sha256;
 use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration};
 
-type HmacSha256 = Hmac<Sha256>;
+use crate::auth::{AuthError, AuthenticatedPrincipal, OidcConfig};
 
-// Development convenience: keep tokens valid for a full day to avoid frequent reconnect issues.
-const TOKEN_TTL_SECS: u64 = 2_592_000; // 30 days
 const JWT_CLOCK_SKEW_SECS: u64 = 30;
 
-#[derive(Debug, Clone)]
-pub struct OidcConfig {
-    pub issuer: String,
-    pub audience: String,
-    pub jwks_url: Option<String>,
+#[derive(Debug, Deserialize)]
+struct OidcDiscoveryResponse {
+    issuer: String,
+    jwks_uri: String,
 }
 
-#[derive(Clone)]
-pub struct AuthValidator {
-    mode: AuthMode,
+#[derive(Debug)]
+struct OidcEndpoints {
+    issuer: String,
+    jwks_url: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AuthenticatedPrincipal {
-    pub subject: String,
-    pub issuer: String,
-    pub display_name: Option<String>,
-    pub client_id: Option<String>,
-}
-
-#[derive(Clone)]
-enum AuthMode {
-    Hmac(HmacTokenValidator),
-    Oidc(Arc<OidcTokenValidator>),
-}
-
-impl AuthValidator {
-    pub fn from_hmac_secret(secret: Vec<u8>) -> Self {
-        Self {
-            mode: AuthMode::Hmac(HmacTokenValidator::new(secret)),
-        }
-    }
-
-    pub async fn from_oidc(config: OidcConfig) -> anyhow::Result<Self> {
-        Ok(Self {
-            mode: AuthMode::Oidc(Arc::new(OidcTokenValidator::new(config).await?)),
-        })
-    }
-
-    pub fn generate_token(&self) -> Option<String> {
-        match &self.mode {
-            AuthMode::Hmac(validator) => Some(validator.generate_token()),
-            AuthMode::Oidc(_) => None,
-        }
-    }
-
-    pub fn is_oidc(&self) -> bool {
-        matches!(self.mode, AuthMode::Oidc(_))
-    }
-
-    pub async fn authenticate(&self, token: &str) -> Result<AuthenticatedPrincipal, AuthError> {
-        match &self.mode {
-            AuthMode::Hmac(validator) => validator.authenticate(token),
-            AuthMode::Oidc(validator) => validator.authenticate(token).await,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct HmacTokenValidator {
-    secret: Vec<u8>,
-}
-
-impl HmacTokenValidator {
-    pub fn new(secret: Vec<u8>) -> Self {
-        Self { secret }
-    }
-
-    pub fn generate_token(&self) -> String {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let timestamp_hex = hex::encode(now.to_le_bytes());
-        let mut mac = HmacSha256::new_from_slice(&self.secret).unwrap();
-        mac.update(&now.to_le_bytes());
-        let signature = hex::encode(mac.finalize().into_bytes());
-        format!("{timestamp_hex}.{signature}")
-    }
-
-    pub fn validate_token(&self, token: &str) -> Result<(), AuthError> {
-        let parts: Vec<&str> = token.split('.').collect();
-        if parts.len() != 2 {
-            return Err(AuthError::MalformedToken);
-        }
-
-        let timestamp_bytes = hex::decode(parts[0]).map_err(|_| AuthError::MalformedToken)?;
-        if timestamp_bytes.len() != 8 {
-            return Err(AuthError::MalformedToken);
-        }
-        let mut ts_arr = [0u8; 8];
-        ts_arr.copy_from_slice(&timestamp_bytes);
-        let timestamp = u64::from_le_bytes(ts_arr);
-
-        let signature = hex::decode(parts[1]).map_err(|_| AuthError::MalformedToken)?;
-
-        let mut mac = HmacSha256::new_from_slice(&self.secret).unwrap();
-        mac.update(&timestamp_bytes);
-        mac.verify_slice(&signature)
-            .map_err(|_| AuthError::InvalidSignature)?;
-
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        if timestamp > now + JWT_CLOCK_SKEW_SECS {
-            return Err(AuthError::Expired);
-        }
-        if now.saturating_sub(timestamp) > TOKEN_TTL_SECS {
-            return Err(AuthError::Expired);
-        }
-
-        Ok(())
-    }
-
-    pub fn authenticate(&self, token: &str) -> Result<AuthenticatedPrincipal, AuthError> {
-        self.validate_token(token)?;
-        let subject_suffix = token.split('.').next().unwrap_or(token);
-        Ok(AuthenticatedPrincipal {
-            subject: format!("legacy-dev-token:{subject_suffix}"),
-            issuer: "bpane-gateway".to_string(),
-            display_name: None,
-            client_id: None,
-        })
-    }
-}
-
-struct OidcTokenValidator {
+pub struct OidcTokenValidator {
     issuer: String,
     audience: String,
     jwks_url: String,
@@ -153,20 +33,14 @@ struct OidcTokenValidator {
     keys: RwLock<HashMap<String, Arc<DecodingKey>>>,
 }
 
-#[derive(Debug, Deserialize)]
-struct OidcDiscoveryDocument {
-    issuer: String,
-    jwks_uri: String,
-}
-
 impl OidcTokenValidator {
-    async fn new(config: OidcConfig) -> anyhow::Result<Self> {
+    pub async fn new(config: OidcConfig) -> anyhow::Result<Self> {
         let client = Client::builder().build()?;
-        let (issuer, jwks_url) = fetch_oidc_endpoints_with_retry(&client, &config).await?;
+        let endpoints = fetch_oidc_endpoints_with_retry(&client, &config).await?;
         let validator = Self {
-            issuer,
+            issuer: endpoints.issuer,
             audience: config.audience,
-            jwks_url,
+            jwks_url: endpoints.jwks_url,
             client,
             keys: RwLock::new(HashMap::new()),
         };
@@ -174,7 +48,7 @@ impl OidcTokenValidator {
         Ok(validator)
     }
 
-    async fn authenticate(&self, token: &str) -> Result<AuthenticatedPrincipal, AuthError> {
+    pub async fn authenticate(&self, token: &str) -> Result<AuthenticatedPrincipal, AuthError> {
         let claims = self.decode_claims(token).await?;
         let subject = claims
             .get("sub")
@@ -291,9 +165,12 @@ impl OidcTokenValidator {
 async fn fetch_oidc_endpoints(
     client: &Client,
     config: &OidcConfig,
-) -> anyhow::Result<(String, String)> {
+) -> anyhow::Result<OidcEndpoints> {
     if let Some(jwks_url) = &config.jwks_url {
-        return Ok((config.issuer.clone(), jwks_url.clone()));
+        return Ok(OidcEndpoints {
+            issuer: config.issuer.clone(),
+            jwks_url: jwks_url.clone(),
+        });
     }
 
     let discovery_url = format!(
@@ -305,15 +182,18 @@ async fn fetch_oidc_endpoints(
         .send()
         .await?
         .error_for_status()?
-        .json::<OidcDiscoveryDocument>()
+        .json::<OidcDiscoveryResponse>()
         .await?;
-    Ok((document.issuer, document.jwks_uri))
+    Ok(OidcEndpoints {
+        issuer: document.issuer,
+        jwks_url: document.jwks_uri,
+    })
 }
 
 async fn fetch_oidc_endpoints_with_retry(
     client: &Client,
     config: &OidcConfig,
-) -> anyhow::Result<(String, String)> {
+) -> anyhow::Result<OidcEndpoints> {
     let max_attempts = 30;
     let mut last_error: Option<anyhow::Error> = None;
     for attempt in 0..max_attempts {
@@ -355,39 +235,3 @@ fn map_jwt_error(error: jsonwebtoken::errors::Error) -> AuthError {
         _ => AuthError::MalformedToken,
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AuthError {
-    MalformedToken,
-    InvalidSignature,
-    Expired,
-    InvalidIssuer,
-    InvalidAudience,
-    UnsupportedAlgorithm,
-    MissingKeyId,
-    UnknownKeyId,
-    KeyFetchFailed,
-    KeyParseFailed,
-}
-
-impl std::fmt::Display for AuthError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::MalformedToken => write!(f, "malformed token"),
-            Self::InvalidSignature => write!(f, "invalid token signature"),
-            Self::Expired => write!(f, "token expired"),
-            Self::InvalidIssuer => write!(f, "invalid token issuer"),
-            Self::InvalidAudience => write!(f, "invalid token audience"),
-            Self::UnsupportedAlgorithm => write!(f, "unsupported token algorithm"),
-            Self::MissingKeyId => write!(f, "token missing key id"),
-            Self::UnknownKeyId => write!(f, "unknown token key id"),
-            Self::KeyFetchFailed => write!(f, "failed to fetch token signing keys"),
-            Self::KeyParseFailed => write!(f, "failed to parse token signing keys"),
-        }
-    }
-}
-
-impl std::error::Error for AuthError {}
-
-#[cfg(test)]
-mod tests;
