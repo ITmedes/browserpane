@@ -59,14 +59,11 @@ impl PostgresSessionStore {
                 ))
             })?;
 
-        for row in rows {
-            let subscription = row_to_stored_workflow_event_subscription(&row)?;
-            if !workflow_event_type_matches(&subscription.event_types, &event.event_type) {
-                continue;
-            }
-            let delivery_id = Uuid::now_v7();
-            let payload =
-                build_workflow_event_delivery_payload(subscription.id, delivery_id, run, event);
+        let subscriptions = rows
+            .iter()
+            .map(row_to_stored_workflow_event_subscription)
+            .collect::<Result<Vec<_>, _>>()?;
+        for delivery in plan_workflow_event_deliveries(&subscriptions, run, event) {
             transaction
                 .execute(
                     r#"
@@ -95,15 +92,15 @@ impl PostgresSessionStore {
                     )
                     "#,
                     &[
-                        &delivery_id,
-                        &subscription.id,
-                        &run.id,
-                        &event.id,
-                        &event.event_type,
-                        &subscription.target_url,
-                        &subscription.signing_secret,
-                        &payload,
-                        &event.created_at,
+                        &delivery.id,
+                        &delivery.subscription_id,
+                        &delivery.run_id,
+                        &delivery.event_id,
+                        &delivery.event_type,
+                        &delivery.target_url,
+                        &delivery.signing_secret,
+                        &delivery.payload,
+                        &delivery.created_at,
                     ],
                 )
                 .await
