@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Bytes;
@@ -9,8 +8,7 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
 use axum::{Json, Router};
-use chrono::{Duration as ChronoDuration, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::Utc;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tracing::{info, warn};
@@ -19,12 +17,11 @@ use uuid::Uuid;
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
 use crate::automation_tasks::{
     AutomationTaskEventListResponse, AutomationTaskListResponse, AutomationTaskLogListResponse,
-    AutomationTaskLogStream, AutomationTaskResource, AutomationTaskSessionSource,
-    AutomationTaskState, AutomationTaskTransitionRequest, PersistAutomationTaskRequest,
+    AutomationTaskResource, AutomationTaskSessionSource, AutomationTaskState,
+    AutomationTaskTransitionRequest, PersistAutomationTaskRequest,
 };
 use crate::credentials::{
-    CredentialBindingListResponse, CredentialBindingProvider, CredentialBindingResource,
-    CredentialInjectionMode, CredentialProvider, CredentialTotpMetadata,
+    CredentialBindingListResponse, CredentialBindingResource, CredentialProvider,
     PersistCredentialBindingRequest, ResolvedWorkflowRunCredentialBindingResource,
     StoreCredentialSecretRequest, WorkflowRunCredentialBinding,
 };
@@ -35,26 +32,20 @@ use crate::extensions::{
 use crate::idle_stop::schedule_idle_session_stop;
 use crate::recording::{
     prepare_session_recording_playback, FinalizeRecordingArtifactRequest,
-    PreparedSessionRecordingPlayback, RecordingArtifactStore, RecordingObservability,
-    RecordingObservabilitySnapshot, SessionRecordingPlaybackManifest,
-    SessionRecordingPlaybackResource,
+    PreparedSessionRecordingPlayback, RecordingObservabilitySnapshot,
+    SessionRecordingPlaybackManifest, SessionRecordingPlaybackResource,
 };
-use crate::recording_lifecycle::RecordingLifecycleManager;
-use crate::session_access::{
-    SessionAutomationAccessTokenClaims, SessionAutomationAccessTokenManager,
-    SessionConnectTicketManager,
-};
+use crate::session_access::SessionAutomationAccessTokenClaims;
 use crate::session_control::{
     CompleteSessionRecordingRequest, CreateSessionRequest, FailSessionRecordingRequest,
     PersistCompletedSessionRecordingRequest, SessionLifecycleState, SessionListResponse,
     SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
     SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
-    SessionRecordingTerminationReason, SessionResource, SessionStore, SetAutomationDelegateRequest,
+    SessionRecordingTerminationReason, SessionResource, SetAutomationDelegateRequest,
     StoredSession, StoredSessionRecording,
 };
 use crate::session_hub::SessionTelemetrySnapshot;
-use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime};
-use crate::session_registry::SessionRegistry;
+use crate::session_manager::{SessionManagerError, SessionRuntime};
 use crate::workflow::{
     derive_workflow_run_admission_resource, derive_workflow_run_intervention_resource,
     derive_workflow_run_runtime_resource, PersistWorkflowDefinitionRequest,
@@ -69,19 +60,17 @@ use crate::workflow::{
     WorkflowRunWorkspaceInput,
 };
 use crate::workflow::{
-    validate_workflow_source_entrypoint, WorkflowObservability, WorkflowObservabilitySnapshot,
-    WorkflowSource, WorkflowSourceArchive, WorkflowSourceResolver,
+    validate_workflow_source_entrypoint, WorkflowObservabilitySnapshot, WorkflowSourceArchive,
 };
 use crate::workflow_event_delivery::{
     group_attempts_by_delivery, PersistWorkflowEventSubscriptionRequest,
     WorkflowEventDeliveryListResponse, WorkflowEventSubscriptionListResponse,
     WorkflowEventSubscriptionResource,
 };
-use crate::workflow_lifecycle::WorkflowLifecycleManager;
 use crate::workspaces::{
     FileWorkspaceFileListResponse, FileWorkspaceFileResource, FileWorkspaceListResponse,
     FileWorkspaceResource, PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest,
-    StoreWorkspaceFileRequest, WorkspaceFileStore, WorkspaceFileStoreError,
+    StoreWorkspaceFileRequest, WorkspaceFileStoreError,
 };
 
 mod authz;
@@ -94,6 +83,7 @@ mod recordings;
 mod resources;
 mod runtime_access;
 mod sessions;
+mod types;
 mod workflow_definitions;
 mod workflow_events;
 mod workflow_files;
@@ -104,357 +94,8 @@ use authz::*;
 use errors::*;
 use resources::*;
 use runtime_access::*;
-
-/// Shared state for the HTTP API.
-struct ApiState {
-    registry: Arc<SessionRegistry>,
-    auth_validator: Arc<AuthValidator>,
-    connect_ticket_manager: Arc<SessionConnectTicketManager>,
-    automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
-    session_store: SessionStore,
-    session_manager: Arc<SessionManager>,
-    credential_provider: Option<Arc<CredentialProvider>>,
-    recording_artifact_store: Arc<RecordingArtifactStore>,
-    workspace_file_store: Arc<WorkspaceFileStore>,
-    workflow_source_resolver: Arc<WorkflowSourceResolver>,
-    recording_observability: Arc<RecordingObservability>,
-    recording_lifecycle: Arc<RecordingLifecycleManager>,
-    workflow_lifecycle: Arc<WorkflowLifecycleManager>,
-    workflow_observability: Arc<WorkflowObservability>,
-    workflow_log_retention: Option<ChronoDuration>,
-    workflow_output_retention: Option<ChronoDuration>,
-    idle_stop_timeout: std::time::Duration,
-    public_gateway_url: String,
-    default_owner_mode: SessionOwnerMode,
-}
-
-pub(crate) struct ApiServerConfig {
-    pub bind_addr: SocketAddr,
-    pub registry: Arc<SessionRegistry>,
-    pub auth_validator: Arc<AuthValidator>,
-    pub connect_ticket_manager: Arc<SessionConnectTicketManager>,
-    pub automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
-    pub session_store: SessionStore,
-    pub session_manager: Arc<SessionManager>,
-    pub credential_provider: Option<Arc<CredentialProvider>>,
-    pub recording_artifact_store: Arc<RecordingArtifactStore>,
-    pub workspace_file_store: Arc<WorkspaceFileStore>,
-    pub workflow_source_resolver: Arc<WorkflowSourceResolver>,
-    pub recording_observability: Arc<RecordingObservability>,
-    pub recording_lifecycle: Arc<RecordingLifecycleManager>,
-    pub workflow_lifecycle: Arc<WorkflowLifecycleManager>,
-    pub workflow_observability: Arc<WorkflowObservability>,
-    pub workflow_log_retention: Option<ChronoDuration>,
-    pub workflow_output_retention: Option<ChronoDuration>,
-    pub idle_stop_timeout: std::time::Duration,
-    pub public_gateway_url: String,
-    pub default_owner_mode: SessionOwnerMode,
-}
-
-const AUTOMATION_ACCESS_TOKEN_HEADER: &str = "x-bpane-automation-access-token";
-const FILE_WORKSPACE_FILE_NAME_HEADER: &str = "x-bpane-file-name";
-const FILE_WORKSPACE_FILE_PROVENANCE_HEADER: &str = "x-bpane-file-provenance";
-const WORKFLOW_RUN_WORKSPACE_ID_HEADER: &str = "x-bpane-workflow-workspace-id";
-
-#[derive(Serialize)]
-struct SessionStatus {
-    browser_clients: u32,
-    viewer_clients: u32,
-    recorder_clients: u32,
-    max_viewers: u32,
-    viewer_slots_remaining: u32,
-    exclusive_browser_owner: bool,
-    mcp_owner: bool,
-    resolution: (u16, u16),
-    recording: SessionRecordingStatus,
-    playback: SessionRecordingPlaybackResource,
-    telemetry: SessionTelemetry,
-}
-
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum SessionRecordingStatusState {
-    Disabled,
-    Idle,
-    Recording,
-    Finalizing,
-    Ready,
-    Failed,
-}
-
-#[derive(Serialize)]
-struct SessionRecordingStatus {
-    configured_mode: SessionRecordingMode,
-    format: SessionRecordingFormat,
-    retention_sec: Option<u32>,
-    state: SessionRecordingStatusState,
-    active_recording_id: Option<String>,
-    recorder_attached: bool,
-    started_at: Option<chrono::DateTime<chrono::Utc>>,
-    bytes_written: Option<u64>,
-    duration_ms: Option<u64>,
-}
-
-#[derive(Serialize)]
-struct SessionTelemetry {
-    joins_accepted: u64,
-    joins_rejected_viewer_cap: u64,
-    last_join_latency_ms: u64,
-    average_join_latency_ms: f64,
-    max_join_latency_ms: u64,
-    full_refresh_requests: u64,
-    full_refresh_tiles_requested: u64,
-    last_full_refresh_tiles: u64,
-    max_full_refresh_tiles: u64,
-    egress_send_stream_lock_acquires_total: u64,
-    egress_send_stream_lock_wait_us_total: u64,
-    egress_send_stream_lock_wait_us_average: f64,
-    egress_send_stream_lock_wait_us_max: u64,
-    egress_lagged_receives_total: u64,
-    egress_lagged_frames_total: u64,
-}
-
-#[derive(Deserialize)]
-struct McpOwnerRequest {
-    width: u16,
-    height: u16,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct AutomationTaskSessionRequest {
-    #[serde(default)]
-    existing_session_id: Option<Uuid>,
-    #[serde(default)]
-    create_session: Option<CreateSessionRequest>,
-}
-
-#[derive(Deserialize)]
-struct CreateAutomationTaskRequest {
-    #[serde(default)]
-    display_name: Option<String>,
-    executor: String,
-    session: AutomationTaskSessionRequest,
-    #[serde(default)]
-    input: Option<Value>,
-    #[serde(default)]
-    labels: std::collections::HashMap<String, String>,
-}
-
-#[derive(Deserialize)]
-struct CreateWorkflowDefinitionRequest {
-    name: String,
-    #[serde(default)]
-    description: Option<String>,
-    #[serde(default)]
-    labels: std::collections::HashMap<String, String>,
-}
-
-#[derive(Deserialize)]
-struct CreateWorkflowDefinitionVersionRequest {
-    version: String,
-    executor: String,
-    entrypoint: String,
-    #[serde(default)]
-    source: Option<WorkflowSource>,
-    #[serde(default)]
-    input_schema: Option<Value>,
-    #[serde(default)]
-    output_schema: Option<Value>,
-    #[serde(default)]
-    default_session: Option<Value>,
-    #[serde(default)]
-    allowed_credential_binding_ids: Vec<String>,
-    #[serde(default)]
-    allowed_extension_ids: Vec<String>,
-    #[serde(default)]
-    allowed_file_workspace_ids: Vec<String>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct CreateWorkflowRunRequest {
-    workflow_id: Uuid,
-    version: String,
-    #[serde(default)]
-    session: Option<AutomationTaskSessionRequest>,
-    #[serde(default)]
-    input: Option<Value>,
-    #[serde(default)]
-    source_system: Option<String>,
-    #[serde(default)]
-    source_reference: Option<String>,
-    #[serde(default)]
-    client_request_id: Option<String>,
-    #[serde(default)]
-    credential_binding_ids: Vec<Uuid>,
-    #[serde(default)]
-    workspace_inputs: Vec<CreateWorkflowRunWorkspaceInputRequest>,
-    #[serde(default)]
-    labels: std::collections::HashMap<String, String>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct CreateWorkflowRunWorkspaceInputRequest {
-    workspace_id: Uuid,
-    file_id: Uuid,
-    #[serde(default)]
-    mount_path: Option<String>,
-}
-
-#[derive(Serialize)]
-struct WorkflowRunProducedFileListResponse {
-    files: Vec<WorkflowRunProducedFileResource>,
-}
-
-#[derive(Deserialize)]
-struct CreateFileWorkspaceRequest {
-    name: String,
-    #[serde(default)]
-    description: Option<String>,
-    #[serde(default)]
-    labels: std::collections::HashMap<String, String>,
-}
-
-#[derive(Deserialize)]
-struct CreateCredentialBindingRequest {
-    name: String,
-    provider: CredentialBindingProvider,
-    #[serde(default)]
-    external_ref: Option<String>,
-    #[serde(default)]
-    namespace: Option<String>,
-    #[serde(default)]
-    allowed_origins: Vec<String>,
-    injection_mode: CredentialInjectionMode,
-    #[serde(default)]
-    totp: Option<CredentialTotpMetadata>,
-    #[serde(default)]
-    secret_payload: Option<Value>,
-    #[serde(default)]
-    labels: std::collections::HashMap<String, String>,
-}
-
-#[derive(Deserialize)]
-struct CreateExtensionDefinitionRequest {
-    name: String,
-    #[serde(default)]
-    description: Option<String>,
-    #[serde(default)]
-    labels: std::collections::HashMap<String, String>,
-}
-
-#[derive(Deserialize)]
-struct CreateExtensionVersionRequest {
-    version: String,
-    install_path: String,
-}
-
-#[derive(Deserialize)]
-struct TransitionAutomationTaskRequest {
-    state: AutomationTaskState,
-    #[serde(default)]
-    output: Option<Value>,
-    #[serde(default)]
-    error: Option<String>,
-    #[serde(default)]
-    artifact_refs: Vec<String>,
-    #[serde(default)]
-    message: Option<String>,
-    #[serde(default)]
-    data: Option<Value>,
-}
-
-#[derive(Deserialize)]
-struct AppendAutomationTaskLogRequest {
-    stream: AutomationTaskLogStream,
-    message: String,
-}
-
-#[derive(Deserialize)]
-struct TransitionWorkflowRunRequest {
-    state: WorkflowRunState,
-    #[serde(default)]
-    output: Option<Value>,
-    #[serde(default)]
-    error: Option<String>,
-    #[serde(default)]
-    artifact_refs: Vec<String>,
-    #[serde(default)]
-    message: Option<String>,
-    #[serde(default)]
-    data: Option<Value>,
-}
-
-#[derive(Deserialize)]
-struct SubmitWorkflowRunInputRequest {
-    input: Value,
-    #[serde(default)]
-    comment: Option<String>,
-    #[serde(default)]
-    details: Option<Value>,
-}
-
-#[derive(Deserialize)]
-struct ResumeWorkflowRunRequest {
-    #[serde(default)]
-    comment: Option<String>,
-    #[serde(default)]
-    details: Option<Value>,
-}
-
-#[derive(Deserialize)]
-struct RejectWorkflowRunRequest {
-    reason: String,
-    #[serde(default)]
-    details: Option<Value>,
-}
-
-#[derive(Deserialize)]
-struct AppendWorkflowRunLogRequest {
-    stream: AutomationTaskLogStream,
-    message: String,
-}
-
-#[derive(Deserialize)]
-struct CreateWorkflowEventSubscriptionRequest {
-    name: String,
-    target_url: String,
-    event_types: Vec<String>,
-    signing_secret: String,
-}
-
-#[derive(Serialize)]
-struct OkResponse {
-    ok: bool,
-}
-
-#[derive(Serialize)]
-struct SessionAccessTokenResponse {
-    session_id: Uuid,
-    token_type: String,
-    token: String,
-    expires_at: chrono::DateTime<chrono::Utc>,
-    connect: crate::session_control::SessionConnectInfo,
-}
-
-#[derive(Serialize)]
-struct SessionAutomationAccessInfo {
-    endpoint_url: String,
-    protocol: String,
-    auth_type: String,
-    auth_header: String,
-    status_path: String,
-    mcp_owner_path: String,
-    compatibility_mode: String,
-}
-
-#[derive(Serialize)]
-struct SessionAutomationAccessResponse {
-    session_id: Uuid,
-    token_type: String,
-    token: String,
-    expires_at: chrono::DateTime<chrono::Utc>,
-    automation: SessionAutomationAccessInfo,
-}
+pub(crate) use types::ApiServerConfig;
+use types::*;
 
 fn require_credential_provider(
     state: &ApiState,
