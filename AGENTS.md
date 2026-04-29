@@ -130,6 +130,7 @@ Current product shape:
 - Full Rust test suite: `cargo test --workspace`
 - Gateway tests: `cargo test -p bpane-gateway`
 - Gateway compose e2e API suite: `cargo test -p bpane-gateway --test compose_api_surface -- --ignored --test-threads=1`
+- Gateway docker-pool compose e2e suite: `cargo test -p bpane-gateway --test compose_api_surface_docker_pool -- --ignored --test-threads=1`
 - Host tests: `cargo test -p bpane-host`
 - Protocol tests: `cargo test -p bpane-protocol`
 
