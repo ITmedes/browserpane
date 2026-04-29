@@ -19,3 +19,11 @@ async fn compose_docker_pool_workflow_admission_api_surface() -> anyhow::Result<
     let harness = support::ComposeHarness::connect().await?;
     docker_pool_runtime::run_workflow_admission(&harness).await
 }
+
+#[tokio::test]
+#[ignore = "requires running local compose stack and temporarily switches gateway to docker_pool mode"]
+async fn compose_docker_pool_workflow_queued_cancel_api_surface() -> anyhow::Result<()> {
+    let _guard = support::suite_lock().lock().await;
+    let harness = support::ComposeHarness::connect().await?;
+    docker_pool_runtime::run_workflow_queued_cancel(&harness).await
+}
