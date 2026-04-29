@@ -1,12 +1,12 @@
 use super::*;
 
-impl PostgresSessionStore {
+impl WorkflowRunRepository<'_> {
     pub(in crate::session_control) async fn create_workflow_run(
         &self,
         principal: &AuthenticatedPrincipal,
         request: PersistWorkflowRunRequest,
     ) -> Result<CreateWorkflowRunResult, SessionStoreError> {
-        let mut client = self.db.client().await?;
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -330,7 +330,7 @@ impl PostgresSessionStore {
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to insert workflow run event: {error}"))
             })?;
-        Self::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
+        PostgresSessionStore::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
 
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
@@ -344,6 +344,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -398,6 +399,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -447,6 +449,7 @@ impl PostgresSessionStore {
         &self,
     ) -> Result<Vec<StoredWorkflowRun>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -503,6 +506,7 @@ impl PostgresSessionStore {
         client_request_id: &str,
     ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?

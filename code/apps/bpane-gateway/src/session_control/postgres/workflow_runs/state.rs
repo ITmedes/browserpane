@@ -1,12 +1,12 @@
 use super::*;
 
-impl PostgresSessionStore {
+impl WorkflowRunRepository<'_> {
     pub(in crate::session_control) async fn transition_workflow_run(
         &self,
         id: Uuid,
         request: WorkflowRunTransitionRequest,
     ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
-        let mut client = self.db.client().await?;
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -279,7 +279,7 @@ impl PostgresSessionStore {
                 ))
             })?;
         let run = row_to_stored_workflow_run(&run_row)?;
-        Self::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
+        PostgresSessionStore::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
 
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
@@ -292,7 +292,7 @@ impl PostgresSessionStore {
         &self,
         id: Uuid,
     ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
-        let mut client = self.db.client().await?;
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -495,7 +495,7 @@ impl PostgresSessionStore {
                 ))
             })?;
         let run = row_to_stored_workflow_run(&run_row)?;
-        Self::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
+        PostgresSessionStore::enqueue_workflow_event_deliveries(&transaction, &run, &event).await?;
 
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
@@ -508,6 +508,7 @@ impl PostgresSessionStore {
         &self,
     ) -> Result<Vec<StoredWorkflowRun>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?

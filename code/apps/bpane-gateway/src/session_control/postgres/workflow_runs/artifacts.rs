@@ -1,12 +1,12 @@
 use super::*;
 
-impl PostgresSessionStore {
+impl WorkflowRunRepository<'_> {
     pub(in crate::session_control) async fn append_workflow_run_produced_file(
         &self,
         id: Uuid,
         request: PersistWorkflowRunProducedFileRequest,
     ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
-        let mut client = self.db.client().await?;
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -184,7 +184,8 @@ impl PostgresSessionStore {
                 ))
             })?;
         let updated_run = row_to_stored_workflow_run(&row)?;
-        Self::enqueue_workflow_event_deliveries(&transaction, &updated_run, &event).await?;
+        PostgresSessionStore::enqueue_workflow_event_deliveries(&transaction, &updated_run, &event)
+            .await?;
 
         transaction.commit().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
@@ -200,6 +201,7 @@ impl PostgresSessionStore {
     ) -> Result<Vec<WorkflowRunLogRetentionCandidate>, SessionStoreError> {
         let retention_secs = retention.num_seconds() as f64;
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -255,7 +257,7 @@ impl PostgresSessionStore {
         run_id: Uuid,
         automation_task_id: Uuid,
     ) -> Result<usize, SessionStoreError> {
-        let mut client = self.db.client().await?;
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -306,6 +308,7 @@ impl PostgresSessionStore {
     ) -> Result<Vec<WorkflowRunOutputRetentionCandidate>, SessionStoreError> {
         let retention_secs = retention.num_seconds() as f64;
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -348,6 +351,7 @@ impl PostgresSessionStore {
         run_id: Uuid,
     ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
