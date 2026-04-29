@@ -32,6 +32,22 @@ const WORKFLOW_DEFINITION_VERSION_COLUMNS: &str = r#"
     created_at
 "#;
 
+const WORKFLOW_DEFINITION_VERSION_COLUMNS_FROM_VERSION_ALIAS: &str = r#"
+    version.id AS id,
+    version.workflow_definition_id AS workflow_definition_id,
+    version.version AS version,
+    version.executor AS executor,
+    version.entrypoint AS entrypoint,
+    version.source AS source,
+    version.input_schema AS input_schema,
+    version.output_schema AS output_schema,
+    version.default_session AS default_session,
+    version.allowed_credential_binding_ids AS allowed_credential_binding_ids,
+    version.allowed_extension_ids AS allowed_extension_ids,
+    version.allowed_file_workspace_ids AS allowed_file_workspace_ids,
+    version.created_at AS created_at
+"#;
+
 pub(super) struct WorkflowDefinitionRepository<'a> {
     store: &'a PostgresSessionStore,
 }
