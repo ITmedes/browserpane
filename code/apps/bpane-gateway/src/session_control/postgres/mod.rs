@@ -1,6 +1,8 @@
 use super::*;
 
 mod db;
+mod extensions;
+mod file_workspaces;
 
 use db::*;
 
