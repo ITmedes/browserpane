@@ -8,8 +8,9 @@ use tracing::{debug, error, warn};
 use wtransport::RecvStream;
 
 use super::policy::viewer_can_forward_frame;
-use crate::session::Session;
 use crate::session_hub::{ResizeResult, SessionHub};
+
+use super::session::Session;
 
 pub(super) fn spawn_browser_to_agent_task(
     session: Arc<Session>,

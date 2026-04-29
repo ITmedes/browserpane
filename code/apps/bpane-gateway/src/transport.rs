@@ -12,6 +12,7 @@ mod egress;
 mod ingress;
 mod policy;
 mod request;
+mod session;
 mod session_task;
 mod tasks;
 
