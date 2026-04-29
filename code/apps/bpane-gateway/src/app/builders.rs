@@ -8,12 +8,11 @@ use tracing::{info, warn};
 use wtransport::Identity;
 
 use crate::auth::{AuthValidator, OidcConfig};
-use crate::automation_access_token::SessionAutomationAccessTokenManager;
 use crate::config::Config;
-use crate::connect_ticket::SessionConnectTicketManager;
 use crate::credential_provider::{CredentialProvider, VaultKvV2CredentialProvider};
 use crate::recording::{RecordingArtifactStore, RecordingObservability, RecordingRetentionManager};
 use crate::recording_lifecycle::{RecordingLifecycleManager, RecordingWorkerConfig};
+use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{SessionOwnerMode, SessionStore};
 use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerDockerConfig};
 use crate::session_registry::SessionRegistry;

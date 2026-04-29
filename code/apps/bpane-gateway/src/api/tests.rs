@@ -19,8 +19,6 @@ use zip::ZipArchive;
 
 use super::*;
 use crate::auth::AuthValidator;
-use crate::automation_access_token::SessionAutomationAccessTokenManager;
-use crate::connect_ticket::SessionConnectTicketManager;
 use crate::credential_provider::{
     CredentialProvider, CredentialProviderBackend, CredentialProviderError,
     ResolvedCredentialSecret, StoreCredentialSecretRequest, StoredCredentialSecret,
@@ -30,6 +28,7 @@ use crate::recording::{
     RecordingRetentionManager,
 };
 use crate::recording_lifecycle::RecordingLifecycleManager;
+use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
     SessionRecordingFormat, SessionRecordingMode, SessionRecordingPolicy,
     SessionRecordingState as StoredSessionRecordingState, StoredSessionRecording,

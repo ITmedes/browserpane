@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthValidator;
 use crate::auth::AuthenticatedPrincipal;
-use crate::automation_access_token::SessionAutomationAccessTokenManager;
+use crate::session_access::SessionAutomationAccessTokenManager;
 use crate::session_control::{
     PersistedWorkflowRunWorkerAssignment, SessionLifecycleState, SessionStore, SessionStoreError,
     WorkflowRunWorkerAssignmentStatus,
