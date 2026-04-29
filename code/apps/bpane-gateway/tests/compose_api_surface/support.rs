@@ -268,6 +268,15 @@ impl ComposeHarness {
             .await
     }
 
+    pub async fn get_json_outcome_without_bearer(
+        &self,
+        path: &str,
+        headers: HeaderMap,
+    ) -> Result<JsonOutcome> {
+        self.send_json_outcome_without_bearer(Method::GET, path, None::<Value>, Some(headers))
+            .await
+    }
+
     pub async fn get_json_with_headers(&self, path: &str, headers: HeaderMap) -> Result<Value> {
         self.send_json(Method::GET, path, None::<Value>, Some(headers))
             .await
@@ -283,12 +292,31 @@ impl ComposeHarness {
             .await
     }
 
+    pub async fn delete_json_outcome_without_bearer(
+        &self,
+        path: &str,
+        headers: HeaderMap,
+    ) -> Result<JsonOutcome> {
+        self.send_json_outcome_without_bearer(Method::DELETE, path, None::<Value>, Some(headers))
+            .await
+    }
+
     pub async fn post_json(&self, path: &str, body: Value) -> Result<Value> {
         self.send_json(Method::POST, path, Some(body), None).await
     }
 
     pub async fn post_json_outcome(&self, path: &str, body: Value) -> Result<JsonOutcome> {
         self.send_json_outcome(Method::POST, path, Some(body), None)
+            .await
+    }
+
+    pub async fn post_json_outcome_without_bearer(
+        &self,
+        path: &str,
+        body: Value,
+        headers: HeaderMap,
+    ) -> Result<JsonOutcome> {
+        self.send_json_outcome_without_bearer(Method::POST, path, Some(body), Some(headers))
             .await
     }
 
@@ -716,6 +744,29 @@ impl ComposeHarness {
         Ok(JsonOutcome { status, body })
     }
 
+    async fn send_json_outcome_without_bearer<T: serde::Serialize>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<T>,
+        headers: Option<HeaderMap>,
+    ) -> Result<JsonOutcome> {
+        let response = self
+            .send_request_without_bearer(method.clone(), path, body, headers)
+            .await?;
+        let status = response.status();
+        let text = response
+            .text()
+            .await
+            .context("failed to read response body")?;
+        let body = serde_json::from_str(&text).with_context(|| {
+            format!(
+                "failed to decode JSON response from {method} {path} with status {status}: {text}"
+            )
+        })?;
+        Ok(JsonOutcome { status, body })
+    }
+
     async fn send_bytes(
         &self,
         method: Method,
@@ -777,6 +828,26 @@ impl ComposeHarness {
             .client
             .request(method.clone(), self.api_url(path))
             .bearer_auth(self.bearer_token());
+        if let Some(headers) = headers {
+            request = request.headers(headers);
+        }
+        if let Some(body) = body {
+            request = request.json(&body);
+        }
+        request
+            .send()
+            .await
+            .with_context(|| format!("failed to call {method} {path}"))
+    }
+
+    async fn send_request_without_bearer<T: serde::Serialize>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<T>,
+        headers: Option<HeaderMap>,
+    ) -> Result<reqwest::Response> {
+        let mut request = self.client.request(method.clone(), self.api_url(path));
         if let Some(headers) = headers {
             request = request.headers(headers);
         }

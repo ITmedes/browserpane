@@ -1,3 +1,4 @@
+pub mod automation_access_boundaries;
 pub mod credentials_extensions;
 pub mod ownership_boundaries;
 pub mod recording_artifacts;
