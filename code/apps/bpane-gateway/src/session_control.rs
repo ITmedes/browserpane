@@ -62,6 +62,7 @@ mod rows;
 mod store;
 mod types;
 mod validation;
+mod workflow_event_delivery_planning;
 mod workflow_run_policy;
 
 use automation_task_policy::*;
@@ -70,6 +71,7 @@ use migrations::*;
 use postgres::*;
 use rows::*;
 use validation::*;
+use workflow_event_delivery_planning::*;
 use workflow_run_policy::*;
 
 pub use store::*;
