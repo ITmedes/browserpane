@@ -593,6 +593,10 @@ async function main() {
         }
         const nextAccess = await automationAccessManager.get(resolved);
         const nextCdpEndpoint = resolveManagedCdpEndpoint(resolved, nextAccess);
+        const previousSession = managedSession;
+        if (previousSession?.id && previousSession.id !== resolved.id) {
+          await unregisterMcpOwner(previousSession, automationAccessManager);
+        }
         await playwrightRuntime.close();
         setManagedSession(resolved);
         console.log(
@@ -621,6 +625,7 @@ async function main() {
         );
         return;
       }
+      await unregisterMcpOwner(managedSession, automationAccessManager);
       await playwrightRuntime.close();
       setManagedSession(null);
       console.log("[mcp-bridge] cleared control session");

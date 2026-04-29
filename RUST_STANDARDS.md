@@ -26,6 +26,30 @@ Standards should be applied with that split in mind. Library crates require stri
 - Avoid hidden allocations and silent lossy behavior in protocol, transport, and media paths.
 - Minimize public API surface. Public Rust APIs are long-term maintenance costs.
 
+## Code Organization
+
+- Keep Rust source files focused and small. These file-size targets apply to Rust source files, not Markdown or other documentation files.
+- Target 150-200 lines per Rust source file for normal production code.
+- Files up to 500 lines are acceptable when the module is still cohesive and splitting it would make the code harder to follow.
+- Treat files over 500 lines as refactor candidates unless they are generated, test fixture-heavy, or have a documented reason to stay together.
+- Keep functions and methods near 50 lines or less.
+- Treat 75 lines as the absolute maximum for a function or method; split into named helpers before exceeding it.
+- Prefer extracting domain-specific helper types/modules over adding large private helper regions to an already large file.
+- Organize substantial test code in separate test modules or files instead of appending large `#[cfg(test)]` blocks to production modules.
+
+## Design Concepts
+
+- Prefer a functional-core, imperative-shell structure: keep side effects at subsystem boundaries and put decisions in deterministic helper functions.
+- Keep entry points, session loops, and task runners as orchestration code; move domain decisions into named modules with typed inputs and outputs.
+- Centralize raw environment, CLI, filesystem, process, and network reads behind config or adapter modules. The rest of the crate should consume typed, validated values.
+- Model OS/runtime backends behind traits or narrow adapter structs so production code and tests use the same boundary.
+- Encapsulate mutable subsystem state in named structs with methods instead of long closures with many local variables.
+- For complex pipelines, split phases into sibling modules and keep the top-level loop readable as a sequence of named phases.
+- Put heuristics and policy decisions in pure functions with explicit constants and focused tests.
+- Use bounded channels and document ownership, shutdown, cancellation, and backpressure for long-lived tasks.
+- Keep protocol decode/encode, validation, dispatch, and business logic separate unless the protocol type itself owns the behavior.
+- Treat large state structs and broad orchestration modules as temporary waypoints; keep extracting cohesive sub-state and helper modules as behavior grows.
+
 ## Validation Baseline
 
 Rust changes should normally pass the narrowest relevant set of:

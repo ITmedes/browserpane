@@ -1,0 +1,287 @@
+use super::*;
+
+pub(in crate::session_control) fn validate_workflow_definition_request(
+    request: &PersistWorkflowDefinitionRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow name must not be empty".to_string(),
+        ));
+    }
+    if let Some(description) = &request.description {
+        if description.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow description must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    for label in &request.labels {
+        if label.0.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow label keys must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(in crate::session_control) fn validate_workflow_definition_version_request(
+    request: &PersistWorkflowDefinitionVersionRequest,
+) -> Result<(), SessionStoreError> {
+    if request.version.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow version must not be empty".to_string(),
+        ));
+    }
+    if request.executor.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow executor must not be empty".to_string(),
+        ));
+    }
+    if request.entrypoint.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow entrypoint must not be empty".to_string(),
+        ));
+    }
+    if let Some(source) = &request.source {
+        match source {
+            WorkflowSource::Git(source) => {
+                if source.repository_url.trim().is_empty() {
+                    return Err(SessionStoreError::InvalidRequest(
+                        "workflow git source repository_url must not be empty".to_string(),
+                    ));
+                }
+                if source
+                    .r#ref
+                    .as_deref()
+                    .is_some_and(|value| value.trim().is_empty())
+                {
+                    return Err(SessionStoreError::InvalidRequest(
+                        "workflow git source ref must not be empty when provided".to_string(),
+                    ));
+                }
+                if let Some(commit) = source.resolved_commit.as_deref() {
+                    if commit.len() != 40 || !commit.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                        return Err(SessionStoreError::InvalidRequest(
+                            "workflow git source resolved_commit must be a 40-character hex sha"
+                                .to_string(),
+                        ));
+                    }
+                }
+                if source
+                    .root_path
+                    .as_deref()
+                    .is_some_and(|value| value.trim().is_empty())
+                {
+                    return Err(SessionStoreError::InvalidRequest(
+                        "workflow git source root_path must not be empty when provided".to_string(),
+                    ));
+                }
+            }
+        }
+    }
+    if let Some(default_session) = &request.default_session {
+        serde_json::from_value::<CreateSessionRequest>(default_session.clone()).map_err(
+            |error| {
+                SessionStoreError::InvalidRequest(format!(
+                    "default_session must be a valid session create payload: {error}"
+                ))
+            },
+        )?;
+    }
+    for value in [
+        &request.allowed_credential_binding_ids,
+        &request.allowed_extension_ids,
+        &request.allowed_file_workspace_ids,
+    ] {
+        for entry in value {
+            if entry.trim().is_empty() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "workflow allowed reference ids must not be empty".to_string(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(in crate::session_control) fn validate_workflow_run_request(
+    request: &PersistWorkflowRunRequest,
+) -> Result<(), SessionStoreError> {
+    if request.workflow_version.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow_version must not be empty".to_string(),
+        ));
+    }
+    if let Some(source_system) = &request.source_system {
+        if source_system.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run source_system must not be empty".to_string(),
+            ));
+        }
+    }
+    if let Some(source_reference) = &request.source_reference {
+        if source_reference.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run source_reference must not be empty".to_string(),
+            ));
+        }
+    }
+    if let Some(client_request_id) = &request.client_request_id {
+        if client_request_id.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run client_request_id must not be empty".to_string(),
+            ));
+        }
+    }
+    if let Some(create_request_fingerprint) = &request.create_request_fingerprint {
+        if create_request_fingerprint.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run create_request_fingerprint must not be empty".to_string(),
+            ));
+        }
+    }
+    for label in &request.labels {
+        if label.0.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run label keys must not be empty".to_string(),
+            ));
+        }
+    }
+    if let Some(source_snapshot) = &request.source_snapshot {
+        if source_snapshot.entrypoint.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run source snapshot entrypoint must not be empty".to_string(),
+            ));
+        }
+        if source_snapshot.file_name.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run source snapshot file_name must not be empty".to_string(),
+            ));
+        }
+    }
+    for credential_binding in &request.credential_bindings {
+        if credential_binding.name.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run credential binding name must not be empty".to_string(),
+            ));
+        }
+        if credential_binding.external_ref.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run credential binding external_ref must not be empty".to_string(),
+            ));
+        }
+        for origin in &credential_binding.allowed_origins {
+            if origin.trim().is_empty() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "workflow run credential binding allowed_origins must not contain empty values"
+                        .to_string(),
+                ));
+            }
+        }
+    }
+    for workspace_input in &request.workspace_inputs {
+        if workspace_input.file_name.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run workspace input file_name must not be empty".to_string(),
+            ));
+        }
+        if workspace_input.sha256_hex.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run workspace input sha256_hex must not be empty".to_string(),
+            ));
+        }
+        if workspace_input.mount_path.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run workspace input mount_path must not be empty".to_string(),
+            ));
+        }
+        if workspace_input.artifact_ref.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "workflow run workspace input artifact_ref must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(in crate::session_control) fn validate_workflow_run_event_request(
+    request: &PersistWorkflowRunEventRequest,
+) -> Result<(), SessionStoreError> {
+    if request.event_type.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow run event_type must not be empty".to_string(),
+        ));
+    }
+    if request.message.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow run event message must not be empty".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+pub(in crate::session_control) fn validate_workflow_run_transition_request(
+    request: &WorkflowRunTransitionRequest,
+) -> Result<(), SessionStoreError> {
+    let task_request = AutomationTaskTransitionRequest {
+        state: request.state.into(),
+        output: request.output.clone(),
+        error: request.error.clone(),
+        artifact_refs: request.artifact_refs.clone(),
+        event_type: "workflow_run.transition".to_string(),
+        event_message: request
+            .message
+            .clone()
+            .unwrap_or_else(|| "workflow run transition".to_string()),
+        event_data: request.data.clone(),
+    };
+    validate_automation_task_transition_request(&task_request).and_then(|_| {
+        match (&request.state, request.data.as_ref()) {
+            (WorkflowRunState::AwaitingInput, Some(data)) => {
+                crate::workflow::parse_workflow_run_runtime_hold_request(data)
+                    .map(|_| ())
+                    .map_err(|error| SessionStoreError::InvalidRequest(error.to_string()))
+            }
+            (_, Some(data))
+                if data
+                    .as_object()
+                    .and_then(|value| value.get("runtime_hold"))
+                    .is_some() =>
+            {
+                Err(SessionStoreError::InvalidRequest(
+                    "workflow runtime_hold is only valid when transitioning to awaiting_input"
+                        .to_string(),
+                ))
+            }
+            _ => Ok(()),
+        }
+    })
+}
+
+pub(in crate::session_control) fn validate_workflow_run_log_request(
+    request: &PersistWorkflowRunLogRequest,
+) -> Result<(), SessionStoreError> {
+    validate_automation_task_log_message(&request.message)
+}
+
+pub(in crate::session_control) fn validate_workflow_run_produced_file_request(
+    request: &PersistWorkflowRunProducedFileRequest,
+) -> Result<(), SessionStoreError> {
+    if request.file_name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow run produced file_name must not be empty".to_string(),
+        ));
+    }
+    if request.sha256_hex.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow run produced file sha256_hex must not be empty".to_string(),
+        ));
+    }
+    if request.artifact_ref.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow run produced file artifact_ref must not be empty".to_string(),
+        ));
+    }
+    Ok(())
+}

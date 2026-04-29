@@ -308,6 +308,13 @@
         linear-gradient(180deg, rgba(14, 24, 41, 0.24), rgba(7, 12, 21, 0.56));
     }
 
+    .overlay-card {
+      width: min(560px, 100%);
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+    }
+
     .overlay h2 {
       font-size: clamp(24px, 2.1vw, 34px);
       line-height: 1.02;
@@ -320,6 +327,27 @@
       font-size: 14px;
       line-height: 1.55;
       margin-bottom: 4px;
+    }
+
+    .overlay-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .overlay-actions[hidden] {
+      display: none;
+    }
+
+    .overlay-actions button {
+      min-width: 172px;
+    }
+
+    .overlay-detail {
+      font-size: 12px;
+      color: #7e93b3;
     }
 
     .info-bar {
@@ -927,10 +955,17 @@
       <section class="browser-panel">
         <div id="desktop-container">
           <div class="overlay" id="overlay">
-            <div>
-              <h2>BrowserPane Remote Desktop</h2>
-              <p>Use the session controls on the right to start or rejoin a browser session.</p>
-              <p style="font-size:12px; margin-top:12px; color:#7e93b3;">
+            <div class="overlay-card">
+              <div>
+                <h2 id="overlay-title">BrowserPane Remote Desktop</h2>
+                <p id="overlay-copy">Use the session controls on the right to start or rejoin a browser session.</p>
+              </div>
+              <div class="overlay-actions" id="overlay-actions" hidden>
+                <button id="overlay-login-btn" type="button">Login</button>
+                <button id="overlay-start-btn" type="button" hidden disabled>Start New Session</button>
+                <button id="overlay-connect-btn" type="button" hidden disabled>Join / Reconnect</button>
+              </div>
+              <p id="overlay-detail" class="overlay-detail">
                 Served by Docker Compose &mdash; gateway on port 4433
               </p>
             </div>
@@ -1403,6 +1438,13 @@
     const micBtn = document.getElementById('btn-mic');
     const uploadBtn = document.getElementById('btn-upload');
     const overlay = document.getElementById('overlay');
+    const overlayTitle = document.getElementById('overlay-title');
+    const overlayCopy = document.getElementById('overlay-copy');
+    const overlayDetail = document.getElementById('overlay-detail');
+    const overlayActions = document.getElementById('overlay-actions');
+    const overlayLoginBtn = document.getElementById('overlay-login-btn');
+    const overlayStartBtn = document.getElementById('overlay-start-btn');
+    const overlayConnectBtn = document.getElementById('overlay-connect-btn');
     const logPanel = document.getElementById('log-panel');
     const authDisplay = document.getElementById('auth-display');
     const sessionDisplay = document.getElementById('session-display');
@@ -2039,11 +2081,86 @@
       return Boolean(resource?.id);
     }
 
+    function setOverlayAction(button, { visible, enabled, label }) {
+      if (!button) return;
+      button.hidden = !visible;
+      button.disabled = !visible || !enabled;
+      if (label) {
+        button.textContent = label;
+      }
+    }
+
+    function renderOverlayState() {
+      if (!overlay || !overlayTitle || !overlayCopy || !overlayDetail || !overlayActions) {
+        return;
+      }
+
+      if (session) {
+        overlay.style.display = 'none';
+        return;
+      }
+
+      overlay.style.display = '';
+
+      const config = authState.config;
+      const hasAccessToken = Boolean(authState.tokens?.access_token);
+      const selected = controlSessionState.resource;
+      const selectedJoinable = isJoinableSession(selected);
+      const selectedState = selected?.state ?? '';
+      const selectedLabel = selected?.id
+        ? `${getShortSessionId(selected.id)} (${selectedState})`
+        : 'none selected';
+      const servedBy = 'Served by Docker Compose — gateway on port 4433';
+
+      if (config?.mode === 'oidc' && !hasAccessToken) {
+        overlayTitle.textContent = 'Login To Continue';
+        overlayCopy.textContent = 'Sign in to create a fresh browser session or reconnect an existing one.';
+        overlayDetail.textContent = getExampleUserLabel()
+          ? `${getExampleUserLabel()} · ${servedBy}`
+          : servedBy;
+        overlayActions.hidden = false;
+        setOverlayAction(overlayLoginBtn, { visible: true, enabled: true, label: 'Login' });
+        setOverlayAction(overlayStartBtn, { visible: false, enabled: false, label: 'Start New Session' });
+        setOverlayAction(overlayConnectBtn, { visible: false, enabled: false, label: 'Join / Reconnect' });
+        return;
+      }
+
+      if (config?.mode === 'oidc') {
+        overlayTitle.textContent = LAYOUT_MODE === 'browser-only'
+          ? 'Choose A Browser Session'
+          : 'Browser Session Not Connected';
+        overlayCopy.textContent = selectedJoinable
+          ? (selectedState === 'stopped'
+            ? 'Restart the selected browser session with its persisted profile, or launch a fresh browser.'
+            : 'Join the selected browser session now, or launch a fresh browser.')
+          : 'Launch a fresh browser session now, or refresh and select an existing session from the console controls.';
+        overlayDetail.textContent = `Selected session: ${selectedLabel} · ${servedBy}`;
+        overlayActions.hidden = false;
+        setOverlayAction(overlayLoginBtn, { visible: false, enabled: false, label: 'Login' });
+        setOverlayAction(overlayStartBtn, { visible: true, enabled: true, label: 'Start New Session' });
+        setOverlayAction(overlayConnectBtn, {
+          visible: true,
+          enabled: selectedJoinable,
+          label: selectedState === 'stopped' ? 'Reconnect Selected' : 'Join / Reconnect',
+        });
+        return;
+      }
+
+      overlayTitle.textContent = 'BrowserPane Remote Desktop';
+      overlayCopy.textContent = 'Start or reconnect a browser session to unlock the live desktop view.';
+      overlayDetail.textContent = servedBy;
+      overlayActions.hidden = false;
+      setOverlayAction(overlayLoginBtn, { visible: false, enabled: false, label: 'Login' });
+      setOverlayAction(overlayStartBtn, { visible: false, enabled: false, label: 'Start New Session' });
+      setOverlayAction(overlayConnectBtn, { visible: false, enabled: false, label: 'Join / Reconnect' });
+    }
+
     function renderSessionState() {
       sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
       renderMcpDelegationState();
       renderRecordingState();
       renderRecordingCatalogState();
+      renderOverlayState();
     }
 
     function isJoinableSession(resource) {
@@ -2278,7 +2395,13 @@
     }
 
     function buildRedirectUri() {
-      return `${window.location.origin}${window.location.pathname}`;
+      const url = new URL(window.location.href);
+      url.searchParams.delete('code');
+      url.searchParams.delete('state');
+      url.searchParams.delete('session_state');
+      url.searchParams.delete('iss');
+      url.hash = '';
+      return `${url.origin}${url.pathname}${url.search}`;
     }
 
     function base64UrlEncode(bytes) {
@@ -4918,6 +5041,7 @@
 
     // ── Button handlers ─────────────────────────────────────────────
     loginBtn.addEventListener('click', () => void beginLogin());
+    overlayLoginBtn.addEventListener('click', () => void beginLogin());
     logoutBtn.addEventListener('click', () => void logout());
     delegateMcpBtn.addEventListener('click', () => void delegateCurrentSessionToMcp().catch((error) => {
       log(`MCP delegation failed: ${error.message}`, 'error');
@@ -4937,7 +5061,9 @@
       log(`Session refresh failed: ${error.message}`, 'error');
     }));
     newSessionBtn.addEventListener('click', () => void connect('new'));
+    overlayStartBtn.addEventListener('click', () => void connect('new'));
     connectBtn.addEventListener('click', () => void connect('selected'));
+    overlayConnectBtn.addEventListener('click', () => void connect('selected'));
     disconnectBtn.addEventListener('click', () => void doDisconnect());
     recordingStartBtn.addEventListener('click', () => void startSessionRecording());
     recordingStopBtn.addEventListener('click', () => void stopSessionRecording());
