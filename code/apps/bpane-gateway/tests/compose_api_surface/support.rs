@@ -19,6 +19,7 @@ const DEFAULT_TOKEN_URL: &str =
 const DEFAULT_OIDC_CLIENT_ID: &str = "bpane-mcp-bridge";
 const DEFAULT_OIDC_CLIENT_SECRET: &str = "bpane-mcp-bridge-secret";
 const DEFAULT_CONTAINER_WORKSPACE_ROOT: &str = "/workspace";
+const DEFAULT_MCP_BRIDGE_BASE_URL: &str = "http://localhost:8931";
 
 pub fn suite_lock() -> &'static Mutex<()> {
     static SUITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -29,6 +30,7 @@ pub fn suite_lock() -> &'static Mutex<()> {
 pub struct ComposeHarness {
     client: reqwest::Client,
     api_base_url: String,
+    mcp_bridge_base_url: String,
     access_token: Arc<String>,
     repo_root: Arc<PathBuf>,
     container_workspace_root: Arc<String>,
@@ -64,6 +66,8 @@ impl ComposeHarness {
             .unwrap_or_else(|_| DEFAULT_OIDC_CLIENT_ID.to_string());
         let client_secret = std::env::var("BPANE_GATEWAY_E2E_CLIENT_SECRET")
             .unwrap_or_else(|_| DEFAULT_OIDC_CLIENT_SECRET.to_string());
+        let mcp_bridge_base_url = std::env::var("BPANE_GATEWAY_E2E_MCP_BRIDGE_URL")
+            .unwrap_or_else(|_| DEFAULT_MCP_BRIDGE_BASE_URL.to_string());
         let repo_root = repository_root()?;
         let container_workspace_root = std::env::var("BPANE_GATEWAY_E2E_CONTAINER_WORKSPACE_ROOT")
             .unwrap_or_else(|_| DEFAULT_CONTAINER_WORKSPACE_ROOT.to_string());
@@ -76,6 +80,7 @@ impl ComposeHarness {
         Ok(Self {
             client,
             api_base_url,
+            mcp_bridge_base_url,
             access_token: Arc::new(access_token),
             repo_root: Arc::new(repo_root),
             container_workspace_root: Arc::new(container_workspace_root),
@@ -88,6 +93,10 @@ impl ComposeHarness {
 
     pub fn api_url(&self, path: &str) -> String {
         format!("{}{}", self.api_base_url, path)
+    }
+
+    pub fn mcp_bridge_url(&self, path: &str) -> String {
+        format!("{}{}", self.mcp_bridge_base_url, path)
     }
 
     pub async fn get_json(&self, path: &str) -> Result<Value> {
@@ -120,6 +129,24 @@ impl ComposeHarness {
 
     pub async fn post_json_outcome(&self, path: &str, body: Value) -> Result<JsonOutcome> {
         self.send_json_outcome(Method::POST, path, Some(body), None)
+            .await
+    }
+
+    pub async fn get_bridge_json(&self, path: &str) -> Result<Value> {
+        self.send_bridge_json(Method::GET, path, None::<Value>)
+            .await
+    }
+
+    pub async fn post_bridge_json(&self, path: &str, body: Value) -> Result<Value> {
+        self.send_bridge_json(Method::POST, path, Some(body)).await
+    }
+
+    pub async fn put_bridge_json(&self, path: &str, body: Value) -> Result<Value> {
+        self.send_bridge_json(Method::PUT, path, Some(body)).await
+    }
+
+    pub async fn delete_bridge_json(&self, path: &str) -> Result<Value> {
+        self.send_bridge_json(Method::DELETE, path, None::<Value>)
             .await
     }
 
@@ -236,6 +263,7 @@ impl ComposeHarness {
     }
 
     pub async fn cleanup_active_sessions(&self) -> Result<()> {
+        self.clear_bridge_control_session().await?;
         let sessions = self.get_json("/api/v1/sessions").await?;
         let sessions = json_array(&sessions, "sessions")?;
         for session in sessions {
@@ -243,9 +271,7 @@ impl ComposeHarness {
                 continue;
             }
             let session_id = json_id(session, "id")?;
-            let _ = self
-                .delete_json(&format!("/api/v1/sessions/{session_id}"))
-                .await?;
+            let _ = self.stop_session_eventually(&session_id).await?;
         }
 
         poll_until(
@@ -266,6 +292,53 @@ impl ComposeHarness {
         .await?;
 
         Ok(())
+    }
+
+    pub async fn clear_bridge_control_session(&self) -> Result<()> {
+        let _ = self.delete_bridge_json("/control-session").await;
+        let _ = self.delete_json("/api/session/mcp-owner").await;
+        poll_until(
+            "compose e2e bridge control-session cleanup",
+            Duration::from_secs(15),
+            || {
+                let harness = self.clone();
+                async move {
+                    let health = harness.get_bridge_json("/health").await?;
+                    if health["control_session_id"].is_null()
+                        && health["playwright_cdp_endpoint"].is_null()
+                    {
+                        return Ok(Some(()));
+                    }
+                    Ok(None)
+                }
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn stop_session_eventually(&self, session_id: &str) -> Result<Value> {
+        poll_until(
+            &format!("session {session_id} stop"),
+            Duration::from_secs(15),
+            || {
+                let harness = self.clone();
+                let path = format!("/api/v1/sessions/{session_id}");
+                async move {
+                    match harness.delete_json_outcome(&path).await? {
+                        JsonOutcome { status, body } if status == StatusCode::OK => Ok(Some(body)),
+                        JsonOutcome { status, .. } if status == StatusCode::CONFLICT => {
+                            let _ = harness.clear_bridge_control_session().await;
+                            Ok(None)
+                        }
+                        JsonOutcome { status, body } => Err(anyhow!(
+                            "DELETE {path} returned unexpected status {status} {body}"
+                        )),
+                    }
+                }
+            },
+        )
+        .await
     }
 
     pub fn unique_name(&self, prefix: &str) -> String {
@@ -500,6 +573,56 @@ impl ComposeHarness {
             .send()
             .await
             .with_context(|| format!("failed to call {method} {path}"))
+    }
+
+    async fn send_bridge_json<T: serde::Serialize>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<T>,
+    ) -> Result<Value> {
+        let outcome = self
+            .send_bridge_json_outcome(method.clone(), path, body)
+            .await?;
+        if !outcome.status.is_success() {
+            bail!(
+                "{} {} returned {} {}",
+                method,
+                path,
+                outcome.status,
+                outcome.body
+            );
+        }
+        Ok(outcome.body)
+    }
+
+    async fn send_bridge_json_outcome<T: serde::Serialize>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<T>,
+    ) -> Result<JsonOutcome> {
+        let mut request = self
+            .client
+            .request(method.clone(), self.mcp_bridge_url(path));
+        if let Some(body) = body {
+            request = request.json(&body);
+        }
+        let response = request
+            .send()
+            .await
+            .with_context(|| format!("failed to call MCP bridge {method} {path}"))?;
+        let status = response.status();
+        let text = response
+            .text()
+            .await
+            .context("failed to read MCP bridge response body")?;
+        let body = serde_json::from_str(&text).with_context(|| {
+            format!(
+                "failed to decode MCP bridge JSON response from {method} {path} with status {status}: {text}"
+            )
+        })?;
+        Ok(JsonOutcome { status, body })
     }
 }
 
