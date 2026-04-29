@@ -1,6 +1,87 @@
 use super::*;
 
+pub(super) struct FileWorkspaceRepository<'a> {
+    store: &'a PostgresSessionStore,
+}
+
 impl PostgresSessionStore {
+    fn file_workspace_repository(&self) -> FileWorkspaceRepository<'_> {
+        FileWorkspaceRepository { store: self }
+    }
+
+    pub(in crate::session_control) async fn create_file_workspace(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistFileWorkspaceRequest,
+    ) -> Result<StoredFileWorkspace, SessionStoreError> {
+        self.file_workspace_repository()
+            .create_file_workspace(principal, request)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_file_workspaces_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredFileWorkspace>, SessionStoreError> {
+        self.file_workspace_repository()
+            .list_file_workspaces_for_owner(principal)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_file_workspace_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredFileWorkspace>, SessionStoreError> {
+        self.file_workspace_repository()
+            .get_file_workspace_for_owner(principal, id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn create_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistFileWorkspaceFileRequest,
+    ) -> Result<StoredFileWorkspaceFile, SessionStoreError> {
+        self.file_workspace_repository()
+            .create_file_workspace_file_for_owner(principal, request)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_file_workspace_files_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+    ) -> Result<Vec<StoredFileWorkspaceFile>, SessionStoreError> {
+        self.file_workspace_repository()
+            .list_file_workspace_files_for_owner(principal, workspace_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredFileWorkspaceFile>, SessionStoreError> {
+        self.file_workspace_repository()
+            .get_file_workspace_file_for_owner(principal, workspace_id, file_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn delete_file_workspace_file_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workspace_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredFileWorkspaceFile>, SessionStoreError> {
+        self.file_workspace_repository()
+            .delete_file_workspace_file_for_owner(principal, workspace_id, file_id)
+            .await
+    }
+}
+
+impl FileWorkspaceRepository<'_> {
     pub(in crate::session_control) async fn create_file_workspace(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -8,6 +89,7 @@ impl PostgresSessionStore {
     ) -> Result<StoredFileWorkspace, SessionStoreError> {
         let now = Utc::now();
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -56,6 +138,7 @@ impl PostgresSessionStore {
         principal: &AuthenticatedPrincipal,
     ) -> Result<Vec<StoredFileWorkspace>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -90,6 +173,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredFileWorkspace>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -135,6 +219,7 @@ impl PostgresSessionStore {
 
         let now = Utc::now();
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -198,6 +283,7 @@ impl PostgresSessionStore {
         }
 
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -241,6 +327,7 @@ impl PostgresSessionStore {
         };
 
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -286,6 +373,7 @@ impl PostgresSessionStore {
         };
 
         let row = self
+            .store
             .db
             .client()
             .await?
