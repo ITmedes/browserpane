@@ -15,12 +15,17 @@ use super::{required_string, RuntimeServices};
 
 impl RuntimeServices {
     pub(in crate::app) async fn build(config: &Config) -> anyhow::Result<Self> {
-        let bind_addr = parse_socket_addr(&config.bind, config.port, "gateway bind")?;
-        let api_bind_addr = parse_socket_addr(&config.bind, config.api_port, "gateway API bind")?;
+        let bind_addr =
+            parse_socket_addr(&config.gateway.bind, config.gateway.port, "gateway bind")?;
+        let api_bind_addr = parse_socket_addr(
+            &config.gateway.bind,
+            config.gateway.api_port,
+            "gateway API bind",
+        )?;
         let identity = build_identity(config).await?;
         let registry = Arc::new(SessionRegistry::new(
-            config.max_viewers,
-            config.exclusive_browser_owner,
+            config.gateway.max_viewers,
+            config.gateway.exclusive_browser_owner,
         ));
         let session_manager = Arc::new(SessionManager::new(build_session_manager_config(config)?)?);
         let session_store = build_session_store(config, &session_manager).await?;
@@ -41,7 +46,7 @@ impl RuntimeServices {
 }
 
 async fn build_identity(config: &Config) -> anyhow::Result<Identity> {
-    match (&config.cert, &config.key) {
+    match (&config.gateway.cert, &config.gateway.key) {
         (Some(cert_path), Some(key_path)) => Identity::load_pemfiles(cert_path, key_path)
             .await
             .map_err(Into::into),
@@ -61,12 +66,12 @@ fn parse_socket_addr(bind: &str, port: u16, label: &str) -> anyhow::Result<Socke
 pub(in crate::app) fn build_session_manager_config(
     config: &Config,
 ) -> anyhow::Result<SessionManagerConfig> {
-    let agent_socket_path = config.agent_socket.to_string_lossy().into_owned();
-    match config.runtime_backend.as_str() {
+    let agent_socket_path = config.runtime.agent_socket.to_string_lossy().into_owned();
+    match config.runtime.backend.as_str() {
         "static_single" => Ok(SessionManagerConfig::StaticSingle {
             agent_socket_path,
-            cdp_endpoint: config.runtime_cdp_endpoint.clone(),
-            idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
+            cdp_endpoint: config.runtime.cdp_endpoint.clone(),
+            idle_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
         }),
         "docker_single" => Ok(SessionManagerConfig::DockerSingle(
             build_docker_runtime_config(config, 1, 1)?,
@@ -74,8 +79,8 @@ pub(in crate::app) fn build_session_manager_config(
         "docker_pool" => Ok(SessionManagerConfig::DockerPool(
             build_docker_runtime_config(
                 config,
-                config.max_active_runtimes,
-                config.max_starting_runtimes,
+                config.runtime.max_active_runtimes,
+                config.runtime.max_starting_runtimes,
             )?,
         )),
         other => bail!("unknown --runtime-backend value: {other}"),
@@ -88,32 +93,32 @@ fn build_docker_runtime_config(
     max_starting_runtimes: usize,
 ) -> anyhow::Result<SessionManagerDockerConfig> {
     Ok(SessionManagerDockerConfig {
-        docker_bin: config.docker_runtime_bin.clone(),
+        docker_bin: config.runtime.docker_bin.clone(),
         image: required_string(
-            &config.docker_runtime_image,
+            &config.runtime.docker_image,
             "--docker-runtime-image",
-            &config.runtime_backend,
+            &config.runtime.backend,
         )?,
         network: required_string(
-            &config.docker_runtime_network,
+            &config.runtime.docker_network,
             "--docker-runtime-network",
-            &config.runtime_backend,
+            &config.runtime.backend,
         )?,
         shared_run_volume: required_string(
-            &config.docker_runtime_volume,
+            &config.runtime.docker_volume,
             "--docker-runtime-volume",
-            &config.runtime_backend,
+            &config.runtime.backend,
         )?,
-        container_name_prefix: config.docker_runtime_container_name_prefix.clone(),
-        socket_root: config.docker_runtime_socket_root.clone(),
-        cdp_proxy_port: config.docker_runtime_cdp_proxy_port,
-        shm_size: config.docker_runtime_shm_size.clone(),
-        start_timeout: Duration::from_secs(config.docker_runtime_start_timeout_secs),
-        idle_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
+        container_name_prefix: config.runtime.docker_container_name_prefix.clone(),
+        socket_root: config.runtime.docker_socket_root.clone(),
+        cdp_proxy_port: config.runtime.docker_cdp_proxy_port,
+        shm_size: config.runtime.docker_shm_size.clone(),
+        start_timeout: Duration::from_secs(config.runtime.docker_start_timeout_secs),
+        idle_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
         max_active_runtimes,
         max_starting_runtimes,
-        seccomp_unconfined: config.docker_runtime_seccomp_unconfined,
-        env_file: config.docker_runtime_env_file.clone(),
+        seccomp_unconfined: config.runtime.docker_seccomp_unconfined,
+        env_file: config.runtime.docker_env_file.clone(),
     })
 }
 
@@ -121,7 +126,7 @@ async fn build_session_store(
     config: &Config,
     session_manager: &SessionManager,
 ) -> anyhow::Result<SessionStore> {
-    if let Some(database_url) = &config.database_url {
+    if let Some(database_url) = &config.storage.database_url {
         info!("using postgres-backed session control store");
         SessionStore::from_database_url_with_config(database_url, session_manager.profile().clone())
             .await
