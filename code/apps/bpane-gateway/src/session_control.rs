@@ -52,6 +52,7 @@ use crate::workflow_event_delivery::{
 };
 use crate::workflow_source::WorkflowSource;
 
+mod automation_task_policy;
 mod extensions_store;
 mod file_workspaces_store;
 mod in_memory;
@@ -63,6 +64,7 @@ mod types;
 mod validation;
 mod workflow_run_policy;
 
+use automation_task_policy::*;
 use in_memory::*;
 use migrations::*;
 use postgres::*;
