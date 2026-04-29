@@ -1,6 +1,45 @@
 use super::*;
 
+pub(super) struct CredentialBindingRepository<'a> {
+    store: &'a PostgresSessionStore,
+}
+
 impl PostgresSessionStore {
+    fn credential_binding_repository(&self) -> CredentialBindingRepository<'_> {
+        CredentialBindingRepository { store: self }
+    }
+
+    pub(in crate::session_control) async fn create_credential_binding(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistCredentialBindingRequest,
+    ) -> Result<StoredCredentialBinding, SessionStoreError> {
+        self.credential_binding_repository()
+            .create_credential_binding(principal, request)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_credential_bindings_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredCredentialBinding>, SessionStoreError> {
+        self.credential_binding_repository()
+            .list_credential_bindings_for_owner(principal)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_credential_binding_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredCredentialBinding>, SessionStoreError> {
+        self.credential_binding_repository()
+            .get_credential_binding_for_owner(principal, id)
+            .await
+    }
+}
+
+impl CredentialBindingRepository<'_> {
     pub(in crate::session_control) async fn create_credential_binding(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -19,6 +58,7 @@ impl PostgresSessionStore {
             })
             .transpose()?;
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -82,6 +122,7 @@ impl PostgresSessionStore {
         principal: &AuthenticatedPrincipal,
     ) -> Result<Vec<StoredCredentialBinding>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -121,6 +162,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredCredentialBinding>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
