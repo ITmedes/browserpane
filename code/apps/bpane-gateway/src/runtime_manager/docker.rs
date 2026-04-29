@@ -11,6 +11,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use super::*;
+use crate::session_control::SessionLifecycleState;
 
 pub(super) struct DockerRuntimeManager {
     pub(super) config: DockerRuntimeConfig,
@@ -400,7 +401,7 @@ impl DockerRuntimeManager {
         )
     }
 
-    fn cdp_endpoint_for_session(&self, session_id: Uuid) -> String {
+    pub(super) fn cdp_endpoint_for_session(&self, session_id: Uuid) -> String {
         format!(
             "http://{}:{}",
             self.container_name_for_session(session_id),
