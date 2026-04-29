@@ -25,10 +25,6 @@ use crate::extension::{
     AppliedExtension, PersistExtensionDefinitionRequest, PersistExtensionVersionRequest,
     StoredExtensionDefinition, StoredExtensionVersion,
 };
-use crate::file_workspace::{
-    PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest, StoredFileWorkspace,
-    StoredFileWorkspaceFile,
-};
 use crate::session_manager::{
     PersistedSessionRuntimeAssignment, SessionManagerProfile, SessionRuntimeAccess,
     SessionRuntimeAssignmentStatus,
@@ -50,6 +46,10 @@ use crate::workflow_event_delivery::{
     RecordWorkflowEventDeliveryAttemptRequest, StoredWorkflowEventDelivery,
     StoredWorkflowEventDeliveryAttempt, StoredWorkflowEventSubscription,
     WorkflowEventDeliveryState,
+};
+use crate::workspaces::{
+    PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest, StoredFileWorkspace,
+    StoredFileWorkspaceFile,
 };
 
 mod automation_task_policy;
