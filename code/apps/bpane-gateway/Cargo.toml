@@ -16,6 +16,8 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
+bb8 = "0.9"
+bb8-postgres = "0.9"
 wtransport = "0.7"
 rustls = { version = "0.23", features = ["ring"] }
 rcgen = "0.13"
