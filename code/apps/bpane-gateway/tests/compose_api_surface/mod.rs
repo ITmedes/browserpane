@@ -1,4 +1,5 @@
 pub mod credentials_extensions;
+pub mod ownership_boundaries;
 pub mod recording_artifacts;
 pub mod session_churn;
 pub mod session_compatibility;

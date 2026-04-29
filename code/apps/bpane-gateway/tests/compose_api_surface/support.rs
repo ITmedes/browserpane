@@ -18,6 +18,13 @@ const DEFAULT_TOKEN_URL: &str =
     "http://localhost:8091/realms/browserpane-dev/protocol/openid-connect/token";
 const DEFAULT_OIDC_CLIENT_ID: &str = "bpane-mcp-bridge";
 const DEFAULT_OIDC_CLIENT_SECRET: &str = "bpane-mcp-bridge-secret";
+const DEFAULT_KEYCLOAK_ADMIN_TOKEN_URL: &str =
+    "http://localhost:8091/realms/master/protocol/openid-connect/token";
+const DEFAULT_KEYCLOAK_ADMIN_API_BASE_URL: &str =
+    "http://localhost:8091/admin/realms/browserpane-dev";
+const DEFAULT_KEYCLOAK_ADMIN_CLIENT_ID: &str = "admin-cli";
+const DEFAULT_KEYCLOAK_ADMIN_USERNAME: &str = "admin";
+const DEFAULT_KEYCLOAK_ADMIN_PASSWORD: &str = "admin";
 const DEFAULT_CONTAINER_WORKSPACE_ROOT: &str = "/workspace";
 const DEFAULT_MCP_BRIDGE_BASE_URL: &str = "http://localhost:8931";
 
@@ -30,6 +37,7 @@ pub fn suite_lock() -> &'static Mutex<()> {
 pub struct ComposeHarness {
     client: reqwest::Client,
     api_base_url: String,
+    token_url: String,
     mcp_bridge_base_url: String,
     access_token: Arc<String>,
     repo_root: Arc<PathBuf>,
@@ -47,6 +55,12 @@ pub struct ComposeVisibleFile {
     pub container_path: String,
 }
 
+pub struct ComposeServicePrincipal {
+    pub client_id: String,
+    pub client_secret: String,
+    keycloak_client_id: String,
+}
+
 #[allow(dead_code)]
 pub struct ComposeServiceRestoreGuard {
     repo_root: PathBuf,
@@ -60,6 +74,14 @@ pub struct JsonOutcome {
 
 impl ComposeHarness {
     pub async fn connect() -> Result<Self> {
+        Self::connect_with_client_credentials(DEFAULT_OIDC_CLIENT_ID, DEFAULT_OIDC_CLIENT_SECRET)
+            .await
+    }
+
+    pub async fn connect_with_client_credentials(
+        client_id: &str,
+        client_secret: &str,
+    ) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
@@ -68,10 +90,10 @@ impl ComposeHarness {
             .unwrap_or_else(|_| DEFAULT_API_BASE_URL.to_string());
         let token_url = std::env::var("BPANE_GATEWAY_E2E_TOKEN_URL")
             .unwrap_or_else(|_| DEFAULT_TOKEN_URL.into());
-        let client_id = std::env::var("BPANE_GATEWAY_E2E_CLIENT_ID")
-            .unwrap_or_else(|_| DEFAULT_OIDC_CLIENT_ID.to_string());
+        let client_id =
+            std::env::var("BPANE_GATEWAY_E2E_CLIENT_ID").unwrap_or_else(|_| client_id.to_string());
         let client_secret = std::env::var("BPANE_GATEWAY_E2E_CLIENT_SECRET")
-            .unwrap_or_else(|_| DEFAULT_OIDC_CLIENT_SECRET.to_string());
+            .unwrap_or_else(|_| client_secret.to_string());
         let mcp_bridge_base_url = std::env::var("BPANE_GATEWAY_E2E_MCP_BRIDGE_URL")
             .unwrap_or_else(|_| DEFAULT_MCP_BRIDGE_BASE_URL.to_string());
         let repo_root = repository_root()?;
@@ -86,10 +108,142 @@ impl ComposeHarness {
         Ok(Self {
             client,
             api_base_url,
+            token_url,
             mcp_bridge_base_url,
             access_token: Arc::new(access_token),
             repo_root: Arc::new(repo_root),
             container_workspace_root: Arc::new(container_workspace_root),
+        })
+    }
+
+    pub async fn create_service_principal(&self, prefix: &str) -> Result<ComposeServicePrincipal> {
+        let client_id = self.unique_name(prefix);
+        let client_secret = format!("{}-secret", self.unique_name(prefix));
+        let admin_token = fetch_keycloak_admin_token(&self.client).await?;
+        let admin_base_url = std::env::var("BPANE_GATEWAY_E2E_KEYCLOAK_ADMIN_API_URL")
+            .unwrap_or_else(|_| DEFAULT_KEYCLOAK_ADMIN_API_BASE_URL.to_string());
+
+        let create_response = self
+            .client
+            .post(format!("{admin_base_url}/clients"))
+            .bearer_auth(&admin_token)
+            .json(&json!({
+                "clientId": client_id,
+                "name": client_id,
+                "protocol": "openid-connect",
+                "enabled": true,
+                "publicClient": false,
+                "secret": client_secret,
+                "standardFlowEnabled": false,
+                "directAccessGrantsEnabled": false,
+                "serviceAccountsEnabled": true,
+                "defaultClientScopes": ["bpane-gateway-audience"],
+            }))
+            .send()
+            .await
+            .context("failed to create temporary Keycloak service principal")?;
+        if create_response.status() != StatusCode::CREATED {
+            let status = create_response.status();
+            let body = create_response
+                .text()
+                .await
+                .context("failed to read temporary Keycloak service principal create response")?;
+            bail!("failed to create temporary Keycloak service principal: {status} {body}");
+        }
+
+        let lookup_response = self
+            .client
+            .get(format!("{admin_base_url}/clients"))
+            .bearer_auth(&admin_token)
+            .query(&[("clientId", client_id.as_str())])
+            .send()
+            .await
+            .context("failed to look up temporary Keycloak service principal")?;
+        let lookup_status = lookup_response.status();
+        let clients: Value = lookup_response
+            .json()
+            .await
+            .context("failed to decode temporary Keycloak service principal lookup")?;
+        if lookup_status != StatusCode::OK {
+            bail!(
+                "temporary Keycloak service principal lookup failed with {lookup_status}: {clients}"
+            );
+        }
+        let keycloak_client_id = clients
+            .as_array()
+            .and_then(|items| {
+                items
+                    .iter()
+                    .find(|candidate| candidate.get("clientId") == Some(&json!(client_id)))
+            })
+            .and_then(|candidate| candidate.get("id"))
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| {
+                anyhow!("temporary Keycloak service principal lookup did not return an id")
+            })?;
+
+        Ok(ComposeServicePrincipal {
+            client_id,
+            client_secret,
+            keycloak_client_id,
+        })
+    }
+
+    pub async fn delete_service_principal(
+        &self,
+        principal: &ComposeServicePrincipal,
+    ) -> Result<()> {
+        let admin_token = fetch_keycloak_admin_token(&self.client).await?;
+        let admin_base_url = std::env::var("BPANE_GATEWAY_E2E_KEYCLOAK_ADMIN_API_URL")
+            .unwrap_or_else(|_| DEFAULT_KEYCLOAK_ADMIN_API_BASE_URL.to_string());
+        let response = self
+            .client
+            .delete(format!(
+                "{admin_base_url}/clients/{}",
+                principal.keycloak_client_id
+            ))
+            .bearer_auth(admin_token)
+            .send()
+            .await
+            .context("failed to delete temporary Keycloak service principal")?;
+        match response.status() {
+            StatusCode::NO_CONTENT | StatusCode::NOT_FOUND => Ok(()),
+            status => {
+                let body = response.text().await.context(
+                    "failed to read temporary Keycloak service principal delete response",
+                )?;
+                bail!(
+                    "failed to delete temporary Keycloak service principal {}: {status} {body}",
+                    principal.client_id
+                );
+            }
+        }
+    }
+
+    pub async fn as_service_principal(&self, principal: &ComposeServicePrincipal) -> Result<Self> {
+        let access_token = fetch_client_credentials_token(
+            &self.client,
+            &self.token_url,
+            &principal.client_id,
+            &principal.client_secret,
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "failed to fetch token for temporary service principal {}",
+                principal.client_id
+            )
+        })?;
+
+        Ok(Self {
+            client: self.client.clone(),
+            api_base_url: self.api_base_url.clone(),
+            token_url: self.token_url.clone(),
+            mcp_bridge_base_url: self.mcp_bridge_base_url.clone(),
+            access_token: Arc::new(access_token),
+            repo_root: self.repo_root.clone(),
+            container_workspace_root: self.container_workspace_root.clone(),
         })
     }
 
@@ -793,6 +947,38 @@ async fn fetch_client_credentials_token(
         .context("failed to decode token response")?;
     if status != StatusCode::OK {
         bail!("token request failed with {status}: {body}");
+    }
+    json_id(&body, "access_token")
+}
+
+async fn fetch_keycloak_admin_token(client: &reqwest::Client) -> Result<String> {
+    let token_url = std::env::var("BPANE_GATEWAY_E2E_KEYCLOAK_ADMIN_TOKEN_URL")
+        .unwrap_or_else(|_| DEFAULT_KEYCLOAK_ADMIN_TOKEN_URL.to_string());
+    let client_id = std::env::var("BPANE_GATEWAY_E2E_KEYCLOAK_ADMIN_CLIENT_ID")
+        .unwrap_or_else(|_| DEFAULT_KEYCLOAK_ADMIN_CLIENT_ID.to_string());
+    let username = std::env::var("BPANE_GATEWAY_E2E_KEYCLOAK_ADMIN_USERNAME")
+        .unwrap_or_else(|_| DEFAULT_KEYCLOAK_ADMIN_USERNAME.to_string());
+    let password = std::env::var("BPANE_GATEWAY_E2E_KEYCLOAK_ADMIN_PASSWORD")
+        .unwrap_or_else(|_| DEFAULT_KEYCLOAK_ADMIN_PASSWORD.to_string());
+
+    let response = client
+        .post(token_url.clone())
+        .form(&[
+            ("grant_type", "password"),
+            ("client_id", client_id.as_str()),
+            ("username", username.as_str()),
+            ("password", password.as_str()),
+        ])
+        .send()
+        .await
+        .with_context(|| format!("failed to request Keycloak admin token from {token_url}"))?;
+    let status = response.status();
+    let body: Value = response
+        .json()
+        .await
+        .context("failed to decode Keycloak admin token response")?;
+    if status != StatusCode::OK {
+        bail!("Keycloak admin token request failed with {status}: {body}");
     }
     json_id(&body, "access_token")
 }
