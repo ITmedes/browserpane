@@ -25,11 +25,11 @@ use crate::credential_provider::{
     CredentialProvider, CredentialProviderBackend, CredentialProviderError,
     ResolvedCredentialSecret, StoreCredentialSecretRequest, StoredCredentialSecret,
 };
-use crate::recording_artifact_store::RecordingArtifactStore;
+use crate::recording::{
+    prepare_session_recording_playback, RecordingArtifactStore, RecordingObservability,
+    RecordingRetentionManager,
+};
 use crate::recording_lifecycle::RecordingLifecycleManager;
-use crate::recording_observability::RecordingObservability;
-use crate::recording_playback::prepare_session_recording_playback;
-use crate::recording_retention::RecordingRetentionManager;
 use crate::session_control::{
     SessionRecordingFormat, SessionRecordingMode, SessionRecordingPolicy,
     SessionRecordingState as StoredSessionRecordingState, StoredSessionRecording,

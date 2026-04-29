@@ -43,15 +43,13 @@ use crate::file_workspace::{
     FileWorkspaceResource, PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest,
 };
 use crate::idle_stop::schedule_idle_session_stop;
-use crate::recording_artifact_store::{
-    FinalizeRecordingArtifactRequest, RecordingArtifactStore, RecordingArtifactStoreError,
-};
-use crate::recording_lifecycle::{RecordingLifecycleError, RecordingLifecycleManager};
-use crate::recording_observability::{RecordingObservability, RecordingObservabilitySnapshot};
-use crate::recording_playback::{
-    prepare_session_recording_playback, PreparedSessionRecordingPlayback, RecordingPlaybackError,
+use crate::recording::{
+    prepare_session_recording_playback, FinalizeRecordingArtifactRequest,
+    PreparedSessionRecordingPlayback, RecordingArtifactStore, RecordingArtifactStoreError,
+    RecordingObservability, RecordingObservabilitySnapshot, RecordingPlaybackError,
     SessionRecordingPlaybackManifest, SessionRecordingPlaybackResource,
 };
+use crate::recording_lifecycle::{RecordingLifecycleError, RecordingLifecycleManager};
 use crate::session_control::{
     CompleteSessionRecordingRequest, CreateSessionRequest, FailSessionRecordingRequest,
     PersistCompletedSessionRecordingRequest, SessionLifecycleState, SessionListResponse,
