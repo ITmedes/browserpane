@@ -1,6 +1,75 @@
 use super::*;
 
+pub(super) struct WorkflowDefinitionRepository<'a> {
+    store: &'a PostgresSessionStore,
+}
+
 impl PostgresSessionStore {
+    fn workflow_definition_repository(&self) -> WorkflowDefinitionRepository<'_> {
+        WorkflowDefinitionRepository { store: self }
+    }
+
+    pub(in crate::session_control) async fn create_workflow_definition(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowDefinitionRequest,
+    ) -> Result<StoredWorkflowDefinition, SessionStoreError> {
+        self.workflow_definition_repository()
+            .create_workflow_definition(principal, request)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_workflow_definitions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredWorkflowDefinition>, SessionStoreError> {
+        self.workflow_definition_repository()
+            .list_workflow_definitions_for_owner(principal)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_workflow_definition_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowDefinition>, SessionStoreError> {
+        self.workflow_definition_repository()
+            .get_workflow_definition_for_owner(principal, id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn create_workflow_definition_version(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistWorkflowDefinitionVersionRequest,
+    ) -> Result<StoredWorkflowDefinitionVersion, SessionStoreError> {
+        self.workflow_definition_repository()
+            .create_workflow_definition_version(principal, request)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_workflow_definition_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workflow_definition_id: Uuid,
+        version: &str,
+    ) -> Result<Option<StoredWorkflowDefinitionVersion>, SessionStoreError> {
+        self.workflow_definition_repository()
+            .get_workflow_definition_version_for_owner(principal, workflow_definition_id, version)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_workflow_definition_version_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredWorkflowDefinitionVersion>, SessionStoreError> {
+        self.workflow_definition_repository()
+            .get_workflow_definition_version_by_id(id)
+            .await
+    }
+}
+
+impl WorkflowDefinitionRepository<'_> {
     pub(in crate::session_control) async fn create_workflow_definition(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -9,6 +78,7 @@ impl PostgresSessionStore {
         let now = Utc::now();
         let labels_value = json_labels(&request.labels);
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -62,6 +132,7 @@ impl PostgresSessionStore {
         principal: &AuthenticatedPrincipal,
     ) -> Result<Vec<StoredWorkflowDefinition>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -98,6 +169,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredWorkflowDefinition>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -135,7 +207,7 @@ impl PostgresSessionStore {
         principal: &AuthenticatedPrincipal,
         request: PersistWorkflowDefinitionVersionRequest,
     ) -> Result<StoredWorkflowDefinitionVersion, SessionStoreError> {
-        let mut client = self.db.client().await?;
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -270,6 +342,7 @@ impl PostgresSessionStore {
         version: &str,
     ) -> Result<Option<StoredWorkflowDefinitionVersion>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -320,6 +393,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredWorkflowDefinitionVersion>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
