@@ -29,7 +29,7 @@ pub(super) async fn authorize_visible_automation_task_request_with_automation_ac
     headers: &HeaderMap,
     state: &ApiState,
     task_id: Uuid,
-) -> Result<crate::automation_task::StoredAutomationTask, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<crate::automation_tasks::StoredAutomationTask, (StatusCode, Json<ErrorResponse>)> {
     if extract_bearer_token(headers).is_some() {
         match authorize_api_request(headers, &state.auth_validator).await {
             Ok(principal) => {

@@ -136,7 +136,7 @@ mod tests {
     use std::time::Duration;
 
     use crate::auth::AuthenticatedPrincipal;
-    use crate::automation_task::{
+    use crate::automation_tasks::{
         AutomationTaskLogStream, AutomationTaskSessionSource, PersistAutomationTaskRequest,
     };
     use crate::session_control::{CreateSessionRequest, SessionOwnerMode, SessionRecordingPolicy};

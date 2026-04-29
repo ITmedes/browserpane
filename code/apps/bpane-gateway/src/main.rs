@@ -1,7 +1,7 @@
 mod api;
 mod app;
 mod auth;
-mod automation_task;
+mod automation_tasks;
 mod config;
 mod credentials;
 mod extensions;
