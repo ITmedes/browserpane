@@ -470,21 +470,19 @@ impl InMemorySessionStore {
         let Some(visible) = visible else {
             return Ok(None);
         };
-        if visible.state.is_terminal() {
-            return Err(SessionStoreError::Conflict(format!(
-                "automation task {id} is already terminal"
-            )));
-        }
+        let cancellation_plan = plan_automation_task_cancellation(&visible, Utc::now())
+            .map_err(|error| SessionStoreError::Conflict(error.to_string()))?;
 
         let mut tasks = self.automation_tasks.lock().await;
         let Some(task) = tasks.iter_mut().find(|task| task.id == id) else {
             return Ok(None);
         };
-        let now = Utc::now();
-        task.state = AutomationTaskState::Cancelled;
-        task.cancel_requested_at = Some(now);
-        task.completed_at = Some(now);
-        task.updated_at = now;
+        let now = cancellation_plan.task_updated_at;
+        task.state = cancellation_plan.task_state;
+        task.cancel_requested_at = cancellation_plan.task_cancel_requested_at;
+        task.started_at = cancellation_plan.task_started_at;
+        task.completed_at = cancellation_plan.task_completed_at;
+        task.updated_at = cancellation_plan.task_updated_at;
         let task = task.clone();
         drop(tasks);
 
@@ -507,9 +505,9 @@ impl InMemorySessionStore {
             .push(StoredAutomationTaskEvent {
                 id: Uuid::now_v7(),
                 task_id: id,
-                event_type: "automation_task.cancelled".to_string(),
-                message: "automation task cancelled".to_string(),
-                data: None,
+                event_type: cancellation_plan.task_event_type,
+                message: cancellation_plan.task_event_message,
+                data: cancellation_plan.task_event_data,
                 created_at: now,
             });
         self.automation_task_logs
@@ -518,17 +516,17 @@ impl InMemorySessionStore {
             .push(StoredAutomationTaskLog {
                 id: Uuid::now_v7(),
                 task_id: id,
-                stream: AutomationTaskLogStream::System,
-                message: "automation task cancelled".to_string(),
+                stream: cancellation_plan.task_log_stream,
+                message: cancellation_plan.task_log_message,
                 created_at: now,
             });
         if let Some(run_id) = workflow_run_id {
             let event = StoredWorkflowRunEvent {
                 id: Uuid::now_v7(),
                 run_id,
-                event_type: "workflow_run.cancelled".to_string(),
-                message: "workflow run cancelled".to_string(),
-                data: None,
+                event_type: cancellation_plan.run_event_type,
+                message: cancellation_plan.run_event_message,
+                data: cancellation_plan.run_event_data,
                 created_at: now,
             };
             self.workflow_run_events.lock().await.push(event.clone());
@@ -549,8 +547,8 @@ impl InMemorySessionStore {
                 .push(StoredWorkflowRunLog {
                     id: Uuid::now_v7(),
                     run_id,
-                    stream: AutomationTaskLogStream::System,
-                    message: "workflow run cancelled".to_string(),
+                    stream: cancellation_plan.run_log_stream,
+                    message: cancellation_plan.run_log_message,
                     created_at: now,
                 });
         }
@@ -616,36 +614,17 @@ impl InMemorySessionStore {
         let Some(task) = tasks.iter_mut().find(|task| task.id == id) else {
             return Ok(None);
         };
-        if task.state.is_terminal() {
-            return Err(SessionStoreError::Conflict(format!(
-                "automation task {id} is already terminal"
-            )));
-        }
-        if !task.state.can_transition_to(request.state) {
-            return Err(SessionStoreError::Conflict(format!(
-                "automation task {id} cannot transition from {} to {}",
-                task.state.as_str(),
-                request.state.as_str()
-            )));
-        }
-        let now = Utc::now();
-        if matches!(
-            request.state,
-            AutomationTaskState::Starting
-                | AutomationTaskState::Running
-                | AutomationTaskState::AwaitingInput
-        ) && task.started_at.is_none()
-        {
-            task.started_at = Some(now);
-        }
-        if request.state.is_terminal() {
-            task.completed_at = Some(now);
-        }
-        task.state = request.state;
-        task.output = request.output;
-        task.error = request.error;
-        task.artifact_refs = request.artifact_refs;
-        task.updated_at = now;
+        let current_task = task.clone();
+        let transition_plan = plan_automation_task_transition(&current_task, &request, Utc::now())
+            .map_err(|error| SessionStoreError::Conflict(error.to_string()))?;
+        let now = transition_plan.task_updated_at;
+        task.state = transition_plan.task_state;
+        task.output = transition_plan.task_output.clone();
+        task.error = transition_plan.task_error.clone();
+        task.artifact_refs = transition_plan.task_artifact_refs.clone();
+        task.started_at = transition_plan.task_started_at;
+        task.completed_at = transition_plan.task_completed_at;
+        task.updated_at = transition_plan.task_updated_at;
         let task = task.clone();
         drop(tasks);
 
@@ -665,9 +644,9 @@ impl InMemorySessionStore {
             .push(StoredAutomationTaskEvent {
                 id: Uuid::now_v7(),
                 task_id: id,
-                event_type: request.event_type,
-                message: request.event_message,
-                data: request.event_data,
+                event_type: transition_plan.task_event_type,
+                message: transition_plan.task_event_message,
+                data: transition_plan.task_event_data,
                 created_at: now,
             });
         Ok(Some(task))

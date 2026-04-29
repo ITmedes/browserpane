@@ -266,19 +266,64 @@ impl PostgresSessionStore {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
 
-        let row = transaction
+        let current_row = transaction
             .query_opt(
                 r#"
-                UPDATE control_automation_tasks
-                SET
-                    state = 'cancelled',
-                    cancel_requested_at = NOW(),
-                    completed_at = NOW(),
-                    updated_at = NOW()
+                SELECT
+                    id,
+                    owner_subject,
+                    owner_issuer,
+                    owner_display_name,
+                    display_name,
+                    executor,
+                    state,
+                    session_id,
+                    session_source,
+                    input,
+                    output,
+                    error,
+                    artifact_refs,
+                    labels,
+                    cancel_requested_at,
+                    started_at,
+                    completed_at,
+                    created_at,
+                    updated_at
+                FROM control_automation_tasks
                 WHERE id = $1
                   AND owner_subject = $2
                   AND owner_issuer = $3
-                  AND state IN ('pending', 'queued', 'starting', 'running', 'awaiting_input')
+                FOR UPDATE
+                "#,
+                &[&id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to lock automation task for cancellation: {error}"
+                ))
+            })?;
+        let Some(current_row) = current_row else {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Ok(None);
+        };
+        let current = row_to_stored_automation_task(&current_row)?;
+        let cancellation_plan = plan_automation_task_cancellation(&current, Utc::now())
+            .map_err(|error| SessionStoreError::Conflict(error.to_string()))?;
+
+        let now = cancellation_plan.task_updated_at;
+        let row = transaction
+            .query_one(
+                r#"
+                UPDATE control_automation_tasks
+                SET
+                    state = $2,
+                    cancel_requested_at = $3,
+                    completed_at = $4,
+                    updated_at = $5
+                WHERE id = $1
                 RETURNING
                     id,
                     owner_subject,
@@ -300,61 +345,18 @@ impl PostgresSessionStore {
                     created_at,
                     updated_at
                 "#,
-                &[&id, &principal.subject, &principal.issuer],
+                &[
+                    &id,
+                    &cancellation_plan.task_state.as_str(),
+                    &cancellation_plan.task_cancel_requested_at,
+                    &cancellation_plan.task_completed_at,
+                    &now,
+                ],
             )
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to cancel automation task: {error}"))
             })?;
-        let Some(row) = row else {
-            let existing = transaction
-                .query_opt(
-                    r#"
-                    SELECT
-                        id,
-                        owner_subject,
-                        owner_issuer,
-                        owner_display_name,
-                        display_name,
-                        executor,
-                        state,
-                        session_id,
-                        session_source,
-                        input,
-                        output,
-                        error,
-                        artifact_refs,
-                        labels,
-                        cancel_requested_at,
-                        started_at,
-                        completed_at,
-                        created_at,
-                        updated_at
-                    FROM control_automation_tasks
-                    WHERE id = $1
-                      AND owner_subject = $2
-                      AND owner_issuer = $3
-                    "#,
-                    &[&id, &principal.subject, &principal.issuer],
-                )
-                .await
-                .map_err(|error| {
-                    SessionStoreError::Backend(format!(
-                        "failed to load automation task after cancel conflict: {error}"
-                    ))
-                })?;
-            transaction.commit().await.map_err(|error| {
-                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
-            })?;
-            if existing.is_some() {
-                return Err(SessionStoreError::Conflict(format!(
-                    "automation task {id} is already terminal"
-                )));
-            }
-            return Ok(None);
-        };
-
-        let now = Utc::now();
         transaction
             .execute(
                 r#"
@@ -366,13 +368,14 @@ impl PostgresSessionStore {
                     data,
                     created_at
                 )
-                VALUES ($1, $2, $3, $4, NULL, $5)
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6)
                 "#,
                 &[
                     &Uuid::now_v7(),
                     &id,
-                    &"automation_task.cancelled",
-                    &"automation task cancelled",
+                    &cancellation_plan.task_event_type,
+                    &cancellation_plan.task_event_message,
+                    &cancellation_plan.task_event_data,
                     &now,
                 ],
             )
@@ -397,8 +400,8 @@ impl PostgresSessionStore {
                 &[
                     &Uuid::now_v7(),
                     &id,
-                    &AutomationTaskLogStream::System.as_str(),
-                    &"automation task cancelled",
+                    &cancellation_plan.task_log_stream.as_str(),
+                    &cancellation_plan.task_log_message,
                     &now,
                 ],
             )
@@ -510,9 +513,9 @@ impl PostgresSessionStore {
             let event = StoredWorkflowRunEvent {
                 id: Uuid::now_v7(),
                 run_id,
-                event_type: "workflow_run.cancelled".to_string(),
-                message: "workflow run cancelled".to_string(),
-                data: None,
+                event_type: cancellation_plan.run_event_type,
+                message: cancellation_plan.run_event_message,
+                data: cancellation_plan.run_event_data,
                 created_at: now,
             };
             transaction
@@ -552,8 +555,8 @@ impl PostgresSessionStore {
                     &[
                         &Uuid::now_v7(),
                         &run_id,
-                        &AutomationTaskLogStream::System.as_str(),
-                        &"workflow run cancelled",
+                        &cancellation_plan.run_log_stream.as_str(),
+                        &cancellation_plan.run_log_message,
                         &now,
                     ],
                 )
@@ -703,36 +706,10 @@ impl PostgresSessionStore {
             return Ok(None);
         };
         let current = row_to_stored_automation_task(&current_row)?;
-        if current.state.is_terminal() {
-            return Err(SessionStoreError::Conflict(format!(
-                "automation task {id} is already terminal"
-            )));
-        }
-        if !current.state.can_transition_to(request.state) {
-            return Err(SessionStoreError::Conflict(format!(
-                "automation task {id} cannot transition from {} to {}",
-                current.state.as_str(),
-                request.state.as_str()
-            )));
-        }
-
-        let now = Utc::now();
-        let started_at = if matches!(
-            request.state,
-            AutomationTaskState::Starting
-                | AutomationTaskState::Running
-                | AutomationTaskState::AwaitingInput
-        ) {
-            current.started_at.or(Some(now))
-        } else {
-            current.started_at
-        };
-        let completed_at = if request.state.is_terminal() {
-            Some(now)
-        } else {
-            current.completed_at
-        };
-        let artifact_refs = json_string_array(&request.artifact_refs);
+        let transition_plan = plan_automation_task_transition(&current, &request, Utc::now())
+            .map_err(|error| SessionStoreError::Conflict(error.to_string()))?;
+        let now = transition_plan.task_updated_at;
+        let artifact_refs = json_string_array(&transition_plan.task_artifact_refs);
         let row = transaction
             .query_one(
                 r#"
@@ -769,13 +746,13 @@ impl PostgresSessionStore {
                 "#,
                 &[
                     &id,
-                    &request.state.as_str(),
-                    &request.output,
-                    &request.error,
+                    &transition_plan.task_state.as_str(),
+                    &transition_plan.task_output,
+                    &transition_plan.task_error,
                     &artifact_refs,
-                    &started_at,
-                    &completed_at,
-                    &now,
+                    &transition_plan.task_started_at,
+                    &transition_plan.task_completed_at,
+                    &transition_plan.task_updated_at,
                 ],
             )
             .await
@@ -801,9 +778,9 @@ impl PostgresSessionStore {
                 &[
                     &Uuid::now_v7(),
                     &id,
-                    &request.event_type,
-                    &request.event_message,
-                    &request.event_data,
+                    &transition_plan.task_event_type,
+                    &transition_plan.task_event_message,
+                    &transition_plan.task_event_data,
                     &now,
                 ],
             )

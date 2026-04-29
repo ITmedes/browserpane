@@ -74,7 +74,10 @@ fn transition_plan_sets_started_at_and_default_messages() {
     assert_eq!(plan.task_started_at, Some(now));
     assert_eq!(plan.task_completed_at, None);
     assert_eq!(plan.task_event_type, "automation_task.running");
-    assert_eq!(plan.task_event_message, "automation task entered running state");
+    assert_eq!(
+        plan.task_event_message,
+        "automation task entered running state"
+    );
     assert_eq!(plan.run_state, WorkflowRunState::Running);
     assert_eq!(plan.run_event_type, "workflow_run.running");
     assert_eq!(plan.run_event_message, "workflow run entered running state");
