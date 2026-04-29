@@ -100,6 +100,7 @@ mod recordings;
 mod resources;
 mod runtime_access;
 mod sessions;
+mod workflow_definitions;
 mod workflow_events;
 mod workflow_files;
 mod workflow_run_operations;
@@ -909,6 +910,7 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         .merge(credential_bindings::credential_binding_routes())
         .merge(file_workspaces::file_workspace_routes())
         .merge(workflow_events::workflow_event_subscription_routes())
+        .merge(workflow_definitions::workflow_definition_routes())
         .merge(workflows::workflow_routes())
         .merge(workflow_files::workflow_file_routes())
         .merge(credential_bindings::workflow_run_credential_binding_routes())

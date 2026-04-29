@@ -49,6 +49,7 @@ mod extensions;
 mod file_workspaces;
 mod recordings;
 mod sessions;
+mod workflow_definitions;
 mod workflow_events;
 mod workflow_files;
 mod workflow_run_operations;
