@@ -47,6 +47,12 @@ pub struct ComposeVisibleFile {
     pub container_path: String,
 }
 
+#[allow(dead_code)]
+pub struct ComposeServiceRestoreGuard {
+    repo_root: PathBuf,
+    services: Vec<String>,
+}
+
 pub struct JsonOutcome {
     pub status: StatusCode,
     pub body: Value,
@@ -294,6 +300,46 @@ impl ComposeHarness {
         Ok(())
     }
 
+    #[allow(dead_code)]
+    pub async fn wait_for_gateway_api_ready(&self) -> Result<()> {
+        poll_until(
+            "compose gateway api readiness",
+            Duration::from_secs(30),
+            || {
+                let harness = self.clone();
+                async move {
+                    match harness.get_json("/api/v1/sessions").await {
+                        Ok(value) => Ok(Some(value)),
+                        Err(_) => Ok(None),
+                    }
+                }
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn compose_service_restore_guard(&self, services: &[&str]) -> ComposeServiceRestoreGuard {
+        ComposeServiceRestoreGuard {
+            repo_root: self.repo_root().to_path_buf(),
+            services: services.iter().map(|value| (*value).to_string()).collect(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn recreate_compose_services(
+        &self,
+        services: &[&str],
+        env_overrides: &[(&str, &str)],
+    ) -> Result<()> {
+        let services = services
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect::<Vec<_>>();
+        recreate_compose_services_blocking(self.repo_root(), &services, env_overrides)
+    }
+
     pub async fn clear_bridge_control_session(&self) -> Result<()> {
         let _ = self.delete_bridge_json("/control-session").await;
         let _ = self.delete_json("/api/session/mcp-owner").await;
@@ -370,18 +416,8 @@ impl ComposeHarness {
     }
 
     pub async fn create_local_workflow_repo(&self) -> Result<LocalWorkflowRepo> {
-        let temp_root = self.repo_root().join(".tmp");
-        std::fs::create_dir_all(&temp_root)
-            .with_context(|| format!("failed to create temp root {}", temp_root.display()))?;
-        let temp_dir = Builder::new()
-            .prefix("bpane-gateway-compose-e2e-")
-            .tempdir_in(&temp_root)
-            .context("failed to create workflow temp dir")?;
-        let workflow_dir = temp_dir.path().join("workflows").join("smoke");
-        std::fs::create_dir_all(&workflow_dir)
-            .with_context(|| format!("failed to create {}", workflow_dir.display()))?;
-        std::fs::write(
-            workflow_dir.join("run.mjs"),
+        self.create_custom_workflow_repo(&[(
+            "workflows/smoke/run.mjs",
             r#"export default async function run({ page, input, sessionId, workflowRunId, automationTaskId, artifacts }) {
   const targetUrl =
     input && typeof input.target_url === 'string' && input.target_url.trim()
@@ -418,8 +454,32 @@ impl ComposeHarness {
   };
 }
 "#,
-        )
-        .with_context(|| format!("failed to write workflow entrypoint {}", workflow_dir.display()))?;
+        )])
+        .await
+    }
+
+    pub async fn create_custom_workflow_repo(
+        &self,
+        files: &[(&str, &str)],
+    ) -> Result<LocalWorkflowRepo> {
+        let temp_root = self.repo_root().join(".tmp");
+        std::fs::create_dir_all(&temp_root)
+            .with_context(|| format!("failed to create temp root {}", temp_root.display()))?;
+        let temp_dir = Builder::new()
+            .prefix("bpane-gateway-compose-e2e-")
+            .tempdir_in(&temp_root)
+            .context("failed to create workflow temp dir")?;
+        for (relative_path, contents) in files {
+            let file_path = temp_dir.path().join(relative_path);
+            let parent = file_path
+                .parent()
+                .ok_or_else(|| anyhow!("workflow fixture path {relative_path} has no parent"))?;
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create {}", parent.display()))?;
+            std::fs::write(&file_path, contents).with_context(|| {
+                format!("failed to write workflow fixture {}", file_path.display())
+            })?;
+        }
 
         initialize_git_repository(temp_dir.path())?;
         let commit = run_git_command(temp_dir.path(), &["rev-parse", "HEAD"])
@@ -624,6 +684,43 @@ impl ComposeHarness {
         })?;
         Ok(JsonOutcome { status, body })
     }
+}
+
+#[allow(dead_code)]
+impl Drop for ComposeServiceRestoreGuard {
+    fn drop(&mut self) {
+        if let Err(error) = recreate_compose_services_blocking(&self.repo_root, &self.services, &[])
+        {
+            eprintln!(
+                "[compose-api-surface] failed to restore compose services {:?}: {error}",
+                self.services
+            );
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn recreate_compose_services_blocking(
+    repo_root: &Path,
+    services: &[String],
+    env_overrides: &[(&str, &str)],
+) -> Result<()> {
+    let mut command = Command::new("docker");
+    command.args(["compose", "-f", "deploy/compose.yml", "up", "-d", "--build"]);
+    for (key, value) in env_overrides {
+        command.env(key, value);
+    }
+    for service in services {
+        command.arg(service);
+    }
+    let status = command
+        .current_dir(repo_root)
+        .status()
+        .context("failed to recreate compose services")?;
+    if !status.success() {
+        bail!("docker compose up failed while recreating services");
+    }
+    Ok(())
 }
 
 pub fn json_id(value: &Value, field: &str) -> Result<String> {
