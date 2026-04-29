@@ -13,8 +13,8 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::session_control::{SessionStore, SessionStoreError};
+use crate::workflow::WorkflowObservability;
 use crate::workflow::{StoredWorkflowRun, StoredWorkflowRunEvent};
-use crate::workflow_observability::WorkflowObservability;
 
 type HmacSha256 = Hmac<Sha256>;
 

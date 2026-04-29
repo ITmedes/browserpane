@@ -19,11 +19,9 @@ use crate::recording_retention::RecordingRetentionManager;
 use crate::session_control::{SessionOwnerMode, SessionStore};
 use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerDockerConfig};
 use crate::session_registry::SessionRegistry;
+use crate::workflow::{WorkflowObservability, WorkflowRetentionManager, WorkflowSourceResolver};
 use crate::workflow_event_delivery::{WorkflowEventDeliveryConfig, WorkflowEventDeliveryManager};
 use crate::workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
-use crate::workflow_observability::WorkflowObservability;
-use crate::workflow_retention::WorkflowRetentionManager;
-use crate::workflow_source::WorkflowSourceResolver;
 
 pub(super) struct AuthServices {
     pub(super) auth_validator: Arc<AuthValidator>,
