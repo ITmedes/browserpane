@@ -108,68 +108,16 @@ pub async fn run_workflow_admission(harness: &ComposeHarness) -> Result<()> {
     harness.cleanup_active_sessions().await?;
     harness.ensure_workflow_worker_image().await?;
 
-    let workflow_repo = harness
-        .create_custom_workflow_repo(&[(
-            "workflows/pool/run.mjs",
-            r#"export default async function run({ page, input, sessionId }) {
-  const holdMs =
-    input && Number.isFinite(input.hold_ms)
-      ? Number(input.hold_ms)
-      : 0;
-  await page.goto('http://web:8080', { waitUntil: 'networkidle' });
-  if (holdMs > 0) {
-    await new Promise((resolve) => setTimeout(resolve, holdMs));
-  }
-  return {
-    title: await page.title(),
-    final_url: page.url(),
-    hold_ms: holdMs,
-    session_id: sessionId,
-  };
-}
-"#,
-        )])
-        .await?;
-
-    let workflow = harness
-        .post_json(
-            "/api/v1/workflows",
-            json!({
-                "name": "compose-docker-pool-admission",
-                "description": "Exercise queued workflow admission in docker_pool mode",
-                "labels": label_map("docker-pool-workflow-admission"),
-            }),
-        )
-        .await?;
-    let workflow_id = json_id(&workflow, "id")?;
-
-    let version_response = harness
-        .post_json(
-            &format!("/api/v1/workflows/{workflow_id}/versions"),
-            json!({
-                "version": "v1",
-                "executor": "playwright",
-                "entrypoint": "workflows/pool/run.mjs",
-                "source": {
-                    "kind": "git",
-                    "repository_url": workflow_repo.repository_url,
-                    "ref": "refs/heads/main",
-                    "root_path": "workflows",
-                },
-                "default_session": {
-                    "labels": {
-                        "origin": "bpane-gateway-compose-e2e",
-                        "scope": "docker-pool-workflow-admission",
-                    }
-                }
-            }),
-        )
-        .await?;
-    if version_response["source"]["resolved_commit"] != json!(workflow_repo.commit) {
-        return Err(anyhow!(
-            "docker_pool workflow version did not pin the expected commit: {version_response}"
-        ));
-    }
+    let workflow_repo = create_docker_pool_workflow_repo(harness).await?;
+    let workflow_id = publish_docker_pool_workflow(
+        harness,
+        "compose-docker-pool-admission",
+        "Exercise queued workflow admission in docker_pool mode",
+        "docker-pool-workflow-admission",
+        &workflow_repo.repository_url,
+        &workflow_repo.commit,
+    )
+    .await?;
 
     let request_prefix = format!("docker-pool-admission-{}", uuid::Uuid::now_v7());
     let first_run = create_workflow_run(
@@ -177,27 +125,17 @@ pub async fn run_workflow_admission(harness: &ComposeHarness) -> Result<()> {
         &workflow_id,
         json!({ "hold_ms": 1800 }),
         &format!("{request_prefix}-run-1"),
+        "docker-pool-workflow-admission",
     )
     .await?;
     let first_run_id = json_id(&first_run, "id")?;
 
-    poll_until(
-        "docker_pool first workflow run start",
+    wait_for_workflow_run_state(
+        harness,
+        &first_run_id,
+        &["running", "starting"],
         Duration::from_secs(20),
-        || {
-            let harness = harness.clone();
-            let first_run_id = first_run_id.clone();
-            async move {
-                let run = harness
-                    .get_json(&format!("/api/v1/workflow-runs/{first_run_id}"))
-                    .await?;
-                let state = run["state"].as_str().unwrap_or_default();
-                if matches!(state, "running" | "starting") {
-                    return Ok(Some(run));
-                }
-                Ok(None)
-            }
-        },
+        "docker_pool first workflow run start",
     )
     .await?;
 
@@ -206,6 +144,7 @@ pub async fn run_workflow_admission(harness: &ComposeHarness) -> Result<()> {
         &workflow_id,
         json!({ "hold_ms": 0 }),
         &format!("{request_prefix}-run-2"),
+        "docker-pool-workflow-admission",
     )
     .await?;
     let second_run_id = json_id(&second_run, "id")?;
@@ -220,23 +159,12 @@ pub async fn run_workflow_admission(harness: &ComposeHarness) -> Result<()> {
         ));
     }
 
-    let completed_second = poll_until(
-        "docker_pool queued workflow completion",
+    let completed_second = wait_for_workflow_run_state(
+        harness,
+        &second_run_id,
+        &["succeeded", "failed", "cancelled", "timed_out"],
         Duration::from_secs(40),
-        || {
-            let harness = harness.clone();
-            let second_run_id = second_run_id.clone();
-            async move {
-                let run = harness
-                    .get_json(&format!("/api/v1/workflow-runs/{second_run_id}"))
-                    .await?;
-                let state = run["state"].as_str().unwrap_or_default();
-                if matches!(state, "succeeded" | "failed" | "cancelled" | "timed_out") {
-                    return Ok(Some(run));
-                }
-                Ok(None)
-            }
-        },
+        "docker_pool queued workflow completion",
     )
     .await?;
     if completed_second["state"] != json!("succeeded") {
@@ -250,19 +178,137 @@ pub async fn run_workflow_admission(harness: &ComposeHarness) -> Result<()> {
         ));
     }
 
-    let second_events = harness
-        .get_json(&format!("/api/v1/workflow-runs/{second_run_id}/events"))
-        .await?;
-    let event_types = second_events["events"]
-        .as_array()
-        .ok_or_else(|| anyhow!("workflow run events payload is malformed: {second_events}"))?
-        .iter()
-        .filter_map(|event| event.get("event_type").and_then(Value::as_str))
-        .collect::<Vec<_>>();
+    let event_types = workflow_run_event_types(harness, &second_run_id).await?;
     for expected in ["workflow_run.queued", "workflow_run.succeeded"] {
-        if !event_types.contains(&expected) {
+        if !event_types.iter().any(|event| event == expected) {
             return Err(anyhow!(
-                "docker_pool queued run is missing expected event {expected}: {second_events}"
+                "docker_pool queued run is missing expected event {expected}: {event_types:?}"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn run_workflow_queued_cancel(harness: &ComposeHarness) -> Result<()> {
+    let _restore = harness.compose_service_restore_guard(&["gateway"]);
+    configure_gateway(
+        harness,
+        &[
+            ("BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES", "4"),
+            ("BPANE_WORKFLOW_WORKER_MAX_ACTIVE", "1"),
+        ],
+    )
+    .await?;
+    harness.cleanup_active_sessions().await?;
+    harness.ensure_workflow_worker_image().await?;
+
+    let workflow_repo = create_docker_pool_workflow_repo(harness).await?;
+    let workflow_id = publish_docker_pool_workflow(
+        harness,
+        "compose-docker-pool-queued-cancel",
+        "Exercise queued workflow cancellation in docker_pool mode",
+        "docker-pool-workflow-queued-cancel",
+        &workflow_repo.repository_url,
+        &workflow_repo.commit,
+    )
+    .await?;
+
+    let request_prefix = format!("docker-pool-queued-cancel-{}", uuid::Uuid::now_v7());
+    let active_run = create_workflow_run(
+        harness,
+        &workflow_id,
+        json!({ "hold_ms": 5000 }),
+        &format!("{request_prefix}-active"),
+        "docker-pool-workflow-queued-cancel",
+    )
+    .await?;
+    let active_run_id = json_id(&active_run, "id")?;
+
+    wait_for_workflow_run_state(
+        harness,
+        &active_run_id,
+        &["running", "starting"],
+        Duration::from_secs(20),
+        "docker_pool active workflow run start",
+    )
+    .await?;
+
+    let queued_run = create_workflow_run(
+        harness,
+        &workflow_id,
+        json!({ "hold_ms": 0 }),
+        &format!("{request_prefix}-queued"),
+        "docker-pool-workflow-queued-cancel",
+    )
+    .await?;
+    let queued_run_id = json_id(&queued_run, "id")?;
+    if queued_run["state"] != json!("queued") {
+        return Err(anyhow!(
+            "docker_pool queued cancel run was not created in queued state: {queued_run}"
+        ));
+    }
+
+    let cancelled = harness
+        .post_json(
+            &format!("/api/v1/workflow-runs/{queued_run_id}/cancel"),
+            json!({}),
+        )
+        .await?;
+    if cancelled["state"] != json!("cancelled") {
+        return Err(anyhow!(
+            "docker_pool queued run did not cancel immediately: {cancelled}"
+        ));
+    }
+
+    let stable_cancelled = wait_for_workflow_run_state(
+        harness,
+        &queued_run_id,
+        &["cancelled"],
+        Duration::from_secs(20),
+        "docker_pool queued cancellation remains terminal",
+    )
+    .await?;
+    if stable_cancelled["state"] != json!("cancelled") {
+        return Err(anyhow!(
+            "docker_pool queued run did not stay cancelled: {stable_cancelled}"
+        ));
+    }
+
+    let active_completed = wait_for_workflow_run_state(
+        harness,
+        &active_run_id,
+        &["succeeded", "failed", "cancelled", "timed_out"],
+        Duration::from_secs(40),
+        "docker_pool active workflow completion after queued cancellation",
+    )
+    .await?;
+    if active_completed["state"] != json!("succeeded") {
+        return Err(anyhow!(
+            "docker_pool active run did not succeed after queued cancellation: {active_completed}"
+        ));
+    }
+
+    let event_types = workflow_run_event_types(harness, &queued_run_id).await?;
+    for expected in [
+        "workflow_run.queued",
+        "workflow_run.cancel_requested",
+        "workflow_run.cancelled",
+    ] {
+        if !event_types.iter().any(|event| event == expected) {
+            return Err(anyhow!(
+                "docker_pool queued cancel run is missing expected event {expected}: {event_types:?}"
+            ));
+        }
+    }
+    for unexpected in [
+        "workflow_run.running",
+        "automation_task.running",
+        "workflow_run.succeeded",
+    ] {
+        if event_types.iter().any(|event| event == unexpected) {
+            return Err(anyhow!(
+                "docker_pool queued cancel run emitted unexpected event {unexpected}: {event_types:?}"
             ));
         }
     }
@@ -304,6 +350,7 @@ async fn create_workflow_run(
     workflow_id: &str,
     input: Value,
     client_request_id: &str,
+    scope: &str,
 ) -> Result<Value> {
     harness
         .post_json(
@@ -316,8 +363,125 @@ async fn create_workflow_run(
                 },
                 "client_request_id": client_request_id,
                 "input": input,
-                "labels": label_map("docker-pool-workflow-admission"),
+                "labels": label_map(scope),
             }),
         )
         .await
+}
+
+async fn create_docker_pool_workflow_repo(
+    harness: &ComposeHarness,
+) -> Result<crate::support::LocalWorkflowRepo> {
+    harness
+        .create_custom_workflow_repo(&[(
+            "workflows/pool/run.mjs",
+            r#"export default async function run({ page, input, sessionId }) {
+  const holdMs =
+    input && Number.isFinite(input.hold_ms)
+      ? Number(input.hold_ms)
+      : 0;
+  await page.goto('http://web:8080', { waitUntil: 'networkidle' });
+  if (holdMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, holdMs));
+  }
+  return {
+    title: await page.title(),
+    final_url: page.url(),
+    hold_ms: holdMs,
+    session_id: sessionId,
+  };
+}
+"#,
+        )])
+        .await
+}
+
+async fn publish_docker_pool_workflow(
+    harness: &ComposeHarness,
+    name: &str,
+    description: &str,
+    scope: &str,
+    repository_url: &str,
+    commit: &str,
+) -> Result<String> {
+    let workflow = harness
+        .post_json(
+            "/api/v1/workflows",
+            json!({
+                "name": name,
+                "description": description,
+                "labels": label_map(scope),
+            }),
+        )
+        .await?;
+    let workflow_id = json_id(&workflow, "id")?;
+
+    let version_response = harness
+        .post_json(
+            &format!("/api/v1/workflows/{workflow_id}/versions"),
+            json!({
+                "version": "v1",
+                "executor": "playwright",
+                "entrypoint": "workflows/pool/run.mjs",
+                "source": {
+                    "kind": "git",
+                    "repository_url": repository_url,
+                    "ref": "refs/heads/main",
+                    "root_path": "workflows",
+                },
+                "default_session": {
+                    "labels": {
+                        "origin": "bpane-gateway-compose-e2e",
+                        "scope": scope,
+                    }
+                }
+            }),
+        )
+        .await?;
+    if version_response["source"]["resolved_commit"] != json!(commit) {
+        return Err(anyhow!(
+            "docker_pool workflow version did not pin the expected commit: {version_response}"
+        ));
+    }
+
+    Ok(workflow_id)
+}
+
+async fn wait_for_workflow_run_state(
+    harness: &ComposeHarness,
+    run_id: &str,
+    states: &[&str],
+    timeout: Duration,
+    description: &str,
+) -> Result<Value> {
+    poll_until(description, timeout, || {
+        let harness = harness.clone();
+        let run_path = format!("/api/v1/workflow-runs/{run_id}");
+        let expected = states
+            .iter()
+            .map(|state| (*state).to_string())
+            .collect::<Vec<_>>();
+        async move {
+            let run = harness.get_json(&run_path).await?;
+            let state = run["state"].as_str().unwrap_or_default().to_string();
+            if expected.iter().any(|candidate| candidate == &state) {
+                return Ok(Some(run));
+            }
+            Ok(None)
+        }
+    })
+    .await
+}
+
+async fn workflow_run_event_types(harness: &ComposeHarness, run_id: &str) -> Result<Vec<String>> {
+    let events = harness
+        .get_json(&format!("/api/v1/workflow-runs/{run_id}/events"))
+        .await?;
+    Ok(events["events"]
+        .as_array()
+        .ok_or_else(|| anyhow!("workflow run events payload is malformed: {events}"))?
+        .iter()
+        .filter_map(|event| event.get("event_type").and_then(Value::as_str))
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>())
 }
