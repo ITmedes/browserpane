@@ -141,7 +141,7 @@ impl WorkflowEventRepository<'_> {
             FROM claimed
             WHERE delivery.id = claimed.id
             RETURNING
-                {WORKFLOW_EVENT_DELIVERY_COLUMNS}
+                {WORKFLOW_EVENT_DELIVERY_COLUMNS_FROM_DELIVERY_ALIAS}
             "#
         );
         let rows = self

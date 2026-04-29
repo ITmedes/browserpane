@@ -134,7 +134,7 @@ impl WorkflowDefinitionRepository<'_> {
         let query = format!(
             r#"
             SELECT
-                {WORKFLOW_DEFINITION_VERSION_COLUMNS}
+                {WORKFLOW_DEFINITION_VERSION_COLUMNS_FROM_VERSION_ALIAS}
             FROM control_workflow_definition_versions version
             JOIN control_workflow_definitions workflow
               ON workflow.id = version.workflow_definition_id

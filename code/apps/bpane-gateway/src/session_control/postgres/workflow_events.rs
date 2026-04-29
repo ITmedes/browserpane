@@ -35,6 +35,26 @@ const WORKFLOW_EVENT_DELIVERY_COLUMNS: &str = r#"
     updated_at
 "#;
 
+const WORKFLOW_EVENT_DELIVERY_COLUMNS_FROM_DELIVERY_ALIAS: &str = r#"
+    delivery.id AS id,
+    delivery.subscription_id AS subscription_id,
+    delivery.run_id AS run_id,
+    delivery.event_id AS event_id,
+    delivery.event_type AS event_type,
+    delivery.target_url AS target_url,
+    delivery.signing_secret AS signing_secret,
+    delivery.payload AS payload,
+    delivery.state AS state,
+    delivery.attempt_count AS attempt_count,
+    delivery.next_attempt_at AS next_attempt_at,
+    delivery.last_attempt_at AS last_attempt_at,
+    delivery.delivered_at AS delivered_at,
+    delivery.last_response_status AS last_response_status,
+    delivery.last_error AS last_error,
+    delivery.created_at AS created_at,
+    delivery.updated_at AS updated_at
+"#;
+
 pub(super) struct WorkflowEventRepository<'a> {
     store: &'a PostgresSessionStore,
 }
