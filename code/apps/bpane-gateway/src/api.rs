@@ -1,6 +1,5 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::net::SocketAddr;
-use std::path::{Component, Path as FsPath};
 use std::sync::Arc;
 
 use axum::body::Bytes;
@@ -102,6 +101,7 @@ mod resources;
 mod runtime_access;
 mod sessions;
 mod workflow_events;
+mod workflow_files;
 mod workflow_run_operations;
 mod workflows;
 
@@ -910,6 +910,7 @@ fn build_api_router(state: Arc<ApiState>) -> Router {
         .merge(file_workspaces::file_workspace_routes())
         .merge(workflow_events::workflow_event_subscription_routes())
         .merge(workflows::workflow_routes())
+        .merge(workflow_files::workflow_file_routes())
         .merge(credential_bindings::workflow_run_credential_binding_routes())
         .merge(workflow_run_operations::workflow_run_operation_routes())
         .merge(workflow_events::workflow_run_event_routes())
