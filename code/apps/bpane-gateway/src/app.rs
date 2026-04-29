@@ -55,8 +55,8 @@ impl GatewayApp {
             connect_ticket_manager: auth_services.connect_ticket_manager.clone(),
             session_store: session_store.clone(),
             recording_lifecycle: recording_services.lifecycle.clone(),
-            idle_stop_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
-            heartbeat_timeout: Duration::from_secs(config.heartbeat_timeout_secs),
+            idle_stop_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
+            heartbeat_timeout: Duration::from_secs(config.gateway.heartbeat_timeout_secs),
             registry: registry.clone(),
         });
 
@@ -71,7 +71,7 @@ impl GatewayApp {
             credential_provider,
             recording_artifact_store: recording_services.artifact_store,
             workspace_file_store: Arc::new(WorkspaceFileStore::local_fs(
-                config.file_workspace_local_root.clone(),
+                config.storage.file_workspace_local_root.clone(),
             )),
             workflow_source_resolver: workflow_services.source_resolver,
             recording_observability: recording_services.observability,
@@ -80,8 +80,8 @@ impl GatewayApp {
             workflow_observability: workflow_services.observability,
             workflow_log_retention: workflow_services.log_retention,
             workflow_output_retention: workflow_services.output_retention,
-            idle_stop_timeout: Duration::from_secs(config.runtime_idle_timeout_secs),
-            public_gateway_url: config.public_gateway_url.clone(),
+            idle_stop_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
+            public_gateway_url: config.gateway.public_gateway_url.clone(),
             default_owner_mode: default_owner_mode(&config),
         };
 

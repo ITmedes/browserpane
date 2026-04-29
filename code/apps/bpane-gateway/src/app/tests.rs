@@ -16,7 +16,7 @@ fn test_config() -> Config {
 #[test]
 fn shared_secret_rejects_too_short_hmac_secret() {
     let mut config = test_config();
-    config.hmac_secret = Some("00112233445566778899aabbccddee".to_string());
+    config.auth.hmac_secret = Some("00112233445566778899aabbccddee".to_string());
 
     let error = load_or_generate_shared_secret(&config).unwrap_err();
 
@@ -28,9 +28,9 @@ fn shared_secret_rejects_too_short_hmac_secret() {
 #[test]
 fn docker_single_runtime_requires_image() {
     let mut config = test_config();
-    config.runtime_backend = "docker_single".to_string();
-    config.docker_runtime_network = Some("network".to_string());
-    config.docker_runtime_volume = Some("volume".to_string());
+    config.runtime.backend = "docker_single".to_string();
+    config.runtime.docker_network = Some("network".to_string());
+    config.runtime.docker_volume = Some("volume".to_string());
 
     let error = build_session_manager_config(&config).unwrap_err();
 
@@ -42,12 +42,12 @@ fn docker_single_runtime_requires_image() {
 #[test]
 fn docker_pool_runtime_uses_configured_capacities() {
     let mut config = test_config();
-    config.runtime_backend = "docker_pool".to_string();
-    config.docker_runtime_image = Some("image".to_string());
-    config.docker_runtime_network = Some("network".to_string());
-    config.docker_runtime_volume = Some("volume".to_string());
-    config.max_active_runtimes = 4;
-    config.max_starting_runtimes = 2;
+    config.runtime.backend = "docker_pool".to_string();
+    config.runtime.docker_image = Some("image".to_string());
+    config.runtime.docker_network = Some("network".to_string());
+    config.runtime.docker_volume = Some("volume".to_string());
+    config.runtime.max_active_runtimes = 4;
+    config.runtime.max_starting_runtimes = 2;
 
     let manager_config = build_session_manager_config(&config).unwrap();
 
@@ -62,7 +62,7 @@ fn docker_pool_runtime_uses_configured_capacities() {
 #[test]
 fn recording_worker_requires_chrome_when_enabled() {
     let mut config = test_config();
-    config.recording_worker_bin = Some("recording-worker".into());
+    config.recording.recording_worker_bin = Some("recording-worker".into());
 
     let error = build_recording_worker_config(&config).unwrap_err();
 
@@ -83,7 +83,7 @@ fn default_owner_mode_tracks_exclusive_flag() {
     let mut config = test_config();
     assert_eq!(default_owner_mode(&config), SessionOwnerMode::Collaborative);
 
-    config.exclusive_browser_owner = true;
+    config.gateway.exclusive_browser_owner = true;
     assert_eq!(
         default_owner_mode(&config),
         SessionOwnerMode::ExclusiveBrowserOwner

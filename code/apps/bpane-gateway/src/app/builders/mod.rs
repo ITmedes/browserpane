@@ -64,15 +64,15 @@ pub(super) fn build_credential_provider(
     config: &Config,
 ) -> anyhow::Result<Option<Arc<CredentialProvider>>> {
     match (
-        config.credential_vault_addr.clone(),
-        config.credential_vault_token.clone(),
+        config.storage.credential_vault_addr.clone(),
+        config.storage.credential_vault_token.clone(),
     ) {
         (Some(addr), Some(token)) => Ok(Some(Arc::new(CredentialProvider::new(Arc::new(
             VaultKvV2CredentialProvider::new(
                 addr,
                 token,
-                config.credential_vault_mount_path.clone(),
-                Some(config.credential_vault_prefix.clone()),
+                config.storage.credential_vault_mount_path.clone(),
+                Some(config.storage.credential_vault_prefix.clone()),
             )?,
         ))))),
         (None, None) => Ok(None),
@@ -81,7 +81,7 @@ pub(super) fn build_credential_provider(
 }
 
 pub(super) fn default_owner_mode(config: &Config) -> SessionOwnerMode {
-    if config.exclusive_browser_owner {
+    if config.gateway.exclusive_browser_owner {
         SessionOwnerMode::ExclusiveBrowserOwner
     } else {
         SessionOwnerMode::Collaborative

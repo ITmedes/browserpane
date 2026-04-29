@@ -17,11 +17,11 @@ impl AuthServices {
         Ok(Self {
             connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
                 shared_secret.clone(),
-                Duration::from_secs(config.session_ticket_ttl_secs),
+                Duration::from_secs(config.auth.session_ticket_ttl_secs),
             )),
             automation_access_token_manager: Arc::new(SessionAutomationAccessTokenManager::new(
                 shared_secret,
-                Duration::from_secs(config.session_ticket_ttl_secs),
+                Duration::from_secs(config.auth.session_ticket_ttl_secs),
             )),
             auth_validator,
         })
@@ -29,7 +29,7 @@ impl AuthServices {
 }
 
 pub(in crate::app) fn load_or_generate_shared_secret(config: &Config) -> anyhow::Result<Vec<u8>> {
-    match &config.hmac_secret {
+    match &config.auth.hmac_secret {
         Some(hex_secret) => {
             let decoded = hex::decode(hex_secret)?;
             if decoded.len() < 16 {
@@ -52,26 +52,27 @@ async fn build_auth_validator(
     config: &Config,
     shared_secret: &[u8],
 ) -> anyhow::Result<AuthValidator> {
-    if let Some(issuer) = &config.oidc_issuer {
+    if let Some(issuer) = &config.auth.oidc_issuer {
         let audience = config
+            .auth
             .oidc_audience
             .clone()
             .ok_or_else(|| anyhow!("--oidc-audience is required when --oidc-issuer is set"))?;
         info!("using OIDC/JWT auth with issuer {}", issuer);
-        if config.token_file.is_some() {
+        if config.auth.token_file.is_some() {
             info!("ignoring --token-file because OIDC auth is enabled");
         }
         AuthValidator::from_oidc(OidcConfig {
             issuer: issuer.clone(),
             audience,
-            jwks_url: config.oidc_jwks_url.clone(),
+            jwks_url: config.auth.oidc_jwks_url.clone(),
         })
         .await
     } else {
         let validator = AuthValidator::from_hmac_secret(shared_secret.to_vec());
         if let Some(token) = validator.generate_token() {
             info!("generated dev token: {token}");
-            if let Some(path) = &config.token_file {
+            if let Some(path) = &config.auth.token_file {
                 std::fs::write(path, &token)?;
                 info!("wrote token to {}", path.display());
             }
