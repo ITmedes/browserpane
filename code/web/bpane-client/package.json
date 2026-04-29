@@ -12,6 +12,7 @@
     "smoke:automation-tasks": "node scripts/run-automation-task-smoke.mjs",
     "smoke:file-workspaces": "node scripts/run-file-workspace-smoke.mjs",
     "smoke:recording": "node scripts/run-recording-smoke.mjs",
+    "smoke:test-embed-overlay": "node scripts/run-test-embed-overlay-smoke.mjs",
     "smoke:workflows": "node scripts/run-workflow-smoke.mjs",
     "smoke:workflow-cancel": "node scripts/run-workflow-cancel-smoke.mjs",
     "smoke:workflow-admission": "node scripts/run-workflow-admission-smoke.mjs",

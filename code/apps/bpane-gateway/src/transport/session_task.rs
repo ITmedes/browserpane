@@ -14,28 +14,43 @@ use super::tasks::{
 };
 use crate::idle_stop::schedule_idle_session_stop;
 use crate::recording_lifecycle::RecordingLifecycleManager;
-use crate::session::Session;
 use crate::session_control::SessionStore;
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 
-pub(super) async fn handle_session(
-    connection: wtransport::Connection,
-    session_id: u64,
-    connect_request: ValidatedConnectRequest,
-    session_manager: Arc<SessionManager>,
-    session_store: SessionStore,
-    idle_stop_timeout: Duration,
-    agent_socket_path: &str,
-    heartbeat_timeout: Duration,
-    registry: Arc<SessionRegistry>,
-    recording_lifecycle: Arc<RecordingLifecycleManager>,
-) -> anyhow::Result<()> {
+use super::session::Session;
+
+pub(super) struct SessionTaskContext {
+    pub connection: wtransport::Connection,
+    pub session_id: u64,
+    pub connect_request: ValidatedConnectRequest,
+    pub session_manager: Arc<SessionManager>,
+    pub session_store: SessionStore,
+    pub idle_stop_timeout: Duration,
+    pub agent_socket_path: String,
+    pub heartbeat_timeout: Duration,
+    pub registry: Arc<SessionRegistry>,
+    pub recording_lifecycle: Arc<RecordingLifecycleManager>,
+}
+
+pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Result<()> {
+    let SessionTaskContext {
+        connection,
+        session_id,
+        connect_request,
+        session_manager,
+        session_store,
+        idle_stop_timeout,
+        agent_socket_path,
+        heartbeat_timeout,
+        registry,
+        recording_lifecycle,
+    } = context;
     let routed_session_id = connect_request.session_id;
     let (client_handle, hub) = registry
         .join_with_role(
             routed_session_id,
-            agent_socket_path,
+            &agent_socket_path,
             connect_request.client_role,
         )
         .await?;

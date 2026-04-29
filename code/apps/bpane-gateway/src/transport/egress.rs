@@ -10,8 +10,9 @@ use wtransport::{Connection, SendStream};
 
 use super::bitrate::DatagramStats;
 use super::policy::{adapt_frame_for_client, viewer_can_receive_frame};
-use crate::session::Session;
 use crate::session_hub::SessionHub;
+
+use super::session::Session;
 
 pub(super) struct EgressTaskContext {
     pub session: Arc<Session>,
@@ -64,7 +65,7 @@ pub(super) fn spawn_agent_to_browser_task(
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
-                    ctx.hub.record_egress_lagged(n as u64);
+                    ctx.hub.record_egress_lagged(n);
                     warn!(
                         ctx.session_id,
                         ctx.client_id, n, "client lagged, skipping frames"

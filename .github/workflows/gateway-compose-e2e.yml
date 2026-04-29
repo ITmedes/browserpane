@@ -1,0 +1,41 @@
+name: Gateway Compose E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Compose e2e suite to run
+        required: true
+        default: all
+        type: choice
+        options:
+          - default
+          - docker-pool
+          - all
+  schedule:
+    - cron: "30 2 * * *"
+
+concurrency:
+  group: gateway-compose-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gateway-compose-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run gateway compose e2e suite
+        env:
+          SUITE: ${{ github.event.inputs.suite || 'all' }}
+        run: |
+          chmod +x scripts/run-gateway-compose-e2e.sh
+          scripts/run-gateway-compose-e2e.sh --suite "$SUITE" --teardown
