@@ -1,13 +1,135 @@
 use super::*;
 
+pub(super) struct SessionRepository<'a> {
+    store: &'a PostgresSessionStore,
+}
+
 impl PostgresSessionStore {
+    fn session_repository(&self) -> SessionRepository<'_> {
+        SessionRepository { store: self }
+    }
+
     pub(in crate::session_control) async fn create_session(
         &self,
         principal: &AuthenticatedPrincipal,
         request: CreateSessionRequest,
         owner_mode: SessionOwnerMode,
     ) -> Result<StoredSession, SessionStoreError> {
-        let mut client = self.db.client().await?;
+        self.session_repository()
+            .create_session(principal, request, owner_mode)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_sessions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .list_sessions_for_owner(principal)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_session_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .get_session_for_owner(principal, id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_session_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository().get_session_by_id(id).await
+    }
+
+    pub(in crate::session_control) async fn get_session_for_principal(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .get_session_for_principal(principal, id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_runtime_candidate_session(
+        &self,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .get_runtime_candidate_session()
+            .await
+    }
+
+    pub(in crate::session_control) async fn stop_session_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .stop_session_for_owner(principal, id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn mark_session_state(
+        &self,
+        id: Uuid,
+        state: SessionLifecycleState,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .mark_session_state(id, state)
+            .await
+    }
+
+    pub(in crate::session_control) async fn stop_session_if_idle(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository().stop_session_if_idle(id).await
+    }
+
+    pub(in crate::session_control) async fn prepare_session_for_connect(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .prepare_session_for_connect(id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn set_automation_delegate_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: SetAutomationDelegateRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .set_automation_delegate_for_owner(principal, id, request)
+            .await
+    }
+
+    pub(in crate::session_control) async fn clear_automation_delegate_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .clear_automation_delegate_for_owner(principal, id)
+            .await
+    }
+}
+
+impl SessionRepository<'_> {
+    pub(in crate::session_control) async fn create_session(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: CreateSessionRequest,
+        owner_mode: SessionOwnerMode,
+    ) -> Result<StoredSession, SessionStoreError> {
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -20,7 +142,7 @@ impl PostgresSessionStore {
                 WHERE runtime_binding = $1
                   AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
                 "#,
-                &[&self.config.runtime_binding],
+                &[&self.store.config.runtime_binding],
             )
             .await
             .map_err(|error| {
@@ -30,9 +152,9 @@ impl PostgresSessionStore {
             .as_ref()
             .map(|row| row.get::<_, i64>("session_count"))
             .unwrap_or(0);
-        if active_runtime_candidates >= self.config.max_runtime_candidates as i64 {
+        if active_runtime_candidates >= self.store.config.max_runtime_candidates as i64 {
             return Err(SessionStoreError::ActiveSessionConflict {
-                max_runtime_sessions: self.config.max_runtime_candidates,
+                max_runtime_sessions: self.store.config.max_runtime_candidates,
             });
         }
 
@@ -102,7 +224,7 @@ impl PostgresSessionStore {
                     &request.integration_context,
                     &extensions_value,
                     &recording_value,
-                    &self.config.runtime_binding,
+                    &self.store.config.runtime_binding,
                     &now,
                 ],
             )
@@ -121,6 +243,7 @@ impl PostgresSessionStore {
         principal: &AuthenticatedPrincipal,
     ) -> Result<Vec<StoredSession>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -167,6 +290,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -210,6 +334,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -254,6 +379,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -309,6 +435,7 @@ impl PostgresSessionStore {
         &self,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -341,7 +468,7 @@ impl PostgresSessionStore {
                 ORDER BY updated_at DESC
                 LIMIT 1
                 "#,
-                &[&self.config.runtime_binding],
+                &[&self.store.config.runtime_binding],
             )
             .await
             .map_err(|error| {
@@ -358,6 +485,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -408,6 +536,7 @@ impl PostgresSessionStore {
         state: SessionLifecycleState,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -455,6 +584,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -502,7 +632,7 @@ impl PostgresSessionStore {
         &self,
         id: Uuid,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
-        let mut client = self.db.client().await?;
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -566,7 +696,7 @@ impl PostgresSessionStore {
                 WHERE runtime_binding = $1
                   AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
                 "#,
-                &[&self.config.runtime_binding],
+                &[&self.store.config.runtime_binding],
             )
             .await
             .map_err(|error| {
@@ -576,9 +706,9 @@ impl PostgresSessionStore {
             .as_ref()
             .map(|row| row.get::<_, i64>("session_count"))
             .unwrap_or(0);
-        if active_runtime_candidates >= self.config.max_runtime_candidates as i64 {
+        if active_runtime_candidates >= self.store.config.max_runtime_candidates as i64 {
             return Err(SessionStoreError::ActiveSessionConflict {
-                max_runtime_sessions: self.config.max_runtime_candidates,
+                max_runtime_sessions: self.store.config.max_runtime_candidates,
             });
         }
 
@@ -637,6 +767,7 @@ impl PostgresSessionStore {
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         let issuer = request.issuer.unwrap_or_else(|| principal.issuer.clone());
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -695,6 +826,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
