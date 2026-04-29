@@ -6,6 +6,9 @@ use serde_json::{json, Value};
 
 use crate::support::{json_id, label_map, poll_until, ComposeHarness};
 
+#[path = "docker_pool_runtime/restart_recovery.rs"]
+mod restart_recovery;
+
 const DOCKER_POOL_BACKEND: &str = "docker_pool";
 
 pub async fn run_session_capacity(harness: &ComposeHarness) -> Result<()> {
@@ -316,7 +319,11 @@ pub async fn run_workflow_queued_cancel(harness: &ComposeHarness) -> Result<()> 
     Ok(())
 }
 
-async fn configure_gateway(
+pub async fn run_workflow_restart_recovery(harness: &ComposeHarness) -> Result<()> {
+    restart_recovery::run(harness).await
+}
+
+pub(super) async fn configure_gateway(
     harness: &ComposeHarness,
     extra_env_overrides: &[(&str, &str)],
 ) -> Result<()> {
@@ -345,7 +352,7 @@ async fn create_session(harness: &ComposeHarness, scope: &str) -> Result<Value> 
         .await
 }
 
-async fn create_workflow_run(
+pub(super) async fn create_workflow_run(
     harness: &ComposeHarness,
     workflow_id: &str,
     input: Value,
@@ -369,7 +376,7 @@ async fn create_workflow_run(
         .await
 }
 
-async fn create_docker_pool_workflow_repo(
+pub(super) async fn create_docker_pool_workflow_repo(
     harness: &ComposeHarness,
 ) -> Result<crate::support::LocalWorkflowRepo> {
     harness
@@ -396,7 +403,7 @@ async fn create_docker_pool_workflow_repo(
         .await
 }
 
-async fn publish_docker_pool_workflow(
+pub(super) async fn publish_docker_pool_workflow(
     harness: &ComposeHarness,
     name: &str,
     description: &str,
@@ -447,7 +454,7 @@ async fn publish_docker_pool_workflow(
     Ok(workflow_id)
 }
 
-async fn wait_for_workflow_run_state(
+pub(super) async fn wait_for_workflow_run_state(
     harness: &ComposeHarness,
     run_id: &str,
     states: &[&str],
@@ -473,7 +480,10 @@ async fn wait_for_workflow_run_state(
     .await
 }
 
-async fn workflow_run_event_types(harness: &ComposeHarness, run_id: &str) -> Result<Vec<String>> {
+pub(super) async fn workflow_run_event_types(
+    harness: &ComposeHarness,
+    run_id: &str,
+) -> Result<Vec<String>> {
     let events = harness
         .get_json(&format!("/api/v1/workflow-runs/{run_id}/events"))
         .await?;
