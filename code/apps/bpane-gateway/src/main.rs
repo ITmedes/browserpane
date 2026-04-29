@@ -1,10 +1,8 @@
 mod api;
 mod app;
 mod auth;
-mod automation_access_token;
 mod automation_task;
 mod config;
-mod connect_ticket;
 mod credential_binding;
 mod credential_provider;
 mod extension;
@@ -15,6 +13,7 @@ mod recording_lifecycle;
 mod relay;
 mod runtime_manager;
 mod session;
+mod session_access;
 mod session_control;
 mod session_hub;
 mod session_manager;

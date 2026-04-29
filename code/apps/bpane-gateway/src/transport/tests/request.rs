@@ -5,7 +5,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
-use crate::connect_ticket::{SessionConnectTicketError, SessionConnectTicketManager};
+use crate::session_access::{SessionConnectTicketError, SessionConnectTicketManager};
 use crate::session_control::{
     CreateSessionRequest, SessionOwnerMode, SessionRecordingPolicy, SessionStore,
 };

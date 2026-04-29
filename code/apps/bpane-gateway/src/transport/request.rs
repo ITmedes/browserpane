@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::auth::{AuthError, AuthValidator, AuthenticatedPrincipal};
-use crate::connect_ticket::{SessionConnectTicketError, SessionConnectTicketManager};
+use crate::session_access::{SessionConnectTicketError, SessionConnectTicketManager};
 use crate::session_control::SessionStore;
 use crate::session_hub::BrowserClientRole;
 

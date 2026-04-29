@@ -17,15 +17,11 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
-use crate::automation_access_token::{
-    SessionAutomationAccessTokenClaims, SessionAutomationAccessTokenManager,
-};
 use crate::automation_task::{
     AutomationTaskEventListResponse, AutomationTaskListResponse, AutomationTaskLogListResponse,
     AutomationTaskLogStream, AutomationTaskResource, AutomationTaskSessionSource,
     AutomationTaskState, AutomationTaskTransitionRequest, PersistAutomationTaskRequest,
 };
-use crate::connect_ticket::SessionConnectTicketManager;
 use crate::credential_binding::{
     CredentialBindingListResponse, CredentialBindingProvider, CredentialBindingResource,
     CredentialInjectionMode, CredentialTotpMetadata, PersistCredentialBindingRequest,
@@ -50,6 +46,10 @@ use crate::recording::{
     SessionRecordingPlaybackManifest, SessionRecordingPlaybackResource,
 };
 use crate::recording_lifecycle::{RecordingLifecycleError, RecordingLifecycleManager};
+use crate::session_access::{
+    SessionAutomationAccessTokenClaims, SessionAutomationAccessTokenManager,
+    SessionConnectTicketManager,
+};
 use crate::session_control::{
     CompleteSessionRecordingRequest, CreateSessionRequest, FailSessionRecordingRequest,
     PersistCompletedSessionRecordingRequest, SessionLifecycleState, SessionListResponse,
