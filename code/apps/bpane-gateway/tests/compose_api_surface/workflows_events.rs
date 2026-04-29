@@ -3,9 +3,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use serde_json::json;
 
-use super::support::{
-    json_array, json_id, label_map, recording_policy, ComposeHarness,
-};
+use super::support::{json_array, json_id, label_map, recording_policy, ComposeHarness};
 
 pub async fn run(harness: &ComposeHarness) -> Result<()> {
     harness.ensure_workflow_worker_image().await?;
@@ -47,7 +45,9 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         ))
         .await?;
     if fetched_subscription["id"] != json!(subscription_id) {
-        return Err(anyhow!("workflow event subscription lookup returned the wrong resource"));
+        return Err(anyhow!(
+            "workflow event subscription lookup returned the wrong resource"
+        ));
     }
 
     let output_workspace = harness
@@ -102,14 +102,18 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .iter()
         .any(|candidate| candidate.get("id") == Some(&json!(workflow_id)))
     {
-        return Err(anyhow!("workflow definition {workflow_id} missing from list endpoint"));
+        return Err(anyhow!(
+            "workflow definition {workflow_id} missing from list endpoint"
+        ));
     }
 
     let fetched_workflow = harness
         .get_json(&format!("/api/v1/workflows/{workflow_id}"))
         .await?;
     if fetched_workflow["id"] != json!(workflow_id) {
-        return Err(anyhow!("workflow definition lookup returned the wrong resource"));
+        return Err(anyhow!(
+            "workflow definition lookup returned the wrong resource"
+        ));
     }
 
     let version = harness
@@ -142,14 +146,18 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         )
         .await?;
     if version["source"]["resolved_commit"] != json!(source.commit) {
-        return Err(anyhow!("workflow version did not resolve the expected commit"));
+        return Err(anyhow!(
+            "workflow version did not resolve the expected commit"
+        ));
     }
 
     let fetched_version = harness
         .get_json(&format!("/api/v1/workflows/{workflow_id}/versions/v1"))
         .await?;
     if fetched_version["entrypoint"] != json!("workflows/smoke/run.mjs") {
-        return Err(anyhow!("workflow definition version lookup did not round-trip"));
+        return Err(anyhow!(
+            "workflow definition version lookup did not round-trip"
+        ));
     }
 
     let run = harness
@@ -196,7 +204,9 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .await?;
     let events = json_array(&events, "events")?;
     if events.len() < 3 {
-        return Err(anyhow!("workflow run events did not capture lifecycle transitions"));
+        return Err(anyhow!(
+            "workflow run events did not capture lifecycle transitions"
+        ));
     }
 
     let logs = harness
@@ -222,7 +232,9 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .get_bytes_with_automation_token(snapshot_path, &automation_token)
         .await?;
     if snapshot_bytes.is_empty() {
-        return Err(anyhow!("workflow source snapshot content endpoint returned empty bytes"));
+        return Err(anyhow!(
+            "workflow source snapshot content endpoint returned empty bytes"
+        ));
     }
 
     let workspace_inputs = json_array(&completed_run, "workspace_inputs")?;
@@ -232,12 +244,16 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     let workspace_input_id = json_id(workspace_input, "id")?;
     let workspace_input_bytes = harness
         .get_bytes_with_automation_token(
-            &format!("/api/v1/workflow-runs/{run_id}/workspace-inputs/{workspace_input_id}/content"),
+            &format!(
+                "/api/v1/workflow-runs/{run_id}/workspace-inputs/{workspace_input_id}/content"
+            ),
             &automation_token,
         )
         .await?;
     if workspace_input_bytes != b"compose workflow input bytes" {
-        return Err(anyhow!("workflow run workspace input content endpoint returned wrong bytes"));
+        return Err(anyhow!(
+            "workflow run workspace input content endpoint returned wrong bytes"
+        ));
     }
 
     let deliveries = super::support::poll_until(
@@ -264,7 +280,9 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
 
     let workflow_operations = harness.get_json("/api/v1/workflow/operations").await?;
     if !workflow_operations.is_object() {
-        return Err(anyhow!("workflow operations endpoint did not return an object"));
+        return Err(anyhow!(
+            "workflow operations endpoint did not return an object"
+        ));
     }
 
     let deleted_subscription = harness
@@ -273,7 +291,9 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         ))
         .await?;
     if deleted_subscription["id"] != json!(subscription_id) {
-        return Err(anyhow!("workflow event subscription delete returned the wrong resource"));
+        return Err(anyhow!(
+            "workflow event subscription delete returned the wrong resource"
+        ));
     }
 
     let refreshed_subscriptions = harness
