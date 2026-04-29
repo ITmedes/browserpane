@@ -1,11 +1,128 @@
 use super::*;
 
+pub(super) struct RuntimeAssignmentRepository<'a> {
+    store: &'a PostgresSessionStore,
+}
+
 impl PostgresSessionStore {
+    fn runtime_assignment_repository(&self) -> RuntimeAssignmentRepository<'_> {
+        RuntimeAssignmentRepository { store: self }
+    }
+
     pub(in crate::session_control) async fn upsert_runtime_assignment(
         &self,
         assignment: PersistedSessionRuntimeAssignment,
     ) -> Result<(), SessionStoreError> {
-        self.db
+        self.runtime_assignment_repository()
+            .upsert_runtime_assignment(assignment)
+            .await
+    }
+
+    pub(in crate::session_control) async fn clear_runtime_assignment(
+        &self,
+        id: Uuid,
+    ) -> Result<(), SessionStoreError> {
+        self.runtime_assignment_repository()
+            .clear_runtime_assignment(id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn upsert_recording_worker_assignment(
+        &self,
+        assignment: PersistedSessionRecordingWorkerAssignment,
+    ) -> Result<(), SessionStoreError> {
+        self.runtime_assignment_repository()
+            .upsert_recording_worker_assignment(assignment)
+            .await
+    }
+
+    pub(in crate::session_control) async fn clear_recording_worker_assignment(
+        &self,
+        id: Uuid,
+    ) -> Result<(), SessionStoreError> {
+        self.runtime_assignment_repository()
+            .clear_recording_worker_assignment(id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_recording_worker_assignment(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<PersistedSessionRecordingWorkerAssignment>, SessionStoreError> {
+        self.runtime_assignment_repository()
+            .get_recording_worker_assignment(id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_recording_worker_assignments(
+        &self,
+    ) -> Result<Vec<PersistedSessionRecordingWorkerAssignment>, SessionStoreError> {
+        self.runtime_assignment_repository()
+            .list_recording_worker_assignments()
+            .await
+    }
+
+    pub(in crate::session_control) async fn upsert_workflow_run_worker_assignment(
+        &self,
+        assignment: PersistedWorkflowRunWorkerAssignment,
+    ) -> Result<(), SessionStoreError> {
+        self.runtime_assignment_repository()
+            .upsert_workflow_run_worker_assignment(assignment)
+            .await
+    }
+
+    pub(in crate::session_control) async fn clear_workflow_run_worker_assignment(
+        &self,
+        run_id: Uuid,
+    ) -> Result<(), SessionStoreError> {
+        self.runtime_assignment_repository()
+            .clear_workflow_run_worker_assignment(run_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_workflow_run_worker_assignment(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Option<PersistedWorkflowRunWorkerAssignment>, SessionStoreError> {
+        self.runtime_assignment_repository()
+            .get_workflow_run_worker_assignment(run_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_workflow_run_worker_assignments(
+        &self,
+    ) -> Result<Vec<PersistedWorkflowRunWorkerAssignment>, SessionStoreError> {
+        self.runtime_assignment_repository()
+            .list_workflow_run_worker_assignments()
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_runtime_assignments(
+        &self,
+        runtime_binding: &str,
+    ) -> Result<Vec<PersistedSessionRuntimeAssignment>, SessionStoreError> {
+        self.runtime_assignment_repository()
+            .list_runtime_assignments(runtime_binding)
+            .await
+    }
+
+    pub(in crate::session_control) async fn mark_session_ready_after_runtime_loss(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.runtime_assignment_repository()
+            .mark_session_ready_after_runtime_loss(id)
+            .await
+    }
+}
+
+impl RuntimeAssignmentRepository<'_> {
+    pub(in crate::session_control) async fn upsert_runtime_assignment(
+        &self,
+        assignment: PersistedSessionRuntimeAssignment,
+    ) -> Result<(), SessionStoreError> {
+        self.store
+            .db
             .client()
             .await?
             .execute(
@@ -50,7 +167,8 @@ impl PostgresSessionStore {
         &self,
         id: Uuid,
     ) -> Result<(), SessionStoreError> {
-        self.db
+        self.store
+            .db
             .client()
             .await?
             .execute(
@@ -69,7 +187,8 @@ impl PostgresSessionStore {
         assignment: PersistedSessionRecordingWorkerAssignment,
     ) -> Result<(), SessionStoreError> {
         let process_id = assignment.process_id.map(i64::from);
-        self.db
+        self.store
+            .db
             .client()
             .await?
             .execute(
@@ -110,7 +229,8 @@ impl PostgresSessionStore {
         &self,
         id: Uuid,
     ) -> Result<(), SessionStoreError> {
-        self.db
+        self.store
+            .db
             .client()
             .await?
             .execute(
@@ -131,6 +251,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<PersistedSessionRecordingWorkerAssignment>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -161,6 +282,7 @@ impl PostgresSessionStore {
         &self,
     ) -> Result<Vec<PersistedSessionRecordingWorkerAssignment>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -193,7 +315,8 @@ impl PostgresSessionStore {
         assignment: PersistedWorkflowRunWorkerAssignment,
     ) -> Result<(), SessionStoreError> {
         let process_id = assignment.process_id.map(i64::from);
-        self.db
+        self.store
+            .db
             .client()
             .await?
             .execute(
@@ -240,7 +363,8 @@ impl PostgresSessionStore {
         &self,
         run_id: Uuid,
     ) -> Result<(), SessionStoreError> {
-        self.db
+        self.store
+            .db
             .client()
             .await?
             .execute(
@@ -261,6 +385,7 @@ impl PostgresSessionStore {
         run_id: Uuid,
     ) -> Result<Option<PersistedWorkflowRunWorkerAssignment>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -293,6 +418,7 @@ impl PostgresSessionStore {
         &self,
     ) -> Result<Vec<PersistedWorkflowRunWorkerAssignment>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -327,6 +453,7 @@ impl PostgresSessionStore {
         runtime_binding: &str,
     ) -> Result<Vec<PersistedSessionRuntimeAssignment>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -358,6 +485,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
