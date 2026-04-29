@@ -87,6 +87,7 @@ impl SessionStore {
         database_url: &str,
         runtime_profile: SessionManagerProfile,
     ) -> Result<Self, SessionStoreError> {
+        run_postgres_migrations(database_url).await?;
         let (store, connection) =
             PostgresSessionStore::connect(database_url, SessionStoreConfig::from(runtime_profile))
                 .await?;
@@ -95,7 +96,6 @@ impl SessionStore {
                 tracing::error!("postgres connection error: {error}");
             }
         });
-        store.migrate().await?;
         Ok(Self {
             backend: SessionStoreBackend::Postgres(Arc::new(store)),
         })
