@@ -1,3 +1,4 @@
+pub mod credentials_extensions;
 pub mod sessions_recordings;
 pub mod support;
 pub mod workflows_events;

@@ -23,8 +23,13 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
 
     let sessions = harness.get_json("/api/v1/sessions").await?;
     let sessions = json_array(&sessions, "sessions")?;
-    if !sessions.iter().any(|session| session.get("id") == Some(&json!(session_id))) {
-        return Err(anyhow!("created session {session_id} is missing from session list"));
+    if !sessions
+        .iter()
+        .any(|session| session.get("id") == Some(&json!(session_id)))
+    {
+        return Err(anyhow!(
+            "created session {session_id} is missing from session list"
+        ));
     }
 
     let fetched = harness
@@ -42,9 +47,16 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     }
 
     let connect_ticket = harness
-        .post_json(&format!("/api/v1/sessions/{session_id}/access-tokens"), json!({}))
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/access-tokens"),
+            json!({}),
+        )
         .await?;
-    if connect_ticket["token"].as_str().unwrap_or_default().is_empty() {
+    if connect_ticket["token"]
+        .as_str()
+        .unwrap_or_default()
+        .is_empty()
+    {
         return Err(anyhow!("session connect ticket was not issued"));
     }
 
@@ -75,12 +87,19 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
             json!({}),
         )
         .await?;
-    if automation_access["token"].as_str().unwrap_or_default().is_empty() {
+    if automation_access["token"]
+        .as_str()
+        .unwrap_or_default()
+        .is_empty()
+    {
         return Err(anyhow!("session automation access token was not issued"));
     }
 
     let recording = harness
-        .post_json(&format!("/api/v1/sessions/{session_id}/recordings"), json!({}))
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/recordings"),
+            json!({}),
+        )
         .await?;
     let recording_id = json_id(&recording, "id")?;
 
@@ -89,11 +108,15 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .await?;
     let recordings = json_array(&recordings, "recordings")?;
     if recordings.is_empty() {
-        return Err(anyhow!("session recording list is empty after recording creation"));
+        return Err(anyhow!(
+            "session recording list is empty after recording creation"
+        ));
     }
 
     let fetched_recording = harness
-        .get_json(&format!("/api/v1/sessions/{session_id}/recordings/{recording_id}"))
+        .get_json(&format!(
+            "/api/v1/sessions/{session_id}/recordings/{recording_id}"
+        ))
         .await?;
     if fetched_recording["id"] != json!(recording_id) {
         return Err(anyhow!("recording lookup returned the wrong resource"));
@@ -119,12 +142,16 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         )
         .await?;
     if !terminal_recording["state"].is_string() {
-        return Err(anyhow!("recording state did not remain readable after stop"));
+        return Err(anyhow!(
+            "recording state did not remain readable after stop"
+        ));
     }
 
     let operations = harness.get_json("/api/v1/recording/operations").await?;
     if !operations.is_object() {
-        return Err(anyhow!("recording operations endpoint did not return an object"));
+        return Err(anyhow!(
+            "recording operations endpoint did not return an object"
+        ));
     }
 
     let deleted = harness

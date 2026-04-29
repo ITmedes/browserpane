@@ -48,8 +48,8 @@ impl ComposeHarness {
             .context("failed to build reqwest client")?;
         let api_base_url = std::env::var("BPANE_GATEWAY_E2E_API_URL")
             .unwrap_or_else(|_| DEFAULT_API_BASE_URL.to_string());
-        let token_url =
-            std::env::var("BPANE_GATEWAY_E2E_TOKEN_URL").unwrap_or_else(|_| DEFAULT_TOKEN_URL.into());
+        let token_url = std::env::var("BPANE_GATEWAY_E2E_TOKEN_URL")
+            .unwrap_or_else(|_| DEFAULT_TOKEN_URL.into());
         let client_id = std::env::var("BPANE_GATEWAY_E2E_CLIENT_ID")
             .unwrap_or_else(|_| DEFAULT_OIDC_CLIENT_ID.to_string());
         let client_secret = std::env::var("BPANE_GATEWAY_E2E_CLIENT_SECRET")
@@ -58,9 +58,10 @@ impl ComposeHarness {
         let container_workspace_root = std::env::var("BPANE_GATEWAY_E2E_CONTAINER_WORKSPACE_ROOT")
             .unwrap_or_else(|_| DEFAULT_CONTAINER_WORKSPACE_ROOT.to_string());
 
-        let access_token = fetch_client_credentials_token(&client, &token_url, &client_id, &client_secret)
-            .await
-            .context("failed to fetch OIDC client credentials token for compose e2e suite")?;
+        let access_token =
+            fetch_client_credentials_token(&client, &token_url, &client_id, &client_secret)
+                .await
+                .context("failed to fetch OIDC client credentials token for compose e2e suite")?;
 
         Ok(Self {
             client,
@@ -83,8 +84,14 @@ impl ComposeHarness {
         self.send_json(Method::GET, path, None::<Value>, None).await
     }
 
+    pub async fn get_json_with_headers(&self, path: &str, headers: HeaderMap) -> Result<Value> {
+        self.send_json(Method::GET, path, None::<Value>, Some(headers))
+            .await
+    }
+
     pub async fn delete_json(&self, path: &str) -> Result<Value> {
-        self.send_json(Method::DELETE, path, None::<Value>, None).await
+        self.send_json(Method::DELETE, path, None::<Value>, None)
+            .await
     }
 
     pub async fn post_json(&self, path: &str, body: Value) -> Result<Value> {
@@ -97,7 +104,8 @@ impl ComposeHarness {
         body: Value,
         headers: HeaderMap,
     ) -> Result<Value> {
-        self.send_json(Method::POST, path, Some(body), Some(headers)).await
+        self.send_json(Method::POST, path, Some(body), Some(headers))
+            .await
     }
 
     pub async fn post_bytes(
@@ -140,7 +148,26 @@ impl ComposeHarness {
         self.send_for_bytes(Method::GET, path, Some(headers)).await
     }
 
-    pub async fn poll_json<F>(&self, description: &str, timeout: Duration, mut predicate: F, path: &str) -> Result<Value>
+    pub async fn get_json_with_automation_token(
+        &self,
+        path: &str,
+        automation_token: &str,
+    ) -> Result<Value> {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-bpane-automation-access-token",
+            HeaderValue::from_str(automation_token).context("invalid automation token header")?,
+        );
+        self.get_json_with_headers(path, headers).await
+    }
+
+    pub async fn poll_json<F>(
+        &self,
+        description: &str,
+        timeout: Duration,
+        mut predicate: F,
+        path: &str,
+    ) -> Result<Value>
     where
         F: FnMut(&Value) -> bool,
     {
@@ -183,6 +210,39 @@ impl ComposeHarness {
         Ok(())
     }
 
+    pub async fn cleanup_active_sessions(&self) -> Result<()> {
+        let sessions = self.get_json("/api/v1/sessions").await?;
+        let sessions = json_array(&sessions, "sessions")?;
+        for session in sessions {
+            if session.get("state").and_then(Value::as_str) == Some("stopped") {
+                continue;
+            }
+            let session_id = json_id(session, "id")?;
+            let _ = self
+                .delete_json(&format!("/api/v1/sessions/{session_id}"))
+                .await?;
+        }
+
+        poll_until(
+            "compose e2e active session cleanup",
+            Duration::from_secs(30),
+            || async {
+                let sessions = self.get_json("/api/v1/sessions").await?;
+                let sessions = json_array(&sessions, "sessions")?;
+                if sessions
+                    .iter()
+                    .all(|session| session.get("state").and_then(Value::as_str) == Some("stopped"))
+                {
+                    return Ok(Some(()));
+                }
+                Ok(None)
+            },
+        )
+        .await?;
+
+        Ok(())
+    }
+
     pub fn unique_name(&self, prefix: &str) -> String {
         format!("{prefix}-{}", Uuid::now_v7())
     }
@@ -192,9 +252,13 @@ impl ComposeHarness {
     }
 
     pub fn container_visible_path(&self, host_path: &Path) -> Result<String> {
-        let relative = host_path
-            .strip_prefix(self.repo_root())
-            .with_context(|| format!("path {} is outside repo root {}", host_path.display(), self.repo_root().display()))?;
+        let relative = host_path.strip_prefix(self.repo_root()).with_context(|| {
+            format!(
+                "path {} is outside repo root {}",
+                host_path.display(),
+                self.repo_root().display()
+            )
+        })?;
         let relative = relative
             .iter()
             .map(|part| part.to_string_lossy())
@@ -284,7 +348,10 @@ impl ComposeHarness {
             .send_request(method.clone(), path, body, headers)
             .await?;
         let status = response.status();
-        let text = response.text().await.context("failed to read response body")?;
+        let text = response
+            .text()
+            .await
+            .context("failed to read response body")?;
         if !status.is_success() {
             bail!("{} {} returned {} {}", method, path, status, text);
         }
@@ -310,7 +377,10 @@ impl ComposeHarness {
             .await
             .with_context(|| format!("failed to call {method} {path}"))?;
         let status = response.status();
-        let text = response.text().await.context("failed to read response body")?;
+        let text = response
+            .text()
+            .await
+            .context("failed to read response body")?;
         if !status.is_success() {
             bail!("{} {} returned {} {}", method, path, status, text);
         }
@@ -324,9 +394,14 @@ impl ComposeHarness {
         path: &str,
         headers: Option<HeaderMap>,
     ) -> Result<Vec<u8>> {
-        let response = self.send_request(method.clone(), path, None::<Value>, headers).await?;
+        let response = self
+            .send_request(method.clone(), path, None::<Value>, headers)
+            .await?;
         let status = response.status();
-        let bytes = response.bytes().await.context("failed to read byte response")?;
+        let bytes = response
+            .bytes()
+            .await
+            .context("failed to read byte response")?;
         if !status.is_success() {
             let detail = String::from_utf8_lossy(&bytes);
             bail!("{} {} returned {} {}", method, path, status, detail);
@@ -359,14 +434,16 @@ impl ComposeHarness {
 }
 
 pub fn json_id(value: &Value, field: &str) -> Result<String> {
-    value.get(field)
+    value
+        .get(field)
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
         .ok_or_else(|| anyhow!("missing string field {field} in {value}"))
 }
 
 pub fn json_array<'a>(value: &'a Value, field: &str) -> Result<&'a Vec<Value>> {
-    value.get(field)
+    value
+        .get(field)
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("missing array field {field} in {value}"))
 }
@@ -395,7 +472,12 @@ fn repository_root() -> Result<PathBuf> {
         .and_then(Path::parent)
         .and_then(Path::parent)
         .map(Path::to_path_buf)
-        .ok_or_else(|| anyhow!("failed to resolve repository root from {}", crate_root.display()))
+        .ok_or_else(|| {
+            anyhow!(
+                "failed to resolve repository root from {}",
+                crate_root.display()
+            )
+        })
 }
 
 async fn fetch_client_credentials_token(
@@ -450,13 +532,19 @@ fn initialize_git_repository(repo_dir: &Path) -> Result<()> {
         }
     }
 
-    run_git_command(repo_dir, &["config", "user.name", "BrowserPane Compose E2E"])?;
+    run_git_command(
+        repo_dir,
+        &["config", "user.name", "BrowserPane Compose E2E"],
+    )?;
     run_git_command(
         repo_dir,
         &["config", "user.email", "compose-e2e@browserpane.local"],
     )?;
     run_git_command(repo_dir, &["add", "."])?;
-    run_git_command(repo_dir, &["commit", "-m", "Add compose e2e workflow fixture"])?;
+    run_git_command(
+        repo_dir,
+        &["commit", "-m", "Add compose e2e workflow fixture"],
+    )?;
     Ok(())
 }
 
@@ -468,7 +556,12 @@ fn run_git_command(repo_dir: &Path, args: &[&str]) -> Result<String> {
         .with_context(|| format!("failed to run git {:?} in {}", args, repo_dir.display()))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("git {:?} failed in {}: {}", args, repo_dir.display(), stderr);
+        bail!(
+            "git {:?} failed in {}: {}",
+            args,
+            repo_dir.display(),
+            stderr
+        );
     }
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
