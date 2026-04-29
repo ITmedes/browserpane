@@ -50,6 +50,7 @@ mod file_workspaces;
 mod recordings;
 mod sessions;
 mod workflow_events;
+mod workflow_files;
 mod workflow_run_operations;
 mod workflow_run_state;
 mod workflow_runtime;
