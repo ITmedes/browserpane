@@ -1,6 +1,76 @@
 use super::*;
 
+pub(super) struct ExtensionRepository<'a> {
+    store: &'a PostgresSessionStore,
+}
+
 impl PostgresSessionStore {
+    fn extension_repository(&self) -> ExtensionRepository<'_> {
+        ExtensionRepository { store: self }
+    }
+
+    pub(in crate::session_control) async fn create_extension_definition(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistExtensionDefinitionRequest,
+    ) -> Result<StoredExtensionDefinition, SessionStoreError> {
+        self.extension_repository()
+            .create_extension_definition(principal, request)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_extension_definitions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredExtensionDefinition>, SessionStoreError> {
+        self.extension_repository()
+            .list_extension_definitions_for_owner(principal)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_extension_definition_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
+        self.extension_repository()
+            .get_extension_definition_for_owner(principal, id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn set_extension_definition_enabled_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        enabled: bool,
+    ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
+        self.extension_repository()
+            .set_extension_definition_enabled_for_owner(principal, id, enabled)
+            .await
+    }
+
+    pub(in crate::session_control) async fn create_extension_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistExtensionVersionRequest,
+    ) -> Result<StoredExtensionVersion, SessionStoreError> {
+        self.extension_repository()
+            .create_extension_version_for_owner(principal, request)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_latest_extension_version_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        extension_definition_id: Uuid,
+    ) -> Result<Option<StoredExtensionVersion>, SessionStoreError> {
+        self.extension_repository()
+            .get_latest_extension_version_for_owner(principal, extension_definition_id)
+            .await
+    }
+}
+
+impl ExtensionRepository<'_> {
     pub(in crate::session_control) async fn create_extension_definition(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -8,6 +78,7 @@ impl PostgresSessionStore {
     ) -> Result<StoredExtensionDefinition, SessionStoreError> {
         let now = Utc::now();
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -60,6 +131,7 @@ impl PostgresSessionStore {
         principal: &AuthenticatedPrincipal,
     ) -> Result<Vec<StoredExtensionDefinition>, SessionStoreError> {
         let rows = self
+            .store
             .db
             .client()
             .await?
@@ -98,6 +170,7 @@ impl PostgresSessionStore {
         id: Uuid,
     ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -136,6 +209,7 @@ impl PostgresSessionStore {
         enabled: bool,
     ) -> Result<Option<StoredExtensionDefinition>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
@@ -173,7 +247,7 @@ impl PostgresSessionStore {
         principal: &AuthenticatedPrincipal,
         request: PersistExtensionVersionRequest,
     ) -> Result<StoredExtensionVersion, SessionStoreError> {
-        let mut client = self.db.client().await?;
+        let mut client = self.store.db.client().await?;
         let transaction = client.build_transaction().start().await.map_err(|error| {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
@@ -272,6 +346,7 @@ impl PostgresSessionStore {
         extension_definition_id: Uuid,
     ) -> Result<Option<StoredExtensionVersion>, SessionStoreError> {
         let row = self
+            .store
             .db
             .client()
             .await?
