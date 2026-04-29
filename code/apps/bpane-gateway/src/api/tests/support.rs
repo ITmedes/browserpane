@@ -1,4 +1,6 @@
 use super::*;
+use crate::session_control::SessionStore;
+use crate::session_registry::SessionRegistry;
 
 #[derive(Default)]
 struct TestCredentialProviderBackend {

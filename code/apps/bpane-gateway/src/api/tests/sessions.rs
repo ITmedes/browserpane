@@ -1,4 +1,6 @@
 use super::*;
+use crate::session_control::SessionStore;
+use crate::session_registry::SessionRegistry;
 
 #[tokio::test]
 async fn rejects_v1_session_routes_without_bearer_auth() {

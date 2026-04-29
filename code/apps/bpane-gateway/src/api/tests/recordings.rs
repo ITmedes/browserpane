@@ -1,6 +1,8 @@
 use std::io::Read;
 
 use super::*;
+use crate::session_control::SessionStore;
+use crate::session_registry::SessionRegistry;
 
 #[tokio::test]
 async fn creates_lists_gets_and_stops_session_recording_metadata() {
