@@ -45,6 +45,11 @@ pub struct ComposeVisibleFile {
     pub container_path: String,
 }
 
+pub struct JsonOutcome {
+    pub status: StatusCode,
+    pub body: Value,
+}
+
 impl ComposeHarness {
     pub async fn connect() -> Result<Self> {
         let client = reqwest::Client::builder()
@@ -89,6 +94,11 @@ impl ComposeHarness {
         self.send_json(Method::GET, path, None::<Value>, None).await
     }
 
+    pub async fn get_json_outcome(&self, path: &str) -> Result<JsonOutcome> {
+        self.send_json_outcome(Method::GET, path, None::<Value>, None)
+            .await
+    }
+
     pub async fn get_json_with_headers(&self, path: &str, headers: HeaderMap) -> Result<Value> {
         self.send_json(Method::GET, path, None::<Value>, Some(headers))
             .await
@@ -99,8 +109,18 @@ impl ComposeHarness {
             .await
     }
 
+    pub async fn delete_json_outcome(&self, path: &str) -> Result<JsonOutcome> {
+        self.send_json_outcome(Method::DELETE, path, None::<Value>, None)
+            .await
+    }
+
     pub async fn post_json(&self, path: &str, body: Value) -> Result<Value> {
         self.send_json(Method::POST, path, Some(body), None).await
+    }
+
+    pub async fn post_json_outcome(&self, path: &str, body: Value) -> Result<JsonOutcome> {
+        self.send_json_outcome(Method::POST, path, Some(body), None)
+            .await
     }
 
     pub async fn post_json_with_headers(
@@ -384,6 +404,29 @@ impl ComposeHarness {
         }
         serde_json::from_str(&text)
             .with_context(|| format!("failed to decode JSON response from {path}: {text}"))
+    }
+
+    async fn send_json_outcome<T: serde::Serialize>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<T>,
+        headers: Option<HeaderMap>,
+    ) -> Result<JsonOutcome> {
+        let response = self
+            .send_request(method.clone(), path, body, headers)
+            .await?;
+        let status = response.status();
+        let text = response
+            .text()
+            .await
+            .context("failed to read response body")?;
+        let body = serde_json::from_str(&text).with_context(|| {
+            format!(
+                "failed to decode JSON response from {method} {path} with status {status}: {text}"
+            )
+        })?;
+        Ok(JsonOutcome { status, body })
     }
 
     async fn send_bytes(
