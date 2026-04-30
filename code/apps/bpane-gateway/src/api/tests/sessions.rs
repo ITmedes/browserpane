@@ -5,6 +5,7 @@ pub(super) use crate::session_registry::SessionRegistry;
 mod automation;
 mod constraints;
 mod contract;
+mod disconnect;
 mod kill;
 mod stop;
 mod visibility;

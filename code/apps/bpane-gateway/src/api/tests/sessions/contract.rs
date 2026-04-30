@@ -3,6 +3,7 @@ use crate::session_control::{
     SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionRuntimeState,
     SessionStatusSummary, SessionStopBlocker, SessionStopBlockerKind, SessionStopEligibility,
 };
+use crate::session_hub::{SessionConnectionTelemetry, SessionConnectionTelemetryRole};
 
 #[tokio::test]
 async fn rejects_v1_session_routes_without_bearer_auth() {
@@ -95,6 +96,20 @@ fn session_status_maps_recorder_clients() {
             full_refresh_tiles_requested: 30,
             last_full_refresh_tiles: 30,
             max_full_refresh_tiles: 30,
+            connections: vec![
+                SessionConnectionTelemetry {
+                    connection_id: 1,
+                    role: SessionConnectionTelemetryRole::Owner,
+                },
+                SessionConnectionTelemetry {
+                    connection_id: 2,
+                    role: SessionConnectionTelemetryRole::Viewer,
+                },
+                SessionConnectionTelemetry {
+                    connection_id: 3,
+                    role: SessionConnectionTelemetryRole::Recorder,
+                },
+            ],
             egress_send_stream_lock_acquires_total: 10,
             egress_send_stream_lock_wait_us_total: 20,
             egress_send_stream_lock_wait_us_average: 2.0,
@@ -122,6 +137,22 @@ fn session_status_maps_recorder_clients() {
     assert_eq!(status.summary.connection_counts.viewer_clients, 1);
     assert!(!status.summary.stop_eligibility.allowed);
     assert_eq!(status.summary.stop_eligibility.blockers.len(), 3);
+    assert_eq!(status.connections.len(), 3);
+    assert_eq!(status.connections[0].connection_id, 1);
+    assert!(matches!(
+        status.connections[0].role,
+        SessionConnectionRole::Owner
+    ));
+    assert_eq!(status.connections[1].connection_id, 2);
+    assert!(matches!(
+        status.connections[1].role,
+        SessionConnectionRole::Viewer
+    ));
+    assert_eq!(status.connections[2].connection_id, 3);
+    assert!(matches!(
+        status.connections[2].role,
+        SessionConnectionRole::Recorder
+    ));
     assert_eq!(status.browser_clients, 3);
     assert_eq!(status.viewer_clients, 1);
     assert_eq!(status.recorder_clients, 1);

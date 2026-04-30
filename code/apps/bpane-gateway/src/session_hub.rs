@@ -16,7 +16,9 @@ mod refresh;
 mod telemetry;
 mod types;
 
-pub use self::telemetry::SessionTelemetrySnapshot;
+#[cfg(test)]
+pub use self::telemetry::SessionConnectionTelemetry;
+pub use self::telemetry::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
 pub use self::types::{
     BrowserClientRole, ClientHandle, ResizeResult, SessionTerminationReason, SubscribeError,
 };
@@ -156,7 +158,6 @@ impl SessionHub {
         membership::unsubscribe(self, client_id).await;
     }
 
-    #[cfg(test)]
     pub async fn terminate_client(&self, client_id: u64, reason: SessionTerminationReason) -> bool {
         membership::terminate_client(self, client_id, reason).await
     }
@@ -222,7 +223,7 @@ impl SessionHub {
 
     pub async fn telemetry_snapshot(&self) -> SessionTelemetrySnapshot {
         let resolution = self.current_resolution().await;
-        telemetry::snapshot(self, resolution)
+        telemetry::snapshot(self, resolution).await
     }
 
     fn record_join_latency(&self, elapsed: std::time::Duration) {

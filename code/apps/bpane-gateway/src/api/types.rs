@@ -25,7 +25,7 @@ use crate::session_control::{
     SessionRecordingFormat, SessionRecordingMode, SessionResource, SessionStatusSummary,
     SessionStore,
 };
-use crate::session_hub::SessionTelemetrySnapshot;
+use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 use crate::workflow::{
@@ -93,6 +93,7 @@ pub(super) struct SessionStatus {
     pub(super) state: SessionLifecycleState,
     #[serde(flatten)]
     pub(super) summary: SessionStatusSummary,
+    pub(super) connections: Vec<SessionConnectionInfo>,
     pub(super) browser_clients: u32,
     pub(super) viewer_clients: u32,
     pub(super) recorder_clients: u32,
@@ -104,6 +105,30 @@ pub(super) struct SessionStatus {
     pub(super) recording: SessionRecordingStatus,
     pub(super) playback: SessionRecordingPlaybackResource,
     pub(super) telemetry: SessionTelemetry,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum SessionConnectionRole {
+    Owner,
+    Viewer,
+    Recorder,
+}
+
+impl From<SessionConnectionTelemetryRole> for SessionConnectionRole {
+    fn from(value: SessionConnectionTelemetryRole) -> Self {
+        match value {
+            SessionConnectionTelemetryRole::Owner => Self::Owner,
+            SessionConnectionTelemetryRole::Viewer => Self::Viewer,
+            SessionConnectionTelemetryRole::Recorder => Self::Recorder,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct SessionConnectionInfo {
+    pub(super) connection_id: u64,
+    pub(super) role: SessionConnectionRole,
 }
 
 #[derive(Serialize)]

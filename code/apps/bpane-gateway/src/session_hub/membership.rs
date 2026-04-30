@@ -146,7 +146,6 @@ pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
     super::policy::notify_client_access_states(hub, &remaining_clients, None).await;
 }
 
-#[cfg(test)]
 pub(super) async fn terminate_client(
     hub: &SessionHub,
     client_id: u64,

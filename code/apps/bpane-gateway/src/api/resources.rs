@@ -85,6 +85,7 @@ pub(super) fn session_status_from_snapshot(
     SessionStatus {
         state,
         summary,
+        connections: session_connections_from_snapshot(&snapshot),
         browser_clients: snapshot.browser_clients,
         viewer_clients: snapshot.viewer_clients,
         recorder_clients: snapshot.recorder_clients,
@@ -93,7 +94,7 @@ pub(super) fn session_status_from_snapshot(
         exclusive_browser_owner: snapshot.exclusive_browser_owner,
         mcp_owner: snapshot.mcp_owner,
         resolution: snapshot.resolution,
-        recording: recording_status_from_snapshot(snapshot, recording_policy, latest_recording),
+        recording: recording_status_from_snapshot(&snapshot, recording_policy, latest_recording),
         playback,
         telemetry: SessionTelemetry {
             joins_accepted: snapshot.joins_accepted,
@@ -114,6 +115,19 @@ pub(super) fn session_status_from_snapshot(
             egress_lagged_frames_total: snapshot.egress_lagged_frames_total,
         },
     }
+}
+
+fn session_connections_from_snapshot(
+    snapshot: &SessionTelemetrySnapshot,
+) -> Vec<SessionConnectionInfo> {
+    snapshot
+        .connections
+        .iter()
+        .map(|connection| SessionConnectionInfo {
+            connection_id: connection.connection_id,
+            role: connection.role.into(),
+        })
+        .collect()
 }
 
 fn derive_session_runtime_state(
@@ -259,7 +273,7 @@ fn derive_session_idle_status(
 }
 
 pub(super) fn recording_status_from_snapshot(
-    snapshot: SessionTelemetrySnapshot,
+    snapshot: &SessionTelemetrySnapshot,
     recording_policy: &SessionRecordingPolicy,
     latest_recording: Option<&StoredSessionRecording>,
 ) -> SessionRecordingStatus {
@@ -319,6 +333,33 @@ pub(super) async fn session_resource(
             .into(),
         status,
         state_override,
+    ))
+}
+
+pub(super) async fn load_session_status(
+    state: &ApiState,
+    session: &StoredSession,
+) -> Result<SessionStatus, SessionStoreError> {
+    let snapshot = state
+        .registry
+        .telemetry_snapshot_if_live(session.id)
+        .await
+        .unwrap_or_else(|| state.registry.empty_telemetry_snapshot());
+    let summary = session_status_summary(state, session).await?;
+    let recordings = state
+        .session_store
+        .list_recordings_for_session(session.id)
+        .await?;
+    let latest_recording = latest_recording(&recordings);
+    let playback = prepare_session_recording_playback(session.id, &recordings, Utc::now());
+
+    Ok(session_status_from_snapshot(
+        session.state,
+        summary,
+        snapshot,
+        &session.recording,
+        latest_recording,
+        playback.resource,
     ))
 }
 
