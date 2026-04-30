@@ -75,7 +75,7 @@ browser client <-> bpane-gateway <-> bpane-host <-> Chromium inside Linux contai
 | `code/apps/bpane-gateway` | WebTransport entry point and shared-session coordinator. Relays frames between browser clients and the host, applies owner/viewer policy, and exposes the HTTP session/ownership API. |
 | `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
-| `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes Streamable HTTP on `/mcp` and legacy SSE on `/sse`, and integrates with gateway ownership APIs so automation can drive a session while humans observe. |
+| `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes Streamable HTTP on `/mcp` and legacy SSE on `/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
 | `code/integrations/workflow-worker` | On-demand workflow executor. Downloads pinned workflow source snapshots, attaches with session automation access, runs Playwright workflow entrypoints, resolves credential/workspace inputs, and writes logs, outputs, and produced files back to the gateway. |
 | `code/integrations/recording-worker` | On-demand recording executor. Attaches as a passive recorder client, captures WebM output, and finalizes recording metadata into gateway-managed artifact storage. |
 | `deploy/` | Local runtime manifests and container images. This is the practical source of truth for how the dev stack is assembled and started. |
@@ -219,10 +219,32 @@ The same frozen API surface also includes session-scoped runtime routes:
 
 - `POST /api/v1/sessions/{id}/access-tokens`
 - `GET /api/v1/sessions/{id}/status`
+- `POST /api/v1/sessions/{id}/stop`
+- `POST /api/v1/sessions/{id}/kill`
+- `POST /api/v1/sessions/{id}/connections/{connection_id}/disconnect`
+- `POST /api/v1/sessions/{id}/connections/disconnect-all`
 - `POST /api/v1/sessions/{id}/mcp-owner`
 - `DELETE /api/v1/sessions/{id}/mcp-owner`
 - `POST /api/v1/sessions/{id}/automation-owner`
 - `DELETE /api/v1/sessions/{id}/automation-owner`
+
+Session resources and status responses now expose a richer lifecycle model:
+
+- persisted `state`
+- derived `runtime_state`
+- derived `presence_state`
+- `connection_counts` by role
+- live `connections` descriptors on the status route
+- `stop_eligibility` with blocker details
+- idle timing metadata
+- side-effect-free status snapshots, including for stopped sessions
+
+Lifecycle control semantics are now explicit:
+
+- `DELETE /api/v1/sessions/{id}` follows safe-stop semantics
+- `POST /api/v1/sessions/{id}/stop` stops only when no blockers remain
+- `POST /api/v1/sessions/{id}/kill` force-terminates live attachments and releases the runtime
+- connection-level disconnect routes remove live attachments without stopping the session runtime
 
 The local dev flow uses those routes to bridge browser-owned and automation-owned control:
 
