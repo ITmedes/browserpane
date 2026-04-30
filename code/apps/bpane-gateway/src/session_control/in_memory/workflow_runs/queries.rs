@@ -1,6 +1,28 @@
 use super::super::*;
 
 impl InMemorySessionStore {
+    pub(in crate::session_control) async fn list_workflow_runs_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredWorkflowRun>, SessionStoreError> {
+        let mut runs = self
+            .workflow_runs
+            .lock()
+            .await
+            .iter()
+            .filter(|run| {
+                run.owner_subject == principal.subject && run.owner_issuer == principal.issuer
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        runs.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        Ok(runs)
+    }
+
     pub(in crate::session_control) async fn create_workflow_run(
         &self,
         principal: &AuthenticatedPrincipal,

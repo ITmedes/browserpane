@@ -128,7 +128,11 @@ pub async fn run(
                                 }
                                 if injected_via_cdp {
                                     trace!("input injected via cdp: {:?}", input_msg);
-                                } else if let Err(e) = input_backend.inject(&input_msg) {
+                                } else if let Err(e) = inject_via_backend(
+                                    input_backend.as_mut(),
+                                    &input_msg,
+                                    last_mouse_pos,
+                                ) {
                                     warn!("input inject failed: {e}");
                                 } else {
                                     trace!("input injected: {:?}", input_msg);
@@ -191,6 +195,19 @@ pub async fn run(
 
     download_watch_task.abort();
     result
+}
+
+fn inject_via_backend(
+    input_backend: &mut dyn InputBackend,
+    input_msg: &bpane_protocol::InputMessage,
+    last_mouse_pos: Option<(u16, u16)>,
+) -> anyhow::Result<()> {
+    if matches!(input_msg, bpane_protocol::InputMessage::MouseScroll { .. }) {
+        if let Some((x, y)) = last_mouse_pos {
+            input_backend.inject(&bpane_protocol::InputMessage::MouseMove { x, y })?;
+        }
+    }
+    input_backend.inject(input_msg)
 }
 
 /// Handle control messages in FFmpeg session mode.

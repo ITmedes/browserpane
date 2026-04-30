@@ -18,9 +18,6 @@ pub(super) fn is_browser_owner(hub: &SessionHub, client_id: u64) -> bool {
     if client_role(hub, client_id) == BrowserClientRole::Recorder {
         return false;
     }
-    if hub.mcp_is_owner() {
-        return false;
-    }
     if !hub.exclusive_browser_owner {
         return true;
     }
@@ -32,7 +29,7 @@ pub(super) fn is_resize_owner(hub: &SessionHub, client_id: u64) -> bool {
     if client_role(hub, client_id) == BrowserClientRole::Recorder {
         return false;
     }
-    if hub.mcp_is_owner() {
+    if hub.mcp_controls_resolution.load(Ordering::Relaxed) {
         return false;
     }
     let owner_id = hub.owner_id.load(Ordering::Relaxed);
@@ -45,13 +42,6 @@ pub(super) async fn request_resize(
     width: u16,
     height: u16,
 ) -> ResizeResult {
-    if hub.mcp_is_owner.load(Ordering::Relaxed) {
-        notify_client_access_states(hub, &[client_id], None).await;
-        if let Some((w, h)) = *hub.mcp_resolution.lock().await {
-            return ResizeResult::Locked(w, h);
-        }
-    }
-
     if is_resize_owner(hub, client_id) {
         let result = forward_resize_request(
             &hub.to_agent,
@@ -68,35 +58,51 @@ pub(super) async fn request_resize(
     }
 
     notify_client_access_states(hub, &[client_id], None).await;
-    let (cur_w, cur_h) = *hub.current_resolution.lock().await;
-    if cur_w > 0 && cur_h > 0 {
-        ResizeResult::Locked(cur_w, cur_h)
+    if let Some((locked_width, locked_height)) = resolve_locked_resolution(hub, None).await {
+        ResizeResult::Locked(locked_width, locked_height)
     } else {
         ResizeResult::Locked(0, 0)
     }
 }
 
 pub(super) async fn set_mcp_owner(hub: &SessionHub, width: u16, height: u16) {
-    *hub.mcp_resolution.lock().await = Some((width, height));
+    let interactive_clients = connected_interactive_client_ids(hub).await;
+    let was_controlling_resolution = hub.mcp_controls_resolution.load(Ordering::Relaxed);
+    let should_control_resolution = was_controlling_resolution || interactive_clients.is_empty();
     hub.mcp_is_owner.store(true, Ordering::Relaxed);
 
-    let msg = ControlMessage::ResolutionRequest { width, height };
-    if hub.to_agent.send(msg.to_frame()).await.is_err() {
-        warn!("failed to send MCP resolution request to agent");
+    if should_control_resolution {
+        *hub.mcp_resolution.lock().await = Some((width, height));
+        hub.mcp_controls_resolution.store(true, Ordering::Relaxed);
+
+        let msg = ControlMessage::ResolutionRequest { width, height };
+        if hub.to_agent.send(msg.to_frame()).await.is_err() {
+            warn!("failed to send MCP resolution request to agent");
+        }
+    } else {
+        hub.mcp_controls_resolution.store(false, Ordering::Relaxed);
+        *hub.mcp_resolution.lock().await = None;
     }
 
     let client_ids = hub.connected_clients.lock().await.clone();
-    notify_client_access_states(hub, &client_ids, Some((width, height))).await;
+    let locked_resolution_override = should_control_resolution.then_some((width, height));
+    notify_client_access_states(hub, &client_ids, locked_resolution_override).await;
 
-    info!(width, height, "MCP agent registered as session owner");
+    info!(
+        width,
+        height,
+        controls_resolution = should_control_resolution,
+        "MCP agent registered as session automation owner"
+    );
 }
 
 pub(super) async fn clear_mcp_owner(hub: &SessionHub) {
     hub.mcp_is_owner.store(false, Ordering::Relaxed);
+    hub.mcp_controls_resolution.store(false, Ordering::Relaxed);
     *hub.mcp_resolution.lock().await = None;
     let client_ids = hub.connected_clients.lock().await.clone();
     if hub.owner_id.load(Ordering::Relaxed) == 0 {
-        if let Some(next_owner) = client_ids.first().copied() {
+        if let Some(next_owner) = first_interactive_client(hub, &client_ids) {
             hub.owner_id.store(next_owner, Ordering::Relaxed);
         }
     }
@@ -208,7 +214,7 @@ async fn resolve_locked_resolution(
     hub: &SessionHub,
     locked_resolution_override: Option<(u16, u16)>,
 ) -> Option<(u16, u16)> {
-    if hub.mcp_is_owner() {
+    if hub.mcp_controls_resolution.load(Ordering::Relaxed) {
         return *hub.mcp_resolution.lock().await;
     }
 
@@ -227,4 +233,21 @@ async fn resolve_locked_resolution(
 async fn cached_session_ready_message(hub: &SessionHub) -> Option<ControlMessage> {
     let frame = hub.cached_session_ready.lock().await.clone()?;
     ControlMessage::decode(&frame.payload).ok()
+}
+
+async fn connected_interactive_client_ids(hub: &SessionHub) -> Vec<u64> {
+    let client_ids = hub.connected_clients.lock().await.clone();
+    let roles = hub.client_roles.read().unwrap();
+    client_ids
+        .into_iter()
+        .filter(|client_id| roles.get(client_id) == Some(&BrowserClientRole::Interactive))
+        .collect()
+}
+
+fn first_interactive_client(hub: &SessionHub, client_ids: &[u64]) -> Option<u64> {
+    let roles = hub.client_roles.read().unwrap();
+    client_ids
+        .iter()
+        .copied()
+        .find(|client_id| roles.get(client_id) == Some(&BrowserClientRole::Interactive))
 }

@@ -75,7 +75,7 @@ browser client <-> bpane-gateway <-> bpane-host <-> Chromium inside Linux contai
 | `code/apps/bpane-gateway` | WebTransport entry point and shared-session coordinator. Relays frames between browser clients and the host, applies owner/viewer policy, and exposes the HTTP session/ownership API. |
 | `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
-| `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Integrates with gateway ownership APIs so automation can drive a session while humans observe. |
+| `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes Streamable HTTP on `/mcp` and legacy SSE on `/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
 | `code/integrations/workflow-worker` | On-demand workflow executor. Downloads pinned workflow source snapshots, attaches with session automation access, runs Playwright workflow entrypoints, resolves credential/workspace inputs, and writes logs, outputs, and produced files back to the gateway. |
 | `code/integrations/recording-worker` | On-demand recording executor. Attaches as a passive recorder client, captures WebM output, and finalizes recording metadata into gateway-managed artifact storage. |
 | `deploy/` | Local runtime manifests and container images. This is the practical source of truth for how the dev stack is assembled and started. |
@@ -103,7 +103,7 @@ The shared protocol is a compact binary protocol implemented in `bpane-protocol`
 
 ### Recommended: Docker Compose
 
-If you want the full multi-session flow from the local session console, start the stack in `docker_pool` mode:
+The local session console now defaults to `docker_pool` mode so `Start New Session` provisions an isolated browser runtime instead of reusing one shared legacy worker:
 
 Generate a dev certificate once:
 
@@ -114,12 +114,9 @@ Generate a dev certificate once:
 Start the stack:
 
 ```bash
-BPANE_GATEWAY_RUNTIME_BACKEND=docker_pool \
 BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \
 docker compose -f deploy/compose.yml up --build
 ```
-
-If you rebuild `gateway` later without those env overrides, Compose will fall back to the default `static_single` backend.
 
 Then open `http://localhost:8080` in Chromium.
 
@@ -135,9 +132,10 @@ Then:
 3. Open the same selected session in another signed-in browser window if you want to share it live with another user
 4. Click `Delegate MCP` if you want the local `mcp-bridge` to drive that exact session
 
-If you only want the older single-runtime dev stack, the default command still works:
+If you explicitly want the older single-runtime compatibility stack, opt into it:
 
 ```bash
+BPANE_GATEWAY_RUNTIME_BACKEND=static_single \
 docker compose -f deploy/compose.yml up --build
 ```
 
@@ -149,7 +147,7 @@ The compose stack starts:
 - `vault`: local HashiCorp Vault dev server on `:8200` for workflow credential bindings
 - `keycloak`: local OIDC provider on `:8091`
 - `web`: local frontend on `:8080`
-- `mcp-bridge`: MCP bridge on `:8931`
+- `mcp-bridge`: MCP bridge on `:8931` (`/mcp` for Streamable HTTP, `/sse` for legacy SSE)
 
 The local compose file also defines a `workflow-worker` image profile. The gateway launches workflow-worker containers on demand; you normally do not start that container as a long-lived service yourself.
 
@@ -159,7 +157,7 @@ The gateway supports three runtime backends:
 - `docker_single`: one start-on-demand runtime container with idle shutdown
 - `docker_pool`: multiple start-on-demand runtime containers with explicit `max_active_runtimes` and `max_starting_runtimes`
 
-`deploy/compose.yml` still defaults to `static_single`, but the local stack is wired so you can switch to the pool backend with:
+`deploy/compose.yml` now defaults to `docker_pool`, but you can still switch backends explicitly when you need a compatibility check:
 
 ```bash
 BPANE_GATEWAY_RUNTIME_BACKEND=docker_pool \
@@ -219,10 +217,32 @@ The same frozen API surface also includes session-scoped runtime routes:
 
 - `POST /api/v1/sessions/{id}/access-tokens`
 - `GET /api/v1/sessions/{id}/status`
+- `POST /api/v1/sessions/{id}/stop`
+- `POST /api/v1/sessions/{id}/kill`
+- `POST /api/v1/sessions/{id}/connections/{connection_id}/disconnect`
+- `POST /api/v1/sessions/{id}/connections/disconnect-all`
 - `POST /api/v1/sessions/{id}/mcp-owner`
 - `DELETE /api/v1/sessions/{id}/mcp-owner`
 - `POST /api/v1/sessions/{id}/automation-owner`
 - `DELETE /api/v1/sessions/{id}/automation-owner`
+
+Session resources and status responses now expose a richer lifecycle model:
+
+- persisted `state`
+- derived `runtime_state`
+- derived `presence_state`
+- `connection_counts` by role
+- live `connections` descriptors on the status route
+- `stop_eligibility` with blocker details
+- idle timing metadata
+- side-effect-free status snapshots, including for stopped sessions
+
+Lifecycle control semantics are now explicit:
+
+- `DELETE /api/v1/sessions/{id}` follows safe-stop semantics
+- `POST /api/v1/sessions/{id}/stop` stops only when no blockers remain
+- `POST /api/v1/sessions/{id}/kill` force-terminates live attachments and releases the runtime
+- connection-level disconnect routes remove live attachments without stopping the session runtime
 
 The local dev flow uses those routes to bridge browser-owned and automation-owned control:
 
@@ -412,7 +432,7 @@ cd code/web/bpane-client && npm run smoke:multisession -- --headless
 
 - Sessions are collaborative by default.
 - If the gateway runs with exclusive browser ownership, one browser client is interactive and later clients become viewers.
-- MCP ownership also forces browser clients into viewer behavior.
+- MCP automation does not force browser clients into viewer behavior. If MCP is the first connector it seeds the display size; otherwise the browser-defined display size remains authoritative.
 - Viewers are read-only and do not get interactive capabilities like input, clipboard, upload, download, microphone, camera, or resize.
 
 ## Authentication Model

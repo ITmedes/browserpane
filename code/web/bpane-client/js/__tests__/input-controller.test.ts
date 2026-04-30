@@ -139,6 +139,8 @@ function dispatchPointer(
 function dispatchWheel(
   target: HTMLElement,
   init: {
+    clientX?: number;
+    clientY?: number;
     deltaX?: number;
     deltaY: number;
     deltaMode?: number;
@@ -149,6 +151,8 @@ function dispatchWheel(
     cancelable: true,
   });
   Object.defineProperties(event, {
+    clientX: { configurable: true, value: init.clientX ?? 0 },
+    clientY: { configurable: true, value: init.clientY ?? 0 },
     deltaX: { configurable: true, value: init.deltaX ?? 0 },
     deltaY: { configurable: true, value: init.deltaY },
     deltaMode: { configurable: true, value: init.deltaMode ?? 0 },
@@ -343,8 +347,8 @@ describe('InputController pointer and scroll handling', () => {
       clientY: 175,
       button: 2,
     });
-    const firstWheel = dispatchWheel(canvas, { deltaY: 30 });
-    const secondWheel = dispatchWheel(canvas, { deltaY: 30 });
+    const firstWheel = dispatchWheel(canvas, { clientX: 150, clientY: 175, deltaY: 30 });
+    const secondWheel = dispatchWheel(canvas, { clientX: 150, clientY: 175, deltaY: 30 });
     const contextMenu = new Event('contextmenu', {
       bubbles: true,
       cancelable: true,
@@ -386,6 +390,11 @@ describe('InputController pointer and scroll handling', () => {
       dx: 0,
       dy: -1,
     });
+
+    const moveFrames = sentFrames.filter(({ payload }) => payload[0] === 0x01);
+    expect(moveFrames.map(decodeMouseMoveFrame)).toEqual([
+      { x: 400, y: 300 },
+    ]);
   });
 });
 

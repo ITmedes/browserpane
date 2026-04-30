@@ -1,9 +1,9 @@
 use tokio::sync::mpsc;
 
 use bpane_protocol::frame::Message;
-use bpane_protocol::{ClipboardMessage, ControlMessage, SessionFlags};
+use bpane_protocol::{ClipboardMessage, ControlMessage, InputMessage, SessionFlags};
 
-use crate::capture;
+use crate::{capture, input::TestInputBackend};
 
 #[tokio::test]
 async fn handle_control_ffmpeg_bitrate_hint() {
@@ -107,4 +107,23 @@ fn clipboard_frame_empty_text() {
         decoded,
         Message::Clipboard(ClipboardMessage::Text { content }) if content.is_empty()
     ));
+}
+
+#[test]
+fn xtest_scroll_replays_last_pointer_position_before_wheel() {
+    let mut backend = TestInputBackend::default();
+    super::inject_via_backend(
+        &mut backend,
+        &InputMessage::MouseScroll { dx: 0, dy: -1 },
+        Some((320, 240)),
+    )
+    .unwrap();
+
+    assert_eq!(
+        backend.events,
+        vec![
+            InputMessage::MouseMove { x: 320, y: 240 },
+            InputMessage::MouseScroll { dx: 0, dy: -1 },
+        ]
+    );
 }

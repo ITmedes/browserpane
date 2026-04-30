@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use axum::response::IntoResponse;
 use axum::Json;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
@@ -20,10 +21,11 @@ use crate::recording::{
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
-    CreateSessionRequest, SessionConnectInfo, SessionOwnerMode, SessionRecordingFormat,
-    SessionRecordingMode, SessionStore,
+    CreateSessionRequest, SessionConnectInfo, SessionLifecycleState, SessionOwnerMode,
+    SessionRecordingFormat, SessionRecordingMode, SessionResource, SessionStatusSummary,
+    SessionStore,
 };
-use crate::session_hub::SessionTelemetrySnapshot;
+use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 use crate::workflow::{
@@ -88,6 +90,10 @@ pub(super) const WORKFLOW_RUN_WORKSPACE_ID_HEADER: &str = "x-bpane-workflow-work
 
 #[derive(Serialize)]
 pub(super) struct SessionStatus {
+    pub(super) state: SessionLifecycleState,
+    #[serde(flatten)]
+    pub(super) summary: SessionStatusSummary,
+    pub(super) connections: Vec<SessionConnectionInfo>,
     pub(super) browser_clients: u32,
     pub(super) viewer_clients: u32,
     pub(super) recorder_clients: u32,
@@ -99,6 +105,42 @@ pub(super) struct SessionStatus {
     pub(super) recording: SessionRecordingStatus,
     pub(super) playback: SessionRecordingPlaybackResource,
     pub(super) telemetry: SessionTelemetry,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum SessionConnectionRole {
+    Owner,
+    Viewer,
+    Recorder,
+}
+
+impl From<SessionConnectionTelemetryRole> for SessionConnectionRole {
+    fn from(value: SessionConnectionTelemetryRole) -> Self {
+        match value {
+            SessionConnectionTelemetryRole::Owner => Self::Owner,
+            SessionConnectionTelemetryRole::Viewer => Self::Viewer,
+            SessionConnectionTelemetryRole::Recorder => Self::Recorder,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct SessionConnectionInfo {
+    pub(super) connection_id: u64,
+    pub(super) role: SessionConnectionRole,
+}
+
+#[derive(Serialize)]
+pub(super) struct SessionStopConflictResponse {
+    pub(super) error: String,
+    pub(super) session: SessionResource,
+}
+
+impl IntoResponse for SessionStopConflictResponse {
+    fn into_response(self) -> axum::response::Response {
+        Json(self).into_response()
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]

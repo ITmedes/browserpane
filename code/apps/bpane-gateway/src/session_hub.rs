@@ -16,8 +16,12 @@ mod refresh;
 mod telemetry;
 mod types;
 
-pub use self::telemetry::SessionTelemetrySnapshot;
-pub use self::types::{BrowserClientRole, ClientHandle, ResizeResult, SubscribeError};
+#[cfg(test)]
+pub use self::telemetry::SessionConnectionTelemetry;
+pub use self::telemetry::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
+pub use self::types::{
+    BrowserClientRole, ClientHandle, ResizeResult, SessionTerminationReason, SubscribeError,
+};
 
 /// Broadcast channel capacity. At 30fps, 1024 frames is ~34 seconds of buffer.
 const BROADCAST_CAPACITY: usize = 1024;
@@ -36,6 +40,8 @@ pub struct SessionHub {
     connected_clients: Mutex<Vec<u64>>,
     client_roles: RwLock<HashMap<u64, BrowserClientRole>>,
     client_control_txs: Mutex<HashMap<u64, mpsc::Sender<ControlMessage>>>,
+    client_termination_txs:
+        Mutex<HashMap<u64, tokio::sync::oneshot::Sender<SessionTerminationReason>>>,
     client_counter: AtomicU64,
     client_count: AtomicU32,
     owner_id: AtomicU64,
@@ -43,9 +49,12 @@ pub struct SessionHub {
     cached_session_ready: Arc<Mutex<Option<Arc<Frame>>>>,
     cached_keyframe: Arc<Mutex<Option<Arc<Frame>>>>,
     cached_grid_config: Arc<Mutex<Option<Arc<Frame>>>>,
-    /// When true, MCP agent owns the session — all browser clients are viewers.
+    /// When true, MCP automation is active for the session.
     mcp_is_owner: AtomicBool,
-    /// Resolution set by the MCP agent (used for ResolutionLocked).
+    /// When true, the MCP agent was the initial active connector and controls
+    /// the session resolution until MCP ownership is cleared.
+    mcp_controls_resolution: AtomicBool,
+    /// Resolution seeded by the MCP agent when it controls resolution.
     mcp_resolution: Mutex<Option<(u16, u16)>>,
     joins_accepted: AtomicU64,
     joins_rejected_viewer_cap: AtomicU64,
@@ -104,11 +113,13 @@ impl SessionHub {
             connected_clients: Mutex::new(Vec::new()),
             client_roles: RwLock::new(HashMap::new()),
             client_control_txs: Mutex::new(HashMap::new()),
+            client_termination_txs: Mutex::new(HashMap::new()),
             client_counter: AtomicU64::new(0),
             client_count: AtomicU32::new(0),
             owner_id: AtomicU64::new(0),
             active,
             mcp_is_owner: AtomicBool::new(false),
+            mcp_controls_resolution: AtomicBool::new(false),
             mcp_resolution: Mutex::new(None),
             cached_session_ready,
             cached_keyframe,
@@ -151,6 +162,14 @@ impl SessionHub {
         membership::unsubscribe(self, client_id).await;
     }
 
+    pub async fn terminate_client(&self, client_id: u64, reason: SessionTerminationReason) -> bool {
+        membership::terminate_client(self, client_id, reason).await
+    }
+
+    pub async fn terminate_all_clients(&self, reason: SessionTerminationReason) -> usize {
+        membership::terminate_all_clients(self, reason).await
+    }
+
     pub fn is_browser_owner(&self, client_id: u64) -> bool {
         policy::is_browser_owner(self, client_id)
     }
@@ -173,9 +192,11 @@ impl SessionHub {
         refresh::request_full_refresh(&self.cached_grid_config, &self.to_agent).await
     }
 
-    /// Register the MCP agent as session owner with the given resolution.
-    /// Sends a ResolutionRequest to the host agent.
-    /// All browser clients will be treated as viewers with locked resolution.
+    /// Register MCP automation as active for this session.
+    ///
+    /// If no interactive browser client has joined yet, MCP seeds the initial
+    /// resolution. Existing browser clients keep their current input and resize
+    /// policy.
     pub async fn set_mcp_owner(&self, width: u16, height: u16) {
         policy::set_mcp_owner(self, width, height).await;
     }
@@ -208,7 +229,7 @@ impl SessionHub {
 
     pub async fn telemetry_snapshot(&self) -> SessionTelemetrySnapshot {
         let resolution = self.current_resolution().await;
-        telemetry::snapshot(self, resolution)
+        telemetry::snapshot(self, resolution).await
     }
 
     fn record_join_latency(&self, elapsed: std::time::Duration) {
