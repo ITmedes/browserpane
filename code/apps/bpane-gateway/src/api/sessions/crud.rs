@@ -13,7 +13,11 @@ pub(super) async fn create_session(
 
     Ok((
         StatusCode::CREATED,
-        Json(session_resource(&state, &stored, None).await),
+        Json(
+            session_resource(&state, &stored, None)
+                .await
+                .map_err(map_session_store_error)?,
+        ),
     ))
 }
 
@@ -31,7 +35,11 @@ pub(super) async fn list_sessions(
         .map_err(map_session_store_error)?;
     let mut resources = Vec::with_capacity(sessions.len());
     for session in sessions {
-        resources.push(session_resource(&state, &session, None).await);
+        resources.push(
+            session_resource(&state, &session, None)
+                .await
+                .map_err(map_session_store_error)?,
+        );
     }
 
     Ok(Json(SessionListResponse {
@@ -46,72 +54,9 @@ pub(super) async fn get_session(
 ) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
     let stored = authorize_visible_session_request(&headers, &state, session_id).await?;
 
-    Ok(Json(session_resource(&state, &stored, None).await))
-}
-
-pub(super) async fn delete_session(
-    headers: HeaderMap,
-    Path(session_id): Path<Uuid>,
-    State(state): State<Arc<ApiState>>,
-) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
-    let principal = authorize_api_request(&headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-
-    let stored = state
-        .session_store
-        .get_session_for_owner(&principal, session_id)
-        .await
-        .map_err(map_session_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: format!("session {session_id} not found"),
-                }),
-            )
-        })?;
-
-    if should_block_session_stop(
-        stored.state,
-        state
-            .session_manager
-            .profile()
-            .supports_legacy_global_routes,
-        runtime_is_currently_in_use(&state).await,
-    ) {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "cannot stop the legacy single-session runtime while it is in use"
-                    .to_string(),
-            }),
-        ));
-    }
-
-    let stopped = state
-        .session_store
-        .stop_session_for_owner(&principal, session_id)
-        .await
-        .map_err(map_session_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: format!("session {session_id} not found"),
-                }),
-            )
-        })?;
-
-    if let Err(error) = state
-        .recording_lifecycle
-        .request_stop_and_wait(session_id, SessionRecordingTerminationReason::SessionStop)
-        .await
-    {
-        info!(%session_id, "recording finalization before session stop returned: {error}");
-    }
-    state.session_manager.release(session_id).await;
-    state.registry.remove_session(session_id).await;
-
-    Ok(Json(session_resource(&state, &stopped, None).await))
+    Ok(Json(
+        session_resource(&state, &stored, None)
+            .await
+            .map_err(map_session_store_error)?,
+    ))
 }

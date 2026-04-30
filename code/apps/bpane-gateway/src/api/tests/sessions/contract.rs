@@ -21,25 +21,6 @@ async fn rejects_v1_session_routes_without_bearer_auth() {
 }
 
 #[test]
-fn blocking_session_stop_only_applies_to_legacy_runtime_backends() {
-    assert!(should_block_session_stop(
-        SessionLifecycleState::Ready,
-        true,
-        true,
-    ));
-    assert!(!should_block_session_stop(
-        SessionLifecycleState::Ready,
-        false,
-        true,
-    ));
-    assert!(!should_block_session_stop(
-        SessionLifecycleState::Stopped,
-        true,
-        true,
-    ));
-}
-
-#[test]
 fn session_status_maps_recorder_clients() {
     let latest_recording = StoredSessionRecording {
         id: uuid::Uuid::now_v7(),

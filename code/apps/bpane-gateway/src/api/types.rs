@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use axum::response::IntoResponse;
 use axum::Json;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
@@ -21,7 +22,8 @@ use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
     CreateSessionRequest, SessionConnectInfo, SessionLifecycleState, SessionOwnerMode,
-    SessionRecordingFormat, SessionRecordingMode, SessionStatusSummary, SessionStore,
+    SessionRecordingFormat, SessionRecordingMode, SessionResource, SessionStatusSummary,
+    SessionStore,
 };
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_manager::SessionManager;
@@ -102,6 +104,18 @@ pub(super) struct SessionStatus {
     pub(super) recording: SessionRecordingStatus,
     pub(super) playback: SessionRecordingPlaybackResource,
     pub(super) telemetry: SessionTelemetry,
+}
+
+#[derive(Serialize)]
+pub(super) struct SessionStopConflictResponse {
+    pub(super) error: String,
+    pub(super) session: SessionResource,
+}
+
+impl IntoResponse for SessionStopConflictResponse {
+    fn into_response(self) -> axum::response::Response {
+        Json(self).into_response()
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
