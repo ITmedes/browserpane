@@ -222,7 +222,21 @@ export async function deleteSession(accessToken, options, sessionId) {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!response.ok && response.status !== 404) {
+  if (response.ok || response.status === 404) {
+    return;
+  }
+  if (response.status === 409) {
+    const killResponse = await fetch(`${options.pageUrl}/api/v1/sessions/${sessionId}/kill`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (killResponse.ok || killResponse.status === 404) {
+      return;
+    }
+    const detail = await killResponse.text().catch(() => '');
+    throw new Error(`HTTP ${killResponse.status}${detail ? ` ${detail}` : ''}`);
+  }
+  if (!response.ok) {
     const detail = await response.text().catch(() => '');
     throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
   }
