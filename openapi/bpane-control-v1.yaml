@@ -1664,6 +1664,26 @@ paths:
                 $ref: '#/components/schemas/SessionStopConflictResponse'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/kill:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Sessions]
+      summary: Force kill a session resource and terminate live attachments
+      operationId: killSession
+      responses:
+        '200':
+          description: Session force killed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/automation-owner:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -3962,6 +3982,7 @@ components:
       enum:
         - manual_stop
         - session_stop
+        - session_kill
         - idle_stop
         - gateway_restart
         - worker_exit

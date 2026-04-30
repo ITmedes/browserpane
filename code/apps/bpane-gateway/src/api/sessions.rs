@@ -4,6 +4,7 @@ use super::*;
 
 mod access;
 mod crud;
+mod kill;
 mod mcp;
 mod ownership;
 mod status;
@@ -38,6 +39,10 @@ pub(super) fn session_operation_routes() -> Router<Arc<ApiState>> {
         .route(
             "/api/v1/sessions/{session_id}/status",
             get(status::get_session_status),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/kill",
+            post(kill::kill_session),
         )
         .route(
             "/api/v1/sessions/{session_id}/stop",

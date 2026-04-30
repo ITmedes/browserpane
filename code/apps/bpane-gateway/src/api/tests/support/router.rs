@@ -161,6 +161,12 @@ pub(crate) fn test_router_with_workflow_lifecycle(
 }
 
 pub(crate) async fn test_router_with_live_agent() -> (Router, String, TestAgentServer) {
+    let (router, token, _, agent_server) = test_router_with_live_agent_state().await;
+    (router, token, agent_server)
+}
+
+pub(crate) async fn test_router_with_live_agent_state(
+) -> (Router, String, Arc<ApiState>, TestAgentServer) {
     let agent_server = TestAgentServer::start().await;
     let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
     let token = auth_validator
@@ -200,7 +206,7 @@ pub(crate) async fn test_router_with_live_agent() -> (Router, String, TestAgentS
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
     });
-    (build_api_router(state), token, agent_server)
+    (build_api_router(state.clone()), token, state, agent_server)
 }
 
 pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
