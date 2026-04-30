@@ -71,6 +71,7 @@ impl SessionRegistry {
             full_refresh_tiles_requested: 0,
             last_full_refresh_tiles: 0,
             max_full_refresh_tiles: 0,
+            connections: Vec::new(),
             egress_send_stream_lock_acquires_total: 0,
             egress_send_stream_lock_wait_us_total: 0,
             egress_send_stream_lock_wait_us_average: 0.0,
@@ -218,6 +219,48 @@ impl SessionRegistry {
             return 0;
         };
         hub.terminate_all_clients(reason).await
+    }
+
+    pub async fn disconnect_session_client(
+        &self,
+        session_id: Uuid,
+        client_id: u64,
+        reason: SessionTerminationReason,
+    ) -> bool {
+        let Some(hub) = self.lookup_live_hub(session_id).await else {
+            return false;
+        };
+        let terminated = hub.terminate_client(client_id, reason).await;
+        if terminated {
+            hub.unsubscribe(client_id).await;
+        }
+        terminated
+    }
+
+    pub async fn disconnect_all_session_clients(
+        &self,
+        session_id: Uuid,
+        reason: SessionTerminationReason,
+    ) -> usize {
+        let Some(hub) = self.lookup_live_hub(session_id).await else {
+            return 0;
+        };
+
+        let client_ids = hub
+            .telemetry_snapshot()
+            .await
+            .connections
+            .into_iter()
+            .map(|connection| connection.connection_id)
+            .collect::<Vec<_>>();
+        let mut disconnected = 0;
+        for client_id in client_ids {
+            if hub.terminate_client(client_id, reason).await {
+                hub.unsubscribe(client_id).await;
+                disconnected += 1;
+            }
+        }
+        disconnected
     }
 }
 

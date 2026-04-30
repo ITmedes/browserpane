@@ -1638,6 +1638,52 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/connections/{connection_id}/disconnect:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      tags: [Sessions]
+      summary: Disconnect a single live session attachment
+      operationId: disconnectSessionConnection
+      responses:
+        '200':
+          description: Live session attachment disconnected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/connections/disconnect-all:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Sessions]
+      summary: Disconnect all live session attachments
+      operationId: disconnectAllSessionConnections
+      responses:
+        '200':
+          description: All live session attachments disconnected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/stop:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -3782,6 +3828,23 @@ components:
         total_clients:
           type: integer
           minimum: 0
+    SessionConnectionRole:
+      type: string
+      enum:
+        - owner
+        - viewer
+        - recorder
+    SessionConnectionInfo:
+      type: object
+      required:
+        - connection_id
+        - role
+      properties:
+        connection_id:
+          type: integer
+          minimum: 1
+        role:
+          $ref: '#/components/schemas/SessionConnectionRole'
     SessionStopBlockerKind:
       type: string
       enum:
@@ -4315,6 +4378,7 @@ components:
         - connection_counts
         - stop_eligibility
         - idle
+        - connections
         - browser_clients
         - viewer_clients
         - recorder_clients
@@ -4339,6 +4403,10 @@ components:
           $ref: '#/components/schemas/SessionStopEligibility'
         idle:
           $ref: '#/components/schemas/SessionIdleStatus'
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionConnectionInfo'
         browser_clients:
           type: integer
           minimum: 0

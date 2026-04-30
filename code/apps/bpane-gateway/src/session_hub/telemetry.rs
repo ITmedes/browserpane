@@ -1,9 +1,22 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use super::SessionHub;
+use super::{BrowserClientRole, SessionHub};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionConnectionTelemetryRole {
+    Owner,
+    Viewer,
+    Recorder,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionConnectionTelemetry {
+    pub connection_id: u64,
+    pub role: SessionConnectionTelemetryRole,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SessionTelemetrySnapshot {
     pub browser_clients: u32,
     pub viewer_clients: u32,
@@ -22,6 +35,7 @@ pub struct SessionTelemetrySnapshot {
     pub full_refresh_tiles_requested: u64,
     pub last_full_refresh_tiles: u64,
     pub max_full_refresh_tiles: u64,
+    pub connections: Vec<SessionConnectionTelemetry>,
     pub egress_send_stream_lock_acquires_total: u64,
     pub egress_send_stream_lock_wait_us_total: u64,
     pub egress_send_stream_lock_wait_us_average: f64,
@@ -30,10 +44,11 @@ pub struct SessionTelemetrySnapshot {
     pub egress_lagged_frames_total: u64,
 }
 
-pub(super) fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelemetrySnapshot {
+pub(super) async fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelemetrySnapshot {
     let browser_clients = hub.client_count();
     let viewer_clients = hub.viewer_count();
     let recorder_clients = hub.recorder_count();
+    let connections = snapshot_connections(hub).await;
     let joins_accepted = hub.joins_accepted.load(Ordering::Relaxed);
     let total_join_latency_ms = hub.total_join_latency_ms.load(Ordering::Relaxed);
     let egress_send_stream_lock_acquires_total = hub
@@ -65,6 +80,7 @@ pub(super) fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelem
         full_refresh_tiles_requested: hub.full_refresh_tiles_requested.load(Ordering::Relaxed),
         last_full_refresh_tiles: hub.last_full_refresh_tiles.load(Ordering::Relaxed),
         max_full_refresh_tiles: hub.max_full_refresh_tiles.load(Ordering::Relaxed),
+        connections,
         egress_send_stream_lock_acquires_total,
         egress_send_stream_lock_wait_us_total,
         egress_send_stream_lock_wait_us_average: if egress_send_stream_lock_acquires_total == 0 {
@@ -79,6 +95,31 @@ pub(super) fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelem
         egress_lagged_receives_total: hub.egress_lagged_receives_total.load(Ordering::Relaxed),
         egress_lagged_frames_total: hub.egress_lagged_frames_total.load(Ordering::Relaxed),
     }
+}
+
+async fn snapshot_connections(hub: &SessionHub) -> Vec<SessionConnectionTelemetry> {
+    let connected_clients = hub.connected_clients.lock().await.clone();
+    let roles = hub.client_roles.read().unwrap();
+    connected_clients
+        .into_iter()
+        .map(|connection_id| {
+            let role = match roles.get(&connection_id).copied() {
+                Some(BrowserClientRole::Recorder) => SessionConnectionTelemetryRole::Recorder,
+                Some(BrowserClientRole::Interactive) => {
+                    if hub.is_browser_owner(connection_id) {
+                        SessionConnectionTelemetryRole::Owner
+                    } else {
+                        SessionConnectionTelemetryRole::Viewer
+                    }
+                }
+                None => SessionConnectionTelemetryRole::Viewer,
+            };
+            SessionConnectionTelemetry {
+                connection_id,
+                role,
+            }
+        })
+        .collect()
 }
 
 pub(super) fn record_join_latency(hub: &SessionHub, elapsed: Duration) {

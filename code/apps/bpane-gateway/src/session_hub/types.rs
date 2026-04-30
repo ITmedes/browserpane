@@ -60,18 +60,21 @@ pub struct ClientHandle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionTerminationReason {
     SessionKilled,
+    DisconnectedByOwner,
 }
 
 impl SessionTerminationReason {
     pub fn close_reason_bytes(self) -> &'static [u8] {
         match self {
             Self::SessionKilled => b"session force killed by owner",
+            Self::DisconnectedByOwner => b"session connection disconnected by owner",
         }
     }
 
     pub fn transitions_to_idle(self) -> bool {
         match self {
             Self::SessionKilled => false,
+            Self::DisconnectedByOwner => true,
         }
     }
 }

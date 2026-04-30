@@ -58,3 +58,9 @@ async fn terminate_client_targets_only_the_requested_subscriber() {
         Err(tokio::sync::oneshot::error::TryRecvError::Empty)
     ));
 }
+
+#[test]
+fn disconnect_reason_transitions_to_idle_but_kill_does_not() {
+    assert!(SessionTerminationReason::DisconnectedByOwner.transitions_to_idle());
+    assert!(!SessionTerminationReason::SessionKilled.transitions_to_idle());
+}
