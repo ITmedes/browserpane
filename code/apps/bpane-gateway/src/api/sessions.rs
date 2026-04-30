@@ -4,9 +4,12 @@ use super::*;
 
 mod access;
 mod crud;
+mod disconnect;
+mod kill;
 mod mcp;
 mod ownership;
 mod status;
+mod stop;
 
 pub(super) fn session_routes() -> Router<Arc<ApiState>> {
     Router::new()
@@ -16,7 +19,7 @@ pub(super) fn session_routes() -> Router<Arc<ApiState>> {
         )
         .route(
             "/api/v1/sessions/{session_id}",
-            get(crud::get_session).delete(crud::delete_session),
+            get(crud::get_session).delete(stop::delete_session),
         )
 }
 
@@ -37,6 +40,22 @@ pub(super) fn session_operation_routes() -> Router<Arc<ApiState>> {
         .route(
             "/api/v1/sessions/{session_id}/status",
             get(status::get_session_status),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/connections/{connection_id}/disconnect",
+            post(disconnect::disconnect_session_connection),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/connections/disconnect-all",
+            post(disconnect::disconnect_all_session_connections),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/kill",
+            post(kill::kill_session),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/stop",
+            post(stop::stop_session),
         )
         .route(
             "/api/v1/sessions/{session_id}/mcp-owner",

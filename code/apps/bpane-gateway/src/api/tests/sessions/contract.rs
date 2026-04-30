@@ -1,4 +1,9 @@
 use super::*;
+use crate::session_control::{
+    SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionRuntimeState,
+    SessionStatusSummary, SessionStopBlocker, SessionStopBlockerKind, SessionStopEligibility,
+};
+use crate::session_hub::{SessionConnectionTelemetry, SessionConnectionTelemetryRole};
 
 #[tokio::test]
 async fn rejects_v1_session_routes_without_bearer_auth() {
@@ -14,25 +19,6 @@ async fn rejects_v1_session_routes_without_bearer_auth() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[test]
-fn blocking_session_stop_only_applies_to_legacy_runtime_backends() {
-    assert!(should_block_session_stop(
-        SessionLifecycleState::Ready,
-        true,
-        true,
-    ));
-    assert!(!should_block_session_stop(
-        SessionLifecycleState::Ready,
-        false,
-        true,
-    ));
-    assert!(!should_block_session_stop(
-        SessionLifecycleState::Stopped,
-        true,
-        true,
-    ));
 }
 
 #[test]
@@ -57,6 +43,41 @@ fn session_status_maps_recorder_clients() {
     let playback =
         prepare_session_recording_playback(latest_recording.session_id, &[], chrono::Utc::now());
     let status = session_status_from_snapshot(
+        SessionLifecycleState::Active,
+        SessionStatusSummary {
+            runtime_state: SessionRuntimeState::Running,
+            presence_state: SessionPresenceState::Connected,
+            connection_counts: SessionConnectionCounts {
+                interactive_clients: 2,
+                owner_clients: 1,
+                viewer_clients: 1,
+                recorder_clients: 1,
+                automation_clients: 0,
+                total_clients: 3,
+            },
+            stop_eligibility: SessionStopEligibility {
+                allowed: false,
+                blockers: vec![
+                    SessionStopBlocker {
+                        kind: SessionStopBlockerKind::OwnerClients,
+                        count: 1,
+                    },
+                    SessionStopBlocker {
+                        kind: SessionStopBlockerKind::ViewerClients,
+                        count: 1,
+                    },
+                    SessionStopBlocker {
+                        kind: SessionStopBlockerKind::RecorderClients,
+                        count: 1,
+                    },
+                ],
+            },
+            idle: SessionIdleStatus {
+                idle_timeout_sec: Some(300),
+                idle_since: None,
+                idle_deadline: None,
+            },
+        },
         SessionTelemetrySnapshot {
             browser_clients: 3,
             viewer_clients: 1,
@@ -75,6 +96,20 @@ fn session_status_maps_recorder_clients() {
             full_refresh_tiles_requested: 30,
             last_full_refresh_tiles: 30,
             max_full_refresh_tiles: 30,
+            connections: vec![
+                SessionConnectionTelemetry {
+                    connection_id: 1,
+                    role: SessionConnectionTelemetryRole::Owner,
+                },
+                SessionConnectionTelemetry {
+                    connection_id: 2,
+                    role: SessionConnectionTelemetryRole::Viewer,
+                },
+                SessionConnectionTelemetry {
+                    connection_id: 3,
+                    role: SessionConnectionTelemetryRole::Recorder,
+                },
+            ],
             egress_send_stream_lock_acquires_total: 10,
             egress_send_stream_lock_wait_us_total: 20,
             egress_send_stream_lock_wait_us_average: 2.0,
@@ -91,6 +126,33 @@ fn session_status_maps_recorder_clients() {
         playback.resource,
     );
 
+    assert_eq!(status.state, SessionLifecycleState::Active);
+    assert_eq!(status.summary.runtime_state, SessionRuntimeState::Running);
+    assert_eq!(
+        status.summary.presence_state,
+        SessionPresenceState::Connected
+    );
+    assert_eq!(status.summary.connection_counts.total_clients, 3);
+    assert_eq!(status.summary.connection_counts.owner_clients, 1);
+    assert_eq!(status.summary.connection_counts.viewer_clients, 1);
+    assert!(!status.summary.stop_eligibility.allowed);
+    assert_eq!(status.summary.stop_eligibility.blockers.len(), 3);
+    assert_eq!(status.connections.len(), 3);
+    assert_eq!(status.connections[0].connection_id, 1);
+    assert!(matches!(
+        status.connections[0].role,
+        SessionConnectionRole::Owner
+    ));
+    assert_eq!(status.connections[1].connection_id, 2);
+    assert!(matches!(
+        status.connections[1].role,
+        SessionConnectionRole::Viewer
+    ));
+    assert_eq!(status.connections[2].connection_id, 3);
+    assert!(matches!(
+        status.connections[2].role,
+        SessionConnectionRole::Recorder
+    ));
     assert_eq!(status.browser_clients, 3);
     assert_eq!(status.viewer_clients, 1);
     assert_eq!(status.recorder_clients, 1);
@@ -184,6 +246,31 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
         "legacy_single_runtime"
     );
     assert_eq!(created["runtime"]["cdp_endpoint"], "http://host:9223");
+    assert_eq!(created["status"]["runtime_state"], "not_started");
+    assert_eq!(created["status"]["presence_state"], "empty");
+    assert_eq!(
+        created["status"]["connection_counts"]["interactive_clients"],
+        0
+    );
+    assert_eq!(created["status"]["connection_counts"]["owner_clients"], 0);
+    assert_eq!(created["status"]["connection_counts"]["viewer_clients"], 0);
+    assert_eq!(
+        created["status"]["connection_counts"]["recorder_clients"],
+        0
+    );
+    assert_eq!(
+        created["status"]["connection_counts"]["automation_clients"],
+        0
+    );
+    assert_eq!(created["status"]["connection_counts"]["total_clients"], 0);
+    assert_eq!(created["status"]["stop_eligibility"]["allowed"], true);
+    assert!(created["status"]["stop_eligibility"]["blockers"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert_eq!(created["status"]["idle"]["idle_timeout_sec"], 900);
+    assert!(created["status"]["idle"]["idle_since"].is_null());
+    assert!(created["status"]["idle"]["idle_deadline"].is_null());
     assert!(created["created_at"].is_string());
     assert!(created["updated_at"].is_string());
     assert!(created["stopped_at"].is_null());
@@ -220,6 +307,8 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     assert_eq!(fetched["id"], session_id);
     assert_eq!(fetched["labels"]["suite"], "contract");
     assert_eq!(fetched["recording"]["mode"], "manual");
+    assert_eq!(fetched["status"]["runtime_state"], "not_started");
+    assert_eq!(fetched["status"]["presence_state"], "empty");
 
     let issue_response = app
         .clone()

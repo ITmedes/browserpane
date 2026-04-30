@@ -2,13 +2,18 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  isInitializeRequest,
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ListPromptsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { randomUUID } from "node:crypto";
+import { lookup } from "node:dns/promises";
 import http from "node:http";
+import { isIP } from "node:net";
 import {
   GatewaySessionAutomationAccessResponse,
   GatewaySessionResource,
@@ -55,6 +60,32 @@ async function readJsonBody<T>(req: http.IncomingMessage): Promise<T> {
     throw new Error("request body is required");
   }
   return JSON.parse(raw) as T;
+}
+
+function singleHeader(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function writeJsonRpcError(
+  res: http.ServerResponse,
+  statusCode: number,
+  message: string,
+  code = -32000,
+): void {
+  if (res.headersSent) {
+    return;
+  }
+  res.writeHead(statusCode, { "Content-Type": "application/json" });
+  res.end(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      error: {
+        code,
+        message,
+      },
+      id: null,
+    }),
+  );
 }
 
 class GatewayTokenManager {
@@ -237,6 +268,26 @@ function describeManagedCdpEndpoint(
   }
 }
 
+function isChromiumDevToolsSafeHostname(hostname: string): boolean {
+  return (
+    hostname === "localhost"
+    || hostname === "127.0.0.1"
+    || hostname === "::1"
+    || isIP(hostname) !== 0
+  );
+}
+
+async function resolveChromiumDevToolsEndpoint(cdpEndpoint: string): Promise<string> {
+  const url = new URL(cdpEndpoint);
+  if (isChromiumDevToolsSafeHostname(url.hostname)) {
+    return cdpEndpoint;
+  }
+
+  const resolved = await lookup(url.hostname, { family: 4 });
+  url.hostname = resolved.address;
+  return url.toString();
+}
+
 async function gatewaySessionHeaders(
   session: GatewaySessionResource | null,
   automationAccessManager: SessionAutomationAccessManager,
@@ -277,6 +328,12 @@ async function registerMcpOwner(
         const sessionSuffix = session ? ` for session ${session.id}` : "";
         console.log(
           `[mcp-bridge] registered as MCP owner${sessionSuffix} at ${width}x${height}`,
+        );
+        return;
+      }
+      if (!session && resp.status === 404) {
+        console.warn(
+          "[mcp-bridge] legacy MCP owner route is unavailable; continuing with fallback CDP endpoint",
         );
         return;
       }
@@ -321,7 +378,8 @@ function spawnPlaywrightMcp(cdpEndpoint: string): StdioClientTransport {
 
 class PlaywrightRuntimeController {
   private client: Client | null = null;
-  private cdpEndpoint: string | null = null;
+  private requestedCdpEndpoint: string | null = null;
+  private effectiveCdpEndpoint: string | null = null;
 
   async ensureConnected(
     session: GatewaySessionResource | null,
@@ -329,24 +387,29 @@ class PlaywrightRuntimeController {
   ): Promise<Client> {
     const access = await automationAccessManager.get(session);
     const nextEndpoint = resolveManagedCdpEndpoint(session, access);
-    if (this.client && this.cdpEndpoint === nextEndpoint) {
+    if (this.client && this.requestedCdpEndpoint === nextEndpoint) {
       return this.client;
     }
 
     await this.close();
 
-    const transport = spawnPlaywrightMcp(nextEndpoint);
+    const effectiveEndpoint = await resolveChromiumDevToolsEndpoint(nextEndpoint);
+    const transport = spawnPlaywrightMcp(effectiveEndpoint);
     const client = new Client(
       { name: "bpane-mcp-bridge", version: "0.1.0" },
       { capabilities: {} },
     );
     await client.connect(transport);
     this.client = client;
-    this.cdpEndpoint = nextEndpoint;
+    this.requestedCdpEndpoint = nextEndpoint;
+    this.effectiveCdpEndpoint = effectiveEndpoint;
 
     const sessionSuffix = session ? ` for session ${session.id}` : "";
+    const endpointSuffix = effectiveEndpoint === nextEndpoint
+      ? nextEndpoint
+      : `${nextEndpoint} (resolved to ${effectiveEndpoint})`;
     console.log(
-      `[mcp-bridge] connected to @playwright/mcp subprocess${sessionSuffix} via ${nextEndpoint}`,
+      `[mcp-bridge] connected to @playwright/mcp subprocess${sessionSuffix} via ${endpointSuffix}`,
     );
 
     return client;
@@ -354,14 +417,16 @@ class PlaywrightRuntimeController {
 
   async close(): Promise<void> {
     if (!this.client) {
-      this.cdpEndpoint = null;
+      this.requestedCdpEndpoint = null;
+      this.effectiveCdpEndpoint = null;
       return;
     }
 
     const client = this.client;
-    const previousEndpoint = this.cdpEndpoint;
+    const previousEndpoint = this.requestedCdpEndpoint;
     this.client = null;
-    this.cdpEndpoint = null;
+    this.requestedCdpEndpoint = null;
+    this.effectiveCdpEndpoint = null;
 
     try {
       await client.close();
@@ -376,7 +441,11 @@ class PlaywrightRuntimeController {
   }
 
   getCurrentEndpoint(): string | null {
-    return this.cdpEndpoint;
+    return this.requestedCdpEndpoint;
+  }
+
+  getEffectiveEndpoint(): string | null {
+    return this.effectiveCdpEndpoint;
   }
 }
 
@@ -510,13 +579,116 @@ async function main() {
   //    Each SSE connection gets its own Server instance to avoid the
   //    "Already connected to a transport" error.
   const transports = new Map<string, SSEServerTransport>();
+  const streamableTransports = new Map<string, StreamableHTTPServerTransport>();
   const servers = new Map<string, Server>();
+
+  async function releaseOwnershipIfIdle(): Promise<void> {
+    if (servers.size > 0) {
+      return;
+    }
+    console.log("[mcp-bridge] no MCP clients remaining — clearing ownership");
+    await unregisterMcpOwner(managedSession, automationAccessManager);
+    await playwrightRuntime.close();
+  }
+
+  async function handleStreamableHttpRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    let parsedBody: unknown | undefined;
+    if (req.method === "POST") {
+      try {
+        parsedBody = await readJsonBody<unknown>(req);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        writeJsonRpcError(res, 400, `Parse error: ${message}`, -32700);
+        return;
+      }
+    }
+
+    const requestedSessionId = singleHeader(req.headers["mcp-session-id"]);
+    if (requestedSessionId) {
+      const transport = streamableTransports.get(requestedSessionId);
+      if (!transport) {
+        writeJsonRpcError(res, 404, "Session not found", -32001);
+        return;
+      }
+      await transport.handleRequest(req, res, parsedBody);
+      return;
+    }
+
+    if (req.method !== "POST" || !isInitializeRequest(parsedBody)) {
+      writeJsonRpcError(res, 400, "Bad Request: No valid session ID provided");
+      return;
+    }
+
+    const needsBridgeBootstrap = servers.size === 0;
+    let sessionId: string | null = null;
+    let server: Server | null = null;
+    let transport: StreamableHTTPServerTransport | null = null;
+    try {
+      if (needsBridgeBootstrap) {
+        await registerMcpOwner(managedSession, automationAccessManager, width, height);
+      }
+      const playwrightClient = await playwrightRuntime.ensureConnected(
+        managedSession,
+        automationAccessManager,
+      );
+
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (initializedSessionId) => {
+          sessionId = initializedSessionId;
+          if (transport && server) {
+            streamableTransports.set(initializedSessionId, transport);
+            servers.set(initializedSessionId, server);
+          }
+          console.log(
+            `[mcp-bridge] MCP client connected (session=${initializedSessionId}, transport=streamable_http, total=${servers.size}, cdp=${playwrightRuntime.getCurrentEndpoint() ?? "unknown"})`,
+          );
+        },
+      });
+      server = createServerForConnection(playwrightClient, monitor);
+      server.onclose = () => {
+        const closedSessionId = sessionId ?? transport?.sessionId;
+        if (closedSessionId) {
+          streamableTransports.delete(closedSessionId);
+          servers.delete(closedSessionId);
+          console.log(
+            `[mcp-bridge] MCP client disconnected (session=${closedSessionId}, transport=streamable_http, remaining=${servers.size})`,
+          );
+          void releaseOwnershipIfIdle();
+        }
+      };
+
+      await server.connect(transport);
+      await transport.handleRequest(req, res, parsedBody);
+    } catch (error) {
+      if (sessionId) {
+        streamableTransports.delete(sessionId);
+        servers.delete(sessionId);
+      }
+      try {
+        await server?.close();
+      } catch {
+        // ignore cleanup failures after a failed streamable HTTP request
+      }
+      if (needsBridgeBootstrap) {
+        await releaseOwnershipIfIdle();
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      writeJsonRpcError(res, 503, message, -32603);
+    }
+  }
 
   const httpServer = http.createServer(async (req, res) => {
     // CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Accept, Content-Type, Authorization, Mcp-Protocol-Version, Mcp-Session-Id",
+    );
 
     if (req.method === "OPTIONS") {
       res.writeHead(204);
@@ -543,6 +715,7 @@ async function main() {
             automationAccessManager.getCached(managedSession),
           ),
           playwright_cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
+          playwright_effective_cdp_endpoint: playwrightRuntime.getEffectiveEndpoint(),
         }),
       );
       return;
@@ -559,6 +732,7 @@ async function main() {
             automationAccessManager.getCached(managedSession),
           ),
           playwright_cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
+          playwright_effective_cdp_endpoint: playwrightRuntime.getEffectiveEndpoint(),
         }),
       );
       return;
@@ -634,6 +808,11 @@ async function main() {
       return;
     }
 
+    if (url.pathname === "/mcp") {
+      await handleStreamableHttpRequest(req, res);
+      return;
+    }
+
     if (url.pathname === "/sse") {
       const needsBridgeBootstrap = servers.size === 0;
       try {
@@ -702,6 +881,7 @@ async function main() {
           JSON.stringify({
             ok: true,
             cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
+            effective_cdp_endpoint: playwrightRuntime.getEffectiveEndpoint(),
           }),
         );
       } catch (error) {
@@ -718,6 +898,7 @@ async function main() {
 
   httpServer.listen(MCP_PORT, "0.0.0.0", () => {
     console.log(`[mcp-bridge] MCP server listening on port ${MCP_PORT}`);
+    console.log(`[mcp-bridge] Streamable HTTP endpoint: http://0.0.0.0:${MCP_PORT}/mcp`);
     console.log(`[mcp-bridge] SSE endpoint: http://0.0.0.0:${MCP_PORT}/sse`);
     console.log(`[mcp-bridge] Health: http://0.0.0.0:${MCP_PORT}/health`);
     console.log(`[mcp-bridge] Supervised delay: ${SUPERVISED_DELAY_MS}ms when viewers present`);

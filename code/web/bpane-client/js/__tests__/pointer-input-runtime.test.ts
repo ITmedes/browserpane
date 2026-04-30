@@ -26,6 +26,8 @@ function dispatchPointer(
 function dispatchWheel(
   target: HTMLElement,
   init: {
+    clientX?: number;
+    clientY?: number;
     deltaX?: number;
     deltaY: number;
     deltaMode?: number;
@@ -36,6 +38,8 @@ function dispatchWheel(
     cancelable: true,
   });
   Object.defineProperties(event, {
+    clientX: { configurable: true, value: init.clientX ?? 0 },
+    clientY: { configurable: true, value: init.clientY ?? 0 },
     deltaX: { configurable: true, value: init.deltaX ?? 0 },
     deltaY: { configurable: true, value: init.deltaY },
     deltaMode: { configurable: true, value: init.deltaMode ?? 0 },
@@ -113,6 +117,7 @@ describe('PointerInputRuntime', () => {
   it('sends pointer buttons, accumulates wheel deltas, and focuses the keyboard target on click', () => {
     const canvas = document.createElement('canvas');
     const sendMouseButton = vi.fn();
+    const sendMouseMove = vi.fn();
     const sendScroll = vi.fn();
     const focusKeyboardTarget = vi.fn();
     setCanvasRect(canvas, {
@@ -126,7 +131,7 @@ describe('PointerInputRuntime', () => {
       canvas,
       drawCursor: vi.fn(),
       getRemoteDims: () => ({ width: 800, height: 600 }),
-      sendMouseMove: vi.fn(),
+      sendMouseMove,
       sendMouseButton,
       sendScroll,
       now: () => 100,
@@ -146,8 +151,8 @@ describe('PointerInputRuntime', () => {
       clientY: 175,
       button: 2,
     });
-    const firstWheel = dispatchWheel(canvas, { deltaY: 30 });
-    const secondWheel = dispatchWheel(canvas, { deltaY: 30 });
+    const firstWheel = dispatchWheel(canvas, { clientX: 150, clientY: 175, deltaY: 30 });
+    const secondWheel = dispatchWheel(canvas, { clientX: 150, clientY: 175, deltaY: 30 });
     const contextMenu = new Event('contextmenu', {
       bubbles: true,
       cancelable: true,
@@ -166,6 +171,9 @@ describe('PointerInputRuntime', () => {
     expect(sendMouseButton.mock.calls).toEqual([
       [2, true, 400, 300],
       [2, false, 400, 300],
+    ]);
+    expect(sendMouseMove.mock.calls).toEqual([
+      [400, 300],
     ]);
     expect(sendScroll.mock.calls).toEqual([
       [0, -1],
@@ -199,17 +207,18 @@ describe('PointerInputRuntime', () => {
       focusKeyboardTarget: vi.fn(),
     });
 
-    dispatchWheel(canvas, { deltaY: 30 });
+    dispatchWheel(canvas, { clientX: 5, clientY: 5, deltaY: 30 });
     dispatchPointer(canvas, 'pointermove', { clientX: 10, clientY: 10 });
     runtime.reset();
     now = 110;
     dispatchPointer(canvas, 'pointermove', { clientX: 20, clientY: 20 });
-    dispatchWheel(canvas, { deltaY: 30 });
-    dispatchWheel(canvas, { deltaY: 30 });
+    dispatchWheel(canvas, { clientX: 30, clientY: 40, deltaY: 30 });
+    dispatchWheel(canvas, { clientX: 30, clientY: 40, deltaY: 30 });
 
     expect(sendMouseMove.mock.calls).toEqual([
       [10, 10],
       [20, 20],
+      [30, 40],
     ]);
     expect(sendScroll.mock.calls).toEqual([
       [0, -1],

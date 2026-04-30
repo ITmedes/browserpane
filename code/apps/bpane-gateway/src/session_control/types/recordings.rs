@@ -109,6 +109,7 @@ impl FromStr for SessionRecordingState {
 pub enum SessionRecordingTerminationReason {
     ManualStop,
     SessionStop,
+    SessionKill,
     IdleStop,
     GatewayRestart,
     WorkerExit,
@@ -119,6 +120,7 @@ impl SessionRecordingTerminationReason {
         match self {
             Self::ManualStop => "manual_stop",
             Self::SessionStop => "session_stop",
+            Self::SessionKill => "session_kill",
             Self::IdleStop => "idle_stop",
             Self::GatewayRestart => "gateway_restart",
             Self::WorkerExit => "worker_exit",
@@ -133,6 +135,7 @@ impl FromStr for SessionRecordingTerminationReason {
         match value {
             "manual_stop" => Ok(Self::ManualStop),
             "session_stop" => Ok(Self::SessionStop),
+            "session_kill" => Ok(Self::SessionKill),
             "idle_stop" => Ok(Self::IdleStop),
             "gateway_restart" => Ok(Self::GatewayRestart),
             "worker_exit" => Ok(Self::WorkerExit),

@@ -59,6 +59,7 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
     let client_role = client_handle.client_role;
     let initial_access_state = client_handle.initial_access_state;
     let control_rx = client_handle.control_rx;
+    let termination_rx = client_handle.termination_rx;
     let from_host = client_handle.from_host;
     let to_host = client_handle.to_host;
     let initial_frames = client_handle.initial_frames;
@@ -116,6 +117,9 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
         spawn_direct_control_task(session.clone(), send_stream.clone(), control_rx);
 
     let gateway_pinger = spawn_gateway_pinger(session.clone(), send_stream.clone());
+    let mut close_reason: &[u8] = b"session ended";
+    let mut should_transition_to_idle = true;
+    let mut termination_rx = termination_rx;
 
     if recorder_role_suppresses_bitrate_feedback(client_role) {
         tokio::select! {
@@ -123,6 +127,13 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
             _ = browser_to_agent => {}
             _ = direct_control_task => {}
             _ = gateway_pinger => {}
+            reason = &mut termination_rx => {
+                if let Ok(reason) = reason {
+                    close_reason = reason.close_reason_bytes();
+                    should_transition_to_idle = reason.transitions_to_idle();
+                    session.deactivate();
+                }
+            }
         }
     } else {
         let bitrate_hint_task = spawn_bitrate_hint_task(
@@ -138,38 +149,48 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
             _ = direct_control_task => {}
             _ = gateway_pinger => {}
             _ = bitrate_hint_task => {}
+            reason = &mut termination_rx => {
+                if let Ok(reason) = reason {
+                    close_reason = reason.close_reason_bytes();
+                    should_transition_to_idle = reason.transitions_to_idle();
+                    session.deactivate();
+                }
+            }
         }
     }
 
     session.deactivate();
     registry.leave(routed_session_id, client_id).await;
-    if let Some(snapshot) = registry.telemetry_snapshot_if_live(routed_session_id).await {
-        if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner {
+    if should_transition_to_idle {
+        if let Some(snapshot) = registry.telemetry_snapshot_if_live(routed_session_id).await {
+            if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner
+            {
+                let _ = session_store.mark_session_idle(routed_session_id).await;
+                session_manager.mark_session_idle(routed_session_id).await;
+                schedule_idle_session_stop(
+                    routed_session_id,
+                    idle_stop_timeout,
+                    registry.clone(),
+                    session_store.clone(),
+                    session_manager.clone(),
+                    recording_lifecycle.clone(),
+                );
+            }
+        } else {
             let _ = session_store.mark_session_idle(routed_session_id).await;
             session_manager.mark_session_idle(routed_session_id).await;
             schedule_idle_session_stop(
                 routed_session_id,
                 idle_stop_timeout,
                 registry.clone(),
-                session_store.clone(),
+                session_store,
                 session_manager.clone(),
-                recording_lifecycle.clone(),
+                recording_lifecycle,
             );
         }
-    } else {
-        let _ = session_store.mark_session_idle(routed_session_id).await;
-        session_manager.mark_session_idle(routed_session_id).await;
-        schedule_idle_session_stop(
-            routed_session_id,
-            idle_stop_timeout,
-            registry.clone(),
-            session_store,
-            session_manager.clone(),
-            recording_lifecycle,
-        );
     }
 
-    connection.close(wtransport::VarInt::from_u32(0), b"session ended");
+    connection.close(wtransport::VarInt::from_u32(0), close_reason);
 
     Ok(())
 }

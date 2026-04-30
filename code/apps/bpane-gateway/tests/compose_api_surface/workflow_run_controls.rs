@@ -102,17 +102,18 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         return Err(anyhow!("workflow run log append did not persist"));
     }
 
-    let mut upload_headers = Vec::new();
-    upload_headers.push((
-        "x-bpane-workflow-workspace-id",
-        output_workspace_id.as_str(),
-    ));
-    upload_headers.push(("x-bpane-file-name", "compose-e2e-produced.txt"));
-    upload_headers.push((
-        "x-bpane-file-provenance",
-        "{\"origin\":\"bpane-gateway-compose-e2e\",\"kind\":\"produced_file\"}",
-    ));
-    upload_headers.push(("x-bpane-automation-access-token", automation_token.as_str()));
+    let upload_headers = vec![
+        (
+            "x-bpane-workflow-workspace-id",
+            output_workspace_id.as_str(),
+        ),
+        ("x-bpane-file-name", "compose-e2e-produced.txt"),
+        (
+            "x-bpane-file-provenance",
+            "{\"origin\":\"bpane-gateway-compose-e2e\",\"kind\":\"produced_file\"}",
+        ),
+        ("x-bpane-automation-access-token", automation_token.as_str()),
+    ];
     let uploaded_file = harness
         .post_bytes(
             &format!("/api/v1/workflow-runs/{controlled_run_id}/produced-files"),

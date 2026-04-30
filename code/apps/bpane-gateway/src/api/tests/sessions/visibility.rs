@@ -164,8 +164,8 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
 }
 
 #[tokio::test]
-async fn rejects_session_scoped_runtime_routes_for_stopped_sessions() {
-    let (app, token) = test_router();
+async fn session_status_reports_stopped_sessions_without_runtime_side_effects() {
+    let (app, token, state) = test_router_with_state();
 
     let created = response_json(
         app.clone()
@@ -183,6 +183,7 @@ async fn rejects_session_scoped_runtime_routes_for_stopped_sessions() {
     )
     .await;
     let session_id = created["id"].as_str().unwrap().to_string();
+    let session_uuid = Uuid::parse_str(&session_id).unwrap();
 
     let delete_response = app
         .clone()
@@ -197,6 +198,11 @@ async fn rejects_session_scoped_runtime_routes_for_stopped_sessions() {
         .await
         .unwrap();
     assert_eq!(delete_response.status(), StatusCode::OK);
+    assert!(state
+        .registry
+        .telemetry_snapshot_if_live(session_uuid)
+        .await
+        .is_none());
 
     let status_response = app
         .oneshot(
@@ -208,10 +214,95 @@ async fn rejects_session_scoped_runtime_routes_for_stopped_sessions() {
         )
         .await
         .unwrap();
-    assert_eq!(status_response.status(), StatusCode::CONFLICT);
+    assert_eq!(status_response.status(), StatusCode::OK);
     let body = response_json(status_response).await;
-    assert!(body["error"]
-        .as_str()
-        .unwrap()
-        .contains("runtime-compatible state"));
+    assert_eq!(body["state"], "stopped");
+    assert_eq!(body["runtime_state"], "stopped");
+    assert_eq!(body["presence_state"], "empty");
+    assert_eq!(body["connection_counts"]["total_clients"], 0);
+    assert_eq!(body["connection_counts"]["interactive_clients"], 0);
+    assert_eq!(body["connection_counts"]["automation_clients"], 0);
+    assert_eq!(body["stop_eligibility"]["allowed"], true);
+    assert_eq!(body["browser_clients"], 0);
+    assert_eq!(body["viewer_clients"], 0);
+    assert_eq!(body["recorder_clients"], 0);
+    assert_eq!(body["mcp_owner"], false);
+    assert!(state
+        .registry
+        .telemetry_snapshot_if_live(session_uuid)
+        .await
+        .is_none());
+}
+
+#[tokio::test]
+async fn session_resource_and_status_reads_do_not_create_live_hubs() {
+    let (app, token, state) = test_router_with_state();
+
+    let created = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+    let session_uuid = Uuid::parse_str(&session_id).unwrap();
+    assert!(state
+        .registry
+        .telemetry_snapshot_if_live(session_uuid)
+        .await
+        .is_none());
+
+    let get_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let get_body = response_json(get_response).await;
+    assert_eq!(get_body["status"]["runtime_state"], "not_started");
+    assert_eq!(get_body["status"]["presence_state"], "empty");
+    assert_eq!(get_body["status"]["connection_counts"]["total_clients"], 0);
+    assert!(state
+        .registry
+        .telemetry_snapshot_if_live(session_uuid)
+        .await
+        .is_none());
+
+    let status_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/status"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(status_response.status(), StatusCode::OK);
+    let status_body = response_json(status_response).await;
+    assert_eq!(status_body["state"], "ready");
+    assert_eq!(status_body["runtime_state"], "not_started");
+    assert_eq!(status_body["presence_state"], "empty");
+    assert_eq!(status_body["connection_counts"]["total_clients"], 0);
+    assert_eq!(status_body["browser_clients"], 0);
+    assert!(state
+        .registry
+        .telemetry_snapshot_if_live(session_uuid)
+        .await
+        .is_none());
 }

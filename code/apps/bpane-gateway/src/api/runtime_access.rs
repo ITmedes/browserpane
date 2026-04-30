@@ -1,23 +1,5 @@
 use super::*;
 
-pub(super) async fn runtime_is_currently_in_use(state: &ApiState) -> bool {
-    let Some(session_id) = legacy_runtime_session_id(state).await else {
-        return false;
-    };
-    let Some(snapshot) = state.registry.telemetry_snapshot_if_live(session_id).await else {
-        return false;
-    };
-    snapshot.browser_clients > 0 || snapshot.viewer_clients > 0 || snapshot.mcp_owner
-}
-
-pub(super) fn should_block_session_stop(
-    state: SessionLifecycleState,
-    supports_legacy_global_routes: bool,
-    runtime_in_use: bool,
-) -> bool {
-    supports_legacy_global_routes && state.is_runtime_candidate() && runtime_in_use
-}
-
 pub(super) async fn resolve_runtime(
     state: &ApiState,
     session_id: Uuid,
@@ -45,20 +27,6 @@ fn map_session_manager_error(error: SessionManagerError) -> (StatusCode, Json<Er
         StatusCode::CONFLICT,
         Json(ErrorResponse {
             error: error.to_string(),
-        }),
-    )
-}
-
-pub(super) fn map_runtime_compat_status(status: StatusCode) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        status,
-        Json(ErrorResponse {
-            error: if status == StatusCode::CONFLICT {
-                "runtime is not currently available for the requested compatibility route"
-                    .to_string()
-            } else {
-                "compatibility route failed".to_string()
-            },
         }),
     )
 }

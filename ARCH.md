@@ -56,7 +56,7 @@ The system has seven primary runtime roles plus persistent control-plane stores:
 | Wire protocol | Custom binary, no serde | Manual `[u8]` encode/decode for minimal overhead and zero alloc on hot path |
 | Tile compression | QOI or Zstd (configurable) | QOI: fast decode, good for UI; Zstd: better ratio for complex content |
 | Audio | PipeWire -> FFmpeg -> Opus or IMA-ADPCM | 48 kHz stereo, silence-gated; Opus default (64 kbps CBR), ADPCM fallback |
-| MCP bridge | Node.js + @playwright/mcp | SSE proxy for browser automation with live supervision |
+| MCP bridge | Node.js + @playwright/mcp | Streamable HTTP + SSE bridge for browser automation with live supervision |
 | Session store | PostgreSQL 16 | Durable owner-scoped `/api/v1/sessions`, workflows, recordings, and reusable runtime inputs |
 | Secret store | HashiCorp Vault KV v2 | Externalized workflow credential payloads |
 | Deployment | Docker Compose, 7 long-lived services + on-demand workers | Isolated services on a bridge network |
@@ -91,8 +91,8 @@ long-lived compose service.
    v              v              v              v              v              v              v
 ┌──────────┐ ┌──────────────┐ ┌───────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────┐
 │bpane-host│ │bpane-gateway │ │  mcp-bridge   │ │   Keycloak   │ │   Postgres   │ │  Vault   │
-│ .0.10    │ │ :4433 (QUIC) │ │ :8931 (SSE)   │ │ :8080/.8091  │ │ :5432/.5433  │ │ :8200    │
-│          │ │ :8932 (HTTP) │ │               │ │ local OIDC   │ │ control-plane│ │ KV v2    │
+│ .0.10    │ │ :4433 (QUIC) │ │ :8931 (/mcp,  │ │ :8080/.8091  │ │ :5432/.5433  │ │ :8200    │
+│          │ │ :8932 (HTTP) │ │  /sse)        │ │ local OIDC   │ │ control-plane│ │ KV v2    │
 │ Xorg :99 │ │              │ │ @playwright/  │ │ realm        │ │ state        │ │ secrets   │
 │ OpenBox  │ │ Unix socket  │ │ mcp (STDIO)   │ │              │ │              │ │          │
 │ Chromium │ │ <-> host IPC │ │               │ │              │ │              │ │          │
@@ -113,7 +113,7 @@ long-lived compose service.
 - `4433/tcp+udp` — WebTransport (QUIC)
 - `8932/tcp` — gateway HTTP API
 - `8091/tcp` — local Keycloak realm for dev/testing
-- `8931/tcp` — MCP bridge (SSE)
+- `8931/tcp` — MCP bridge (`/mcp` for Streamable HTTP, `/sse` for legacy SSE)
 - `5433/tcp` — local Postgres for the session control plane
 - `8200/tcp` — local Vault dev server for credential bindings
 
@@ -241,20 +241,28 @@ Stateless relay between host agent and browser clients.
   - Docker runtime assignment metadata is now persisted in Postgres and reconciled on gateway startup, so an existing pool-mode worker can be rebound after a gateway restart without launching a duplicate runtime
   - Docker-backed workers now receive `BPANE_SESSION_ID` and reuse a session-specific Chromium profile rooted under the shared `/run/bpane` volume, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state
   - this is profile-backed restoration, not true container/process suspension: exact live in-memory browser state only survives while the worker is still running
-- **MCP ownership**: atomic flag that locks resolution for browser clients
-  when an MCP agent owns the session
-- **Auth** (`auth.rs`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
+- **MCP ownership**: atomic session-automation state in the gateway
+  - MCP automation does not by itself demote browser clients into viewers
+  - if MCP is the initial active connector it can seed and hold the session
+    resolution until ownership is cleared
+  - if a browser client is already active, that browser-defined input/ownership
+    state remains authoritative while MCP automation attaches alongside it
+- **Auth** (`auth/`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
 - **Heartbeat**: disconnects after 15s without CONTROL ping
 - **HTTP API** (`api.rs`, :8932):
   - canonical frozen v1 contract: `openapi/bpane-control-v1.yaml`
   - `POST /api/v1/sessions` — create a persistent session resource
   - `GET /api/v1/sessions` — list owner-scoped sessions
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
-  - `DELETE /api/v1/sessions/{id}` — stop one owner-scoped session resource
+  - `DELETE /api/v1/sessions/{id}` — safe-stop one owner-scoped session resource
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
+  - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
+  - `POST /api/v1/sessions/{id}/kill` — force-kill live attachments and release runtime
+  - `POST /api/v1/sessions/{id}/connections/{connection_id}/disconnect` — disconnect one live attachment
+  - `POST /api/v1/sessions/{id}/connections/disconnect-all` — disconnect all live attachments without force-killing the session
   - `POST /api/v1/sessions/{id}/automation-owner` — delegate one session to an automation principal
   - `DELETE /api/v1/sessions/{id}/automation-owner` — clear automation delegation
-  - `GET /api/v1/sessions/{id}/status` — session-scoped runtime telemetry for compatibility mode
+  - `GET /api/v1/sessions/{id}/status` — side-effect-free session-scoped lifecycle/runtime/presence view, including role counts, idle timing, stop eligibility, live connection descriptors, and stopped-session snapshots
   - `POST /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership claim
   - `DELETE /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership release
   - session-scoped recording routes expose segment lifecycle, playback/export, and artifact download
@@ -364,15 +372,17 @@ decompression.
 Optional. Bridges external MCP clients (e.g., Claude Code) to Playwright MCP
 running against the Chromium instance inside the host container.
 
-- SSE server for MCP client connections (per-connection `Server` instances)
+- Streamable HTTP server on `/mcp` and legacy SSE endpoint on `/sse`
 - Proxies tool calls to @playwright/mcp subprocess (STDIO mode)
 - Supervisor-aware: adds configurable delay (default 1500ms) when browser
   viewers are watching (polls gateway status every 2s)
-- Lazy registration: only claims MCP ownership on first SSE client connect
-- Registers/clears MCP ownership with gateway (resolution lock)
+- Lazy registration: only claims MCP ownership on first MCP client connect
+- Registers/clears MCP ownership with the gateway so delegated automation can attach without forcing browser clients into viewer mode
 - Uses OIDC client-credentials for gateway API access in the local compose stack
 - Exposes a local control-session API on `:8931` so the browser test page can point
   the bridge at an explicitly delegated session without restarting the service
+- Resolves the delegated session's runtime CDP endpoint from the gateway session
+  resource before binding Playwright MCP
 - Graceful shutdown: always releases ownership on SIGINT/SIGTERM
 
 ### workflow-worker (~1,100 lines TypeScript)

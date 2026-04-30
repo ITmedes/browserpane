@@ -36,11 +36,11 @@ Current product shape:
 - Browser runtime: Chromium desktop only. Firefox and Safari are not production targets.
 - Shared sessions: supported for small curated groups, not broadcast-scale delivery.
 - Exclusive browser-owner mode: optional in `bpane-gateway` via `--exclusive-browser-owner`; default is disabled.
-- Viewer cap: configurable in `bpane-gateway` via `--max-viewers`, default `10` when exclusive-owner mode or MCP ownership is active.
+- Viewer cap: configurable in `bpane-gateway` via `--max-viewers`, default `10` for restricted browser viewers.
 - MCP automation: supported via `mcp-bridge` and gateway ownership APIs.
 - Browser extensions: owner-approved unpacked extensions are supported for docker-backed sessions and workflow runs; `static_single` does not support session extension sets.
 - Camera ingress: disabled by default in compose; requires browser H.264 encode support and a mapped `v4l2loopback` device on the host.
-- In exclusive-owner or MCP-owned sessions, restricted browser viewers are view-only: no input, clipboard, microphone, camera, upload, download, or resize.
+- In exclusive-owner sessions, restricted browser viewers are view-only: no input, clipboard, microphone, camera, upload, download, or resize.
 
 ## Architecture map
 
@@ -70,7 +70,7 @@ Current product shape:
   - `workflow_event_delivery.rs`: owner-scoped workflow event subscriptions, signed outbound webhook delivery, retry/backoff, and persisted delivery diagnostics.
   - `workflow_observability.rs`: gateway-local counters/timestamps for workflow event delivery, produced-file uploads, and workflow retention passes.
   - `workflow_retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
-  - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. The default stack still uses the single-runtime path; `docker_pool` adds explicit runtime caps for parallel session workers and can now be exercised from local compose for browser sessions. Docker-backed workers carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile, and Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
+  - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. Local compose defaults to `docker_pool` for browser-session testing. Docker-backed workers carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile, and Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
@@ -84,7 +84,7 @@ Current product shape:
 - `code/web/bpane-client`
   - TypeScript package. There is no meaningful Rust browser client crate in the current repo.
 - `code/integrations/mcp-bridge`
-  - SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
+  - Streamable HTTP and legacy SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
   - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its local `/control-session` API, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured, including in `docker_pool` mode.
 - `code/integrations/recording-worker`
   - Playwright-driven recorder worker that attaches as a `recorder` browser client through the control plane.
@@ -97,7 +97,7 @@ Current product shape:
   - Local auth in compose is OIDC via Keycloak on `:8091`.
   - Local session-control persistence in compose is Postgres on `:5433`.
   - Local workflow credential binding dev/testing uses HashiCorp Vault dev mode on `:8200`.
-  - Local compose can now be switched to `docker_pool` for browser-session workers via gateway env overrides; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
+  - Local compose defaults to `docker_pool` for browser-session workers; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 
@@ -115,7 +115,7 @@ Current product shape:
 
 - Browser sessions are collaborative by default.
 - If `--exclusive-browser-owner` is enabled, one owner drives the session and additional browser clients join as viewers.
-- MCP ownership still locks browser clients into viewer behavior.
+- MCP automation does not by itself lock browser clients into viewer behavior. If MCP is the initial connector it seeds the display size; if a browser client is already connected, that browser-defined display size remains authoritative.
 - Late joiners are bootstrapped from cached session state and late-join refreshes are tracked in gateway telemetry.
 - If a worker is still alive, reconnect returns to the exact live runtime. After idle-stop, reconnect restarts from the persisted Chromium profile instead of a true suspended process image.
 - Gateway session status reports:
@@ -168,8 +168,8 @@ Run these where applicable:
 ## Local development flow
 
 1. `./deploy/gen-dev-cert.sh dev/certs`
-2. For the multi-session control-plane path, prefer:
-   `BPANE_GATEWAY_RUNTIME_BACKEND=docker_pool BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 docker compose -f deploy/compose.yml up --build`
+2. Start the local stack:
+   `BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 docker compose -f deploy/compose.yml up --build`
 3. Open `http://localhost:8080` in Chromium.
 4. Log in through the local Keycloak realm with `demo / demo-demo`.
 5. The test page will resolve or create an owner-scoped `/api/v1/sessions` resource before transport connect.

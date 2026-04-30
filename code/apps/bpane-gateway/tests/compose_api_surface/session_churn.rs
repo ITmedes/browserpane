@@ -68,10 +68,20 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         let stopped_status = harness
             .get_json_outcome(&format!("/api/v1/sessions/{session_id}/status"))
             .await?;
-        if stopped_status.status != StatusCode::CONFLICT {
+        if stopped_status.status != StatusCode::OK {
             return Err(anyhow!(
                 "stopped session status returned unexpected status {} {}",
                 stopped_status.status,
+                stopped_status.body
+            ));
+        }
+        if stopped_status.body["state"] != json!("stopped")
+            || stopped_status.body["runtime_state"] != json!("stopped")
+            || stopped_status.body["presence_state"] != json!("empty")
+            || stopped_status.body["connection_counts"]["total_clients"] != json!(0)
+        {
+            return Err(anyhow!(
+                "stopped session status did not expose the expected lifecycle snapshot: {}",
                 stopped_status.body
             ));
         }

@@ -6,7 +6,7 @@ use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::session_hub::SessionTelemetrySnapshot;
-use crate::session_hub::{BrowserClientRole, ClientHandle, SessionHub};
+use crate::session_hub::{BrowserClientRole, ClientHandle, SessionHub, SessionTerminationReason};
 
 /// Maps agent socket paths to active SessionHubs.
 ///
@@ -50,6 +50,35 @@ impl SessionRegistry {
     ) -> Option<SessionTelemetrySnapshot> {
         let hub = self.lookup_live_hub(session_id).await?;
         Some(hub.telemetry_snapshot().await)
+    }
+
+    pub fn empty_telemetry_snapshot(&self) -> SessionTelemetrySnapshot {
+        SessionTelemetrySnapshot {
+            browser_clients: 0,
+            viewer_clients: 0,
+            recorder_clients: 0,
+            max_viewers: self.max_viewers,
+            viewer_slots_remaining: self.max_viewers,
+            exclusive_browser_owner: self.exclusive_browser_owner,
+            mcp_owner: false,
+            resolution: (0, 0),
+            joins_accepted: 0,
+            joins_rejected_viewer_cap: 0,
+            last_join_latency_ms: 0,
+            average_join_latency_ms: 0.0,
+            max_join_latency_ms: 0,
+            full_refresh_requests: 0,
+            full_refresh_tiles_requested: 0,
+            last_full_refresh_tiles: 0,
+            max_full_refresh_tiles: 0,
+            connections: Vec::new(),
+            egress_send_stream_lock_acquires_total: 0,
+            egress_send_stream_lock_wait_us_total: 0,
+            egress_send_stream_lock_wait_us_average: 0.0,
+            egress_send_stream_lock_wait_us_max: 0,
+            egress_lagged_receives_total: 0,
+            egress_lagged_frames_total: 0,
+        }
     }
 
     async fn insert_or_get_live_hub(
@@ -179,6 +208,59 @@ impl SessionRegistry {
         if removed.is_some() {
             debug!(%session_id, "removed session hub from registry");
         }
+    }
+
+    pub async fn terminate_session_clients(
+        &self,
+        session_id: Uuid,
+        reason: SessionTerminationReason,
+    ) -> usize {
+        let Some(hub) = self.lookup_live_hub(session_id).await else {
+            return 0;
+        };
+        hub.terminate_all_clients(reason).await
+    }
+
+    pub async fn disconnect_session_client(
+        &self,
+        session_id: Uuid,
+        client_id: u64,
+        reason: SessionTerminationReason,
+    ) -> bool {
+        let Some(hub) = self.lookup_live_hub(session_id).await else {
+            return false;
+        };
+        let terminated = hub.terminate_client(client_id, reason).await;
+        if terminated {
+            hub.unsubscribe(client_id).await;
+        }
+        terminated
+    }
+
+    pub async fn disconnect_all_session_clients(
+        &self,
+        session_id: Uuid,
+        reason: SessionTerminationReason,
+    ) -> usize {
+        let Some(hub) = self.lookup_live_hub(session_id).await else {
+            return 0;
+        };
+
+        let client_ids = hub
+            .telemetry_snapshot()
+            .await
+            .connections
+            .into_iter()
+            .map(|connection| connection.connection_id)
+            .collect::<Vec<_>>();
+        let mut disconnected = 0;
+        for client_id in client_ids {
+            if hub.terminate_client(client_id, reason).await {
+                hub.unsubscribe(client_id).await;
+                disconnected += 1;
+            }
+        }
+        disconnected
     }
 }
 

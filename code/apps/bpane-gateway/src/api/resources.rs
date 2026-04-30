@@ -1,12 +1,91 @@
 use super::*;
+use std::collections::HashSet;
+
+use crate::auth::AuthenticatedPrincipal;
+use crate::session_control::{
+    SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionRuntimeState,
+    SessionStatusSummary, SessionStopBlocker, SessionStopBlockerKind, SessionStopEligibility,
+    SessionStoreError, StoredSession,
+};
+use crate::session_manager::SessionRuntimeAssignmentStatus;
+
+pub(super) async fn session_status_summary(
+    state: &ApiState,
+    stored: &StoredSession,
+) -> Result<SessionStatusSummary, SessionStoreError> {
+    let snapshot = state
+        .registry
+        .telemetry_snapshot_if_live(stored.id)
+        .await
+        .unwrap_or_else(|| state.registry.empty_telemetry_snapshot());
+    let runtime_assignment = state
+        .session_manager
+        .describe_session_runtime_assignment_status(stored.id)
+        .await;
+    let runtime_state = derive_session_runtime_state(stored.state, runtime_assignment);
+    let connection_counts = session_connection_counts_from_snapshot(snapshot);
+    let presence_state = derive_session_presence_state(stored.state, &connection_counts);
+    let owner = session_owner_principal(stored);
+    let recordings = state
+        .session_store
+        .list_recordings_for_session(stored.id)
+        .await?;
+    let active_recording_count = recordings
+        .iter()
+        .filter(|recording| recording.state.is_active())
+        .count() as u32;
+    let active_workflow_runs = state
+        .session_store
+        .list_workflow_runs_for_owner(&owner)
+        .await?
+        .into_iter()
+        .filter(|run| run.session_id == stored.id && !run.state.is_terminal())
+        .collect::<Vec<_>>();
+    let workflow_run_task_ids = active_workflow_runs
+        .iter()
+        .map(|run| run.automation_task_id)
+        .collect::<HashSet<_>>();
+    let active_workflow_run_count = active_workflow_runs.len() as u32;
+    let active_automation_task_count = state
+        .session_store
+        .list_automation_tasks_for_owner(&owner)
+        .await?
+        .into_iter()
+        .filter(|task| {
+            task.session_id == stored.id
+                && !task.state.is_terminal()
+                && !workflow_run_task_ids.contains(&task.id)
+        })
+        .count() as u32;
+    let stop_eligibility = derive_session_stop_eligibility(
+        &connection_counts,
+        active_recording_count,
+        active_automation_task_count,
+        active_workflow_run_count,
+    );
+    let idle = derive_session_idle_status(stored, presence_state);
+
+    Ok(SessionStatusSummary {
+        runtime_state,
+        presence_state,
+        connection_counts,
+        stop_eligibility,
+        idle,
+    })
+}
 
 pub(super) fn session_status_from_snapshot(
+    state: SessionLifecycleState,
+    summary: SessionStatusSummary,
     snapshot: SessionTelemetrySnapshot,
     recording_policy: &SessionRecordingPolicy,
     latest_recording: Option<&StoredSessionRecording>,
     playback: SessionRecordingPlaybackResource,
 ) -> SessionStatus {
     SessionStatus {
+        state,
+        summary,
+        connections: session_connections_from_snapshot(&snapshot),
         browser_clients: snapshot.browser_clients,
         viewer_clients: snapshot.viewer_clients,
         recorder_clients: snapshot.recorder_clients,
@@ -15,7 +94,7 @@ pub(super) fn session_status_from_snapshot(
         exclusive_browser_owner: snapshot.exclusive_browser_owner,
         mcp_owner: snapshot.mcp_owner,
         resolution: snapshot.resolution,
-        recording: recording_status_from_snapshot(snapshot, recording_policy, latest_recording),
+        recording: recording_status_from_snapshot(&snapshot, recording_policy, latest_recording),
         playback,
         telemetry: SessionTelemetry {
             joins_accepted: snapshot.joins_accepted,
@@ -38,8 +117,163 @@ pub(super) fn session_status_from_snapshot(
     }
 }
 
-pub(super) fn recording_status_from_snapshot(
+fn session_connections_from_snapshot(
+    snapshot: &SessionTelemetrySnapshot,
+) -> Vec<SessionConnectionInfo> {
+    snapshot
+        .connections
+        .iter()
+        .map(|connection| SessionConnectionInfo {
+            connection_id: connection.connection_id,
+            role: connection.role.into(),
+        })
+        .collect()
+}
+
+fn derive_session_runtime_state(
+    lifecycle: SessionLifecycleState,
+    runtime_assignment: Option<SessionRuntimeAssignmentStatus>,
+) -> SessionRuntimeState {
+    match lifecycle {
+        SessionLifecycleState::Stopped
+        | SessionLifecycleState::Failed
+        | SessionLifecycleState::Expired => SessionRuntimeState::Stopped,
+        SessionLifecycleState::Stopping => SessionRuntimeState::Stopping,
+        SessionLifecycleState::Starting => SessionRuntimeState::Starting,
+        SessionLifecycleState::Pending => match runtime_assignment {
+            Some(SessionRuntimeAssignmentStatus::Starting) => SessionRuntimeState::Starting,
+            Some(SessionRuntimeAssignmentStatus::Ready) => SessionRuntimeState::Running,
+            None => SessionRuntimeState::NotStarted,
+        },
+        SessionLifecycleState::Ready
+        | SessionLifecycleState::Active
+        | SessionLifecycleState::Idle => match runtime_assignment {
+            Some(SessionRuntimeAssignmentStatus::Starting) => SessionRuntimeState::Starting,
+            Some(SessionRuntimeAssignmentStatus::Ready) => SessionRuntimeState::Running,
+            None => SessionRuntimeState::NotStarted,
+        },
+    }
+}
+
+fn session_connection_counts_from_snapshot(
     snapshot: SessionTelemetrySnapshot,
+) -> SessionConnectionCounts {
+    let total_clients = snapshot.browser_clients;
+    let recorder_clients = snapshot.recorder_clients;
+    let viewer_clients = snapshot.viewer_clients;
+    let interactive_clients = total_clients.saturating_sub(recorder_clients);
+    let owner_clients = interactive_clients.saturating_sub(viewer_clients);
+    let automation_clients = if snapshot.mcp_owner { 1 } else { 0 };
+
+    SessionConnectionCounts {
+        interactive_clients,
+        owner_clients,
+        viewer_clients,
+        recorder_clients,
+        automation_clients,
+        total_clients,
+    }
+}
+
+fn derive_session_presence_state(
+    lifecycle: SessionLifecycleState,
+    counts: &SessionConnectionCounts,
+) -> SessionPresenceState {
+    if counts.interactive_clients > 0 {
+        return SessionPresenceState::Connected;
+    }
+    if counts.recorder_clients > 0 {
+        return SessionPresenceState::RecordingOnly;
+    }
+    if counts.automation_clients > 0 {
+        return SessionPresenceState::AutomationOwned;
+    }
+    if lifecycle == SessionLifecycleState::Idle {
+        return SessionPresenceState::Idle;
+    }
+    SessionPresenceState::Empty
+}
+
+fn derive_session_stop_eligibility(
+    counts: &SessionConnectionCounts,
+    active_recording_count: u32,
+    active_automation_task_count: u32,
+    active_workflow_run_count: u32,
+) -> SessionStopEligibility {
+    let mut blockers = Vec::new();
+    if counts.owner_clients > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::OwnerClients,
+            count: counts.owner_clients,
+        });
+    }
+    if counts.viewer_clients > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::ViewerClients,
+            count: counts.viewer_clients,
+        });
+    }
+    if counts.recorder_clients > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::RecorderClients,
+            count: counts.recorder_clients,
+        });
+    }
+    if counts.automation_clients > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::AutomationOwner,
+            count: counts.automation_clients,
+        });
+    }
+    if active_recording_count > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::RecordingActivity,
+            count: active_recording_count,
+        });
+    }
+    if active_automation_task_count > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::AutomationTasks,
+            count: active_automation_task_count,
+        });
+    }
+    if active_workflow_run_count > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::WorkflowRuns,
+            count: active_workflow_run_count,
+        });
+    }
+
+    SessionStopEligibility {
+        allowed: blockers.is_empty(),
+        blockers,
+    }
+}
+
+fn derive_session_idle_status(
+    stored: &StoredSession,
+    presence_state: SessionPresenceState,
+) -> SessionIdleStatus {
+    let idle_since = if presence_state == SessionPresenceState::Idle {
+        Some(stored.updated_at)
+    } else {
+        None
+    };
+    let idle_deadline = idle_since.and_then(|since| {
+        stored
+            .idle_timeout_sec
+            .map(|timeout| since + chrono::Duration::seconds(i64::from(timeout)))
+    });
+
+    SessionIdleStatus {
+        idle_timeout_sec: stored.idle_timeout_sec,
+        idle_since,
+        idle_deadline,
+    }
+}
+
+pub(super) fn recording_status_from_snapshot(
+    snapshot: &SessionTelemetrySnapshot,
     recording_policy: &SessionRecordingPolicy,
     latest_recording: Option<&StoredSessionRecording>,
 ) -> SessionRecordingStatus {
@@ -76,19 +310,57 @@ pub(super) fn recording_status_from_snapshot(
     }
 }
 
-pub(super) fn session_resource(
+fn session_owner_principal(stored: &StoredSession) -> AuthenticatedPrincipal {
+    AuthenticatedPrincipal {
+        subject: stored.owner.subject.clone(),
+        issuer: stored.owner.issuer.clone(),
+        display_name: stored.owner.display_name.clone(),
+        client_id: None,
+    }
+}
+
+pub(super) async fn session_resource(
     state: &ApiState,
     stored: &StoredSession,
     state_override: Option<SessionLifecycleState>,
-) -> SessionResource {
-    stored.to_resource(
+) -> Result<SessionResource, SessionStoreError> {
+    let status = session_status_summary(state, stored).await?;
+    Ok(stored.to_resource(
         &state.public_gateway_url,
         state
             .session_manager
             .describe_session_runtime(stored.id)
             .into(),
+        status,
         state_override,
-    )
+    ))
+}
+
+pub(super) async fn load_session_status(
+    state: &ApiState,
+    session: &StoredSession,
+) -> Result<SessionStatus, SessionStoreError> {
+    let snapshot = state
+        .registry
+        .telemetry_snapshot_if_live(session.id)
+        .await
+        .unwrap_or_else(|| state.registry.empty_telemetry_snapshot());
+    let summary = session_status_summary(state, session).await?;
+    let recordings = state
+        .session_store
+        .list_recordings_for_session(session.id)
+        .await?;
+    let latest_recording = latest_recording(&recordings);
+    let playback = prepare_session_recording_playback(session.id, &recordings, Utc::now());
+
+    Ok(session_status_from_snapshot(
+        session.state,
+        summary,
+        snapshot,
+        &session.recording,
+        latest_recording,
+        playback.resource,
+    ))
 }
 
 pub(super) async fn load_session_recording(

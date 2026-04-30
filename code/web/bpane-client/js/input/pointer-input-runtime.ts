@@ -73,6 +73,9 @@ export class PointerInputRuntime {
         this.scrollState,
       );
       if (dx || dy) {
+        const { x, y } = this.resolveCanvasPoint(event.clientX, event.clientY);
+        this.drawCursor(null, x, y);
+        this.sendMouseMoveFn(x, y);
         this.sendScrollFn(dx, dy);
       }
     }, { passive: false, signal: input.signal });

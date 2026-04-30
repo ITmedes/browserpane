@@ -1,6 +1,20 @@
 use super::super::*;
 
 impl SessionStore {
+    pub async fn list_workflow_runs_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredWorkflowRun>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_workflow_runs_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_workflow_runs_for_owner(principal).await
+            }
+        }
+    }
+
     pub async fn create_workflow_run(
         &self,
         principal: &AuthenticatedPrincipal,

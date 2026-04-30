@@ -176,6 +176,76 @@ impl From<SessionRuntimeAccess> for SessionRuntimeInfo {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionRuntimeState {
+    NotStarted,
+    Starting,
+    Running,
+    Stopping,
+    Stopped,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionPresenceState {
+    Empty,
+    Connected,
+    AutomationOwned,
+    RecordingOnly,
+    Idle,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct SessionConnectionCounts {
+    pub interactive_clients: u32,
+    pub owner_clients: u32,
+    pub viewer_clients: u32,
+    pub recorder_clients: u32,
+    pub automation_clients: u32,
+    pub total_clients: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionStopBlockerKind {
+    OwnerClients,
+    ViewerClients,
+    RecorderClients,
+    AutomationOwner,
+    RecordingActivity,
+    AutomationTasks,
+    WorkflowRuns,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionStopBlocker {
+    pub kind: SessionStopBlockerKind,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct SessionStopEligibility {
+    pub allowed: bool,
+    pub blockers: Vec<SessionStopBlocker>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionIdleStatus {
+    pub idle_timeout_sec: Option<u32>,
+    pub idle_since: Option<DateTime<Utc>>,
+    pub idle_deadline: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionStatusSummary {
+    pub runtime_state: SessionRuntimeState,
+    pub presence_state: SessionPresenceState,
+    pub connection_counts: SessionConnectionCounts,
+    pub stop_eligibility: SessionStopEligibility,
+    pub idle: SessionIdleStatus,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SessionResource {
     pub id: Uuid,
@@ -193,6 +263,7 @@ pub struct SessionResource {
     pub recording: crate::session_control::SessionRecordingPolicy,
     pub connect: SessionConnectInfo,
     pub runtime: SessionRuntimeInfo,
+    pub status: SessionStatusSummary,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub stopped_at: Option<DateTime<Utc>>,
@@ -258,6 +329,7 @@ impl StoredSession {
         &self,
         public_gateway_url: &str,
         runtime: SessionRuntimeInfo,
+        status: SessionStatusSummary,
         state_override: Option<SessionLifecycleState>,
     ) -> SessionResource {
         SessionResource {
@@ -286,6 +358,7 @@ impl StoredSession {
                 compatibility_mode: runtime.compatibility_mode.clone(),
             },
             runtime,
+            status,
             created_at: self.created_at,
             updated_at: self.updated_at,
             stopped_at: self.stopped_at,
