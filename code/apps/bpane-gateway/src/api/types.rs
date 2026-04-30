@@ -20,8 +20,8 @@ use crate::recording::{
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
-    CreateSessionRequest, SessionConnectInfo, SessionOwnerMode, SessionRecordingFormat,
-    SessionRecordingMode, SessionStore,
+    CreateSessionRequest, SessionConnectInfo, SessionLifecycleState, SessionOwnerMode,
+    SessionRecordingFormat, SessionRecordingMode, SessionStatusSummary, SessionStore,
 };
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_manager::SessionManager;
@@ -88,6 +88,9 @@ pub(super) const WORKFLOW_RUN_WORKSPACE_ID_HEADER: &str = "x-bpane-workflow-work
 
 #[derive(Serialize)]
 pub(super) struct SessionStatus {
+    pub(super) state: SessionLifecycleState,
+    #[serde(flatten)]
+    pub(super) summary: SessionStatusSummary,
     pub(super) browser_clients: u32,
     pub(super) viewer_clients: u32,
     pub(super) recorder_clients: u32,

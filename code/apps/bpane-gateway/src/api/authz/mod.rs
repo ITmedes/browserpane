@@ -13,5 +13,6 @@ pub(super) use resources::{
 pub(super) use sessions::{
     authorize_runtime_access_principal_with_automation_access, authorize_runtime_session_request,
     authorize_runtime_session_request_with_automation_access, authorize_visible_session_request,
-    load_session_owner_principal, prepare_runtime_access_session,
+    authorize_visible_session_request_with_automation_access, load_session_owner_principal,
+    prepare_runtime_access_session,
 };

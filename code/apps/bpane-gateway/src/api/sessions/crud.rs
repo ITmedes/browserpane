@@ -13,7 +13,7 @@ pub(super) async fn create_session(
 
     Ok((
         StatusCode::CREATED,
-        Json(session_resource(&state, &stored, None)),
+        Json(session_resource(&state, &stored, None).await),
     ))
 }
 
@@ -28,12 +28,15 @@ pub(super) async fn list_sessions(
         .session_store
         .list_sessions_for_owner(&principal)
         .await
-        .map_err(map_session_store_error)?
-        .into_iter()
-        .map(|session| session_resource(&state, &session, None))
-        .collect();
+        .map_err(map_session_store_error)?;
+    let mut resources = Vec::with_capacity(sessions.len());
+    for session in sessions {
+        resources.push(session_resource(&state, &session, None).await);
+    }
 
-    Ok(Json(SessionListResponse { sessions }))
+    Ok(Json(SessionListResponse {
+        sessions: resources,
+    }))
 }
 
 pub(super) async fn get_session(
@@ -43,7 +46,7 @@ pub(super) async fn get_session(
 ) -> Result<Json<SessionResource>, (StatusCode, Json<ErrorResponse>)> {
     let stored = authorize_visible_session_request(&headers, &state, session_id).await?;
 
-    Ok(Json(session_resource(&state, &stored, None)))
+    Ok(Json(session_resource(&state, &stored, None).await))
 }
 
 pub(super) async fn delete_session(
@@ -110,5 +113,5 @@ pub(super) async fn delete_session(
     state.session_manager.release(session_id).await;
     state.registry.remove_session(session_id).await;
 
-    Ok(Json(session_resource(&state, &stopped, None)))
+    Ok(Json(session_resource(&state, &stopped, None).await))
 }

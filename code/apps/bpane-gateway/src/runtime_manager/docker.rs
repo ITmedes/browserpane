@@ -120,6 +120,18 @@ impl DockerRuntimeManager {
             cdp_endpoint: Some(self.cdp_endpoint_for_session(session_id)),
         }
     }
+
+    pub(super) async fn describe_assignment_status(
+        &self,
+        session_id: Uuid,
+    ) -> Option<RuntimeAssignmentStatus> {
+        let leases = self.leases.lock().await;
+        match leases.get(&session_id) {
+            Some(DockerLeaseState::Starting { .. }) => Some(RuntimeAssignmentStatus::Starting),
+            Some(DockerLeaseState::Ready(_)) => Some(RuntimeAssignmentStatus::Ready),
+            None => None,
+        }
+    }
 }
 
 impl DockerLeaseState {

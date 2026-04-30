@@ -1,12 +1,49 @@
 use super::*;
+use crate::session_control::{
+    SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionRuntimeState,
+    SessionStatusSummary, SessionStopBlocker, SessionStopBlockerKind, SessionStopEligibility,
+};
+use crate::session_manager::SessionRuntimeAssignmentStatus;
+
+pub(super) async fn session_status_summary(
+    state: &ApiState,
+    stored: &StoredSession,
+) -> SessionStatusSummary {
+    let snapshot = state
+        .registry
+        .telemetry_snapshot_if_live(stored.id)
+        .await
+        .unwrap_or_else(|| state.registry.empty_telemetry_snapshot());
+    let runtime_assignment = state
+        .session_manager
+        .describe_session_runtime_assignment_status(stored.id)
+        .await;
+    let runtime_state = derive_session_runtime_state(stored.state, runtime_assignment);
+    let connection_counts = session_connection_counts_from_snapshot(snapshot);
+    let presence_state = derive_session_presence_state(stored.state, &connection_counts);
+    let stop_eligibility = derive_session_stop_eligibility(&connection_counts);
+    let idle = derive_session_idle_status(stored, presence_state);
+
+    SessionStatusSummary {
+        runtime_state,
+        presence_state,
+        connection_counts,
+        stop_eligibility,
+        idle,
+    }
+}
 
 pub(super) fn session_status_from_snapshot(
+    state: SessionLifecycleState,
+    summary: SessionStatusSummary,
     snapshot: SessionTelemetrySnapshot,
     recording_policy: &SessionRecordingPolicy,
     latest_recording: Option<&StoredSessionRecording>,
     playback: SessionRecordingPlaybackResource,
 ) -> SessionStatus {
     SessionStatus {
+        state,
+        summary,
         browser_clients: snapshot.browser_clients,
         viewer_clients: snapshot.viewer_clients,
         recorder_clients: snapshot.recorder_clients,
@@ -35,6 +72,125 @@ pub(super) fn session_status_from_snapshot(
             egress_lagged_receives_total: snapshot.egress_lagged_receives_total,
             egress_lagged_frames_total: snapshot.egress_lagged_frames_total,
         },
+    }
+}
+
+fn derive_session_runtime_state(
+    lifecycle: SessionLifecycleState,
+    runtime_assignment: Option<SessionRuntimeAssignmentStatus>,
+) -> SessionRuntimeState {
+    match lifecycle {
+        SessionLifecycleState::Stopped
+        | SessionLifecycleState::Failed
+        | SessionLifecycleState::Expired => SessionRuntimeState::Stopped,
+        SessionLifecycleState::Stopping => SessionRuntimeState::Stopping,
+        SessionLifecycleState::Starting => SessionRuntimeState::Starting,
+        SessionLifecycleState::Pending => match runtime_assignment {
+            Some(SessionRuntimeAssignmentStatus::Starting) => SessionRuntimeState::Starting,
+            Some(SessionRuntimeAssignmentStatus::Ready) => SessionRuntimeState::Running,
+            None => SessionRuntimeState::NotStarted,
+        },
+        SessionLifecycleState::Ready
+        | SessionLifecycleState::Active
+        | SessionLifecycleState::Idle => match runtime_assignment {
+            Some(SessionRuntimeAssignmentStatus::Starting) => SessionRuntimeState::Starting,
+            Some(SessionRuntimeAssignmentStatus::Ready) => SessionRuntimeState::Running,
+            None => SessionRuntimeState::NotStarted,
+        },
+    }
+}
+
+fn session_connection_counts_from_snapshot(
+    snapshot: SessionTelemetrySnapshot,
+) -> SessionConnectionCounts {
+    let total_clients = snapshot.browser_clients;
+    let recorder_clients = snapshot.recorder_clients;
+    let viewer_clients = snapshot.viewer_clients;
+    let interactive_clients = total_clients.saturating_sub(recorder_clients);
+    let owner_clients = interactive_clients.saturating_sub(viewer_clients);
+    let automation_clients = if snapshot.mcp_owner { 1 } else { 0 };
+
+    SessionConnectionCounts {
+        interactive_clients,
+        owner_clients,
+        viewer_clients,
+        recorder_clients,
+        automation_clients,
+        total_clients,
+    }
+}
+
+fn derive_session_presence_state(
+    lifecycle: SessionLifecycleState,
+    counts: &SessionConnectionCounts,
+) -> SessionPresenceState {
+    if counts.interactive_clients > 0 {
+        return SessionPresenceState::Connected;
+    }
+    if counts.recorder_clients > 0 {
+        return SessionPresenceState::RecordingOnly;
+    }
+    if counts.automation_clients > 0 {
+        return SessionPresenceState::AutomationOwned;
+    }
+    if lifecycle == SessionLifecycleState::Idle {
+        return SessionPresenceState::Idle;
+    }
+    SessionPresenceState::Empty
+}
+
+fn derive_session_stop_eligibility(counts: &SessionConnectionCounts) -> SessionStopEligibility {
+    let mut blockers = Vec::new();
+    if counts.owner_clients > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::OwnerClients,
+            count: counts.owner_clients,
+        });
+    }
+    if counts.viewer_clients > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::ViewerClients,
+            count: counts.viewer_clients,
+        });
+    }
+    if counts.recorder_clients > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::RecorderClients,
+            count: counts.recorder_clients,
+        });
+    }
+    if counts.automation_clients > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::AutomationOwner,
+            count: counts.automation_clients,
+        });
+    }
+
+    SessionStopEligibility {
+        allowed: blockers.is_empty(),
+        blockers,
+    }
+}
+
+fn derive_session_idle_status(
+    stored: &StoredSession,
+    presence_state: SessionPresenceState,
+) -> SessionIdleStatus {
+    let idle_since = if presence_state == SessionPresenceState::Idle {
+        Some(stored.updated_at)
+    } else {
+        None
+    };
+    let idle_deadline = idle_since.and_then(|since| {
+        stored
+            .idle_timeout_sec
+            .map(|timeout| since + chrono::Duration::seconds(i64::from(timeout)))
+    });
+
+    SessionIdleStatus {
+        idle_timeout_sec: stored.idle_timeout_sec,
+        idle_since,
+        idle_deadline,
     }
 }
 
@@ -76,17 +232,19 @@ pub(super) fn recording_status_from_snapshot(
     }
 }
 
-pub(super) fn session_resource(
+pub(super) async fn session_resource(
     state: &ApiState,
     stored: &StoredSession,
     state_override: Option<SessionLifecycleState>,
 ) -> SessionResource {
+    let status = session_status_summary(state, stored).await;
     stored.to_resource(
         &state.public_gateway_url,
         state
             .session_manager
             .describe_session_runtime(stored.id)
             .into(),
+        status,
         state_override,
     )
 }
