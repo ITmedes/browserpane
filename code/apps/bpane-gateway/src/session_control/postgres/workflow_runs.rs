@@ -25,6 +25,15 @@ impl PostgresSessionStore {
             .await
     }
 
+    pub(in crate::session_control) async fn list_workflow_runs_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredWorkflowRun>, SessionStoreError> {
+        self.workflow_run_repository()
+            .list_workflow_runs_for_owner(principal)
+            .await
+    }
+
     pub(in crate::session_control) async fn get_workflow_run_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,

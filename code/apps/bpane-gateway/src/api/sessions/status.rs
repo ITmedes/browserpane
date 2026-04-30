@@ -15,7 +15,9 @@ pub(super) async fn get_session_status(
         .telemetry_snapshot_if_live(session_id)
         .await
         .unwrap_or_else(|| state.registry.empty_telemetry_snapshot());
-    let summary = session_status_summary(&state, &session).await;
+    let summary = session_status_summary(&state, &session)
+        .await
+        .map_err(map_session_store_error)?;
     let recordings = state
         .session_store
         .list_recordings_for_session(session_id)
@@ -68,7 +70,9 @@ pub(super) async fn session_status(
         .telemetry_snapshot_if_live(session_id)
         .await
         .unwrap_or_else(|| state.registry.empty_telemetry_snapshot());
-    let summary = session_status_summary(&state, &session).await;
+    let summary = session_status_summary(&state, &session)
+        .await
+        .map_err(map_session_store_error)?;
     let recordings = state
         .session_store
         .list_recordings_for_session(session_id)

@@ -1300,7 +1300,7 @@ paths:
           $ref: '#/components/responses/BackendUnavailable'
     delete:
       tags: [Sessions]
-      summary: Stop a session resource
+      summary: Safely stop a session resource
       operationId: deleteSession
       responses:
         '200':
@@ -1314,7 +1314,11 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: Session cannot be stopped while blockers remain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStopConflictResponse'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/recordings:
@@ -1616,14 +1620,14 @@ paths:
       - $ref: '#/components/parameters/SessionId'
     get:
       tags: [Session Runtime]
-      summary: Get live runtime telemetry for a runtime-compatible session
+      summary: Get a session lifecycle, runtime, and presence snapshot
       operationId: getSessionStatus
       security:
         - bearerAuth: []
         - sessionAutomationAccessToken: []
       responses:
         '200':
-          description: Live runtime telemetry snapshot
+          description: Session lifecycle and presence snapshot
           content:
             application/json:
               schema:
@@ -1632,8 +1636,32 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/stop:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Sessions]
+      summary: Safely stop a session resource
+      operationId: stopSession
+      responses:
+        '200':
+          description: Session stopped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: Session cannot be stopped while blockers remain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStopConflictResponse'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/automation-owner:
@@ -3741,6 +3769,9 @@ components:
         - viewer_clients
         - recorder_clients
         - automation_owner
+        - recording_activity
+        - automation_tasks
+        - workflow_runs
     SessionStopBlocker:
       type: object
       required: [kind, count]
@@ -3760,6 +3791,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SessionStopBlocker'
+    SessionStopConflictResponse:
+      type: object
+      required: [error, session]
+      properties:
+        error:
+          type: string
+        session:
+          $ref: '#/components/schemas/SessionResource'
     SessionIdleStatus:
       type: object
       required: [idle_timeout_sec, idle_since, idle_deadline]

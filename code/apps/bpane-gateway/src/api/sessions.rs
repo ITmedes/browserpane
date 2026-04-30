@@ -7,6 +7,7 @@ mod crud;
 mod mcp;
 mod ownership;
 mod status;
+mod stop;
 
 pub(super) fn session_routes() -> Router<Arc<ApiState>> {
     Router::new()
@@ -16,7 +17,7 @@ pub(super) fn session_routes() -> Router<Arc<ApiState>> {
         )
         .route(
             "/api/v1/sessions/{session_id}",
-            get(crud::get_session).delete(crud::delete_session),
+            get(crud::get_session).delete(stop::delete_session),
         )
 }
 
@@ -37,6 +38,10 @@ pub(super) fn session_operation_routes() -> Router<Arc<ApiState>> {
         .route(
             "/api/v1/sessions/{session_id}/status",
             get(status::get_session_status),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/stop",
+            post(stop::stop_session),
         )
         .route(
             "/api/v1/sessions/{session_id}/mcp-owner",

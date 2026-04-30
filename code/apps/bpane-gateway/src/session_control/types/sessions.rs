@@ -213,6 +213,9 @@ pub enum SessionStopBlockerKind {
     ViewerClients,
     RecorderClients,
     AutomationOwner,
+    RecordingActivity,
+    AutomationTasks,
+    WorkflowRuns,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

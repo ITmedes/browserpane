@@ -1,14 +1,18 @@
 use super::*;
+use std::collections::HashSet;
+
+use crate::auth::AuthenticatedPrincipal;
 use crate::session_control::{
     SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionRuntimeState,
     SessionStatusSummary, SessionStopBlocker, SessionStopBlockerKind, SessionStopEligibility,
+    SessionStoreError, StoredSession,
 };
 use crate::session_manager::SessionRuntimeAssignmentStatus;
 
 pub(super) async fn session_status_summary(
     state: &ApiState,
     stored: &StoredSession,
-) -> SessionStatusSummary {
+) -> Result<SessionStatusSummary, SessionStoreError> {
     let snapshot = state
         .registry
         .telemetry_snapshot_if_live(stored.id)
@@ -21,16 +25,53 @@ pub(super) async fn session_status_summary(
     let runtime_state = derive_session_runtime_state(stored.state, runtime_assignment);
     let connection_counts = session_connection_counts_from_snapshot(snapshot);
     let presence_state = derive_session_presence_state(stored.state, &connection_counts);
-    let stop_eligibility = derive_session_stop_eligibility(&connection_counts);
+    let owner = session_owner_principal(stored);
+    let recordings = state
+        .session_store
+        .list_recordings_for_session(stored.id)
+        .await?;
+    let active_recording_count = recordings
+        .iter()
+        .filter(|recording| recording.state.is_active())
+        .count() as u32;
+    let active_workflow_runs = state
+        .session_store
+        .list_workflow_runs_for_owner(&owner)
+        .await?
+        .into_iter()
+        .filter(|run| run.session_id == stored.id && !run.state.is_terminal())
+        .collect::<Vec<_>>();
+    let workflow_run_task_ids = active_workflow_runs
+        .iter()
+        .map(|run| run.automation_task_id)
+        .collect::<HashSet<_>>();
+    let active_workflow_run_count = active_workflow_runs.len() as u32;
+    let active_automation_task_count = state
+        .session_store
+        .list_automation_tasks_for_owner(&owner)
+        .await?
+        .into_iter()
+        .filter(|task| {
+            task.session_id == stored.id
+                && !task.state.is_terminal()
+                && !workflow_run_task_ids.contains(&task.id)
+        })
+        .count() as u32;
+    let stop_eligibility = derive_session_stop_eligibility(
+        &connection_counts,
+        active_recording_count,
+        active_automation_task_count,
+        active_workflow_run_count,
+    );
     let idle = derive_session_idle_status(stored, presence_state);
 
-    SessionStatusSummary {
+    Ok(SessionStatusSummary {
         runtime_state,
         presence_state,
         connection_counts,
         stop_eligibility,
         idle,
-    }
+    })
 }
 
 pub(super) fn session_status_from_snapshot(
@@ -139,7 +180,12 @@ fn derive_session_presence_state(
     SessionPresenceState::Empty
 }
 
-fn derive_session_stop_eligibility(counts: &SessionConnectionCounts) -> SessionStopEligibility {
+fn derive_session_stop_eligibility(
+    counts: &SessionConnectionCounts,
+    active_recording_count: u32,
+    active_automation_task_count: u32,
+    active_workflow_run_count: u32,
+) -> SessionStopEligibility {
     let mut blockers = Vec::new();
     if counts.owner_clients > 0 {
         blockers.push(SessionStopBlocker {
@@ -163,6 +209,24 @@ fn derive_session_stop_eligibility(counts: &SessionConnectionCounts) -> SessionS
         blockers.push(SessionStopBlocker {
             kind: SessionStopBlockerKind::AutomationOwner,
             count: counts.automation_clients,
+        });
+    }
+    if active_recording_count > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::RecordingActivity,
+            count: active_recording_count,
+        });
+    }
+    if active_automation_task_count > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::AutomationTasks,
+            count: active_automation_task_count,
+        });
+    }
+    if active_workflow_run_count > 0 {
+        blockers.push(SessionStopBlocker {
+            kind: SessionStopBlockerKind::WorkflowRuns,
+            count: active_workflow_run_count,
         });
     }
 
@@ -232,13 +296,22 @@ pub(super) fn recording_status_from_snapshot(
     }
 }
 
+fn session_owner_principal(stored: &StoredSession) -> AuthenticatedPrincipal {
+    AuthenticatedPrincipal {
+        subject: stored.owner.subject.clone(),
+        issuer: stored.owner.issuer.clone(),
+        display_name: stored.owner.display_name.clone(),
+        client_id: None,
+    }
+}
+
 pub(super) async fn session_resource(
     state: &ApiState,
     stored: &StoredSession,
     state_override: Option<SessionLifecycleState>,
-) -> SessionResource {
-    let status = session_status_summary(state, stored).await;
-    stored.to_resource(
+) -> Result<SessionResource, SessionStoreError> {
+    let status = session_status_summary(state, stored).await?;
+    Ok(stored.to_resource(
         &state.public_gateway_url,
         state
             .session_manager
@@ -246,7 +319,7 @@ pub(super) async fn session_resource(
             .into(),
         status,
         state_override,
-    )
+    ))
 }
 
 pub(super) async fn load_session_recording(
