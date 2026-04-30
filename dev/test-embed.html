@@ -2369,13 +2369,14 @@
         ? sessionLifecycleState.status
         : null;
       const totalConnections = Number(status?.connection_counts?.total_clients ?? 0);
+      const canSafelyStopSession = selected?.state !== 'stopped' && status?.stop_eligibility?.allowed === true;
 
       sessionStatusRefreshBtn.disabled = !canManageSessions || !selectedSessionId || sessionLifecycleState.loading || sessionLifecycleState.acting;
       sessionStopBtn.disabled = !canManageSessions
         || !selectedSessionId
         || sessionLifecycleState.loading
         || sessionLifecycleState.acting
-        || selected?.state === 'stopped';
+        || !canSafelyStopSession;
       sessionKillBtn.disabled = !canManageSessions
         || !selectedSessionId
         || sessionLifecycleState.loading
