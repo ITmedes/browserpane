@@ -4,10 +4,12 @@ use std::time::Instant;
 
 use bpane_protocol::frame::Frame;
 use bpane_protocol::ControlMessage;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 
-use super::{BrowserClientRole, ClientHandle, SessionHub, SubscribeError};
+use super::{
+    BrowserClientRole, ClientHandle, SessionHub, SessionTerminationReason, SubscribeError,
+};
 
 pub(super) async fn subscribe(
     hub: &SessionHub,
@@ -23,6 +25,7 @@ pub(super) async fn subscribe(
     let is_resize_owner =
         client_role == BrowserClientRole::Interactive && !mcp_is_owner && current_owner_id == 0;
     let (control_tx, control_rx) = mpsc::channel::<ControlMessage>(8);
+    let (termination_tx, termination_rx) = oneshot::channel::<SessionTerminationReason>();
 
     let is_owner = if client_role == BrowserClientRole::Recorder || mcp_is_owner {
         false
@@ -72,6 +75,10 @@ pub(super) async fn subscribe(
         .lock()
         .await
         .insert(client_id, control_tx);
+    hub.client_termination_txs
+        .lock()
+        .await
+        .insert(client_id, termination_tx);
 
     let initial_frames = gather_initial_frames(hub).await;
     let initial_access_state = super::policy::initial_access_state(hub, client_id).await;
@@ -95,6 +102,7 @@ pub(super) async fn subscribe(
         initial_frames,
         initial_access_state,
         control_rx,
+        termination_rx,
     })
 }
 
@@ -134,7 +142,37 @@ pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
 
     hub.client_roles.write().unwrap().remove(&client_id);
     hub.client_control_txs.lock().await.remove(&client_id);
+    hub.client_termination_txs.lock().await.remove(&client_id);
     super::policy::notify_client_access_states(hub, &remaining_clients, None).await;
+}
+
+#[cfg(test)]
+pub(super) async fn terminate_client(
+    hub: &SessionHub,
+    client_id: u64,
+    reason: SessionTerminationReason,
+) -> bool {
+    let Some(tx) = hub.client_termination_txs.lock().await.remove(&client_id) else {
+        return false;
+    };
+    tx.send(reason).is_ok()
+}
+
+pub(super) async fn terminate_all_clients(
+    hub: &SessionHub,
+    reason: SessionTerminationReason,
+) -> usize {
+    let termination_txs = {
+        let mut termination_txs = hub.client_termination_txs.lock().await;
+        termination_txs.drain().collect::<Vec<_>>()
+    };
+    let mut terminated = 0;
+    for (_, tx) in termination_txs {
+        if tx.send(reason).is_ok() {
+            terminated += 1;
+        }
+    }
+    terminated
 }
 
 async fn gather_initial_frames(hub: &SessionHub) -> Vec<Arc<Frame>> {

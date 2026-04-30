@@ -17,7 +17,9 @@ mod telemetry;
 mod types;
 
 pub use self::telemetry::SessionTelemetrySnapshot;
-pub use self::types::{BrowserClientRole, ClientHandle, ResizeResult, SubscribeError};
+pub use self::types::{
+    BrowserClientRole, ClientHandle, ResizeResult, SessionTerminationReason, SubscribeError,
+};
 
 /// Broadcast channel capacity. At 30fps, 1024 frames is ~34 seconds of buffer.
 const BROADCAST_CAPACITY: usize = 1024;
@@ -36,6 +38,8 @@ pub struct SessionHub {
     connected_clients: Mutex<Vec<u64>>,
     client_roles: RwLock<HashMap<u64, BrowserClientRole>>,
     client_control_txs: Mutex<HashMap<u64, mpsc::Sender<ControlMessage>>>,
+    client_termination_txs:
+        Mutex<HashMap<u64, tokio::sync::oneshot::Sender<SessionTerminationReason>>>,
     client_counter: AtomicU64,
     client_count: AtomicU32,
     owner_id: AtomicU64,
@@ -104,6 +108,7 @@ impl SessionHub {
             connected_clients: Mutex::new(Vec::new()),
             client_roles: RwLock::new(HashMap::new()),
             client_control_txs: Mutex::new(HashMap::new()),
+            client_termination_txs: Mutex::new(HashMap::new()),
             client_counter: AtomicU64::new(0),
             client_count: AtomicU32::new(0),
             owner_id: AtomicU64::new(0),
@@ -149,6 +154,15 @@ impl SessionHub {
     /// Called when a client disconnects.
     pub async fn unsubscribe(&self, client_id: u64) {
         membership::unsubscribe(self, client_id).await;
+    }
+
+    #[cfg(test)]
+    pub async fn terminate_client(&self, client_id: u64, reason: SessionTerminationReason) -> bool {
+        membership::terminate_client(self, client_id, reason).await
+    }
+
+    pub async fn terminate_all_clients(&self, reason: SessionTerminationReason) -> usize {
+        membership::terminate_all_clients(self, reason).await
     }
 
     pub fn is_browser_owner(&self, client_id: u64) -> bool {

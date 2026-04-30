@@ -6,7 +6,7 @@ use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::session_hub::SessionTelemetrySnapshot;
-use crate::session_hub::{BrowserClientRole, ClientHandle, SessionHub};
+use crate::session_hub::{BrowserClientRole, ClientHandle, SessionHub, SessionTerminationReason};
 
 /// Maps agent socket paths to active SessionHubs.
 ///
@@ -207,6 +207,17 @@ impl SessionRegistry {
         if removed.is_some() {
             debug!(%session_id, "removed session hub from registry");
         }
+    }
+
+    pub async fn terminate_session_clients(
+        &self,
+        session_id: Uuid,
+        reason: SessionTerminationReason,
+    ) -> usize {
+        let Some(hub) = self.lookup_live_hub(session_id).await else {
+            return 0;
+        };
+        hub.terminate_all_clients(reason).await
     }
 }
 

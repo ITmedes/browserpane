@@ -10,6 +10,7 @@ mod lifecycle;
 mod mcp;
 mod ownership;
 mod telemetry;
+mod termination;
 
 async fn mock_agent(sock_path: &str) -> tokio::task::JoinHandle<()> {
     let listener = UnixListener::bind(sock_path).unwrap();
