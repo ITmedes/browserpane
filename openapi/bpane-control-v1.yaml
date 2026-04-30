@@ -3690,6 +3690,111 @@ components:
           type: string
           nullable: true
           format: uri
+    SessionRuntimeState:
+      type: string
+      enum:
+        - not_started
+        - starting
+        - running
+        - stopping
+        - stopped
+    SessionPresenceState:
+      type: string
+      enum:
+        - empty
+        - connected
+        - automation_owned
+        - recording_only
+        - idle
+    SessionConnectionCounts:
+      type: object
+      required:
+        - interactive_clients
+        - owner_clients
+        - viewer_clients
+        - recorder_clients
+        - automation_clients
+        - total_clients
+      properties:
+        interactive_clients:
+          type: integer
+          minimum: 0
+        owner_clients:
+          type: integer
+          minimum: 0
+        viewer_clients:
+          type: integer
+          minimum: 0
+        recorder_clients:
+          type: integer
+          minimum: 0
+        automation_clients:
+          type: integer
+          minimum: 0
+        total_clients:
+          type: integer
+          minimum: 0
+    SessionStopBlockerKind:
+      type: string
+      enum:
+        - owner_clients
+        - viewer_clients
+        - recorder_clients
+        - automation_owner
+    SessionStopBlocker:
+      type: object
+      required: [kind, count]
+      properties:
+        kind:
+          $ref: '#/components/schemas/SessionStopBlockerKind'
+        count:
+          type: integer
+          minimum: 0
+    SessionStopEligibility:
+      type: object
+      required: [allowed, blockers]
+      properties:
+        allowed:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionStopBlocker'
+    SessionIdleStatus:
+      type: object
+      required: [idle_timeout_sec, idle_since, idle_deadline]
+      properties:
+        idle_timeout_sec:
+          type: integer
+          nullable: true
+          minimum: 1
+        idle_since:
+          type: string
+          format: date-time
+          nullable: true
+        idle_deadline:
+          type: string
+          format: date-time
+          nullable: true
+    SessionStatusSummary:
+      type: object
+      required:
+        - runtime_state
+        - presence_state
+        - connection_counts
+        - stop_eligibility
+        - idle
+      properties:
+        runtime_state:
+          $ref: '#/components/schemas/SessionRuntimeState'
+        presence_state:
+          $ref: '#/components/schemas/SessionPresenceState'
+        connection_counts:
+          $ref: '#/components/schemas/SessionConnectionCounts'
+        stop_eligibility:
+          $ref: '#/components/schemas/SessionStopEligibility'
+        idle:
+          $ref: '#/components/schemas/SessionIdleStatus'
     SessionResource:
       type: object
       required:
@@ -3708,6 +3813,7 @@ components:
         - recording
         - connect
         - runtime
+        - status
         - created_at
         - updated_at
         - stopped_at
@@ -3754,6 +3860,8 @@ components:
           $ref: '#/components/schemas/SessionConnectInfo'
         runtime:
           $ref: '#/components/schemas/SessionRuntimeInfo'
+        status:
+          $ref: '#/components/schemas/SessionStatusSummary'
         created_at:
           type: string
           format: date-time
@@ -4141,6 +4249,12 @@ components:
     SessionStatus:
       type: object
       required:
+        - state
+        - runtime_state
+        - presence_state
+        - connection_counts
+        - stop_eligibility
+        - idle
         - browser_clients
         - viewer_clients
         - recorder_clients
@@ -4153,6 +4267,18 @@ components:
         - playback
         - telemetry
       properties:
+        state:
+          $ref: '#/components/schemas/SessionLifecycleState'
+        runtime_state:
+          $ref: '#/components/schemas/SessionRuntimeState'
+        presence_state:
+          $ref: '#/components/schemas/SessionPresenceState'
+        connection_counts:
+          $ref: '#/components/schemas/SessionConnectionCounts'
+        stop_eligibility:
+          $ref: '#/components/schemas/SessionStopEligibility'
+        idle:
+          $ref: '#/components/schemas/SessionIdleStatus'
         browser_clients:
           type: integer
           minimum: 0

@@ -48,6 +48,15 @@ impl SessionManager {
         self.inner.describe_session_runtime(session_id)
     }
 
+    pub async fn describe_session_runtime_assignment_status(
+        &self,
+        session_id: Uuid,
+    ) -> Option<SessionRuntimeAssignmentStatus> {
+        self.inner
+            .describe_session_runtime_assignment_status(session_id)
+            .await
+    }
+
     pub async fn resolve(&self, session_id: Uuid) -> Result<SessionRuntime, SessionManagerError> {
         self.inner.resolve(session_id).await
     }

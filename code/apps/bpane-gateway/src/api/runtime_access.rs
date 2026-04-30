@@ -49,20 +49,6 @@ fn map_session_manager_error(error: SessionManagerError) -> (StatusCode, Json<Er
     )
 }
 
-pub(super) fn map_runtime_compat_status(status: StatusCode) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        status,
-        Json(ErrorResponse {
-            error: if status == StatusCode::CONFLICT {
-                "runtime is not currently available for the requested compatibility route"
-                    .to_string()
-            } else {
-                "compatibility route failed".to_string()
-            },
-        }),
-    )
-}
-
 pub(super) fn ensure_legacy_runtime_routes_supported(
     state: &ApiState,
 ) -> Result<(), (StatusCode, Json<ErrorResponse>)> {

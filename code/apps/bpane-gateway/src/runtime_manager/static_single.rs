@@ -36,6 +36,17 @@ impl StaticSingleRuntimeManager {
         }
     }
 
+    pub(super) async fn describe_assignment_status(
+        &self,
+        session_id: Uuid,
+    ) -> Option<RuntimeAssignmentStatus> {
+        let active = self.active.lock().await;
+        active
+            .as_ref()
+            .filter(|lease| lease.session_id == session_id)
+            .map(|_| RuntimeAssignmentStatus::Ready)
+    }
+
     pub(super) async fn resolve(
         self: &Arc<Self>,
         session_id: Uuid,

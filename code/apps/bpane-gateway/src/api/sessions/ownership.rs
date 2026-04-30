@@ -23,7 +23,7 @@ pub(super) async fn set_automation_owner(
             )
         })?;
 
-    Ok(Json(session_resource(&state, &stored, None)))
+    Ok(Json(session_resource(&state, &stored, None).await))
 }
 
 pub(super) async fn clear_automation_owner(
@@ -48,5 +48,5 @@ pub(super) async fn clear_automation_owner(
             )
         })?;
 
-    Ok(Json(session_resource(&state, &stored, None)))
+    Ok(Json(session_resource(&state, &stored, None).await))
 }

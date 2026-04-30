@@ -256,6 +256,18 @@ impl SessionRuntimeManager {
         }
     }
 
+    pub async fn describe_session_runtime_assignment_status(
+        &self,
+        session_id: Uuid,
+    ) -> Option<RuntimeAssignmentStatus> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(manager) => {
+                manager.describe_assignment_status(session_id).await
+            }
+            RuntimeBackend::Docker(manager) => manager.describe_assignment_status(session_id).await,
+        }
+    }
+
     pub async fn resolve(
         &self,
         session_id: Uuid,

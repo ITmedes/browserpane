@@ -52,6 +52,34 @@ impl SessionRegistry {
         Some(hub.telemetry_snapshot().await)
     }
 
+    pub fn empty_telemetry_snapshot(&self) -> SessionTelemetrySnapshot {
+        SessionTelemetrySnapshot {
+            browser_clients: 0,
+            viewer_clients: 0,
+            recorder_clients: 0,
+            max_viewers: self.max_viewers,
+            viewer_slots_remaining: self.max_viewers,
+            exclusive_browser_owner: self.exclusive_browser_owner,
+            mcp_owner: false,
+            resolution: (0, 0),
+            joins_accepted: 0,
+            joins_rejected_viewer_cap: 0,
+            last_join_latency_ms: 0,
+            average_join_latency_ms: 0.0,
+            max_join_latency_ms: 0,
+            full_refresh_requests: 0,
+            full_refresh_tiles_requested: 0,
+            last_full_refresh_tiles: 0,
+            max_full_refresh_tiles: 0,
+            egress_send_stream_lock_acquires_total: 0,
+            egress_send_stream_lock_wait_us_total: 0,
+            egress_send_stream_lock_wait_us_average: 0.0,
+            egress_send_stream_lock_wait_us_max: 0,
+            egress_lagged_receives_total: 0,
+            egress_lagged_frames_total: 0,
+        }
+    }
+
     async fn insert_or_get_live_hub(
         &self,
         session_id: Uuid,

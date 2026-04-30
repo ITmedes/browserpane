@@ -21,7 +21,7 @@ pub(super) async fn issue_session_access_token(
                 }),
             )
         })?;
-    let resource = session_resource(&state, &connectable, None);
+    let resource = session_resource(&state, &connectable, None).await;
 
     Ok(Json(SessionAccessTokenResponse {
         session_id,
@@ -42,7 +42,7 @@ pub(super) async fn issue_session_automation_access(
             .await?;
     let connectable = prepare_runtime_access_session(&state, &principal, session_id).await?;
     resolve_runtime(&state, session_id).await?;
-    let resource = session_resource(&state, &connectable, None);
+    let resource = session_resource(&state, &connectable, None).await;
     let endpoint_url = resource.runtime.cdp_endpoint.ok_or_else(|| {
         (
             StatusCode::CONFLICT,
