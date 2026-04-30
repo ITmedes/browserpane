@@ -859,6 +859,70 @@
       line-height: 1.5;
     }
 
+    .session-connection-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .session-connection-card,
+    .session-connection-empty {
+      padding: 12px 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(16, 27, 46, 0.74);
+    }
+
+    .session-connection-card {
+      display: grid;
+      gap: 10px;
+    }
+
+    .session-connection-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .session-connection-title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .session-connection-title strong {
+      color: #eef4ff;
+      font-size: 13px;
+      line-height: 1.35;
+      word-break: break-all;
+    }
+
+    .session-connection-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      color: #c5d3eb;
+    }
+
+    .session-connection-meta span {
+      padding: 6px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(137, 161, 201, 0.12);
+      background: rgba(18, 31, 54, 0.76);
+    }
+
+    .session-connection-empty {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
     .panel-logs {
       min-height: 300px;
       flex: 1;
@@ -1034,6 +1098,40 @@
           <button id="btn-connect">Join / Reconnect</button>
           <button id="btn-delegate-mcp" disabled>Delegate MCP</button>
           <button id="btn-disconnect" disabled>Disconnect</button>
+        </div>
+
+        <div id="session-lifecycle-note" class="helper-note info">
+          Select a session to inspect its live lifecycle status, blockers, and attachments.
+        </div>
+
+        <div class="metrics-grid">
+          <span id="session-runtime-state">Runtime: --</span>
+          <span id="session-presence-state">Presence: --</span>
+          <span id="session-connection-counts">Connections: --</span>
+          <span id="session-stop-eligibility">Stop Eligibility: --</span>
+          <span id="session-idle-state">Idle: --</span>
+        </div>
+
+        <div class="form-row">
+          <button id="btn-session-status-refresh" disabled>Refresh Status</button>
+          <button id="btn-session-stop" disabled>Stop Selected</button>
+          <button id="btn-session-kill" disabled>Kill Selected</button>
+          <button id="btn-session-disconnect-all" disabled>Disconnect All</button>
+        </div>
+
+        <div class="workflow-stack">
+          <div class="panel-heading">
+            <span class="panel-title">Live Connections</span>
+            <p class="panel-copy">
+              Inspect the selected session’s current attachments and disconnect specific clients
+              without force-killing the runtime.
+            </p>
+          </div>
+          <div id="session-connection-list" class="session-connection-list">
+            <div class="session-connection-empty">
+              No selected session status loaded yet.
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1384,6 +1482,10 @@
     const connectBtn = document.getElementById('btn-connect');
     const delegateMcpBtn = document.getElementById('btn-delegate-mcp');
     const disconnectBtn = document.getElementById('btn-disconnect');
+    const sessionStatusRefreshBtn = document.getElementById('btn-session-status-refresh');
+    const sessionStopBtn = document.getElementById('btn-session-stop');
+    const sessionKillBtn = document.getElementById('btn-session-kill');
+    const sessionDisconnectAllBtn = document.getElementById('btn-session-disconnect-all');
     const metricsStartBtn = document.getElementById('btn-metrics-start');
     const metricsStopBtn = document.getElementById('btn-metrics-stop');
     const metricsCopyBtn = document.getElementById('btn-metrics-copy');
@@ -1448,6 +1550,13 @@
     const logPanel = document.getElementById('log-panel');
     const authDisplay = document.getElementById('auth-display');
     const sessionDisplay = document.getElementById('session-display');
+    const sessionLifecycleNoteEl = document.getElementById('session-lifecycle-note');
+    const sessionRuntimeStateEl = document.getElementById('session-runtime-state');
+    const sessionPresenceStateEl = document.getElementById('session-presence-state');
+    const sessionConnectionCountsEl = document.getElementById('session-connection-counts');
+    const sessionStopEligibilityEl = document.getElementById('session-stop-eligibility');
+    const sessionIdleStateEl = document.getElementById('session-idle-state');
+    const sessionConnectionListEl = document.getElementById('session-connection-list');
     const mcpDisplay = document.getElementById('mcp-display');
     const mcpDelegationNote = document.getElementById('mcp-delegation-note');
     const authHint = document.getElementById('auth-hint');
@@ -2027,6 +2136,15 @@
       resources: [],
       selectedSessionId: '',
     };
+    const sessionLifecycleState = {
+      sessionId: '',
+      status: null,
+      loading: false,
+      acting: false,
+      disconnectingConnectionId: '',
+      error: '',
+      requestId: 0,
+    };
     const mcpBridgeState = {
       controlSessionId: '',
       controlSessionState: '',
@@ -2172,9 +2290,178 @@
     function renderSessionState() {
       sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
       renderMcpDelegationState();
+      renderSessionLifecycleState();
       renderRecordingState();
       renderRecordingCatalogState();
       renderOverlayState();
+    }
+
+    function summarizeSessionStopBlockers(blockers) {
+      if (!Array.isArray(blockers) || blockers.length === 0) {
+        return 'none';
+      }
+      return blockers
+        .map((blocker) => {
+          const count = Number.isFinite(blocker?.count) ? blocker.count : 0;
+          const kind = String(blocker?.kind || 'unknown').replace(/_/g, ' ');
+          return `${count} ${kind}`;
+        })
+        .join(', ');
+    }
+
+    function clearSessionLifecycleState(sessionId = '') {
+      sessionLifecycleState.sessionId = sessionId;
+      sessionLifecycleState.status = null;
+      sessionLifecycleState.loading = false;
+      sessionLifecycleState.acting = false;
+      sessionLifecycleState.disconnectingConnectionId = '';
+      sessionLifecycleState.error = '';
+    }
+
+    function buildSessionConnectionCard(connection) {
+      const card = document.createElement('article');
+      card.className = 'session-connection-card';
+
+      const header = document.createElement('div');
+      header.className = 'session-connection-header';
+
+      const title = document.createElement('div');
+      title.className = 'session-connection-title';
+      title.innerHTML = `<strong>Connection ${connection.connection_id}</strong><span>Role: ${connection.role ?? 'unknown'}</span>`;
+      header.appendChild(title);
+
+      const roleBadge = document.createElement('span');
+      roleBadge.className = `metric-badge ${normalizeMetricBadgeClass(connection.role)}`;
+      roleBadge.textContent = connection.role ?? 'unknown';
+      header.appendChild(roleBadge);
+      card.appendChild(header);
+
+      const meta = document.createElement('div');
+      meta.className = 'session-connection-meta';
+      const connectionIdChip = document.createElement('span');
+      connectionIdChip.textContent = `ID: ${connection.connection_id}`;
+      meta.appendChild(connectionIdChip);
+      card.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'recording-library-actions';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.action = 'disconnect-session-connection';
+      button.dataset.connectionId = String(connection.connection_id);
+      button.textContent = sessionLifecycleState.disconnectingConnectionId === String(connection.connection_id)
+        ? 'Disconnecting...'
+        : 'Disconnect';
+      button.disabled = sessionLifecycleState.loading
+        || sessionLifecycleState.acting
+        || Boolean(sessionLifecycleState.disconnectingConnectionId);
+      actions.appendChild(button);
+      card.appendChild(actions);
+
+      return card;
+    }
+
+    function renderSessionLifecycleState() {
+      const selected = controlSessionState.resource;
+      const selectedSessionId = selected?.id ?? '';
+      const canManageSessions = authState.config?.mode === 'oidc' && Boolean(authState.tokens?.access_token);
+      const status = sessionLifecycleState.sessionId === selectedSessionId
+        ? sessionLifecycleState.status
+        : null;
+      const totalConnections = Number(status?.connection_counts?.total_clients ?? 0);
+
+      sessionStatusRefreshBtn.disabled = !canManageSessions || !selectedSessionId || sessionLifecycleState.loading || sessionLifecycleState.acting;
+      sessionStopBtn.disabled = !canManageSessions
+        || !selectedSessionId
+        || sessionLifecycleState.loading
+        || sessionLifecycleState.acting
+        || selected?.state === 'stopped';
+      sessionKillBtn.disabled = !canManageSessions
+        || !selectedSessionId
+        || sessionLifecycleState.loading
+        || sessionLifecycleState.acting
+        || selected?.state === 'stopped';
+      sessionDisconnectAllBtn.disabled = !canManageSessions
+        || !selectedSessionId
+        || sessionLifecycleState.loading
+        || sessionLifecycleState.acting
+        || totalConnections === 0;
+
+      sessionRuntimeStateEl.textContent = `Runtime: ${status?.runtime_state ?? '--'}`;
+      sessionPresenceStateEl.textContent = `Presence: ${status?.presence_state ?? '--'}`;
+      if (status?.connection_counts) {
+        const counts = status.connection_counts;
+        sessionConnectionCountsEl.textContent =
+          `Connections: ${counts.total_clients} total · owner ${counts.owner_clients} · viewer ${counts.viewer_clients} · recorder ${counts.recorder_clients}`;
+      } else {
+        sessionConnectionCountsEl.textContent = 'Connections: --';
+      }
+      sessionStopEligibilityEl.textContent = status
+        ? `Stop Eligibility: ${status.stop_eligibility?.allowed ? 'allowed' : summarizeSessionStopBlockers(status.stop_eligibility?.blockers)}`
+        : 'Stop Eligibility: --';
+      if (status?.idle?.idle_since) {
+        sessionIdleStateEl.textContent =
+          `Idle: since ${formatTimestamp(status.idle.idle_since)} · deadline ${formatTimestamp(status.idle.idle_deadline)}`;
+      } else if (status?.idle?.idle_timeout_sec) {
+        sessionIdleStateEl.textContent = `Idle: timeout ${status.idle.idle_timeout_sec}s`;
+      } else {
+        sessionIdleStateEl.textContent = 'Idle: --';
+      }
+
+      if (!canManageSessions) {
+        sessionLifecycleNoteEl.className = 'helper-note info';
+        sessionLifecycleNoteEl.textContent = 'Login first to inspect or control session lifecycle state.';
+        sessionConnectionListEl.innerHTML =
+          '<div class="session-connection-empty">Login first to inspect live session attachments.</div>';
+        return;
+      }
+
+      if (!selectedSessionId) {
+        sessionLifecycleNoteEl.className = 'helper-note info';
+        sessionLifecycleNoteEl.textContent = 'Select a session to inspect its lifecycle status, blockers, and live attachments.';
+        sessionConnectionListEl.innerHTML =
+          '<div class="session-connection-empty">Select a session to load its live connection status.</div>';
+        return;
+      }
+
+      if (sessionLifecycleState.loading) {
+        sessionLifecycleNoteEl.className = 'helper-note info';
+        sessionLifecycleNoteEl.textContent = `Loading lifecycle status for session ${getShortSessionId(selectedSessionId)}...`;
+        sessionConnectionListEl.innerHTML =
+          '<div class="session-connection-empty">Loading live connection details...</div>';
+        return;
+      }
+
+      if (sessionLifecycleState.error) {
+        sessionLifecycleNoteEl.className = 'helper-note warn';
+        sessionLifecycleNoteEl.textContent = `Session lifecycle status could not be loaded: ${sessionLifecycleState.error}`;
+      } else if (!status) {
+        sessionLifecycleNoteEl.className = 'helper-note info';
+        sessionLifecycleNoteEl.textContent =
+          `Refresh the selected session to inspect stop blockers, live attachments, and side-effect-free status snapshots.`;
+      } else if (status.stop_eligibility?.allowed) {
+        sessionLifecycleNoteEl.className = 'helper-note ok';
+        sessionLifecycleNoteEl.textContent =
+          `Session ${getShortSessionId(selectedSessionId)} can be safely stopped right now. ${
+            totalConnections > 0
+              ? 'You can also disconnect individual attachments below without killing the runtime.'
+              : 'No live attachments are currently connected.'
+          }`;
+      } else {
+        sessionLifecycleNoteEl.className = 'helper-note warn';
+        sessionLifecycleNoteEl.textContent =
+          `Session ${getShortSessionId(selectedSessionId)} cannot be safely stopped yet: ${summarizeSessionStopBlockers(status.stop_eligibility?.blockers)}.`;
+      }
+
+      sessionConnectionListEl.innerHTML = '';
+      if (!status?.connections?.length) {
+        sessionConnectionListEl.innerHTML =
+          '<div class="session-connection-empty">No live session attachments are currently connected.</div>';
+        return;
+      }
+      for (const connection of status.connections) {
+        sessionConnectionListEl.appendChild(buildSessionConnectionCard(connection));
+      }
     }
 
     function isJoinableSession(resource) {
@@ -2198,7 +2485,13 @@
         (resource) => resource.id === controlSessionState.selectedSessionId,
       ) ?? null;
       controlSessionState.resource = selected;
+      if (!selected?.id) {
+        clearSessionLifecycleState('');
+      }
       renderSessionState();
+      void refreshSelectedSessionLifecycleStatus({ silent: true }).catch((error) => {
+        log(`Session lifecycle refresh failed: ${error.message}`, 'error');
+      });
       void refreshRecordingCatalogForSelectedSession({ force: false, silent: true }).catch((error) => {
         log(`Recording library refresh failed: ${error.message}`, 'error');
       });
@@ -2493,6 +2786,7 @@
       controlSessionState.resource = null;
       controlSessionState.resources = [];
       controlSessionState.selectedSessionId = '';
+      clearSessionLifecycleState('');
       clearRecordingCatalogState();
       clearWorkflowState();
       stopMcpBridgePolling({ clearState: true });
@@ -2762,6 +3056,95 @@
       return sessions;
     }
 
+    async function readApiFailure(response) {
+      let detail = '';
+      try {
+        const payload = await response.json();
+        detail = payload?.error ?? JSON.stringify(payload);
+      } catch {
+        detail = await response.text().catch(() => '');
+      }
+      return `HTTP ${response.status}${detail ? ` ${detail}` : ''}`;
+    }
+
+    async function fetchSessionLifecycleStatus(accessToken, sessionId) {
+      const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(sessionId)}/status`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        throw new Error(await readApiFailure(response));
+      }
+      return await response.json();
+    }
+
+    async function refreshSelectedSessionLifecycleStatus({ silent = true, force = false } = {}) {
+      const accessToken = await getValidAccessToken();
+      const sessionId = controlSessionState.resource?.id ?? '';
+      if (!accessToken || !sessionId) {
+        clearSessionLifecycleState(sessionId);
+        renderSessionLifecycleState();
+        return null;
+      }
+      if (
+        !force
+        && !sessionLifecycleState.loading
+        && sessionLifecycleState.sessionId === sessionId
+        && sessionLifecycleState.status
+        && !sessionLifecycleState.error
+      ) {
+        return sessionLifecycleState.status;
+      }
+
+      const requestId = sessionLifecycleState.requestId + 1;
+      sessionLifecycleState.requestId = requestId;
+      sessionLifecycleState.sessionId = sessionId;
+      sessionLifecycleState.loading = true;
+      sessionLifecycleState.error = '';
+      renderSessionLifecycleState();
+
+      try {
+        const status = await fetchSessionLifecycleStatus(accessToken, sessionId);
+        if (sessionLifecycleState.requestId !== requestId) {
+          return null;
+        }
+        sessionLifecycleState.status = status;
+        sessionLifecycleState.loading = false;
+        sessionLifecycleState.error = '';
+        renderSessionLifecycleState();
+        if (!silent) {
+          log(`Loaded lifecycle status for session ${sessionId}`, 'info');
+        }
+        return status;
+      } catch (error) {
+        if (sessionLifecycleState.requestId !== requestId) {
+          return null;
+        }
+        sessionLifecycleState.status = null;
+        sessionLifecycleState.loading = false;
+        sessionLifecycleState.error = error.message;
+        renderSessionLifecycleState();
+        if (!silent) {
+          log(`Session lifecycle status refresh failed: ${error.message}`, 'error');
+        }
+        throw error;
+      }
+    }
+
+    async function refreshSelectedSessionControlData({ silent = true, forceStatus = false } = {}) {
+      const accessToken = await getValidAccessToken();
+      if (!accessToken) {
+        clearSessionLifecycleState(controlSessionState.resource?.id ?? '');
+        renderSessionLifecycleState();
+        return null;
+      }
+      await refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+      return refreshSelectedSessionLifecycleStatus({ silent, force: forceStatus });
+    }
+
     async function createSessionResource(accessToken) {
       const response = await fetch(SESSION_API_URL, {
         method: 'POST',
@@ -3005,6 +3388,164 @@
       log(`Delegated session ${controlSession.id} to ${authState.config.mcpBridge.clientId}`, 'ok');
       await assignMcpBridgeControlSession(controlSession.id);
       await refreshMcpBridgeState({ silent: true });
+    }
+
+    async function stopSelectedSession() {
+      const accessToken = await getValidAccessToken();
+      const selected = controlSessionState.resource;
+      if (!accessToken || !selected?.id) {
+        throw new Error('login and session selection are required');
+      }
+
+      sessionLifecycleState.acting = true;
+      sessionLifecycleState.error = '';
+      renderSessionLifecycleState();
+      try {
+        const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(selected.id)}/stop`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+          },
+          cache: 'no-store',
+        });
+        const payload = await response.json().catch(() => null);
+        if (response.status === 409) {
+          if (payload?.session?.id) {
+            controlSessionState.resource = payload.session;
+          }
+          await refreshSelectedSessionControlData({ silent: true, forceStatus: true });
+          log(
+            `Safe stop blocked for session ${selected.id}: ${summarizeSessionStopBlockers(payload?.session?.status?.stop_eligibility?.blockers)}`,
+            'warn',
+          );
+          return payload;
+        }
+        if (!response.ok) {
+          throw new Error(
+            payload?.error ? `HTTP ${response.status} ${payload.error}` : `HTTP ${response.status}`,
+          );
+        }
+        log(`Stopped session ${selected.id}`, 'ok');
+        await refreshSelectedSessionControlData({ silent: true, forceStatus: true });
+        return payload;
+      } finally {
+        sessionLifecycleState.acting = false;
+        renderSessionLifecycleState();
+      }
+    }
+
+    async function killSelectedSession() {
+      const accessToken = await getValidAccessToken();
+      const selected = controlSessionState.resource;
+      if (!accessToken || !selected?.id) {
+        throw new Error('login and session selection are required');
+      }
+
+      sessionLifecycleState.acting = true;
+      sessionLifecycleState.error = '';
+      renderSessionLifecycleState();
+      try {
+        const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(selected.id)}/kill`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+          },
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          throw new Error(await readApiFailure(response));
+        }
+        const payload = await response.json();
+        log(`Force-killed session ${selected.id}`, 'warn');
+        await refreshSelectedSessionControlData({ silent: true, forceStatus: true });
+        return payload;
+      } finally {
+        sessionLifecycleState.acting = false;
+        renderSessionLifecycleState();
+      }
+    }
+
+    async function disconnectAllSelectedSessionConnections() {
+      const accessToken = await getValidAccessToken();
+      const selected = controlSessionState.resource;
+      if (!accessToken || !selected?.id) {
+        throw new Error('login and session selection are required');
+      }
+
+      sessionLifecycleState.acting = true;
+      sessionLifecycleState.error = '';
+      renderSessionLifecycleState();
+      try {
+        const response = await fetch(
+          `${SESSION_API_URL}/${encodeURIComponent(selected.id)}/connections/disconnect-all`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: 'application/json',
+            },
+            cache: 'no-store',
+          },
+        );
+        if (!response.ok) {
+          throw new Error(await readApiFailure(response));
+        }
+        const payload = await response.json();
+        sessionLifecycleState.sessionId = selected.id;
+        sessionLifecycleState.status = payload;
+        sessionLifecycleState.error = '';
+        log(`Disconnected all live attachments from session ${selected.id}`, 'warn');
+        await refreshSelectedSessionControlData({ silent: true, forceStatus: true });
+        return payload;
+      } finally {
+        sessionLifecycleState.acting = false;
+        renderSessionLifecycleState();
+      }
+    }
+
+    async function disconnectSelectedSessionConnection(connectionId) {
+      const accessToken = await getValidAccessToken();
+      const selected = controlSessionState.resource;
+      if (!accessToken || !selected?.id) {
+        throw new Error('login and session selection are required');
+      }
+      if (connectionId === undefined || connectionId === null || connectionId === '') {
+        throw new Error('connection id is required');
+      }
+
+      sessionLifecycleState.acting = true;
+      sessionLifecycleState.disconnectingConnectionId = String(connectionId);
+      sessionLifecycleState.error = '';
+      renderSessionLifecycleState();
+      try {
+        const response = await fetch(
+          `${SESSION_API_URL}/${encodeURIComponent(selected.id)}/connections/${encodeURIComponent(String(connectionId))}/disconnect`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: 'application/json',
+            },
+            cache: 'no-store',
+          },
+        );
+        if (!response.ok) {
+          throw new Error(await readApiFailure(response));
+        }
+        const payload = await response.json();
+        sessionLifecycleState.sessionId = selected.id;
+        sessionLifecycleState.status = payload;
+        sessionLifecycleState.error = '';
+        log(`Disconnected connection ${connectionId} from session ${selected.id}`, 'warn');
+        await refreshSelectedSessionControlData({ silent: true, forceStatus: true });
+        return payload;
+      } finally {
+        sessionLifecycleState.acting = false;
+        sessionLifecycleState.disconnectingConnectionId = '';
+        renderSessionLifecycleState();
+      }
     }
 
     async function logout() {
@@ -4780,6 +5321,7 @@
             }
             renderAuthState();
             void refreshMcpBridgeState({ silent: true });
+            void refreshSelectedSessionLifecycleStatus({ silent: true, force: true });
             cameraBtn.disabled = true;
             micBtn.disabled = false;
             uploadBtn.disabled = false;
@@ -4946,7 +5488,10 @@
             void getValidAccessToken().then((accessToken) => {
               if (accessToken) {
                 return refreshSessionResources(accessToken, { preserveSelection: true, silent: true })
-                  .then(() => refreshMcpBridgeState({ silent: true }));
+                  .then(() => Promise.all([
+                    refreshMcpBridgeState({ silent: true }),
+                    refreshSelectedSessionLifecycleStatus({ silent: true, force: true }),
+                  ]));
               }
               return null;
             });
@@ -5041,7 +5586,10 @@
       void getValidAccessToken().then((accessToken) => {
         if (accessToken) {
           return refreshSessionResources(accessToken, { preserveSelection: true, silent: true })
-            .then(() => refreshMcpBridgeState({ silent: true }));
+            .then(() => Promise.all([
+              refreshMcpBridgeState({ silent: true }),
+              refreshSelectedSessionLifecycleStatus({ silent: true, force: true }),
+            ]));
         }
         return null;
       });
@@ -5103,7 +5651,10 @@
         return null;
       }
       return refreshSessionResources(accessToken, { preserveSelection: true, silent: false })
-        .then(() => refreshMcpBridgeState({ silent: true }));
+        .then(() => Promise.all([
+          refreshMcpBridgeState({ silent: true }),
+          refreshSelectedSessionLifecycleStatus({ silent: true, force: true }),
+        ]));
     }).catch((error) => {
       log(`Session refresh failed: ${error.message}`, 'error');
     }));
@@ -5112,6 +5663,39 @@
     connectBtn.addEventListener('click', () => void connect('selected'));
     overlayConnectBtn.addEventListener('click', () => void connect('selected'));
     disconnectBtn.addEventListener('click', () => void doDisconnect());
+    sessionStatusRefreshBtn.addEventListener('click', () => {
+      void refreshSelectedSessionLifecycleStatus({ silent: false, force: true }).catch((error) => {
+        log(`Session lifecycle status refresh failed: ${error.message}`, 'error');
+      });
+    });
+    sessionStopBtn.addEventListener('click', () => {
+      void stopSelectedSession().catch((error) => {
+        log(`Session stop failed: ${error.message}`, 'error');
+      });
+    });
+    sessionKillBtn.addEventListener('click', () => {
+      void killSelectedSession().catch((error) => {
+        log(`Session kill failed: ${error.message}`, 'error');
+      });
+    });
+    sessionDisconnectAllBtn.addEventListener('click', () => {
+      void disconnectAllSelectedSessionConnections().catch((error) => {
+        log(`Disconnect-all failed: ${error.message}`, 'error');
+      });
+    });
+    sessionConnectionListEl.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action="disconnect-session-connection"]');
+      if (!button) {
+        return;
+      }
+      const connectionId = button.dataset.connectionId;
+      if (!connectionId) {
+        return;
+      }
+      void disconnectSelectedSessionConnection(connectionId).catch((error) => {
+        log(`Connection disconnect failed: ${error.message}`, 'error');
+      });
+    });
     recordingStartBtn.addEventListener('click', () => void startSessionRecording());
     recordingStopBtn.addEventListener('click', () => void stopSessionRecording());
     recordingDownloadBtn.addEventListener('click', downloadLastRecording);
@@ -5299,6 +5883,10 @@
         renderAuthState();
         return cloneValue(resource);
       },
+      refreshSessionStatus: async ({ force = true, silent = false } = {}) => {
+        const status = await refreshSelectedSessionLifecycleStatus({ force, silent });
+        return cloneValue(status);
+      },
       startNewSession: async (options = {}) => {
         await connect('new', options);
         return cloneValue(controlSessionState.resource);
@@ -5307,6 +5895,10 @@
         await connect('selected', options);
         return cloneValue(controlSessionState.resource);
       },
+      stopSelectedSession,
+      killSelectedSession,
+      disconnectAllSelectedSessionConnections,
+      disconnectSessionConnection: disconnectSelectedSessionConnection,
       disconnect: doDisconnect,
     };
     window.__bpaneRecording = {
@@ -5445,7 +6037,7 @@
     log(`Session control API: ${SESSION_API_URL}`, 'info');
     log(`Default client role: ${DEFAULT_CLIENT_ROLE}`, 'info');
     log('Benchmark metrics API: window.__bpaneBenchmarkMetrics.{startSample,stopSample,resetSample,getSummary}', 'info');
-    log('Control API: window.__bpaneControl.{listSessions,getState,refreshSessions,selectSession,startNewSession,connectSelected,disconnect}', 'info');
+    log('Control API: window.__bpaneControl.{listSessions,getState,refreshSessions,selectSession,refreshSessionStatus,startNewSession,connectSelected,stopSelectedSession,killSelectedSession,disconnectAllSelectedSessionConnections,disconnectSessionConnection,disconnect}', 'info');
     log(
       'Recording API: window.__bpaneRecording.{start,stop,downloadLast,refreshCatalog,downloadCatalogRecording,downloadPlaybackExport,setAutoDownload,getState,getCatalogState}',
       'info',
