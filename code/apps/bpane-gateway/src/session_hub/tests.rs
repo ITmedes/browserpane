@@ -45,6 +45,17 @@ async fn mock_agent(sock_path: &str) -> tokio::task::JoinHandle<()> {
                                 height: u16::from_le_bytes([frame.payload[3], frame.payload[4]]),
                             };
                             stream.write_all(&ack.to_frame().encode()).await.unwrap();
+                        } else if frame.channel == ChannelId::Tiles {
+                            if let Ok(TileMessage::CacheMiss { col, row, .. }) =
+                                TileMessage::decode(&frame.payload)
+                            {
+                                let fill = TileMessage::Fill {
+                                    col,
+                                    row,
+                                    rgba: 0xFF00_0000,
+                                };
+                                stream.write_all(&fill.to_frame().encode()).await.unwrap();
+                            }
                         }
                     }
                     Ok(None) => break,

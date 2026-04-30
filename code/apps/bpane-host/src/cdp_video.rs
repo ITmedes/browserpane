@@ -63,6 +63,10 @@ pub struct PageHintState {
     pub scroll_delta_y: i32,
     pub visible: bool,
     pub focused: bool,
+    /// Multiple CDP page targets reported themselves as visible and focused.
+    /// In that state we can still use the hint for visual classification, but
+    /// input must fall back to the real browser window instead of one target.
+    pub focus_ambiguous: bool,
     pub update_seq: u64,
 }
 
@@ -78,6 +82,7 @@ impl Default for PageHintState {
             scroll_delta_y: 0,
             visible: false,
             focused: false,
+            focus_ambiguous: false,
             update_seq: 0,
         }
     }
@@ -197,7 +202,7 @@ impl BrowserCdpHandle {
 }
 
 fn can_dispatch_direct_wheel(hint: &PageHintState) -> bool {
-    hint.visible && hint.focused
+    hint.visible && hint.focused && !hint.focus_ambiguous
 }
 
 fn should_switch_to_focused_target(
@@ -873,6 +878,21 @@ pub fn spawn_video_hint_task(shared: Arc<Mutex<PageHintState>>) -> BrowserCdpHan
                 continue;
             }
 
+            if let Some(active_url) = current_active_page_target_url(&http, debug_port).await {
+                if ws_url.as_deref() != Some(active_url.as_str()) {
+                    debug!(
+                        from_target = ws_url.as_deref().unwrap_or("<unknown>"),
+                        to_target = %active_url,
+                        "cdp switching to active page target"
+                    );
+                    ws_stream = None;
+                    prefetched_hint = None;
+                    force_target_refresh = true;
+                    set_shared_state(&shared, PageHintState::default());
+                    continue;
+                }
+            }
+
             let Some(mut hint) = (match prefetched_hint.take() {
                 Some(hint) => Some(hint),
                 None => evaluate_page_hint(stream, &video_probe_js, &mut request_id).await,
@@ -996,6 +1016,11 @@ async fn fetch_targets(http: &reqwest::Client, port: u16) -> Option<Vec<DevTools
         .ok()
 }
 
+async fn current_active_page_target_url(http: &reqwest::Client, port: u16) -> Option<String> {
+    let targets = fetch_targets(http, port).await?;
+    active_page_target_url(&targets).map(str::to_string)
+}
+
 fn score_target(target: &DevToolsTarget) -> i32 {
     let mut score = 0i32;
     match target.target_type.as_str() {
@@ -1058,10 +1083,22 @@ fn is_ignored_target(target: &DevToolsTarget) -> bool {
     title == "devtools" || title.starts_with("devtools -")
 }
 
+fn active_page_target_url(targets: &[DevToolsTarget]) -> Option<&str> {
+    targets
+        .iter()
+        .find(|target| {
+            target.target_type == "page"
+                && target.web_socket_debugger_url.is_some()
+                && !is_ignored_target(target)
+        })
+        .and_then(|target| target.web_socket_debugger_url.as_deref())
+}
+
 fn ordered_target_candidates<'a>(
     targets: &'a [DevToolsTarget],
     current_ws_url: Option<&str>,
 ) -> Vec<&'a DevToolsTarget> {
+    let active_ws_url = active_page_target_url(targets);
     let mut candidates: Vec<(usize, &DevToolsTarget)> = targets
         .iter()
         .enumerate()
@@ -1071,19 +1108,46 @@ fn ordered_target_candidates<'a>(
         .collect();
 
     candidates.sort_by(|(left_idx, left), (right_idx, right)| {
+        let left_active = active_ws_url
+            .map(|url| left.web_socket_debugger_url.as_deref() == Some(url))
+            .unwrap_or(false);
+        let right_active = active_ws_url
+            .map(|url| right.web_socket_debugger_url.as_deref() == Some(url))
+            .unwrap_or(false);
         let left_current = current_ws_url
             .map(|url| left.web_socket_debugger_url.as_deref() == Some(url))
             .unwrap_or(false);
         let right_current = current_ws_url
             .map(|url| right.web_socket_debugger_url.as_deref() == Some(url))
             .unwrap_or(false);
-        right_current
-            .cmp(&left_current)
+        right_active
+            .cmp(&left_active)
+            .then_with(|| right_current.cmp(&left_current))
             .then_with(|| score_target(right).cmp(&score_target(left)))
             .then_with(|| left_idx.cmp(right_idx))
     });
 
     candidates.into_iter().map(|(_, target)| target).collect()
+}
+
+fn selected_focus_is_ambiguous(
+    focused_count: usize,
+    active_ws_url: Option<&str>,
+    selected_url: &str,
+) -> bool {
+    focused_count > 1 && active_ws_url != Some(selected_url)
+}
+
+fn visible_fallback_focus_is_ambiguous(active_ws_url: Option<&str>, selected_url: &str) -> bool {
+    active_ws_url.is_some() && active_ws_url != Some(selected_url)
+}
+
+struct CandidateStream {
+    url: String,
+    stream: CdpWsStream,
+    hint: PageHintState,
+    title: String,
+    url_hint: String,
 }
 
 async fn connect_visible_target_stream(
@@ -1094,8 +1158,10 @@ async fn connect_visible_target_stream(
     request_id: &mut u64,
 ) -> Option<(String, CdpWsStream, PageHintState)> {
     let targets = fetch_targets(http, port).await?;
+    let active_ws_url = active_page_target_url(&targets).map(str::to_string);
     let candidates = ordered_target_candidates(&targets, current_ws_url);
-    let mut visible_fallback: Option<(String, CdpWsStream, PageHintState, String, String)> = None;
+    let mut focused_candidates: Vec<CandidateStream> = Vec::new();
+    let mut visible_fallback: Option<CandidateStream> = None;
 
     for target in candidates {
         let Some(url) = target.web_socket_debugger_url.as_deref() else {
@@ -1120,24 +1186,70 @@ async fn connect_visible_target_stream(
             continue;
         }
         if hint.focused {
-            debug!(
-                target = %url,
-                focused = hint.focused,
-                title = title,
-                url_hint = url_hint,
-                "cdp selected focused target"
-            );
-            return Some((url.to_string(), stream, hint));
+            focused_candidates.push(CandidateStream {
+                url: url.to_string(),
+                stream,
+                hint,
+                title,
+                url_hint,
+            });
+            continue;
         }
         if visible_fallback.is_none() {
-            visible_fallback = Some((url.to_string(), stream, hint, title, url_hint));
+            visible_fallback = Some(CandidateStream {
+                url: url.to_string(),
+                stream,
+                hint,
+                title,
+                url_hint,
+            });
         }
     }
 
-    if let Some((url, stream, hint, title, url_hint)) = visible_fallback {
+    if !focused_candidates.is_empty() {
+        let focused_count = focused_candidates.len();
+        let selected_idx = focused_candidates
+            .iter()
+            .position(|candidate| active_ws_url.as_deref() == Some(candidate.url.as_str()))
+            .or_else(|| {
+                focused_candidates
+                    .iter()
+                    .position(|candidate| current_ws_url == Some(candidate.url.as_str()))
+            })
+            .unwrap_or(0);
+        let CandidateStream {
+            url,
+            stream,
+            mut hint,
+            title,
+            url_hint,
+        } = focused_candidates.swap_remove(selected_idx);
+        hint.focus_ambiguous =
+            selected_focus_is_ambiguous(focused_count, active_ws_url.as_deref(), &url);
         debug!(
             target = %url,
             focused = hint.focused,
+            focus_ambiguous = hint.focus_ambiguous,
+            title = title,
+            url_hint = url_hint,
+            "cdp selected focused target"
+        );
+        return Some((url, stream, hint));
+    }
+
+    if let Some(CandidateStream {
+        url,
+        stream,
+        mut hint,
+        title,
+        url_hint,
+    }) = visible_fallback
+    {
+        hint.focus_ambiguous = visible_fallback_focus_is_ambiguous(active_ws_url.as_deref(), &url);
+        debug!(
+            target = %url,
+            focused = hint.focused,
+            focus_ambiguous = hint.focus_ambiguous,
             title = title,
             url_hint = url_hint,
             "cdp selected visible fallback target"
@@ -1577,6 +1689,10 @@ fn parse_page_hint(raw: &Value) -> PageHintState {
             .unwrap_or(0);
         let visible = obj.get("visible").and_then(parse_bool).unwrap_or(false);
         let focused = obj.get("focused").and_then(parse_bool).unwrap_or(false);
+        let focus_ambiguous = obj
+            .get("focusAmbiguous")
+            .and_then(parse_bool)
+            .unwrap_or(false);
         let video_region = obj
             .get("region")
             .and_then(|value| parse_region(value, region_kind))
@@ -1593,6 +1709,7 @@ fn parse_page_hint(raw: &Value) -> PageHintState {
             scroll_delta_y,
             visible,
             focused,
+            focus_ambiguous,
             update_seq: 0,
         };
     }
@@ -1895,7 +2012,7 @@ async fn handle_text_command(
         Ok(g) => *g,
         Err(poisoned) => *poisoned.into_inner(),
     };
-    if !hint.visible || !hint.focused {
+    if !hint.visible || !hint.focused || hint.focus_ambiguous {
         let _ = cmd.response.send(false);
         return true;
     }
@@ -2472,6 +2589,95 @@ mod tests {
     }
 
     #[test]
+    fn active_page_target_url_uses_first_visible_page_target() {
+        let targets = vec![
+            DevToolsTarget {
+                target_type: "page".to_string(),
+                url: Some("https://example.test/one".to_string()),
+                title: Some("One".to_string()),
+                web_socket_debugger_url: Some("ws://127.0.0.1:9222/devtools/page/one".to_string()),
+            },
+            DevToolsTarget {
+                target_type: "page".to_string(),
+                url: Some("https://example.test/two".to_string()),
+                title: Some("Two".to_string()),
+                web_socket_debugger_url: Some("ws://127.0.0.1:9222/devtools/page/two".to_string()),
+            },
+        ];
+
+        assert_eq!(
+            active_page_target_url(&targets),
+            Some("ws://127.0.0.1:9222/devtools/page/one")
+        );
+    }
+
+    #[test]
+    fn active_page_target_url_ignores_non_page_targets() {
+        let targets = vec![
+            DevToolsTarget {
+                target_type: "iframe".to_string(),
+                url: Some("https://example.test/frame".to_string()),
+                title: Some("Frame".to_string()),
+                web_socket_debugger_url: Some(
+                    "ws://127.0.0.1:9222/devtools/page/frame".to_string(),
+                ),
+            },
+            DevToolsTarget {
+                target_type: "service_worker".to_string(),
+                url: Some("chrome-extension://example/background.js".to_string()),
+                title: Some("Service Worker".to_string()),
+                web_socket_debugger_url: Some("ws://127.0.0.1:9222/devtools/page/sw".to_string()),
+            },
+        ];
+
+        assert_eq!(active_page_target_url(&targets), None);
+    }
+
+    #[test]
+    fn ordered_target_candidates_prefer_active_page_over_current_target() {
+        let targets = vec![
+            DevToolsTarget {
+                target_type: "page".to_string(),
+                url: Some("https://example.test/active".to_string()),
+                title: Some("Active".to_string()),
+                web_socket_debugger_url: Some(
+                    "ws://127.0.0.1:9222/devtools/page/active".to_string(),
+                ),
+            },
+            DevToolsTarget {
+                target_type: "page".to_string(),
+                url: Some("https://www.youtube.com/watch?v=abc123".to_string()),
+                title: Some("Example Video - YouTube".to_string()),
+                web_socket_debugger_url: Some(
+                    "ws://127.0.0.1:9222/devtools/page/current".to_string(),
+                ),
+            },
+        ];
+
+        let ordered =
+            ordered_target_candidates(&targets, Some("ws://127.0.0.1:9222/devtools/page/current"));
+
+        assert_eq!(
+            ordered[0].web_socket_debugger_url.as_deref(),
+            Some("ws://127.0.0.1:9222/devtools/page/active")
+        );
+    }
+
+    #[test]
+    fn selected_focus_is_not_ambiguous_when_active_target_matches() {
+        assert!(!selected_focus_is_ambiguous(
+            3,
+            Some("ws://127.0.0.1:9222/devtools/page/active"),
+            "ws://127.0.0.1:9222/devtools/page/active",
+        ));
+        assert!(selected_focus_is_ambiguous(
+            3,
+            Some("ws://127.0.0.1:9222/devtools/page/active"),
+            "ws://127.0.0.1:9222/devtools/page/other",
+        ));
+    }
+
+    #[test]
     fn direct_wheel_dispatch_requires_focused_visible_target() {
         let mut hint = PageHintState {
             visible: true,
@@ -2485,6 +2691,10 @@ mod tests {
 
         hint.visible = false;
         hint.focused = true;
+        assert!(!can_dispatch_direct_wheel(&hint));
+
+        hint.visible = true;
+        hint.focus_ambiguous = true;
         assert!(!can_dispatch_direct_wheel(&hint));
     }
 

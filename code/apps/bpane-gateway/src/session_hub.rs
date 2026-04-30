@@ -49,9 +49,12 @@ pub struct SessionHub {
     cached_session_ready: Arc<Mutex<Option<Arc<Frame>>>>,
     cached_keyframe: Arc<Mutex<Option<Arc<Frame>>>>,
     cached_grid_config: Arc<Mutex<Option<Arc<Frame>>>>,
-    /// When true, MCP agent owns the session — all browser clients are viewers.
+    /// When true, MCP automation is active for the session.
     mcp_is_owner: AtomicBool,
-    /// Resolution set by the MCP agent (used for ResolutionLocked).
+    /// When true, the MCP agent was the initial active connector and controls
+    /// the session resolution until MCP ownership is cleared.
+    mcp_controls_resolution: AtomicBool,
+    /// Resolution seeded by the MCP agent when it controls resolution.
     mcp_resolution: Mutex<Option<(u16, u16)>>,
     joins_accepted: AtomicU64,
     joins_rejected_viewer_cap: AtomicU64,
@@ -116,6 +119,7 @@ impl SessionHub {
             owner_id: AtomicU64::new(0),
             active,
             mcp_is_owner: AtomicBool::new(false),
+            mcp_controls_resolution: AtomicBool::new(false),
             mcp_resolution: Mutex::new(None),
             cached_session_ready,
             cached_keyframe,
@@ -188,9 +192,11 @@ impl SessionHub {
         refresh::request_full_refresh(&self.cached_grid_config, &self.to_agent).await
     }
 
-    /// Register the MCP agent as session owner with the given resolution.
-    /// Sends a ResolutionRequest to the host agent.
-    /// All browser clients will be treated as viewers with locked resolution.
+    /// Register MCP automation as active for this session.
+    ///
+    /// If no interactive browser client has joined yet, MCP seeds the initial
+    /// resolution. Existing browser clients keep their current input and resize
+    /// policy.
     pub async fn set_mcp_owner(&self, width: u16, height: u16) {
         policy::set_mcp_owner(self, width, height).await;
     }
