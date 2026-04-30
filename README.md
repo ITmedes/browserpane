@@ -103,7 +103,7 @@ The shared protocol is a compact binary protocol implemented in `bpane-protocol`
 
 ### Recommended: Docker Compose
 
-If you want the full multi-session flow from the local session console, start the stack in `docker_pool` mode:
+The local session console now defaults to `docker_pool` mode so `Start New Session` provisions an isolated browser runtime instead of reusing one shared legacy worker:
 
 Generate a dev certificate once:
 
@@ -114,12 +114,9 @@ Generate a dev certificate once:
 Start the stack:
 
 ```bash
-BPANE_GATEWAY_RUNTIME_BACKEND=docker_pool \
 BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \
 docker compose -f deploy/compose.yml up --build
 ```
-
-If you rebuild `gateway` later without those env overrides, Compose will fall back to the default `static_single` backend.
 
 Then open `http://localhost:8080` in Chromium.
 
@@ -135,9 +132,10 @@ Then:
 3. Open the same selected session in another signed-in browser window if you want to share it live with another user
 4. Click `Delegate MCP` if you want the local `mcp-bridge` to drive that exact session
 
-If you only want the older single-runtime dev stack, the default command still works:
+If you explicitly want the older single-runtime compatibility stack, opt into it:
 
 ```bash
+BPANE_GATEWAY_RUNTIME_BACKEND=static_single \
 docker compose -f deploy/compose.yml up --build
 ```
 
@@ -159,7 +157,7 @@ The gateway supports three runtime backends:
 - `docker_single`: one start-on-demand runtime container with idle shutdown
 - `docker_pool`: multiple start-on-demand runtime containers with explicit `max_active_runtimes` and `max_starting_runtimes`
 
-`deploy/compose.yml` still defaults to `static_single`, but the local stack is wired so you can switch to the pool backend with:
+`deploy/compose.yml` now defaults to `docker_pool`, but you can still switch backends explicitly when you need a compatibility check:
 
 ```bash
 BPANE_GATEWAY_RUNTIME_BACKEND=docker_pool \
