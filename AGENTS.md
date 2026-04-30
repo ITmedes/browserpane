@@ -36,11 +36,11 @@ Current product shape:
 - Browser runtime: Chromium desktop only. Firefox and Safari are not production targets.
 - Shared sessions: supported for small curated groups, not broadcast-scale delivery.
 - Exclusive browser-owner mode: optional in `bpane-gateway` via `--exclusive-browser-owner`; default is disabled.
-- Viewer cap: configurable in `bpane-gateway` via `--max-viewers`, default `10` when exclusive-owner mode or MCP ownership is active.
+- Viewer cap: configurable in `bpane-gateway` via `--max-viewers`, default `10` for restricted browser viewers.
 - MCP automation: supported via `mcp-bridge` and gateway ownership APIs.
 - Browser extensions: owner-approved unpacked extensions are supported for docker-backed sessions and workflow runs; `static_single` does not support session extension sets.
 - Camera ingress: disabled by default in compose; requires browser H.264 encode support and a mapped `v4l2loopback` device on the host.
-- In exclusive-owner or MCP-owned sessions, restricted browser viewers are view-only: no input, clipboard, microphone, camera, upload, download, or resize.
+- In exclusive-owner sessions, restricted browser viewers are view-only: no input, clipboard, microphone, camera, upload, download, or resize.
 
 ## Architecture map
 
@@ -84,7 +84,7 @@ Current product shape:
 - `code/web/bpane-client`
   - TypeScript package. There is no meaningful Rust browser client crate in the current repo.
 - `code/integrations/mcp-bridge`
-  - SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
+  - Streamable HTTP and legacy SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
   - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its local `/control-session` API, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured, including in `docker_pool` mode.
 - `code/integrations/recording-worker`
   - Playwright-driven recorder worker that attaches as a `recorder` browser client through the control plane.
@@ -115,7 +115,7 @@ Current product shape:
 
 - Browser sessions are collaborative by default.
 - If `--exclusive-browser-owner` is enabled, one owner drives the session and additional browser clients join as viewers.
-- MCP ownership still locks browser clients into viewer behavior.
+- MCP automation does not by itself lock browser clients into viewer behavior. If MCP is the initial connector it seeds the display size; if a browser client is already connected, that browser-defined display size remains authoritative.
 - Late joiners are bootstrapped from cached session state and late-join refreshes are tracked in gateway telemetry.
 - If a worker is still alive, reconnect returns to the exact live runtime. After idle-stop, reconnect restarts from the persisted Chromium profile instead of a true suspended process image.
 - Gateway session status reports:

@@ -17,17 +17,16 @@ pub(super) async fn subscribe(
 ) -> Result<ClientHandle, SubscribeError> {
     let join_started = Instant::now();
     let client_id = hub.client_counter.fetch_add(1, Ordering::Relaxed) + 1;
-    let mcp_is_owner = hub.mcp_is_owner.load(Ordering::Relaxed);
     let mut connected_clients = hub.connected_clients.lock().await;
     let prev_count = connected_clients.len() as u32;
     let current_owner_id = hub.owner_id.load(Ordering::Relaxed);
     let exclusive_browser_owner = hub.exclusive_browser_owner;
-    let is_resize_owner =
-        client_role == BrowserClientRole::Interactive && !mcp_is_owner && current_owner_id == 0;
+    let should_claim_browser_owner =
+        client_role == BrowserClientRole::Interactive && current_owner_id == 0;
     let (control_tx, control_rx) = mpsc::channel::<ControlMessage>(8);
     let (termination_tx, termination_rx) = oneshot::channel::<SessionTerminationReason>();
 
-    let is_owner = if client_role == BrowserClientRole::Recorder || mcp_is_owner {
+    let is_owner = if client_role == BrowserClientRole::Recorder {
         false
     } else if !exclusive_browser_owner {
         true
@@ -36,7 +35,7 @@ pub(super) async fn subscribe(
     };
 
     if client_role == BrowserClientRole::Interactive && !is_owner {
-        let owner_connected = !mcp_is_owner && current_owner_id != 0 && prev_count > 0;
+        let owner_connected = current_owner_id != 0 && prev_count > 0;
         let current_viewers = {
             let roles = hub.client_roles.read().unwrap();
             connected_clients
@@ -59,7 +58,7 @@ pub(super) async fn subscribe(
     }
 
     connected_clients.push(client_id);
-    if is_resize_owner {
+    if should_claim_browser_owner {
         hub.owner_id.store(client_id, Ordering::Relaxed);
     }
     hub.client_count
@@ -80,10 +79,11 @@ pub(super) async fn subscribe(
         .await
         .insert(client_id, termination_tx);
 
+    let from_host = hub.broadcast_tx.subscribe();
     let initial_frames = gather_initial_frames(hub).await;
     let initial_access_state = super::policy::initial_access_state(hub, client_id).await;
 
-    if prev_count > 0 {
+    if prev_count > 0 || should_request_automation_repaint(hub, client_role) {
         let tiles_requested = hub.request_full_refresh().await;
         if tiles_requested > 0 {
             hub.record_refresh_burst(tiles_requested);
@@ -94,7 +94,7 @@ pub(super) async fn subscribe(
     hub.joins_accepted.fetch_add(1, Ordering::Relaxed);
 
     Ok(ClientHandle {
-        from_host: hub.broadcast_tx.subscribe(),
+        from_host,
         to_host: hub.to_agent.clone(),
         client_id,
         is_owner,
@@ -106,6 +106,10 @@ pub(super) async fn subscribe(
     })
 }
 
+fn should_request_automation_repaint(hub: &SessionHub, client_role: BrowserClientRole) -> bool {
+    client_role == BrowserClientRole::Interactive && hub.mcp_is_owner.load(Ordering::Relaxed)
+}
+
 pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
     let mut connected_clients = hub.connected_clients.lock().await;
     connected_clients.retain(|id| *id != client_id);
@@ -113,9 +117,7 @@ pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
         .store(connected_clients.len() as u32, Ordering::Relaxed);
 
     let remaining_clients = connected_clients.clone();
-    let next_owner = if hub.mcp_is_owner.load(Ordering::Relaxed) {
-        0
-    } else {
+    let next_owner = {
         let roles = hub.client_roles.read().unwrap();
         connected_clients
             .iter()
@@ -131,10 +133,7 @@ pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {
                 next_owner, "promoted existing viewer to session owner"
             );
         }
-    } else if hub.owner_id.load(Ordering::Relaxed) == 0
-        && !hub.mcp_is_owner.load(Ordering::Relaxed)
-        && next_owner != 0
-    {
+    } else if hub.owner_id.load(Ordering::Relaxed) == 0 && next_owner != 0 {
         hub.owner_id.store(next_owner, Ordering::Relaxed);
         debug!(client_id, next_owner, "restored missing session owner");
     }

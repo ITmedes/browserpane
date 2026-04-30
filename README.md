@@ -75,7 +75,7 @@ browser client <-> bpane-gateway <-> bpane-host <-> Chromium inside Linux contai
 | `code/apps/bpane-gateway` | WebTransport entry point and shared-session coordinator. Relays frames between browser clients and the host, applies owner/viewer policy, and exposes the HTTP session/ownership API. |
 | `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
-| `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Integrates with gateway ownership APIs so automation can drive a session while humans observe. |
+| `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes Streamable HTTP on `/mcp` and legacy SSE on `/sse`, and integrates with gateway ownership APIs so automation can drive a session while humans observe. |
 | `code/integrations/workflow-worker` | On-demand workflow executor. Downloads pinned workflow source snapshots, attaches with session automation access, runs Playwright workflow entrypoints, resolves credential/workspace inputs, and writes logs, outputs, and produced files back to the gateway. |
 | `code/integrations/recording-worker` | On-demand recording executor. Attaches as a passive recorder client, captures WebM output, and finalizes recording metadata into gateway-managed artifact storage. |
 | `deploy/` | Local runtime manifests and container images. This is the practical source of truth for how the dev stack is assembled and started. |
@@ -149,7 +149,7 @@ The compose stack starts:
 - `vault`: local HashiCorp Vault dev server on `:8200` for workflow credential bindings
 - `keycloak`: local OIDC provider on `:8091`
 - `web`: local frontend on `:8080`
-- `mcp-bridge`: MCP bridge on `:8931`
+- `mcp-bridge`: MCP bridge on `:8931` (`/mcp` for Streamable HTTP, `/sse` for legacy SSE)
 
 The local compose file also defines a `workflow-worker` image profile. The gateway launches workflow-worker containers on demand; you normally do not start that container as a long-lived service yourself.
 
@@ -412,7 +412,7 @@ cd code/web/bpane-client && npm run smoke:multisession -- --headless
 
 - Sessions are collaborative by default.
 - If the gateway runs with exclusive browser ownership, one browser client is interactive and later clients become viewers.
-- MCP ownership also forces browser clients into viewer behavior.
+- MCP automation does not force browser clients into viewer behavior. If MCP is the first connector it seeds the display size; otherwise the browser-defined display size remains authoritative.
 - Viewers are read-only and do not get interactive capabilities like input, clipboard, upload, download, microphone, camera, or resize.
 
 ## Authentication Model

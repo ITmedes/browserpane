@@ -1,4 +1,4 @@
-# BrowserPane MCP Bridge — SSE proxy for @playwright/mcp over CDP
+# BrowserPane MCP Bridge — Streamable HTTP/SSE proxy for @playwright/mcp over CDP
 FROM node:22-slim
 
 # Playwright system dependencies (Chromium not needed — we connect via CDP)

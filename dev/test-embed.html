@@ -2072,13 +2072,27 @@
       }
       const shortId = getShortSessionId(resource.id);
       const state = resource.state ?? 'unknown';
-      const suffix = resource.id === mcpBridgeState.controlSessionId ? ' · MCP delegated' : '';
+      const suffix = resource.id === mcpBridgeState.controlSessionId
+        ? ' · MCP attached'
+        : (isResourceDelegatedToConfiguredMcpBridge(resource) ? ' · MCP delegated' : '');
       const clientRole = currentClientRole === 'recorder' ? ' · recorder' : '';
       return `Session: ${shortId} (${state})${suffix}${clientRole}`;
     }
 
     function supportsLocalMcpDelegation(resource) {
       return Boolean(resource?.id);
+    }
+
+    function isResourceDelegatedToConfiguredMcpBridge(resource) {
+      const delegate = resource?.automation_delegate;
+      const bridge = authState.config?.mcpBridge;
+      if (!delegate?.client_id || !bridge?.clientId) {
+        return false;
+      }
+      if (delegate.client_id !== bridge.clientId) {
+        return false;
+      }
+      return !bridge.issuer || delegate.issuer === bridge.issuer;
     }
 
     function setOverlayAction(button, { visible, enabled, label }) {
@@ -2173,7 +2187,9 @@
       const viewport = resource?.viewport?.width && resource?.viewport?.height
         ? `${resource.viewport.width}x${resource.viewport.height}`
         : '--';
-      const delegated = resource.id === mcpBridgeState.controlSessionId ? ' · MCP' : '';
+      const delegated = resource.id === mcpBridgeState.controlSessionId
+        ? ' · MCP attached'
+        : (isResourceDelegatedToConfiguredMcpBridge(resource) ? ' · MCP delegated' : '');
       return `${shortId} · ${state} · ${viewport}${delegated}`;
     }
 
@@ -2278,6 +2294,8 @@
 
     function renderMcpDelegationState() {
       const selectedSessionId = controlSessionState.resource?.id ?? '';
+      const selectedBackendDelegated =
+        isResourceDelegatedToConfiguredMcpBridge(controlSessionState.resource);
       const controlSessionId = mcpBridgeState.controlSessionId;
       const bridgeName = getMcpBridgeDisplayName();
 
@@ -2297,14 +2315,26 @@
       }
 
       if (!mcpBridgeState.available && mcpBridgeState.lastError) {
-        setMcpDisplayState('MCP: bridge unavailable', 'mcp-warning');
+        setMcpDisplayState(
+          selectedBackendDelegated ? 'MCP: delegated, bridge unchecked' : 'MCP: bridge unavailable',
+          'mcp-warning',
+        );
         mcpDelegationNote.className = 'helper-note warn';
-        mcpDelegationNote.textContent =
-          `${bridgeName} status could not be loaded right now. Delegation state may be stale until the bridge becomes reachable again.`;
+        mcpDelegationNote.textContent = selectedBackendDelegated
+          ? `The selected session ${getShortSessionId(selectedSessionId)} is delegated to ${bridgeName} in the control plane, but the bridge status could not be loaded right now.`
+          : `${bridgeName} status could not be loaded right now. Delegation state may be stale until the bridge becomes reachable again.`;
         return;
       }
 
       if (!controlSessionId) {
+        if (selectedSessionId && selectedBackendDelegated) {
+          setMcpDisplayState('MCP: backend delegated', 'mcp-warning');
+          mcpDelegationNote.className = 'helper-note warn';
+          mcpDelegationNote.textContent =
+            `The selected session ${getShortSessionId(selectedSessionId)} is delegated to ${bridgeName} in the control plane, but the bridge has not reported an attached control session yet.`;
+          return;
+        }
+
         setMcpDisplayState('MCP: no delegated session', 'mcp-inactive');
         mcpDelegationNote.className = 'helper-note info';
         mcpDelegationNote.textContent = selectedSessionId
@@ -2328,6 +2358,19 @@
         : `${bridgeName} is currently attached to session ${getShortSessionId(controlSessionId)}. Select that session if you want to inspect or share the exact delegated browser.`;
     }
 
+    function applyMcpBridgeStatusPayload(payload) {
+      const controlSessionId = typeof payload?.control_session_id === 'string'
+        ? payload.control_session_id
+        : (typeof payload?.session?.id === 'string' ? payload.session.id : '');
+      const controlSessionStateValue = typeof payload?.control_session_state === 'string'
+        ? payload.control_session_state
+        : (typeof payload?.session?.state === 'string' ? payload.session.state : '');
+      mcpBridgeState.controlSessionId = controlSessionId;
+      mcpBridgeState.controlSessionState = controlSessionStateValue;
+      mcpBridgeState.available = true;
+      mcpBridgeState.lastError = '';
+    }
+
     async function refreshMcpBridgeState({ silent = true } = {}) {
       const healthUrl = getMcpBridgeHealthUrl();
       if (!healthUrl || !authState.tokens?.access_token) {
@@ -2343,14 +2386,7 @@
           throw new Error(`HTTP ${response.status}`);
         }
         const payload = await response.json();
-        mcpBridgeState.controlSessionId = typeof payload?.control_session_id === 'string'
-          ? payload.control_session_id
-          : '';
-        mcpBridgeState.controlSessionState = typeof payload?.control_session_state === 'string'
-          ? payload.control_session_state
-          : '';
-        mcpBridgeState.available = true;
-        mcpBridgeState.lastError = '';
+        applyMcpBridgeStatusPayload(payload);
         renderSessionPicker();
         renderSessionState();
         if (!silent && mcpBridgeState.controlSessionId) {
@@ -2795,11 +2831,12 @@
       }
     }
 
-    async function resolveSelectedSessionResource(accessToken) {
+    async function resolveSelectedSessionResource(accessToken, { refresh = false } = {}) {
       try {
-        if (!controlSessionState.resources.length) {
+        if (refresh || !controlSessionState.resources.length) {
           await refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
         }
+        await refreshMcpBridgeState({ silent: true });
         const selected = controlSessionState.resources.find(
           (resource) => resource.id === controlSessionState.selectedSessionId,
         );
@@ -2911,7 +2948,12 @@
         }
         throw new Error(`bridge control session update failed: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
       }
+      const payload = await response.json();
+      applyMcpBridgeStatusPayload(payload);
+      renderSessionPicker();
+      renderSessionState();
       log(`MCP bridge control session set to ${sessionId}`, 'ok');
+      return payload;
     }
 
     async function delegateCurrentSessionToMcp() {
@@ -2962,6 +3004,7 @@
       renderSessionState();
       log(`Delegated session ${controlSession.id} to ${authState.config.mcpBridge.clientId}`, 'ok');
       await assignMcpBridgeControlSession(controlSession.id);
+      await refreshMcpBridgeState({ silent: true });
     }
 
     async function logout() {
@@ -4692,7 +4735,7 @@
       try {
         const controlSession = mode === 'new'
           ? await createAndSelectSessionResource(accessToken)
-          : await resolveSelectedSessionResource(accessToken);
+          : await resolveSelectedSessionResource(accessToken, { refresh: true });
         if (!controlSession) {
           setStatus(mode === 'new' ? 'Session creation failed' : 'Session selection required', 'error');
           if (overlay) overlay.style.display = '';
@@ -4736,6 +4779,7 @@
               renderSessionPicker();
             }
             renderAuthState();
+            void refreshMcpBridgeState({ silent: true });
             cameraBtn.disabled = true;
             micBtn.disabled = false;
             uploadBtn.disabled = false;
@@ -4901,7 +4945,8 @@
             renderRecordingState();
             void getValidAccessToken().then((accessToken) => {
               if (accessToken) {
-                return refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+                return refreshSessionResources(accessToken, { preserveSelection: true, silent: true })
+                  .then(() => refreshMcpBridgeState({ silent: true }));
               }
               return null;
             });
@@ -4995,7 +5040,8 @@
       renderRecordingState();
       void getValidAccessToken().then((accessToken) => {
         if (accessToken) {
-          return refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+          return refreshSessionResources(accessToken, { preserveSelection: true, silent: true })
+            .then(() => refreshMcpBridgeState({ silent: true }));
         }
         return null;
       });
@@ -5056,7 +5102,8 @@
         setStatus('Login required', 'error');
         return null;
       }
-      return refreshSessionResources(accessToken, { preserveSelection: true, silent: false });
+      return refreshSessionResources(accessToken, { preserveSelection: true, silent: false })
+        .then(() => refreshMcpBridgeState({ silent: true }));
     }).catch((error) => {
       log(`Session refresh failed: ${error.message}`, 'error');
     }));
@@ -5231,6 +5278,7 @@
           throw new Error('no access token available');
         }
         const sessions = await refreshSessionResources(accessToken, { preserveSelection, silent });
+        await refreshMcpBridgeState({ silent: true });
         return cloneValue(sessions) ?? [];
       },
       selectSession: async (sessionId) => {
