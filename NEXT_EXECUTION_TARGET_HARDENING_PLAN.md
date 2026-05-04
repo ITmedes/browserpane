@@ -2,7 +2,7 @@
 
 Date: 2026-05-04
 
-Status: planning only. No implementation changes are included in this file.
+Status: implementation in progress.
 
 GitHub tracking issue: `#65`
 https://github.com/ITmedes/browserpane/issues/65
@@ -26,6 +26,23 @@ startup. This plan starts from that state.
 
 Source issue: `#57`
 
+Implementation status: completed on `feature/BPANE-0065`.
+
+Commits:
+
+- `ecd6703 feat(host): deny local browser file access by default`
+- `6748ac3 test(browser): verify local file policy at runtime`
+
+Validation completed:
+
+- `cargo fmt --all -- --check`
+- `cargo clippy -p bpane-gateway --all-targets --all-features -- -D warnings`
+- `cargo test -p bpane-gateway --test start_host_browser_policy`
+- `cargo test -p bpane-gateway --test start_host_runtime_paths`
+- `cd code/web/bpane-client && npm run build`
+- `cd code/web/bpane-client && npm run smoke:browser-policy -- --headless`
+- `cd code/web/bpane-client && npm run smoke:test-embed-lifecycle -- --headless`
+
 Goal: default browser sessions must not be able to read arbitrary local files
 through `file:///` navigation or browser file-system APIs.
 
@@ -48,6 +65,8 @@ Acceptance criteria:
 ### 2. Complete Session File Data Visibility
 
 Source issue: `#56`
+
+Implementation status: next.
 
 Goal: browser uploads and downloads should become attributable session state,
 not only runtime-local scratch files or immediate transport events.
