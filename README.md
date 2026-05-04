@@ -201,6 +201,17 @@ http://localhost:8080/cert-fingerprint
 
 `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem` for CLI use.
 
+### Remote / Self-Hosted Testing
+
+The checked-in compose stack is a local development and regression environment,
+not a production deployment guide. Remote testing needs HTTPS for the web UI,
+a browser-trusted WebTransport gateway certificate, aligned OIDC issuer and
+redirect settings, and private handling for dev-only services such as Postgres,
+Vault, Keycloak admin surfaces, gateway internals, and the MCP bridge.
+
+See [REMOTE_DEPLOYMENT.md](REMOTE_DEPLOYMENT.md) for the current remote
+deployment assumptions and compose override notes.
+
 ### Session Control Plane
 
 The local stack now includes a frozen v1 session control plane in `bpane-gateway`.
