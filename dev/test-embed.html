@@ -1055,6 +1055,7 @@
       <nav class="control-nav" aria-label="Console navigation">
         <a class="nav-link" href="#panel-sessions">Sessions</a>
         <a class="nav-link" href="#panel-display">Display</a>
+        <a class="nav-link" href="#panel-session-files">Files</a>
         <a class="nav-link" href="#panel-browser-policy">Policy</a>
         <a class="nav-link" href="#panel-workflows">Workflows</a>
         <a class="nav-link" href="#panel-recording">Recording</a>
@@ -1185,6 +1186,36 @@
           <button id="btn-camera" class="toggle-button" aria-pressed="false" disabled>Camera Off</button>
           <button id="btn-mic" class="toggle-button" aria-pressed="false" disabled>Mic Off</button>
           <button id="btn-upload" disabled>Upload File</button>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-session-files">
+        <div class="recording-library">
+          <div class="recording-library-header">
+            <div class="panel-heading">
+              <span class="panel-title">Session Files</span>
+              <h2>Runtime uploads and downloads</h2>
+              <p class="panel-copy">
+                Inspect files observed through browser upload/download channels for the selected
+                session. Content is served through owner-scoped control-plane URLs.
+              </p>
+            </div>
+            <button id="btn-session-files-refresh" disabled>Refresh Files</button>
+          </div>
+
+          <div id="session-files-note" class="helper-note info">
+            Select a session to list runtime file transfer artifacts.
+          </div>
+
+          <div class="metrics-grid">
+            <span id="session-files-status">Files: --</span>
+          </div>
+
+          <div id="session-files-list" class="recording-library-list">
+            <div class="recording-library-empty">
+              No selected session files loaded yet.
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1567,6 +1598,10 @@
     const cameraBtn = document.getElementById('btn-camera');
     const micBtn = document.getElementById('btn-mic');
     const uploadBtn = document.getElementById('btn-upload');
+    const sessionFilesRefreshBtn = document.getElementById('btn-session-files-refresh');
+    const sessionFilesNoteEl = document.getElementById('session-files-note');
+    const sessionFilesStatusEl = document.getElementById('session-files-status');
+    const sessionFilesListEl = document.getElementById('session-files-list');
     const browserPolicyModeEl = document.getElementById('browser-policy-mode');
     const browserPolicyFileUrlEl = document.getElementById('browser-policy-file-url');
     const browserPolicyFsReadEl = document.getElementById('browser-policy-fs-read');
@@ -2179,6 +2214,14 @@
       error: '',
       requestId: 0,
     };
+    const sessionFilesState = {
+      sessionId: '',
+      files: [],
+      loading: false,
+      error: '',
+      downloadingFileId: '',
+      requestId: 0,
+    };
     const mcpBridgeState = {
       controlSessionId: '',
       controlSessionState: '',
@@ -2362,6 +2405,7 @@
       sessionDisplay.textContent = getSessionLabel(controlSessionState.resource);
       renderMcpDelegationState();
       renderSessionLifecycleState();
+      renderSessionFilesState();
       renderRecordingState();
       renderRecordingCatalogState();
       renderOverlayState();
@@ -2536,6 +2580,128 @@
       }
     }
 
+    function clearSessionFilesState(sessionId = '') {
+      sessionFilesState.sessionId = sessionId;
+      sessionFilesState.files = [];
+      sessionFilesState.loading = false;
+      sessionFilesState.error = '';
+      sessionFilesState.downloadingFileId = '';
+    }
+
+    function buildSessionFileCard(file) {
+      const card = document.createElement('article');
+      card.className = 'recording-library-card';
+
+      const header = document.createElement('div');
+      header.className = 'recording-library-card-header';
+
+      const title = document.createElement('div');
+      title.className = 'recording-library-title';
+      const source = String(file.source || 'unknown').replace(/_/g, ' ');
+      const name = document.createElement('strong');
+      name.textContent = file.name || file.id;
+      title.appendChild(name);
+      const sourceLabel = document.createElement('span');
+      sourceLabel.textContent = source;
+      title.appendChild(sourceLabel);
+      header.appendChild(title);
+
+      const badge = document.createElement('span');
+      badge.className = `metric-badge ${normalizeMetricBadgeClass(file.source)}`;
+      badge.textContent = file.source || 'unknown';
+      header.appendChild(badge);
+      card.appendChild(header);
+
+      const meta = document.createElement('div');
+      meta.className = 'recording-library-meta';
+      const size = document.createElement('span');
+      size.textContent = formatBytes(file.byte_count ?? 0);
+      meta.appendChild(size);
+      const mediaType = document.createElement('span');
+      mediaType.textContent = file.media_type || 'application/octet-stream';
+      meta.appendChild(mediaType);
+      const created = document.createElement('span');
+      created.textContent = `created ${formatTimestamp(file.created_at)}`;
+      meta.appendChild(created);
+      card.appendChild(meta);
+
+      const digest = document.createElement('div');
+      digest.className = 'recording-library-meta';
+      const sha = document.createElement('span');
+      sha.textContent = `sha256 ${String(file.sha256_hex || '').slice(0, 16)}...`;
+      digest.appendChild(sha);
+      card.appendChild(digest);
+
+      const actions = document.createElement('div');
+      actions.className = 'recording-library-actions';
+      const downloadBtn = document.createElement('button');
+      downloadBtn.type = 'button';
+      downloadBtn.dataset.action = 'download-session-file';
+      downloadBtn.dataset.fileId = file.id;
+      downloadBtn.textContent = sessionFilesState.downloadingFileId === file.id
+        ? 'Downloading...'
+        : 'Download';
+      downloadBtn.disabled = Boolean(sessionFilesState.downloadingFileId);
+      actions.appendChild(downloadBtn);
+      card.appendChild(actions);
+
+      return card;
+    }
+
+    function renderSessionFilesState() {
+      const selectedSessionId = controlSessionState.resource?.id ?? '';
+      const canLoad = authState.config?.mode === 'oidc' && Boolean(authState.tokens?.access_token) && Boolean(selectedSessionId);
+      const files = sessionFilesState.sessionId === selectedSessionId
+        ? sessionFilesState.files
+        : [];
+
+      sessionFilesRefreshBtn.disabled = !canLoad || sessionFilesState.loading || Boolean(sessionFilesState.downloadingFileId);
+      sessionFilesStatusEl.textContent = sessionFilesState.loading
+        ? 'Files: loading...'
+        : `Files: ${files.length}`;
+
+      if (!authState.tokens?.access_token) {
+        sessionFilesNoteEl.className = 'helper-note info';
+        sessionFilesNoteEl.textContent = 'Login first to inspect session file artifacts.';
+        sessionFilesListEl.innerHTML =
+          '<div class="recording-library-empty">Login first to list session files.</div>';
+        return;
+      }
+      if (!selectedSessionId) {
+        sessionFilesNoteEl.className = 'helper-note info';
+        sessionFilesNoteEl.textContent = 'Select a session to inspect runtime upload/download artifacts.';
+        sessionFilesListEl.innerHTML =
+          '<div class="recording-library-empty">Select a session to load file artifacts.</div>';
+        return;
+      }
+      if (sessionFilesState.loading) {
+        sessionFilesNoteEl.className = 'helper-note info';
+        sessionFilesNoteEl.textContent = `Loading files for session ${getShortSessionId(selectedSessionId)}...`;
+        sessionFilesListEl.innerHTML =
+          '<div class="recording-library-empty">Loading session files...</div>';
+        return;
+      }
+      if (sessionFilesState.error) {
+        sessionFilesNoteEl.className = 'helper-note error';
+        sessionFilesNoteEl.textContent = `Session files could not be loaded: ${sessionFilesState.error}`;
+      } else {
+        sessionFilesNoteEl.className = files.length ? 'helper-note ok' : 'helper-note info';
+        sessionFilesNoteEl.textContent = files.length
+          ? `Loaded ${files.length} file${files.length === 1 ? '' : 's'} for session ${getShortSessionId(selectedSessionId)}.`
+          : 'No runtime upload/download artifacts are recorded for this session yet.';
+      }
+
+      sessionFilesListEl.innerHTML = '';
+      if (!files.length) {
+        sessionFilesListEl.innerHTML =
+          '<div class="recording-library-empty">No session files recorded yet.</div>';
+        return;
+      }
+      for (const file of files) {
+        sessionFilesListEl.appendChild(buildSessionFileCard(file));
+      }
+    }
+
     function isJoinableSession(resource) {
       return Boolean(resource?.id) && isRuntimeCandidateSessionState(resource.state);
     }
@@ -2559,10 +2725,14 @@
       controlSessionState.resource = selected;
       if (!selected?.id) {
         clearSessionLifecycleState('');
+        clearSessionFilesState('');
       }
       renderSessionState();
       void refreshSelectedSessionLifecycleStatus({ silent: true }).catch((error) => {
         log(`Session lifecycle refresh failed: ${error.message}`, 'error');
+      });
+      void refreshSessionFilesForSelectedSession({ force: false, silent: true }).catch((error) => {
+        log(`Session files refresh failed: ${error.message}`, 'error');
       });
       void refreshRecordingCatalogForSelectedSession({ force: false, silent: true }).catch((error) => {
         log(`Recording library refresh failed: ${error.message}`, 'error');
@@ -3151,6 +3321,69 @@
         throw new Error(await readApiFailure(response));
       }
       return await response.json();
+    }
+
+    async function fetchSessionFiles(accessToken, sessionId) {
+      const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(sessionId)}/files`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        throw new Error(await readApiFailure(response));
+      }
+      const payload = await response.json();
+      return Array.isArray(payload?.files) ? payload.files : [];
+    }
+
+    async function refreshSessionFilesForSelectedSession({ silent = true, force = false } = {}) {
+      const accessToken = await getValidAccessToken();
+      const sessionId = controlSessionState.resource?.id ?? '';
+      if (!accessToken || !sessionId) {
+        clearSessionFilesState(sessionId);
+        renderSessionFilesState();
+        return [];
+      }
+      if (
+        !force
+        && !sessionFilesState.loading
+        && sessionFilesState.sessionId === sessionId
+        && !sessionFilesState.error
+      ) {
+        return sessionFilesState.files;
+      }
+
+      const requestId = sessionFilesState.requestId + 1;
+      sessionFilesState.requestId = requestId;
+      sessionFilesState.sessionId = sessionId;
+      sessionFilesState.loading = true;
+      sessionFilesState.error = '';
+      renderSessionFilesState();
+
+      try {
+        const files = await fetchSessionFiles(accessToken, sessionId);
+        if (sessionFilesState.requestId !== requestId) {
+          return [];
+        }
+        sessionFilesState.files = files;
+        sessionFilesState.loading = false;
+        sessionFilesState.error = '';
+        renderSessionFilesState();
+        if (!silent) {
+          log(`Loaded ${files.length} session file${files.length === 1 ? '' : 's'} for ${sessionId}`, 'info');
+        }
+        return files;
+      } catch (error) {
+        if (sessionFilesState.requestId !== requestId) {
+          return [];
+        }
+        sessionFilesState.loading = false;
+        sessionFilesState.error = error.message;
+        renderSessionFilesState();
+        throw error;
+      }
     }
 
     async function refreshSelectedSessionLifecycleStatus({ silent = true, force = false } = {}) {
@@ -5333,6 +5566,35 @@
       }
     }
 
+    async function downloadSessionFile(fileId) {
+      const accessToken = await getValidAccessToken();
+      const sessionId = controlSessionState.resource?.id ?? '';
+      if (!accessToken || !sessionId) {
+        throw new Error('login and session selection are required');
+      }
+      if (sessionFilesState.sessionId !== sessionId || !sessionFilesState.files.length) {
+        await refreshSessionFilesForSelectedSession({ silent: true, force: true });
+      }
+      const file = sessionFilesState.files.find((entry) => entry.id === fileId);
+      if (!file) {
+        throw new Error(`session file ${fileId} not found`);
+      }
+      sessionFilesState.downloadingFileId = fileId;
+      renderSessionFilesState();
+      try {
+        const result = await downloadAuthenticatedArtifact(
+          accessToken,
+          file.content_path,
+          file.name || `session-${sessionId}-${fileId}`,
+        );
+        log(`Downloaded session file ${file.name} (${formatBytes(result.bytes)})`, 'info');
+        return result;
+      } finally {
+        sessionFilesState.downloadingFileId = '';
+        renderSessionFilesState();
+      }
+    }
+
     async function connect(mode = 'selected', connectOptions = {}) {
       const accessToken = await getValidAccessToken();
       if (!accessToken) {
@@ -5394,6 +5656,7 @@
             renderAuthState();
             void refreshMcpBridgeState({ silent: true });
             void refreshSelectedSessionLifecycleStatus({ silent: true, force: true });
+            void refreshSessionFilesForSelectedSession({ silent: true, force: true });
             cameraBtn.disabled = true;
             micBtn.disabled = false;
             uploadBtn.disabled = false;
@@ -5563,6 +5826,7 @@
                   .then(() => Promise.all([
                     refreshMcpBridgeState({ silent: true }),
                     refreshSelectedSessionLifecycleStatus({ silent: true, force: true }),
+                    refreshSessionFilesForSelectedSession({ silent: true, force: true }),
                   ]));
               }
               return null;
@@ -5740,6 +6004,11 @@
         log(`Session lifecycle status refresh failed: ${error.message}`, 'error');
       });
     });
+    sessionFilesRefreshBtn.addEventListener('click', () => {
+      void refreshSessionFilesForSelectedSession({ silent: false, force: true }).catch((error) => {
+        log(`Session files refresh failed: ${error.message}`, 'error');
+      });
+    });
     sessionStopBtn.addEventListener('click', () => {
       void stopSelectedSession().catch((error) => {
         log(`Session stop failed: ${error.message}`, 'error');
@@ -5866,6 +6135,19 @@
       }
       void downloadWorkflowProducedFile(fileId).catch((error) => {
         log(`Workflow file download failed: ${error.message}`, 'error');
+      });
+    });
+    sessionFilesListEl.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action="download-session-file"]');
+      if (!button) {
+        return;
+      }
+      const fileId = button.dataset.fileId;
+      if (!fileId) {
+        return;
+      }
+      void downloadSessionFile(fileId).catch((error) => {
+        log(`Session file download failed: ${error.message}`, 'error');
       });
     });
     recordingPlaybackDownloadBtn.addEventListener('click', () => {
@@ -6003,6 +6285,17 @@
       getState: () => cloneValue(browserPolicyState),
       setProbeResult: setBrowserPolicyProbeResult,
     };
+    window.__bpaneSessionFiles = {
+      refresh: (options = {}) => refreshSessionFilesForSelectedSession(options),
+      download: downloadSessionFile,
+      getState: () => ({
+        sessionId: sessionFilesState.sessionId,
+        files: cloneValue(sessionFilesState.files) ?? [],
+        loading: sessionFilesState.loading,
+        error: sessionFilesState.error,
+        downloadingFileId: sessionFilesState.downloadingFileId,
+      }),
+    };
     window.__bpaneWorkflow = {
       listDefinitions: () => cloneValue(workflowState.definitions) ?? [],
       getState: () => ({
@@ -6103,6 +6396,7 @@
 
     // ── Startup ─────────────────────────────────────────────────────
     renderBrowserPolicyState();
+    renderSessionFilesState();
     renderBenchmarkMetrics();
     renderRecordingState();
     renderRecordingCatalogState();
@@ -6120,6 +6414,7 @@
       'info',
     );
     log('Browser policy API: window.__bpaneBrowserPolicy.{getState,setProbeResult}', 'info');
+    log('Session files API: window.__bpaneSessionFiles.{refresh,download,getState}', 'info');
     log(
       'Workflow API: window.__bpaneWorkflow.{listDefinitions,getState,refreshDefinitions,selectWorkflow,setVersion,loadVersion,setInput,setOperatorInput,setOperatorComment,invokeSelected,refreshRun,submitInput,resumeRun,rejectRun,cancelRun,downloadProducedFile}',
       'info',
