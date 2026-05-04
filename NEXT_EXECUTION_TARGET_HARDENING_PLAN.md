@@ -66,7 +66,47 @@ Acceptance criteria:
 
 Source issue: `#56`
 
-Implementation status: next.
+Implementation status: partially completed on `feature/BPANE-0065`.
+
+Completed scope:
+
+- Session-scoped file metadata/resource model for runtime uploads and downloads.
+- Postgres migration and in-memory/Postgres store support for session files.
+- Owner-scoped read APIs:
+  - `GET /api/v1/sessions/{session_id}/files`
+  - `GET /api/v1/sessions/{session_id}/files/{file_id}`
+  - `GET /api/v1/sessions/{session_id}/files/{file_id}/content`
+- Browser upload recording from completed `CH_FILE_UP` transfers.
+- Browser download recording from completed `CH_FILE_DOWN` transfers before
+  gateway fan-out.
+- `dev/test-embed.html` Session Files panel.
+- Compose-backed browser smoke for upload visibility and authenticated content
+  download.
+
+Commits:
+
+- `69337d7 feat(gateway): track uploaded session files`
+- `ed53828 feat(gateway): record downloaded session files`
+- `e4789d0 test(client): add session file harness smoke`
+
+Validation completed:
+
+- `cargo fmt --all -- --check`
+- `cargo clippy -p bpane-gateway --all-targets --all-features -- -D warnings`
+- `cargo test -p bpane-gateway`
+- `cd code/web/bpane-client && node --check scripts/run-session-files-smoke.mjs`
+- `cd code/web/bpane-client && npm run build`
+- `cd code/web/bpane-client && npm run smoke:session-files -- --headless`
+
+Remaining scope:
+
+- Define retention and cleanup rules for session-file artifacts.
+- Decide whether runtime session files need a dedicated artifact store instead
+  of the current pragmatic workspace-file-store backed implementation.
+- Add stronger download e2e coverage if a host-triggered download fixture is
+  introduced.
+- Keep API-level session A/B isolation covered and add full browser-harness
+  isolation only if regression risk justifies the runtime cost.
 
 Goal: browser uploads and downloads should become attributable session state,
 not only runtime-local scratch files or immediate transport events.
