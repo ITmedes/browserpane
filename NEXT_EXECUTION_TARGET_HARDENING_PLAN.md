@@ -258,10 +258,14 @@ Completed scope:
 - Added Vitest coverage for list, create, lifecycle URL encoding, bearer auth,
   and typed API error handling.
 - Added an initial non-default reference admin shell page.
+- Added tested clients for local `/auth-config.json`, `/cert-fingerprint`, and
+  `/cert-hash` metadata so the admin app can preserve compose auth/certificate
+  discovery behavior.
 
 Commits:
 
 - `92a0291 feat(admin): scaffold reference admin shell`
+- `c783c10 feat(admin): add local metadata clients`
 
 Validation completed:
 
@@ -275,7 +279,6 @@ starting a large, unfocused rewrite.
 Implementation targets:
 
 - Keep `#63` as the broad product umbrella.
-- Preserve local OIDC and cert metadata behavior.
 - Show session list/detail through the new typed control client.
 - Embed the live browser client through `bpane-client`.
 - Port the lifecycle smoke coverage that currently depends on
