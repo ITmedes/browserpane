@@ -458,6 +458,10 @@ async function main() {
     const healthAfterB = await delegateMcp(pageOwnerB, sessionB, options);
     const registerAfterB = await registerMcp(options);
     const healthAfterRegisterB = await fetchJson(options.mcpHealthUrl);
+    const sessionAResourceAfterSwitch = await fetchSessionResource(accessToken, options, sessionA);
+    const sessionBResourceAfterSwitch = await fetchSessionResource(accessToken, options, sessionB);
+    const sessionAStatusAfterSwitch = await fetchSessionStatus(accessToken, options, sessionA);
+    const sessionBStatusAfterSwitch = await fetchSessionStatus(accessToken, options, sessionB);
 
     const summary = {
       scenario: 'multi-session-compose-smoke',
@@ -468,12 +472,20 @@ async function main() {
           worker_container_id: containerA,
           runtime: sessionAResource.runtime,
           status: sessionAStatus,
+          after_mcp_switch: {
+            automation_delegate: sessionAResourceAfterSwitch.automation_delegate,
+            status: sessionAStatusAfterSwitch,
+          },
         },
         ownerB: {
           id: sessionB,
           worker_container_id: containerB,
           runtime: sessionBResource.runtime,
           status: sessionBStatus,
+          after_mcp_switch: {
+            automation_delegate: sessionBResourceAfterSwitch.automation_delegate,
+            status: sessionBStatusAfterSwitch,
+          },
         },
         viewer: {
           joined_session_id: joinedSession,
@@ -504,6 +516,18 @@ async function main() {
     }
     if (healthAfterRegisterB.playwright_cdp_endpoint !== sessionBResource.runtime.cdp_endpoint) {
       throw new Error('MCP bridge Playwright endpoint did not match session B runtime metadata.');
+    }
+    if (sessionAResourceAfterSwitch.automation_delegate !== null) {
+      throw new Error('Switching MCP to session B left session A delegated in the control plane.');
+    }
+    if (sessionAStatusAfterSwitch.mcp_owner !== false) {
+      throw new Error('Switching MCP to session B left session A marked as MCP-owned.');
+    }
+    if (sessionBResourceAfterSwitch.automation_delegate?.client_id !== 'bpane-mcp-bridge') {
+      throw new Error('Session B is not delegated to the MCP bridge after switching control.');
+    }
+    if (sessionBStatusAfterSwitch.mcp_owner !== true) {
+      throw new Error('Session B is not marked as MCP-owned after bridge registration.');
     }
 
     log(`Verified two parallel sessions (${sessionA}, ${sessionB}) and MCP bridge switching.`);
