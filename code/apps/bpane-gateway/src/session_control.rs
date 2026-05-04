@@ -23,6 +23,10 @@ use crate::extensions::{
     AppliedExtension, PersistExtensionDefinitionRequest, PersistExtensionVersionRequest,
     StoredExtensionDefinition, StoredExtensionVersion,
 };
+pub use crate::session_files::{
+    PersistSessionFileBindingRequest, SessionFileBindingMode, SessionFileBindingState,
+    StoredSessionFileBinding,
+};
 use crate::session_manager::{
     PersistedSessionRuntimeAssignment, SessionManagerProfile, SessionRuntimeAssignmentStatus,
 };

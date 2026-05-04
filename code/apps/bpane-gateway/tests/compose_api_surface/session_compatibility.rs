@@ -23,53 +23,68 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         )
         .await?;
     let session_id = json_id(&session, "id")?;
+    let compatibility_mode = session["connect"]["compatibility_mode"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
 
-    let legacy_status = harness.get_json("/api/session/status").await?;
-    if legacy_status["mcp_owner"] != json!(false) {
-        return Err(anyhow!(
-            "legacy session status unexpectedly started with MCP ownership: {legacy_status}"
-        ));
-    }
+    if compatibility_mode == "legacy_single_runtime" {
+        let legacy_status = harness.get_json("/api/session/status").await?;
+        if legacy_status["mcp_owner"] != json!(false) {
+            return Err(anyhow!(
+                "legacy session status unexpectedly started with MCP ownership: {legacy_status}"
+            ));
+        }
 
-    let legacy_claim = harness
-        .post_json(
-            "/api/session/mcp-owner",
-            json!({
-                "width": 1280,
-                "height": 720,
-            }),
-        )
-        .await?;
-    if legacy_claim["ok"] != json!(true) {
-        return Err(anyhow!("legacy MCP owner claim did not return ok"));
-    }
+        let legacy_claim = harness
+            .post_json(
+                "/api/session/mcp-owner",
+                json!({
+                    "width": 1280,
+                    "height": 720,
+                }),
+            )
+            .await?;
+        if legacy_claim["ok"] != json!(true) {
+            return Err(anyhow!("legacy MCP owner claim did not return ok"));
+        }
 
-    let owned_legacy_status = harness.get_json("/api/session/status").await?;
-    if owned_legacy_status["mcp_owner"] != json!(true) {
-        return Err(anyhow!(
-            "legacy MCP owner claim did not toggle legacy status: {owned_legacy_status}"
-        ));
-    }
+        let owned_legacy_status = harness.get_json("/api/session/status").await?;
+        if owned_legacy_status["mcp_owner"] != json!(true) {
+            return Err(anyhow!(
+                "legacy MCP owner claim did not toggle legacy status: {owned_legacy_status}"
+            ));
+        }
 
-    let scoped_status = harness
-        .get_json(&format!("/api/v1/sessions/{session_id}/status"))
-        .await?;
-    if scoped_status["mcp_owner"] != json!(true) {
-        return Err(anyhow!(
-            "legacy MCP owner claim did not reach the concrete session: {scoped_status}"
-        ));
-    }
+        let scoped_status = harness
+            .get_json(&format!("/api/v1/sessions/{session_id}/status"))
+            .await?;
+        if scoped_status["mcp_owner"] != json!(true) {
+            return Err(anyhow!(
+                "legacy MCP owner claim did not reach the concrete session: {scoped_status}"
+            ));
+        }
 
-    let legacy_clear = harness.delete_json("/api/session/mcp-owner").await?;
-    if legacy_clear["ok"] != json!(true) {
-        return Err(anyhow!("legacy MCP owner clear did not return ok"));
-    }
+        let legacy_clear = harness.delete_json("/api/session/mcp-owner").await?;
+        if legacy_clear["ok"] != json!(true) {
+            return Err(anyhow!("legacy MCP owner clear did not return ok"));
+        }
 
-    let cleared_legacy_status = harness.get_json("/api/session/status").await?;
-    if cleared_legacy_status["mcp_owner"] != json!(false) {
-        return Err(anyhow!(
-            "legacy MCP owner clear did not release ownership: {cleared_legacy_status}"
-        ));
+        let cleared_legacy_status = harness.get_json("/api/session/status").await?;
+        if cleared_legacy_status["mcp_owner"] != json!(false) {
+            return Err(anyhow!(
+                "legacy MCP owner clear did not release ownership: {cleared_legacy_status}"
+            ));
+        }
+    } else {
+        let disabled = harness.get_json_outcome("/api/session/status").await?;
+        if disabled.status != reqwest::StatusCode::CONFLICT {
+            return Err(anyhow!(
+                "legacy global route should be disabled for {compatibility_mode}, got {} {}",
+                disabled.status,
+                disabled.body
+            ));
+        }
     }
 
     let delegated = harness

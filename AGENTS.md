@@ -61,6 +61,7 @@ Current product shape:
   - `workflow_source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
   - `file_workspace.rs`: owner-scoped file workspace and workspace-file resource shapes persisted by the control plane.
   - `workspace_file_store.rs`: workspace file content storage boundary. `local_fs` is the current implementation; workspace files carry opaque artifact refs plus optional provenance metadata instead of raw filesystem paths.
+  - `session_files/`: session-scoped file binding resource shapes. Owners can bind workspace files to relative session mount paths; automation access can read/list those bindings before runtime materialization.
   - `recording_artifact_store.rs`: recording artifact storage boundary. `local_fs` is the current implementation; the gateway persists opaque artifact refs instead of raw filesystem paths.
   - `recording_lifecycle.rs`: recorder-worker launch, persisted assignment tracking, and restart reconciliation for session-scoped recording, including `recording.mode=always`. Recording resources are contiguous segments; restart recovery fails the stale in-flight segment and starts a linked fresh one instead of pretending the artifact is continuous.
   - `recording_playback.rs`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.
@@ -70,7 +71,7 @@ Current product shape:
   - `workflow_event_delivery.rs`: owner-scoped workflow event subscriptions, signed outbound webhook delivery, retry/backoff, and persisted delivery diagnostics.
   - `workflow_observability.rs`: gateway-local counters/timestamps for workflow event delivery, produced-file uploads, and workflow retention passes.
   - `workflow_retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
-  - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. Local compose defaults to `docker_pool` for browser-session testing. Docker-backed workers carry a session id into their Chromium profile path so stopped sessions can restart against the same persisted browser profile, and Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
+  - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. Local compose defaults to `docker_pool` for browser-session testing. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads, and Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
@@ -97,7 +98,7 @@ Current product shape:
   - Local auth in compose is OIDC via Keycloak on `:8091`.
   - Local session-control persistence in compose is Postgres on `:5433`.
   - Local workflow credential binding dev/testing uses HashiCorp Vault dev mode on `:8200`.
-  - Local compose defaults to `docker_pool` for browser-session workers; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
+  - Local compose defaults to `docker_pool` for browser-session workers, with a shared socket-only runtime volume and per-session browser data volumes; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 

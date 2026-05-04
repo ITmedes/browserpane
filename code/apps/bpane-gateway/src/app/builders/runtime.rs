@@ -104,13 +104,15 @@ fn build_docker_runtime_config(
             "--docker-runtime-network",
             &config.runtime.backend,
         )?,
-        shared_run_volume: required_string(
-            &config.runtime.docker_volume,
-            "--docker-runtime-volume",
+        socket_volume: required_string(
+            &config.runtime.docker_socket_volume,
+            "--docker-runtime-socket-volume",
             &config.runtime.backend,
         )?,
+        session_data_volume_prefix: config.runtime.docker_session_data_volume_prefix.clone(),
         container_name_prefix: config.runtime.docker_container_name_prefix.clone(),
         socket_root: config.runtime.docker_socket_root.clone(),
+        session_data_root: config.runtime.docker_session_data_root.clone(),
         cdp_proxy_port: config.runtime.docker_cdp_proxy_port,
         shm_size: config.runtime.docker_shm_size.clone(),
         start_timeout: Duration::from_secs(config.runtime.docker_start_timeout_secs),

@@ -86,7 +86,7 @@ RUN groupadd -f input && \
     useradd -m -s /bin/bash bpane && \
     usermod -aG input,video,audio bpane
 
-RUN mkdir -p /run/bpane /home/bpane/bpane-downloads /home/bpane/bpane-uploads && \
+RUN mkdir -p /run/bpane/session /home/bpane/bpane-downloads /home/bpane/bpane-uploads && \
     chown -R bpane:bpane /run/bpane /home/bpane
 
 COPY --from=builder /build/target/release/bpane-host /usr/local/bin/bpane-host

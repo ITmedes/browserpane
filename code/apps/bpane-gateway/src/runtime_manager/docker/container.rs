@@ -8,6 +8,81 @@ use uuid::Uuid;
 use super::*;
 
 impl DockerRuntimeManager {
+    pub(in crate::runtime_manager) fn docker_run_args(
+        &self,
+        lease: &RuntimeLease,
+        extension_dirs: &[String],
+    ) -> Result<Vec<String>, RuntimeManagerError> {
+        let container_name = lease.container_name.as_deref().ok_or_else(|| {
+            RuntimeManagerError::StartupFailed(
+                "docker lease did not include a container name".to_string(),
+            )
+        })?;
+        let session_data_root = self.session_data_root().to_string();
+        let socket_volume_mount_root = self.socket_volume_mount_root();
+        let mut args = vec![
+            "run".to_string(),
+            "-d".to_string(),
+            "--rm".to_string(),
+            "--name".to_string(),
+            container_name.to_string(),
+            "--network".to_string(),
+            self.config.network.clone(),
+            "--network-alias".to_string(),
+            container_name.to_string(),
+            "-v".to_string(),
+            format!("{}:{socket_volume_mount_root}", self.config.socket_volume),
+            "-v".to_string(),
+            format!(
+                "{}:{}",
+                self.session_data_volume_for_session(lease.session_id),
+                session_data_root
+            ),
+            "--shm-size".to_string(),
+            self.config.shm_size.clone(),
+            "--label".to_string(),
+            format!("browserpane.session_id={}", lease.session_id),
+            "-e".to_string(),
+            format!("BPANE_SESSION_ID={}", lease.session_id),
+            "-e".to_string(),
+            format!("BPANE_SOCKET_PATH={}", lease.agent_socket_path),
+            "-e".to_string(),
+            format!("BPANE_SESSION_DATA_DIR={session_data_root}"),
+            "-e".to_string(),
+            format!("BPANE_PROFILE_DIR={}", self.profile_dir_for_session()),
+            "-e".to_string(),
+            format!("BPANE_UPLOAD_DIR={}", self.upload_dir_for_session()),
+            "-e".to_string(),
+            format!("BPANE_DOWNLOAD_DIR={}", self.download_dir_for_session()),
+            "-e".to_string(),
+            format!(
+                "BPANE_SESSION_FILE_MOUNTS_DIR={}",
+                self.session_file_mounts_root()
+            ),
+            "-e".to_string(),
+            format!(
+                "BPANE_SESSION_FILE_BINDINGS_MANIFEST={}",
+                self.session_file_manifest_path()
+            ),
+        ];
+        if !extension_dirs.is_empty() {
+            args.push("-e".to_string());
+            args.push(format!("BPANE_EXTENSION_DIRS={}", extension_dirs.join(",")));
+        }
+
+        if self.config.seccomp_unconfined {
+            args.push("--security-opt".to_string());
+            args.push("seccomp=unconfined".to_string());
+        }
+        if let Some(env_file) = &self.config.env_file {
+            args.push("--env-file".to_string());
+            args.push(env_file.display().to_string());
+        }
+
+        args.push(self.config.image.clone());
+        Ok(args)
+    }
+
     pub(super) async fn start_container(
         &self,
         lease: &RuntimeLease,
@@ -21,40 +96,13 @@ impl DockerRuntimeManager {
         let _ = self.stop_container(container_name).await;
         let _ = remove_socket_path(&lease.agent_socket_path).await;
         let extension_dirs = self.session_extension_dirs(lease.session_id).await?;
+        self.initialize_session_data_volume(lease.session_id)
+            .await?;
+        self.materialize_session_file_bindings(lease.session_id)
+            .await?;
 
         let mut command = Command::new(&self.config.docker_bin);
-        command.arg("run").arg("-d").arg("--rm");
-        command
-            .arg("--name")
-            .arg(container_name)
-            .arg("--network")
-            .arg(&self.config.network)
-            .arg("--network-alias")
-            .arg(container_name)
-            .arg("-v")
-            .arg(format!("{}:/run/bpane", self.config.shared_run_volume))
-            .arg("--shm-size")
-            .arg(&self.config.shm_size)
-            .arg("--label")
-            .arg(format!("browserpane.session_id={}", lease.session_id))
-            .arg("-e")
-            .arg(format!("BPANE_SESSION_ID={}", lease.session_id))
-            .arg("-e")
-            .arg(format!("BPANE_SOCKET_PATH={}", lease.agent_socket_path));
-        if !extension_dirs.is_empty() {
-            command
-                .arg("-e")
-                .arg(format!("BPANE_EXTENSION_DIRS={}", extension_dirs.join(",")));
-        }
-
-        if self.config.seccomp_unconfined {
-            command.arg("--security-opt").arg("seccomp=unconfined");
-        }
-        if let Some(env_file) = &self.config.env_file {
-            command.arg("--env-file").arg(env_file);
-        }
-
-        command.arg(&self.config.image);
+        command.args(self.docker_run_args(lease, &extension_dirs)?);
 
         let output = command.output().await.map_err(|error| {
             RuntimeManagerError::StartupFailed(format!("failed to run docker launcher: {error}"))

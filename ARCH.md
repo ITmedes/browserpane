@@ -237,9 +237,9 @@ Stateless relay between host agent and browser clients.
     - `docker_single`: opt-in Docker-backed worker startup/shutdown for the active session, with idle timeout and one active runtime at a time
     - `docker_pool`: opt-in Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`
   - session resources, runtime capacity, and compatibility routing now derive from this runtime profile
-  - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions via the Docker socket, shared `/run/bpane` volume, and a shared host-worker env profile
+  - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions via the Docker socket, a shared socket-only runtime volume, per-session browser data volumes, and a shared host-worker env profile
   - Docker runtime assignment metadata is now persisted in Postgres and reconciled on gateway startup, so an existing pool-mode worker can be rebound after a gateway restart without launching a duplicate runtime
-  - Docker-backed workers now receive `BPANE_SESSION_ID` and reuse a session-specific Chromium profile rooted under the shared `/run/bpane` volume, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state
+  - Docker-backed workers now receive `BPANE_SESSION_ID` plus explicit profile/upload/download paths under a session-specific data root, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state without exposing one shared browser data root
   - this is profile-backed restoration, not true container/process suspension: exact live in-memory browser state only survives while the worker is still running
 - **MCP ownership**: atomic session-automation state in the gateway
   - MCP automation does not by itself demote browser clients into viewers
@@ -265,6 +265,9 @@ Stateless relay between host agent and browser clients.
   - `GET /api/v1/sessions/{id}/status` — side-effect-free session-scoped lifecycle/runtime/presence view, including role counts, idle timing, stop eligibility, live connection descriptors, and stopped-session snapshots
   - `POST /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership claim
   - `DELETE /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership release
+  - session-scoped file binding routes attach owner-approved workspace files to
+    a session mount contract, expose bound content through session-scoped APIs,
+    and preserve automation-read access before runtime materialization
   - session-scoped recording routes expose segment lifecycle, playback/export, and artifact download
   - workflow routes expose definitions, immutable versions, runs, logs, events, and run-scoped automation access
   - reusable workflow input routes expose file workspaces, credential bindings, and approved extensions
