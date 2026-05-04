@@ -204,6 +204,24 @@ Acceptance criteria:
 
 Source issue: `#53`
 
+Implementation status: completed on `feature/BPANE-0065`.
+
+Completed scope:
+
+- Added [REMOTE_DEPLOYMENT.md](REMOTE_DEPLOYMENT.md) with remote HTTPS,
+  WebTransport certificate, OIDC alignment, compose override, runtime mode, and
+  dev-service exposure guidance.
+- Added a README pointer from the local development section to the remote
+  deployment notes.
+
+Commits:
+
+- `b87d7f0 docs: add remote deployment notes`
+
+Validation completed:
+
+- `git diff --cached --check`
+
 Goal: document the deployment assumptions that differ between localhost compose
 and remote/self-hosted testing.
 
