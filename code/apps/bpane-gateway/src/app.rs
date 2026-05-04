@@ -9,8 +9,8 @@ use crate::workspaces::WorkspaceFileStore;
 mod builders;
 
 use builders::{
-    build_credential_provider, default_owner_mode, AuthServices, RecordingServices,
-    RuntimeServices, WorkflowServices,
+    build_credential_provider, default_owner_mode, start_session_file_retention, AuthServices,
+    RecordingServices, RuntimeServices, WorkflowServices,
 };
 
 pub(crate) struct GatewayApp {
@@ -36,6 +36,12 @@ impl GatewayApp {
                 workspace_file_store.clone(),
             )
             .await;
+        start_session_file_retention(
+            &config,
+            runtime_services.session_store.clone(),
+            workspace_file_store.clone(),
+        )
+        .await?;
         let credential_provider = build_credential_provider(&config)?;
         let recording_services = RecordingServices::build(
             &config,

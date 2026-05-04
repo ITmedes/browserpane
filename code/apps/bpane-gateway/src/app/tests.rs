@@ -6,7 +6,7 @@ use crate::session_manager::SessionManagerConfig;
 
 use super::builders::{
     build_recording_worker_config, build_session_manager_config, default_owner_mode,
-    load_or_generate_shared_secret, workflow_retention_window,
+    load_or_generate_shared_secret, session_file_retention_window, workflow_retention_window,
 };
 
 fn test_config() -> Config {
@@ -76,6 +76,15 @@ fn workflow_retention_zero_disables_cleanup_window() {
     assert!(workflow_retention_window("workflow-log-retention-secs", 0)
         .unwrap()
         .is_none());
+}
+
+#[test]
+fn session_file_retention_zero_disables_cleanup_window() {
+    assert!(
+        session_file_retention_window("session-file-retention-secs", 0)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

@@ -8,6 +8,9 @@ use uuid::Uuid;
 
 mod transfer_recorder;
 
+mod retention;
+
+pub(crate) use retention::SessionFileRetentionManager;
 pub(crate) use transfer_recorder::{new_active_transfer_map, SessionFileRecorder};
 
 #[derive(Debug, Clone)]
@@ -66,6 +69,14 @@ pub struct StoredSessionFile {
     pub labels: HashMap<String, String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionFileRetentionCandidate {
+    pub session_id: Uuid,
+    pub file_id: Uuid,
+    pub artifact_ref: String,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

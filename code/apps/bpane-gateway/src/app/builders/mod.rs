@@ -20,6 +20,7 @@ use crate::workflow_lifecycle::WorkflowLifecycleManager;
 mod auth;
 mod recording;
 mod runtime;
+mod session_files;
 mod workflow;
 
 #[cfg(test)]
@@ -28,6 +29,9 @@ pub(in crate::app) use self::auth::load_or_generate_shared_secret;
 pub(in crate::app) use self::recording::build_recording_worker_config;
 #[cfg(test)]
 pub(in crate::app) use self::runtime::build_session_manager_config;
+#[cfg(test)]
+pub(in crate::app) use self::session_files::session_file_retention_window;
+pub(in crate::app) use self::session_files::start_session_file_retention;
 #[cfg(test)]
 pub(in crate::app) use self::workflow::workflow_retention_window;
 
