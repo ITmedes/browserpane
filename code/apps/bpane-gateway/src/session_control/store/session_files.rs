@@ -45,6 +45,44 @@ impl SessionStore {
         }
     }
 
+    pub async fn list_session_file_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+        retention: ChronoDuration,
+    ) -> Result<Vec<SessionFileRetentionCandidate>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .list_session_file_retention_candidates(now, retention)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .list_session_file_retention_candidates(now, retention)
+                    .await
+            }
+        }
+    }
+
+    pub async fn delete_session_file_for_session(
+        &self,
+        session_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredSessionFile>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .delete_session_file_for_session(session_id, file_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .delete_session_file_for_session(session_id, file_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn create_session_file_binding_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,

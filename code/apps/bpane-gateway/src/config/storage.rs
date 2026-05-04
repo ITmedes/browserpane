@@ -29,4 +29,14 @@ pub struct StorageConfig {
     /// Managed local root for persisted file workspace content served by the gateway's local_fs workspace file store.
     #[arg(long, default_value = "/tmp/bpane-file-workspaces")]
     pub file_workspace_local_root: std::path::PathBuf,
+
+    /// How often the gateway scans for expired session-file artifacts.
+    /// Set to 0 to disable session-file retention cleanup.
+    #[arg(long = "session-file-cleanup-interval-secs", default_value_t = 3600)]
+    pub session_file_cleanup_interval_secs: u64,
+
+    /// How long runtime session upload/download artifacts remain queryable before cleanup removes them.
+    /// Set to 0 to retain session files indefinitely.
+    #[arg(long = "session-file-retention-secs", default_value_t = 604800)]
+    pub session_file_retention_secs: u64,
 }

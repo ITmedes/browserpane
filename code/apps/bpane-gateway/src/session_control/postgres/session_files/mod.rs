@@ -37,6 +37,26 @@ impl PostgresSessionStore {
             .await
     }
 
+    pub(in crate::session_control) async fn list_session_file_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+        retention: ChronoDuration,
+    ) -> Result<Vec<SessionFileRetentionCandidate>, SessionStoreError> {
+        self.session_file_repository()
+            .list_session_file_retention_candidates(now, retention)
+            .await
+    }
+
+    pub(in crate::session_control) async fn delete_session_file_for_session(
+        &self,
+        session_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredSessionFile>, SessionStoreError> {
+        self.session_file_repository()
+            .delete_session_file_for_session(session_id, file_id)
+            .await
+    }
+
     pub(in crate::session_control) async fn create_session_file_binding_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -258,6 +278,94 @@ impl SessionFileRepository<'_> {
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to fetch session file: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_session_file).transpose()
+    }
+
+    pub(in crate::session_control) async fn list_session_file_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+        retention: ChronoDuration,
+    ) -> Result<Vec<SessionFileRetentionCandidate>, SessionStoreError> {
+        let rows = self
+            .store
+            .db
+            .client()
+            .await?
+            .query(
+                r#"
+                SELECT
+                    id,
+                    session_id,
+                    artifact_ref,
+                    created_at
+                FROM control_session_files
+                ORDER BY created_at ASC
+                "#,
+                &[],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list session file retention candidates: {error}"
+                ))
+            })?;
+
+        let mut candidates = rows
+            .iter()
+            .filter_map(|row| {
+                let created_at = row.get::<_, DateTime<Utc>>("created_at");
+                let expires_at = created_at + retention;
+                if expires_at > now {
+                    return None;
+                }
+                Some(SessionFileRetentionCandidate {
+                    session_id: row.get("session_id"),
+                    file_id: row.get("id"),
+                    artifact_ref: row.get("artifact_ref"),
+                    expires_at,
+                })
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| left.expires_at.cmp(&right.expires_at));
+        Ok(candidates)
+    }
+
+    pub(in crate::session_control) async fn delete_session_file_for_session(
+        &self,
+        session_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredSessionFile>, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                DELETE FROM control_session_files
+                WHERE session_id = $1
+                  AND id = $2
+                RETURNING
+                    id,
+                    session_id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    artifact_ref,
+                    source,
+                    labels,
+                    created_at,
+                    updated_at
+                "#,
+                &[&session_id, &file_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to delete session file: {error}"))
             })?;
         row.as_ref().map(row_to_stored_session_file).transpose()
     }

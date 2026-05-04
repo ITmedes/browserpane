@@ -25,7 +25,8 @@ use crate::extensions::{
 };
 pub use crate::session_files::{
     PersistSessionFileBindingRequest, PersistSessionFileRequest, SessionFileBindingMode,
-    SessionFileBindingState, SessionFileSource, StoredSessionFile, StoredSessionFileBinding,
+    SessionFileBindingState, SessionFileRetentionCandidate, SessionFileSource, StoredSessionFile,
+    StoredSessionFileBinding,
 };
 use crate::session_manager::{
     PersistedSessionRuntimeAssignment, SessionManagerProfile, SessionRuntimeAssignmentStatus,

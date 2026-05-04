@@ -62,6 +62,48 @@ impl InMemorySessionStore {
             .cloned())
     }
 
+    pub(in crate::session_control) async fn list_session_file_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+        retention: ChronoDuration,
+    ) -> Result<Vec<SessionFileRetentionCandidate>, SessionStoreError> {
+        let mut candidates = self
+            .session_files
+            .lock()
+            .await
+            .iter()
+            .filter_map(|file| {
+                let expires_at = file.created_at + retention;
+                if expires_at > now {
+                    return None;
+                }
+                Some(SessionFileRetentionCandidate {
+                    session_id: file.session_id,
+                    file_id: file.id,
+                    artifact_ref: file.artifact_ref.clone(),
+                    expires_at,
+                })
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| left.expires_at.cmp(&right.expires_at));
+        Ok(candidates)
+    }
+
+    pub(in crate::session_control) async fn delete_session_file_for_session(
+        &self,
+        session_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredSessionFile>, SessionStoreError> {
+        let mut files = self.session_files.lock().await;
+        let Some(index) = files
+            .iter()
+            .position(|file| file.session_id == session_id && file.id == file_id)
+        else {
+            return Ok(None);
+        };
+        Ok(Some(files.remove(index)))
+    }
+
     pub(in crate::session_control) async fn create_session_file_binding_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
