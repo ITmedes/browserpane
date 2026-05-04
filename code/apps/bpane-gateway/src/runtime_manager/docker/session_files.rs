@@ -30,6 +30,23 @@ mv "$tmp" "$target"
 trap - EXIT
 "#;
 
+const INITIALIZE_SESSION_DATA_SCRIPT: &str = r#"
+set -eu
+mkdir -p \
+  "$BPANE_SESSION_DATA_DIR" \
+  "$BPANE_PROFILE_DIR" \
+  "$BPANE_UPLOAD_DIR" \
+  "$BPANE_DOWNLOAD_DIR" \
+  "$BPANE_SESSION_FILE_MOUNTS_DIR"
+chown -R bpane:bpane "$BPANE_SESSION_DATA_DIR"
+chmod 0770 \
+  "$BPANE_SESSION_DATA_DIR" \
+  "$BPANE_PROFILE_DIR" \
+  "$BPANE_UPLOAD_DIR" \
+  "$BPANE_DOWNLOAD_DIR" \
+  "$BPANE_SESSION_FILE_MOUNTS_DIR"
+"#;
+
 #[derive(Serialize)]
 struct SessionFileBindingsManifest {
     format_version: u32,
@@ -65,6 +82,67 @@ struct SessionFileBindingsManifestEntry {
 }
 
 impl DockerRuntimeManager {
+    pub(super) async fn initialize_session_data_volume(
+        &self,
+        session_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        let output = Command::new(&self.config.docker_bin)
+            .args(self.docker_initialize_session_data_args(session_id))
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to initialize docker session data volume for {session_id}: {error}"
+                ))
+            })?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to initialize docker session data volume for {session_id}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+
+    pub(in crate::runtime_manager) fn docker_initialize_session_data_args(
+        &self,
+        session_id: Uuid,
+    ) -> Vec<String> {
+        vec![
+            "run".to_string(),
+            "--rm".to_string(),
+            "--network".to_string(),
+            "none".to_string(),
+            "-v".to_string(),
+            format!(
+                "{}:{}",
+                self.session_data_volume_for_session(session_id),
+                self.session_data_root()
+            ),
+            "-e".to_string(),
+            format!("BPANE_SESSION_DATA_DIR={}", self.session_data_root()),
+            "-e".to_string(),
+            format!("BPANE_PROFILE_DIR={}", self.profile_dir_for_session()),
+            "-e".to_string(),
+            format!("BPANE_UPLOAD_DIR={}", self.upload_dir_for_session()),
+            "-e".to_string(),
+            format!("BPANE_DOWNLOAD_DIR={}", self.download_dir_for_session()),
+            "-e".to_string(),
+            format!(
+                "BPANE_SESSION_FILE_MOUNTS_DIR={}",
+                self.session_file_mounts_root()
+            ),
+            "--user".to_string(),
+            "0:0".to_string(),
+            "--entrypoint".to_string(),
+            "/bin/sh".to_string(),
+            self.config.image.clone(),
+            "-ec".to_string(),
+            INITIALIZE_SESSION_DATA_SCRIPT.to_string(),
+        ]
+    }
+
     pub(super) async fn materialize_session_file_bindings(
         &self,
         session_id: Uuid,

@@ -95,6 +95,8 @@ impl DockerRuntimeManager {
         let _ = self.stop_container(container_name).await;
         let _ = remove_socket_path(&lease.agent_socket_path).await;
         let extension_dirs = self.session_extension_dirs(lease.session_id).await?;
+        self.initialize_session_data_volume(lease.session_id)
+            .await?;
         self.materialize_session_file_bindings(lease.session_id)
             .await?;
 
