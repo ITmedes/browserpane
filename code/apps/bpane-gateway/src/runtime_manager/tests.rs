@@ -234,12 +234,16 @@ fn docker_runtime_launch_separates_socket_and_session_data_mounts() {
 
     let args = manager.docker_run_args(&lease, &[]).unwrap();
 
-    assert!(args.contains(&"deploy_agent-socket:/run/bpane/sessions".to_string()));
+    assert!(args.contains(&"deploy_agent-socket:/run/bpane".to_string()));
     assert!(args.contains(
         &"deploy_bpane-session-data-019db438c74a7ef2810c792e298faf11:/run/bpane/session"
             .to_string()
     ));
-    assert!(!args.contains(&"deploy_agent-socket:/run/bpane".to_string()));
+    assert!(!args.contains(&"deploy_agent-socket:/run/bpane/sessions".to_string()));
+    assert!(args.contains(
+        &"BPANE_SOCKET_PATH=/run/bpane/sessions/019db438-c74a-7ef2-810c-792e298faf11.sock"
+            .to_string()
+    ));
     assert!(args.contains(&"BPANE_SESSION_DATA_DIR=/run/bpane/session".to_string()));
     assert!(args.contains(&"BPANE_PROFILE_DIR=/run/bpane/session/chromium".to_string()));
     assert!(args.contains(&"BPANE_UPLOAD_DIR=/run/bpane/session/uploads".to_string()));

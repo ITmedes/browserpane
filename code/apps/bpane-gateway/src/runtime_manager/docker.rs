@@ -155,6 +155,16 @@ impl DockerRuntimeManager {
         )
     }
 
+    pub(super) fn socket_volume_mount_root(&self) -> String {
+        let socket_root = self.config.socket_root.trim_end_matches('/');
+        std::path::Path::new(socket_root)
+            .parent()
+            .and_then(|parent| parent.to_str())
+            .filter(|parent| !parent.is_empty() && *parent != "/")
+            .unwrap_or(socket_root)
+            .to_string()
+    }
+
     pub(super) fn session_data_root(&self) -> &str {
         self.config.session_data_root.trim_end_matches('/')
     }
