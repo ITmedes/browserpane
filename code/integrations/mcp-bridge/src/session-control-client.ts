@@ -15,6 +15,11 @@ export interface GatewaySessionResource {
   id: string;
   state: GatewaySessionState;
   owner_mode: GatewaySessionOwnerMode;
+  automation_delegate?: {
+    client_id: string;
+    issuer: string;
+    display_name?: string | null;
+  } | null;
   connect: {
     gateway_url: string;
     transport_path: string;

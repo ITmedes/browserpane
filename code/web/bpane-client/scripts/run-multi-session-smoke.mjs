@@ -517,6 +517,12 @@ async function main() {
     if (healthAfterRegisterB.playwright_cdp_endpoint !== sessionBResource.runtime.cdp_endpoint) {
       throw new Error('MCP bridge Playwright endpoint did not match session B runtime metadata.');
     }
+    if (healthAfterRegisterB.bridge_alignment !== 'aligned') {
+      throw new Error(`MCP bridge health reported non-aligned state: ${healthAfterRegisterB.bridge_alignment}`);
+    }
+    if (healthAfterRegisterB.control_session_backend_delegated !== true) {
+      throw new Error('MCP bridge health did not report the active control session as backend-delegated.');
+    }
     if (sessionAResourceAfterSwitch.automation_delegate !== null) {
       throw new Error('Switching MCP to session B left session A delegated in the control plane.');
     }
