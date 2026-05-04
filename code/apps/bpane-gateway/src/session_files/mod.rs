@@ -71,6 +71,17 @@ impl FromStr for SessionFileBindingState {
     }
 }
 
+impl SessionFileBindingState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Materialized => "materialized",
+            Self::Failed => "failed",
+            Self::Removed => "removed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StoredSessionFileBinding {
     pub id: Uuid,

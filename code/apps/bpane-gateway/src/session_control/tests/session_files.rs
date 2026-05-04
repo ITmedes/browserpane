@@ -103,6 +103,26 @@ async fn in_memory_store_tracks_session_file_binding_lifecycle() {
         .unwrap();
     assert_eq!(fetched.id, created.id);
 
+    let materialized = store
+        .mark_session_file_binding_materialized(session.id, created.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(materialized.state, SessionFileBindingState::Materialized);
+    assert_eq!(materialized.error, None);
+
+    let failed = store
+        .fail_session_file_binding_materialization(
+            session.id,
+            created.id,
+            "materialization failed".to_string(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(failed.state, SessionFileBindingState::Failed);
+    assert_eq!(failed.error.as_deref(), Some("materialization failed"));
+
     let removed = store
         .remove_session_file_binding_for_owner(&owner, session.id, created.id)
         .await

@@ -22,6 +22,13 @@ impl GatewayApp {
     pub(crate) async fn build(config: Config) -> anyhow::Result<Self> {
         let auth_services = AuthServices::build(&config).await?;
         let runtime_services = RuntimeServices::build(&config).await?;
+        let workspace_file_store = Arc::new(WorkspaceFileStore::local_fs(
+            config.storage.file_workspace_local_root.clone(),
+        ));
+        runtime_services
+            .session_manager
+            .attach_workspace_file_store(workspace_file_store.clone())
+            .await;
         let credential_provider = build_credential_provider(&config)?;
         let recording_services = RecordingServices::build(
             &config,
@@ -70,9 +77,7 @@ impl GatewayApp {
             session_manager,
             credential_provider,
             recording_artifact_store: recording_services.artifact_store,
-            workspace_file_store: Arc::new(WorkspaceFileStore::local_fs(
-                config.storage.file_workspace_local_root.clone(),
-            )),
+            workspace_file_store,
             workflow_source_resolver: workflow_services.source_resolver,
             recording_observability: recording_services.observability,
             recording_lifecycle: recording_services.lifecycle,

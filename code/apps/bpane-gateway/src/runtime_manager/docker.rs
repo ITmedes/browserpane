@@ -1,6 +1,7 @@
 mod container;
 mod recovery;
 mod resolve;
+mod session_files;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,12 +11,14 @@ use tokio::sync::{Mutex, Notify};
 use uuid::Uuid;
 
 use super::*;
+use crate::workspaces::WorkspaceFileStore;
 
 pub(super) struct DockerRuntimeManager {
     pub(super) config: DockerRuntimeConfig,
     pub(super) profile: RuntimeProfile,
     pub(super) leases: Mutex<HashMap<Uuid, DockerLeaseState>>,
     pub(super) session_store: Mutex<Option<SessionStore>>,
+    pub(super) workspace_file_store: Mutex<Option<Arc<WorkspaceFileStore>>>,
 }
 
 pub(super) enum DockerLeaseState {
@@ -116,6 +119,7 @@ impl DockerRuntimeManager {
             profile,
             leases: Mutex::new(HashMap::new()),
             session_store: Mutex::new(None),
+            workspace_file_store: Mutex::new(None),
         })
     }
 
@@ -125,6 +129,14 @@ impl DockerRuntimeManager {
 
     async fn session_store(&self) -> Option<SessionStore> {
         self.session_store.lock().await.clone()
+    }
+
+    pub(super) async fn attach_workspace_file_store(&self, store: Arc<WorkspaceFileStore>) {
+        *self.workspace_file_store.lock().await = Some(store);
+    }
+
+    async fn workspace_file_store(&self) -> Option<Arc<WorkspaceFileStore>> {
+        self.workspace_file_store.lock().await.clone()
     }
 
     pub(super) fn socket_path_for_session(&self, session_id: Uuid) -> String {
@@ -157,6 +169,14 @@ impl DockerRuntimeManager {
 
     pub(super) fn download_dir_for_session(&self) -> String {
         format!("{}/downloads", self.session_data_root())
+    }
+
+    pub(super) fn session_file_mounts_root(&self) -> String {
+        format!("{}/mounts", self.session_data_root())
+    }
+
+    pub(super) fn session_file_manifest_path(&self) -> String {
+        format!("{}/session-file-bindings.json", self.session_data_root())
     }
 
     pub(super) fn container_name_for_session(&self, session_id: Uuid) -> String {

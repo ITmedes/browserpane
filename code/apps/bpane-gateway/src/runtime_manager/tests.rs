@@ -1,9 +1,16 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::Utc;
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 use super::*;
+use crate::session_control::SessionOwner;
+use crate::session_files::{
+    SessionFileBindingMode, SessionFileBindingState, StoredSessionFileBinding,
+};
 
 fn docker_config() -> DockerRuntimeConfig {
     DockerRuntimeConfig {
@@ -237,4 +244,90 @@ fn docker_runtime_launch_separates_socket_and_session_data_mounts() {
     assert!(args.contains(&"BPANE_PROFILE_DIR=/run/bpane/session/chromium".to_string()));
     assert!(args.contains(&"BPANE_UPLOAD_DIR=/run/bpane/session/uploads".to_string()));
     assert!(args.contains(&"BPANE_DOWNLOAD_DIR=/run/bpane/session/downloads".to_string()));
+    assert!(args.contains(&"BPANE_SESSION_FILE_MOUNTS_DIR=/run/bpane/session/mounts".to_string()));
+    assert!(args.contains(
+        &"BPANE_SESSION_FILE_BINDINGS_MANIFEST=/run/bpane/session/session-file-bindings.json"
+            .to_string()
+    ));
+}
+
+#[test]
+fn docker_runtime_materializes_session_file_bindings_inside_session_data_volume() {
+    let manager = DockerRuntimeManager::new(
+        docker_config(),
+        RuntimeProfile {
+            runtime_binding: "docker_runtime_pool".to_string(),
+            compatibility_mode: "session_runtime_pool".to_string(),
+            max_runtime_sessions: 2,
+            supports_legacy_global_routes: false,
+            supports_session_extensions: true,
+        },
+    )
+    .unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let binding = StoredSessionFileBinding {
+        id: Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf12").unwrap(),
+        session_id,
+        workspace_id: Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf13").unwrap(),
+        file_id: Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf14").unwrap(),
+        file_name: "input.csv".to_string(),
+        media_type: Some("text/csv".to_string()),
+        byte_count: 12,
+        sha256_hex: "abc123".to_string(),
+        provenance: Some(json!({ "source": "test" })),
+        artifact_ref: "local_fs:workspace/input.csv".to_string(),
+        mount_path: "inputs/input.csv".to_string(),
+        mode: SessionFileBindingMode::ReadOnly,
+        state: SessionFileBindingState::Pending,
+        error: None,
+        labels: HashMap::from([("suite".to_string(), "unit".to_string())]),
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+
+    assert_eq!(
+        manager.materialized_path_for_binding(&binding),
+        "/run/bpane/session/mounts/inputs/input.csv"
+    );
+
+    let args = manager.docker_materialize_file_args(
+        session_id,
+        "/run/bpane/session/mounts/inputs/input.csv",
+        "0444",
+    );
+    assert!(args.contains(&"--network".to_string()));
+    assert!(args.contains(&"none".to_string()));
+    assert!(args.contains(
+        &"deploy_bpane-session-data-019db438c74a7ef2810c792e298faf11:/run/bpane/session"
+            .to_string()
+    ));
+    assert!(args.contains(&"BPANE_SESSION_DATA_DIR=/run/bpane/session".to_string()));
+    assert!(args.contains(
+        &"BPANE_MATERIALIZE_TARGET=/run/bpane/session/mounts/inputs/input.csv".to_string()
+    ));
+    assert!(args.contains(&"BPANE_MATERIALIZE_MODE=0444".to_string()));
+    assert!(args.contains(&"--entrypoint".to_string()));
+    assert!(args.contains(&"/bin/sh".to_string()));
+
+    let manifest = manager
+        .build_session_file_manifest(
+            session_id,
+            &SessionOwner {
+                subject: "owner".to_string(),
+                issuer: "https://issuer.example".to_string(),
+                display_name: None,
+            },
+            &[binding],
+        )
+        .unwrap();
+    let manifest: Value = serde_json::from_slice(&manifest).unwrap();
+    assert_eq!(manifest["format_version"], 1);
+    assert_eq!(manifest["owner"]["subject"], "owner");
+    assert_eq!(manifest["mounts_root"], "/run/bpane/session/mounts");
+    assert_eq!(manifest["bindings"][0]["source"], "workspace");
+    assert_eq!(
+        manifest["bindings"][0]["materialized_path"],
+        "/run/bpane/session/mounts/inputs/input.csv"
+    );
+    assert_eq!(manifest["bindings"][0]["state"], "materialized");
 }
