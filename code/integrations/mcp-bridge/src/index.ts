@@ -268,6 +268,48 @@ function describeManagedCdpEndpoint(
   }
 }
 
+type BridgeHealthAlignment =
+  | "unmanaged"
+  | "aligned"
+  | "control_session_not_visible"
+  | "control_session_not_delegated"
+  | "playwright_endpoint_mismatch";
+
+function isSessionDelegatedToBridge(session: GatewaySessionResource | null): boolean {
+  if (!session?.automation_delegate) {
+    return false;
+  }
+  if (!GATEWAY_OIDC_CLIENT_ID) {
+    return true;
+  }
+  return session.automation_delegate.client_id === GATEWAY_OIDC_CLIENT_ID;
+}
+
+function deriveBridgeHealthAlignment(
+  selectedSession: GatewaySessionResource | null,
+  visibleSession: GatewaySessionResource | null,
+  expectedCdpEndpoint: string | null,
+  playwrightCdpEndpoint: string | null,
+): BridgeHealthAlignment {
+  if (!selectedSession) {
+    return "unmanaged";
+  }
+  if (!visibleSession) {
+    return "control_session_not_visible";
+  }
+  if (!isSessionDelegatedToBridge(visibleSession)) {
+    return "control_session_not_delegated";
+  }
+  if (
+    expectedCdpEndpoint
+    && playwrightCdpEndpoint
+    && expectedCdpEndpoint !== playwrightCdpEndpoint
+  ) {
+    return "playwright_endpoint_mismatch";
+  }
+  return "aligned";
+}
+
 function isChromiumDevToolsSafeHostname(hostname: string): boolean {
   return (
     hostname === "localhost"
@@ -699,6 +741,19 @@ async function main() {
     const url = new URL(req.url ?? "/", `http://localhost:${MCP_PORT}`);
 
     if (url.pathname === "/health") {
+      let visibleControlSession: GatewaySessionResource | null = null;
+      if (managedSession) {
+        try {
+          visibleControlSession = await sessionControlClient.getSession(managedSession.id);
+        } catch {
+          visibleControlSession = null;
+        }
+      }
+      const controlSessionCdpEndpoint = describeManagedCdpEndpoint(
+        visibleControlSession ?? managedSession,
+        automationAccessManager.getCached(managedSession),
+      );
+      const playwrightCdpEndpoint = playwrightRuntime.getCurrentEndpoint();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
@@ -708,13 +763,21 @@ async function main() {
           resolution: { width, height },
           supervised_delay_ms: SUPERVISED_DELAY_MS,
           control_session_id: managedSession?.id ?? null,
-          control_session_state: managedSession?.state ?? null,
-          control_session_mode: managedSession?.connect.compatibility_mode ?? null,
-          control_session_cdp_endpoint: describeManagedCdpEndpoint(
+          control_session_state: visibleControlSession?.state ?? managedSession?.state ?? null,
+          control_session_mode:
+            visibleControlSession?.connect.compatibility_mode
+            ?? managedSession?.connect.compatibility_mode
+            ?? null,
+          control_session_visible: Boolean(visibleControlSession),
+          control_session_backend_delegated: isSessionDelegatedToBridge(visibleControlSession),
+          bridge_alignment: deriveBridgeHealthAlignment(
             managedSession,
-            automationAccessManager.getCached(managedSession),
+            visibleControlSession,
+            controlSessionCdpEndpoint,
+            playwrightCdpEndpoint,
           ),
-          playwright_cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
+          control_session_cdp_endpoint: controlSessionCdpEndpoint,
+          playwright_cdp_endpoint: playwrightCdpEndpoint,
           playwright_effective_cdp_endpoint: playwrightRuntime.getEffectiveEndpoint(),
         }),
       );
