@@ -30,7 +30,7 @@ fn docker_single_runtime_requires_image() {
     let mut config = test_config();
     config.runtime.backend = "docker_single".to_string();
     config.runtime.docker_network = Some("network".to_string());
-    config.runtime.docker_volume = Some("volume".to_string());
+    config.runtime.docker_socket_volume = Some("volume".to_string());
 
     let error = build_session_manager_config(&config).unwrap_err();
 
@@ -45,7 +45,7 @@ fn docker_pool_runtime_uses_configured_capacities() {
     config.runtime.backend = "docker_pool".to_string();
     config.runtime.docker_image = Some("image".to_string());
     config.runtime.docker_network = Some("network".to_string());
-    config.runtime.docker_volume = Some("volume".to_string());
+    config.runtime.docker_socket_volume = Some("volume".to_string());
     config.runtime.max_active_runtimes = 4;
     config.runtime.max_starting_runtimes = 2;
 

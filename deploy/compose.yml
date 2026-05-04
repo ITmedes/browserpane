@@ -110,7 +110,9 @@ services:
       --runtime-cdp-endpoint ${BPANE_GATEWAY_RUNTIME_CDP_ENDPOINT:-http://host:9223}
       --docker-runtime-image ${BPANE_GATEWAY_DOCKER_RUNTIME_IMAGE:-deploy-host}
       --docker-runtime-network ${BPANE_GATEWAY_DOCKER_RUNTIME_NETWORK:-deploy_bpane-internal}
-      --docker-runtime-volume ${BPANE_GATEWAY_DOCKER_RUNTIME_VOLUME:-deploy_agent-socket}
+      --docker-runtime-socket-volume ${BPANE_GATEWAY_DOCKER_RUNTIME_SOCKET_VOLUME:-deploy_agent-socket}
+      --docker-runtime-session-data-volume-prefix ${BPANE_GATEWAY_DOCKER_RUNTIME_SESSION_DATA_VOLUME_PREFIX:-deploy_bpane-session-data}
+      --docker-runtime-session-data-root ${BPANE_GATEWAY_DOCKER_RUNTIME_SESSION_DATA_ROOT:-/run/bpane/session}
       --docker-runtime-env-file ${BPANE_GATEWAY_DOCKER_RUNTIME_ENV_FILE:-/runtime/host-runtime.env}
       --docker-runtime-cdp-proxy-port ${BPANE_GATEWAY_DOCKER_RUNTIME_CDP_PROXY_PORT:-9223}
       --docker-runtime-seccomp-unconfined
