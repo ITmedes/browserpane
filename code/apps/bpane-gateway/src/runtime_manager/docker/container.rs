@@ -19,6 +19,7 @@ impl DockerRuntimeManager {
             )
         })?;
         let session_data_root = self.session_data_root().to_string();
+        let socket_volume_mount_root = self.socket_volume_mount_root();
         let mut args = vec![
             "run".to_string(),
             "-d".to_string(),
@@ -30,7 +31,7 @@ impl DockerRuntimeManager {
             "--network-alias".to_string(),
             container_name.to_string(),
             "-v".to_string(),
-            format!("{}:{}", self.config.socket_volume, self.config.socket_root),
+            format!("{}:{socket_volume_mount_root}", self.config.socket_volume),
             "-v".to_string(),
             format!(
                 "{}:{}",
