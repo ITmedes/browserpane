@@ -11,6 +11,7 @@
     "workflow:cli": "node scripts/workflow-cli.mjs",
     "smoke:automation-tasks": "node scripts/run-automation-task-smoke.mjs",
     "smoke:file-workspaces": "node scripts/run-file-workspace-smoke.mjs",
+    "smoke:browser-policy": "node scripts/run-browser-policy-smoke.mjs",
     "smoke:recording": "node scripts/run-recording-smoke.mjs",
     "smoke:test-embed-lifecycle": "node scripts/run-test-embed-lifecycle-smoke.mjs",
     "smoke:test-embed-overlay": "node scripts/run-test-embed-overlay-smoke.mjs",

@@ -1055,6 +1055,7 @@
       <nav class="control-nav" aria-label="Console navigation">
         <a class="nav-link" href="#panel-sessions">Sessions</a>
         <a class="nav-link" href="#panel-display">Display</a>
+        <a class="nav-link" href="#panel-browser-policy">Policy</a>
         <a class="nav-link" href="#panel-workflows">Workflows</a>
         <a class="nav-link" href="#panel-recording">Recording</a>
         <a class="nav-link" href="#panel-metrics">Metrics</a>
@@ -1184,6 +1185,33 @@
           <button id="btn-camera" class="toggle-button" aria-pressed="false" disabled>Camera Off</button>
           <button id="btn-mic" class="toggle-button" aria-pressed="false" disabled>Mic Off</button>
           <button id="btn-upload" disabled>Upload File</button>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-browser-policy">
+        <div class="panel-header">
+          <div class="panel-heading">
+            <span class="panel-title">Browser Policy</span>
+            <h2>Local file access guardrails</h2>
+            <p class="panel-copy">
+              Docker-backed browser sessions are expected to run with managed Chromium policy
+              that blocks arbitrary <code>file:///</code> navigation and File System Access API
+              read/write prompts by default.
+            </p>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <span id="browser-policy-mode">Mode: --</span>
+          <span id="browser-policy-file-url">file:// Navigation: --</span>
+          <span id="browser-policy-fs-read">File System Read: --</span>
+          <span id="browser-policy-fs-write">File System Write: --</span>
+          <span id="browser-policy-last-probe">Last Probe: --</span>
+        </div>
+
+        <div id="browser-policy-note" class="helper-note info">
+          Run <code>npm run smoke:browser-policy -- --headless</code> to execute the runtime CDP
+          probe against the selected docker-backed browser session.
         </div>
       </section>
 
@@ -1539,6 +1567,12 @@
     const cameraBtn = document.getElementById('btn-camera');
     const micBtn = document.getElementById('btn-mic');
     const uploadBtn = document.getElementById('btn-upload');
+    const browserPolicyModeEl = document.getElementById('browser-policy-mode');
+    const browserPolicyFileUrlEl = document.getElementById('browser-policy-file-url');
+    const browserPolicyFsReadEl = document.getElementById('browser-policy-fs-read');
+    const browserPolicyFsWriteEl = document.getElementById('browser-policy-fs-write');
+    const browserPolicyLastProbeEl = document.getElementById('browser-policy-last-probe');
+    const browserPolicyNoteEl = document.getElementById('browser-policy-note');
     const overlay = document.getElementById('overlay');
     const overlayTitle = document.getElementById('overlay-title');
     const overlayCopy = document.getElementById('overlay-copy');
@@ -2152,6 +2186,13 @@
       lastError: '',
       pollInterval: null,
     };
+    const browserPolicyState = {
+      mode: 'deny_all',
+      fileUrlNavigation: 'blocked',
+      fileSystemRead: 'blocked',
+      fileSystemWrite: 'blocked',
+      lastProbe: null,
+    };
     const workflowState = {
       definitions: [],
       selectedWorkflowId: '',
@@ -2182,6 +2223,36 @@
 
     function getShortSessionId(sessionId) {
       return sessionId ? String(sessionId).slice(0, 8) : '--';
+    }
+
+    function renderBrowserPolicyState() {
+      browserPolicyModeEl.textContent = `Mode: ${browserPolicyState.mode}`;
+      browserPolicyFileUrlEl.textContent = `file:// Navigation: ${browserPolicyState.fileUrlNavigation}`;
+      browserPolicyFsReadEl.textContent = `File System Read: ${browserPolicyState.fileSystemRead}`;
+      browserPolicyFsWriteEl.textContent = `File System Write: ${browserPolicyState.fileSystemWrite}`;
+      if (browserPolicyState.lastProbe) {
+        const probe = browserPolicyState.lastProbe;
+        browserPolicyLastProbeEl.textContent = `Last Probe: ${probe.blocked ? 'blocked' : 'failed'} · ${formatTimestamp(probe.checkedAt)}`;
+        browserPolicyNoteEl.textContent = probe.blocked
+          ? `Runtime probe passed for ${probe.probeUrl}: local file contents were not exposed.`
+          : `Runtime probe failed for ${probe.probeUrl}: ${probe.reason || 'unexpected result'}.`;
+        browserPolicyNoteEl.className = probe.blocked ? 'helper-note ok' : 'helper-note error';
+      } else {
+        browserPolicyLastProbeEl.textContent = 'Last Probe: --';
+        browserPolicyNoteEl.innerHTML = 'Run <code>npm run smoke:browser-policy -- --headless</code> to execute the runtime CDP probe against the selected docker-backed browser session.';
+        browserPolicyNoteEl.className = 'helper-note info';
+      }
+    }
+
+    function setBrowserPolicyProbeResult(result) {
+      browserPolicyState.lastProbe = {
+        blocked: Boolean(result?.blocked),
+        probeUrl: typeof result?.probeUrl === 'string' ? result.probeUrl : 'file:///etc/passwd',
+        reason: typeof result?.reason === 'string' ? result.reason : '',
+        checkedAt: typeof result?.checkedAt === 'string' ? result.checkedAt : new Date().toISOString(),
+      };
+      renderBrowserPolicyState();
+      return cloneValue(browserPolicyState);
     }
 
     function getSessionLabel(resource) {
@@ -5928,6 +5999,10 @@
         downloadingPlayback: recordingCatalogState.downloadingPlayback,
       }),
     };
+    window.__bpaneBrowserPolicy = {
+      getState: () => cloneValue(browserPolicyState),
+      setProbeResult: setBrowserPolicyProbeResult,
+    };
     window.__bpaneWorkflow = {
       listDefinitions: () => cloneValue(workflowState.definitions) ?? [],
       getState: () => ({
@@ -6027,6 +6102,7 @@
     };
 
     // ── Startup ─────────────────────────────────────────────────────
+    renderBrowserPolicyState();
     renderBenchmarkMetrics();
     renderRecordingState();
     renderRecordingCatalogState();
@@ -6043,6 +6119,7 @@
       'Recording API: window.__bpaneRecording.{start,stop,downloadLast,refreshCatalog,downloadCatalogRecording,downloadPlaybackExport,setAutoDownload,getState,getCatalogState}',
       'info',
     );
+    log('Browser policy API: window.__bpaneBrowserPolicy.{getState,setProbeResult}', 'info');
     log(
       'Workflow API: window.__bpaneWorkflow.{listDefinitions,getState,refreshDefinitions,selectWorkflow,setVersion,loadVersion,setInput,setOperatorInput,setOperatorComment,invokeSelected,refreshRun,submitInput,resumeRun,rejectRun,cancelRun,downloadProducedFile}',
       'info',

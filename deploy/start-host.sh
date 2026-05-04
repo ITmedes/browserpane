@@ -50,7 +50,10 @@ except json.JSONDecodeError as error:
     sys.exit(64)
 
 url_blocklist = policy.get("URLBlocklist")
-blocks_file_urls = isinstance(url_blocklist, list) and "file:///*" in url_blocklist
+blocks_file_urls = (
+    isinstance(url_blocklist, list)
+    and ("file://*" in url_blocklist or "file:///*" in url_blocklist)
+)
 blocks_file_system_read = policy.get("DefaultFileSystemReadGuardSetting") == 2
 blocks_file_system_write = policy.get("DefaultFileSystemWriteGuardSetting") == 2
 mode = (
