@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use anyhow::{anyhow, Result};
 use serde_json::json;
 
@@ -122,28 +120,30 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         return Err(anyhow!("recording lookup returned the wrong resource"));
     }
 
-    let _stopped = harness
+    let stopped_recording = harness
         .post_json(
             &format!("/api/v1/sessions/{session_id}/recordings/{recording_id}/stop"),
             json!({}),
         )
         .await?;
+    if stopped_recording["state"] != json!("finalizing") {
+        return Err(anyhow!(
+            "recording stop did not transition to finalizing: {stopped_recording}"
+        ));
+    }
 
-    let terminal_recording = harness
-        .poll_json(
-            "recording terminal state",
-            Duration::from_secs(30),
-            |value| {
-                value["state"] == json!("ready")
-                    || value["state"] == json!("failed")
-                    || value["state"] == json!("finalizing")
-            },
-            &format!("/api/v1/sessions/{session_id}/recordings/{recording_id}"),
+    let failed_recording = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/recordings/{recording_id}/fail"),
+            json!({
+                "error": "compose e2e synthetic recorder finalization",
+                "termination_reason": "worker_exit",
+            }),
         )
         .await?;
-    if !terminal_recording["state"].is_string() {
+    if failed_recording["state"] != json!("failed") {
         return Err(anyhow!(
-            "recording state did not remain readable after stop"
+            "recording fail did not transition to failed: {failed_recording}"
         ));
     }
 

@@ -1,6 +1,63 @@
 #!/bin/bash
 set -e
 
+normalize_path() {
+  python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+
+print(Path(sys.argv[1]).resolve(strict=False))
+PY
+}
+
+path_is_within() {
+  local child="$1"
+  local root="$2"
+  case "$child" in
+    "$root"|"$root"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+validate_session_data_path() {
+  local name="$1"
+  local value="$2"
+  local root="$3"
+  local normalized
+  normalized="$(normalize_path "$value")"
+  if ! path_is_within "$normalized" "$root"; then
+    echo "invalid ${name}: ${value} escapes BPANE_SESSION_DATA_DIR=${root}" >&2
+    exit 64
+  fi
+}
+
+# Create a dedicated Chromium profile and transfer roots for the current
+# BrowserPane session. Docker-backed runtimes provide BPANE_SESSION_DATA_DIR and
+# must keep browser data below that root; static_single remains a legacy path.
+BPANE_SESSION_ID="${BPANE_SESSION_ID:-static-default}"
+BPANE_PROFILE_ROOT="${BPANE_PROFILE_ROOT:-/home/bpane/.bpane-chromium-sessions}"
+SESSION_STATE_DIR="${BPANE_PROFILE_ROOT%/}/${BPANE_SESSION_ID}"
+PROFILE_DIR="${BPANE_PROFILE_DIR:-${SESSION_STATE_DIR}/chromium}"
+BPANE_UPLOAD_DIR="${BPANE_UPLOAD_DIR:-${SESSION_STATE_DIR}/uploads}"
+BPANE_DOWNLOAD_DIR="${BPANE_DOWNLOAD_DIR:-${SESSION_STATE_DIR}/downloads}"
+
+if [ -n "${BPANE_SESSION_DATA_DIR:-}" ]; then
+  BPANE_SESSION_DATA_DIR="$(normalize_path "$BPANE_SESSION_DATA_DIR")"
+  if [ "$BPANE_SESSION_DATA_DIR" = "/" ]; then
+    echo "invalid BPANE_SESSION_DATA_DIR: refusing to use / as the session data root" >&2
+    exit 64
+  fi
+  validate_session_data_path "BPANE_PROFILE_DIR" "$PROFILE_DIR" "$BPANE_SESSION_DATA_DIR"
+  validate_session_data_path "BPANE_UPLOAD_DIR" "$BPANE_UPLOAD_DIR" "$BPANE_SESSION_DATA_DIR"
+  validate_session_data_path "BPANE_DOWNLOAD_DIR" "$BPANE_DOWNLOAD_DIR" "$BPANE_SESSION_DATA_DIR"
+  export BPANE_SESSION_DATA_DIR
+fi
+export BPANE_SESSION_ID BPANE_PROFILE_ROOT PROFILE_DIR BPANE_UPLOAD_DIR BPANE_DOWNLOAD_DIR
+
+if [ "${BPANE_VALIDATE_RUNTIME_PATHS_ONLY:-0}" = "1" ]; then
+  exit 0
+fi
+
 # Clean stale lock files
 rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
 
@@ -100,15 +157,6 @@ gtk-cursor-blink-time=0
 EOF
 done
 
-# Create a dedicated Chromium profile for the current BrowserPane session.
-# Docker-backed runtimes override BPANE_SESSION_ID so stopped sessions can
-# restart against the same persisted Chromium state.
-BPANE_SESSION_ID="${BPANE_SESSION_ID:-static-default}"
-BPANE_PROFILE_ROOT="${BPANE_PROFILE_ROOT:-/home/bpane/.bpane-chromium-sessions}"
-SESSION_STATE_DIR="${BPANE_PROFILE_ROOT%/}/${BPANE_SESSION_ID}"
-PROFILE_DIR="${BPANE_PROFILE_DIR:-${SESSION_STATE_DIR}/chromium}"
-BPANE_UPLOAD_DIR="${BPANE_UPLOAD_DIR:-${SESSION_STATE_DIR}/uploads}"
-BPANE_DOWNLOAD_DIR="${BPANE_DOWNLOAD_DIR:-${SESSION_STATE_DIR}/downloads}"
 mkdir -p "$PROFILE_DIR" "$BPANE_UPLOAD_DIR" "$BPANE_DOWNLOAD_DIR"
 rm -f \
   "${PROFILE_DIR}/SingletonLock" \

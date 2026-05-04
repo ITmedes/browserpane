@@ -6,6 +6,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use crate::session_control::SessionStore;
+use crate::workspaces::WorkspaceFileStore;
 
 mod docker;
 mod static_single;
@@ -141,9 +142,11 @@ pub struct DockerRuntimeConfig {
     pub docker_bin: String,
     pub image: String,
     pub network: String,
-    pub shared_run_volume: String,
+    pub socket_volume: String,
+    pub session_data_volume_prefix: String,
     pub container_name_prefix: String,
     pub socket_root: String,
+    pub session_data_root: String,
     pub cdp_proxy_port: u16,
     pub shm_size: String,
     pub start_timeout: Duration,
@@ -239,6 +242,13 @@ impl SessionRuntimeManager {
         match &self.backend {
             RuntimeBackend::StaticSingle(_) => {}
             RuntimeBackend::Docker(manager) => manager.attach_session_store(store).await,
+        }
+    }
+
+    pub async fn attach_workspace_file_store(&self, store: Arc<WorkspaceFileStore>) {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => {}
+            RuntimeBackend::Docker(manager) => manager.attach_workspace_file_store(store).await,
         }
     }
 

@@ -10,6 +10,8 @@ mod automation_tasks;
 
 mod sessions;
 
+mod session_files;
+
 #[derive(Debug, Clone)]
 pub enum SessionStoreError {
     ActiveSessionConflict { max_runtime_sessions: usize },

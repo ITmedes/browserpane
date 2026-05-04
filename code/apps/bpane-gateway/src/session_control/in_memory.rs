@@ -4,6 +4,7 @@ use std::ops::Deref;
 mod automation_tasks;
 mod recordings;
 mod runtime_assignments;
+mod session_files;
 mod sessions;
 mod state;
 mod workflow_definitions;

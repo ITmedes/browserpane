@@ -171,7 +171,8 @@ docker compose -f deploy/compose.yml up --build
 
 - `BPANE_GATEWAY_DOCKER_RUNTIME_IMAGE`
 - `BPANE_GATEWAY_DOCKER_RUNTIME_NETWORK`
-- `BPANE_GATEWAY_DOCKER_RUNTIME_VOLUME`
+- `BPANE_GATEWAY_DOCKER_RUNTIME_SOCKET_VOLUME`
+- `BPANE_GATEWAY_DOCKER_RUNTIME_SESSION_DATA_VOLUME_PREFIX`
 
 The default local auth flow is OIDC-based:
 
@@ -184,7 +185,7 @@ The default local auth flow is OIDC-based:
 - sessions created from the test page use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
 - reconnecting a stopped session now restarts the same session resource instead of creating a new one
 - the console UI now shows whether the currently selected session is the exact session delegated to the local MCP bridge
-- in Docker-backed runtime modes, BrowserPane reuses a session-specific Chromium profile so cookies, cache, downloads, and Chromium session-restore state survive worker restarts
+- in Docker-backed runtime modes, BrowserPane mounts session-specific browser data for the Chromium profile, uploads, and downloads so cookies, cache, downloads, and Chromium session-restore state survive worker restarts without sharing one browser data root across sessions
 - Docker-backed runtime assignments are now persisted in Postgres and recovered on gateway restart, so an existing pool-mode worker can be rebound without launching a duplicate container
 - exact in-memory browser process state is only preserved while the worker is still alive; once idle-stop shuts a worker down, reconnect restores the browser from its persisted profile rather than from a true container checkpoint
 - if you want the local `mcp-bridge` to follow that same session, click `Delegate MCP`
@@ -228,6 +229,20 @@ The same frozen API surface also includes session-scoped runtime routes:
 - `POST /api/v1/sessions/{id}/automation-owner`
 - `DELETE /api/v1/sessions/{id}/automation-owner`
 
+Session-scoped file binding routes let owners attach existing workspace files
+to a session-level mount contract before runtime materialization:
+
+- `POST /api/v1/sessions/{id}/file-bindings`
+- `GET /api/v1/sessions/{id}/file-bindings`
+- `GET /api/v1/sessions/{id}/file-bindings/{binding_id}`
+- `GET /api/v1/sessions/{id}/file-bindings/{binding_id}/content`
+- `DELETE /api/v1/sessions/{id}/file-bindings/{binding_id}`
+
+Bindings snapshot workspace-file metadata, enforce relative mount paths, reject
+duplicate active mount paths per session, and allow session automation access to
+read/list bound file resources. Runtime materialization into browser containers
+is the next implementation phase.
+
 Session resources and status responses now expose a richer lifecycle model:
 
 - persisted `state`
@@ -260,12 +275,12 @@ Current limitation:
 - the public session resource model is now versioned and persistent
 - gateway transport and runtime compatibility APIs are now session-scoped
 - gateway runtime orchestration now goes through an internal `SessionManager` boundary; the current runtime backend implementation still lives in `runtime_manager.rs`
-- the default runtime backend is still `legacy_single_runtime` compatibility mode
+- the default local compose runtime backend is `docker_pool`; `legacy_single_runtime` remains available for compatibility checks
 - the optional `docker_single` backend can now start and stop one runtime container for the active session
 - the optional `docker_pool` backend can start multiple runtime containers in parallel, but only up to its configured runtime caps
 - Docker-backed runtime assignment metadata is now persisted and reconciled on gateway startup so pool-mode workers can survive a gateway restart cleanly
 - `mcp-bridge` now follows the selected delegated session's runtime endpoint, but each bridge instance still manages only one control session at a time
-- the default compose stack still runs the single-runtime backend unless you opt into `docker_pool`
+- the default compose stack runs `docker_pool` for local multi-session testing
 - global compatibility routes like `/api/session/status` and `/api/session/mcp-owner` are compatibility-only and are not part of the frozen v1 contract; multi-runtime backends should use session-scoped `/api/v1/sessions/{id}/...` routes
 
 ### Recordings

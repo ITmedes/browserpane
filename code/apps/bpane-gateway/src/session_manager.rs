@@ -4,6 +4,8 @@ use crate::runtime_manager::{
     RuntimeSessionAccessInfo, SessionRuntimeManager,
 };
 use crate::session_control::SessionStore;
+use crate::workspaces::WorkspaceFileStore;
+use std::sync::Arc;
 use uuid::Uuid;
 
 pub type SessionManagerConfig = RuntimeManagerConfig;
@@ -38,6 +40,10 @@ impl SessionManager {
 
     pub async fn attach_session_store(&self, store: SessionStore) {
         self.inner.attach_session_store(store).await;
+    }
+
+    pub async fn attach_workspace_file_store(&self, store: Arc<WorkspaceFileStore>) {
+        self.inner.attach_workspace_file_store(store).await;
     }
 
     pub async fn reconcile_persisted_state(&self) -> Result<(), SessionManagerError> {
@@ -85,9 +91,11 @@ mod tests {
             docker_bin: "docker".to_string(),
             image: "deploy-host".to_string(),
             network: "deploy_bpane-internal".to_string(),
-            shared_run_volume: "deploy_agent-socket".to_string(),
+            socket_volume: "deploy_agent-socket".to_string(),
+            session_data_volume_prefix: "deploy_bpane-session-data".to_string(),
             container_name_prefix: "bpane-runtime".to_string(),
             socket_root: "/run/bpane/sessions".to_string(),
+            session_data_root: "/run/bpane/session".to_string(),
             cdp_proxy_port: 9223,
             shm_size: "128m".to_string(),
             start_timeout: Duration::from_secs(30),
