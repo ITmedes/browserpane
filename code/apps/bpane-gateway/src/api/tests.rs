@@ -30,8 +30,9 @@ use crate::recording::{
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
-    SessionRecordingFormat, SessionRecordingMode, SessionRecordingPolicy,
-    SessionRecordingState as StoredSessionRecordingState, StoredSessionRecording,
+    PersistSessionFileRequest, SessionFileSource, SessionRecordingFormat, SessionRecordingMode,
+    SessionRecordingPolicy, SessionRecordingState as StoredSessionRecordingState,
+    StoredSessionRecording,
 };
 use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerProfile};
 use crate::workflow::{WorkflowObservability, WorkflowSourceResolver};

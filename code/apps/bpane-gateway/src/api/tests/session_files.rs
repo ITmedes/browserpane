@@ -64,6 +64,41 @@ async fn create_workspace_file(app: Router, token: &str) -> (String, String, Vec
     (workspace_id, file_id, file_bytes)
 }
 
+async fn create_runtime_session_file(state: &Arc<ApiState>, session_id: &str) -> (String, Vec<u8>) {
+    let session_id = Uuid::parse_str(session_id).unwrap();
+    let file_id = Uuid::now_v7();
+    let file_bytes = b"runtime upload payload\n".to_vec();
+    let file_name = "upload.txt".to_string();
+    let stored_artifact = state
+        .workspace_file_store
+        .write(crate::workspaces::StoreWorkspaceFileRequest {
+            workspace_id: session_id,
+            file_id,
+            file_name: file_name.clone(),
+            bytes: file_bytes.clone(),
+        })
+        .await
+        .unwrap();
+
+    let file = state
+        .session_store
+        .record_session_file(PersistSessionFileRequest {
+            id: file_id,
+            session_id,
+            name: file_name,
+            media_type: Some("text/plain".to_string()),
+            byte_count: file_bytes.len() as u64,
+            sha256_hex: hex::encode(Sha256::digest(&file_bytes)),
+            artifact_ref: stored_artifact.artifact_ref,
+            source: SessionFileSource::BrowserUpload,
+            labels: HashMap::from([("suite".to_string(), "session-files".to_string())]),
+        })
+        .await
+        .unwrap();
+
+    (file.id.to_string(), file_bytes)
+}
+
 #[tokio::test]
 async fn creates_lists_reads_and_removes_session_file_bindings() {
     let (app, token) = test_router();
@@ -176,6 +211,67 @@ async fn creates_lists_reads_and_removes_session_file_bindings() {
         .as_array()
         .unwrap()
         .is_empty());
+}
+
+#[tokio::test]
+async fn lists_downloads_and_scopes_runtime_session_files() {
+    let (app, token, state) = test_router_with_state();
+    let session_id = create_test_session(app.clone(), &token).await;
+    let other_session_id = Uuid::now_v7().to_string();
+    let (file_id, file_bytes) = create_runtime_session_file(&state, &session_id).await;
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/files"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let files = response_json(list_response).await;
+    assert_eq!(files["files"].as_array().unwrap().len(), 1);
+    assert_eq!(files["files"][0]["id"], file_id);
+    assert_eq!(files["files"][0]["session_id"], session_id);
+    assert_eq!(files["files"][0]["name"], "upload.txt");
+    assert_eq!(files["files"][0]["source"], "browser_upload");
+    assert_eq!(
+        files["files"][0]["content_path"],
+        format!("/api/v1/sessions/{session_id}/files/{file_id}/content")
+    );
+
+    let content_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/files/{file_id}/content"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(content_response.status(), StatusCode::OK);
+    assert_eq!(response_bytes(content_response).await, file_bytes);
+
+    let cross_session_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/sessions/{other_session_id}/files/{file_id}/content"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cross_session_response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

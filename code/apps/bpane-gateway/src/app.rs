@@ -61,6 +61,7 @@ impl GatewayApp {
             auth_validator: auth_services.auth_validator.clone(),
             connect_ticket_manager: auth_services.connect_ticket_manager.clone(),
             session_store: session_store.clone(),
+            workspace_file_store: workspace_file_store.clone(),
             recording_lifecycle: recording_services.lifecycle.clone(),
             idle_stop_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
             heartbeat_timeout: Duration::from_secs(config.gateway.heartbeat_timeout_secs),

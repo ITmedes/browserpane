@@ -1322,6 +1322,80 @@ paths:
                 $ref: '#/components/schemas/SessionStopConflictResponse'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/files:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Session Files]
+      summary: List runtime files associated with a visible session
+      operationId: listSessionFiles
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Session file list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionFileListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/files/{file_id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/SessionFileId'
+    get:
+      tags: [Session Files]
+      summary: Fetch one runtime session file metadata resource
+      operationId: getSessionFile
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Session file metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionFileResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/files/{file_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/SessionFileId'
+    get:
+      tags: [Session Files]
+      summary: Download runtime session file content
+      operationId: getSessionFileContent
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Raw file bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/file-bindings:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -2046,6 +2120,13 @@ components:
       schema:
         type: string
         format: uuid
+    SessionFileId:
+      name: file_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     BPaneFileName:
       name: x-bpane-file-name
       in: header
@@ -2755,6 +2836,64 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FileWorkspaceFileResource'
+    SessionFileSource:
+      type: string
+      enum:
+        - browser_upload
+        - browser_download
+    SessionFileResource:
+      type: object
+      required:
+        - id
+        - session_id
+        - name
+        - media_type
+        - byte_count
+        - sha256_hex
+        - source
+        - labels
+        - content_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        media_type:
+          type: string
+          nullable: true
+        byte_count:
+          type: integer
+          minimum: 0
+        sha256_hex:
+          type: string
+        source:
+          $ref: '#/components/schemas/SessionFileSource'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        content_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SessionFileListResponse:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionFileResource'
     SessionFileBindingMode:
       type: string
       enum:

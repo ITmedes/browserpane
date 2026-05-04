@@ -1,6 +1,50 @@
 use super::*;
 
 impl SessionStore {
+    pub async fn record_session_file(
+        &self,
+        request: PersistSessionFileRequest,
+    ) -> Result<StoredSessionFile, SessionStoreError> {
+        validate_session_file_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.record_session_file(request).await,
+            SessionStoreBackend::Postgres(store) => store.record_session_file(request).await,
+        }
+    }
+
+    pub async fn list_session_files_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<StoredSessionFile>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_session_files_for_session(session_id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_session_files_for_session(session_id).await
+            }
+        }
+    }
+
+    pub async fn get_session_file_for_session(
+        &self,
+        session_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredSessionFile>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_session_file_for_session(session_id, file_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_session_file_for_session(session_id, file_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn create_session_file_binding_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,

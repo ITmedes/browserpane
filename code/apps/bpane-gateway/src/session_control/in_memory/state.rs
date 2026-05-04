@@ -22,6 +22,7 @@ pub(in crate::session_control) struct InMemoryStoreState {
     pub(in crate::session_control) extension_versions: Mutex<Vec<StoredExtensionVersion>>,
     pub(in crate::session_control) file_workspaces: Mutex<Vec<StoredFileWorkspace>>,
     pub(in crate::session_control) file_workspace_files: Mutex<Vec<StoredFileWorkspaceFile>>,
+    pub(in crate::session_control) session_files: Mutex<Vec<StoredSessionFile>>,
     pub(in crate::session_control) session_file_bindings: Mutex<Vec<StoredSessionFileBinding>>,
     pub(in crate::session_control) recordings: Mutex<Vec<StoredSessionRecording>>,
     pub(in crate::session_control) runtime_assignments:
@@ -52,6 +53,7 @@ impl InMemoryStoreState {
             extension_versions: Mutex::new(Vec::new()),
             file_workspaces: Mutex::new(Vec::new()),
             file_workspace_files: Mutex::new(Vec::new()),
+            session_files: Mutex::new(Vec::new()),
             session_file_bindings: Mutex::new(Vec::new()),
             recordings: Mutex::new(Vec::new()),
             runtime_assignments: Mutex::new(HashMap::new()),
