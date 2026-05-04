@@ -133,11 +133,7 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .poll_json(
             "recording terminal state",
             Duration::from_secs(30),
-            |value| {
-                value["state"] == json!("ready")
-                    || value["state"] == json!("failed")
-                    || value["state"] == json!("finalizing")
-            },
+            |value| value["state"] == json!("ready") || value["state"] == json!("failed"),
             &format!("/api/v1/sessions/{session_id}/recordings/{recording_id}"),
         )
         .await?;
