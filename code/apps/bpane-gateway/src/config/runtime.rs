@@ -33,9 +33,16 @@ pub struct RuntimeConfig {
     #[arg(long = "docker-runtime-network")]
     pub docker_network: Option<String>,
 
-    /// Docker named volume mounted at /run/bpane for the optional docker_single runtime backend.
-    #[arg(long = "docker-runtime-volume")]
-    pub docker_volume: Option<String>,
+    /// Docker named volume mounted at the session socket root for docker-backed runtimes.
+    #[arg(long = "docker-runtime-socket-volume", alias = "docker-runtime-volume")]
+    pub docker_socket_volume: Option<String>,
+
+    /// Prefix for per-session Docker named volumes that hold browser profile/uploads/downloads.
+    #[arg(
+        long = "docker-runtime-session-data-volume-prefix",
+        default_value = "bpane-session-data"
+    )]
+    pub docker_session_data_volume_prefix: String,
 
     /// Container name prefix used by docker-backed runtime workers.
     #[arg(
@@ -50,6 +57,13 @@ pub struct RuntimeConfig {
         default_value = "/run/bpane/sessions"
     )]
     pub docker_socket_root: String,
+
+    /// Session data root inside docker-backed runtime workers.
+    #[arg(
+        long = "docker-runtime-session-data-root",
+        default_value = "/run/bpane/session"
+    )]
+    pub docker_session_data_root: String,
 
     /// CDP proxy port exposed by docker-backed runtime workers.
     #[arg(long = "docker-runtime-cdp-proxy-port", default_value_t = 9223)]

@@ -10,9 +10,11 @@ fn docker_config() -> DockerRuntimeConfig {
         docker_bin: "docker".to_string(),
         image: "deploy-host".to_string(),
         network: "deploy_bpane-internal".to_string(),
-        shared_run_volume: "deploy_agent-socket".to_string(),
+        socket_volume: "deploy_agent-socket".to_string(),
+        session_data_volume_prefix: "deploy_bpane-session-data".to_string(),
         container_name_prefix: "bpane-runtime".to_string(),
         socket_root: "/run/bpane/sessions".to_string(),
+        session_data_root: "/run/bpane/session".to_string(),
         cdp_proxy_port: 9223,
         shm_size: "128m".to_string(),
         start_timeout: Duration::from_secs(30),
@@ -108,6 +110,37 @@ fn docker_runtime_requires_core_configuration() {
 }
 
 #[test]
+fn docker_runtime_rejects_root_runtime_mounts() {
+    let socket_error =
+        SessionRuntimeManager::new(RuntimeManagerConfig::DockerPool(DockerRuntimeConfig {
+            socket_root: "/".to_string(),
+            ..docker_config()
+        }))
+        .err()
+        .unwrap();
+    assert_eq!(
+        socket_error,
+        RuntimeManagerError::InvalidConfiguration(
+            "docker runtime backend requires socket_root below /".to_string(),
+        )
+    );
+
+    let data_error =
+        SessionRuntimeManager::new(RuntimeManagerConfig::DockerPool(DockerRuntimeConfig {
+            session_data_root: "/".to_string(),
+            ..docker_config()
+        }))
+        .err()
+        .unwrap();
+    assert_eq!(
+        data_error,
+        RuntimeManagerError::InvalidConfiguration(
+            "docker runtime backend requires session_data_root below /".to_string(),
+        )
+    );
+}
+
+#[test]
 fn docker_runtime_validates_starting_capacity_limit() {
     let error = SessionRuntimeManager::new(RuntimeManagerConfig::DockerPool(DockerRuntimeConfig {
         max_starting_runtimes: 3,
@@ -169,4 +202,39 @@ fn docker_runtime_names_and_sockets_are_session_scoped() {
         manager.cdp_endpoint_for_session(session_id),
         format!("http://bpane-runtime-{}:9223", session_id.as_simple())
     );
+}
+
+#[test]
+fn docker_runtime_launch_separates_socket_and_session_data_mounts() {
+    let manager = DockerRuntimeManager::new(
+        docker_config(),
+        RuntimeProfile {
+            runtime_binding: "docker_runtime_pool".to_string(),
+            compatibility_mode: "session_runtime_pool".to_string(),
+            max_runtime_sessions: 2,
+            supports_legacy_global_routes: false,
+            supports_session_extensions: true,
+        },
+    )
+    .unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let lease = RuntimeLease {
+        session_id,
+        agent_socket_path: manager.socket_path_for_session(session_id),
+        container_name: Some(manager.container_name_for_session(session_id)),
+        idle_generation: 0,
+    };
+
+    let args = manager.docker_run_args(&lease, &[]).unwrap();
+
+    assert!(args.contains(&"deploy_agent-socket:/run/bpane/sessions".to_string()));
+    assert!(args.contains(
+        &"deploy_bpane-session-data-019db438c74a7ef2810c792e298faf11:/run/bpane/session"
+            .to_string()
+    ));
+    assert!(!args.contains(&"deploy_agent-socket:/run/bpane".to_string()));
+    assert!(args.contains(&"BPANE_SESSION_DATA_DIR=/run/bpane/session".to_string()));
+    assert!(args.contains(&"BPANE_PROFILE_DIR=/run/bpane/session/chromium".to_string()));
+    assert!(args.contains(&"BPANE_UPLOAD_DIR=/run/bpane/session/uploads".to_string()));
+    assert!(args.contains(&"BPANE_DOWNLOAD_DIR=/run/bpane/session/downloads".to_string()));
 }
