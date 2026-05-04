@@ -155,11 +155,15 @@ Completed scope:
   state is machine-checkable.
 - The multi-session smoke asserts the bridge reports `aligned` health after
   switching delegation to session B.
+- The multi-session smoke now opens a real MCP streamable HTTP client, calls
+  `browser_navigate`, and verifies the side effect lands in the delegated
+  session's Chromium runtime instead of the previous session.
 
 Commits:
 
 - `bcd85f9 fix(mcp): clear stale delegation on session switch`
 - `586b93e feat(mcp): expose bridge alignment health`
+- `5bce3e0 test(client): verify mcp actions target delegated session`
 
 Validation completed:
 
@@ -170,14 +174,12 @@ Validation completed:
 
 Remaining scope:
 
-- Add at least one real MCP tool-call side effect test to prove browser actions
-  land in the intended delegated session.
 - Keep the per-connection multi-session MCP model as the longer-term design.
 
 Goal: delegation must not leave the MCP bridge silently controlling the wrong
 BrowserPane session.
 
-Implementation targets:
+Completed implementation targets:
 
 - Stabilize existing single-session `/control-session` switching first.
 - Clear previous session MCP ownership when switching from session A to B.
@@ -186,6 +188,9 @@ Implementation targets:
 - Add regression coverage that refetches both session statuses after a switch.
 - Add at least one real MCP tool-call side effect test to verify it lands on
   the intended session.
+
+Remaining implementation target:
+
 - Keep the per-connection multi-session MCP model as the longer-term design.
 
 Acceptance criteria:
