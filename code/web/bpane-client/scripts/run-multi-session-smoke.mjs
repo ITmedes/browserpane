@@ -3,12 +3,14 @@ import { execFile } from 'node:child_process';
 import process from 'node:process';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright-core';
+import { McpStreamableClient } from './support/mcp-streamable-client.mjs';
 
 const execFileAsync = promisify(execFile);
 
 const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
   mcpHealthUrl: 'http://localhost:8931/health',
+  mcpUrl: 'http://localhost:8931/mcp',
   mcpRegisterUrl: 'http://localhost:8931/register',
   mcpControlUrl: 'http://localhost:8931/control-session',
   certSpki: process.env.BPANE_BENCHMARK_CERT_SPKI ?? '',
@@ -40,6 +42,9 @@ function parseArgs(argv) {
       i++;
     } else if (arg === '--mcp-health-url' && next) {
       options.mcpHealthUrl = next;
+      i++;
+    } else if (arg === '--mcp-url' && next) {
+      options.mcpUrl = next;
       i++;
     } else if (arg === '--mcp-register-url' && next) {
       options.mcpRegisterUrl = next;
@@ -75,6 +80,7 @@ Usage: node scripts/run-multi-session-smoke.mjs [options]
 Options:
   --page-url <url>            Local test page URL (default: ${DEFAULTS.pageUrl})
   --mcp-health-url <url>      MCP bridge health URL (default: ${DEFAULTS.mcpHealthUrl})
+  --mcp-url <url>             MCP streamable HTTP URL (default: ${DEFAULTS.mcpUrl})
   --mcp-register-url <url>    MCP bridge register URL (default: ${DEFAULTS.mcpRegisterUrl})
   --mcp-control-url <url>     MCP bridge control URL (default: ${DEFAULTS.mcpControlUrl})
   --cert-spki <base64>        SPKI pin for the local gateway cert
@@ -326,6 +332,76 @@ async function lookupRuntimeContainerId(sessionId) {
   return stdout.trim();
 }
 
+async function fetchRuntimeTargetUrls(containerId) {
+  const script = `
+import json
+import sys
+import urllib.request
+
+with urllib.request.urlopen("http://127.0.0.1:9222/json/list", timeout=5) as response:
+    sys.stdout.write(response.read().decode("utf-8"))
+`;
+  const { stdout } = await execFileAsync('docker', ['exec', containerId, 'python3', '-c', script]);
+  const targets = JSON.parse(stdout);
+  if (!Array.isArray(targets)) {
+    return [];
+  }
+  return targets
+    .map((target) => (typeof target?.url === 'string' ? target.url : ''))
+    .filter(Boolean);
+}
+
+function buildMcpProbeUrl(sessionId) {
+  const marker = `bpane-mcp-probe-${sessionId}-${Date.now()}`;
+  const document = `<title>${marker}</title><body>${marker}</body>`;
+  return {
+    marker,
+    url: `data:text/html,${encodeURIComponent(document)}`,
+  };
+}
+
+async function verifyMcpNavigationLandsInSession({ options, containerA, containerB, sessionB }) {
+  const probe = buildMcpProbeUrl(sessionB);
+  const client = new McpStreamableClient({
+    endpointUrl: options.mcpUrl,
+    requestTimeoutMs: options.connectTimeoutMs,
+  });
+
+  try {
+    await client.initialize();
+    const tools = await client.listTools();
+    if (!tools.some((tool) => tool?.name === 'browser_navigate')) {
+      throw new Error('MCP bridge did not expose the browser_navigate tool.');
+    }
+    const result = await client.callTool('browser_navigate', { url: probe.url });
+    if (result?.isError === true) {
+      throw new Error(`MCP browser_navigate reported an error: ${JSON.stringify(result)}`);
+    }
+
+    const sessionBUrls = await poll(
+      `MCP navigation target in session ${sessionB}`,
+      () => fetchRuntimeTargetUrls(containerB),
+      (urls) => urls.some((url) => url.includes(probe.marker)),
+      options.connectTimeoutMs,
+      1000,
+    );
+    const sessionAUrls = await fetchRuntimeTargetUrls(containerA);
+    if (sessionAUrls.some((url) => url.includes(probe.marker))) {
+      throw new Error('MCP browser_navigate side effect landed in session A instead of session B.');
+    }
+
+    return {
+      client,
+      marker: probe.marker,
+      target_session_urls: sessionBUrls,
+      non_target_session_urls: sessionAUrls,
+    };
+  } catch (error) {
+    await client.close().catch(() => {});
+    throw error;
+  }
+}
+
 async function fetchSessionResource(accessToken, options, sessionId) {
   return await fetchJson(`${options.pageUrl}/api/v1/sessions/${sessionId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -392,6 +468,7 @@ async function main() {
   let pageOwnerA = null;
   let pageOwnerB = null;
   let pageViewer = null;
+  let mcpClient = null;
   let accessToken = '';
   const createdSessions = [];
 
@@ -458,6 +535,14 @@ async function main() {
     const healthAfterB = await delegateMcp(pageOwnerB, sessionB, options);
     const registerAfterB = await registerMcp(options);
     const healthAfterRegisterB = await fetchJson(options.mcpHealthUrl);
+    log(`Verifying MCP browser action lands in session ${sessionB}`);
+    const mcpSideEffect = await verifyMcpNavigationLandsInSession({
+      options,
+      containerA,
+      containerB,
+      sessionB,
+    });
+    mcpClient = mcpSideEffect.client;
     const sessionAResourceAfterSwitch = await fetchSessionResource(accessToken, options, sessionA);
     const sessionBResourceAfterSwitch = await fetchSessionResource(accessToken, options, sessionB);
     const sessionAStatusAfterSwitch = await fetchSessionStatus(accessToken, options, sessionA);
@@ -497,6 +582,11 @@ async function main() {
         after_delegate_b: healthAfterB,
         after_register_b: registerAfterB,
         final_health: healthAfterRegisterB,
+        side_effect: {
+          marker: mcpSideEffect.marker,
+          target_session_url_count: mcpSideEffect.target_session_urls.length,
+          non_target_session_url_count: mcpSideEffect.non_target_session_urls.length,
+        },
       },
     };
 
@@ -542,6 +632,11 @@ async function main() {
       await fs.writeFile(options.outputPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
     }
   } finally {
+    if (mcpClient) {
+      await mcpClient.close().catch((error) => {
+        log(`cleanup warning: failed to close MCP client: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
     if (pageViewer) {
       await disconnectSession(pageViewer).catch(() => {});
     }
