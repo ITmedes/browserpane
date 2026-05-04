@@ -66,7 +66,8 @@ Acceptance criteria:
 
 Source issue: `#56`
 
-Implementation status: partially completed on `feature/BPANE-0065`.
+Implementation status: completed on `feature/BPANE-0065`, with optional
+follow-ups listed below.
 
 Completed scope:
 
@@ -79,6 +80,8 @@ Completed scope:
 - Browser upload recording from completed `CH_FILE_UP` transfers.
 - Browser download recording from completed `CH_FILE_DOWN` transfers before
   gateway fan-out.
+- Configured session-file retention cleanup for expired runtime file artifacts
+  and metadata.
 - `dev/test-embed.html` Session Files panel.
 - Compose-backed browser smoke for upload visibility and authenticated content
   download.
@@ -88,19 +91,20 @@ Commits:
 - `69337d7 feat(gateway): track uploaded session files`
 - `ed53828 feat(gateway): record downloaded session files`
 - `e4789d0 test(client): add session file harness smoke`
+- `7b7a451 feat(gateway): clean up retained session files`
 
 Validation completed:
 
 - `cargo fmt --all -- --check`
 - `cargo clippy -p bpane-gateway --all-targets --all-features -- -D warnings`
 - `cargo test -p bpane-gateway`
+- `cargo test -p bpane-gateway session_files::retention`
 - `cd code/web/bpane-client && node --check scripts/run-session-files-smoke.mjs`
 - `cd code/web/bpane-client && npm run build`
 - `cd code/web/bpane-client && npm run smoke:session-files -- --headless`
 
-Remaining scope:
+Follow-up candidates:
 
-- Define retention and cleanup rules for session-file artifacts.
 - Decide whether runtime session files need a dedicated artifact store instead
   of the current pragmatic workspace-file-store backed implementation.
 - Add stronger download e2e coverage if a host-triggered download fixture is
