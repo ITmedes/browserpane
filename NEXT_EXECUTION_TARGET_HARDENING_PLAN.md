@@ -139,6 +139,37 @@ Acceptance criteria:
 
 Source issue: `#54`
 
+Implementation status: in progress on `feature/BPANE-0065`.
+
+Completed scope:
+
+- Switching the local bridge from session A to session B now releases live MCP
+  ownership for A before caching automation access for B.
+- `dev/test-embed.html` refreshes bridge/session state before delegation and
+  clears previous bridge delegates after the bridge adopts the new session.
+- The multi-session smoke refetches both session resources and statuses after
+  a bridge switch and fails if session A remains backend-delegated or
+  MCP-owned.
+
+Commits:
+
+- `bcd85f9 fix(mcp): clear stale delegation on session switch`
+
+Validation completed:
+
+- `cd code/integrations/mcp-bridge && npm run build`
+- `cd code/web/bpane-client && node --check scripts/run-multi-session-smoke.mjs`
+- `cd code/web/bpane-client && npm run build`
+- `cd code/web/bpane-client && npm run smoke:multisession -- --headless`
+
+Remaining scope:
+
+- Surface split/stale bridge state explicitly through `/health`, beyond the
+  current control-session and Playwright endpoint fields.
+- Add at least one real MCP tool-call side effect test to prove browser actions
+  land in the intended delegated session.
+- Keep the per-connection multi-session MCP model as the longer-term design.
+
 Goal: delegation must not leave the MCP bridge silently controlling the wrong
 BrowserPane session.
 
