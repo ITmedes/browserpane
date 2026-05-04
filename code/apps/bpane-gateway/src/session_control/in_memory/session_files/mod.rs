@@ -123,4 +123,56 @@ impl InMemorySessionStore {
         binding.updated_at = Utc::now();
         Ok(Some(binding.clone()))
     }
+
+    pub(in crate::session_control) async fn mark_session_file_binding_materialized(
+        &self,
+        session_id: Uuid,
+        binding_id: Uuid,
+    ) -> Result<Option<StoredSessionFileBinding>, SessionStoreError> {
+        self.transition_session_file_binding_materialization(
+            session_id,
+            binding_id,
+            SessionFileBindingState::Materialized,
+            None,
+        )
+        .await
+    }
+
+    pub(in crate::session_control) async fn fail_session_file_binding_materialization(
+        &self,
+        session_id: Uuid,
+        binding_id: Uuid,
+        error: String,
+    ) -> Result<Option<StoredSessionFileBinding>, SessionStoreError> {
+        self.transition_session_file_binding_materialization(
+            session_id,
+            binding_id,
+            SessionFileBindingState::Failed,
+            Some(error),
+        )
+        .await
+    }
+
+    async fn transition_session_file_binding_materialization(
+        &self,
+        session_id: Uuid,
+        binding_id: Uuid,
+        state: SessionFileBindingState,
+        error: Option<String>,
+    ) -> Result<Option<StoredSessionFileBinding>, SessionStoreError> {
+        let mut bindings = self.session_file_bindings.lock().await;
+        let Some(binding) = bindings
+            .iter_mut()
+            .find(|binding| binding.session_id == session_id && binding.id == binding_id)
+        else {
+            return Ok(None);
+        };
+        if binding.state == SessionFileBindingState::Removed {
+            return Ok(None);
+        }
+        binding.state = state;
+        binding.error = error;
+        binding.updated_at = Utc::now();
+        Ok(Some(binding.clone()))
+    }
 }

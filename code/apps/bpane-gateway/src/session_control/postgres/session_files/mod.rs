@@ -48,6 +48,37 @@ impl PostgresSessionStore {
             .remove_session_file_binding_for_owner(principal, session_id, binding_id)
             .await
     }
+
+    pub(in crate::session_control) async fn mark_session_file_binding_materialized(
+        &self,
+        session_id: Uuid,
+        binding_id: Uuid,
+    ) -> Result<Option<StoredSessionFileBinding>, SessionStoreError> {
+        self.session_file_repository()
+            .transition_session_file_binding_materialization(
+                session_id,
+                binding_id,
+                SessionFileBindingState::Materialized,
+                None,
+            )
+            .await
+    }
+
+    pub(in crate::session_control) async fn fail_session_file_binding_materialization(
+        &self,
+        session_id: Uuid,
+        binding_id: Uuid,
+        error: String,
+    ) -> Result<Option<StoredSessionFileBinding>, SessionStoreError> {
+        self.session_file_repository()
+            .transition_session_file_binding_materialization(
+                session_id,
+                binding_id,
+                SessionFileBindingState::Failed,
+                Some(error),
+            )
+            .await
+    }
 }
 
 impl SessionFileRepository<'_> {
@@ -308,6 +339,60 @@ impl SessionFileRepository<'_> {
             .map_err(|error| {
                 SessionStoreError::Backend(format!(
                     "failed to remove session file binding: {error}"
+                ))
+            })?;
+        row.as_ref()
+            .map(row_to_stored_session_file_binding)
+            .transpose()
+    }
+
+    pub(in crate::session_control) async fn transition_session_file_binding_materialization(
+        &self,
+        session_id: Uuid,
+        binding_id: Uuid,
+        state: SessionFileBindingState,
+        error: Option<String>,
+    ) -> Result<Option<StoredSessionFileBinding>, SessionStoreError> {
+        let now = Utc::now();
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                UPDATE control_session_file_bindings
+                SET state = $3,
+                    error = $4,
+                    updated_at = $5
+                WHERE session_id = $1
+                  AND id = $2
+                  AND state <> 'removed'
+                RETURNING
+                    id,
+                    session_id,
+                    workspace_id,
+                    file_id,
+                    file_name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    provenance,
+                    artifact_ref,
+                    mount_path,
+                    mode,
+                    state,
+                    error,
+                    labels,
+                    created_at,
+                    updated_at
+                "#,
+                &[&session_id, &binding_id, &state.as_str(), &error, &now],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to update session file binding materialization state: {error}"
                 ))
             })?;
         row.as_ref()

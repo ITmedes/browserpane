@@ -4,6 +4,8 @@ use crate::runtime_manager::{
     RuntimeSessionAccessInfo, SessionRuntimeManager,
 };
 use crate::session_control::SessionStore;
+use crate::workspaces::WorkspaceFileStore;
+use std::sync::Arc;
 use uuid::Uuid;
 
 pub type SessionManagerConfig = RuntimeManagerConfig;
@@ -38,6 +40,10 @@ impl SessionManager {
 
     pub async fn attach_session_store(&self, store: SessionStore) {
         self.inner.attach_session_store(store).await;
+    }
+
+    pub async fn attach_workspace_file_store(&self, store: Arc<WorkspaceFileStore>) {
+        self.inner.attach_workspace_file_store(store).await;
     }
 
     pub async fn reconcile_persisted_state(&self) -> Result<(), SessionManagerError> {
