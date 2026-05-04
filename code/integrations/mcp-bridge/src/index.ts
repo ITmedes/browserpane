@@ -765,14 +765,14 @@ async function main() {
           res.end(JSON.stringify({ error: `session ${sessionId} not found or not delegated` }));
           return;
         }
-        const nextAccess = await automationAccessManager.get(resolved);
-        const nextCdpEndpoint = resolveManagedCdpEndpoint(resolved, nextAccess);
         const previousSession = managedSession;
         if (previousSession?.id && previousSession.id !== resolved.id) {
           await unregisterMcpOwner(previousSession, automationAccessManager);
         }
         await playwrightRuntime.close();
         setManagedSession(resolved);
+        const nextAccess = await automationAccessManager.get(resolved);
+        const nextCdpEndpoint = resolveManagedCdpEndpoint(resolved, nextAccess);
         console.log(
           `[mcp-bridge] control session set to ${resolved.id} (${resolved.state}) via ${nextCdpEndpoint}`,
         );

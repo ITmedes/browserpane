@@ -3612,6 +3612,53 @@
       };
     }
 
+    function collectPreviousMcpDelegationSessionIds(targetSessionId) {
+      const sessionIds = new Set();
+      if (mcpBridgeState.controlSessionId && mcpBridgeState.controlSessionId !== targetSessionId) {
+        sessionIds.add(mcpBridgeState.controlSessionId);
+      }
+      for (const resource of controlSessionState.resources) {
+        if (
+          resource.id
+          && resource.id !== targetSessionId
+          && isResourceDelegatedToConfiguredMcpBridge(resource)
+        ) {
+          sessionIds.add(resource.id);
+        }
+      }
+      return Array.from(sessionIds);
+    }
+
+    async function clearMcpBridgeAutomationDelegate(accessToken, sessionId) {
+      const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(sessionId)}/automation-owner`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (response.status === 404) {
+        return null;
+      }
+      if (!response.ok) {
+        throw new Error(`clearing previous MCP delegation for ${sessionId} failed: ${await readApiFailure(response)}`);
+      }
+      return await response.json();
+    }
+
+    async function clearMcpBridgeDelegationSessionIds(accessToken, sessionIds) {
+      for (const previousSessionId of sessionIds) {
+        await clearMcpBridgeAutomationDelegate(accessToken, previousSessionId);
+        controlSessionState.resources = controlSessionState.resources.map((resource) => (
+          resource.id === previousSessionId
+            ? { ...resource, automation_delegate: null }
+            : resource
+        ));
+        log(`Cleared previous MCP delegation from session ${previousSessionId}`, 'info');
+      }
+    }
+
     async function assignMcpBridgeControlSession(sessionId) {
       const controlUrl = authState.config?.mcpBridge?.controlUrl;
       if (!controlUrl) {
@@ -3667,6 +3714,13 @@
         );
       }
 
+      await refreshMcpBridgeState({ silent: true });
+      await refreshSessionResources(accessToken, { preserveSelection: true, silent: true });
+      controlSession = controlSessionState.resources.find((resource) => resource.id === controlSession.id)
+        ?? controlSession;
+      controlSessionState.resource = controlSession;
+      const previousMcpDelegationSessionIds =
+        collectPreviousMcpDelegationSessionIds(controlSession.id);
       const response = await fetch(`${SESSION_API_URL}/${encodeURIComponent(controlSession.id)}/automation-owner`, {
         method: 'POST',
         headers: {
@@ -3692,6 +3746,7 @@
       renderSessionState();
       log(`Delegated session ${controlSession.id} to ${authState.config.mcpBridge.clientId}`, 'ok');
       await assignMcpBridgeControlSession(controlSession.id);
+      await clearMcpBridgeDelegationSessionIds(accessToken, previousMcpDelegationSessionIds);
       await refreshMcpBridgeState({ silent: true });
     }
 
