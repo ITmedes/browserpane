@@ -1,4 +1,9 @@
 {
+  "URLBlocklist": [
+    "file:///*"
+  ],
+  "DefaultFileSystemReadGuardSetting": 2,
+  "DefaultFileSystemWriteGuardSetting": 2,
   "ExtensionInstallForcelist": [
     "gighmmpiobklfepjocnamgkkbiglidom;https://clients2.google.com/service/update2/crx"
   ],
