@@ -29,6 +29,13 @@ impl GatewayApp {
             .session_manager
             .attach_workspace_file_store(workspace_file_store.clone())
             .await;
+        runtime_services
+            .registry
+            .attach_session_file_recording(
+                runtime_services.session_store.clone(),
+                workspace_file_store.clone(),
+            )
+            .await;
         let credential_provider = build_credential_provider(&config)?;
         let recording_services = RecordingServices::build(
             &config,

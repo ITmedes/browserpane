@@ -4,7 +4,9 @@ use std::sync::Arc;
 use bpane_protocol::channel::ChannelId;
 use bpane_protocol::frame::Frame;
 use tokio::sync::{broadcast, mpsc, Mutex};
-use tracing::info;
+use tracing::{info, warn};
+
+use crate::session_files::{new_active_transfer_map, SessionFileRecorder};
 
 pub(super) struct PumpState {
     pub(super) active: Arc<AtomicBool>,
@@ -18,9 +20,19 @@ pub(super) fn spawn(
     mut from_agent: mpsc::Receiver<Frame>,
     broadcast_tx: broadcast::Sender<Arc<Frame>>,
     state: PumpState,
+    file_recorder: Option<SessionFileRecorder>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        let mut active_file_transfers = new_active_transfer_map();
         while let Some(frame) = from_agent.recv().await {
+            if let Some(recorder) = &file_recorder {
+                if let Err(error) = recorder
+                    .observe_frame(&mut active_file_transfers, &frame)
+                    .await
+                {
+                    warn!("session file download metadata recording failed: {error}");
+                }
+            }
             cache_frame(&state, &frame).await;
 
             let arc_frame = Arc::new(frame);
