@@ -1,0 +1,200 @@
+# Next Execution Target Hardening Plan
+
+Date: 2026-05-04
+
+Status: planning only. No implementation changes are included in this file.
+
+GitHub tracking issue: `#65`
+https://github.com/ITmedes/browserpane/issues/65
+
+## Purpose
+
+This plan consolidates the next five BrowserPane execution-target priorities
+into one implementation roadmap. The goal is to reduce fragmented issue
+context after the docker runtime/session data isolation work and keep the next
+slices focused on production hardening, regression visibility, and integration
+correctness.
+
+The previous `#62` slice established the first required runtime boundary:
+docker-backed browser sessions now use separate socket and session data roots,
+and workspace-backed session file bindings can be materialized before runtime
+startup. This plan starts from that state.
+
+## Priority Order
+
+### 1. Browser Local File Access Policy
+
+Source issue: `#57`
+
+Goal: default browser sessions must not be able to read arbitrary local files
+through `file:///` navigation or browser file-system APIs.
+
+Implementation targets:
+
+- Extend the managed Chromium policy while preserving extension policy.
+- Block `file:///*` by default.
+- Deny File System Access API read/write prompts by default.
+- Add an explicit development escape hatch only if required for compatibility.
+- Expose the effective policy mode in diagnostics or session status.
+- Add test harness probes for blocked local-file access.
+
+Acceptance criteria:
+
+- A default docker-backed session cannot display `file:///etc/passwd`.
+- File System Access API read/write access is denied by default.
+- Existing extension policy behavior still works.
+- The test harness can show the effective file access mode and probe result.
+
+### 2. Complete Session File Data Visibility
+
+Source issue: `#56`
+
+Goal: browser uploads and downloads should become attributable session state,
+not only runtime-local scratch files or immediate transport events.
+
+Implementation targets:
+
+- Keep the current per-session docker data volume boundary.
+- Teach browser upload/download finalization to report session file metadata to
+  the gateway or a session-scoped API.
+- Persist session file metadata for upload/download origins.
+- Decide whether `CH_FILE_DOWN` remains an immediate convenience channel or
+  becomes a notification that a control-plane file is ready.
+- Add digest, byte count, media type, source, session id, owner, and timestamp.
+- Add cleanup or retention rules for scratch session files.
+- Add a `dev/test-embed.html` Session Files panel for manual and smoke testing.
+
+Acceptance criteria:
+
+- Browser uploads and downloads are visible through session-scoped APIs.
+- Session A cannot list or download Session B files.
+- Workspace-backed files are materialized only when explicitly bound.
+- The harness can exercise bindings, uploads, downloads, and isolation without
+  direct Docker inspection.
+
+### 3. MCP Delegation Drift And Session-Bound Control
+
+Source issue: `#54`
+
+Goal: delegation must not leave the MCP bridge silently controlling the wrong
+BrowserPane session.
+
+Implementation targets:
+
+- Stabilize existing single-session `/control-session` switching first.
+- Clear previous session MCP ownership when switching from session A to B.
+- Improve UI messaging so "gateway delegated" and "bridge adopted" are distinct.
+- Surface split or stale bridge state through `/health`.
+- Add regression coverage that refetches both session statuses after a switch.
+- Add at least one real MCP tool-call side effect test to verify it lands on
+  the intended session.
+- Keep the per-connection multi-session MCP model as the longer-term design.
+
+Acceptance criteria:
+
+- Delegating session B cannot leave the bridge silently driving session A.
+- Stale MCP ownership is cleared from the previous session after a switch.
+- The smoke suite catches wrong-session routing through a real action, not only
+  through metadata checks.
+
+### 4. Remote Deployment Documentation
+
+Source issue: `#53`
+
+Goal: document the deployment assumptions that differ between localhost compose
+and remote/self-hosted testing.
+
+Implementation targets:
+
+- Add README documentation for remote HTTPS and secure-context requirements.
+- Document OIDC issuer, redirect URI, web origin, gateway URL, and certificate
+  metadata alignment.
+- Warn against exposing dev Postgres, Vault, Keycloak, gateway API, and
+  MCP bridge ports publicly.
+- Document `sudo env ... docker compose ...` override behavior.
+- Reference docker-pool runtime defaults and current local testing assumptions.
+
+Acceptance criteria:
+
+- A user moving from localhost to a remote host can identify the required HTTPS,
+  OIDC, and WebTransport configuration changes.
+- The docs clearly state that local compose is not production deployment
+  guidance.
+
+### 5. Admin App And Real-Time Operations Slice
+
+Source issue: `#63`
+
+Goal: reduce the broad admin-app issue into implementable slices without
+starting a large, unfocused rewrite.
+
+Implementation targets:
+
+- Keep `#63` as the broad product umbrella.
+- Start with a narrow reference-admin foundation slice only after the security
+  and integration hardening items above are complete.
+- Proposed first admin slice:
+  - scaffold `code/web/bpane-admin`;
+  - preserve local OIDC and cert metadata behavior;
+  - add typed REST client boundaries;
+  - show session list/detail;
+  - embed the live browser client through `bpane-client`;
+  - port the lifecycle smoke coverage that currently depends on
+    `dev/test-embed.html`.
+- Defer the full real-time WebSocket/event-stream work until the first admin
+  shell proves the resource model and smoke parity.
+
+Acceptance criteria for the first admin slice:
+
+- The admin app can authenticate in local compose.
+- It can list sessions and open a live session detail view.
+- It does not duplicate `bpane-client` internals.
+- It has initial smoke coverage for session lifecycle actions.
+- `dev/test-embed.html` remains available until smoke parity is achieved.
+
+## Issue Consolidation Plan
+
+The new consolidated issue should become the short-term execution tracker for
+this file.
+
+Recommended issue actions:
+
+- Close `#57` as superseded by priority 1 in the consolidated issue.
+- Keep `#56` open only if the team wants it as a broader file-data epic;
+  otherwise close it as superseded by priority 2 and reference `#62` for the
+  completed runtime-boundary part.
+- Close `#54` as superseded by priority 3 if the consolidated issue will own
+  MCP delegation stabilization.
+- Close `#53` as superseded by priority 4 if the documentation task is small
+  enough to remain in this roadmap.
+- Keep `#63` open as the product umbrella and add a comment that this plan only
+  covers the first admin-app slice.
+
+## Validation Strategy
+
+Run narrow checks per slice, then finish with the compose e2e and browser smoke
+coverage relevant to the changed surface.
+
+Expected validation set:
+
+- `cargo fmt --all -- --check`
+- `cargo clippy -p bpane-gateway --all-targets --all-features -- -D warnings`
+- `cargo test -p bpane-gateway`
+- `cargo test --workspace`
+- `scripts/run-gateway-compose-e2e.sh --suite all`
+- `cd code/web/bpane-client && npx tsc --noEmit`
+- `cd code/web/bpane-client && npm test`
+- `cd code/web/bpane-client && npm run build`
+- Targeted Playwright smokes for file-policy, session-files, MCP delegation, and
+  session lifecycle behavior.
+
+## Open Questions
+
+- Should approved session files ever be opened through `file:///`, or should all
+  approved file access use authenticated BrowserPane HTTP URLs?
+- Should browser downloads default to session-scoped artifacts or workspace
+  files?
+- Should the MCP parallel-session endpoint be implemented in the same slice as
+  single-session drift stabilization or in a later issue?
+- Should the first admin app slice wait for a gateway event stream, or should it
+  start with REST reconciliation and add WebSocket synchronization later?
