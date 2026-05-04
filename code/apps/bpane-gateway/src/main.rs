@@ -12,6 +12,7 @@ mod relay;
 mod runtime_manager;
 mod session_access;
 mod session_control;
+mod session_files;
 mod session_hub;
 mod session_manager;
 mod session_registry;

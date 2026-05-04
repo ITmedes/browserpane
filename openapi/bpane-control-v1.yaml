@@ -16,6 +16,7 @@ tags:
   - name: Sessions
   - name: Session Runtime
   - name: Session Recordings
+  - name: Session Files
   - name: Session Automation
   - name: Automation Tasks
   - name: Credential Bindings
@@ -1321,6 +1322,124 @@ paths:
                 $ref: '#/components/schemas/SessionStopConflictResponse'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/file-bindings:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Session Files]
+      summary: List file bindings associated with a visible session
+      operationId: listSessionFileBindings
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Session file binding list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionFileBindingListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Session Files]
+      summary: Bind an existing workspace file to a session
+      operationId: createSessionFileBinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionFileBindingRequest'
+      responses:
+        '201':
+          description: Session file binding created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionFileBindingResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/file-bindings/{binding_id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/SessionFileBindingId'
+    get:
+      tags: [Session Files]
+      summary: Fetch one session file binding
+      operationId: getSessionFileBinding
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Session file binding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionFileBindingResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    delete:
+      tags: [Session Files]
+      summary: Remove one session file binding
+      operationId: removeSessionFileBinding
+      responses:
+        '200':
+          description: Removed session file binding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionFileBindingResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/file-bindings/{binding_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/SessionFileBindingId'
+    get:
+      tags: [Session Files]
+      summary: Download the workspace file content behind one session file binding
+      operationId: getSessionFileBindingContent
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Raw file bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/recordings:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -1915,6 +2034,13 @@ components:
         format: uuid
     FileId:
       name: file_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionFileBindingId:
+      name: binding_id
       in: path
       required: true
       schema:
@@ -2629,6 +2755,118 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FileWorkspaceFileResource'
+    SessionFileBindingMode:
+      type: string
+      enum:
+        - read_only
+        - read_write
+        - scratch_output
+    SessionFileBindingState:
+      type: string
+      enum:
+        - pending
+        - materialized
+        - failed
+        - removed
+    CreateSessionFileBindingRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - workspace_id
+        - file_id
+        - mount_path
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        mount_path:
+          type: string
+          description: Relative path where the file should be materialized in the session data root.
+        mode:
+          $ref: '#/components/schemas/SessionFileBindingMode'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    SessionFileBindingResource:
+      type: object
+      required:
+        - id
+        - session_id
+        - workspace_id
+        - file_id
+        - file_name
+        - media_type
+        - byte_count
+        - sha256_hex
+        - provenance
+        - mount_path
+        - mode
+        - state
+        - error
+        - labels
+        - content_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+        media_type:
+          type: string
+          nullable: true
+        byte_count:
+          type: integer
+          minimum: 0
+        sha256_hex:
+          type: string
+        provenance:
+          type: object
+          nullable: true
+          additionalProperties: true
+        mount_path:
+          type: string
+        mode:
+          $ref: '#/components/schemas/SessionFileBindingMode'
+        state:
+          $ref: '#/components/schemas/SessionFileBindingState'
+        error:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        content_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SessionFileBindingListResponse:
+      type: object
+      required: [bindings]
+      properties:
+        bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionFileBindingResource'
     WorkflowRunState:
       type: string
       enum:

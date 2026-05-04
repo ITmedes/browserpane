@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Component, Path};
 
 use super::*;
 
@@ -182,4 +182,72 @@ pub(in crate::session_control) fn validate_file_workspace_file_request(
         ));
     }
     Ok(())
+}
+
+pub(in crate::session_control) fn validate_session_file_binding_request(
+    request: &mut PersistSessionFileBindingRequest,
+) -> Result<(), SessionStoreError> {
+    request.mount_path = normalize_session_file_mount_path(&request.mount_path)?;
+    if request.mode == SessionFileBindingMode::ScratchOutput {
+        return Err(SessionStoreError::InvalidRequest(
+            "session file workspace bindings do not support scratch_output mode".to_string(),
+        ));
+    }
+    for (key, value) in &request.labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "session file binding label keys must not be empty".to_string(),
+            ));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "session file binding label values must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn normalize_session_file_mount_path(mount_path: &str) -> Result<String, SessionStoreError> {
+    let trimmed = mount_path.trim();
+    if trimmed.is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "session file binding mount_path must not be empty".to_string(),
+        ));
+    }
+    let path = Path::new(trimmed);
+    if path.is_absolute() {
+        return Err(SessionStoreError::InvalidRequest(
+            "session file binding mount_path must be relative".to_string(),
+        ));
+    }
+
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => {
+                let value = part.to_string_lossy().trim().to_string();
+                if value.is_empty() {
+                    return Err(SessionStoreError::InvalidRequest(
+                        "session file binding mount_path contains an empty component".to_string(),
+                    ));
+                }
+                parts.push(value);
+            }
+            _ => {
+                return Err(SessionStoreError::InvalidRequest(
+                    "session file binding mount_path must not contain traversal or non-normal path components"
+                        .to_string(),
+                ));
+            }
+        }
+    }
+
+    if parts.is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "session file binding mount_path must contain a relative file path".to_string(),
+        ));
+    }
+
+    Ok(parts.join("/"))
 }

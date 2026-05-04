@@ -265,6 +265,9 @@ Stateless relay between host agent and browser clients.
   - `GET /api/v1/sessions/{id}/status` — side-effect-free session-scoped lifecycle/runtime/presence view, including role counts, idle timing, stop eligibility, live connection descriptors, and stopped-session snapshots
   - `POST /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership claim
   - `DELETE /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership release
+  - session-scoped file binding routes attach owner-approved workspace files to
+    a session mount contract, expose bound content through session-scoped APIs,
+    and preserve automation-read access before runtime materialization
   - session-scoped recording routes expose segment lifecycle, playback/export, and artifact download
   - workflow routes expose definitions, immutable versions, runs, logs, events, and run-scoped automation access
   - reusable workflow input routes expose file workspaces, credential bindings, and approved extensions

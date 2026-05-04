@@ -27,6 +27,7 @@ pub(crate) fn build_api_router(state: Arc<ApiState>) -> Router {
         .merge(workflow_events::workflow_run_event_routes())
         .merge(automation_tasks::automation_task_routes())
         .merge(recordings::recording_routes())
+        .merge(session_files::session_file_routes())
         .merge(sessions::session_operation_routes())
         .merge(recordings::recording_operation_routes())
         .route("/api/v1/workflow/operations", get(get_workflow_operations))

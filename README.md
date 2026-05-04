@@ -227,6 +227,20 @@ The same frozen API surface also includes session-scoped runtime routes:
 - `POST /api/v1/sessions/{id}/automation-owner`
 - `DELETE /api/v1/sessions/{id}/automation-owner`
 
+Session-scoped file binding routes let owners attach existing workspace files
+to a session-level mount contract before runtime materialization:
+
+- `POST /api/v1/sessions/{id}/file-bindings`
+- `GET /api/v1/sessions/{id}/file-bindings`
+- `GET /api/v1/sessions/{id}/file-bindings/{binding_id}`
+- `GET /api/v1/sessions/{id}/file-bindings/{binding_id}/content`
+- `DELETE /api/v1/sessions/{id}/file-bindings/{binding_id}`
+
+Bindings snapshot workspace-file metadata, enforce relative mount paths, reject
+duplicate active mount paths per session, and allow session automation access to
+read/list bound file resources. Runtime materialization into browser containers
+is the next implementation phase.
+
 Session resources and status responses now expose a richer lifecycle model:
 
 - persisted `state`
