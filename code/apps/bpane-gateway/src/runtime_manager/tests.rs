@@ -331,3 +331,37 @@ fn docker_runtime_materializes_session_file_bindings_inside_session_data_volume(
     );
     assert_eq!(manifest["bindings"][0]["state"], "materialized");
 }
+
+#[test]
+fn docker_runtime_initializes_session_data_volume_as_root() {
+    let manager = DockerRuntimeManager::new(
+        docker_config(),
+        RuntimeProfile {
+            runtime_binding: "docker_runtime_pool".to_string(),
+            compatibility_mode: "session_runtime_pool".to_string(),
+            max_runtime_sessions: 2,
+            supports_legacy_global_routes: false,
+            supports_session_extensions: true,
+        },
+    )
+    .unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+
+    let args = manager.docker_initialize_session_data_args(session_id);
+
+    assert!(args.contains(&"--network".to_string()));
+    assert!(args.contains(&"none".to_string()));
+    assert!(args.contains(
+        &"deploy_bpane-session-data-019db438c74a7ef2810c792e298faf11:/run/bpane/session"
+            .to_string()
+    ));
+    assert!(args.contains(&"BPANE_SESSION_DATA_DIR=/run/bpane/session".to_string()));
+    assert!(args.contains(&"BPANE_PROFILE_DIR=/run/bpane/session/chromium".to_string()));
+    assert!(args.contains(&"BPANE_UPLOAD_DIR=/run/bpane/session/uploads".to_string()));
+    assert!(args.contains(&"BPANE_DOWNLOAD_DIR=/run/bpane/session/downloads".to_string()));
+    assert!(args.contains(&"BPANE_SESSION_FILE_MOUNTS_DIR=/run/bpane/session/mounts".to_string()));
+    assert!(args.contains(&"--user".to_string()));
+    assert!(args.contains(&"0:0".to_string()));
+    assert!(args.contains(&"--entrypoint".to_string()));
+    assert!(args.contains(&"/bin/sh".to_string()));
+}
