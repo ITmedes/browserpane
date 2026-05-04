@@ -246,22 +246,40 @@ Acceptance criteria:
 
 Source issue: `#63`
 
+Implementation status: foundation started on `feature/BPANE-0065`.
+
+Completed scope:
+
+- Added a new SvelteKit package at `code/web/bpane-admin`.
+- Added a typed `ControlClient` boundary for the frozen
+  `/api/v1/sessions` API.
+- Added wire-to-view mapping for session list/detail resources with validation
+  at the API boundary.
+- Added Vitest coverage for list, create, lifecycle URL encoding, bearer auth,
+  and typed API error handling.
+- Added an initial non-default reference admin shell page.
+
+Commits:
+
+- `92a0291 feat(admin): scaffold reference admin shell`
+
+Validation completed:
+
+- `cd code/web/bpane-admin && npm test`
+- `cd code/web/bpane-admin && npm run check`
+- `cd code/web/bpane-admin && npm run build`
+
 Goal: reduce the broad admin-app issue into implementable slices without
 starting a large, unfocused rewrite.
 
 Implementation targets:
 
 - Keep `#63` as the broad product umbrella.
-- Start with a narrow reference-admin foundation slice only after the security
-  and integration hardening items above are complete.
-- Proposed first admin slice:
-  - scaffold `code/web/bpane-admin`;
-  - preserve local OIDC and cert metadata behavior;
-  - add typed REST client boundaries;
-  - show session list/detail;
-  - embed the live browser client through `bpane-client`;
-  - port the lifecycle smoke coverage that currently depends on
-    `dev/test-embed.html`.
+- Preserve local OIDC and cert metadata behavior.
+- Show session list/detail through the new typed control client.
+- Embed the live browser client through `bpane-client`.
+- Port the lifecycle smoke coverage that currently depends on
+  `dev/test-embed.html`.
 - Defer the full real-time WebSocket/event-stream work until the first admin
   shell proves the resource model and smoke parity.
 
