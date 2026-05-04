@@ -246,3 +246,64 @@ pub(in crate::session_control) fn row_to_stored_file_workspace_file(
         updated_at: row.get("updated_at"),
     })
 }
+
+pub(in crate::session_control) fn row_to_stored_session_file_binding(
+    row: &Row,
+) -> Result<StoredSessionFileBinding, SessionStoreError> {
+    let byte_count = u64::try_from(row.get::<_, i64>("byte_count")).map_err(|error| {
+        SessionStoreError::Backend(format!(
+            "session file binding byte_count must be non-negative and fit u64: {error}"
+        ))
+    })?;
+    let provenance: Option<Value> = row.get("provenance");
+    if provenance.as_ref().is_some_and(|value| !value.is_object()) {
+        return Err(SessionStoreError::Backend(
+            "session file binding provenance column must be a JSON object".to_string(),
+        ));
+    }
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("session file binding labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("session file binding label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let mode = row
+        .get::<_, String>("mode")
+        .parse::<SessionFileBindingMode>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let state = row
+        .get::<_, String>("state")
+        .parse::<SessionFileBindingState>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+
+    Ok(StoredSessionFileBinding {
+        id: row.get("id"),
+        session_id: row.get("session_id"),
+        workspace_id: row.get("workspace_id"),
+        file_id: row.get("file_id"),
+        file_name: row.get("file_name"),
+        media_type: row.get("media_type"),
+        byte_count,
+        sha256_hex: row.get("sha256_hex"),
+        provenance,
+        artifact_ref: row.get("artifact_ref"),
+        mount_path: row.get("mount_path"),
+        mode,
+        state,
+        error: row.get("error"),
+        labels,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}

@@ -25,6 +25,7 @@ use crate::session_control::{
     SessionRecordingFormat, SessionRecordingMode, SessionResource, SessionStatusSummary,
     SessionStore,
 };
+use crate::session_files::SessionFileBindingMode;
 use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
@@ -284,6 +285,21 @@ pub(super) struct CreateFileWorkspaceRequest {
     pub(super) description: Option<String>,
     #[serde(default)]
     pub(super) labels: HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct CreateSessionFileBindingRequest {
+    pub(super) workspace_id: Uuid,
+    pub(super) file_id: Uuid,
+    pub(super) mount_path: String,
+    #[serde(default = "default_session_file_binding_mode")]
+    pub(super) mode: SessionFileBindingMode,
+    #[serde(default)]
+    pub(super) labels: HashMap<String, String>,
+}
+
+fn default_session_file_binding_mode() -> SessionFileBindingMode {
+    SessionFileBindingMode::ReadOnly
 }
 
 #[derive(Deserialize)]

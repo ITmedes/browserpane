@@ -61,6 +61,7 @@ Current product shape:
   - `workflow_source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
   - `file_workspace.rs`: owner-scoped file workspace and workspace-file resource shapes persisted by the control plane.
   - `workspace_file_store.rs`: workspace file content storage boundary. `local_fs` is the current implementation; workspace files carry opaque artifact refs plus optional provenance metadata instead of raw filesystem paths.
+  - `session_files/`: session-scoped file binding resource shapes. Owners can bind workspace files to relative session mount paths; automation access can read/list those bindings before runtime materialization.
   - `recording_artifact_store.rs`: recording artifact storage boundary. `local_fs` is the current implementation; the gateway persists opaque artifact refs instead of raw filesystem paths.
   - `recording_lifecycle.rs`: recorder-worker launch, persisted assignment tracking, and restart reconciliation for session-scoped recording, including `recording.mode=always`. Recording resources are contiguous segments; restart recovery fails the stale in-flight segment and starts a linked fresh one instead of pretending the artifact is continuous.
   - `recording_playback.rs`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.

@@ -37,12 +37,13 @@ use crate::recording::{
 use crate::session_access::SessionAutomationAccessTokenClaims;
 use crate::session_control::{
     CompleteSessionRecordingRequest, CreateSessionRequest, FailSessionRecordingRequest,
-    PersistCompletedSessionRecordingRequest, SessionLifecycleState, SessionListResponse,
-    SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
-    SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
-    SessionRecordingTerminationReason, SessionResource, SetAutomationDelegateRequest,
-    StoredSession, StoredSessionRecording,
+    PersistCompletedSessionRecordingRequest, PersistSessionFileBindingRequest,
+    SessionLifecycleState, SessionListResponse, SessionOwnerMode, SessionRecordingFormat,
+    SessionRecordingListResponse, SessionRecordingMode, SessionRecordingPolicy,
+    SessionRecordingResource, SessionRecordingState, SessionRecordingTerminationReason,
+    SessionResource, SetAutomationDelegateRequest, StoredSession, StoredSessionRecording,
 };
+use crate::session_files::{SessionFileBindingListResponse, SessionFileBindingResource};
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_manager::{SessionManagerError, SessionRuntime};
 use crate::workflow::{
@@ -84,6 +85,7 @@ mod resources;
 mod router;
 mod runtime_access;
 mod session_bindings;
+mod session_files;
 mod sessions;
 mod types;
 mod workflow_definitions;
