@@ -27,6 +27,7 @@ use crate::session_access::SessionConnectTicketManager;
 use crate::session_control::SessionStore;
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
+use crate::workspaces::WorkspaceFileStore;
 
 pub struct TransportServerConfig {
     pub bind_addr: SocketAddr,
@@ -35,6 +36,7 @@ pub struct TransportServerConfig {
     pub auth_validator: Arc<AuthValidator>,
     pub connect_ticket_manager: Arc<SessionConnectTicketManager>,
     pub session_store: SessionStore,
+    pub workspace_file_store: Arc<WorkspaceFileStore>,
     pub recording_lifecycle: Arc<RecordingLifecycleManager>,
     pub idle_stop_timeout: Duration,
     pub heartbeat_timeout: Duration,
@@ -48,6 +50,7 @@ pub struct TransportServer {
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     session_store: SessionStore,
+    workspace_file_store: Arc<WorkspaceFileStore>,
     recording_lifecycle: Arc<RecordingLifecycleManager>,
     idle_stop_timeout: Duration,
     heartbeat_timeout: Duration,
@@ -63,6 +66,7 @@ impl TransportServer {
             auth_validator: config.auth_validator,
             connect_ticket_manager: config.connect_ticket_manager,
             session_store: config.session_store,
+            workspace_file_store: config.workspace_file_store,
             recording_lifecycle: config.recording_lifecycle,
             idle_stop_timeout: config.idle_stop_timeout,
             heartbeat_timeout: config.heartbeat_timeout,
@@ -187,6 +191,7 @@ impl TransportServer {
             let registry = self.registry.clone();
             let session_manager = self.session_manager.clone();
             let session_store = self.session_store.clone();
+            let workspace_file_store = self.workspace_file_store.clone();
             let recording_lifecycle = self.recording_lifecycle.clone();
             let idle_stop_timeout = self.idle_stop_timeout;
             active_sessions.fetch_add(1, Ordering::Relaxed);
@@ -204,6 +209,7 @@ impl TransportServer {
                     connect_request: validated_request,
                     session_manager,
                     session_store,
+                    workspace_file_store,
                     idle_stop_timeout,
                     agent_socket_path: agent_path,
                     heartbeat_timeout,

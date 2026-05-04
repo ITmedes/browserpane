@@ -8,6 +8,7 @@ use tracing::{debug, error, warn};
 use wtransport::RecvStream;
 
 use super::policy::viewer_can_forward_frame;
+use crate::session_files::{new_active_transfer_map, SessionFileRecorder};
 use crate::session_hub::{ResizeResult, SessionHub};
 
 use super::session::Session;
@@ -18,10 +19,12 @@ pub(super) fn spawn_browser_to_agent_task(
     client_id: u64,
     mut recv_stream: RecvStream,
     to_host: mpsc::Sender<Frame>,
+    file_recorder: SessionFileRecorder,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut buf = vec![0u8; 64 * 1024];
         let mut decoder = FrameDecoder::new();
+        let mut active_file_transfers = new_active_transfer_map();
 
         loop {
             if !session.is_active() {
@@ -63,8 +66,15 @@ pub(super) fn spawn_browser_to_agent_task(
                                     continue;
                                 }
 
+                                let forwarded = frame.clone();
                                 if to_host.send(frame).await.is_err() {
                                     return;
+                                }
+                                if let Err(error) = file_recorder
+                                    .observe_frame(&mut active_file_transfers, &forwarded)
+                                    .await
+                                {
+                                    warn!("session file upload metadata recording failed: {error}");
                                 }
                             }
                             Ok(None) => break,
