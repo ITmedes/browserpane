@@ -1,5 +1,6 @@
 {
   "URLBlocklist": [
+    "file://*",
     "file:///*"
   ],
   "DefaultFileSystemReadGuardSetting": 2,

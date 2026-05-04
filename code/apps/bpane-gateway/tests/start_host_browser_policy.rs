@@ -37,8 +37,12 @@ fn managed_policy_blocks_file_url_navigation_by_default() {
         .expect("URLBlocklist should be configured");
 
     assert!(
+        blocklist.iter().any(|value| value == "file://*"),
+        "URLBlocklist should include Chromium's runtime-enforced file://* pattern"
+    );
+    assert!(
         blocklist.iter().any(|value| value == "file:///*"),
-        "URLBlocklist should block file:///*"
+        "URLBlocklist should include the documented file:///* pattern"
     );
 }
 
