@@ -150,10 +150,16 @@ Completed scope:
 - The multi-session smoke refetches both session resources and statuses after
   a bridge switch and fails if session A remains backend-delegated or
   MCP-owned.
+- `/health` now exposes explicit control-plane/backend delegation visibility
+  and a `bridge_alignment` value so stale, split, or endpoint-mismatched bridge
+  state is machine-checkable.
+- The multi-session smoke asserts the bridge reports `aligned` health after
+  switching delegation to session B.
 
 Commits:
 
 - `bcd85f9 fix(mcp): clear stale delegation on session switch`
+- `586b93e feat(mcp): expose bridge alignment health`
 
 Validation completed:
 
@@ -164,8 +170,6 @@ Validation completed:
 
 Remaining scope:
 
-- Surface split/stale bridge state explicitly through `/health`, beyond the
-  current control-session and Playwright endpoint fields.
 - Add at least one real MCP tool-call side effect test to prove browser actions
   land in the intended delegated session.
 - Keep the per-connection multi-session MCP model as the longer-term design.
