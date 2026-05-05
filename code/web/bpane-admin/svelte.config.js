@@ -7,6 +7,9 @@ const config = {
     adapter: adapter({
       fallback: 'index.html',
     }),
+    paths: {
+      base: process.env.BPANE_ADMIN_BASE_PATH ?? '',
+    },
   },
 };
 
