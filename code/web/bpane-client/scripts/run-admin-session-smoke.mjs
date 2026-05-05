@@ -32,10 +32,15 @@ async function run() {
     log('Creating an admin-owned session.');
     await page.getByTestId('session-new').click();
     sessionId = await resolveSelectedSessionId(page, options);
+    await configureDisplayControls(page);
 
     log(`Connecting embedded browser for ${sessionId}.`);
     await page.getByTestId('browser-connect').click();
     await waitForBrowserConnected(page, options);
+    const uploadEnabled = await page.getByTestId('display-upload').isEnabled();
+    if (!uploadEnabled) {
+      throw new Error('Expected display upload control to be enabled after browser connect.');
+    }
     const stopDisabled = await page.getByTestId('session-stop').isDisabled();
     if (!stopDisabled) {
       throw new Error('Expected session stop to be disabled while embedded browser is connected.');
@@ -61,6 +66,16 @@ async function run() {
     await cleanupAdminSmoke(page, options, log);
     await context.close();
     await browser.close();
+  }
+}
+
+async function configureDisplayControls(page) {
+  await page.getByTestId('display-render-backend').selectOption('canvas2d');
+  await page.getByTestId('display-hidpi').setChecked(false);
+  await page.getByTestId('display-scroll-copy').setChecked(false);
+  const uploadDisabled = await page.getByTestId('display-upload').isDisabled();
+  if (!uploadDisabled) {
+    throw new Error('Expected display upload control to stay disabled before browser connect.');
   }
 }
 

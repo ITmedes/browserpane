@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { ControlClient, type FetchLike } from '../api/control-client';
 import type { SessionResource } from '../api/control-types';
 import { BrowserSessionConnector } from './browser-session-connector';
-import type { BrowserSessionConnectOptions } from './browser-session-types';
+import {
+  DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES,
+  type BrowserSessionConnectOptions,
+} from './browser-session-types';
 
 const SESSION: SessionResource = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
@@ -74,6 +77,48 @@ describe('BrowserSessionConnector', () => {
       connectTicket: 'connect-ticket',
       clientRole: 'interactive',
       certHashUrl: '/cert-hash',
+      hiDpi: true,
+      microphone: true,
+      camera: true,
+      renderBackend: 'auto',
+      scrollCopy: true,
+      fileTransfer: true,
+    });
+  });
+
+  it('forwards admin display connection preferences to the SDK', async () => {
+    let connectOptions: BrowserSessionConnectOptions | null = null;
+    const connector = new BrowserSessionConnector({
+      controlClient: new ControlClient({
+        baseUrl: 'http://localhost:8932',
+        accessTokenProvider: () => 'owner-token',
+        fetchImpl: ticketFetch(),
+      }),
+      sdkProvider: {
+        load: async () => ({
+          BpaneSession: {
+            connect: async (options) => {
+              connectOptions = options;
+              return { disconnect: vi.fn() };
+            },
+          },
+        }),
+      },
+    });
+
+    await connector.connect(SESSION, document.createElement('div'), {
+      ...DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES,
+      hiDpi: false,
+      renderBackend: 'canvas2d',
+      scrollCopy: false,
+    });
+
+    expect(connectOptions).toMatchObject({
+      hiDpi: false,
+      renderBackend: 'canvas2d',
+      scrollCopy: false,
+      microphone: true,
+      camera: true,
     });
   });
 });

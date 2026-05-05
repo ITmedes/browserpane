@@ -37,6 +37,7 @@ describe('AdminWorkspaceViewModelBuilder', () => {
     expect(viewModel.panels.filter((panel) => panel.implemented).map((panel) => panel.id)).toEqual([
       'sessions',
       'lifecycle',
+      'display',
       'files',
     ]);
   });
