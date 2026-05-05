@@ -95,7 +95,7 @@
   <title>BrowserPane Admin</title>
 </svelte:head>
 
-<main class="admin-shell">
+<main class="mx-auto w-[calc(100vw-32px)] max-w-[1120px] py-8 md:py-[72px]">
   <AdminHero
     {auth}
     {authError}
@@ -108,17 +108,3 @@
     <AdminSessionSurface {controlClient} />
   {/if}
 </main>
-
-<style>
-  .admin-shell {
-    width: min(1120px, calc(100vw - 32px));
-    margin: 0 auto;
-    padding: 72px 0;
-  }
-
-  @media (max-width: 760px) {
-    .admin-shell {
-      padding: 32px 0;
-    }
-  }
-</style>
