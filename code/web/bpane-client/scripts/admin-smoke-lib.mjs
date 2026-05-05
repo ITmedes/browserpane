@@ -50,6 +50,7 @@ export async function waitForBrowserConnected(page, options) {
 }
 
 export async function disconnectEmbeddedBrowser(page, options) {
+  await closeAdminOverlay(page);
   await page.getByTestId('browser-disconnect').click();
   await poll(
     'admin embedded browser disconnect',
@@ -60,6 +61,7 @@ export async function disconnectEmbeddedBrowser(page, options) {
 }
 
 export async function waitForStopEnabled(page, options, sessionId) {
+  await openAdminTab(page, 'lifecycle');
   await waitForSessionStopEligibility(page, options, sessionId);
   await page.getByTestId('session-detail-refresh').click();
   await poll('admin stop button enabled', async () => {
@@ -68,6 +70,7 @@ export async function waitForStopEnabled(page, options, sessionId) {
 }
 
 export async function waitForKillEnabled(page, options, sessionId) {
+  await openAdminTab(page, 'lifecycle');
   await waitForSessionClients(page, options, sessionId, 0);
   await page.getByTestId('session-detail-refresh').click();
   await poll('admin kill button enabled', async () => {
@@ -76,6 +79,7 @@ export async function waitForKillEnabled(page, options, sessionId) {
 }
 
 export async function waitForSessionState(page, options, sessionId, expectedState) {
+  await openAdminTab(page, 'lifecycle');
   await poll(`admin session API state ${expectedState}`, async () => {
     const session = await fetchSessionResource(page, options, sessionId);
     return session.state;
@@ -84,6 +88,28 @@ export async function waitForSessionState(page, options, sessionId, expectedStat
   await poll(`admin session UI state ${expectedState}`, async () => {
     return await page.getByTestId('session-state').textContent();
   }, (state) => state === expectedState, options.connectTimeoutMs);
+}
+
+export async function openAdminTab(page, panelId) {
+  await ensureAdminOverlayOpen(page);
+  await page.getByTestId(`workspace-panel-toggle-${panelId}`).click();
+  await page.getByTestId(`workspace-panel-${panelId}`).waitFor({ state: 'visible' });
+}
+
+export async function ensureAdminOverlayOpen(page) {
+  if (await page.getByTestId('admin-overlay').isVisible().catch(() => false)) {
+    return;
+  }
+  await page.getByTestId('admin-overlay-open').click();
+  await page.getByTestId('admin-overlay').waitFor({ state: 'visible' });
+}
+
+export async function closeAdminOverlay(page) {
+  if (!await page.getByTestId('admin-overlay').isVisible().catch(() => false)) {
+    return;
+  }
+  await page.getByTestId('admin-overlay-close').click();
+  await page.getByTestId('admin-overlay').waitFor({ state: 'detached' }).catch(() => {});
 }
 
 async function fillKeycloakLogin(page, authConfig, options) {
@@ -136,8 +162,10 @@ async function fetchSessionResource(page, options, sessionId) {
 
 async function cleanupAdminSession(page) {
   if (await page.getByTestId('browser-disconnect').isEnabled().catch(() => false)) {
+    await closeAdminOverlay(page);
     await page.getByTestId('browser-disconnect').click();
   }
+  await openAdminTab(page, 'lifecycle').catch(() => {});
   if (await page.getByTestId('session-kill').isEnabled().catch(() => false)) {
     await page.getByTestId('session-kill').click();
   }

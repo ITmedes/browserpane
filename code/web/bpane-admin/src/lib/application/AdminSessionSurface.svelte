@@ -8,8 +8,8 @@
   import { SessionViewModelBuilder } from '../presentation/session-view-model';
   import { BrowserSessionConnector } from '../session/browser-session-connector';
   import { DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES, type BrowserSessionConnectPreferences, type LiveBrowserSessionConnection } from '../session/browser-session-types';
-  import AdminWorkspaceSidebar from './AdminWorkspaceSidebar.svelte';
-  import ResizableWorkspaceLayout from './ResizableWorkspaceLayout.svelte';
+  import AdminWorkspaceTabs from './AdminWorkspaceTabs.svelte';
+  import BrowserWorkspaceOverlayLayout from './BrowserWorkspaceOverlayLayout.svelte';
 
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient;
@@ -160,7 +160,7 @@
   }
 </script>
 
-<ResizableWorkspaceLayout>
+<BrowserWorkspaceOverlayLayout>
   {#snippet browser()}
     <BrowserEmbedPanel
       viewModel={workspaceViewModel.browser}
@@ -172,8 +172,8 @@
       onDisconnect={() => disconnectBrowser(true)}
     />
   {/snippet}
-  {#snippet sidebar()}
-    <AdminWorkspaceSidebar
+  {#snippet admin()}
+    <AdminWorkspaceTabs
       {controlClient}
       {selectedSession}
       {sessions}
@@ -194,4 +194,4 @@
       onBrowserPreferencesChange={(next) => { browserPreferences = next; }}
     />
   {/snippet}
-</ResizableWorkspaceLayout>
+</BrowserWorkspaceOverlayLayout>
