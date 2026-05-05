@@ -89,7 +89,14 @@ export async function waitForSessionState(page, options, sessionId, expectedStat
 async function fillKeycloakLogin(page, authConfig, options) {
   const username = page.locator('input[name="username"], #username').first();
   const password = page.locator('input[name="password"], #password').first();
-  await username.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  const loginState = await poll('admin OIDC login readiness', async () => ({
+    authenticated: await page.getByTestId('session-new').isVisible().catch(() => false),
+    usernameVisible: await username.isVisible().catch(() => false),
+  }), (value) => value.authenticated || value.usernameVisible, options.connectTimeoutMs);
+  if (loginState.authenticated) {
+    return;
+  }
+
   await password.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await username.fill(authConfig.exampleUser.username);
   await password.fill(authConfig.exampleUser.password);

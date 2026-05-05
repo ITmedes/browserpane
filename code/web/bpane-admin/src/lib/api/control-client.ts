@@ -1,7 +1,10 @@
 import { ControlSessionMapper } from './control-session-mapper';
+import { ControlSessionFileMapper } from './control-session-file-mapper';
 import type {
   CreateSessionCommand,
   SessionAccessTokenResponse,
+  SessionFileListResponse,
+  SessionFileResource,
   SessionListResponse,
   SessionResource,
 } from './control-types';
@@ -68,10 +71,36 @@ export class ControlClient {
     return ControlSessionMapper.toSessionAccessTokenResponse(payload);
   }
 
+  async listSessionFiles(sessionId: string): Promise<SessionFileListResponse> {
+    const payload = await this.#request(
+      'GET',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/files`,
+    );
+    return ControlSessionFileMapper.toSessionFileList(payload);
+  }
+
+  async getSessionFile(sessionId: string, fileId: string): Promise<SessionFileResource> {
+    const payload = await this.#request(
+      'GET',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(fileId)}`,
+    );
+    return ControlSessionFileMapper.toSessionFileResource(payload);
+  }
+
+  async downloadSessionFileContent(file: SessionFileResource): Promise<Blob> {
+    const response = await this.#send('GET', file.content_path, undefined, '*/*');
+    return await response.blob();
+  }
+
   async #request(method: string, path: string, body?: unknown): Promise<unknown> {
+    const response = await this.#send(method, path, body, 'application/json');
+    return await response.json();
+  }
+
+  async #send(method: string, path: string, body?: unknown, accept = 'application/json'): Promise<Response> {
     const accessToken = await this.#accessTokenProvider();
     const headers: Record<string, string> = {
-      accept: 'application/json',
+      accept,
       authorization: `Bearer ${accessToken}`,
     };
     const init: RequestInit = {
@@ -87,6 +116,6 @@ export class ControlClient {
     if (!response.ok) {
       throw new ControlApiError(response.status, await response.text());
     }
-    return await response.json();
+    return response;
   }
 }

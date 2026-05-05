@@ -9,6 +9,13 @@ import type {
   SessionStopBlocker,
   SessionStopEligibility,
 } from './control-types';
+import {
+  expectBoolean,
+  expectNumber,
+  expectRecord,
+  expectString,
+  optionalString,
+} from './control-wire';
 
 export class ControlSessionMapper {
   static toSessionList(payload: unknown): SessionListResponse {
@@ -112,39 +119,4 @@ function toStopBlocker(value: unknown): SessionStopBlocker {
     kind: expectString(object.kind, 'session stop blocker kind'),
     count: expectNumber(object.count, 'session stop blocker count'),
   };
-}
-
-function expectRecord(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`${label} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function expectString(value: unknown, label: string): string {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`${label} must be a non-empty string`);
-  }
-  return value;
-}
-
-function expectNumber(value: unknown, label: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(`${label} must be a finite number`);
-  }
-  return value;
-}
-
-function expectBoolean(value: unknown, label: string): boolean {
-  if (typeof value !== 'boolean') {
-    throw new Error(`${label} must be a boolean`);
-  }
-  return value;
-}
-
-function optionalString(value: unknown, label: string): string | null | undefined {
-  if (value === undefined || value === null) {
-    return value;
-  }
-  return expectString(value, label);
 }
