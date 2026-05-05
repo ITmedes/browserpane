@@ -8,6 +8,8 @@ const SESSION = {
   connect: {
     gateway_url: 'https://localhost:4433',
     transport_path: '/session',
+    auth_type: 'session_connect_ticket',
+    ticket_path: '/api/v1/sessions/019df4d2-f4f7-7b00-9e0c-79683b1c82f6/access-tokens',
     compatibility_mode: 'session_runtime_pool',
   },
   runtime: {
@@ -95,6 +97,30 @@ describe('ControlClient', () => {
 
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('http://localhost:8932/api/v1/sessions/session%2Fwith%2Fslash/stop'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('issues session-scoped connect tickets', async () => {
+    const fetchImpl = jsonFetch({
+      session_id: SESSION.id,
+      token_type: 'session_connect_ticket',
+      token: 'connect-ticket',
+      expires_at: '2026-05-04T19:05:00Z',
+      connect: SESSION.connect,
+    });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const response = await client.issueSessionAccessToken(SESSION.id);
+
+    expect(response.token).toBe('connect-ticket');
+    expect(response.connect.auth_type).toBe('session_connect_ticket');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL(`http://localhost:8932/api/v1/sessions/${SESSION.id}/access-tokens`),
       expect.objectContaining({ method: 'POST' }),
     );
   });

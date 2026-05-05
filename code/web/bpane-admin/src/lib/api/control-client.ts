@@ -1,5 +1,10 @@
 import { ControlSessionMapper } from './control-session-mapper';
-import type { CreateSessionCommand, SessionListResponse, SessionResource } from './control-types';
+import type {
+  CreateSessionCommand,
+  SessionAccessTokenResponse,
+  SessionListResponse,
+  SessionResource,
+} from './control-types';
 
 export type AccessTokenProvider = () => Promise<string> | string;
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -53,6 +58,14 @@ export class ControlClient {
   async killSession(sessionId: string): Promise<SessionResource> {
     const payload = await this.#request('POST', `/api/v1/sessions/${encodeURIComponent(sessionId)}/kill`);
     return ControlSessionMapper.toSessionResource(payload);
+  }
+
+  async issueSessionAccessToken(sessionId: string): Promise<SessionAccessTokenResponse> {
+    const payload = await this.#request(
+      'POST',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/access-tokens`,
+    );
+    return ControlSessionMapper.toSessionAccessTokenResponse(payload);
   }
 
   async #request(method: string, path: string, body?: unknown): Promise<unknown> {
