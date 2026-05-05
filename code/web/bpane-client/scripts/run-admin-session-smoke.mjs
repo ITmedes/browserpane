@@ -39,6 +39,7 @@ async function run() {
     log(`Connecting embedded browser for ${sessionId}.`);
     await page.getByTestId('browser-connect').click();
     await waitForBrowserConnected(page, options);
+    await verifyBrowserPolicyPanel(page);
     const uploadEnabled = await page.getByTestId('display-upload').isEnabled();
     if (!uploadEnabled) {
       throw new Error('Expected display upload control to be enabled after browser connect.');
@@ -68,6 +69,21 @@ async function run() {
     await cleanupAdminSmoke(page, options, log);
     await context.close();
     await browser.close();
+  }
+}
+
+async function verifyBrowserPolicyPanel(page) {
+  const policyMode = await page.getByTestId('policy-mode').textContent();
+  if (!policyMode?.includes('deny_all')) {
+    throw new Error(`Expected admin policy panel to report deny_all, got ${policyMode}`);
+  }
+  const fileUrlPolicy = await page.getByTestId('policy-file-url').textContent();
+  if (fileUrlPolicy !== 'blocked') {
+    throw new Error(`Expected file URL policy to be blocked, got ${fileUrlPolicy}`);
+  }
+  const copyEnabled = await page.getByTestId('policy-copy-command').isEnabled();
+  if (!copyEnabled) {
+    throw new Error('Expected policy CDP probe command to be copyable after browser connect.');
   }
 }
 

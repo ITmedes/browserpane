@@ -18,6 +18,7 @@
     BrowserSessionConnectPreferences,
     LiveBrowserSessionConnection,
   } from '../session/browser-session-types';
+  import BrowserPolicySurface from './BrowserPolicySurface.svelte';
   import DisplayControlsSurface from './DisplayControlsSurface.svelte';
   import McpDelegationSurface from './McpDelegationSurface.svelte';
   import SessionFilesSurface from './SessionFilesSurface.svelte';
@@ -64,7 +65,7 @@
     onBrowserPreferencesChange,
   }: AdminWorkspaceSidebarProps = $props();
 
-  let openPanelIds = $state<readonly AdminFeaturePanelId[]>(['sessions', 'lifecycle', 'display', 'files']);
+  let openPanelIds = $state<readonly AdminFeaturePanelId[]>(['sessions', 'lifecycle', 'display', 'files', 'policy']);
 
   function togglePanel(panelId: AdminFeaturePanelId): void {
     openPanelIds = openPanelIds.includes(panelId)
@@ -133,6 +134,11 @@
           connected={browserConnected}
           preferences={browserPreferences}
           onPreferencesChange={onBrowserPreferencesChange}
+        />
+      {:else if panel.id === 'policy'}
+        <BrowserPolicySurface
+          {selectedSession}
+          {onRefreshSelectedSession}
         />
       {:else}
         <FeaturePlaceholderPanel {panel} />
