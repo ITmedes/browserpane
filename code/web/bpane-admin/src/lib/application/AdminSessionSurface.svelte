@@ -3,11 +3,11 @@
   import type { ControlClient } from '../api/control-client';
   import type { SessionResource } from '../api/control-types';
   import BrowserEmbedPanel from '../presentation/BrowserEmbedPanel.svelte';
-  import SessionDetailPanel from '../presentation/SessionDetailPanel.svelte';
-  import SessionListPanel from '../presentation/SessionListPanel.svelte';
+  import { AdminWorkspaceViewModelBuilder } from '../presentation/admin-workspace-view-model';
+  import { SessionViewModelBuilder } from '../presentation/session-view-model';
   import { BrowserSessionConnector } from '../session/browser-session-connector';
   import type { LiveBrowserSessionConnection } from '../session/browser-session-types';
-  import SessionFilesSurface from './SessionFilesSurface.svelte';
+  import AdminWorkspaceSidebar from './AdminWorkspaceSidebar.svelte';
 
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient;
@@ -23,6 +23,28 @@
   let browserConnecting = $state(false);
   let browserError = $state<string | null>(null);
   let browserStatus = $state('Disconnected');
+  let sessionFileCount = $state(0);
+  const browserConnected = $derived(Boolean(liveConnection && liveConnection.sessionId === selectedSession?.id));
+  const workspaceViewModel = $derived(AdminWorkspaceViewModelBuilder.build({
+    browserStatus,
+    selectedSessionId: selectedSession?.id ?? null,
+    sessionCount: sessions.length,
+    fileCount: sessionFileCount,
+    connected: browserConnected,
+  }));
+  const sessionListViewModel = $derived(SessionViewModelBuilder.list({
+    sessions,
+    selectedSessionId: selectedSession?.id ?? null,
+    authenticated: true,
+    loading: sessionsLoading,
+    error: sessionsError,
+  }));
+  const sessionDetailViewModel = $derived(SessionViewModelBuilder.detail({
+    session: selectedSession,
+    connected: browserConnected,
+    loading: sessionsLoading,
+    error: sessionsError,
+  }));
 
   onMount(() => {
     void loadSessions();
@@ -131,42 +153,42 @@
       : [session, ...sessions];
   }
 
+  function selectSession(sessionId: string): void {
+    selectedSession = sessions.find((session) => session.id === sessionId) ?? selectedSession;
+  }
+
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'Unexpected admin console error';
   }
 </script>
 
-<SessionListPanel
-  {sessions}
-  selectedSessionId={selectedSession?.id ?? null}
-  authenticated={true}
-  loading={sessionsLoading}
-  error={sessionsError}
-  onRefresh={() => void loadSessions()}
-  onCreateSession={() => void createSession()}
-  onSelectSession={(session) => {
-    selectedSession = session;
-  }}
-/>
+<div class="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+  <main class="min-w-0 xl:sticky xl:top-4 xl:self-start">
+    <BrowserEmbedPanel
+      viewModel={workspaceViewModel.browser}
+      session={selectedSession}
+      connectedSessionId={liveConnection?.sessionId ?? null}
+      connecting={browserConnecting}
+      error={browserError}
+      onConnect={(container) => void connectBrowser(container)}
+      onDisconnect={() => disconnectBrowser(true)}
+    />
+  </main>
 
-<SessionDetailPanel
-  session={selectedSession}
-  loading={sessionsLoading}
-  error={sessionsError}
-  connected={Boolean(liveConnection && liveConnection.sessionId === selectedSession?.id)}
-  onRefresh={() => void refreshSelectedSession()}
-  onStop={() => void runLifecycle('stop')}
-  onKill={() => void runLifecycle('kill')}
-/>
-
-<SessionFilesSurface {controlClient} session={selectedSession} />
-
-<BrowserEmbedPanel
-  session={selectedSession}
-  connectedSessionId={liveConnection?.sessionId ?? null}
-  connecting={browserConnecting}
-  status={browserStatus}
-  error={browserError}
-  onConnect={(container) => void connectBrowser(container)}
-  onDisconnect={() => disconnectBrowser(true)}
-/>
+  <AdminWorkspaceSidebar
+    {controlClient}
+    {selectedSession}
+    {workspaceViewModel}
+    {sessionListViewModel}
+    {sessionDetailViewModel}
+    onRefreshSessions={() => void loadSessions()}
+    onCreateSession={() => void createSession()}
+    onSelectSessionId={selectSession}
+    onRefreshSelectedSession={() => void refreshSelectedSession()}
+    onStopSession={() => void runLifecycle('stop')}
+    onKillSession={() => void runLifecycle('kill')}
+    onFileCountChange={(count) => {
+      sessionFileCount = count;
+    }}
+  />
+</div>

@@ -1,21 +1,22 @@
 <script lang="ts">
   import type { SessionResource } from '../api/control-types';
+  import type { BrowserStageViewModel } from './admin-workspace-view-model';
 
   type BrowserEmbedPanelProps = {
+    readonly viewModel: BrowserStageViewModel;
     readonly session: SessionResource | null;
     readonly connectedSessionId: string | null;
     readonly connecting: boolean;
-    readonly status: string;
     readonly error: string | null;
     readonly onConnect: (container: HTMLElement) => void;
     readonly onDisconnect: () => void;
   };
 
   let {
+    viewModel,
     session,
     connectedSessionId,
     connecting,
-    status,
     error,
     onConnect,
     onDisconnect,
@@ -30,11 +31,14 @@
   }
 </script>
 
-<section class="mt-[22px] rounded-[24px] border border-admin-ink/12 bg-admin-night/88 p-6 shadow-[0_18px_48px_rgb(24_32_24_/_16%)]" aria-label="Live browser session">
+<section class="rounded-[30px] border border-admin-ink/12 bg-admin-night/92 p-4 shadow-[0_28px_80px_rgb(24_32_24_/_20%)]" aria-label="Live browser session">
   <div class="admin-header">
     <div>
       <p class="admin-eyebrow admin-eyebrow-light">Live browser</p>
-      <h2 class="m-0 text-[1.1rem] font-bold text-admin-cream">{status}</h2>
+      <h2 class="m-0 text-[1.1rem] font-bold text-admin-cream">{viewModel.status}</h2>
+      <p class="mt-1 mb-0 text-xs font-bold text-admin-cream/58">
+        Session {viewModel.sessionLabel} · {viewModel.connectionLabel}
+      </p>
     </div>
     <div class="admin-actions">
       <button
@@ -59,7 +63,7 @@
   </div>
 
   <div
-    class="relative mt-[22px] min-h-[min(62vh,620px)] overflow-hidden rounded-[20px] border border-admin-cream/14 bg-[#050806] max-[860px]:min-h-[420px]"
+    class="relative mt-4 min-h-[calc(100vh-280px)] overflow-hidden rounded-[24px] border border-admin-cream/14 bg-[#050806] max-[1100px]:min-h-[64vh] max-[760px]:min-h-[420px]"
     data-testid="browser-viewport"
     bind:this={container}
   >
@@ -77,5 +81,5 @@
   {#if error}
     <p class="mt-4 mb-0 text-[#f49a7d] leading-normal" data-testid="browser-error">{error}</p>
   {/if}
-  <p class="sr-only" data-testid="browser-status">{status}</p>
+  <p class="sr-only" data-testid="browser-status">{viewModel.status}</p>
 </section>

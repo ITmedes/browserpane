@@ -45,22 +45,22 @@
   .admin-hero {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
-    gap: clamp(24px, 5vw, 56px);
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+    gap: clamp(16px, 3vw, 36px);
     overflow: hidden;
-    padding: clamp(32px, 6vw, 72px);
+    padding: clamp(18px, 3vw, 32px);
     background:
       linear-gradient(120deg, rgb(255 255 248 / 90%), rgb(238 232 204 / 72%)),
       repeating-linear-gradient(90deg, transparent 0 24px, rgb(24 32 24 / 3.5%) 24px 25px);
-    @apply rounded-[36px] border border-admin-ink/14 shadow-[0_28px_80px_rgb(24_32_24_/_14%)] max-[860px]:grid-cols-1 max-[860px]:rounded-[24px];
+    @apply rounded-[28px] border border-admin-ink/14 shadow-[0_18px_56px_rgb(24_32_24_/_12%)] max-[860px]:grid-cols-1 max-[860px]:rounded-[24px];
   }
 
   .admin-hero::after {
     position: absolute;
     right: -56px;
     bottom: -80px;
-    width: 260px;
-    height: 260px;
+    width: 180px;
+    height: 180px;
     border-radius: 48%;
     background: #db6b3b;
     content: "";

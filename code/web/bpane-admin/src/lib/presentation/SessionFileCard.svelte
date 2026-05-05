@@ -1,19 +1,13 @@
 <script lang="ts">
-  import type { SessionFileResource } from '../api/control-types';
-  import {
-    formatSessionFileBytes,
-    formatSessionFileSource,
-    formatSessionFileTimestamp,
-    shortSessionFileDigest,
-  } from './session-file-format';
+  import type { SessionFileCardViewModel } from './session-file-view-model';
 
   type SessionFileCardProps = {
-    readonly file: SessionFileResource;
+    readonly viewModel: SessionFileCardViewModel;
     readonly downloadingFileId: string | null;
-    readonly onDownload: (file: SessionFileResource) => void;
+    readonly onDownload: (fileId: string) => void;
   };
 
-  let { file, downloadingFileId, onDownload }: SessionFileCardProps = $props();
+  let { viewModel, downloadingFileId, onDownload }: SessionFileCardProps = $props();
 </script>
 
 <article
@@ -21,22 +15,22 @@
   data-testid="session-files-row"
 >
   <div class="flex min-w-0 flex-wrap items-baseline gap-3">
-    <strong class="[overflow-wrap:anywhere]">{file.name}</strong>
-    <span class="text-admin-ink/68">{formatSessionFileSource(file.source)}</span>
+    <strong class="[overflow-wrap:anywhere]">{viewModel.name}</strong>
+    <span class="text-admin-ink/68">{viewModel.source}</span>
   </div>
   <div class="flex min-w-0 flex-wrap items-baseline gap-3 text-admin-ink/68">
-    <span>{formatSessionFileBytes(file.byte_count)}</span>
-    <span>{file.media_type ?? 'application/octet-stream'}</span>
-    <span>{formatSessionFileTimestamp(file.created_at)}</span>
+    <span>{viewModel.size}</span>
+    <span>{viewModel.mediaType}</span>
+    <span>{viewModel.createdAt}</span>
   </div>
-  <div class="font-mono text-[0.82rem] text-admin-ink/68">sha256 {shortSessionFileDigest(file.sha256_hex)}</div>
+  <div class="font-mono text-[0.82rem] text-admin-ink/68">{viewModel.digest}</div>
   <button
     class="admin-button-primary"
     type="button"
     data-testid="session-file-download"
     disabled={Boolean(downloadingFileId)}
-    onclick={() => onDownload(file)}
+    onclick={() => onDownload(viewModel.id)}
   >
-    {downloadingFileId === file.id ? 'Downloading...' : 'Download'}
+    {downloadingFileId === viewModel.id ? 'Downloading...' : 'Download'}
   </button>
 </article>

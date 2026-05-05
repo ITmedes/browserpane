@@ -95,7 +95,7 @@
   <title>BrowserPane Admin</title>
 </svelte:head>
 
-<main class="mx-auto w-[calc(100vw-32px)] max-w-[1120px] py-8 md:py-[72px]">
+<main class="mx-auto w-[calc(100vw-32px)] max-w-[1680px] py-4 md:py-6">
   <AdminHero
     {auth}
     {authError}

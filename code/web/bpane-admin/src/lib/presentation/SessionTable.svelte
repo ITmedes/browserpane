@@ -1,13 +1,13 @@
 <script lang="ts">
-  import type { SessionResource } from '../api/control-types';
+  import type { SessionListItemViewModel } from './session-view-model';
 
   type SessionTableProps = {
-    readonly sessions: readonly SessionResource[];
+    readonly sessions: readonly SessionListItemViewModel[];
     readonly selectedSessionId: string | null;
-    readonly onSelectSession: (session: SessionResource) => void;
+    readonly onSelectSessionId: (sessionId: string) => void;
   };
 
-  let { sessions, selectedSessionId, onSelectSession }: SessionTableProps = $props();
+  let { sessions, selectedSessionId, onSelectSessionId }: SessionTableProps = $props();
 </script>
 
 <div class="mt-[22px] grid gap-2" aria-label="Session list">
@@ -32,13 +32,13 @@
       aria-pressed={session.id === selectedSessionId}
       data-testid="session-row"
       data-session-id={session.id}
-      onclick={() => onSelectSession(session)}
+      onclick={() => onSelectSessionId(session.id)}
     >
       <span class="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-admin-ink" title={session.id}>{session.id}</span>
-      <span>{session.state}</span>
-      <span>{session.status.runtime_state}</span>
-      <span>{session.status.presence_state}</span>
-      <span>{session.status.connection_counts.total_clients}</span>
+      <span>{session.lifecycle}</span>
+      <span>{session.runtime}</span>
+      <span>{session.presence}</span>
+      <span>{session.clients}</span>
     </button>
   {/each}
 </div>
