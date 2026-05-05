@@ -39,6 +39,7 @@ describe('AdminWorkspaceViewModelBuilder', () => {
       'lifecycle',
       'display',
       'files',
+      'policy',
     ]);
   });
 });

@@ -67,7 +67,7 @@ export class AdminWorkspaceViewModelBuilder {
           'Refresh files',
           'Download file artifact',
         ], ['file count', 'artifact source']),
-        panel('policy', 'Policy', 'Local file access guardrails', 'Browser policy visibility and runtime probes.', 'planned', false, [
+        panel('policy', 'Policy', 'Local file access guardrails', 'Browser policy visibility and runtime probes.', input.selectedSessionId ? 'visible' : 'select', true, [
           'Inspect effective policy',
           'Run local-file probe',
         ], ['file:// navigation', 'File System Access API']),
