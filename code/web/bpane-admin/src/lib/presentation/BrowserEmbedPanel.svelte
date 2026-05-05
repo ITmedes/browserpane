@@ -31,7 +31,7 @@
   }
 </script>
 
-<section class="rounded-[30px] border border-admin-ink/12 bg-admin-night/92 p-4 shadow-[0_28px_80px_rgb(24_32_24_/_20%)]" aria-label="Live browser session">
+<section class="flex min-h-[calc(100vh-84px)] flex-col rounded-[30px] border border-admin-ink/12 bg-admin-night/92 p-4 shadow-[0_28px_80px_rgb(24_32_24_/_20%)]" aria-label="Live browser session">
   <div class="admin-header">
     <div>
       <p class="admin-eyebrow admin-eyebrow-light">Live browser</p>
@@ -63,7 +63,7 @@
   </div>
 
   <div
-    class="relative mt-4 min-h-[calc(100vh-216px)] overflow-hidden rounded-[24px] border border-admin-cream/14 bg-[#050806] max-[1100px]:min-h-[64vh] max-[760px]:min-h-[420px]"
+    class="relative mt-4 min-h-0 flex-1 overflow-hidden rounded-[24px] border border-admin-cream/14 bg-[#050806] max-[1100px]:min-h-[64vh] max-[760px]:min-h-[420px]"
     data-testid="browser-viewport"
     bind:this={container}
   >

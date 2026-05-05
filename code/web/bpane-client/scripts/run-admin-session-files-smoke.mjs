@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
-import { ensureAdminLoggedIn } from './admin-smoke-lib.mjs';
+import { ensureAdminLoggedIn, openAdminTab } from './admin-smoke-lib.mjs';
 import {
   cleanupWorkflowSmokeSessions,
   configurePage,
@@ -113,12 +113,14 @@ async function createFileArtifact(page, options, uploadPath, log) {
 }
 
 async function selectSession(page, sessionId, options) {
+  await openAdminTab(page, 'sessions');
   const row = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
   await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await row.click();
 }
 
 async function waitForFileRow(page, options) {
+  await openAdminTab(page, 'files');
   const refresh = page.getByTestId('session-files-refresh');
   await refresh.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   if (await refresh.isEnabled()) {

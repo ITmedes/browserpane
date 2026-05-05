@@ -6,6 +6,8 @@ import {
   cleanupAdminSmoke,
   disconnectEmbeddedBrowser,
   ensureAdminLoggedIn,
+  closeAdminOverlay,
+  openAdminTab,
   waitForBrowserConnected,
   waitForKillEnabled,
   waitForSessionState,
@@ -30,21 +32,24 @@ async function run() {
     await cleanupAdminBeforeRun(page, options, log);
 
     log('Creating an admin-owned session.');
-    await page.getByTestId('workspace-resize-handle').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+    await openAdminTab(page, 'sessions');
     await page.getByTestId('session-new').click();
     sessionId = await resolveSelectedSessionId(page, options);
     await configureDisplayControls(page);
     await waitForMcpDelegationReady(page, options);
 
     log(`Connecting embedded browser for ${sessionId}.`);
+    await closeAdminOverlay(page);
     await page.getByTestId('browser-connect').click();
     await waitForBrowserConnected(page, options);
     await verifyBrowserPolicyPanel(page);
     await verifyRemainingPanels(page);
+    await openAdminTab(page, 'display');
     const uploadEnabled = await page.getByTestId('display-upload').isEnabled();
     if (!uploadEnabled) {
       throw new Error('Expected display upload control to be enabled after browser connect.');
     }
+    await openAdminTab(page, 'lifecycle');
     const stopDisabled = await page.getByTestId('session-stop').isDisabled();
     if (!stopDisabled) {
       throw new Error('Expected session stop to be disabled while embedded browser is connected.');
@@ -57,6 +62,7 @@ async function run() {
     await waitForSessionState(page, options, sessionId, 'stopped');
 
     log(`Reconnecting stopped session ${sessionId}.`);
+    await closeAdminOverlay(page);
     await page.getByTestId('browser-connect').click();
     await waitForBrowserConnected(page, options);
     await disconnectEmbeddedBrowser(page, options);
@@ -74,6 +80,7 @@ async function run() {
 }
 
 async function verifyBrowserPolicyPanel(page) {
+  await openAdminTab(page, 'policy');
   const policyMode = await page.getByTestId('policy-mode').textContent();
   if (!policyMode?.includes('deny_all')) {
     throw new Error(`Expected admin policy panel to report deny_all, got ${policyMode}`);
@@ -89,25 +96,18 @@ async function verifyBrowserPolicyPanel(page) {
 }
 
 async function verifyRemainingPanels(page) {
-  await openWorkspacePanel(page, 'recording');
+  await openAdminTab(page, 'recording');
   await page.getByTestId('recording-status').waitFor({ state: 'visible' });
-  await openWorkspacePanel(page, 'metrics');
+  await openAdminTab(page, 'metrics');
   await page.getByTestId('metrics-sample').waitFor({ state: 'visible' });
-  await openWorkspacePanel(page, 'logs');
+  await openAdminTab(page, 'logs');
   await page.getByTestId('admin-log-count').waitFor({ state: 'visible' });
-  await openWorkspacePanel(page, 'workflows');
+  await openAdminTab(page, 'workflows');
   await page.getByTestId('workflow-status').waitFor({ state: 'visible' });
 }
 
-async function openWorkspacePanel(page, panelId) {
-  const panel = page.getByTestId(`workspace-panel-${panelId}`);
-  const expanded = await panel.getByRole('button').getAttribute('aria-expanded');
-  if (expanded !== 'true') {
-    await page.getByTestId(`workspace-panel-toggle-${panelId}`).click();
-  }
-}
-
 async function waitForMcpDelegationReady(page, options) {
+  await openAdminTab(page, 'sessions');
   await page.getByTestId('mcp-status').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await poll('admin MCP delegate button enabled', async () => {
     return await page.getByTestId('mcp-delegate').isEnabled();
@@ -115,6 +115,7 @@ async function waitForMcpDelegationReady(page, options) {
 }
 
 async function configureDisplayControls(page) {
+  await openAdminTab(page, 'display');
   await page.getByTestId('display-render-backend').selectOption('canvas2d');
   await page.getByTestId('display-hidpi').setChecked(false);
   await page.getByTestId('display-scroll-copy').setChecked(false);
@@ -135,6 +136,7 @@ async function resolveSelectedSessionId(page, options) {
 }
 
 async function emitSummary(page, options, sessionId, stopDisabled, log) {
+  await openAdminTab(page, 'lifecycle');
   const summary = {
     pageUrl: options.pageUrl,
     sessionId,
