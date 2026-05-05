@@ -7,6 +7,7 @@ import type {
   SessionFileResource,
   SessionListResponse,
   SessionResource,
+  SetAutomationDelegateCommand,
 } from './control-types';
 
 export type AccessTokenProvider = () => Promise<string> | string;
@@ -60,6 +61,26 @@ export class ControlClient {
 
   async killSession(sessionId: string): Promise<SessionResource> {
     const payload = await this.#request('POST', `/api/v1/sessions/${encodeURIComponent(sessionId)}/kill`);
+    return ControlSessionMapper.toSessionResource(payload);
+  }
+
+  async setAutomationDelegate(
+    sessionId: string,
+    command: SetAutomationDelegateCommand,
+  ): Promise<SessionResource> {
+    const payload = await this.#request(
+      'POST',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-owner`,
+      command,
+    );
+    return ControlSessionMapper.toSessionResource(payload);
+  }
+
+  async clearAutomationDelegate(sessionId: string): Promise<SessionResource> {
+    const payload = await this.#request(
+      'DELETE',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-owner`,
+    );
     return ControlSessionMapper.toSessionResource(payload);
   }
 

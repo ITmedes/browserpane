@@ -2,18 +2,20 @@
   import { onDestroy, onMount } from 'svelte';
   import type { ControlClient } from '../api/control-client';
   import type { SessionResource } from '../api/control-types';
+  import type { McpBridgeConfig } from '../auth/auth-config';
   import BrowserEmbedPanel from '../presentation/BrowserEmbedPanel.svelte';
   import { AdminWorkspaceViewModelBuilder } from '../presentation/admin-workspace-view-model';
   import { SessionViewModelBuilder } from '../presentation/session-view-model';
   import { BrowserSessionConnector } from '../session/browser-session-connector';
   import { DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES, type BrowserSessionConnectPreferences, type LiveBrowserSessionConnection } from '../session/browser-session-types';
   import AdminWorkspaceSidebar from './AdminWorkspaceSidebar.svelte';
+  import ResizableWorkspaceLayout from './ResizableWorkspaceLayout.svelte';
 
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient;
+    readonly mcpBridge: McpBridgeConfig | null;
   };
-
-  let { controlClient }: AdminSessionSurfaceProps = $props();
+  let { controlClient, mcpBridge }: AdminSessionSurfaceProps = $props();
   let browserConnector = $derived(new BrowserSessionConnector({ controlClient }));
   let liveConnection = $state<LiveBrowserSessionConnection | null>(null);
   let sessions = $state<readonly SessionResource[]>([]);
@@ -47,13 +49,8 @@
     error: sessionsError,
   }));
 
-  onMount(() => {
-    void loadSessions();
-  });
-
-  onDestroy(() => {
-    disconnectBrowser(false);
-  });
+  onMount(() => { void loadSessions(); });
+  onDestroy(() => { disconnectBrowser(false); });
 
   async function loadSessions(): Promise<void> {
     sessionsLoading = true;
@@ -163,8 +160,8 @@
   }
 </script>
 
-<div class="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-  <main class="min-w-0 xl:sticky xl:top-4 xl:self-start">
+<ResizableWorkspaceLayout>
+  {#snippet browser()}
     <BrowserEmbedPanel
       viewModel={workspaceViewModel.browser}
       session={selectedSession}
@@ -174,24 +171,27 @@
       onConnect={(container) => void connectBrowser(container)}
       onDisconnect={() => disconnectBrowser(true)}
     />
-  </main>
-
-  <AdminWorkspaceSidebar
-    {controlClient}
-    {selectedSession}
-    {liveConnection}
-    {browserPreferences}
-    {browserConnected}
-    {workspaceViewModel}
-    {sessionListViewModel}
-    {sessionDetailViewModel}
-    onRefreshSessions={() => void loadSessions()}
-    onCreateSession={() => void createSession()}
-    onSelectSessionId={selectSession}
-    onRefreshSelectedSession={() => void refreshSelectedSession()}
-    onStopSession={() => void runLifecycle('stop')}
-    onKillSession={() => void runLifecycle('kill')}
-    onFileCountChange={(count) => { sessionFileCount = count; }}
-    onBrowserPreferencesChange={(next) => { browserPreferences = next; }}
-  />
-</div>
+  {/snippet}
+  {#snippet sidebar()}
+    <AdminWorkspaceSidebar
+      {controlClient}
+      {selectedSession}
+      {sessions}
+      {mcpBridge}
+      {liveConnection}
+      {browserPreferences}
+      {browserConnected}
+      {workspaceViewModel}
+      {sessionListViewModel}
+      {sessionDetailViewModel}
+      onRefreshSessions={loadSessions}
+      onCreateSession={() => void createSession()}
+      onSelectSessionId={selectSession}
+      onRefreshSelectedSession={refreshSelectedSession}
+      onStopSession={() => void runLifecycle('stop')}
+      onKillSession={() => void runLifecycle('kill')}
+      onFileCountChange={(count) => { sessionFileCount = count; }}
+      onBrowserPreferencesChange={(next) => { browserPreferences = next; }}
+    />
+  {/snippet}
+</ResizableWorkspaceLayout>

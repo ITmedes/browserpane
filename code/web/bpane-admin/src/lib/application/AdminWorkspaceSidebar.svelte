@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ControlClient } from '../api/control-client';
   import type { SessionResource } from '../api/control-types';
+  import type { McpBridgeConfig } from '../auth/auth-config';
   import CollapsibleWorkspacePanel from '../presentation/CollapsibleWorkspacePanel.svelte';
   import FeaturePlaceholderPanel from '../presentation/FeaturePlaceholderPanel.svelte';
   import SessionDetailPanel from '../presentation/SessionDetailPanel.svelte';
@@ -18,21 +19,24 @@
     LiveBrowserSessionConnection,
   } from '../session/browser-session-types';
   import DisplayControlsSurface from './DisplayControlsSurface.svelte';
+  import McpDelegationSurface from './McpDelegationSurface.svelte';
   import SessionFilesSurface from './SessionFilesSurface.svelte';
 
   type AdminWorkspaceSidebarProps = {
     readonly controlClient: ControlClient;
     readonly selectedSession: SessionResource | null;
+    readonly sessions: readonly SessionResource[];
+    readonly mcpBridge: McpBridgeConfig | null;
     readonly liveConnection: LiveBrowserSessionConnection | null;
     readonly browserConnected: boolean;
     readonly browserPreferences: BrowserSessionConnectPreferences;
     readonly workspaceViewModel: AdminWorkspaceViewModel;
     readonly sessionListViewModel: SessionListPanelViewModel;
     readonly sessionDetailViewModel: SessionDetailPanelViewModel;
-    readonly onRefreshSessions: () => void;
+    readonly onRefreshSessions: () => Promise<void>;
     readonly onCreateSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
-    readonly onRefreshSelectedSession: () => void;
+    readonly onRefreshSelectedSession: () => Promise<void>;
     readonly onStopSession: () => void;
     readonly onKillSession: () => void;
     readonly onFileCountChange: (count: number) => void;
@@ -42,6 +46,8 @@
   let {
     controlClient,
     selectedSession,
+    sessions,
+    mcpBridge,
     liveConnection,
     browserConnected,
     browserPreferences,
@@ -96,14 +102,22 @@
       {#if panel.id === 'sessions'}
         <SessionListPanel
           viewModel={sessionListViewModel}
-          onRefresh={onRefreshSessions}
+          onRefresh={() => void onRefreshSessions()}
           onCreateSession={onCreateSession}
           onSelectSessionId={onSelectSessionId}
+        />
+        <McpDelegationSurface
+          {controlClient}
+          {selectedSession}
+          {sessions}
+          {mcpBridge}
+          {onRefreshSessions}
+          {onRefreshSelectedSession}
         />
       {:else if panel.id === 'lifecycle'}
         <SessionDetailPanel
           viewModel={sessionDetailViewModel}
-          onRefresh={onRefreshSelectedSession}
+          onRefresh={() => void onRefreshSelectedSession()}
           onStop={onStopSession}
           onKill={onKillSession}
         />

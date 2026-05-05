@@ -22,6 +22,12 @@ export type SessionStopEligibility = {
   readonly blockers: readonly SessionStopBlocker[];
 };
 
+export type SessionAutomationDelegate = {
+  readonly client_id: string;
+  readonly issuer: string;
+  readonly display_name?: string | null;
+};
+
 export type SessionConnectionCounts = {
   readonly interactive_clients: number;
   readonly owner_clients: number;
@@ -42,6 +48,7 @@ export type SessionResource = {
   readonly id: string;
   readonly state: string;
   readonly owner_mode: string;
+  readonly automation_delegate?: SessionAutomationDelegate | null;
   readonly connect: SessionConnectInfo;
   readonly runtime: SessionRuntimeInfo;
   readonly status: SessionStatusSummary;
@@ -58,6 +65,12 @@ export type CreateSessionCommand = {
   readonly owner_mode?: string;
   readonly idle_timeout_sec?: number;
   readonly labels?: Readonly<Record<string, string>>;
+};
+
+export type SetAutomationDelegateCommand = {
+  readonly client_id: string;
+  readonly issuer?: string | null;
+  readonly display_name?: string | null;
 };
 
 export type SessionAccessTokenResponse = {

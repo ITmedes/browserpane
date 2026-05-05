@@ -11,7 +11,7 @@ import {
   waitForSessionState,
   waitForStopEnabled,
 } from './admin-smoke-lib.mjs';
-import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs } from './workflow-smoke-lib.mjs';
+import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
 
 async function run() {
   const options = parseSmokeArgs(process.argv.slice(2), 'run-admin-session-smoke.mjs');
@@ -30,9 +30,11 @@ async function run() {
     await cleanupAdminBeforeRun(page, options, log);
 
     log('Creating an admin-owned session.');
+    await page.getByTestId('workspace-resize-handle').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
     await page.getByTestId('session-new').click();
     sessionId = await resolveSelectedSessionId(page, options);
     await configureDisplayControls(page);
+    await waitForMcpDelegationReady(page, options);
 
     log(`Connecting embedded browser for ${sessionId}.`);
     await page.getByTestId('browser-connect').click();
@@ -67,6 +69,13 @@ async function run() {
     await context.close();
     await browser.close();
   }
+}
+
+async function waitForMcpDelegationReady(page, options) {
+  await page.getByTestId('mcp-status').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await poll('admin MCP delegate button enabled', async () => {
+    return await page.getByTestId('mcp-delegate').isEnabled();
+  }, (enabled) => enabled, options.connectTimeoutMs);
 }
 
 async function configureDisplayControls(page) {
