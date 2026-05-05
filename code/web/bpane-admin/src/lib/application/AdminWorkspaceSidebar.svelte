@@ -82,7 +82,7 @@
   }
 </script>
 
-<aside class="grid max-h-[calc(100vh-96px)] content-start gap-3 overflow-y-auto pr-1 max-xl:max-h-none max-xl:overflow-visible">
+<aside class="grid max-h-[calc(100vh-72px)] content-start gap-3 overflow-y-auto pr-1 max-xl:max-h-none max-xl:overflow-visible">
   <div class="rounded-[24px] border border-admin-ink/10 bg-admin-cream/70 p-3">
     <p class="admin-eyebrow mb-2">Admin surface map</p>
     <div class="flex flex-wrap gap-2">

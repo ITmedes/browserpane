@@ -6,7 +6,7 @@
   import { OidcAuthClient } from '$lib/auth/oidc-auth-client';
   import type { AuthSnapshot } from '$lib/auth/oidc-types';
   import AdminSessionSurface from '$lib/application/AdminSessionSurface.svelte';
-  import AdminHero from '$lib/presentation/AdminHero.svelte';
+  import AdminHeader from '$lib/presentation/AdminHeader.svelte';
 
   let authClient: OidcAuthClient | null = null;
   let controlClient: ControlClient | null = null;
@@ -97,14 +97,34 @@
   <title>BrowserPane Admin</title>
 </svelte:head>
 
-<main class="mx-auto w-[calc(100vw-32px)] max-w-[1680px] py-4 md:py-6">
-  <AdminHero
-    {auth}
-    {authError}
-    loading={authLoading}
-    onLogin={() => void login()}
-    onLogout={() => void logout()}
-  />
+<AdminHeader
+  {auth}
+  {authError}
+  loading={authLoading}
+  onLogin={() => void login()}
+  onLogout={() => void logout()}
+/>
+
+<main class="mx-auto min-h-screen w-[calc(100vw-32px)] max-w-[1680px] pt-[72px] pb-4">
+  {#if authError && !auth?.authenticated}
+    <section class="admin-panel">
+      <p class="admin-error mt-0">{authError}</p>
+    </section>
+  {/if}
+
+  {#if !auth?.authenticated}
+    <section class="rounded-[24px] border border-admin-ink/12 bg-admin-panel/70 p-5 shadow-[0_18px_48px_rgb(24_32_24_/_8%)]">
+      <p class="admin-eyebrow">Operator access</p>
+      {#if authLoading}
+        <p class="m-0 leading-normal text-admin-ink/78">Loading auth metadata...</p>
+      {:else if auth?.configured}
+        <p class="m-0 leading-normal text-admin-ink/78">Sign in with the local BrowserPane realm.</p>
+        <button class="admin-button-primary mt-3" type="button" onclick={() => void login()}>Sign in</button>
+      {:else}
+        <p class="m-0 leading-normal text-admin-ink/78">OIDC is not configured for this deployment.</p>
+      {/if}
+    </section>
+  {/if}
 
   {#if auth?.authenticated && controlClient}
     <AdminSessionSurface {controlClient} mcpBridge={authConfig?.mcpBridge ?? null} />

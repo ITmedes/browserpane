@@ -42,34 +42,16 @@
     @apply mt-[22px] rounded-[24px] border border-admin-ink/12 bg-admin-panel/62 p-6 shadow-[0_18px_48px_rgb(24_32_24_/_8%)];
   }
 
-  .admin-hero {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
-    gap: clamp(16px, 3vw, 36px);
-    overflow: hidden;
-    padding: clamp(18px, 3vw, 32px);
-    background:
-      linear-gradient(120deg, rgb(255 255 248 / 90%), rgb(238 232 204 / 72%)),
-      repeating-linear-gradient(90deg, transparent 0 24px, rgb(24 32 24 / 3.5%) 24px 25px);
-    @apply rounded-[28px] border border-admin-ink/14 shadow-[0_18px_56px_rgb(24_32_24_/_12%)] max-[860px]:grid-cols-1 max-[860px]:rounded-[24px];
-  }
-
-  .admin-hero::after {
-    position: absolute;
-    right: -56px;
-    bottom: -80px;
-    width: 180px;
-    height: 180px;
-    border-radius: 48%;
-    background: #db6b3b;
-    content: "";
-    opacity: 0.18;
-    transform: rotate(-18deg);
-  }
-
   .admin-header {
     @apply flex items-center justify-between gap-3 max-[860px]:flex-col max-[860px]:items-stretch;
+  }
+
+  .admin-header-link {
+    @apply rounded-full border border-admin-ink/12 bg-admin-panel/70 px-3 py-1 text-xs font-extrabold text-admin-ink/70 no-underline;
+  }
+
+  .admin-header-button {
+    @apply min-h-8 cursor-pointer rounded-full border border-admin-ink/18 bg-admin-night px-3 text-xs font-extrabold text-admin-cream disabled:cursor-not-allowed disabled:opacity-45;
   }
 
   .admin-actions {
