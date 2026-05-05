@@ -2,13 +2,15 @@
   import type { ControlClient } from '../api/control-client';
   import type { SessionFileResource, SessionResource } from '../api/control-types';
   import SessionFileCard from '../presentation/SessionFileCard.svelte';
+  import { SessionFileViewModelBuilder } from '../presentation/session-file-view-model';
 
   type SessionFilesSurfaceProps = {
     readonly controlClient: ControlClient;
     readonly session: SessionResource | null;
+    readonly onFileCountChange?: (count: number) => void;
   };
 
-  let { controlClient, session }: SessionFilesSurfaceProps = $props();
+  let { controlClient, session, onFileCountChange }: SessionFilesSurfaceProps = $props();
   let currentSessionId = $state<string | null>(null);
   let files = $state<readonly SessionFileResource[]>([]);
   let loading = $state(false);
@@ -22,6 +24,7 @@
     }
     currentSessionId = nextSessionId;
     files = [];
+    onFileCountChange?.(0);
     error = null;
     if (nextSessionId) {
       void loadFiles(nextSessionId);
@@ -38,6 +41,7 @@
       const response = await controlClient.listSessionFiles(sessionId);
       if (currentSessionId === sessionId) {
         files = response.files;
+        onFileCountChange?.(response.files.length);
       }
     } catch (loadError) {
       if (currentSessionId === sessionId) {
@@ -50,7 +54,11 @@
     }
   }
 
-  async function downloadFile(file: SessionFileResource): Promise<void> {
+  async function downloadFile(fileId: string): Promise<void> {
+    const file = files.find((entry) => entry.id === fileId);
+    if (!file) {
+      return;
+    }
     downloadingFileId = file.id;
     error = null;
     try {
@@ -78,14 +86,11 @@
   }
 </script>
 
-<section class="admin-panel" aria-label="Session files">
-  <div class="admin-header max-[760px]:flex-col max-[760px]:items-stretch">
-    <div>
-      <p class="admin-eyebrow admin-eyebrow-warm">Runtime files</p>
-      <h2 class="m-0 text-[1.15rem] font-bold text-admin-night">
-        {session ? `${files.length} session file${files.length === 1 ? '' : 's'}` : 'No session selected'}
-      </h2>
-    </div>
+<section class="grid gap-4" aria-label="Session files">
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <span class="text-sm font-bold text-admin-ink/68">
+      {session ? `${files.length} session file${files.length === 1 ? '' : 's'}` : 'No session selected'}
+    </span>
     <button
       class="admin-button-primary"
       type="button"
@@ -108,7 +113,11 @@
   {:else}
     <div class="mt-[18px] grid gap-3">
       {#each files as file (file.id)}
-        <SessionFileCard {file} {downloadingFileId} onDownload={(entry) => void downloadFile(entry)} />
+        <SessionFileCard
+          viewModel={SessionFileViewModelBuilder.card(file)}
+          {downloadingFileId}
+          onDownload={(fileId) => void downloadFile(fileId)}
+        />
       {/each}
     </div>
   {/if}
