@@ -13,11 +13,19 @@
     SessionDetailPanelViewModel,
     SessionListPanelViewModel,
   } from '../presentation/session-view-model';
+  import type {
+    BrowserSessionConnectPreferences,
+    LiveBrowserSessionConnection,
+  } from '../session/browser-session-types';
+  import DisplayControlsSurface from './DisplayControlsSurface.svelte';
   import SessionFilesSurface from './SessionFilesSurface.svelte';
 
   type AdminWorkspaceSidebarProps = {
     readonly controlClient: ControlClient;
     readonly selectedSession: SessionResource | null;
+    readonly liveConnection: LiveBrowserSessionConnection | null;
+    readonly browserConnected: boolean;
+    readonly browserPreferences: BrowserSessionConnectPreferences;
     readonly workspaceViewModel: AdminWorkspaceViewModel;
     readonly sessionListViewModel: SessionListPanelViewModel;
     readonly sessionDetailViewModel: SessionDetailPanelViewModel;
@@ -28,11 +36,15 @@
     readonly onStopSession: () => void;
     readonly onKillSession: () => void;
     readonly onFileCountChange: (count: number) => void;
+    readonly onBrowserPreferencesChange: (preferences: BrowserSessionConnectPreferences) => void;
   };
 
   let {
     controlClient,
     selectedSession,
+    liveConnection,
+    browserConnected,
+    browserPreferences,
     workspaceViewModel,
     sessionListViewModel,
     sessionDetailViewModel,
@@ -43,9 +55,10 @@
     onStopSession,
     onKillSession,
     onFileCountChange,
+    onBrowserPreferencesChange,
   }: AdminWorkspaceSidebarProps = $props();
 
-  let openPanelIds = $state<readonly AdminFeaturePanelId[]>(['sessions', 'lifecycle', 'files']);
+  let openPanelIds = $state<readonly AdminFeaturePanelId[]>(['sessions', 'lifecycle', 'display', 'files']);
 
   function togglePanel(panelId: AdminFeaturePanelId): void {
     openPanelIds = openPanelIds.includes(panelId)
@@ -99,6 +112,13 @@
           {controlClient}
           session={selectedSession}
           {onFileCountChange}
+        />
+      {:else if panel.id === 'display'}
+        <DisplayControlsSurface
+          {liveConnection}
+          connected={browserConnected}
+          preferences={browserPreferences}
+          onPreferencesChange={onBrowserPreferencesChange}
         />
       {:else}
         <FeaturePlaceholderPanel {panel} />

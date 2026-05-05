@@ -57,7 +57,7 @@ export class AdminWorkspaceViewModelBuilder {
           'Kill selected',
           'Disconnect all clients',
         ], ['runtime', 'presence', 'connections']),
-        panel('display', 'Display', 'Render backend, HiDPI, scroll copy, media controls', 'Session display and browser media controls from the dev harness.', 'planned', false, [
+        panel('display', 'Display', 'Render backend, HiDPI, scroll copy, media controls', 'Session display and browser media controls from the dev harness.', input.connected ? 'live' : 'next connect', true, [
           'Render backend',
           'HiDPI',
           'Scroll copy',

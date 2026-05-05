@@ -6,7 +6,7 @@
   import { AdminWorkspaceViewModelBuilder } from '../presentation/admin-workspace-view-model';
   import { SessionViewModelBuilder } from '../presentation/session-view-model';
   import { BrowserSessionConnector } from '../session/browser-session-connector';
-  import type { LiveBrowserSessionConnection } from '../session/browser-session-types';
+  import { DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES, type BrowserSessionConnectPreferences, type LiveBrowserSessionConnection } from '../session/browser-session-types';
   import AdminWorkspaceSidebar from './AdminWorkspaceSidebar.svelte';
 
   type AdminSessionSurfaceProps = {
@@ -24,6 +24,7 @@
   let browserError = $state<string | null>(null);
   let browserStatus = $state('Disconnected');
   let sessionFileCount = $state(0);
+  let browserPreferences = $state<BrowserSessionConnectPreferences>({ ...DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES });
   const browserConnected = $derived(Boolean(liveConnection && liveConnection.sessionId === selectedSession?.id));
   const workspaceViewModel = $derived(AdminWorkspaceViewModelBuilder.build({
     browserStatus,
@@ -120,7 +121,7 @@
     browserError = null;
     browserStatus = `Connecting to ${selectedSession.id}`;
     try {
-      liveConnection = await browserConnector.connect(selectedSession, container);
+      liveConnection = await browserConnector.connect(selectedSession, container, browserPreferences);
       browserStatus = `Connected to ${selectedSession.id}`;
       await refreshSelectedSession();
     } catch (error) {
@@ -178,6 +179,9 @@
   <AdminWorkspaceSidebar
     {controlClient}
     {selectedSession}
+    {liveConnection}
+    {browserPreferences}
+    {browserConnected}
     {workspaceViewModel}
     {sessionListViewModel}
     {sessionDetailViewModel}
@@ -187,8 +191,7 @@
     onRefreshSelectedSession={() => void refreshSelectedSession()}
     onStopSession={() => void runLifecycle('stop')}
     onKillSession={() => void runLifecycle('kill')}
-    onFileCountChange={(count) => {
-      sessionFileCount = count;
-    }}
+    onFileCountChange={(count) => { sessionFileCount = count; }}
+    onBrowserPreferencesChange={(next) => { browserPreferences = next; }}
   />
 </div>

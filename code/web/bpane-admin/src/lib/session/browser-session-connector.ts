@@ -1,7 +1,9 @@
 import { ControlClient } from '../api/control-client';
 import type { SessionResource } from '../api/control-types';
 import { BrowserSessionSdkLoader } from './browser-session-sdk-loader';
+import { DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES } from './browser-session-types';
 import type {
+  BrowserSessionConnectPreferences,
   BrowserSessionSdk,
   LiveBrowserSessionConnection,
 } from './browser-session-types';
@@ -30,6 +32,7 @@ export class BrowserSessionConnector {
   async connect(
     session: SessionResource,
     container: HTMLElement,
+    preferences: BrowserSessionConnectPreferences = DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES,
   ): Promise<LiveBrowserSessionConnection> {
     const access = await this.#controlClient.issueSessionAccessToken(session.id);
     if (access.token_type !== 'session_connect_ticket') {
@@ -43,12 +46,8 @@ export class BrowserSessionConnector {
       gatewayUrl,
       connectTicket: access.token,
       clientRole: 'interactive',
-      hiDpi: true,
-      audio: true,
-      camera: true,
-      clipboard: true,
-      fileTransfer: true,
       certHashUrl: this.#certHashUrl,
+      ...preferences,
     });
 
     return {
