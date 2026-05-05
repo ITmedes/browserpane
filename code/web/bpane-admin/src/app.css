@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+@theme {
+  --color-admin-cream: #fffdf3;
+  --color-admin-ink: #162119;
+  --color-admin-panel: #fffff8;
+  --color-admin-field: #e8f5df;
+  --color-admin-leaf: #417463;
+  --color-admin-warm: #db6b3b;
+  --color-admin-danger: #a33a21;
+  --color-admin-night: #243126;
+  --font-display: "Georgia", "Charter", serif;
+  --font-mono: "SFMono-Regular", "Cascadia Code", monospace;
+  --font-sans: "Aptos", "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+@layer base {
+  :root {
+    color: #182018;
+    background: #eef1df;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    background:
+      radial-gradient(circle at 15% 15%, rgb(219 107 59 / 22%), transparent 28rem),
+      radial-gradient(circle at 82% 8%, rgb(65 116 99 / 20%), transparent 24rem),
+      linear-gradient(135deg, #f5f1df 0%, #e7ebd5 48%, #d6dfca 100%);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  .admin-panel {
+    @apply mt-[22px] rounded-[24px] border border-admin-ink/12 bg-admin-panel/62 p-6 shadow-[0_18px_48px_rgb(24_32_24_/_8%)];
+  }
+
+  .admin-hero {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    gap: clamp(24px, 5vw, 56px);
+    overflow: hidden;
+    padding: clamp(32px, 6vw, 72px);
+    background:
+      linear-gradient(120deg, rgb(255 255 248 / 90%), rgb(238 232 204 / 72%)),
+      repeating-linear-gradient(90deg, transparent 0 24px, rgb(24 32 24 / 3.5%) 24px 25px);
+    @apply rounded-[36px] border border-admin-ink/14 shadow-[0_28px_80px_rgb(24_32_24_/_14%)] max-[860px]:grid-cols-1 max-[860px]:rounded-[24px];
+  }
+
+  .admin-hero::after {
+    position: absolute;
+    right: -56px;
+    bottom: -80px;
+    width: 260px;
+    height: 260px;
+    border-radius: 48%;
+    background: #db6b3b;
+    content: "";
+    opacity: 0.18;
+    transform: rotate(-18deg);
+  }
+
+  .admin-header {
+    @apply flex items-center justify-between gap-3 max-[860px]:flex-col max-[860px]:items-stretch;
+  }
+
+  .admin-actions {
+    @apply flex items-center gap-3 max-[860px]:flex-col max-[860px]:items-stretch;
+  }
+
+  .admin-eyebrow {
+    @apply m-0 mb-2 text-xs font-extrabold tracking-[0.16em] text-admin-leaf uppercase;
+  }
+
+  .admin-eyebrow-warm {
+    @apply text-admin-warm;
+  }
+
+  .admin-eyebrow-light {
+    @apply text-[#a7c7a1];
+  }
+
+  .admin-section-title {
+    @apply m-0 text-xl font-bold text-admin-night;
+  }
+
+  .admin-button-primary {
+    @apply min-h-10 cursor-pointer rounded-full border border-admin-ink/18 bg-admin-night px-3.5 font-extrabold text-admin-cream disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .admin-button-light {
+    @apply min-h-10 cursor-pointer rounded-full border border-admin-cream/20 bg-admin-cream px-3.5 font-extrabold text-admin-ink disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .admin-button-ghost {
+    @apply inline-flex min-h-[42px] cursor-pointer items-center rounded-full border border-admin-ink/18 bg-admin-panel/84 px-4 font-extrabold text-admin-ink no-underline;
+  }
+
+  .admin-empty {
+    @apply mt-[18px] mb-0 text-admin-ink/68 leading-normal;
+  }
+
+  .admin-empty-spacious {
+    @apply mt-[22px];
+  }
+
+  .admin-error {
+    @apply mt-4 mb-0 text-admin-danger leading-normal;
+  }
+
+  .admin-code-pill {
+    @apply rounded-[7px] bg-admin-leaf/12 px-1.5 py-0.5;
+  }
+}

@@ -10,8 +10,11 @@
   let { sessions, selectedSessionId, onSelectSession }: SessionTableProps = $props();
 </script>
 
-<div class="table" aria-label="Session list">
-  <div class="row heading" aria-hidden="true">
+<div class="mt-[22px] grid gap-2" aria-label="Session list">
+  <div
+    class="grid grid-cols-[minmax(140px,1.5fr)_repeat(4,minmax(96px,1fr))] items-center gap-3 rounded-2xl border border-admin-ink/10 bg-transparent p-3.5 text-left text-xs font-black tracking-[0.08em] text-admin-ink/52 uppercase max-[860px]:hidden"
+    aria-hidden="true"
+  >
     <span>Session</span>
     <span>Lifecycle</span>
     <span>Runtime</span>
@@ -20,15 +23,18 @@
   </div>
   {#each sessions as session}
     <button
-      class="row"
-      class:active={session.id === selectedSessionId}
+      class={`grid w-full cursor-pointer grid-cols-[minmax(140px,1.5fr)_repeat(4,minmax(96px,1fr))] items-center gap-3 rounded-2xl border p-3.5 text-left text-admin-ink/78 hover:border-admin-leaf/42 hover:bg-admin-field/84 max-[860px]:grid-cols-2 ${
+        session.id === selectedSessionId
+          ? 'border-admin-leaf/42 bg-admin-field/84'
+          : 'border-admin-ink/10 bg-admin-panel/68'
+      }`}
       type="button"
       aria-pressed={session.id === selectedSessionId}
       data-testid="session-row"
       data-session-id={session.id}
       onclick={() => onSelectSession(session)}
     >
-      <span title={session.id}>{session.id}</span>
+      <span class="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-admin-ink" title={session.id}>{session.id}</span>
       <span>{session.state}</span>
       <span>{session.status.runtime_state}</span>
       <span>{session.status.presence_state}</span>
@@ -36,63 +42,3 @@
     </button>
   {/each}
 </div>
-
-<style>
-  .table {
-    display: grid;
-    gap: 8px;
-    margin-top: 22px;
-  }
-
-  .row {
-    display: grid;
-    grid-template-columns: minmax(140px, 1.5fr) repeat(4, minmax(96px, 1fr));
-    gap: 12px;
-    align-items: center;
-    width: 100%;
-    padding: 14px;
-    border: 1px solid rgba(24, 32, 24, 0.1);
-    border-radius: 16px;
-    background: rgba(255, 255, 248, 0.68);
-    color: rgba(24, 32, 24, 0.78);
-    font: inherit;
-    text-align: left;
-  }
-
-  button.row {
-    cursor: pointer;
-  }
-
-  button.row:hover,
-  button.row.active {
-    border-color: rgba(65, 116, 99, 0.42);
-    background: rgba(232, 245, 223, 0.84);
-  }
-
-  .heading {
-    background: transparent;
-    color: rgba(24, 32, 24, 0.52);
-    font-size: 0.78rem;
-    font-weight: 900;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .row span:first-child {
-    overflow: hidden;
-    color: #162119;
-    font-family: "SFMono-Regular", "Cascadia Code", monospace;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  @media (max-width: 860px) {
-    .row {
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .heading {
-      display: none;
-    }
-  }
-</style>

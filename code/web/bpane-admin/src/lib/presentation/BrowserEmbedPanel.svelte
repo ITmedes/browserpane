@@ -30,14 +30,15 @@
   }
 </script>
 
-<section class="browser" aria-label="Live browser session">
-  <div class="header">
+<section class="mt-[22px] rounded-[24px] border border-admin-ink/12 bg-admin-night/88 p-6 shadow-[0_18px_48px_rgb(24_32_24_/_16%)]" aria-label="Live browser session">
+  <div class="admin-header">
     <div>
-      <p class="eyebrow">Live browser</p>
-      <h2>{status}</h2>
+      <p class="admin-eyebrow admin-eyebrow-light">Live browser</p>
+      <h2 class="m-0 text-[1.1rem] font-bold text-admin-cream">{status}</h2>
     </div>
-    <div class="actions">
+    <div class="admin-actions">
       <button
+        class="admin-button-light"
         type="button"
         data-testid="browser-connect"
         disabled={!session || connecting || isConnected}
@@ -46,6 +47,7 @@
         Connect
       </button>
       <button
+        class="admin-button-light"
         type="button"
         data-testid="browser-disconnect"
         disabled={!isConnected || connecting}
@@ -56,129 +58,24 @@
     </div>
   </div>
 
-  <div class="viewport" data-testid="browser-viewport" bind:this={container}>
+  <div
+    class="relative mt-[22px] min-h-[min(62vh,620px)] overflow-hidden rounded-[20px] border border-admin-cream/14 bg-[#050806] max-[860px]:min-h-[420px]"
+    data-testid="browser-viewport"
+    bind:this={container}
+  >
     {#if !isConnected}
-      <div class="placeholder">
-        <strong>{session ? 'Ready to connect' : 'No session selected'}</strong>
-        <span>Live rendering uses the existing <code>bpane-client</code> bundle.</span>
+      <div class="absolute inset-0 grid place-content-center gap-2 text-center text-admin-cream/72">
+        <strong class="text-[1.3rem] text-admin-cream">{session ? 'Ready to connect' : 'No session selected'}</strong>
+        <span>
+          Live rendering uses the existing <code class="rounded-[7px] bg-admin-cream/12 px-1.5 py-0.5">bpane-client</code>
+          bundle.
+        </span>
       </div>
     {/if}
   </div>
 
   {#if error}
-    <p class="error" data-testid="browser-error">{error}</p>
+    <p class="mt-4 mb-0 text-[#f49a7d] leading-normal" data-testid="browser-error">{error}</p>
   {/if}
   <p class="sr-only" data-testid="browser-status">{status}</p>
 </section>
-
-<style>
-  .browser {
-    margin-top: 22px;
-    padding: 24px;
-    border: 1px solid rgba(24, 32, 24, 0.12);
-    border-radius: 24px;
-    background: rgba(24, 32, 24, 0.88);
-    box-shadow: 0 18px 48px rgba(24, 32, 24, 0.16);
-  }
-
-  .header,
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .header {
-    justify-content: space-between;
-  }
-
-  .eyebrow {
-    margin: 0 0 8px;
-    color: #a7c7a1;
-    font-size: 0.74rem;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  h2 {
-    margin: 0;
-    color: #fffdf3;
-    font-size: 1.1rem;
-  }
-
-  button {
-    min-height: 40px;
-    padding: 0 14px;
-    border: 1px solid rgba(255, 253, 243, 0.2);
-    border-radius: 999px;
-    background: #fffdf3;
-    color: #162119;
-    font: inherit;
-    font-weight: 800;
-    cursor: pointer;
-  }
-
-  button:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
-
-  .viewport {
-    position: relative;
-    overflow: hidden;
-    min-height: min(62vh, 620px);
-    margin-top: 22px;
-    border: 1px solid rgba(255, 253, 243, 0.14);
-    border-radius: 20px;
-    background: #050806;
-  }
-
-  .placeholder {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-content: center;
-    gap: 8px;
-    color: rgba(255, 253, 243, 0.72);
-    text-align: center;
-  }
-
-  .placeholder strong {
-    color: #fffdf3;
-    font-size: 1.3rem;
-  }
-
-  code {
-    padding: 2px 6px;
-    border-radius: 7px;
-    background: rgba(255, 253, 243, 0.12);
-  }
-
-  .error {
-    margin: 16px 0 0;
-    color: #f49a7d;
-    line-height: 1.5;
-  }
-
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-  }
-
-  @media (max-width: 860px) {
-    .header,
-    .actions {
-      align-items: stretch;
-      flex-direction: column;
-    }
-
-    .viewport {
-      min-height: 420px;
-    }
-  }
-</style>

@@ -25,14 +25,15 @@
   }: SessionListPanelProps = $props();
 </script>
 
-<section class="sessions" aria-label="Owner-scoped sessions">
-  <div class="header">
+<section class="admin-panel" aria-label="Owner-scoped sessions">
+  <div class="admin-header">
     <div>
-      <p class="eyebrow">Control plane</p>
-      <h2>Owner-scoped sessions</h2>
+      <p class="admin-eyebrow">Control plane</p>
+      <h2 class="admin-section-title">Owner-scoped sessions</h2>
     </div>
-    <div class="actions">
+    <div class="admin-actions">
       <button
+        class="admin-button-primary"
         type="button"
         data-testid="session-new"
         disabled={!authenticated || loading}
@@ -41,6 +42,7 @@
         New session
       </button>
       <button
+        class="admin-button-primary"
         type="button"
         data-testid="session-refresh"
         disabled={!authenticated || loading}
@@ -52,96 +54,16 @@
   </div>
 
   {#if !authenticated}
-    <p class="empty">Sign in to inspect sessions from <code>/api/v1/sessions</code>.</p>
+    <p class="admin-empty admin-empty-spacious">
+      Sign in to inspect sessions from <code class="admin-code-pill">/api/v1/sessions</code>.
+    </p>
   {:else if loading}
-    <p class="empty">Loading sessions...</p>
+    <p class="admin-empty admin-empty-spacious">Loading sessions...</p>
   {:else if error}
-    <p class="error">{error}</p>
+    <p class="admin-error admin-empty-spacious">{error}</p>
   {:else if sessions.length === 0}
-    <p class="empty">No owner-scoped sessions are visible for this operator.</p>
+    <p class="admin-empty admin-empty-spacious">No owner-scoped sessions are visible for this operator.</p>
   {:else}
     <SessionTable {sessions} {selectedSessionId} {onSelectSession} />
   {/if}
 </section>
-
-<style>
-  .sessions {
-    margin-top: 22px;
-    padding: 24px;
-    border: 1px solid rgba(24, 32, 24, 0.12);
-    border-radius: 24px;
-    background: rgba(255, 255, 248, 0.62);
-    box-shadow: 0 18px 48px rgba(24, 32, 24, 0.08);
-  }
-
-  .header,
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .header {
-    justify-content: space-between;
-  }
-
-  .eyebrow {
-    margin: 0 0 8px;
-    color: #417463;
-    font-size: 0.74rem;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  h2 {
-    margin: 0;
-    color: #243126;
-    font-size: 1.25rem;
-  }
-
-  button {
-    min-height: 40px;
-    padding: 0 14px;
-    border: 1px solid rgba(24, 32, 24, 0.18);
-    border-radius: 999px;
-    background: #243126;
-    color: #fffdf3;
-    font: inherit;
-    font-weight: 800;
-    cursor: pointer;
-  }
-
-  button:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
-
-  .empty,
-  .error {
-    margin: 22px 0 0;
-    line-height: 1.5;
-  }
-
-  .empty {
-    color: rgba(24, 32, 24, 0.68);
-  }
-
-  .error {
-    color: #a33a21;
-  }
-
-  code {
-    padding: 2px 6px;
-    border-radius: 7px;
-    background: rgba(65, 116, 99, 0.12);
-  }
-
-  @media (max-width: 860px) {
-    .header,
-    .actions {
-      align-items: stretch;
-      flex-direction: column;
-    }
-  }
-</style>

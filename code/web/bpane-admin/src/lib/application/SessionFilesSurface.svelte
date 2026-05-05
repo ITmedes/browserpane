@@ -78,13 +78,16 @@
   }
 </script>
 
-<section class="files" aria-label="Session files">
-  <div class="header">
+<section class="admin-panel" aria-label="Session files">
+  <div class="admin-header max-[760px]:flex-col max-[760px]:items-stretch">
     <div>
-      <p class="eyebrow">Runtime files</p>
-      <h2>{session ? `${files.length} session file${files.length === 1 ? '' : 's'}` : 'No session selected'}</h2>
+      <p class="admin-eyebrow admin-eyebrow-warm">Runtime files</p>
+      <h2 class="m-0 text-[1.15rem] font-bold text-admin-night">
+        {session ? `${files.length} session file${files.length === 1 ? '' : 's'}` : 'No session selected'}
+      </h2>
     </div>
     <button
+      class="admin-button-primary"
       type="button"
       data-testid="session-files-refresh"
       disabled={!session || loading || Boolean(downloadingFileId)}
@@ -95,92 +98,18 @@
   </div>
 
   {#if error}
-    <p class="error" data-testid="session-files-error">{error}</p>
+    <p class="admin-error" data-testid="session-files-error">{error}</p>
   {:else if !session}
-    <p class="empty" data-testid="session-files-empty">Select a session to inspect file artifacts.</p>
+    <p class="admin-empty" data-testid="session-files-empty">Select a session to inspect file artifacts.</p>
   {:else if loading}
-    <p class="empty">Loading runtime upload/download artifacts...</p>
+    <p class="admin-empty">Loading runtime upload/download artifacts...</p>
   {:else if files.length === 0}
-    <p class="empty" data-testid="session-files-empty">No runtime files are recorded for this session yet.</p>
+    <p class="admin-empty" data-testid="session-files-empty">No runtime files are recorded for this session yet.</p>
   {:else}
-    <div class="file-list">
+    <div class="mt-[18px] grid gap-3">
       {#each files as file (file.id)}
         <SessionFileCard {file} {downloadingFileId} onDownload={(entry) => void downloadFile(entry)} />
       {/each}
     </div>
   {/if}
 </section>
-
-<style>
-  .files {
-    margin-top: 22px;
-    padding: 24px;
-    border: 1px solid rgba(24, 32, 24, 0.12);
-    border-radius: 24px;
-    background: rgba(255, 255, 248, 0.62);
-    box-shadow: 0 18px 48px rgba(24, 32, 24, 0.08);
-  }
-
-  .header {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .eyebrow {
-    margin: 0 0 8px;
-    color: #a9522f;
-    font-size: 0.74rem;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  h2 {
-    margin: 0;
-    color: #243126;
-    font-size: 1.15rem;
-  }
-
-  button {
-    min-height: 40px;
-    padding: 0 14px;
-    border: 1px solid rgba(24, 32, 24, 0.18);
-    border-radius: 999px;
-    background: #243126;
-    color: #fffdf3;
-    font: inherit;
-    font-weight: 800;
-    cursor: pointer;
-  }
-
-  button:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
-
-  .file-list {
-    display: grid;
-    gap: 12px;
-    margin-top: 18px;
-  }
-
-  .error {
-    margin: 18px 0 0;
-    color: #a33a21;
-    line-height: 1.5;
-  }
-
-  .empty {
-    margin: 18px 0 0;
-    line-height: 1.5;
-  }
-
-  @media (max-width: 760px) {
-    .header {
-      align-items: stretch;
-      flex-direction: column;
-    }
-  }
-</style>
