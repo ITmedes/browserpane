@@ -2,42 +2,16 @@ import fs from 'node:fs/promises';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
 import {
-  DEFAULTS,
-  cleanupWorkflowSmokeSessions,
-  createLogger,
-  fetchAuthConfig,
-  launchChrome,
-  parseSmokeArgs,
-  poll,
-} from './workflow-smoke-lib.mjs';
-
-async function ensureAdminLoggedIn(page, options) {
-  await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
-  const authConfig = await fetchAuthConfig(options);
-  if (!authConfig || authConfig.mode !== 'oidc') {
-    return authConfig;
-  }
-  const loginButton = page.getByTestId('admin-login');
-  if (!(await loginButton.isVisible().catch(() => false))) {
-    await page.getByTestId('session-new').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-    return authConfig;
-  }
-  if (!authConfig.exampleUser?.username || !authConfig.exampleUser?.password) {
-    throw new Error('OIDC auth is enabled, but no example user is configured for smoke login.');
-  }
-
-  await loginButton.click();
-  const username = page.locator('input[name="username"], #username').first();
-  const password = page.locator('input[name="password"], #password').first();
-  await username.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  await password.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  await username.fill(authConfig.exampleUser.username);
-  await password.fill(authConfig.exampleUser.password);
-  await page.locator('input[type="submit"], #kc-login').click();
-  await page.waitForURL(urlPatternFor(options.pageUrl), { timeout: options.connectTimeoutMs });
-  await page.getByTestId('session-new').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  return authConfig;
-}
+  cleanupAdminBeforeRun,
+  cleanupAdminSmoke,
+  disconnectEmbeddedBrowser,
+  ensureAdminLoggedIn,
+  waitForBrowserConnected,
+  waitForKillEnabled,
+  waitForSessionState,
+  waitForStopEnabled,
+} from './admin-smoke-lib.mjs';
+import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs } from './workflow-smoke-lib.mjs';
 
 async function run() {
   const options = parseSmokeArgs(process.argv.slice(2), 'run-admin-session-smoke.mjs');
@@ -53,86 +27,65 @@ async function run() {
   try {
     log(`Opening ${options.pageUrl}`);
     await ensureAdminLoggedIn(page, options);
-    const accessToken = await getAdminAccessToken(page);
-    if (accessToken) {
-      await cleanupWorkflowSmokeSessions(accessToken, rootApiOptions(options), log);
-    }
+    await cleanupAdminBeforeRun(page, options, log);
 
     log('Creating an admin-owned session.');
     await page.getByTestId('session-new').click();
-    const row = page.getByTestId('session-row').first();
-    await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-    sessionId = await row.getAttribute('data-session-id') ?? '';
-    if (!sessionId) {
-      throw new Error('Admin session row did not expose a session id.');
-    }
+    sessionId = await resolveSelectedSessionId(page, options);
 
     log(`Connecting embedded browser for ${sessionId}.`);
     await page.getByTestId('browser-connect').click();
-    const connectStatus = await poll(
-      'admin embedded browser connection',
-      async () => await page.getByTestId('browser-status').textContent(),
-      (status) => status?.startsWith('Connected to') === true || status === 'Connection failed',
-      options.connectTimeoutMs,
-    );
-    if (connectStatus === 'Connection failed') {
-      const detail = await page.getByTestId('browser-error').textContent().catch(() => '');
-      throw new Error(`Admin embedded browser connection failed${detail ? `: ${detail}` : ''}`);
-    }
-
+    await waitForBrowserConnected(page, options);
     const stopDisabled = await page.getByTestId('session-stop').isDisabled();
     if (!stopDisabled) {
       throw new Error('Expected session stop to be disabled while embedded browser is connected.');
     }
 
-    const summary = { pageUrl: options.pageUrl, sessionId, stopDisabled };
-    console.log(JSON.stringify(summary, null, 2));
-    if (options.outputPath) {
-      await fs.writeFile(options.outputPath, JSON.stringify(summary, null, 2));
-      log(`Wrote summary to ${options.outputPath}`);
-    }
+    log('Disconnecting and stopping the selected session.');
+    await disconnectEmbeddedBrowser(page, options);
+    await waitForStopEnabled(page, options, sessionId);
+    await page.getByTestId('session-stop').click();
+    await waitForSessionState(page, options, sessionId, 'stopped');
+
+    log(`Reconnecting stopped session ${sessionId}.`);
+    await page.getByTestId('browser-connect').click();
+    await waitForBrowserConnected(page, options);
+    await disconnectEmbeddedBrowser(page, options);
+
+    log(`Force killing reconnected session ${sessionId}.`);
+    await waitForKillEnabled(page, options, sessionId);
+    await page.getByTestId('session-kill').click();
+    await waitForSessionState(page, options, sessionId, 'stopped');
+    await emitSummary(page, options, sessionId, stopDisabled, log);
   } finally {
-    await cleanupAdminSession(page).catch(() => {});
-    const accessToken = await getAdminAccessToken(page).catch(() => '');
-    if (accessToken) {
-      await cleanupWorkflowSmokeSessions(accessToken, rootApiOptions(options), log).catch(() => {});
-    }
+    await cleanupAdminSmoke(page, options, log);
     await context.close();
     await browser.close();
   }
 }
 
-async function cleanupAdminSession(page) {
-  if (await page.getByTestId('browser-disconnect').isEnabled().catch(() => false)) {
-    await page.getByTestId('browser-disconnect').click();
+async function resolveSelectedSessionId(page, options) {
+  const row = page.getByTestId('session-row').first();
+  await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  const sessionId = await row.getAttribute('data-session-id') ?? '';
+  if (!sessionId) {
+    throw new Error('Admin session row did not expose a session id.');
   }
-  if (await page.getByTestId('session-kill').isEnabled().catch(() => false)) {
-    await page.getByTestId('session-kill').click();
-  }
+  return sessionId;
 }
 
-function urlPatternFor(pageUrl) {
-  const url = new URL(pageUrl);
-  const prefix = `${url.origin}${url.pathname}`;
-  return new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`);
-}
-
-async function getAdminAccessToken(page) {
-  return await page.evaluate(() => {
-    const raw = window.sessionStorage.getItem('bpane.admin.auth.tokens.v1');
-    if (!raw) {
-      return '';
-    }
-    const tokens = JSON.parse(raw);
-    return typeof tokens.access_token === 'string' ? tokens.access_token : '';
-  });
-}
-
-function rootApiOptions(options) {
-  return {
-    ...options,
-    pageUrl: new URL('/', options.pageUrl).origin,
+async function emitSummary(page, options, sessionId, stopDisabled, log) {
+  const summary = {
+    pageUrl: options.pageUrl,
+    sessionId,
+    stopDisabledWhileConnected: stopDisabled,
+    finalState: await page.getByTestId('session-state').textContent(),
   };
+  console.log(JSON.stringify(summary, null, 2));
+  if (options.outputPath) {
+    await fs.writeFile(options.outputPath, JSON.stringify(summary, null, 2));
+    log(`Wrote summary to ${options.outputPath}`);
+  }
 }
 
 run().catch((error) => {

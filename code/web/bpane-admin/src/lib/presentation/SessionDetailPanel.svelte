@@ -68,10 +68,10 @@
     <p class="empty">Select or create a session to inspect lifecycle and runtime state.</p>
   {:else}
     <div class="facts">
-      <span>state <strong>{session.state}</strong></span>
+      <span>state <strong data-testid="session-state">{session.state}</strong></span>
       <span>owner <strong>{session.owner_mode}</strong></span>
-      <span>runtime <strong>{session.status.runtime_state}</strong></span>
-      <span>presence <strong>{session.status.presence_state}</strong></span>
+      <span>runtime <strong data-testid="session-runtime-state">{session.status.runtime_state}</strong></span>
+      <span>presence <strong data-testid="session-presence-state">{session.status.presence_state}</strong></span>
       <span>binding <strong>{session.runtime.binding}</strong></span>
       <span>transport <strong>{session.connect.compatibility_mode}</strong></span>
     </div>
