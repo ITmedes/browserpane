@@ -71,23 +71,23 @@ export class AdminWorkspaceViewModelBuilder {
           'Inspect effective policy',
           'Run local-file probe',
         ], ['file:// navigation', 'File System Access API']),
-        panel('workflows', 'Workflows', 'Invoke, inspect, and download run artifacts', 'Workflow definition, run, intervention, and artifact controls.', 'planned', false, [
+        panel('workflows', 'Workflows', 'Invoke, inspect, and download run artifacts', 'Workflow definition, run, intervention, and artifact controls.', 'api pending', true, [
           'Load definition',
           'Invoke run',
           'Operator intervention',
           'Download produced files',
         ], ['run status', 'admission', 'runtime hold']),
-        panel('recording', 'Recording', 'Capture and export the composed session output', 'Local and control-plane recording controls.', 'planned', false, [
+        panel('recording', 'Recording', 'Capture and export the composed session output', 'Local browser recording controls.', input.connected ? 'ready' : 'connect', true, [
           'Start recording',
           'Stop and save WebM',
           'Download session export',
         ], ['recording status', 'retained segments']),
-        panel('metrics', 'Metrics', 'Benchmark samples and transport health', 'Runtime sampling and transport performance summary.', 'planned', false, [
+        panel('metrics', 'Metrics', 'Benchmark samples and transport health', 'Runtime sampling and transport performance summary.', input.connected ? 'ready' : 'connect', true, [
           'Start sample',
           'Stop sample',
           'Copy metrics',
         ], ['surface throughput', 'tiles', 'video']),
-        panel('logs', 'Logs', 'Session and transport event timeline', 'Operator-facing diagnostics without crowding the browser stage.', 'planned', false, [
+        panel('logs', 'Logs', 'Session and transport event timeline', 'Operator-facing diagnostics without crowding the browser stage.', 'local', true, [
           'Clear logs',
           'Copy diagnostics',
         ], ['auth events', 'transport events']),

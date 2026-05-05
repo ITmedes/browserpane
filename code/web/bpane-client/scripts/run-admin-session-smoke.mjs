@@ -40,6 +40,7 @@ async function run() {
     await page.getByTestId('browser-connect').click();
     await waitForBrowserConnected(page, options);
     await verifyBrowserPolicyPanel(page);
+    await verifyRemainingPanels(page);
     const uploadEnabled = await page.getByTestId('display-upload').isEnabled();
     if (!uploadEnabled) {
       throw new Error('Expected display upload control to be enabled after browser connect.');
@@ -84,6 +85,25 @@ async function verifyBrowserPolicyPanel(page) {
   const copyEnabled = await page.getByTestId('policy-copy-command').isEnabled();
   if (!copyEnabled) {
     throw new Error('Expected policy CDP probe command to be copyable after browser connect.');
+  }
+}
+
+async function verifyRemainingPanels(page) {
+  await openWorkspacePanel(page, 'recording');
+  await page.getByTestId('recording-status').waitFor({ state: 'visible' });
+  await openWorkspacePanel(page, 'metrics');
+  await page.getByTestId('metrics-sample').waitFor({ state: 'visible' });
+  await openWorkspacePanel(page, 'logs');
+  await page.getByTestId('admin-log-count').waitFor({ state: 'visible' });
+  await openWorkspacePanel(page, 'workflows');
+  await page.getByTestId('workflow-status').waitFor({ state: 'visible' });
+}
+
+async function openWorkspacePanel(page, panelId) {
+  const panel = page.getByTestId(`workspace-panel-${panelId}`);
+  const expanded = await panel.getByRole('button').getAttribute('aria-expanded');
+  if (expanded !== 'true') {
+    await page.getByTestId(`workspace-panel-toggle-${panelId}`).click();
   }
 }
 

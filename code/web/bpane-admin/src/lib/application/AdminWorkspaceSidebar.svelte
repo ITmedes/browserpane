@@ -20,8 +20,12 @@
   } from '../session/browser-session-types';
   import BrowserPolicySurface from './BrowserPolicySurface.svelte';
   import DisplayControlsSurface from './DisplayControlsSurface.svelte';
+  import LogsSurface from './LogsSurface.svelte';
   import McpDelegationSurface from './McpDelegationSurface.svelte';
+  import MetricsSurface from './MetricsSurface.svelte';
+  import RecordingSurface from './RecordingSurface.svelte';
   import SessionFilesSurface from './SessionFilesSurface.svelte';
+  import WorkflowOperationsSurface from './WorkflowOperationsSurface.svelte';
 
   type AdminWorkspaceSidebarProps = {
     readonly controlClient: ControlClient;
@@ -140,6 +144,14 @@
           {selectedSession}
           {onRefreshSelectedSession}
         />
+      {:else if panel.id === 'recording'}
+        <RecordingSurface {liveConnection} />
+      {:else if panel.id === 'metrics'}
+        <MetricsSurface {liveConnection} />
+      {:else if panel.id === 'logs'}
+        <LogsSurface {selectedSession} {browserConnected} sessionCount={sessions.length} />
+      {:else if panel.id === 'workflows'}
+        <WorkflowOperationsSurface {selectedSession} />
       {:else}
         <FeaturePlaceholderPanel {panel} />
       {/if}

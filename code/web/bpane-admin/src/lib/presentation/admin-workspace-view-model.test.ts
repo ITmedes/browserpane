@@ -40,6 +40,10 @@ describe('AdminWorkspaceViewModelBuilder', () => {
       'display',
       'files',
       'policy',
+      'workflows',
+      'recording',
+      'metrics',
+      'logs',
     ]);
   });
 });
