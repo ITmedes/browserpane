@@ -1,5 +1,53 @@
 export type BrowserSessionRenderBackend = 'auto' | 'canvas2d' | 'webgl2';
 
+export type BrowserSessionRecordingOptions = {
+  readonly frameRate?: number;
+  readonly mimeType?: string;
+  readonly videoBitsPerSecond?: number;
+  readonly audioBitsPerSecond?: number;
+};
+
+export type BrowserSessionRenderDiagnostics = {
+  readonly backend: string;
+  readonly reason: string;
+  readonly renderer?: string | null;
+  readonly vendor?: string | null;
+  readonly software?: boolean;
+};
+
+export type BrowserSessionStatsSnapshot = {
+  readonly elapsedMs?: number;
+  readonly transfer?: {
+    readonly rxBytes?: number;
+    readonly txBytes?: number;
+    readonly rxFrames?: number;
+    readonly txFrames?: number;
+  };
+  readonly tiles?: {
+    readonly commandBytes?: number;
+    readonly imageCommands?: number;
+    readonly videoCommands?: number;
+    readonly drawCommands?: number;
+    readonly totalCommands?: number;
+    readonly cacheHitRateObserved?: number;
+    readonly scrollComposition?: {
+      readonly scrollBatches?: number;
+      readonly scrollSavedTiles?: number;
+      readonly scrollPotentialTiles?: number;
+    };
+    readonly scrollHealth?: {
+      readonly hostFallbackRate?: number;
+      readonly hostFallbackRateRecent20?: number;
+      readonly hostFallbackRateRecent50?: number;
+    };
+  };
+  readonly video?: {
+    readonly datagrams?: number;
+    readonly droppedFrames?: number;
+    readonly datagramBytes?: number;
+  };
+};
+
 export type BrowserSessionConnectPreferences = {
   readonly hiDpi: boolean;
   readonly audio: boolean;
@@ -50,6 +98,11 @@ export type BrowserSessionHandle = {
   readonly startCamera?: () => Promise<void>;
   readonly stopCamera?: () => void;
   readonly uploadFiles?: (files: FileList | Iterable<File>) => Promise<void>;
+  readonly isRecording?: () => boolean;
+  readonly startRecording?: (options?: BrowserSessionRecordingOptions) => Promise<void>;
+  readonly stopRecording?: () => Promise<Blob>;
+  readonly getSessionStats?: () => BrowserSessionStatsSnapshot;
+  readonly getRenderDiagnostics?: () => BrowserSessionRenderDiagnostics;
 };
 
 export type BrowserSessionSdk = {
