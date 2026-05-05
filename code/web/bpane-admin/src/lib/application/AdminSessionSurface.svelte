@@ -28,7 +28,7 @@
   });
 
   onDestroy(() => {
-    disconnectBrowser();
+    disconnectBrowser(false);
   });
 
   async function loadSessions(): Promise<void> {
@@ -92,7 +92,7 @@
     if (!selectedSession) {
       return;
     }
-    disconnectBrowser();
+    disconnectBrowser(false);
     browserConnecting = true;
     browserError = null;
     browserStatus = `Connecting to ${selectedSession.id}`;
@@ -108,10 +108,14 @@
     }
   }
 
-  function disconnectBrowser(): void {
+  function disconnectBrowser(refreshAfterDisconnect = false): void {
+    const hadLiveConnection = Boolean(liveConnection);
     liveConnection?.handle.disconnect();
     liveConnection = null;
     browserStatus = 'Disconnected';
+    if (hadLiveConnection && refreshAfterDisconnect) {
+      window.setTimeout(() => void refreshSelectedSession(), 250);
+    }
   }
 
   function setSessionList(next: readonly SessionResource[]): void {
@@ -161,5 +165,5 @@
   status={browserStatus}
   error={browserError}
   onConnect={(container) => void connectBrowser(container)}
-  onDisconnect={disconnectBrowser}
+  onDisconnect={() => disconnectBrowser(true)}
 />
