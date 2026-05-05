@@ -63,7 +63,7 @@
   </div>
 
   <div
-    class="relative mt-4 min-h-[calc(100vh-280px)] overflow-hidden rounded-[24px] border border-admin-cream/14 bg-[#050806] max-[1100px]:min-h-[64vh] max-[760px]:min-h-[420px]"
+    class="relative mt-4 min-h-[calc(100vh-216px)] overflow-hidden rounded-[24px] border border-admin-cream/14 bg-[#050806] max-[1100px]:min-h-[64vh] max-[760px]:min-h-[420px]"
     data-testid="browser-viewport"
     bind:this={container}
   >

@@ -50,11 +50,11 @@
 </script>
 
 <section
-  class="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_12px_var(--admin-sidebar-width)]"
+  class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_12px_var(--admin-sidebar-width)]"
   style={gridStyle}
   bind:this={root}
 >
-  <main class="min-w-0 xl:sticky xl:top-4 xl:self-start">
+  <main class="min-w-0 xl:sticky xl:top-[72px] xl:self-start">
     {@render browser()}
   </main>
 
