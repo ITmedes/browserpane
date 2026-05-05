@@ -1,22 +1,27 @@
 <script lang="ts">
   import type { SessionResource } from '../api/control-types';
+  import SessionTable from './SessionTable.svelte';
 
   type SessionListPanelProps = {
     readonly sessions: readonly SessionResource[];
+    readonly selectedSessionId: string | null;
     readonly authenticated: boolean;
     readonly loading: boolean;
     readonly error: string | null;
     readonly onRefresh: () => void;
     readonly onCreateSession: () => void;
+    readonly onSelectSession: (session: SessionResource) => void;
   };
 
   let {
     sessions,
+    selectedSessionId,
     authenticated,
     loading,
     error,
     onRefresh,
     onCreateSession,
+    onSelectSession,
   }: SessionListPanelProps = $props();
 </script>
 
@@ -45,24 +50,7 @@
   {:else if sessions.length === 0}
     <p class="empty">No owner-scoped sessions are visible for this operator.</p>
   {:else}
-    <div class="table" role="table" aria-label="Session list">
-      <div class="row heading" role="row">
-        <span role="columnheader">Session</span>
-        <span role="columnheader">Lifecycle</span>
-        <span role="columnheader">Runtime</span>
-        <span role="columnheader">Presence</span>
-        <span role="columnheader">Clients</span>
-      </div>
-      {#each sessions as session}
-        <div class="row" role="row">
-          <span role="cell" title={session.id}>{session.id}</span>
-          <span role="cell">{session.state}</span>
-          <span role="cell">{session.status.runtime_state}</span>
-          <span role="cell">{session.status.presence_state}</span>
-          <span role="cell">{session.status.connection_counts.total_clients}</span>
-        </div>
-      {/each}
-    </div>
+    <SessionTable {sessions} {selectedSessionId} {onSelectSession} />
   {/if}
 </section>
 
@@ -133,41 +121,6 @@
     color: #a33a21;
   }
 
-  .table {
-    display: grid;
-    gap: 8px;
-    margin-top: 22px;
-  }
-
-  .row {
-    display: grid;
-    grid-template-columns: minmax(140px, 1.5fr) repeat(4, minmax(96px, 1fr));
-    gap: 12px;
-    align-items: center;
-    padding: 14px;
-    border: 1px solid rgba(24, 32, 24, 0.1);
-    border-radius: 16px;
-    background: rgba(255, 255, 248, 0.68);
-    color: rgba(24, 32, 24, 0.78);
-  }
-
-  .heading {
-    background: transparent;
-    color: rgba(24, 32, 24, 0.52);
-    font-size: 0.78rem;
-    font-weight: 900;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .row span:first-child {
-    overflow: hidden;
-    color: #162119;
-    font-family: "SFMono-Regular", "Cascadia Code", monospace;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   code {
     padding: 2px 6px;
     border-radius: 7px;
@@ -179,14 +132,6 @@
     .actions {
       align-items: stretch;
       flex-direction: column;
-    }
-
-    .row {
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .heading {
-      display: none;
     }
   }
 </style>

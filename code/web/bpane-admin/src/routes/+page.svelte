@@ -1,22 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ControlClient } from '$lib/api/control-client';
-  import type { SessionResource } from '$lib/api/control-types';
   import { AuthConfigClient } from '$lib/auth/auth-config';
   import { BrowserTokenStore } from '$lib/auth/browser-token-store';
   import { OidcAuthClient } from '$lib/auth/oidc-auth-client';
   import type { AuthSnapshot } from '$lib/auth/oidc-types';
+  import AdminSessionSurface from '$lib/application/AdminSessionSurface.svelte';
   import AdminHero from '$lib/presentation/AdminHero.svelte';
-  import SessionListPanel from '$lib/presentation/SessionListPanel.svelte';
 
   let authClient: OidcAuthClient | null = null;
   let controlClient: ControlClient | null = null;
   let auth: AuthSnapshot | null = null;
   let authLoading = true;
   let authError: string | null = null;
-  let sessions: readonly SessionResource[] = [];
-  let sessionsLoading = false;
-  let sessionsError: string | null = null;
 
   onMount(() => {
     void initialize();
@@ -39,7 +35,6 @@
       auth = authClient.getSnapshot();
       if (auth.authenticated) {
         bindControlClient();
-        await loadSessions();
       }
     } catch (error) {
       authError = errorMessage(error);
@@ -61,40 +56,9 @@
     }
     const logoutUrl = await authClient.buildLogoutUrl(new URL(window.location.href));
     auth = authClient.getSnapshot();
-    sessions = [];
+    controlClient = null;
     if (logoutUrl) {
       window.location.href = logoutUrl;
-    }
-  }
-
-  async function loadSessions(): Promise<void> {
-    if (!controlClient) {
-      return;
-    }
-    sessionsLoading = true;
-    sessionsError = null;
-    try {
-      sessions = (await controlClient.listSessions()).sessions;
-    } catch (error) {
-      sessionsError = errorMessage(error);
-    } finally {
-      sessionsLoading = false;
-    }
-  }
-
-  async function createSession(): Promise<void> {
-    if (!controlClient) {
-      return;
-    }
-    sessionsLoading = true;
-    sessionsError = null;
-    try {
-      await controlClient.createSession();
-      sessions = (await controlClient.listSessions()).sessions;
-    } catch (error) {
-      sessionsError = errorMessage(error);
-    } finally {
-      sessionsLoading = false;
     }
   }
 
@@ -140,14 +104,9 @@
     onLogout={() => void logout()}
   />
 
-  <SessionListPanel
-    {sessions}
-    authenticated={Boolean(auth?.authenticated)}
-    loading={sessionsLoading}
-    error={sessionsError}
-    onRefresh={() => void loadSessions()}
-    onCreateSession={() => void createSession()}
-  />
+  {#if auth?.authenticated && controlClient}
+    <AdminSessionSurface {controlClient} />
+  {/if}
 </main>
 
 <style>
