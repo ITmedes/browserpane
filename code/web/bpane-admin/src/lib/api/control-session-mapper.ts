@@ -1,4 +1,5 @@
 import type {
+  SessionAutomationDelegate,
   SessionConnectionCounts,
   SessionConnectInfo,
   SessionAccessTokenResponse,
@@ -32,10 +33,12 @@ export class ControlSessionMapper {
   static toSessionResource(payload: unknown): SessionResource {
     const object = expectRecord(payload, 'session resource');
     const stoppedAt = optionalString(object.stopped_at, 'session resource stopped_at');
+    const automationDelegate = toAutomationDelegate(object.automation_delegate);
     return {
       id: expectString(object.id, 'session resource id'),
       state: expectString(object.state, 'session resource state'),
       owner_mode: expectString(object.owner_mode, 'session resource owner_mode'),
+      ...(automationDelegate !== undefined ? { automation_delegate: automationDelegate } : {}),
       connect: toConnectInfo(object.connect),
       runtime: toRuntimeInfo(object.runtime),
       status: toStatusSummary(object.status),
@@ -66,6 +69,22 @@ function toConnectInfo(value: unknown): SessionConnectInfo {
     auth_type: expectString(object.auth_type, 'session connect auth_type'),
     ...(ticketPath !== undefined ? { ticket_path: ticketPath } : {}),
     compatibility_mode: expectString(object.compatibility_mode, 'session connect compatibility_mode'),
+  };
+}
+
+function toAutomationDelegate(value: unknown): SessionAutomationDelegate | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const object = expectRecord(value, 'session resource automation_delegate');
+  const displayName = optionalString(
+    object.display_name,
+    'session automation_delegate display_name',
+  );
+  return {
+    client_id: expectString(object.client_id, 'session automation_delegate client_id'),
+    issuer: expectString(object.issuer, 'session automation_delegate issuer'),
+    ...(displayName !== undefined ? { display_name: displayName } : {}),
   };
 }
 

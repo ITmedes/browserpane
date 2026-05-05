@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ControlClient } from '$lib/api/control-client';
-  import { AuthConfigClient } from '$lib/auth/auth-config';
+  import { AuthConfigClient, type AuthConfig } from '$lib/auth/auth-config';
   import { BrowserTokenStore } from '$lib/auth/browser-token-store';
   import { OidcAuthClient } from '$lib/auth/oidc-auth-client';
   import type { AuthSnapshot } from '$lib/auth/oidc-types';
@@ -10,6 +10,7 @@
 
   let authClient: OidcAuthClient | null = null;
   let controlClient: ControlClient | null = null;
+  let authConfig: AuthConfig | null = null;
   let auth: AuthSnapshot | null = null;
   let authLoading = true;
   let authError: string | null = null;
@@ -21,6 +22,7 @@
   async function initialize(): Promise<void> {
     try {
       const config = await new AuthConfigClient({ baseUrl: window.location.origin }).load();
+      authConfig = config;
       if (!config) {
         auth = null;
         return;
@@ -105,6 +107,6 @@
   />
 
   {#if auth?.authenticated && controlClient}
-    <AdminSessionSurface {controlClient} />
+    <AdminSessionSurface {controlClient} mcpBridge={authConfig?.mcpBridge ?? null} />
   {/if}
 </main>

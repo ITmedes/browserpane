@@ -125,6 +125,41 @@ describe('ControlClient', () => {
     );
   });
 
+  it('sets and clears a session automation delegate', async () => {
+    const fetchImpl = jsonFetch({
+      ...SESSION,
+      automation_delegate: {
+        client_id: 'bpane-mcp-bridge',
+        issuer: 'http://localhost:8091/realms/bpane',
+        display_name: 'BrowserPane MCP bridge',
+      },
+    });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const delegated = await client.setAutomationDelegate(SESSION.id, {
+      client_id: 'bpane-mcp-bridge',
+      issuer: 'http://localhost:8091/realms/bpane',
+      display_name: 'BrowserPane MCP bridge',
+    });
+    await client.clearAutomationDelegate(SESSION.id);
+
+    expect(delegated.automation_delegate?.client_id).toBe('bpane-mcp-bridge');
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      new URL(`http://localhost:8932/api/v1/sessions/${SESSION.id}/automation-owner`),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      new URL(`http://localhost:8932/api/v1/sessions/${SESSION.id}/automation-owner`),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
   it('throws a typed API error for non-success responses', async () => {
     const fetchImpl = vi.fn<FetchLike>(async () => new Response('denied', { status: 403 }));
     const client = new ControlClient({
