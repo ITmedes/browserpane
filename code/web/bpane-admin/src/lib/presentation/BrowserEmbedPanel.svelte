@@ -37,16 +37,26 @@
       <h2>{status}</h2>
     </div>
     <div class="actions">
-      <button type="button" disabled={!session || connecting || isConnected} onclick={connect}>
+      <button
+        type="button"
+        data-testid="browser-connect"
+        disabled={!session || connecting || isConnected}
+        onclick={connect}
+      >
         Connect
       </button>
-      <button type="button" disabled={!isConnected || connecting} onclick={onDisconnect}>
+      <button
+        type="button"
+        data-testid="browser-disconnect"
+        disabled={!isConnected || connecting}
+        onclick={onDisconnect}
+      >
         Disconnect
       </button>
     </div>
   </div>
 
-  <div class="viewport" bind:this={container}>
+  <div class="viewport" data-testid="browser-viewport" bind:this={container}>
     {#if !isConnected}
       <div class="placeholder">
         <strong>{session ? 'Ready to connect' : 'No session selected'}</strong>
@@ -56,8 +66,9 @@
   </div>
 
   {#if error}
-    <p class="error">{error}</p>
+    <p class="error" data-testid="browser-error">{error}</p>
   {/if}
+  <p class="sr-only" data-testid="browser-status">{status}</p>
 </section>
 
 <style>
@@ -148,6 +159,15 @@
     margin: 16px 0 0;
     color: #f49a7d;
     line-height: 1.5;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
 
   @media (max-width: 860px) {

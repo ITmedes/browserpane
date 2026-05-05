@@ -26,7 +26,7 @@ export class BrowserSessionSdkLoader {
 class BrowserSessionSdkMapper {
   static toSdk(moduleValue: unknown): BrowserSessionSdk {
     const moduleObject = expectRecord(moduleValue, 'BrowserPane SDK module');
-    const sessionClass = expectRecord(moduleObject.BpaneSession, 'BrowserPane BpaneSession export');
+    const sessionClass = expectObjectLike(moduleObject.BpaneSession, 'BrowserPane BpaneSession export');
     const connect = sessionClass.connect;
     if (typeof connect !== 'function') {
       throw new Error('BrowserPane SDK BpaneSession.connect must be a function');
@@ -58,6 +58,13 @@ async function invokeConnect(
 function expectRecord(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function expectObjectLike(value: unknown, label: string): Record<string, unknown> {
+  if ((!value || typeof value !== 'object') && typeof value !== 'function') {
+    throw new Error(`${label} must be an object or function`);
   }
   return value as Record<string, unknown>;
 }
