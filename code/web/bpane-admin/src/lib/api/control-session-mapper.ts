@@ -1,6 +1,7 @@
 import type {
   SessionConnectionCounts,
   SessionConnectInfo,
+  SessionAccessTokenResponse,
   SessionListResponse,
   SessionResource,
   SessionRuntimeInfo,
@@ -36,13 +37,27 @@ export class ControlSessionMapper {
       ...(stoppedAt !== undefined ? { stopped_at: stoppedAt } : {}),
     };
   }
+
+  static toSessionAccessTokenResponse(payload: unknown): SessionAccessTokenResponse {
+    const object = expectRecord(payload, 'session access token response');
+    return {
+      session_id: expectString(object.session_id, 'session access token session_id'),
+      token_type: expectString(object.token_type, 'session access token token_type'),
+      token: expectString(object.token, 'session access token token'),
+      expires_at: expectString(object.expires_at, 'session access token expires_at'),
+      connect: toConnectInfo(object.connect),
+    };
+  }
 }
 
 function toConnectInfo(value: unknown): SessionConnectInfo {
   const object = expectRecord(value, 'session resource connect');
+  const ticketPath = optionalString(object.ticket_path, 'session connect ticket_path');
   return {
     gateway_url: expectString(object.gateway_url, 'session connect gateway_url'),
     transport_path: expectString(object.transport_path, 'session connect transport_path'),
+    auth_type: expectString(object.auth_type, 'session connect auth_type'),
+    ...(ticketPath !== undefined ? { ticket_path: ticketPath } : {}),
     compatibility_mode: expectString(object.compatibility_mode, 'session connect compatibility_mode'),
   };
 }

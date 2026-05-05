@@ -7,6 +7,8 @@ export type SessionRuntimeInfo = {
 export type SessionConnectInfo = {
   readonly gateway_url: string;
   readonly transport_path: string;
+  readonly auth_type: string;
+  readonly ticket_path?: string | null;
   readonly compatibility_mode: string;
 };
 
@@ -56,4 +58,12 @@ export type CreateSessionCommand = {
   readonly owner_mode?: string;
   readonly idle_timeout_sec?: number;
   readonly labels?: Readonly<Record<string, string>>;
+};
+
+export type SessionAccessTokenResponse = {
+  readonly session_id: string;
+  readonly token_type: string;
+  readonly token: string;
+  readonly expires_at: string;
+  readonly connect: SessionConnectInfo;
 };
