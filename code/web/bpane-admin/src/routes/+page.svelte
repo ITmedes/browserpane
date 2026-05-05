@@ -33,7 +33,9 @@
         config,
         tokenStore: new BrowserTokenStore(window.sessionStorage),
       });
-      await completeLoginRedirect();
+      if (config.mode === 'oidc') {
+        await completeLoginRedirect();
+      }
       auth = authClient.getSnapshot();
       if (auth.authenticated) {
         bindControlClient();
@@ -110,7 +112,13 @@
     }
     controlClient = new ControlClient({
       baseUrl: window.location.origin,
-      accessTokenProvider: () => authClient?.getValidAccessToken() ?? '',
+      accessTokenProvider: async () => {
+        const token = await authClient?.getValidAccessToken();
+        if (!token) {
+          throw new Error('No active admin access token');
+        }
+        return token;
+      },
     });
   }
 
