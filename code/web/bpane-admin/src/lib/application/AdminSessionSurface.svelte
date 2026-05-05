@@ -7,6 +7,7 @@
   import SessionListPanel from '../presentation/SessionListPanel.svelte';
   import { BrowserSessionConnector } from '../session/browser-session-connector';
   import type { LiveBrowserSessionConnection } from '../session/browser-session-types';
+  import SessionFilesSurface from './SessionFilesSurface.svelte';
 
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient;
@@ -157,6 +158,8 @@
   onStop={() => void runLifecycle('stop')}
   onKill={() => void runLifecycle('kill')}
 />
+
+<SessionFilesSurface {controlClient} session={selectedSession} />
 
 <BrowserEmbedPanel
   session={selectedSession}

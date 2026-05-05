@@ -14,6 +14,7 @@
     "smoke:session-files": "node scripts/run-session-files-smoke.mjs",
     "smoke:browser-policy": "node scripts/run-browser-policy-smoke.mjs",
     "smoke:admin-session": "node scripts/run-admin-session-smoke.mjs",
+    "smoke:admin-session-files": "node scripts/run-admin-session-files-smoke.mjs",
     "smoke:recording": "node scripts/run-recording-smoke.mjs",
     "smoke:test-embed-lifecycle": "node scripts/run-test-embed-lifecycle-smoke.mjs",
     "smoke:test-embed-overlay": "node scripts/run-test-embed-overlay-smoke.mjs",

@@ -67,3 +67,21 @@ export type SessionAccessTokenResponse = {
   readonly expires_at: string;
   readonly connect: SessionConnectInfo;
 };
+
+export type SessionFileResource = {
+  readonly id: string;
+  readonly session_id: string;
+  readonly name: string;
+  readonly media_type?: string | null;
+  readonly byte_count: number;
+  readonly sha256_hex: string;
+  readonly source: string;
+  readonly labels: Readonly<Record<string, string>>;
+  readonly content_path: string;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type SessionFileListResponse = {
+  readonly files: readonly SessionFileResource[];
+};
