@@ -24,6 +24,8 @@
       class:active={session.id === selectedSessionId}
       type="button"
       aria-pressed={session.id === selectedSessionId}
+      data-testid="session-row"
+      data-session-id={session.id}
       onclick={() => onSelectSession(session)}
     >
       <span title={session.id}>{session.id}</span>

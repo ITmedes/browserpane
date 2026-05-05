@@ -32,10 +32,20 @@
       <h2>Owner-scoped sessions</h2>
     </div>
     <div class="actions">
-      <button type="button" disabled={!authenticated || loading} onclick={onCreateSession}>
+      <button
+        type="button"
+        data-testid="session-new"
+        disabled={!authenticated || loading}
+        onclick={onCreateSession}
+      >
         New session
       </button>
-      <button type="button" disabled={!authenticated || loading} onclick={onRefresh}>
+      <button
+        type="button"
+        data-testid="session-refresh"
+        disabled={!authenticated || loading}
+        onclick={onRefresh}
+      >
         Refresh
       </button>
     </div>

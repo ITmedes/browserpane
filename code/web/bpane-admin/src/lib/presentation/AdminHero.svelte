@@ -28,10 +28,10 @@
       <p class="state">Loading auth metadata...</p>
     {:else if auth?.authenticated}
       <p class="state">Signed in as <strong>{auth.username}</strong></p>
-      <button type="button" onclick={onLogout}>Sign out</button>
+      <button type="button" data-testid="admin-logout" onclick={onLogout}>Sign out</button>
     {:else if auth?.configured}
       <p class="state">Sign in with the local BrowserPane realm.</p>
-      <button type="button" onclick={onLogin}>Sign in</button>
+      <button type="button" data-testid="admin-login" onclick={onLogin}>Sign in</button>
     {:else}
       <p class="state">OIDC is not configured for this deployment.</p>
     {/if}

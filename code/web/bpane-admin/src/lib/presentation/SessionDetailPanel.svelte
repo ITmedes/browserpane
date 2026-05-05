@@ -37,15 +37,30 @@
       <h2>{session?.id ?? 'No session selected'}</h2>
     </div>
     <div class="actions">
-      <button type="button" disabled={!session || loading} onclick={onRefresh}>Refresh</button>
       <button
         type="button"
+        data-testid="session-detail-refresh"
+        disabled={!session || loading}
+        onclick={onRefresh}
+      >
+        Refresh
+      </button>
+      <button
+        type="button"
+        data-testid="session-stop"
         disabled={!session || loading || connected || !session.status.stop_eligibility.allowed}
         onclick={onStop}
       >
         Stop
       </button>
-      <button type="button" disabled={!session || loading || connected} onclick={onKill}>Kill</button>
+      <button
+        type="button"
+        data-testid="session-kill"
+        disabled={!session || loading || connected}
+        onclick={onKill}
+      >
+        Kill
+      </button>
     </div>
   </div>
 
