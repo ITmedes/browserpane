@@ -105,7 +105,7 @@
   onLogout={() => void logout()}
 />
 
-<main class="mx-auto min-h-screen w-[calc(100vw-32px)] max-w-[1680px] pt-[72px] pb-4">
+<main class="mx-auto min-h-screen w-[calc(100vw-20px)] max-w-[1680px] pt-[70px] pb-3 sm:w-[calc(100vw-32px)] sm:pt-[72px] sm:pb-4">
   {#if authError && !auth?.authenticated}
     <section class="admin-panel">
       <p class="admin-error mt-0">{authError}</p>
@@ -113,7 +113,7 @@
   {/if}
 
   {#if !auth?.authenticated}
-    <section class="rounded-[24px] border border-admin-ink/12 bg-admin-panel/70 p-5 shadow-[0_18px_48px_rgb(24_32_24_/_8%)]">
+    <section class="rounded-2xl border border-[#90a6cc]/20 bg-admin-panel/90 p-5 shadow-[0_24px_64px_rgb(0_0_0_/_34%)]">
       <p class="admin-eyebrow">Operator access</p>
       {#if authLoading}
         <p class="m-0 leading-normal text-admin-ink/78">Loading auth metadata...</p>

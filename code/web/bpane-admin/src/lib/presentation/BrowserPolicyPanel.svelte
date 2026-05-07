@@ -66,7 +66,7 @@
   </div>
 
   {#if viewModel.probeCommand}
-    <code class="block max-h-28 overflow-auto rounded-[14px] bg-admin-night p-3 text-xs text-admin-cream [overflow-wrap:anywhere]" data-testid="policy-probe-command">
+    <code class="block max-h-28 overflow-auto rounded-[14px] bg-admin-night p-3 text-xs text-admin-ink [overflow-wrap:anywhere]" data-testid="policy-probe-command">
       {viewModel.probeCommand}
     </code>
   {/if}
