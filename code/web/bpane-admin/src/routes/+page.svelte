@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { AdminEventClient } from '$lib/api/admin-event-client';
   import { ControlClient } from '$lib/api/control-client';
+  import { WorkflowClient } from '$lib/api/workflow-client';
   import { AuthConfigClient, type AuthConfig } from '$lib/auth/auth-config';
   import { BrowserTokenStore } from '$lib/auth/browser-token-store';
   import { OidcAuthClient } from '$lib/auth/oidc-auth-client';
@@ -12,6 +13,7 @@
   let authClient = $state<OidcAuthClient | null>(null);
   let controlClient = $state<ControlClient | null>(null);
   let adminEventClient = $state<AdminEventClient | null>(null);
+  let workflowClient = $state<WorkflowClient | null>(null);
   let authConfig = $state<AuthConfig | null>(null);
   let auth = $state<AuthSnapshot | null>(null);
   let authLoading = $state(true);
@@ -63,6 +65,7 @@
     auth = authClient.getSnapshot();
     controlClient = null;
     adminEventClient = null;
+    workflowClient = null;
     if (logoutUrl) {
       window.location.href = logoutUrl;
     }
@@ -85,6 +88,10 @@
       accessTokenProvider: requireAccessToken,
     });
     adminEventClient = new AdminEventClient({
+      baseUrl: window.location.origin,
+      accessTokenProvider: requireAccessToken,
+    });
+    workflowClient = new WorkflowClient({
       baseUrl: window.location.origin,
       accessTokenProvider: requireAccessToken,
     });
@@ -139,10 +146,11 @@
     </section>
   {/if}
 
-  {#if auth?.authenticated && controlClient && adminEventClient}
+  {#if auth?.authenticated && controlClient && adminEventClient && workflowClient}
     <AdminSessionSurface
       {controlClient}
       {adminEventClient}
+      {workflowClient}
       {adminOpen}
       mcpBridge={authConfig?.mcpBridge ?? null}
       onAdminOpenChange={(open) => { adminOpen = open; }}

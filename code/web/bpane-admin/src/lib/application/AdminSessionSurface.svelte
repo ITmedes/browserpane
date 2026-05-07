@@ -3,6 +3,7 @@
   import type { AdminEventClient } from '../api/admin-event-client';
   import type { ControlClient } from '../api/control-client';
   import type { SessionResource } from '../api/control-types';
+  import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
   import BrowserEmbedPanel from '../presentation/BrowserEmbedPanel.svelte';
   import { AdminWorkspaceViewModelBuilder } from '../presentation/admin-workspace-view-model';
@@ -13,13 +14,12 @@
   import BrowserWorkspaceOverlayLayout from './BrowserWorkspaceOverlayLayout.svelte';
 
   type AdminSessionSurfaceProps = {
-    readonly controlClient: ControlClient;
-    readonly adminEventClient: AdminEventClient;
+    readonly controlClient: ControlClient; readonly adminEventClient: AdminEventClient; readonly workflowClient: WorkflowClient;
     readonly mcpBridge: McpBridgeConfig | null;
     readonly adminOpen: boolean;
     readonly onAdminOpenChange: (open: boolean) => void;
   };
-  let { controlClient, adminEventClient, mcpBridge, adminOpen, onAdminOpenChange }: AdminSessionSurfaceProps = $props();
+  let { controlClient, adminEventClient, workflowClient, mcpBridge, adminOpen, onAdminOpenChange }: AdminSessionSurfaceProps = $props();
   let browserConnector = $derived(new BrowserSessionConnector({ controlClient }));
   let liveConnection = $state<LiveBrowserSessionConnection | null>(null);
   let sessions = $state<readonly SessionResource[]>([]);
@@ -187,7 +187,7 @@
   {/snippet}
   {#snippet admin()}
     <AdminWorkspaceTabs
-      {controlClient} {selectedSession} {sessions} {mcpBridge}
+      {controlClient} {workflowClient} {selectedSession} {sessions} {mcpBridge}
       {liveConnection} {browserPreferences} {browserConnected}
       {workspaceViewModel} {sessionListViewModel} {sessionDetailViewModel}
       onRefreshSessions={loadSessions} onCreateSession={() => void createSession()}

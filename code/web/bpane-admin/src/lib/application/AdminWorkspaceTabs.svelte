@@ -12,6 +12,7 @@
   } from 'lucide-svelte';
   import type { ControlClient } from '../api/control-client';
   import type { SessionResource } from '../api/control-types';
+  import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
   import FeaturePlaceholderPanel from '../presentation/FeaturePlaceholderPanel.svelte';
   import SessionDetailPanel from '../presentation/SessionDetailPanel.svelte';
@@ -34,6 +35,7 @@
 
   type AdminWorkspaceTabsProps = {
     readonly controlClient: ControlClient;
+    readonly workflowClient: WorkflowClient;
     readonly selectedSession: SessionResource | null;
     readonly sessions: readonly SessionResource[];
     readonly mcpBridge: McpBridgeConfig | null;
@@ -156,7 +158,7 @@
       {:else if activePanel.id === 'logs'}
         <LogsSurface selectedSession={props.selectedSession} browserConnected={props.browserConnected} sessionCount={props.sessions.length} />
       {:else if activePanel.id === 'workflows'}
-        <WorkflowOperationsSurface selectedSession={props.selectedSession} />
+        <WorkflowOperationsSurface workflowClient={props.workflowClient} selectedSession={props.selectedSession} />
       {:else}
         <FeaturePlaceholderPanel panel={activePanel} />
       {/if}
