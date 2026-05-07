@@ -9,10 +9,12 @@
   type RecordingSurfaceProps = {
     readonly controlClient: ControlClient; readonly session: SessionResource | null;
     readonly liveConnection: LiveBrowserSessionConnection | null;
+    readonly refreshVersion: number;
   };
 
-  let { controlClient, session, liveConnection }: RecordingSurfaceProps = $props();
+  let { controlClient, session, liveConnection, refreshVersion }: RecordingSurfaceProps = $props();
   let currentSessionId = $state<string | null>(null);
+  let lastRefreshVersion = $state(0);
   let recordings = $state<readonly SessionRecordingResource[]>([]);
   let playback = $state<SessionRecordingPlaybackResource | null>(null);
   let libraryLoading = $state(false);
@@ -53,6 +55,16 @@
     libraryRequest += 1;
     if (nextSessionId) {
       void loadLibrary(nextSessionId);
+    }
+  });
+
+  $effect(() => {
+    if (refreshVersion === lastRefreshVersion) {
+      return;
+    }
+    lastRefreshVersion = refreshVersion;
+    if (currentSessionId) {
+      void loadLibrary(currentSessionId);
     }
   });
 

@@ -48,6 +48,7 @@
     readonly sessionDetailViewModel: SessionDetailPanelViewModel;
     readonly logEntries: readonly AdminLogEntry[];
     readonly sessionFilesRefreshVersion: number;
+    readonly recordingsRefreshVersion: number;
     readonly onRefreshSessions: () => Promise<void>;
     readonly onCreateSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
@@ -165,6 +166,7 @@
           controlClient={props.controlClient}
           session={props.selectedSession}
           liveConnection={props.liveConnection}
+          refreshVersion={props.recordingsRefreshVersion}
         />
       {:else if activePanel.id === 'metrics'}
         <MetricsSurface liveConnection={props.liveConnection} />

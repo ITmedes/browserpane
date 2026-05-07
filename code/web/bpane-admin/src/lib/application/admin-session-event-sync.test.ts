@@ -70,6 +70,33 @@ describe('subscribeAdminSessionEvents', () => {
 
     expect(refreshes).toBe(1);
   });
+
+  it('notifies panel refresh boundaries when recordings change', () => {
+    const client = new FakeAdminEventClient();
+    let refreshes = 0;
+
+    subscribeAdminSessionEvents(client as never, {
+      onSessions: () => undefined,
+      onLoadingChange: () => undefined,
+      onError: () => undefined,
+      onLog: () => undefined,
+      onRecordingsSnapshot: () => { refreshes += 1; },
+    });
+    client.handlers.onEvent({
+      type: 'recordings.snapshot',
+      sequence: 5,
+      createdAt: '2026-05-04T19:02:00Z',
+      recordings: [{
+        sessionId: 'session-a',
+        recordingCount: 1,
+        activeCount: 0,
+        readyCount: 1,
+        latestUpdatedAt: null,
+      }],
+    });
+
+    expect(refreshes).toBe(1);
+  });
 });
 
 class FakeAdminEventClient implements Pick<AdminEventClient, 'subscribe'> {

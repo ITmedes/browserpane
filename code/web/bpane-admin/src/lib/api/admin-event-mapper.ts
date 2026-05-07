@@ -6,6 +6,7 @@ export type AdminEventType =
   | 'sessions.snapshot'
   | 'workflow_runs.snapshot'
   | 'session_files.snapshot'
+  | 'recordings.snapshot'
   | 'admin.error';
 
 export type AdminSessionsSnapshotEvent = {
@@ -49,10 +50,26 @@ export type AdminSessionFilesSnapshotEvent = {
   readonly sessionFiles: readonly AdminSessionFilesSnapshot[];
 };
 
+export type AdminRecordingsSnapshot = {
+  readonly sessionId: string;
+  readonly recordingCount: number;
+  readonly activeCount: number;
+  readonly readyCount: number;
+  readonly latestUpdatedAt: string | null;
+};
+
+export type AdminRecordingsSnapshotEvent = {
+  readonly type: 'recordings.snapshot';
+  readonly sequence: number;
+  readonly createdAt: string;
+  readonly recordings: readonly AdminRecordingsSnapshot[];
+};
+
 export type AdminEvent =
   | AdminSessionsSnapshotEvent
   | AdminWorkflowRunsSnapshotEvent
   | AdminSessionFilesSnapshotEvent
+  | AdminRecordingsSnapshotEvent
   | AdminErrorEvent;
 
 export class AdminEventMapper {
@@ -67,6 +84,9 @@ export class AdminEventMapper {
     }
     if (eventType === 'session_files.snapshot') {
       return toSessionFilesSnapshotEvent(object);
+    }
+    if (eventType === 'recordings.snapshot') {
+      return toRecordingsSnapshotEvent(object);
     }
     if (eventType === 'admin.error') {
       return toAdminErrorEvent(object);
@@ -141,5 +161,31 @@ function toSessionFilesSnapshot(payload: unknown): AdminSessionFilesSnapshot {
     latestUpdatedAt: object.latest_updated_at === null
       ? null
       : expectString(object.latest_updated_at, 'session files snapshot latest_updated_at'),
+  };
+}
+
+function toRecordingsSnapshotEvent(object: Record<string, unknown>): AdminRecordingsSnapshotEvent {
+  const recordings = object.recordings;
+  if (!Array.isArray(recordings)) {
+    throw new Error('recordings.snapshot event recordings must be an array');
+  }
+  return {
+    type: 'recordings.snapshot',
+    sequence: expectNumber(object.sequence, 'recordings.snapshot event sequence'),
+    createdAt: expectString(object.created_at, 'recordings.snapshot event created_at'),
+    recordings: recordings.map(toRecordingsSnapshot),
+  };
+}
+
+function toRecordingsSnapshot(payload: unknown): AdminRecordingsSnapshot {
+  const object = expectRecord(payload, 'recordings snapshot');
+  return {
+    sessionId: expectString(object.session_id, 'recordings snapshot session_id'),
+    recordingCount: expectNumber(object.recording_count, 'recordings snapshot recording_count'),
+    activeCount: expectNumber(object.active_count, 'recordings snapshot active_count'),
+    readyCount: expectNumber(object.ready_count, 'recordings snapshot ready_count'),
+    latestUpdatedAt: object.latest_updated_at === null
+      ? null
+      : expectString(object.latest_updated_at, 'recordings snapshot latest_updated_at'),
   };
 }

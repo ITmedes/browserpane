@@ -34,6 +34,7 @@
   let browserStatus = $state('Disconnected');
   let sessionFileCount = $state(0);
   let sessionFilesRefreshVersion = $state(0);
+  let recordingsRefreshVersion = $state(0);
   let logEntries = $state<readonly AdminLogEntry[]>([]);
   let lastLogSignature = $state('');
   let browserPreferences = $state<BrowserSessionConnectPreferences>({ ...DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES });
@@ -72,6 +73,7 @@
       onError: (error) => { sessionsError = error; },
       onLog: appendLog,
       onSessionFilesSnapshot: () => { sessionFilesRefreshVersion += 1; },
+      onRecordingsSnapshot: () => { recordingsRefreshVersion += 1; },
     });
     void loadSessions();
     return () => { subscription.close(); disconnectBrowser(false); };
@@ -202,7 +204,8 @@
     <AdminWorkspaceTabs
       {controlClient} {workflowClient} {selectedSession} {sessions} {mcpBridge}
       {liveConnection} {browserPreferences} {browserConnected}
-      {workspaceViewModel} {sessionListViewModel} {sessionDetailViewModel} {logEntries} {sessionFilesRefreshVersion}
+      {workspaceViewModel} {sessionListViewModel} {sessionDetailViewModel} {logEntries}
+      {sessionFilesRefreshVersion} {recordingsRefreshVersion}
       onRefreshSessions={loadSessions} onCreateSession={() => void createSession()}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
       onStopSession={() => void runLifecycle('stop')} onKillSession={() => void runLifecycle('kill')}
