@@ -63,6 +63,26 @@ describe('AdminLogEntryFactory', () => {
     expect(entry.message).toBe('Gateway session file snapshot #9: 2 files across 2 sessions.');
   });
 
+  it('turns recording snapshot events into gateway log entries', () => {
+    const entry = AdminLogEntryFactory.fromAdminEvent({
+      type: 'recordings.snapshot',
+      sequence: 10,
+      createdAt: NOW.toISOString(),
+      recordings: [
+        {
+          sessionId: 'session-a',
+          recordingCount: 2,
+          activeCount: 1,
+          readyCount: 1,
+          latestUpdatedAt: NOW.toISOString(),
+        },
+      ],
+    });
+
+    expect(entry.source).toBe('gateway');
+    expect(entry.message).toBe('Gateway recording snapshot #10: 2 segments, 1 active.');
+  });
+
   it('bounds appended log history to newest entries', () => {
     const entries = Array.from({ length: 121 }, (_, index) =>
       AdminLogEntryFactory.fromConnectionStatus('open', {

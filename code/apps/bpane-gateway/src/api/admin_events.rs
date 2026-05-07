@@ -13,6 +13,7 @@ const ADMIN_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(750);
 const SESSIONS_SNAPSHOT_EVENT_TYPE: &str = "sessions.snapshot";
 const WORKFLOW_RUNS_SNAPSHOT_EVENT_TYPE: &str = "workflow_runs.snapshot";
 const SESSION_FILES_SNAPSHOT_EVENT_TYPE: &str = "session_files.snapshot";
+const RECORDINGS_SNAPSHOT_EVENT_TYPE: &str = "recordings.snapshot";
 
 #[derive(Debug, Deserialize)]
 struct AdminEventsQuery {
@@ -59,6 +60,23 @@ struct AdminSessionFilesSummary {
     latest_updated_at: Option<chrono::DateTime<Utc>>,
 }
 
+#[derive(Debug, Serialize)]
+struct AdminRecordingsSnapshotEvent {
+    event_type: &'static str,
+    sequence: u64,
+    created_at: chrono::DateTime<Utc>,
+    recordings: Vec<AdminRecordingsSummary>,
+}
+
+#[derive(Debug, Serialize)]
+struct AdminRecordingsSummary {
+    session_id: Uuid,
+    recording_count: usize,
+    active_count: usize,
+    ready_count: usize,
+    latest_updated_at: Option<chrono::DateTime<Utc>>,
+}
+
 struct AdminChangedEvent<T> {
     event: T,
     change_key: Vec<u8>,
@@ -90,6 +108,7 @@ async fn stream_admin_events(
     let mut previous_sessions_change_key: Option<Vec<u8>> = None;
     let mut previous_workflow_runs_change_key: Option<Vec<u8>> = None;
     let mut previous_session_files_change_key: Option<Vec<u8>> = None;
+    let mut previous_recordings_change_key: Option<Vec<u8>> = None;
     let mut ticks = interval(ADMIN_EVENT_POLL_INTERVAL);
     ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
@@ -126,6 +145,18 @@ async fn stream_admin_events(
             &mut sequence,
             &mut previous_session_files_change_key,
             session_files_snapshot,
+        )
+        .await
+        .is_err()
+        {
+            return;
+        }
+        let recordings_snapshot = build_recordings_snapshot(&state, &principal, sequence).await;
+        if emit_changed_event(
+            &mut socket,
+            &mut sequence,
+            &mut previous_recordings_change_key,
+            recordings_snapshot,
         )
         .await
         .is_err()
@@ -229,6 +260,54 @@ async fn build_session_files_snapshot(
             sequence,
             created_at: Utc::now(),
             session_files: summaries,
+        },
+        change_key,
+    })
+}
+
+async fn build_recordings_snapshot(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    sequence: u64,
+) -> Result<
+    AdminChangedEvent<AdminRecordingsSnapshotEvent>,
+    crate::session_control::SessionStoreError,
+> {
+    let mut summaries = Vec::new();
+    for session in state
+        .session_store
+        .list_sessions_for_owner(principal)
+        .await?
+    {
+        let recordings = state
+            .session_store
+            .list_recordings_for_session(session.id)
+            .await?;
+        summaries.push(AdminRecordingsSummary {
+            session_id: session.id,
+            recording_count: recordings.len(),
+            active_count: recordings
+                .iter()
+                .filter(|recording| recording.state.is_active())
+                .count(),
+            ready_count: recordings
+                .iter()
+                .filter(|recording| recording.state == SessionRecordingState::Ready)
+                .count(),
+            latest_updated_at: recordings
+                .iter()
+                .map(|recording| recording.updated_at)
+                .max(),
+        });
+    }
+    summaries.sort_by_key(|summary| summary.session_id);
+    let change_key = serialized_change_key(&summaries)?;
+    Ok(AdminChangedEvent {
+        event: AdminRecordingsSnapshotEvent {
+            event_type: RECORDINGS_SNAPSHOT_EVENT_TYPE,
+            sequence,
+            created_at: Utc::now(),
+            recordings: summaries,
         },
         change_key,
     })
@@ -396,5 +475,28 @@ mod tests {
         .unwrap();
 
         assert_ne!(empty_key, file_key);
+    }
+
+    #[test]
+    fn recordings_snapshot_change_key_tracks_counts() {
+        let session_id = Uuid::nil();
+        let empty_key = serialized_change_key(&vec![AdminRecordingsSummary {
+            session_id,
+            recording_count: 0,
+            active_count: 0,
+            ready_count: 0,
+            latest_updated_at: None,
+        }])
+        .unwrap();
+        let recording_key = serialized_change_key(&vec![AdminRecordingsSummary {
+            session_id,
+            recording_count: 1,
+            active_count: 0,
+            ready_count: 1,
+            latest_updated_at: Some(Utc::now()),
+        }])
+        .unwrap();
+
+        assert_ne!(empty_key, recording_key);
     }
 }

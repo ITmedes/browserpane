@@ -97,6 +97,27 @@ describe('AdminEventMapper', () => {
     }
   });
 
+  it('maps recording snapshot events', () => {
+    const event = AdminEventMapper.toEvent({
+      event_type: 'recordings.snapshot',
+      sequence: 7,
+      created_at: '2026-05-04T19:02:00Z',
+      recordings: [{
+        session_id: SESSION.id,
+        recording_count: 2,
+        active_count: 1,
+        ready_count: 1,
+        latest_updated_at: '2026-05-04T19:01:00Z',
+      }],
+    });
+
+    expect(event.type).toBe('recordings.snapshot');
+    if (event.type === 'recordings.snapshot') {
+      expect(event.recordings[0]?.sessionId).toBe(SESSION.id);
+      expect(event.recordings[0]?.activeCount).toBe(1);
+    }
+  });
+
   it('rejects unsupported event types at the API boundary', () => {
     expect(() =>
       AdminEventMapper.toEvent({

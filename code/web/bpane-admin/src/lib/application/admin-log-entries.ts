@@ -44,6 +44,16 @@ export class AdminLogEntryFactory {
         message: `Gateway session file snapshot #${event.sequence}: ${fileCount} files across ${event.sessionFiles.length} sessions.`,
       });
     }
+    if (event.type === 'recordings.snapshot') {
+      const recordingCount = event.recordings.reduce((sum, session) => sum + session.recordingCount, 0);
+      const activeCount = event.recordings.reduce((sum, session) => sum + session.activeCount, 0);
+      return entry({
+        timestamp: event.createdAt,
+        level: 'info',
+        source: 'gateway',
+        message: `Gateway recording snapshot #${event.sequence}: ${recordingCount} segments, ${activeCount} active.`,
+      });
+    }
     return entry({
       timestamp: event.createdAt,
       level: 'warn',
