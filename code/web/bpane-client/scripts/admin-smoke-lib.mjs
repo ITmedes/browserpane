@@ -171,7 +171,7 @@ async function cleanupAdminSession(page) {
   }
 }
 
-async function getAdminAccessToken(page) {
+export async function getAdminAccessToken(page) {
   return await page.evaluate(() => {
     const raw = window.sessionStorage.getItem('bpane.admin.auth.tokens.v1');
     if (!raw) {
