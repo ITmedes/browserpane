@@ -49,6 +49,27 @@ describe('subscribeAdminSessionEvents', () => {
     expect(logs[0]?.source).toBe('ui');
     expect(logs[0]?.message).toBe('Admin event stream error: socket failed');
   });
+
+  it('notifies panel refresh boundaries when session files change', () => {
+    const client = new FakeAdminEventClient();
+    let refreshes = 0;
+
+    subscribeAdminSessionEvents(client as never, {
+      onSessions: () => undefined,
+      onLoadingChange: () => undefined,
+      onError: () => undefined,
+      onLog: () => undefined,
+      onSessionFilesSnapshot: () => { refreshes += 1; },
+    });
+    client.handlers.onEvent({
+      type: 'session_files.snapshot',
+      sequence: 4,
+      createdAt: '2026-05-04T19:02:00Z',
+      sessionFiles: [{ sessionId: 'session-a', fileCount: 1, latestUpdatedAt: null }],
+    });
+
+    expect(refreshes).toBe(1);
+  });
 });
 
 class FakeAdminEventClient implements Pick<AdminEventClient, 'subscribe'> {

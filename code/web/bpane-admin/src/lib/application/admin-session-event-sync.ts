@@ -8,6 +8,7 @@ type AdminSessionEventSyncHandlers = {
   readonly onLoadingChange: (loading: boolean) => void;
   readonly onError: (error: string | null) => void;
   readonly onLog: (entry: AdminLogEntry) => void;
+  readonly onSessionFilesSnapshot?: () => void;
 };
 
 export function subscribeAdminSessionEvents(
@@ -23,6 +24,8 @@ export function subscribeAdminSessionEvents(
         handlers.onSessions(event.sessions);
       } else if (event.type === 'admin.error') {
         handlers.onError(event.error);
+      } else if (event.type === 'session_files.snapshot') {
+        handlers.onSessionFilesSnapshot?.();
       }
     },
     onStatus: (status) => handlers.onLog(AdminLogEntryFactory.fromConnectionStatus(status)),

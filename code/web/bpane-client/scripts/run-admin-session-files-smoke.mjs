@@ -38,12 +38,14 @@ async function run() {
 
   try {
     await fs.writeFile(uploadPath, uploadText, 'utf8');
-    const controlState = await createFileArtifact(harnessPage, rootOptions, uploadPath, log);
+    const controlState = await createConnectedSession(harnessPage, rootOptions, log);
     accessToken = await getAccessToken(harnessPage);
 
     log(`Opening ${adminOptions.pageUrl}`);
     await ensureAdminLoggedIn(adminPage, adminOptions);
     await selectSession(adminPage, controlState.sessionId, adminOptions);
+    await openFilesPanel(adminPage, adminOptions);
+    await uploadHarnessFile(harnessPage, rootOptions, uploadPath);
     const fileRow = await waitForFileRow(adminPage, adminOptions);
     const downloadedText = await downloadFileRow(adminPage, fileRow);
     if (downloadedText !== uploadText) {
@@ -55,6 +57,7 @@ async function run() {
       sessionId: controlState.sessionId,
       fileName: 'session-upload.txt',
       downloadedBytes: Buffer.byteLength(downloadedText),
+      realtimeFileRefresh: true,
     };
     console.log(JSON.stringify(summary, null, 2));
     if (options.outputPath) {
@@ -72,7 +75,7 @@ async function run() {
   }
 }
 
-async function createFileArtifact(page, options, uploadPath, log) {
+async function createConnectedSession(page, options, log) {
   log(`Opening ${options.pageUrl}`);
   await configurePage(page, options);
   await page.waitForFunction(() => Boolean(window.__bpaneControl && window.__bpaneSessionFiles), {
@@ -95,7 +98,10 @@ async function createFileArtifact(page, options, uploadPath, log) {
     (state) => state?.connected === true && Boolean(state?.sessionId),
     options.connectTimeoutMs,
   );
+  return controlState;
+}
 
+async function uploadHarnessFile(page, options, uploadPath) {
   const chooserPromise = page.waitForEvent('filechooser');
   await page.click('#btn-upload');
   const chooser = await chooserPromise;
@@ -109,7 +115,6 @@ async function createFileArtifact(page, options, uploadPath, log) {
     (state) => state?.files?.some((file) => file.name === 'session-upload.txt'),
     options.connectTimeoutMs,
   );
-  return controlState;
 }
 
 async function selectSession(page, sessionId, options) {
@@ -119,13 +124,13 @@ async function selectSession(page, sessionId, options) {
   await row.click();
 }
 
-async function waitForFileRow(page, options) {
+async function openFilesPanel(page, options) {
   await openAdminTab(page, 'files');
   const refresh = page.getByTestId('session-files-refresh');
   await refresh.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  if (await refresh.isEnabled()) {
-    await refresh.click();
-  }
+}
+
+async function waitForFileRow(page, options) {
   const row = page.getByTestId('session-files-row').filter({ hasText: 'session-upload.txt' }).first();
   await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   return row;

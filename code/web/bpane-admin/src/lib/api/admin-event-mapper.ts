@@ -2,7 +2,11 @@ import { ControlSessionMapper } from './control-session-mapper';
 import type { SessionResource } from './control-types';
 import { expectNumber, expectRecord, expectString } from './control-wire';
 
-export type AdminEventType = 'sessions.snapshot' | 'workflow_runs.snapshot' | 'admin.error';
+export type AdminEventType =
+  | 'sessions.snapshot'
+  | 'workflow_runs.snapshot'
+  | 'session_files.snapshot'
+  | 'admin.error';
 
 export type AdminSessionsSnapshotEvent = {
   readonly type: 'sessions.snapshot';
@@ -32,7 +36,24 @@ export type AdminWorkflowRunsSnapshotEvent = {
   readonly workflowRuns: readonly AdminWorkflowRunSnapshot[];
 };
 
-export type AdminEvent = AdminSessionsSnapshotEvent | AdminWorkflowRunsSnapshotEvent | AdminErrorEvent;
+export type AdminSessionFilesSnapshot = {
+  readonly sessionId: string;
+  readonly fileCount: number;
+  readonly latestUpdatedAt: string | null;
+};
+
+export type AdminSessionFilesSnapshotEvent = {
+  readonly type: 'session_files.snapshot';
+  readonly sequence: number;
+  readonly createdAt: string;
+  readonly sessionFiles: readonly AdminSessionFilesSnapshot[];
+};
+
+export type AdminEvent =
+  | AdminSessionsSnapshotEvent
+  | AdminWorkflowRunsSnapshotEvent
+  | AdminSessionFilesSnapshotEvent
+  | AdminErrorEvent;
 
 export class AdminEventMapper {
   static toEvent(payload: unknown): AdminEvent {
@@ -43,6 +64,9 @@ export class AdminEventMapper {
     }
     if (eventType === 'workflow_runs.snapshot') {
       return toWorkflowRunsSnapshotEvent(object);
+    }
+    if (eventType === 'session_files.snapshot') {
+      return toSessionFilesSnapshotEvent(object);
     }
     if (eventType === 'admin.error') {
       return toAdminErrorEvent(object);
@@ -93,5 +117,29 @@ function toWorkflowRunSnapshot(payload: unknown): AdminWorkflowRunSnapshot {
     sessionId: expectString(object.session_id, 'workflow run snapshot session_id'),
     state: expectString(object.state, 'workflow run snapshot state'),
     updatedAt: expectString(object.updated_at, 'workflow run snapshot updated_at'),
+  };
+}
+
+function toSessionFilesSnapshotEvent(object: Record<string, unknown>): AdminSessionFilesSnapshotEvent {
+  const sessionFiles = object.session_files;
+  if (!Array.isArray(sessionFiles)) {
+    throw new Error('session_files.snapshot event session_files must be an array');
+  }
+  return {
+    type: 'session_files.snapshot',
+    sequence: expectNumber(object.sequence, 'session_files.snapshot event sequence'),
+    createdAt: expectString(object.created_at, 'session_files.snapshot event created_at'),
+    sessionFiles: sessionFiles.map(toSessionFilesSnapshot),
+  };
+}
+
+function toSessionFilesSnapshot(payload: unknown): AdminSessionFilesSnapshot {
+  const object = expectRecord(payload, 'session files snapshot');
+  return {
+    sessionId: expectString(object.session_id, 'session files snapshot session_id'),
+    fileCount: expectNumber(object.file_count, 'session files snapshot file_count'),
+    latestUpdatedAt: object.latest_updated_at === null
+      ? null
+      : expectString(object.latest_updated_at, 'session files snapshot latest_updated_at'),
   };
 }

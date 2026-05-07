@@ -12,6 +12,7 @@ use super::*;
 const ADMIN_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(750);
 const SESSIONS_SNAPSHOT_EVENT_TYPE: &str = "sessions.snapshot";
 const WORKFLOW_RUNS_SNAPSHOT_EVENT_TYPE: &str = "workflow_runs.snapshot";
+const SESSION_FILES_SNAPSHOT_EVENT_TYPE: &str = "session_files.snapshot";
 
 #[derive(Debug, Deserialize)]
 struct AdminEventsQuery {
@@ -41,6 +42,21 @@ struct AdminWorkflowRunSummary {
     session_id: Uuid,
     state: crate::workflow::WorkflowRunState,
     updated_at: chrono::DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+struct AdminSessionFilesSnapshotEvent {
+    event_type: &'static str,
+    sequence: u64,
+    created_at: chrono::DateTime<Utc>,
+    session_files: Vec<AdminSessionFilesSummary>,
+}
+
+#[derive(Debug, Serialize)]
+struct AdminSessionFilesSummary {
+    session_id: Uuid,
+    file_count: usize,
+    latest_updated_at: Option<chrono::DateTime<Utc>>,
 }
 
 struct AdminChangedEvent<T> {
@@ -73,6 +89,7 @@ async fn stream_admin_events(
     let mut sequence = 1;
     let mut previous_sessions_change_key: Option<Vec<u8>> = None;
     let mut previous_workflow_runs_change_key: Option<Vec<u8>> = None;
+    let mut previous_session_files_change_key: Option<Vec<u8>> = None;
     let mut ticks = interval(ADMIN_EVENT_POLL_INTERVAL);
     ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
@@ -96,6 +113,19 @@ async fn stream_admin_events(
             &mut sequence,
             &mut previous_workflow_runs_change_key,
             workflow_runs_snapshot,
+        )
+        .await
+        .is_err()
+        {
+            return;
+        }
+        let session_files_snapshot =
+            build_session_files_snapshot(&state, &principal, sequence).await;
+        if emit_changed_event(
+            &mut socket,
+            &mut sequence,
+            &mut previous_session_files_change_key,
+            session_files_snapshot,
         )
         .await
         .is_err()
@@ -162,6 +192,43 @@ async fn build_workflow_runs_snapshot(
             sequence,
             created_at: Utc::now(),
             workflow_runs: runs,
+        },
+        change_key,
+    })
+}
+
+async fn build_session_files_snapshot(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    sequence: u64,
+) -> Result<
+    AdminChangedEvent<AdminSessionFilesSnapshotEvent>,
+    crate::session_control::SessionStoreError,
+> {
+    let mut summaries = Vec::new();
+    for session in state
+        .session_store
+        .list_sessions_for_owner(principal)
+        .await?
+    {
+        let files = state
+            .session_store
+            .list_session_files_for_session(session.id)
+            .await?;
+        summaries.push(AdminSessionFilesSummary {
+            session_id: session.id,
+            file_count: files.len(),
+            latest_updated_at: files.iter().map(|file| file.updated_at).max(),
+        });
+    }
+    summaries.sort_by_key(|summary| summary.session_id);
+    let change_key = serialized_change_key(&summaries)?;
+    Ok(AdminChangedEvent {
+        event: AdminSessionFilesSnapshotEvent {
+            event_type: SESSION_FILES_SNAPSHOT_EVENT_TYPE,
+            sequence,
+            created_at: Utc::now(),
+            session_files: summaries,
         },
         change_key,
     })
@@ -310,5 +377,24 @@ mod tests {
         .unwrap();
 
         assert_ne!(pending_key, running_key);
+    }
+
+    #[test]
+    fn session_files_snapshot_change_key_tracks_counts() {
+        let session_id = Uuid::nil();
+        let empty_key = serialized_change_key(&vec![AdminSessionFilesSummary {
+            session_id,
+            file_count: 0,
+            latest_updated_at: None,
+        }])
+        .unwrap();
+        let file_key = serialized_change_key(&vec![AdminSessionFilesSummary {
+            session_id,
+            file_count: 1,
+            latest_updated_at: Some(Utc::now()),
+        }])
+        .unwrap();
+
+        assert_ne!(empty_key, file_key);
     }
 }
