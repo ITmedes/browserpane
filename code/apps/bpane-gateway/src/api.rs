@@ -76,6 +76,7 @@ use crate::workspaces::{
     StoreWorkspaceFileRequest, WorkspaceFileStoreError,
 };
 
+mod admin_events;
 mod authz;
 mod automation_tasks;
 mod credential_bindings;
