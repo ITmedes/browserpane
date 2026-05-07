@@ -1,4 +1,15 @@
 <script lang="ts">
+  import {
+    Activity,
+    ClipboardList,
+    FileArchive,
+    FolderOpen,
+    Gauge,
+    MonitorCog,
+    Radio,
+    ScrollText,
+    Video,
+  } from 'lucide-svelte';
   import type { ControlClient } from '../api/control-client';
   import type { SessionResource } from '../api/control-types';
   import type { McpBridgeConfig } from '../auth/auth-config';
@@ -49,14 +60,27 @@
   function panelFor(id: AdminFeaturePanelId, panels: readonly AdminFeaturePanelViewModel[]): AdminFeaturePanelViewModel | null {
     return panels.find((panel) => panel.id === id) ?? panels[0] ?? null;
   }
+
+  const PANEL_ICONS = {
+    sessions: ClipboardList,
+    lifecycle: Activity,
+    display: MonitorCog,
+    files: FolderOpen,
+    policy: FileArchive,
+    workflows: Radio,
+    recording: Video,
+    metrics: Gauge,
+    logs: ScrollText,
+  } satisfies Record<AdminFeaturePanelId, typeof Activity>;
 </script>
 
 <section class="grid h-full min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden" data-testid="admin-workspace-tabs">
   <div class="border-b border-[#90a6cc]/18 p-3">
     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3" role="tablist" aria-label="Admin panels">
       {#each props.workspaceViewModel.panels as panel (panel.id)}
+        {@const Icon = PANEL_ICONS[panel.id]}
         <button
-          class={`min-w-0 truncate rounded-xl border px-3 py-2 text-xs font-bold ${
+          class={`inline-flex min-w-0 items-center justify-center gap-1.5 truncate rounded-xl border px-3 py-2 text-xs font-bold ${
             activePanelId === panel.id
               ? 'border-admin-leaf/40 bg-admin-leaf/14 text-admin-leaf'
               : 'border-[#90a6cc]/18 bg-[#111e32]/82 text-[#c1d0e8]'
@@ -67,7 +91,8 @@
           data-testid={`workspace-panel-toggle-${panel.id}`}
           onclick={() => { activePanelId = panel.id; }}
         >
-          {panel.label}
+          <Icon size={14} aria-hidden="true" />
+          <span class="truncate">{panel.label}</span>
         </button>
       {/each}
     </div>

@@ -5,10 +5,11 @@
   type BrowserWorkspaceOverlayLayoutProps = {
     readonly browser: Snippet;
     readonly admin: Snippet;
+    readonly adminOpen: boolean;
+    readonly onAdminOpenChange: (open: boolean) => void;
   };
 
-  let { browser, admin }: BrowserWorkspaceOverlayLayoutProps = $props();
-  let adminOpen = $state(true);
+  let { browser, admin, adminOpen, onAdminOpenChange }: BrowserWorkspaceOverlayLayoutProps = $props();
 </script>
 
 <section class="relative min-h-[calc(100vh-76px)]">
@@ -29,7 +30,7 @@
             Operations overlay
           </h2>
         </div>
-        <button class="rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-1.5 text-xs font-bold text-admin-ink" type="button" data-testid="admin-overlay-close" onclick={() => { adminOpen = false; }}>
+        <button class="rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-1.5 text-xs font-bold text-admin-ink" type="button" data-testid="admin-overlay-close" onclick={() => onAdminOpenChange(false)}>
           Hide
         </button>
       </div>
@@ -37,15 +38,5 @@
         {@render admin()}
       </div>
     </aside>
-  {:else}
-    <button
-      class="fixed top-[76px] right-4 z-40 inline-flex items-center gap-2 rounded-xl border border-[#90a6cc]/25 bg-[#0e1829]/95 px-4 py-2 text-xs font-bold tracking-[0.12em] text-[#c1d0e8] uppercase shadow-[0_18px_44px_rgb(0_0_0_/_28%)] transition hover:border-admin-leaf/45 hover:text-admin-ink"
-      type="button"
-      data-testid="admin-overlay-open"
-      onclick={() => { adminOpen = true; }}
-    >
-      <span class="h-2 w-2 rounded-full bg-admin-leaf"></span>
-      Open admin
-    </button>
   {/if}
 </section>
