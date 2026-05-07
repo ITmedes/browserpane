@@ -11,6 +11,7 @@ use super::*;
 
 const ADMIN_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(750);
 const SESSIONS_SNAPSHOT_EVENT_TYPE: &str = "sessions.snapshot";
+const WORKFLOW_RUNS_SNAPSHOT_EVENT_TYPE: &str = "workflow_runs.snapshot";
 
 #[derive(Debug, Deserialize)]
 struct AdminEventsQuery {
@@ -26,8 +27,24 @@ struct AdminSessionsSnapshotEvent {
     sessions: Vec<SessionResource>,
 }
 
-struct AdminSessionsSnapshot {
-    event: AdminSessionsSnapshotEvent,
+#[derive(Debug, Serialize)]
+struct AdminWorkflowRunsSnapshotEvent {
+    event_type: &'static str,
+    sequence: u64,
+    created_at: chrono::DateTime<Utc>,
+    workflow_runs: Vec<AdminWorkflowRunSummary>,
+}
+
+#[derive(Debug, Serialize)]
+struct AdminWorkflowRunSummary {
+    id: Uuid,
+    session_id: Uuid,
+    state: crate::workflow::WorkflowRunState,
+    updated_at: chrono::DateTime<Utc>,
+}
+
+struct AdminChangedEvent<T> {
+    event: T,
     change_key: Vec<u8>,
 }
 
@@ -54,40 +71,36 @@ async fn stream_admin_events(
     principal: AuthenticatedPrincipal,
 ) {
     let mut sequence = 1;
-    let mut previous_change_key: Option<Vec<u8>> = None;
+    let mut previous_sessions_change_key: Option<Vec<u8>> = None;
+    let mut previous_workflow_runs_change_key: Option<Vec<u8>> = None;
     let mut ticks = interval(ADMIN_EVENT_POLL_INTERVAL);
     ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
     loop {
-        let snapshot = build_sessions_snapshot(&state, &principal, sequence).await;
-        match snapshot {
-            Ok(snapshot) if previous_change_key.as_ref() != Some(&snapshot.change_key) => {
-                let Ok(payload) = serde_json::to_string(&snapshot.event) else {
-                    return;
-                };
-                if socket.send(Message::Text(payload.into())).await.is_err() {
-                    return;
-                }
-                previous_change_key = Some(snapshot.change_key);
-                sequence += 1;
-            }
-            Ok(_) => {}
-            Err(error) => {
-                let payload = serde_json::json!({
-                    "event_type": "admin.error",
-                    "sequence": sequence,
-                    "created_at": Utc::now(),
-                    "error": error.to_string()
-                });
-                if socket
-                    .send(Message::Text(payload.to_string().into()))
-                    .await
-                    .is_err()
-                {
-                    return;
-                }
-                sequence += 1;
-            }
+        let sessions_snapshot = build_sessions_snapshot(&state, &principal, sequence).await;
+        if emit_changed_event(
+            &mut socket,
+            &mut sequence,
+            &mut previous_sessions_change_key,
+            sessions_snapshot,
+        )
+        .await
+        .is_err()
+        {
+            return;
+        }
+        let workflow_runs_snapshot =
+            build_workflow_runs_snapshot(&state, &principal, sequence).await;
+        if emit_changed_event(
+            &mut socket,
+            &mut sequence,
+            &mut previous_workflow_runs_change_key,
+            workflow_runs_snapshot,
+        )
+        .await
+        .is_err()
+        {
+            return;
         }
 
         ticks.tick().await;
@@ -98,7 +111,8 @@ async fn build_sessions_snapshot(
     state: &ApiState,
     principal: &AuthenticatedPrincipal,
     sequence: u64,
-) -> Result<AdminSessionsSnapshot, crate::session_control::SessionStoreError> {
+) -> Result<AdminChangedEvent<AdminSessionsSnapshotEvent>, crate::session_control::SessionStoreError>
+{
     let mut resources = Vec::new();
     for session in state
         .session_store
@@ -109,7 +123,7 @@ async fn build_sessions_snapshot(
     }
     resources.sort_by_key(|session| session.id);
     let change_key = serialized_change_key(&resources)?;
-    Ok(AdminSessionsSnapshot {
+    Ok(AdminChangedEvent {
         event: AdminSessionsSnapshotEvent {
             event_type: SESSIONS_SNAPSHOT_EVENT_TYPE,
             sequence,
@@ -118,6 +132,84 @@ async fn build_sessions_snapshot(
         },
         change_key,
     })
+}
+
+async fn build_workflow_runs_snapshot(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    sequence: u64,
+) -> Result<
+    AdminChangedEvent<AdminWorkflowRunsSnapshotEvent>,
+    crate::session_control::SessionStoreError,
+> {
+    let mut runs = state
+        .session_store
+        .list_workflow_runs_for_owner(principal)
+        .await?
+        .into_iter()
+        .map(|run| AdminWorkflowRunSummary {
+            id: run.id,
+            session_id: run.session_id,
+            state: run.state,
+            updated_at: run.updated_at,
+        })
+        .collect::<Vec<_>>();
+    runs.sort_by_key(|run| run.id);
+    let change_key = serialized_change_key(&runs)?;
+    Ok(AdminChangedEvent {
+        event: AdminWorkflowRunsSnapshotEvent {
+            event_type: WORKFLOW_RUNS_SNAPSHOT_EVENT_TYPE,
+            sequence,
+            created_at: Utc::now(),
+            workflow_runs: runs,
+        },
+        change_key,
+    })
+}
+
+async fn emit_changed_event<T: Serialize>(
+    socket: &mut WebSocket,
+    sequence: &mut u64,
+    previous_change_key: &mut Option<Vec<u8>>,
+    snapshot: Result<AdminChangedEvent<T>, crate::session_control::SessionStoreError>,
+) -> Result<(), ()> {
+    match snapshot {
+        Ok(snapshot) if previous_change_key.as_ref() != Some(&snapshot.change_key) => {
+            let payload = serde_json::to_string(&snapshot.event).map_err(|_| ())?;
+            if socket.send(Message::Text(payload.into())).await.is_err() {
+                return Err(());
+            }
+            *previous_change_key = Some(snapshot.change_key);
+            *sequence += 1;
+        }
+        Ok(_) => {}
+        Err(error) => {
+            emit_admin_error(socket, sequence, error.to_string()).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn emit_admin_error(
+    socket: &mut WebSocket,
+    sequence: &mut u64,
+    error: String,
+) -> Result<(), ()> {
+    let payload = serde_json::json!({
+        "event_type": "admin.error",
+        "sequence": *sequence,
+        "created_at": Utc::now(),
+        "error": error
+    });
+    if socket
+        .send(Message::Text(payload.to_string().into()))
+        .await
+        .is_err()
+    {
+        return Err(());
+    }
+    *sequence += 1;
+    Ok(())
 }
 
 fn serialized_change_key<T: Serialize>(
@@ -195,5 +287,28 @@ mod tests {
         let second_key = serialized_change_key(&payload).unwrap();
 
         assert_eq!(first_key, second_key);
+    }
+
+    #[test]
+    fn workflow_run_snapshot_change_key_tracks_state() {
+        let id = Uuid::nil();
+        let session_id = Uuid::nil();
+        let updated_at = Utc::now();
+        let pending_key = serialized_change_key(&vec![AdminWorkflowRunSummary {
+            id,
+            session_id,
+            state: crate::workflow::WorkflowRunState::Pending,
+            updated_at,
+        }])
+        .unwrap();
+        let running_key = serialized_change_key(&vec![AdminWorkflowRunSummary {
+            id,
+            session_id,
+            state: crate::workflow::WorkflowRunState::Running,
+            updated_at,
+        }])
+        .unwrap();
+
+        assert_ne!(pending_key, running_key);
     }
 }

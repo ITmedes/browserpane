@@ -21,7 +21,7 @@ export function subscribeAdminSessionEvents(
         handlers.onLoadingChange(false);
         handlers.onError(null);
         handlers.onSessions(event.sessions);
-      } else {
+      } else if (event.type === 'admin.error') {
         handlers.onError(event.error);
       }
     },

@@ -33,6 +33,21 @@ describe('AdminLogEntryFactory', () => {
     });
   });
 
+  it('turns workflow run snapshot events into gateway log entries', () => {
+    const entry = AdminLogEntryFactory.fromAdminEvent({
+      type: 'workflow_runs.snapshot',
+      sequence: 8,
+      createdAt: NOW.toISOString(),
+      workflowRuns: [
+        { id: 'run-a', sessionId: 'session-a', state: 'running', updatedAt: NOW.toISOString() },
+        { id: 'run-b', sessionId: 'session-a', state: 'succeeded', updatedAt: NOW.toISOString() },
+      ],
+    });
+
+    expect(entry.source).toBe('gateway');
+    expect(entry.message).toBe('Gateway workflow snapshot #8: 2 runs, 1 active.');
+  });
+
   it('bounds appended log history to newest entries', () => {
     const entries = Array.from({ length: 121 }, (_, index) =>
       AdminLogEntryFactory.fromConnectionStatus('open', {

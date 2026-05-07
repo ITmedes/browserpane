@@ -26,6 +26,15 @@ export class AdminLogEntryFactory {
         message: `Gateway session snapshot #${event.sequence}: ${event.sessions.length} visible sessions.`,
       });
     }
+    if (event.type === 'workflow_runs.snapshot') {
+      const active = event.workflowRuns.filter((run) => !TERMINAL_WORKFLOW_STATES.has(run.state)).length;
+      return entry({
+        timestamp: event.createdAt,
+        level: 'info',
+        source: 'gateway',
+        message: `Gateway workflow snapshot #${event.sequence}: ${event.workflowRuns.length} runs, ${active} active.`,
+      });
+    }
     return entry({
       timestamp: event.createdAt,
       level: 'warn',
@@ -78,6 +87,8 @@ export class AdminLogEntryFactory {
     return entries.map((entry) => `${entry.timestamp} [${entry.source}] ${entry.message}`).join('\n');
   }
 }
+
+const TERMINAL_WORKFLOW_STATES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out']);
 
 function entry(input: {
   readonly timestamp?: string;
