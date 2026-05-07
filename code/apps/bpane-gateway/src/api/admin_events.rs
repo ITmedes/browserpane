@@ -9,8 +9,8 @@ use tokio::time::{interval, MissedTickBehavior};
 
 use super::*;
 use snapshots::{
-    build_recordings_snapshot, build_session_files_snapshot, build_sessions_snapshot,
-    build_workflow_runs_snapshot, AdminChangedEvent,
+    build_mcp_delegation_snapshot, build_recordings_snapshot, build_session_files_snapshot,
+    build_sessions_snapshot, build_workflow_runs_snapshot, AdminChangedEvent,
 };
 
 const ADMIN_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(750);
@@ -50,6 +50,7 @@ async fn stream_admin_events(
     let mut previous_workflow_runs_change_key: Option<Vec<u8>> = None;
     let mut previous_session_files_change_key: Option<Vec<u8>> = None;
     let mut previous_recordings_change_key: Option<Vec<u8>> = None;
+    let mut previous_mcp_delegation_change_key: Option<Vec<u8>> = None;
     let mut ticks = interval(ADMIN_EVENT_POLL_INTERVAL);
     ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
@@ -98,6 +99,19 @@ async fn stream_admin_events(
             &mut sequence,
             &mut previous_recordings_change_key,
             recordings_snapshot,
+        )
+        .await
+        .is_err()
+        {
+            return;
+        }
+        let mcp_delegation_snapshot =
+            build_mcp_delegation_snapshot(&state, &principal, sequence).await;
+        if emit_changed_event(
+            &mut socket,
+            &mut sequence,
+            &mut previous_mcp_delegation_change_key,
+            mcp_delegation_snapshot,
         )
         .await
         .is_err()

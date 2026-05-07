@@ -34,6 +34,11 @@ async function run() {
     await waitForRealtimeSessionRow(page, options, sessionId);
     await page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`).click();
 
+    log('Delegating the selected session through REST and waiting for realtime MCP state.');
+    const mcpBridge = await loadMcpBridgeConfig(options);
+    await setAutomationDelegate(accessToken, options, sessionId, mcpBridge);
+    await waitForRealtimeMcpDelegation(page, options);
+
     log('Stopping the session through REST and waiting for websocket-driven UI state.');
     await openAdminTab(page, 'lifecycle');
     await stopSession(accessToken, options, sessionId);
@@ -41,8 +46,9 @@ async function run() {
       return await page.getByTestId('session-state').textContent();
     }, (state) => state === 'stopped', options.connectTimeoutMs);
     await openAdminTab(page, 'logs');
-    await waitForGatewayLogEntry(page, options);
-    await emitSummary(options, sessionId, log);
+    await waitForGatewayLogEntry(page, options, 'Gateway session snapshot');
+    await waitForGatewayLogEntry(page, options, 'Gateway MCP delegation snapshot', '1 delegated');
+    await emitSummary(options, sessionId, log, true);
   } finally {
     await cleanupAdminSmoke(page, options, log);
     await context.close();
@@ -68,22 +74,54 @@ async function stopSession(accessToken, options, sessionId) {
   });
 }
 
+async function loadMcpBridgeConfig(options) {
+  const config = await fetchJson(`${apiOrigin(options)}/auth-config.json`);
+  if (!config.mcpBridge?.clientId) {
+    throw new Error('Admin realtime smoke requires auth-config mcpBridge metadata.');
+  }
+  return config.mcpBridge;
+}
+
+async function setAutomationDelegate(accessToken, options, sessionId, bridge) {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/automation-owner`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      client_id: bridge.clientId,
+      issuer: bridge.issuer,
+      display_name: bridge.displayName,
+    }),
+  });
+}
+
 async function waitForRealtimeSessionRow(page, options, sessionId) {
   const row = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
   await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
 }
 
-async function waitForGatewayLogEntry(page, options) {
-  await poll('admin realtime gateway log entry', async () => {
-    return await page.locator('[data-testid="admin-log-entry"][data-log-source="gateway"]').count();
-  }, (count) => count > 0, options.connectTimeoutMs);
+async function waitForRealtimeMcpDelegation(page, options) {
+  await openAdminTab(page, 'sessions');
+  await poll('admin realtime MCP delegation state', async () => {
+    return await page.getByTestId('mcp-status').textContent().catch(() => '');
+  }, (status) => status === 'Backend delegated', options.connectTimeoutMs);
 }
 
-async function emitSummary(options, sessionId, log) {
+async function waitForGatewayLogEntry(page, options, ...textParts) {
+  await poll('admin realtime gateway log entry', async () => {
+    const texts = await page.locator('[data-testid="admin-log-entry"][data-log-source="gateway"]').allTextContents();
+    return texts.some((text) => textParts.every((part) => text.includes(part)));
+  }, Boolean, options.connectTimeoutMs);
+}
+
+async function emitSummary(options, sessionId, log, realtimeMcpDelegation) {
   const summary = {
     pageUrl: options.pageUrl,
     sessionId,
     realtimeSessionList: true,
+    realtimeMcpDelegation,
     realtimeLifecycleState: 'stopped',
     realtimeGatewayLogs: true,
   };

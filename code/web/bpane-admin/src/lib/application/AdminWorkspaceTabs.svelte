@@ -49,6 +49,7 @@
     readonly logEntries: readonly AdminLogEntry[];
     readonly sessionFilesRefreshVersion: number;
     readonly recordingsRefreshVersion: number;
+    readonly mcpDelegationRefreshVersion: number;
     readonly onRefreshSessions: () => Promise<void>;
     readonly onCreateSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
@@ -135,6 +136,7 @@
           selectedSession={props.selectedSession}
           sessions={props.sessions}
           mcpBridge={props.mcpBridge}
+          refreshVersion={props.mcpDelegationRefreshVersion}
           onRefreshSessions={props.onRefreshSessions}
           onRefreshSelectedSession={props.onRefreshSelectedSession}
         />

@@ -8,6 +8,7 @@ const SESSIONS_SNAPSHOT_EVENT_TYPE: &str = "sessions.snapshot";
 const WORKFLOW_RUNS_SNAPSHOT_EVENT_TYPE: &str = "workflow_runs.snapshot";
 const SESSION_FILES_SNAPSHOT_EVENT_TYPE: &str = "session_files.snapshot";
 const RECORDINGS_SNAPSHOT_EVENT_TYPE: &str = "recordings.snapshot";
+const MCP_DELEGATION_SNAPSHOT_EVENT_TYPE: &str = "mcp_delegation.snapshot";
 
 #[derive(Debug, Serialize)]
 pub(super) struct AdminSessionsSnapshotEvent {
@@ -63,6 +64,23 @@ struct AdminRecordingsSummary {
     active_count: usize,
     ready_count: usize,
     latest_updated_at: Option<chrono::DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct AdminMcpDelegationSnapshotEvent {
+    event_type: &'static str,
+    sequence: u64,
+    created_at: chrono::DateTime<Utc>,
+    mcp_delegations: Vec<AdminMcpDelegationSummary>,
+}
+
+#[derive(Debug, Serialize)]
+struct AdminMcpDelegationSummary {
+    session_id: Uuid,
+    delegated_client_id: Option<String>,
+    delegated_issuer: Option<String>,
+    mcp_owner: bool,
+    updated_at: chrono::DateTime<Utc>,
 }
 
 pub(super) struct AdminChangedEvent<T> {
@@ -215,6 +233,50 @@ pub(super) async fn build_recordings_snapshot(
     })
 }
 
+pub(super) async fn build_mcp_delegation_snapshot(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    sequence: u64,
+) -> Result<
+    AdminChangedEvent<AdminMcpDelegationSnapshotEvent>,
+    crate::session_control::SessionStoreError,
+> {
+    let mut summaries = Vec::new();
+    for session in state
+        .session_store
+        .list_sessions_for_owner(principal)
+        .await?
+    {
+        let telemetry = state.registry.telemetry_snapshot_if_live(session.id).await;
+        summaries.push(AdminMcpDelegationSummary {
+            session_id: session.id,
+            delegated_client_id: session
+                .automation_delegate
+                .as_ref()
+                .map(|delegate| delegate.client_id.clone()),
+            delegated_issuer: session
+                .automation_delegate
+                .as_ref()
+                .map(|delegate| delegate.issuer.clone()),
+            mcp_owner: telemetry
+                .map(|snapshot| snapshot.mcp_owner)
+                .unwrap_or(false),
+            updated_at: session.updated_at,
+        });
+    }
+    summaries.sort_by_key(|summary| summary.session_id);
+    let change_key = serialized_change_key(&summaries)?;
+    Ok(AdminChangedEvent {
+        event: AdminMcpDelegationSnapshotEvent {
+            event_type: MCP_DELEGATION_SNAPSHOT_EVENT_TYPE,
+            sequence,
+            created_at: Utc::now(),
+            mcp_delegations: summaries,
+        },
+        change_key,
+    })
+}
+
 fn serialized_change_key<T: Serialize>(
     value: &T,
 ) -> Result<Vec<u8>, crate::session_control::SessionStoreError> {
@@ -301,5 +363,29 @@ mod tests {
         .unwrap();
 
         assert_ne!(empty_key, recording_key);
+    }
+
+    #[test]
+    fn mcp_delegation_snapshot_change_key_tracks_delegate() {
+        let session_id = Uuid::nil();
+        let updated_at = Utc::now();
+        let empty_key = serialized_change_key(&vec![AdminMcpDelegationSummary {
+            session_id,
+            delegated_client_id: None,
+            delegated_issuer: None,
+            mcp_owner: false,
+            updated_at,
+        }])
+        .unwrap();
+        let delegated_key = serialized_change_key(&vec![AdminMcpDelegationSummary {
+            session_id,
+            delegated_client_id: Some("bpane-mcp-bridge".to_string()),
+            delegated_issuer: Some("local-compose".to_string()),
+            mcp_owner: false,
+            updated_at,
+        }])
+        .unwrap();
+
+        assert_ne!(empty_key, delegated_key);
     }
 }
