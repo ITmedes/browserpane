@@ -8,12 +8,13 @@
   import AdminSessionSurface from '$lib/application/AdminSessionSurface.svelte';
   import AdminHeader from '$lib/presentation/AdminHeader.svelte';
 
-  let authClient: OidcAuthClient | null = null;
-  let controlClient: ControlClient | null = null;
-  let authConfig: AuthConfig | null = null;
-  let auth: AuthSnapshot | null = null;
-  let authLoading = true;
-  let authError: string | null = null;
+  let authClient = $state<OidcAuthClient | null>(null);
+  let controlClient = $state<ControlClient | null>(null);
+  let authConfig = $state<AuthConfig | null>(null);
+  let auth = $state<AuthSnapshot | null>(null);
+  let authLoading = $state(true);
+  let authError = $state<string | null>(null);
+  let adminOpen = $state(true);
 
   onMount(() => {
     void initialize();
@@ -100,9 +101,12 @@
 <AdminHeader
   {auth}
   {authError}
+  {adminOpen}
   loading={authLoading}
+  showAdminToggle={Boolean(auth?.authenticated && controlClient)}
   onLogin={() => void login()}
   onLogout={() => void logout()}
+  onAdminToggle={() => { adminOpen = !adminOpen; }}
 />
 
 <main class="mx-auto min-h-screen w-[calc(100vw-20px)] max-w-[1680px] pt-[70px] pb-3 sm:w-[calc(100vw-32px)] sm:pt-[72px] sm:pb-4">
@@ -127,6 +131,11 @@
   {/if}
 
   {#if auth?.authenticated && controlClient}
-    <AdminSessionSurface {controlClient} mcpBridge={authConfig?.mcpBridge ?? null} />
+    <AdminSessionSurface
+      {controlClient}
+      {adminOpen}
+      mcpBridge={authConfig?.mcpBridge ?? null}
+      onAdminOpenChange={(open) => { adminOpen = open; }}
+    />
   {/if}
 </main>

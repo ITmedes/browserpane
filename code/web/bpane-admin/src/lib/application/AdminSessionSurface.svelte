@@ -14,8 +14,10 @@
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient;
     readonly mcpBridge: McpBridgeConfig | null;
+    readonly adminOpen: boolean;
+    readonly onAdminOpenChange: (open: boolean) => void;
   };
-  let { controlClient, mcpBridge }: AdminSessionSurfaceProps = $props();
+  let { controlClient, mcpBridge, adminOpen, onAdminOpenChange }: AdminSessionSurfaceProps = $props();
   let browserConnector = $derived(new BrowserSessionConnector({ controlClient }));
   let liveConnection = $state<LiveBrowserSessionConnection | null>(null);
   let sessions = $state<readonly SessionResource[]>([]);
@@ -160,7 +162,7 @@
   }
 </script>
 
-<BrowserWorkspaceOverlayLayout>
+<BrowserWorkspaceOverlayLayout {adminOpen} {onAdminOpenChange}>
   {#snippet browser()}
     <BrowserEmbedPanel
       viewModel={workspaceViewModel.browser}
