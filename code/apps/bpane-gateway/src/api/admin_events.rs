@@ -149,7 +149,7 @@ fn admin_events_token<'a>(headers: &'a HeaderMap, query: &'a AdminEventsQuery) -
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "));
-    header_token.or_else(|| query.access_token.as_deref())
+    header_token.or(query.access_token.as_deref())
 }
 
 #[cfg(test)]
