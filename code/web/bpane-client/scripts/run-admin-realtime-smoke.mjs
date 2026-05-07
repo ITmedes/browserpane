@@ -40,6 +40,8 @@ async function run() {
     await poll('admin realtime stopped state', async () => {
       return await page.getByTestId('session-state').textContent();
     }, (state) => state === 'stopped', options.connectTimeoutMs);
+    await openAdminTab(page, 'logs');
+    await waitForGatewayLogEntry(page, options);
     await emitSummary(options, sessionId, log);
   } finally {
     await cleanupAdminSmoke(page, options, log);
@@ -71,12 +73,19 @@ async function waitForRealtimeSessionRow(page, options, sessionId) {
   await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
 }
 
+async function waitForGatewayLogEntry(page, options) {
+  await poll('admin realtime gateway log entry', async () => {
+    return await page.locator('[data-testid="admin-log-entry"][data-log-source="gateway"]').count();
+  }, (count) => count > 0, options.connectTimeoutMs);
+}
+
 async function emitSummary(options, sessionId, log) {
   const summary = {
     pageUrl: options.pageUrl,
     sessionId,
     realtimeSessionList: true,
     realtimeLifecycleState: 'stopped',
+    realtimeGatewayLogs: true,
   };
   console.log(JSON.stringify(summary, null, 2));
   if (options.outputPath) {
