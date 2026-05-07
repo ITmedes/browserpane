@@ -4,13 +4,15 @@ const JSON_RPC_VERSION = '2.0';
 export class McpStreamableClient {
   #endpointUrl;
   #requestTimeoutMs;
+  #bpaneSessionId;
   #sessionId = '';
   #nextRequestId = 1;
   #protocolVersion = DEFAULT_PROTOCOL_VERSION;
 
-  constructor({ endpointUrl, requestTimeoutMs }) {
+  constructor({ endpointUrl, requestTimeoutMs, bpaneSessionId = '' }) {
     this.#endpointUrl = endpointUrl;
     this.#requestTimeoutMs = requestTimeoutMs;
+    this.#bpaneSessionId = bpaneSessionId;
   }
 
   async initialize() {
@@ -101,6 +103,9 @@ export class McpStreamableClient {
     if (sessionId) {
       headers['mcp-session-id'] = sessionId;
       headers['mcp-protocol-version'] = this.#protocolVersion;
+    }
+    if (this.#bpaneSessionId) {
+      headers['bpane-session-id'] = this.#bpaneSessionId;
     }
     return headers;
   }
