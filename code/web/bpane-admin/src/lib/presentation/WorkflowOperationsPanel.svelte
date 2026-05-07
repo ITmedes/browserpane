@@ -115,6 +115,7 @@
       Operator input JSON
       <textarea
         class="min-h-20 min-w-0 rounded-xl border border-admin-ink/14 bg-admin-cream p-3 font-mono text-xs text-admin-ink"
+        data-testid="workflow-intervention-input"
         value={props.interventionInputText}
         disabled={!props.viewModel.canSubmitInput}
         oninput={(event) => props.onInterventionInputChange(event.currentTarget.value)}
