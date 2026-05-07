@@ -2,7 +2,8 @@ import fs from 'node:fs/promises';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
 import { cleanupAdminBeforeRun, cleanupAdminSmoke, ensureAdminLoggedIn, getAdminAccessToken, openAdminTab } from './admin-smoke-lib.mjs';
-import { DEFAULTS, createLogger, fetchJson, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
+import { appendRunLog, createWorkflow, createWorkflowVersion, issueAutomationAccess, transitionRun } from './admin-workflow-smoke-lib.mjs';
+import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
 
 async function run() {
   const options = parseSmokeArgs(process.argv.slice(2), 'run-admin-workflow-smoke.mjs');
@@ -79,59 +80,20 @@ async function run() {
     await refreshAndWaitForState(page, options, 'succeeded');
     await waitForCount(page, options, 'workflow-log-count', 1);
     await waitForCount(page, options, 'workflow-event-count', 1);
-    await emitSummary(options, { workflowId: workflow.id, version: version.version, runId, sessionId }, log);
+    await openAdminTab(page, 'logs');
+    await waitForWorkflowGatewayLog(page, options);
+    await emitSummary(options, {
+      workflowId: workflow.id,
+      version: version.version,
+      runId,
+      sessionId,
+      workflowGatewayLogs: true,
+    }, log);
   } finally {
     await cleanupAdminSmoke(page, options, log);
     await context.close();
     await browser.close();
   }
-}
-
-async function createWorkflow(accessToken, rootUrl) {
-  return await fetchJson(`${rootUrl}/api/v1/workflows`, {
-    method: 'POST',
-    headers: jsonAuthHeaders(accessToken),
-    body: JSON.stringify({
-      name: `admin-workflow-smoke-${Date.now()}`,
-      description: 'Validate admin workflow operations controls',
-      labels: { suite: 'admin-workflow-smoke' },
-    }),
-  });
-}
-
-async function createWorkflowVersion(accessToken, rootUrl, workflowId) {
-  return await fetchJson(`${rootUrl}/api/v1/workflows/${workflowId}/versions`, {
-    method: 'POST',
-    headers: jsonAuthHeaders(accessToken),
-    body: JSON.stringify({
-      version: 'v1',
-      executor: 'manual',
-      entrypoint: 'workflows/operator/run.mjs',
-    }),
-  });
-}
-
-async function issueAutomationAccess(accessToken, rootUrl, sessionId) {
-  return await fetchJson(`${rootUrl}/api/v1/sessions/${sessionId}/automation-access`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-}
-
-async function transitionRun(token, rootUrl, runId, body) {
-  return await fetchJson(`${rootUrl}/api/v1/workflow-runs/${runId}/state`, {
-    method: 'POST',
-    headers: automationHeaders(token),
-    body: JSON.stringify(body),
-  });
-}
-
-async function appendRunLog(token, rootUrl, runId, message) {
-  return await fetchJson(`${rootUrl}/api/v1/workflow-runs/${runId}/logs`, {
-    method: 'POST',
-    headers: automationHeaders(token),
-    body: JSON.stringify({ stream: 'stdout', message }),
-  });
 }
 
 async function resolveSelectedSessionId(page, options) {
@@ -177,6 +139,18 @@ async function waitForCount(page, options, testId, minimum) {
   }, (value) => Number.isFinite(value) && value >= minimum, options.connectTimeoutMs);
 }
 
+async function waitForWorkflowGatewayLog(page, options) {
+  const workflowLogs = page
+    .locator('[data-testid="admin-log-entry"][data-log-source="gateway"]')
+    .filter({ hasText: 'workflow snapshot' });
+  await poll(
+    'admin workflow gateway log entry',
+    async () => await workflowLogs.count(),
+    (count) => count > 0,
+    options.connectTimeoutMs,
+  );
+}
+
 function parseCount(text) { return Number(text?.match(/\d+/)?.[0] ?? Number.NaN); }
 async function emitSummary(options, summary, log) {
   console.log(JSON.stringify(summary, null, 2));
@@ -184,14 +158,6 @@ async function emitSummary(options, summary, log) {
     await fs.writeFile(options.outputPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
     log(`Wrote summary to ${options.outputPath}`);
   }
-}
-
-function jsonAuthHeaders(accessToken) {
-  return { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
-}
-
-function automationHeaders(token) {
-  return { 'x-bpane-automation-access-token': token, 'Content-Type': 'application/json' };
 }
 
 run().catch((error) => {

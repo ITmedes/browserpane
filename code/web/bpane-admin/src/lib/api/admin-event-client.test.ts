@@ -58,6 +58,26 @@ describe('AdminEventMapper', () => {
     }
   });
 
+  it('maps workflow run snapshot events', () => {
+    const event = AdminEventMapper.toEvent({
+      event_type: 'workflow_runs.snapshot',
+      sequence: 5,
+      created_at: '2026-05-04T19:02:00Z',
+      workflow_runs: [{
+        id: 'run-a',
+        session_id: SESSION.id,
+        state: 'running',
+        updated_at: '2026-05-04T19:01:00Z',
+      }],
+    });
+
+    expect(event.type).toBe('workflow_runs.snapshot');
+    if (event.type === 'workflow_runs.snapshot') {
+      expect(event.workflowRuns[0]?.id).toBe('run-a');
+      expect(event.workflowRuns[0]?.state).toBe('running');
+    }
+  });
+
   it('rejects unsupported event types at the API boundary', () => {
     expect(() =>
       AdminEventMapper.toEvent({
