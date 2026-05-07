@@ -51,15 +51,15 @@
   }
 </script>
 
-<section class="grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden" data-testid="admin-workspace-tabs">
-  <div class="border-b border-admin-ink/10 p-3">
-    <div class="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Admin panels">
+<section class="grid h-full min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden" data-testid="admin-workspace-tabs">
+  <div class="border-b border-[#90a6cc]/18 p-3">
+    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3" role="tablist" aria-label="Admin panels">
       {#each props.workspaceViewModel.panels as panel (panel.id)}
         <button
-          class={`shrink-0 rounded-full border px-3 py-2 text-xs font-extrabold ${
+          class={`min-w-0 truncate rounded-xl border px-3 py-2 text-xs font-bold ${
             activePanelId === panel.id
-              ? 'border-admin-leaf/30 bg-admin-leaf/12 text-admin-leaf'
-              : 'border-admin-ink/10 bg-admin-cream/72 text-admin-ink/62'
+              ? 'border-admin-leaf/40 bg-admin-leaf/14 text-admin-leaf'
+              : 'border-[#90a6cc]/18 bg-[#111e32]/82 text-[#c1d0e8]'
           }`}
           type="button"
           role="tab"
@@ -75,22 +75,23 @@
 
   {#if activePanel}
     <div
-      class="min-h-0 overflow-y-auto p-4"
+      class="min-h-0 min-w-0 overflow-y-auto p-3 sm:p-4"
       role="tabpanel"
       tabindex="0"
       aria-label={activePanel.label}
       data-testid={`workspace-panel-${activePanel.id}`}
     >
-      <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div class="mb-4 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div class="min-w-0">
           <p class="admin-eyebrow">{activePanel.label}</p>
-          <h3 class="m-0 text-lg font-extrabold text-admin-night">{activePanel.title}</h3>
-          <p class="mt-1 mb-0 text-sm leading-normal text-admin-ink/64">{activePanel.description}</p>
+          <h3 class="m-0 text-lg font-bold text-admin-ink">{activePanel.title}</h3>
+          <p class="mt-1 mb-0 text-sm leading-normal text-[#c1d0e8]">{activePanel.description}</p>
         </div>
-        <span class="rounded-full bg-admin-leaf/10 px-3 py-1 text-xs font-extrabold text-admin-leaf">{activePanel.status}</span>
+        <span class="w-fit rounded-xl border border-admin-leaf/25 bg-admin-leaf/10 px-3 py-1 text-xs font-bold text-admin-leaf">{activePanel.status}</span>
       </div>
 
-      {#if activePanel.id === 'sessions'}
+      <div class="min-w-0 overflow-x-auto">
+        {#if activePanel.id === 'sessions'}
         <SessionListPanel
           viewModel={props.sessionListViewModel}
           onRefresh={() => void props.onRefreshSessions()}
@@ -134,6 +135,7 @@
       {:else}
         <FeaturePlaceholderPanel panel={activePanel} />
       {/if}
+      </div>
     </div>
   {/if}
 </section>

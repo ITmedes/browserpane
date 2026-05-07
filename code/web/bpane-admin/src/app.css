@@ -1,23 +1,23 @@
 @import "tailwindcss";
 
 @theme {
-  --color-admin-cream: #fffdf3;
-  --color-admin-ink: #162119;
-  --color-admin-panel: #fffff8;
-  --color-admin-field: #e8f5df;
-  --color-admin-leaf: #417463;
-  --color-admin-warm: #db6b3b;
-  --color-admin-danger: #a33a21;
-  --color-admin-night: #243126;
-  --font-display: "Georgia", "Charter", serif;
+  --color-admin-cream: #0d1522;
+  --color-admin-ink: #eef3ff;
+  --color-admin-panel: #0e1829;
+  --color-admin-field: #16243c;
+  --color-admin-leaf: #4fd1a8;
+  --color-admin-warm: #ffd166;
+  --color-admin-danger: #ff7d7d;
+  --color-admin-night: #08101d;
+  --font-display: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", "Cascadia Code", monospace;
-  --font-sans: "Aptos", "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-sans: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
 }
 
 @layer base {
   :root {
-    color: #182018;
-    background: #eef1df;
+    color: #eef3ff;
+    background: #0d1522;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
   }
@@ -27,9 +27,9 @@
     min-height: 100vh;
     margin: 0;
     background:
-      radial-gradient(circle at 15% 15%, rgb(219 107 59 / 22%), transparent 28rem),
-      radial-gradient(circle at 82% 8%, rgb(65 116 99 / 20%), transparent 24rem),
-      linear-gradient(135deg, #f5f1df 0%, #e7ebd5 48%, #d6dfca 100%);
+      radial-gradient(circle at top left, rgb(79 209 168 / 12%), transparent 32%),
+      radial-gradient(circle at top right, rgb(255 209 102 / 8%), transparent 30%),
+      linear-gradient(180deg, #132238 0%, #0b131f 100%);
   }
 
   * {
@@ -39,19 +39,15 @@
 
 @layer components {
   .admin-panel {
-    @apply mt-[22px] rounded-[24px] border border-admin-ink/12 bg-admin-panel/62 p-6 shadow-[0_18px_48px_rgb(24_32_24_/_8%)];
+    @apply mt-[22px] rounded-2xl border border-[#90a6cc]/20 bg-admin-panel/90 p-6 shadow-[0_24px_64px_rgb(0_0_0_/_34%)];
   }
 
   .admin-header {
     @apply flex items-center justify-between gap-3 max-[860px]:flex-col max-[860px]:items-stretch;
   }
 
-  .admin-header-link {
-    @apply rounded-full border border-admin-ink/12 bg-admin-panel/70 px-3 py-1 text-xs font-extrabold text-admin-ink/70 no-underline;
-  }
-
   .admin-header-button {
-    @apply min-h-8 cursor-pointer rounded-full border border-admin-ink/18 bg-admin-night px-3 text-xs font-extrabold text-admin-cream disabled:cursor-not-allowed disabled:opacity-45;
+    @apply min-h-8 cursor-pointer rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-xs font-bold text-admin-ink shadow-sm disabled:cursor-not-allowed disabled:opacity-45;
   }
 
   .admin-actions {
@@ -59,7 +55,7 @@
   }
 
   .admin-eyebrow {
-    @apply m-0 mb-2 text-xs font-extrabold tracking-[0.16em] text-admin-leaf uppercase;
+    @apply m-0 mb-2 text-xs font-bold tracking-[0.16em] text-[#9fb1cf] uppercase;
   }
 
   .admin-eyebrow-warm {
@@ -71,23 +67,23 @@
   }
 
   .admin-section-title {
-    @apply m-0 text-xl font-bold text-admin-night;
+    @apply m-0 text-xl font-bold text-admin-ink;
   }
 
   .admin-button-primary {
-    @apply min-h-10 cursor-pointer rounded-full border border-admin-ink/18 bg-admin-night px-3.5 font-extrabold text-admin-cream disabled:cursor-not-allowed disabled:opacity-45;
+    @apply min-h-10 cursor-pointer rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3.5 font-bold text-admin-ink transition hover:border-[#90a6cc]/30 hover:bg-[#1d2e4b] disabled:cursor-not-allowed disabled:opacity-45;
   }
 
   .admin-button-light {
-    @apply min-h-10 cursor-pointer rounded-full border border-admin-cream/20 bg-admin-cream px-3.5 font-extrabold text-admin-ink disabled:cursor-not-allowed disabled:opacity-45;
+    @apply min-h-10 cursor-pointer rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3.5 font-bold text-admin-ink transition hover:border-[#90a6cc]/30 hover:bg-[#1d2e4b] disabled:cursor-not-allowed disabled:opacity-45;
   }
 
   .admin-button-ghost {
-    @apply inline-flex min-h-[42px] cursor-pointer items-center rounded-full border border-admin-ink/18 bg-admin-panel/84 px-4 font-extrabold text-admin-ink no-underline;
+    @apply inline-flex min-h-[42px] cursor-pointer items-center rounded-xl border border-[#90a6cc]/20 bg-admin-panel/80 px-4 font-bold text-admin-ink no-underline;
   }
 
   .admin-empty {
-    @apply mt-[18px] mb-0 text-admin-ink/68 leading-normal;
+    @apply mt-[18px] mb-0 text-[#c1d0e8] leading-normal;
   }
 
   .admin-empty-spacious {
