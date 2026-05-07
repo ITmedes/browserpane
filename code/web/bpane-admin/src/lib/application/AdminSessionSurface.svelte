@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onMount } from 'svelte';
+  import type { AdminEventClient } from '../api/admin-event-client';
   import type { ControlClient } from '../api/control-client';
   import type { SessionResource } from '../api/control-types';
   import type { McpBridgeConfig } from '../auth/auth-config';
@@ -13,11 +14,12 @@
 
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient;
+    readonly adminEventClient: AdminEventClient;
     readonly mcpBridge: McpBridgeConfig | null;
     readonly adminOpen: boolean;
     readonly onAdminOpenChange: (open: boolean) => void;
   };
-  let { controlClient, mcpBridge, adminOpen, onAdminOpenChange }: AdminSessionSurfaceProps = $props();
+  let { controlClient, adminEventClient, mcpBridge, adminOpen, onAdminOpenChange }: AdminSessionSurfaceProps = $props();
   let browserConnector = $derived(new BrowserSessionConnector({ controlClient }));
   let liveConnection = $state<LiveBrowserSessionConnection | null>(null);
   let sessions = $state<readonly SessionResource[]>([]);
@@ -45,14 +47,26 @@
     error: sessionsError,
   }));
   const sessionDetailViewModel = $derived(SessionViewModelBuilder.detail({
-    session: selectedSession,
-    connected: browserConnected,
-    loading: sessionsLoading,
-    error: sessionsError,
+    session: selectedSession, connected: browserConnected,
+    loading: sessionsLoading, error: sessionsError,
   }));
 
-  onMount(() => { void loadSessions(); });
-  onDestroy(() => { disconnectBrowser(false); });
+  onMount(() => {
+    const subscription = adminEventClient.subscribe({
+      onEvent: (event) => {
+        if (event.type === 'sessions.snapshot') {
+          sessionsLoading = false;
+          sessionsError = null;
+          setSessionList(event.sessions);
+        } else {
+          sessionsError = event.error;
+        }
+      },
+      onError: (error) => { sessionsError = errorMessage(error); },
+    });
+    void loadSessions();
+    return () => { subscription.close(); disconnectBrowser(false); };
+  });
 
   async function loadSessions(): Promise<void> {
     sessionsLoading = true;
@@ -165,33 +179,20 @@
 <BrowserWorkspaceOverlayLayout {adminOpen} {onAdminOpenChange}>
   {#snippet browser()}
     <BrowserEmbedPanel
-      viewModel={workspaceViewModel.browser}
-      session={selectedSession}
-      connectedSessionId={liveConnection?.sessionId ?? null}
-      connecting={browserConnecting}
-      error={browserError}
+      viewModel={workspaceViewModel.browser} session={selectedSession}
+      connectedSessionId={liveConnection?.sessionId ?? null} connecting={browserConnecting} error={browserError}
       onConnect={(container) => void connectBrowser(container)}
       onDisconnect={() => disconnectBrowser(true)}
     />
   {/snippet}
   {#snippet admin()}
     <AdminWorkspaceTabs
-      {controlClient}
-      {selectedSession}
-      {sessions}
-      {mcpBridge}
-      {liveConnection}
-      {browserPreferences}
-      {browserConnected}
-      {workspaceViewModel}
-      {sessionListViewModel}
-      {sessionDetailViewModel}
-      onRefreshSessions={loadSessions}
-      onCreateSession={() => void createSession()}
-      onSelectSessionId={selectSession}
-      onRefreshSelectedSession={refreshSelectedSession}
-      onStopSession={() => void runLifecycle('stop')}
-      onKillSession={() => void runLifecycle('kill')}
+      {controlClient} {selectedSession} {sessions} {mcpBridge}
+      {liveConnection} {browserPreferences} {browserConnected}
+      {workspaceViewModel} {sessionListViewModel} {sessionDetailViewModel}
+      onRefreshSessions={loadSessions} onCreateSession={() => void createSession()}
+      onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
+      onStopSession={() => void runLifecycle('stop')} onKillSession={() => void runLifecycle('kill')}
       onFileCountChange={(count) => { sessionFileCount = count; }}
       onBrowserPreferencesChange={(next) => { browserPreferences = next; }}
     />

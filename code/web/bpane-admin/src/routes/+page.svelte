@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { AdminEventClient } from '$lib/api/admin-event-client';
   import { ControlClient } from '$lib/api/control-client';
   import { AuthConfigClient, type AuthConfig } from '$lib/auth/auth-config';
   import { BrowserTokenStore } from '$lib/auth/browser-token-store';
@@ -10,6 +11,7 @@
 
   let authClient = $state<OidcAuthClient | null>(null);
   let controlClient = $state<ControlClient | null>(null);
+  let adminEventClient = $state<AdminEventClient | null>(null);
   let authConfig = $state<AuthConfig | null>(null);
   let auth = $state<AuthSnapshot | null>(null);
   let authLoading = $state(true);
@@ -60,6 +62,7 @@
     const logoutUrl = await authClient.buildLogoutUrl(new URL(window.location.href));
     auth = authClient.getSnapshot();
     controlClient = null;
+    adminEventClient = null;
     if (logoutUrl) {
       window.location.href = logoutUrl;
     }
@@ -79,14 +82,20 @@
     }
     controlClient = new ControlClient({
       baseUrl: window.location.origin,
-      accessTokenProvider: async () => {
-        const token = await authClient?.getValidAccessToken();
-        if (!token) {
-          throw new Error('No active admin access token');
-        }
-        return token;
-      },
+      accessTokenProvider: requireAccessToken,
     });
+    adminEventClient = new AdminEventClient({
+      baseUrl: window.location.origin,
+      accessTokenProvider: requireAccessToken,
+    });
+  }
+
+  async function requireAccessToken(): Promise<string> {
+    const token = await authClient?.getValidAccessToken();
+    if (!token) {
+      throw new Error('No active admin access token');
+    }
+    return token;
   }
 
   function errorMessage(error: unknown): string {
@@ -130,9 +139,10 @@
     </section>
   {/if}
 
-  {#if auth?.authenticated && controlClient}
+  {#if auth?.authenticated && controlClient && adminEventClient}
     <AdminSessionSurface
       {controlClient}
+      {adminEventClient}
       {adminOpen}
       mcpBridge={authConfig?.mcpBridge ?? null}
       onAdminOpenChange={(open) => { adminOpen = open; }}
