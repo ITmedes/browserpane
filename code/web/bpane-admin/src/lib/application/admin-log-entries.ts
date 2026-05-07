@@ -54,6 +54,16 @@ export class AdminLogEntryFactory {
         message: `Gateway recording snapshot #${event.sequence}: ${recordingCount} segments, ${activeCount} active.`,
       });
     }
+    if (event.type === 'mcp_delegation.snapshot') {
+      const delegatedCount = event.delegations.filter((entry) => entry.delegatedClientId).length;
+      const mcpOwnerCount = event.delegations.filter((entry) => entry.mcpOwner).length;
+      return entry({
+        timestamp: event.createdAt,
+        level: 'info',
+        source: 'gateway',
+        message: `Gateway MCP delegation snapshot #${event.sequence}: ${delegatedCount} delegated, ${mcpOwnerCount} MCP-owned.`,
+      });
+    }
     return entry({
       timestamp: event.createdAt,
       level: 'warn',

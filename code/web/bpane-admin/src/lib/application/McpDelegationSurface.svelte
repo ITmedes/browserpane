@@ -12,6 +12,7 @@
     readonly selectedSession: SessionResource | null;
     readonly sessions: readonly SessionResource[];
     readonly mcpBridge: McpBridgeConfig | null;
+    readonly refreshVersion: number;
     readonly onRefreshSessions: () => Promise<void>;
     readonly onRefreshSelectedSession: () => Promise<void>;
   };
@@ -21,10 +22,12 @@
     selectedSession,
     sessions,
     mcpBridge,
+    refreshVersion,
     onRefreshSessions,
     onRefreshSelectedSession,
   }: McpDelegationSurfaceProps = $props();
   let currentKey = $state('');
+  let lastRefreshVersion = $state(0);
   let health = $state<McpBridgeHealth | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -45,6 +48,16 @@
     currentKey = nextKey;
     health = null;
     error = null;
+    if (bridgeClient) {
+      void refreshBridge();
+    }
+  });
+
+  $effect(() => {
+    if (refreshVersion === lastRefreshVersion) {
+      return;
+    }
+    lastRefreshVersion = refreshVersion;
     if (bridgeClient) {
       void refreshBridge();
     }

@@ -1,20 +1,24 @@
-import { ControlSessionMapper } from './control-session-mapper';
-import type { SessionResource } from './control-types';
 import { expectNumber, expectRecord, expectString } from './control-wire';
+import {
+  type AdminMcpDelegationSnapshotEvent,
+  type AdminRecordingsSnapshotEvent,
+  type AdminSessionFilesSnapshotEvent,
+  type AdminSessionsSnapshotEvent,
+  type AdminWorkflowRunsSnapshotEvent,
+  toMcpDelegationSnapshotEvent,
+  toRecordingsSnapshotEvent,
+  toSessionFilesSnapshotEvent,
+  toSessionsSnapshotEvent,
+  toWorkflowRunsSnapshotEvent,
+} from './admin-event-snapshots';
 
 export type AdminEventType =
   | 'sessions.snapshot'
   | 'workflow_runs.snapshot'
   | 'session_files.snapshot'
   | 'recordings.snapshot'
+  | 'mcp_delegation.snapshot'
   | 'admin.error';
-
-export type AdminSessionsSnapshotEvent = {
-  readonly type: 'sessions.snapshot';
-  readonly sequence: number;
-  readonly createdAt: string;
-  readonly sessions: readonly SessionResource[];
-};
 
 export type AdminErrorEvent = {
   readonly type: 'admin.error';
@@ -23,53 +27,12 @@ export type AdminErrorEvent = {
   readonly error: string;
 };
 
-export type AdminWorkflowRunSnapshot = {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly state: string;
-  readonly updatedAt: string;
-};
-
-export type AdminWorkflowRunsSnapshotEvent = {
-  readonly type: 'workflow_runs.snapshot';
-  readonly sequence: number;
-  readonly createdAt: string;
-  readonly workflowRuns: readonly AdminWorkflowRunSnapshot[];
-};
-
-export type AdminSessionFilesSnapshot = {
-  readonly sessionId: string;
-  readonly fileCount: number;
-  readonly latestUpdatedAt: string | null;
-};
-
-export type AdminSessionFilesSnapshotEvent = {
-  readonly type: 'session_files.snapshot';
-  readonly sequence: number;
-  readonly createdAt: string;
-  readonly sessionFiles: readonly AdminSessionFilesSnapshot[];
-};
-
-export type AdminRecordingsSnapshot = {
-  readonly sessionId: string;
-  readonly recordingCount: number;
-  readonly activeCount: number;
-  readonly readyCount: number;
-  readonly latestUpdatedAt: string | null;
-};
-
-export type AdminRecordingsSnapshotEvent = {
-  readonly type: 'recordings.snapshot';
-  readonly sequence: number;
-  readonly createdAt: string;
-  readonly recordings: readonly AdminRecordingsSnapshot[];
-};
-
 export type AdminEvent =
   | AdminSessionsSnapshotEvent
   | AdminWorkflowRunsSnapshotEvent
   | AdminSessionFilesSnapshotEvent
   | AdminRecordingsSnapshotEvent
+  | AdminMcpDelegationSnapshotEvent
   | AdminErrorEvent;
 
 export class AdminEventMapper {
@@ -88,24 +51,14 @@ export class AdminEventMapper {
     if (eventType === 'recordings.snapshot') {
       return toRecordingsSnapshotEvent(object);
     }
+    if (eventType === 'mcp_delegation.snapshot') {
+      return toMcpDelegationSnapshotEvent(object);
+    }
     if (eventType === 'admin.error') {
       return toAdminErrorEvent(object);
     }
     throw new Error(`unsupported admin event type: ${eventType}`);
   }
-}
-
-function toSessionsSnapshotEvent(object: Record<string, unknown>): AdminSessionsSnapshotEvent {
-  const sessions = object.sessions;
-  if (!Array.isArray(sessions)) {
-    throw new Error('sessions.snapshot event sessions must be an array');
-  }
-  return {
-    type: 'sessions.snapshot',
-    sequence: expectNumber(object.sequence, 'sessions.snapshot event sequence'),
-    createdAt: expectString(object.created_at, 'sessions.snapshot event created_at'),
-    sessions: sessions.map((session) => ControlSessionMapper.toSessionResource(session)),
-  };
 }
 
 function toAdminErrorEvent(object: Record<string, unknown>): AdminErrorEvent {
@@ -114,78 +67,5 @@ function toAdminErrorEvent(object: Record<string, unknown>): AdminErrorEvent {
     sequence: expectNumber(object.sequence, 'admin.error event sequence'),
     createdAt: expectString(object.created_at, 'admin.error event created_at'),
     error: expectString(object.error, 'admin.error event error'),
-  };
-}
-
-function toWorkflowRunsSnapshotEvent(object: Record<string, unknown>): AdminWorkflowRunsSnapshotEvent {
-  const workflowRuns = object.workflow_runs;
-  if (!Array.isArray(workflowRuns)) {
-    throw new Error('workflow_runs.snapshot event workflow_runs must be an array');
-  }
-  return {
-    type: 'workflow_runs.snapshot',
-    sequence: expectNumber(object.sequence, 'workflow_runs.snapshot event sequence'),
-    createdAt: expectString(object.created_at, 'workflow_runs.snapshot event created_at'),
-    workflowRuns: workflowRuns.map(toWorkflowRunSnapshot),
-  };
-}
-
-function toWorkflowRunSnapshot(payload: unknown): AdminWorkflowRunSnapshot {
-  const object = expectRecord(payload, 'workflow run snapshot');
-  return {
-    id: expectString(object.id, 'workflow run snapshot id'),
-    sessionId: expectString(object.session_id, 'workflow run snapshot session_id'),
-    state: expectString(object.state, 'workflow run snapshot state'),
-    updatedAt: expectString(object.updated_at, 'workflow run snapshot updated_at'),
-  };
-}
-
-function toSessionFilesSnapshotEvent(object: Record<string, unknown>): AdminSessionFilesSnapshotEvent {
-  const sessionFiles = object.session_files;
-  if (!Array.isArray(sessionFiles)) {
-    throw new Error('session_files.snapshot event session_files must be an array');
-  }
-  return {
-    type: 'session_files.snapshot',
-    sequence: expectNumber(object.sequence, 'session_files.snapshot event sequence'),
-    createdAt: expectString(object.created_at, 'session_files.snapshot event created_at'),
-    sessionFiles: sessionFiles.map(toSessionFilesSnapshot),
-  };
-}
-
-function toSessionFilesSnapshot(payload: unknown): AdminSessionFilesSnapshot {
-  const object = expectRecord(payload, 'session files snapshot');
-  return {
-    sessionId: expectString(object.session_id, 'session files snapshot session_id'),
-    fileCount: expectNumber(object.file_count, 'session files snapshot file_count'),
-    latestUpdatedAt: object.latest_updated_at === null
-      ? null
-      : expectString(object.latest_updated_at, 'session files snapshot latest_updated_at'),
-  };
-}
-
-function toRecordingsSnapshotEvent(object: Record<string, unknown>): AdminRecordingsSnapshotEvent {
-  const recordings = object.recordings;
-  if (!Array.isArray(recordings)) {
-    throw new Error('recordings.snapshot event recordings must be an array');
-  }
-  return {
-    type: 'recordings.snapshot',
-    sequence: expectNumber(object.sequence, 'recordings.snapshot event sequence'),
-    createdAt: expectString(object.created_at, 'recordings.snapshot event created_at'),
-    recordings: recordings.map(toRecordingsSnapshot),
-  };
-}
-
-function toRecordingsSnapshot(payload: unknown): AdminRecordingsSnapshot {
-  const object = expectRecord(payload, 'recordings snapshot');
-  return {
-    sessionId: expectString(object.session_id, 'recordings snapshot session_id'),
-    recordingCount: expectNumber(object.recording_count, 'recordings snapshot recording_count'),
-    activeCount: expectNumber(object.active_count, 'recordings snapshot active_count'),
-    readyCount: expectNumber(object.ready_count, 'recordings snapshot ready_count'),
-    latestUpdatedAt: object.latest_updated_at === null
-      ? null
-      : expectString(object.latest_updated_at, 'recordings snapshot latest_updated_at'),
   };
 }

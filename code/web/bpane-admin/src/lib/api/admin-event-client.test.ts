@@ -118,6 +118,27 @@ describe('AdminEventMapper', () => {
     }
   });
 
+  it('maps MCP delegation snapshot events', () => {
+    const event = AdminEventMapper.toEvent({
+      event_type: 'mcp_delegation.snapshot',
+      sequence: 8,
+      created_at: '2026-05-04T19:02:00Z',
+      mcp_delegations: [{
+        session_id: SESSION.id,
+        delegated_client_id: 'bpane-mcp-bridge',
+        delegated_issuer: 'local-compose',
+        mcp_owner: true,
+        updated_at: '2026-05-04T19:01:00Z',
+      }],
+    });
+
+    expect(event.type).toBe('mcp_delegation.snapshot');
+    if (event.type === 'mcp_delegation.snapshot') {
+      expect(event.delegations[0]?.sessionId).toBe(SESSION.id);
+      expect(event.delegations[0]?.mcpOwner).toBe(true);
+    }
+  });
+
   it('rejects unsupported event types at the API boundary', () => {
     expect(() =>
       AdminEventMapper.toEvent({

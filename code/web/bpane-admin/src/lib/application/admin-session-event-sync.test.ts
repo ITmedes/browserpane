@@ -97,6 +97,33 @@ describe('subscribeAdminSessionEvents', () => {
 
     expect(refreshes).toBe(1);
   });
+
+  it('notifies panel refresh boundaries when MCP delegation changes', () => {
+    const client = new FakeAdminEventClient();
+    let refreshes = 0;
+
+    subscribeAdminSessionEvents(client as never, {
+      onSessions: () => undefined,
+      onLoadingChange: () => undefined,
+      onError: () => undefined,
+      onLog: () => undefined,
+      onMcpDelegationSnapshot: () => { refreshes += 1; },
+    });
+    client.handlers.onEvent({
+      type: 'mcp_delegation.snapshot',
+      sequence: 6,
+      createdAt: '2026-05-04T19:02:00Z',
+      delegations: [{
+        sessionId: 'session-a',
+        delegatedClientId: 'bpane-mcp-bridge',
+        delegatedIssuer: 'local-compose',
+        mcpOwner: false,
+        updatedAt: '2026-05-04T19:01:00Z',
+      }],
+    });
+
+    expect(refreshes).toBe(1);
+  });
 });
 
 class FakeAdminEventClient implements Pick<AdminEventClient, 'subscribe'> {

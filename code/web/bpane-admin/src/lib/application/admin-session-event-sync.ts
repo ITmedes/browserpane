@@ -10,6 +10,7 @@ type AdminSessionEventSyncHandlers = {
   readonly onLog: (entry: AdminLogEntry) => void;
   readonly onSessionFilesSnapshot?: () => void;
   readonly onRecordingsSnapshot?: () => void;
+  readonly onMcpDelegationSnapshot?: () => void;
 };
 
 export function subscribeAdminSessionEvents(
@@ -29,6 +30,8 @@ export function subscribeAdminSessionEvents(
         handlers.onSessionFilesSnapshot?.();
       } else if (event.type === 'recordings.snapshot') {
         handlers.onRecordingsSnapshot?.();
+      } else if (event.type === 'mcp_delegation.snapshot') {
+        handlers.onMcpDelegationSnapshot?.();
       }
     },
     onStatus: (status) => handlers.onLog(AdminLogEntryFactory.fromConnectionStatus(status)),

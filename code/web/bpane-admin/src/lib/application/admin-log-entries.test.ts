@@ -83,6 +83,33 @@ describe('AdminLogEntryFactory', () => {
     expect(entry.message).toBe('Gateway recording snapshot #10: 2 segments, 1 active.');
   });
 
+  it('turns MCP delegation snapshot events into gateway log entries', () => {
+    const entry = AdminLogEntryFactory.fromAdminEvent({
+      type: 'mcp_delegation.snapshot',
+      sequence: 11,
+      createdAt: NOW.toISOString(),
+      delegations: [
+        {
+          sessionId: 'session-a',
+          delegatedClientId: 'bpane-mcp-bridge',
+          delegatedIssuer: 'local-compose',
+          mcpOwner: true,
+          updatedAt: NOW.toISOString(),
+        },
+        {
+          sessionId: 'session-b',
+          delegatedClientId: null,
+          delegatedIssuer: null,
+          mcpOwner: false,
+          updatedAt: NOW.toISOString(),
+        },
+      ],
+    });
+
+    expect(entry.source).toBe('gateway');
+    expect(entry.message).toBe('Gateway MCP delegation snapshot #11: 1 delegated, 1 MCP-owned.');
+  });
+
   it('bounds appended log history to newest entries', () => {
     const entries = Array.from({ length: 121 }, (_, index) =>
       AdminLogEntryFactory.fromConnectionStatus('open', {
