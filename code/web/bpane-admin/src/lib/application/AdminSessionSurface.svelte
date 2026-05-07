@@ -6,11 +6,14 @@
   import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
   import BrowserEmbedPanel from '../presentation/BrowserEmbedPanel.svelte';
+  import type { AdminLogEntry } from '../presentation/logs-view-model';
   import { AdminWorkspaceViewModelBuilder } from '../presentation/admin-workspace-view-model';
   import { SessionViewModelBuilder } from '../presentation/session-view-model';
   import { BrowserSessionConnector } from '../session/browser-session-connector';
   import { DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES, type BrowserSessionConnectPreferences, type LiveBrowserSessionConnection } from '../session/browser-session-types';
   import AdminWorkspaceTabs from './AdminWorkspaceTabs.svelte';
+  import { AdminLogEntryFactory } from './admin-log-entries';
+  import { subscribeAdminSessionEvents } from './admin-session-event-sync';
   import BrowserWorkspaceOverlayLayout from './BrowserWorkspaceOverlayLayout.svelte';
 
   type AdminSessionSurfaceProps = {
@@ -30,6 +33,8 @@
   let browserError = $state<string | null>(null);
   let browserStatus = $state('Disconnected');
   let sessionFileCount = $state(0);
+  let logEntries = $state<readonly AdminLogEntry[]>([]);
+  let lastLogSignature = $state('');
   let browserPreferences = $state<BrowserSessionConnectPreferences>({ ...DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES });
   const browserConnected = $derived(Boolean(liveConnection && liveConnection.sessionId === selectedSession?.id));
   const workspaceViewModel = $derived(AdminWorkspaceViewModelBuilder.build({
@@ -51,18 +56,20 @@
     loading: sessionsLoading, error: sessionsError,
   }));
 
+  $effect(() => {
+    const signature = `${selectedSession?.id ?? 'none'}:${selectedSession?.state ?? 'none'}:${browserConnected}:${sessions.length}`;
+    if (signature !== lastLogSignature) {
+      lastLogSignature = signature;
+      appendLog(AdminLogEntryFactory.fromUiState({ selectedSession, browserConnected, sessionCount: sessions.length }));
+    }
+  });
+
   onMount(() => {
-    const subscription = adminEventClient.subscribe({
-      onEvent: (event) => {
-        if (event.type === 'sessions.snapshot') {
-          sessionsLoading = false;
-          sessionsError = null;
-          setSessionList(event.sessions);
-        } else {
-          sessionsError = event.error;
-        }
-      },
-      onError: (error) => { sessionsError = errorMessage(error); },
+    const subscription = subscribeAdminSessionEvents(adminEventClient, {
+      onSessions: setSessionList,
+      onLoadingChange: (loading) => { sessionsLoading = loading; },
+      onError: (error) => { sessionsError = error; },
+      onLog: appendLog,
     });
     void loadSessions();
     return () => { subscription.close(); disconnectBrowser(false); };
@@ -171,6 +178,10 @@
     selectedSession = sessions.find((session) => session.id === sessionId) ?? selectedSession;
   }
 
+  function appendLog(entry: AdminLogEntry): void {
+    logEntries = AdminLogEntryFactory.append(logEntries, entry);
+  }
+
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'Unexpected admin console error';
   }
@@ -189,11 +200,12 @@
     <AdminWorkspaceTabs
       {controlClient} {workflowClient} {selectedSession} {sessions} {mcpBridge}
       {liveConnection} {browserPreferences} {browserConnected}
-      {workspaceViewModel} {sessionListViewModel} {sessionDetailViewModel}
+      {workspaceViewModel} {sessionListViewModel} {sessionDetailViewModel} {logEntries}
       onRefreshSessions={loadSessions} onCreateSession={() => void createSession()}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
       onStopSession={() => void runLifecycle('stop')} onKillSession={() => void runLifecycle('kill')}
       onFileCountChange={(count) => { sessionFileCount = count; }}
+      onClearLogs={() => { logEntries = []; }}
       onBrowserPreferencesChange={(next) => { browserPreferences = next; }}
     />
   {/snippet}

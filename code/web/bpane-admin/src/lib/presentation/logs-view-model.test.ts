@@ -6,6 +6,7 @@ describe('AdminLogsViewModelBuilder', () => {
     const viewModel = AdminLogsViewModelBuilder.build([]);
 
     expect(viewModel.countLabel).toBe('0 events');
+    expect(viewModel.sourceLabel).toBe('0 gateway / 0 local');
     expect(viewModel.canCopy).toBe(false);
     expect(viewModel.canClear).toBe(false);
   });
@@ -15,10 +16,12 @@ describe('AdminLogsViewModelBuilder', () => {
       id: 'entry-1',
       timestamp: '12:00:00',
       level: 'info',
+      source: 'gateway',
       message: 'Selected session session-a',
     }]);
 
     expect(viewModel.countLabel).toBe('1 events');
+    expect(viewModel.sourceLabel).toBe('1 gateway / 0 local');
     expect(viewModel.canCopy).toBe(true);
     expect(viewModel.canClear).toBe(true);
   });

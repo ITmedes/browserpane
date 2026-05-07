@@ -22,6 +22,7 @@
     type AdminFeaturePanelViewModel,
     type AdminWorkspaceViewModel,
   } from '../presentation/admin-workspace-view-model';
+  import type { AdminLogEntry } from '../presentation/logs-view-model';
   import type { SessionDetailPanelViewModel, SessionListPanelViewModel } from '../presentation/session-view-model';
   import type { BrowserSessionConnectPreferences, LiveBrowserSessionConnection } from '../session/browser-session-types';
   import BrowserPolicySurface from './BrowserPolicySurface.svelte';
@@ -45,6 +46,7 @@
     readonly workspaceViewModel: AdminWorkspaceViewModel;
     readonly sessionListViewModel: SessionListPanelViewModel;
     readonly sessionDetailViewModel: SessionDetailPanelViewModel;
+    readonly logEntries: readonly AdminLogEntry[];
     readonly onRefreshSessions: () => Promise<void>;
     readonly onCreateSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
@@ -52,6 +54,7 @@
     readonly onStopSession: () => void;
     readonly onKillSession: () => void;
     readonly onFileCountChange: (count: number) => void;
+    readonly onClearLogs: () => void;
     readonly onBrowserPreferencesChange: (preferences: BrowserSessionConnectPreferences) => void;
   };
 
@@ -160,7 +163,7 @@
       {:else if activePanel.id === 'metrics'}
         <MetricsSurface liveConnection={props.liveConnection} />
       {:else if activePanel.id === 'logs'}
-        <LogsSurface selectedSession={props.selectedSession} browserConnected={props.browserConnected} sessionCount={props.sessions.length} />
+        <LogsSurface entries={props.logEntries} onClear={props.onClearLogs} />
       {:else if activePanel.id === 'workflows'}
         <WorkflowOperationsSurface workflowClient={props.workflowClient} selectedSession={props.selectedSession} />
       {:else}
