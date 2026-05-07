@@ -1,5 +1,6 @@
 import { ControlSessionMapper } from './control-session-mapper';
 import { ControlSessionFileMapper } from './control-session-file-mapper';
+import { RecordingMapper } from './recording-mapper';
 import type {
   CreateSessionCommand,
   SessionAccessTokenResponse,
@@ -9,6 +10,11 @@ import type {
   SessionResource,
   SetAutomationDelegateCommand,
 } from './control-types';
+import type {
+  SessionRecordingListResponse,
+  SessionRecordingPlaybackResource,
+  SessionRecordingResource,
+} from './recording-types';
 
 export type AccessTokenProvider = () => Promise<string> | string;
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -110,6 +116,34 @@ export class ControlClient {
 
   async downloadSessionFileContent(file: SessionFileResource): Promise<Blob> {
     const response = await this.#send('GET', file.content_path, undefined, '*/*');
+    return await response.blob();
+  }
+
+  async listSessionRecordings(sessionId: string): Promise<SessionRecordingListResponse> {
+    const payload = await this.#request(
+      'GET',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/recordings`,
+    );
+    return RecordingMapper.toRecordingList(payload);
+  }
+
+  async getSessionRecordingPlayback(sessionId: string): Promise<SessionRecordingPlaybackResource> {
+    const payload = await this.#request(
+      'GET',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/recording-playback`,
+    );
+    return RecordingMapper.toPlayback(payload);
+  }
+
+  async downloadSessionRecordingContent(recording: SessionRecordingResource): Promise<Blob> {
+    const response = await this.#send('GET', recording.content_path, undefined, '*/*');
+    return await response.blob();
+  }
+
+  async downloadSessionRecordingPlaybackExport(
+    playback: SessionRecordingPlaybackResource,
+  ): Promise<Blob> {
+    const response = await this.#send('GET', playback.export_path, undefined, 'application/zip');
     return await response.blob();
   }
 
