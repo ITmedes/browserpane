@@ -35,6 +35,15 @@ export class AdminLogEntryFactory {
         message: `Gateway workflow snapshot #${event.sequence}: ${event.workflowRuns.length} runs, ${active} active.`,
       });
     }
+    if (event.type === 'session_files.snapshot') {
+      const fileCount = event.sessionFiles.reduce((sum, session) => sum + session.fileCount, 0);
+      return entry({
+        timestamp: event.createdAt,
+        level: 'info',
+        source: 'gateway',
+        message: `Gateway session file snapshot #${event.sequence}: ${fileCount} files across ${event.sessionFiles.length} sessions.`,
+      });
+    }
     return entry({
       timestamp: event.createdAt,
       level: 'warn',

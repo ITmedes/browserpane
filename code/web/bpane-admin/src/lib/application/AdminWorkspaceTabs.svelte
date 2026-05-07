@@ -47,6 +47,7 @@
     readonly sessionListViewModel: SessionListPanelViewModel;
     readonly sessionDetailViewModel: SessionDetailPanelViewModel;
     readonly logEntries: readonly AdminLogEntry[];
+    readonly sessionFilesRefreshVersion: number;
     readonly onRefreshSessions: () => Promise<void>;
     readonly onCreateSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
@@ -144,7 +145,12 @@
           onKill={props.onKillSession}
         />
       {:else if activePanel.id === 'files'}
-        <SessionFilesSurface controlClient={props.controlClient} session={props.selectedSession} onFileCountChange={props.onFileCountChange} />
+        <SessionFilesSurface
+          controlClient={props.controlClient}
+          session={props.selectedSession}
+          refreshVersion={props.sessionFilesRefreshVersion}
+          onFileCountChange={props.onFileCountChange}
+        />
       {:else if activePanel.id === 'display'}
         <DisplayControlsSurface
           liveConnection={props.liveConnection}

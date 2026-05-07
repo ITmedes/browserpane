@@ -7,11 +7,13 @@
   type SessionFilesSurfaceProps = {
     readonly controlClient: ControlClient;
     readonly session: SessionResource | null;
+    readonly refreshVersion: number;
     readonly onFileCountChange?: (count: number) => void;
   };
 
-  let { controlClient, session, onFileCountChange }: SessionFilesSurfaceProps = $props();
+  let { controlClient, session, refreshVersion, onFileCountChange }: SessionFilesSurfaceProps = $props();
   let currentSessionId = $state<string | null>(null);
+  let lastRefreshVersion = $state(0);
   let files = $state<readonly SessionFileResource[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -28,6 +30,16 @@
     error = null;
     if (nextSessionId) {
       void loadFiles(nextSessionId);
+    }
+  });
+
+  $effect(() => {
+    if (refreshVersion === lastRefreshVersion) {
+      return;
+    }
+    lastRefreshVersion = refreshVersion;
+    if (currentSessionId) {
+      void loadFiles(currentSessionId);
     }
   });
 

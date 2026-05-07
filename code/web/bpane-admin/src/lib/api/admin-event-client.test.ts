@@ -78,6 +78,25 @@ describe('AdminEventMapper', () => {
     }
   });
 
+  it('maps session file snapshot events', () => {
+    const event = AdminEventMapper.toEvent({
+      event_type: 'session_files.snapshot',
+      sequence: 6,
+      created_at: '2026-05-04T19:02:00Z',
+      session_files: [{
+        session_id: SESSION.id,
+        file_count: 2,
+        latest_updated_at: '2026-05-04T19:01:00Z',
+      }],
+    });
+
+    expect(event.type).toBe('session_files.snapshot');
+    if (event.type === 'session_files.snapshot') {
+      expect(event.sessionFiles[0]?.sessionId).toBe(SESSION.id);
+      expect(event.sessionFiles[0]?.fileCount).toBe(2);
+    }
+  });
+
   it('rejects unsupported event types at the API boundary', () => {
     expect(() =>
       AdminEventMapper.toEvent({
