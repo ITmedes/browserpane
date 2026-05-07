@@ -49,6 +49,7 @@
     <input
       class="mt-1"
       type="checkbox"
+      data-testid="recording-auto-download"
       checked={autoDownload}
       onchange={(event) => onAutoDownloadChange((event.currentTarget as HTMLInputElement).checked)}
     />
@@ -74,7 +75,7 @@
     <p class="admin-empty mt-0">Recording operation in progress...</p>
   {/if}
   {#if viewModel.error}
-    <p class="admin-error mt-0">{viewModel.error}</p>
+    <p class="admin-error mt-0" data-testid="recording-error">{viewModel.error}</p>
   {/if}
 
   <div class="border-t border-[#90a6cc]/18 pt-4">

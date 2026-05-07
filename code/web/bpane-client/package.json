@@ -16,6 +16,7 @@
     "smoke:admin-session": "node scripts/run-admin-session-smoke.mjs",
     "smoke:admin-realtime": "node scripts/run-admin-realtime-smoke.mjs",
     "smoke:admin-session-files": "node scripts/run-admin-session-files-smoke.mjs",
+    "smoke:admin-recording": "node scripts/run-admin-recording-smoke.mjs",
     "smoke:admin-workflow": "node scripts/run-admin-workflow-smoke.mjs",
     "smoke:recording": "node scripts/run-recording-smoke.mjs",
     "smoke:test-embed-lifecycle": "node scripts/run-test-embed-lifecycle-smoke.mjs",
