@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { RecordingViewModel } from './recording-view-model';
+  import RecordingSegmentCard from './RecordingSegmentCard.svelte';
 
   type RecordingPanelProps = {
     readonly viewModel: RecordingViewModel;
@@ -8,6 +9,9 @@
     readonly onStart: () => void;
     readonly onStop: () => void;
     readonly onDownload: () => void;
+    readonly onRefreshLibrary: () => void;
+    readonly onDownloadSegment: (recordingId: string) => void;
+    readonly onDownloadPlayback: () => void;
   };
 
   let {
@@ -17,6 +21,9 @@
     onStart,
     onStop,
     onDownload,
+    onRefreshLibrary,
+    onDownloadSegment,
+    onDownloadPlayback,
   }: RecordingPanelProps = $props();
 </script>
 
@@ -69,4 +76,49 @@
   {#if viewModel.error}
     <p class="admin-error mt-0">{viewModel.error}</p>
   {/if}
+
+  <div class="border-t border-[#90a6cc]/18 pt-4">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div class="grid gap-1">
+        <span class="text-sm font-bold text-admin-ink/68" data-testid="recording-library-status">
+          {viewModel.libraryStatus}
+        </span>
+        <span class="text-sm text-admin-ink/62" data-testid="recording-playback-status">
+          {viewModel.playbackStatus}
+        </span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button
+          class="admin-button-primary"
+          type="button"
+          data-testid="recording-library-refresh"
+          disabled={!viewModel.canRefreshLibrary}
+          onclick={onRefreshLibrary}
+        >
+          {viewModel.refreshLibraryLabel}
+        </button>
+        <button
+          class="admin-button-primary"
+          type="button"
+          data-testid="recording-playback-download"
+          disabled={!viewModel.canDownloadPlaybackExport}
+          onclick={onDownloadPlayback}
+        >
+          {viewModel.playbackDownloadLabel}
+        </button>
+      </div>
+    </div>
+
+    <p class="admin-empty mt-0" data-testid="recording-library-note">{viewModel.libraryNote}</p>
+
+    {#if viewModel.segments.length === 0}
+      <p class="admin-empty" data-testid="recording-library-empty">{viewModel.emptyLibraryLabel}</p>
+    {:else}
+      <div class="grid gap-3">
+        {#each viewModel.segments as segment (segment.id)}
+          <RecordingSegmentCard viewModel={segment} onDownload={onDownloadSegment} />
+        {/each}
+      </div>
+    {/if}
+  </div>
 </section>

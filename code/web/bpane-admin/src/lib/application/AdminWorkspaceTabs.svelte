@@ -152,7 +152,11 @@
       {:else if activePanel.id === 'policy'}
         <BrowserPolicySurface selectedSession={props.selectedSession} onRefreshSelectedSession={props.onRefreshSelectedSession} />
       {:else if activePanel.id === 'recording'}
-        <RecordingSurface liveConnection={props.liveConnection} />
+        <RecordingSurface
+          controlClient={props.controlClient}
+          session={props.selectedSession}
+          liveConnection={props.liveConnection}
+        />
       {:else if activePanel.id === 'metrics'}
         <MetricsSurface liveConnection={props.liveConnection} />
       {:else if activePanel.id === 'logs'}
