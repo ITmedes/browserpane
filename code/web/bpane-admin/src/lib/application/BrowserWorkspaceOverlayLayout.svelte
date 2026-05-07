@@ -19,7 +19,7 @@
 
   {#if adminOpen}
     <aside
-      class="fixed top-[72px] right-2 bottom-2 z-40 w-[min(560px,calc(100vw-16px))] overflow-hidden rounded-2xl border border-[#90a6cc]/20 bg-[#0e1829]/95 shadow-[0_24px_64px_rgb(0_0_0_/_34%)] backdrop-blur-xl sm:top-20 sm:right-4 sm:bottom-4"
+      class="fixed top-[72px] right-2 bottom-2 z-40 w-[min(560px,calc(100vw-16px))] overflow-hidden rounded-2xl border border-[#90a6cc]/20 bg-[#0e1829]/95 shadow-2xl shadow-black/45 ring-1 ring-white/10 backdrop-blur-xl sm:top-20 sm:right-4 sm:bottom-4"
       data-testid="admin-overlay"
       transition:fly={{ x: 42, duration: 160 }}
     >
