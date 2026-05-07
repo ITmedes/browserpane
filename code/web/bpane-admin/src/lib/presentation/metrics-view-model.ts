@@ -1,15 +1,8 @@
-import type {
-  BrowserSessionRenderDiagnostics,
-  BrowserSessionStatsSnapshot,
-  LiveBrowserSessionConnection,
-} from '../session/browser-session-types';
-
-export type MetricsRawSample = {
-  readonly capturedAtMs: number;
-  readonly frameCount: number;
-  readonly stats: BrowserSessionStatsSnapshot;
-  readonly diagnostics: BrowserSessionRenderDiagnostics | null;
-};
+import type { LiveBrowserSessionConnection } from '../session/browser-session-types';
+import {
+  MetricsDiagnosticsPayloadBuilder,
+  type MetricsRawSample,
+} from './metrics-diagnostics-payload';
 
 export type MetricsSampleSummary = {
   readonly sample: string;
@@ -36,32 +29,15 @@ export type MetricsViewModel = {
 
 export class MetricsSampleSummaryBuilder {
   static fromSamples(start: MetricsRawSample, end: MetricsRawSample): MetricsSampleSummary {
-    const durationMs = Math.max(0, end.capturedAtMs - start.capturedAtMs);
-    const durationSec = Math.max(durationMs / 1000, 0.001);
-    const frames = Math.max(0, end.frameCount - start.frameCount);
-    const rxBytes = delta(end.stats.transfer?.rxBytes, start.stats.transfer?.rxBytes);
-    const txBytes = delta(end.stats.transfer?.txBytes, start.stats.transfer?.txBytes);
-    const tileBytes = delta(end.stats.tiles?.commandBytes, start.stats.tiles?.commandBytes);
-    const videoBytes = delta(end.stats.video?.datagramBytes, start.stats.video?.datagramBytes);
-    const videoDatagrams = delta(end.stats.video?.datagrams, start.stats.video?.datagrams);
+    const payload = MetricsDiagnosticsPayloadBuilder.build(start, end);
     return {
-      sample: `${frames} frames - ${(frames / durationSec).toFixed(1)} fps - ${formatDuration(durationMs)}`,
+      sample: `${payload.frames.delta} frames - ${payload.frames.fps.toFixed(1)} fps - ${formatDuration(payload.timing.durationMs)}`,
       render: `${end.diagnostics?.backend ?? '--'} - ${end.diagnostics?.reason ?? '--'}`,
-      throughput: `down ${formatRate(rxBytes / durationSec)} - up ${formatRate(txBytes / durationSec)}`,
-      tiles: `${delta(end.stats.tiles?.totalCommands, start.stats.tiles?.totalCommands)} commands - ${formatBytes(tileBytes)} tile data`,
-      scroll: `${delta(end.stats.tiles?.scrollComposition?.scrollBatches, start.stats.tiles?.scrollComposition?.scrollBatches)} batches - host fallback ${(end.stats.tiles?.scrollHealth?.hostFallbackRate ?? 0).toFixed(1)}%`,
-      video: `${videoDatagrams} datagrams - ${formatBytes(videoBytes)}`,
-      payload: {
-        durationMs,
-        frames,
-        fps: frames / durationSec,
-        rxBytes,
-        txBytes,
-        tileBytes,
-        videoBytes,
-        videoDatagrams,
-        renderDiagnostics: end.diagnostics,
-      },
+      throughput: `down ${formatRate(payload.transfer.rxBytes, payload.timing.durationMs)} - up ${formatRate(payload.transfer.txBytes, payload.timing.durationMs)}`,
+      tiles: `${payload.tiles.totalCommands} commands - ${formatBytes(payload.tiles.commandBytes)} tile data`,
+      scroll: `${payload.scroll.batches} batches - host fallback ${payload.scroll.hostFallbackRate.toFixed(1)}%`,
+      video: `${payload.video.datagrams} datagrams - ${formatBytes(payload.video.datagramBytes)}`,
+      payload,
     };
   }
 }
@@ -90,10 +66,6 @@ export class MetricsViewModelBuilder {
   }
 }
 
-function delta(end: number | undefined, start: number | undefined): number {
-  return Math.max(0, (end ?? 0) - (start ?? 0));
-}
-
 function formatDuration(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
@@ -112,6 +84,7 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
-function formatRate(bytesPerSecond: number): string {
-  return `${formatBytes(bytesPerSecond)}/s`;
+function formatRate(bytes: number, durationMs: number): string {
+  const durationSec = Math.max(durationMs / 1000, 0.001);
+  return `${formatBytes(bytes / durationSec)}/s`;
 }

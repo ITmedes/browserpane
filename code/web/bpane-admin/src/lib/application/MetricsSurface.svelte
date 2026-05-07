@@ -3,9 +3,9 @@
   import {
     MetricsSampleSummaryBuilder,
     MetricsViewModelBuilder,
-    type MetricsRawSample,
     type MetricsSampleSummary,
   } from '../presentation/metrics-view-model';
+  import type { MetricsRawSample } from '../presentation/metrics-diagnostics-payload';
   import type { LiveBrowserSessionConnection } from '../session/browser-session-types';
 
   type MetricsSurfaceProps = {

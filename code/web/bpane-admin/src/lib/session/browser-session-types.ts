@@ -22,18 +22,36 @@ export type BrowserSessionStatsSnapshot = {
     readonly txBytes?: number;
     readonly rxFrames?: number;
     readonly txFrames?: number;
+    readonly rxByChannel?: Readonly<Record<string, { readonly bytes?: number; readonly frames?: number }>>;
+    readonly txByChannel?: Readonly<Record<string, { readonly bytes?: number; readonly frames?: number }>>;
   };
   readonly tiles?: {
     readonly commandBytes?: number;
+    readonly commands?: Readonly<Record<string, number>>;
     readonly imageCommands?: number;
     readonly videoCommands?: number;
     readonly drawCommands?: number;
     readonly totalCommands?: number;
+    readonly cacheHitsObserved?: number;
+    readonly cacheMissesObserved?: number;
     readonly cacheHitRateObserved?: number;
+    readonly cacheSizeObserved?: number;
+    readonly redundantQoiCommands?: number;
+    readonly redundantQoiBytes?: number;
     readonly scrollComposition?: {
       readonly scrollBatches?: number;
+      readonly subTileScrollBatches?: number;
+      readonly scrollUpdateCommands?: number;
+      readonly scrollQoiCommands?: number;
+      readonly scrollCacheHitCommands?: number;
+      readonly scrollFillCommands?: number;
+      readonly scrollQoiBytes?: number;
       readonly scrollSavedTiles?: number;
       readonly scrollPotentialTiles?: number;
+      readonly scrollReuseRate?: number;
+      readonly subTileScrollSavedTiles?: number;
+      readonly subTileScrollPotentialTiles?: number;
+      readonly subTileScrollReuseRate?: number;
     };
     readonly scrollHealth?: {
       readonly hostFallbackRate?: number;
@@ -42,6 +60,7 @@ export type BrowserSessionStatsSnapshot = {
     };
   };
   readonly video?: {
+    readonly decodedFrames?: number;
     readonly datagrams?: number;
     readonly droppedFrames?: number;
     readonly datagramBytes?: number;
