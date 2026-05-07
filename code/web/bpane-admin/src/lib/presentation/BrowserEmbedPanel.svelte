@@ -31,14 +31,14 @@
   }
 </script>
 
-<section class="flex min-h-[calc(100vh-84px)] flex-col rounded-2xl border border-[#90a6cc]/18 bg-admin-night/92 p-3 shadow-[0_24px_64px_rgb(0_0_0_/_34%)] sm:p-4" aria-label="Live browser session">
-  <div class="admin-header">
-    <div>
-      <p class="admin-eyebrow admin-eyebrow-light">Live browser</p>
-      <h2 class="m-0 text-[1.1rem] font-bold text-admin-ink">{viewModel.status}</h2>
-      <p class="mt-1 mb-0 text-xs font-bold text-[#9fb1cf]">
+<section class="flex min-h-[calc(100vh-96px)] flex-col rounded-2xl border border-[#90a6cc]/18 bg-admin-night/92 p-3 shadow-[0_24px_64px_rgb(0_0_0_/_34%)] sm:p-4" aria-label="Live browser session">
+  <div class="flex items-center justify-between gap-3">
+    <div class="flex min-w-0 items-center gap-3">
+      <span class="shrink-0 text-xs font-bold tracking-[0.16em] text-[#9fb1cf] uppercase">Live browser</span>
+      <span class="shrink-0 text-sm font-bold text-admin-ink">{viewModel.status}</span>
+      <span class="min-w-0 truncate text-xs font-bold text-[#9fb1cf]">
         Session {viewModel.sessionLabel} · {viewModel.connectionLabel}
-      </p>
+      </span>
     </div>
     <div class="admin-actions">
       <button
@@ -63,7 +63,7 @@
   </div>
 
   <div
-    class="relative mt-4 min-h-0 flex-1 overflow-hidden rounded-xl border border-[#c4d5f4]/10 bg-[#050806] max-[1100px]:min-h-[64vh] max-[760px]:min-h-[420px]"
+    class="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-[#c4d5f4]/10 bg-[#050806] max-[1100px]:min-h-[64vh] max-[760px]:min-h-[420px]"
     data-testid="browser-viewport"
     bind:this={container}
   >

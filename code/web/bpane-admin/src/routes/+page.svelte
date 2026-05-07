@@ -109,7 +109,7 @@
   onAdminToggle={() => { adminOpen = !adminOpen; }}
 />
 
-<main class="mx-auto min-h-screen w-[calc(100vw-20px)] max-w-[1680px] pt-[70px] pb-3 sm:w-[calc(100vw-32px)] sm:pt-[72px] sm:pb-4">
+<main class="mx-auto min-h-screen w-[calc(100vw-20px)] max-w-[1680px] pt-[78px] pb-3 sm:w-[calc(100vw-32px)] sm:pt-20 sm:pb-4">
   {#if authError && !auth?.authenticated}
     <section class="admin-panel">
       <p class="admin-error mt-0">{authError}</p>
