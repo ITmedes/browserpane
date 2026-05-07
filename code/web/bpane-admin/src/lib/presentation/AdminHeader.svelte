@@ -29,10 +29,10 @@
 </script>
 
 <header class="fixed inset-x-0 top-0 z-50 border-b border-[#90a6cc]/20 bg-[#0d1522]/90 shadow-[0_18px_44px_rgb(0_0_0_/_28%)] backdrop-blur-xl">
-  <div class="mx-auto flex h-14 w-[calc(100vw-32px)] max-w-[1680px] items-center justify-between gap-3">
+  <div class="mx-auto flex h-16 w-[calc(100vw-32px)] max-w-[1680px] items-center justify-between gap-3">
     <div class="flex min-w-0 items-center gap-3">
       <a class="block shrink-0" href="/" aria-label="BrowserPane home">
-        <img class="h-10 w-36 object-cover object-center sm:w-44" src={logoUrl} alt="BrowserPane" />
+        <img class="h-12 w-44 object-cover object-center sm:w-56" src={logoUrl} alt="BrowserPane" />
       </a>
     </div>
 
