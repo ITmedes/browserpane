@@ -121,14 +121,13 @@
   }
 
   async function startRecording(): Promise<void> {
-    const start = liveConnection?.handle.startRecording;
-    if (!start) {
+    if (!liveConnection?.handle.startRecording) {
       return;
     }
     busy = true;
     error = null;
     try {
-      await start({ frameRate: 24 });
+      await liveConnection.handle.startRecording({ frameRate: 24 });
       recording = true;
     } catch (startError) {
       error = errorMessage(startError);
@@ -138,14 +137,13 @@
   }
 
   async function stopRecording(): Promise<void> {
-    const stop = liveConnection?.handle.stopRecording;
-    if (!stop) {
+    if (!liveConnection?.handle.stopRecording) {
       return;
     }
     busy = true;
     error = null;
     try {
-      lastBlob = await stop();
+      lastBlob = await liveConnection.handle.stopRecording();
       lastArtifactName = `bpane-${liveConnection?.sessionId ?? 'session'}-${Date.now()}.webm`;
       recording = false;
       if (autoDownload) {
