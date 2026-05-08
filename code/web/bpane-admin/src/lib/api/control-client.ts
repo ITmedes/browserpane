@@ -1,5 +1,6 @@
 import { ControlSessionMapper } from './control-session-mapper';
 import { ControlSessionFileMapper } from './control-session-file-mapper';
+import { ControlSessionStatusMapper } from './control-session-status-mapper';
 import { RecordingMapper } from './recording-mapper';
 import type {
   CreateSessionCommand,
@@ -15,6 +16,7 @@ import type {
   SessionRecordingPlaybackResource,
   SessionRecordingResource,
 } from './recording-types';
+import type { SessionStatus } from './session-status-types';
 
 export type AccessTokenProvider = () => Promise<string> | string;
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -60,6 +62,11 @@ export class ControlClient {
     return ControlSessionMapper.toSessionResource(payload);
   }
 
+  async getSessionStatus(sessionId: string): Promise<SessionStatus> {
+    const payload = await this.#request('GET', `/api/v1/sessions/${encodeURIComponent(sessionId)}/status`);
+    return ControlSessionStatusMapper.toSessionStatus(payload);
+  }
+
   async stopSession(sessionId: string): Promise<SessionResource> {
     const payload = await this.#request('POST', `/api/v1/sessions/${encodeURIComponent(sessionId)}/stop`);
     return ControlSessionMapper.toSessionResource(payload);
@@ -68,6 +75,19 @@ export class ControlClient {
   async killSession(sessionId: string): Promise<SessionResource> {
     const payload = await this.#request('POST', `/api/v1/sessions/${encodeURIComponent(sessionId)}/kill`);
     return ControlSessionMapper.toSessionResource(payload);
+  }
+
+  async disconnectSessionConnection(sessionId: string, connectionId: number): Promise<SessionStatus> {
+    const payload = await this.#request(
+      'POST',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/connections/${connectionId}/disconnect`,
+    );
+    return ControlSessionStatusMapper.toSessionStatus(payload);
+  }
+
+  async disconnectAllSessionConnections(sessionId: string): Promise<SessionStatus> {
+    const payload = await this.#request('POST', `/api/v1/sessions/${encodeURIComponent(sessionId)}/connections/disconnect-all`);
+    return ControlSessionStatusMapper.toSessionStatus(payload);
   }
 
   async setAutomationDelegate(

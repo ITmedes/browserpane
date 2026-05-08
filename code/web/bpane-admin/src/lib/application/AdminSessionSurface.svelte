@@ -13,9 +13,9 @@
   import { DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES, type BrowserSessionConnectPreferences, type LiveBrowserSessionConnection } from '../session/browser-session-types';
   import AdminWorkspaceTabs from './AdminWorkspaceTabs.svelte';
   import { AdminLogEntryFactory } from './admin-log-entries';
+  import { AdminSessionSelection } from './admin-session-selection';
   import { subscribeAdminSessionEvents } from './admin-session-event-sync';
   import BrowserWorkspaceOverlayLayout from './BrowserWorkspaceOverlayLayout.svelte';
-
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient; readonly adminEventClient: AdminEventClient; readonly workflowClient: WorkflowClient;
     readonly mcpBridge: McpBridgeConfig | null;
@@ -29,6 +29,7 @@
   let selectedSession = $state<SessionResource | null>(null);
   let sessionsLoading = $state(false);
   let sessionsError = $state<string | null>(null);
+  let pendingSelectedSessionId = $state<string | null>(null);
   let browserConnecting = $state(false);
   let browserError = $state<string | null>(null);
   let browserStatus = $state('Disconnected');
@@ -41,24 +42,13 @@
   let browserPreferences = $state<BrowserSessionConnectPreferences>({ ...DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES });
   const browserConnected = $derived(Boolean(liveConnection && liveConnection.sessionId === selectedSession?.id));
   const workspaceViewModel = $derived(AdminWorkspaceViewModelBuilder.build({
-    browserStatus,
-    selectedSessionId: selectedSession?.id ?? null,
-    sessionCount: sessions.length,
-    fileCount: sessionFileCount,
-    connected: browserConnected,
+    browserStatus, selectedSessionId: selectedSession?.id ?? null,
+    sessionCount: sessions.length, fileCount: sessionFileCount, connected: browserConnected,
   }));
   const sessionListViewModel = $derived(SessionViewModelBuilder.list({
-    sessions,
-    selectedSessionId: selectedSession?.id ?? null,
-    authenticated: true,
-    loading: sessionsLoading,
-    error: sessionsError,
+    sessions, selectedSessionId: selectedSession?.id ?? null,
+    authenticated: true, loading: sessionsLoading, error: sessionsError,
   }));
-  const sessionDetailViewModel = $derived(SessionViewModelBuilder.detail({
-    session: selectedSession, connected: browserConnected,
-    loading: sessionsLoading, error: sessionsError,
-  }));
-
   $effect(() => {
     const signature = `${selectedSession?.id ?? 'none'}:${selectedSession?.state ?? 'none'}:${browserConnected}:${sessions.length}`;
     if (signature !== lastLogSignature) {
@@ -66,7 +56,6 @@
       appendLog(AdminLogEntryFactory.fromUiState({ selectedSession, browserConnected, sessionCount: sessions.length }));
     }
   });
-
   onMount(() => {
     const subscription = subscribeAdminSessionEvents(adminEventClient, {
       onSessions: setSessionList,
@@ -80,7 +69,6 @@
     void loadSessions();
     return () => { subscription.close(); disconnectBrowser(false); };
   });
-
   async function loadSessions(): Promise<void> {
     sessionsLoading = true;
     sessionsError = null;
@@ -92,12 +80,13 @@
       sessionsLoading = false;
     }
   }
-
   async function createSession(): Promise<void> {
     sessionsLoading = true;
     sessionsError = null;
     try {
-      selectedSession = await controlClient.createSession();
+      const created = await controlClient.createSession();
+      pendingSelectedSessionId = created.id;
+      upsertSession(created);
       setSessionList((await controlClient.listSessions()).sessions);
     } catch (error) {
       sessionsError = errorMessage(error);
@@ -105,7 +94,6 @@
       sessionsLoading = false;
     }
   }
-
   async function refreshSelectedSession(): Promise<void> {
     if (!selectedSession) {
       return;
@@ -119,7 +107,6 @@
       sessionsLoading = false;
     }
   }
-
   async function runLifecycle(action: 'stop' | 'kill'): Promise<void> {
     if (!selectedSession) {
       return;
@@ -137,7 +124,6 @@
       sessionsLoading = false;
     }
   }
-
   async function connectBrowser(container: HTMLElement): Promise<void> {
     if (!selectedSession) {
       return;
@@ -157,7 +143,6 @@
       browserConnecting = false;
     }
   }
-
   function disconnectBrowser(refreshAfterDisconnect = false): void {
     const hadLiveConnection = Boolean(liveConnection);
     liveConnection?.handle.disconnect();
@@ -167,50 +152,46 @@
       window.setTimeout(() => void refreshSelectedSession(), 250);
     }
   }
-
   function setSessionList(next: readonly SessionResource[]): void {
     sessions = next;
-    selectedSession = next.find((session) => session.id === selectedSession?.id) ?? next[0] ?? null;
+    const selection = AdminSessionSelection.afterList({ sessions, selectedSession, pendingSelectedSessionId });
+    selectedSession = selection.selectedSession;
+    pendingSelectedSessionId = selection.pendingSelectedSessionId;
   }
-
   function upsertSession(session: SessionResource): void {
     selectedSession = session;
     sessions = sessions.some((entry) => entry.id === session.id)
       ? sessions.map((entry) => entry.id === session.id ? session : entry)
       : [session, ...sessions];
   }
-
   function selectSession(sessionId: string): void {
+    pendingSelectedSessionId = null;
     selectedSession = sessions.find((session) => session.id === sessionId) ?? selectedSession;
   }
-
   function appendLog(entry: AdminLogEntry): void {
     logEntries = AdminLogEntryFactory.append(logEntries, entry);
   }
-
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'Unexpected admin console error';
   }
 </script>
-
 <BrowserWorkspaceOverlayLayout {adminOpen} {onAdminOpenChange}>
   {#snippet browser()}
     <BrowserEmbedPanel
       viewModel={workspaceViewModel.browser} session={selectedSession}
       connectedSessionId={liveConnection?.sessionId ?? null} connecting={browserConnecting} error={browserError}
-      onConnect={(container) => void connectBrowser(container)}
-      onDisconnect={() => disconnectBrowser(true)}
+      onConnect={(container) => void connectBrowser(container)} onDisconnect={() => disconnectBrowser(true)}
     />
   {/snippet}
   {#snippet admin()}
     <AdminWorkspaceTabs
       {controlClient} {workflowClient} {selectedSession} {sessions} {mcpBridge}
       {liveConnection} {browserPreferences} {browserConnected}
-      {workspaceViewModel} {sessionListViewModel} {sessionDetailViewModel} {logEntries}
+      {workspaceViewModel} {sessionListViewModel} {logEntries}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion}
       onRefreshSessions={loadSessions} onCreateSession={() => void createSession()}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
-      onStopSession={() => void runLifecycle('stop')} onKillSession={() => void runLifecycle('kill')}
+      onStopSession={() => void runLifecycle('stop')} onKillSession={() => void runLifecycle('kill')} onDisconnectEmbeddedBrowser={() => disconnectBrowser(false)}
       onFileCountChange={(count) => { sessionFileCount = count; }}
       onClearLogs={() => { logEntries = []; }}
       onBrowserPreferencesChange={(next) => { browserPreferences = next; }}
