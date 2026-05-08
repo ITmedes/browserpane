@@ -8,6 +8,7 @@
     readonly connectedSessionId: string | null;
     readonly connecting: boolean;
     readonly error: string | null;
+    readonly autoConnectVersion: number;
     readonly onConnect: (container: HTMLElement) => void;
     readonly onDisconnect: () => void;
   };
@@ -18,11 +19,24 @@
     connectedSessionId,
     connecting,
     error,
+    autoConnectVersion,
     onConnect,
     onDisconnect,
   }: BrowserEmbedPanelProps = $props();
   let container: HTMLElement;
+  let lastAutoConnectVersion = $state(0);
   const isConnected = $derived(Boolean(session && connectedSessionId === session.id));
+
+  $effect(() => {
+    if (autoConnectVersion === 0 || autoConnectVersion === lastAutoConnectVersion || !session || !container) {
+      return;
+    }
+    lastAutoConnectVersion = autoConnectVersion;
+    if (connecting || isConnected) {
+      return;
+    }
+    connect();
+  });
 
   function connect(): void {
     if (container) {

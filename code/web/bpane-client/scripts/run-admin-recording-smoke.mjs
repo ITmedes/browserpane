@@ -6,7 +6,6 @@ import { chromium } from 'playwright-core';
 import {
   cleanupAdminBeforeRun,
   cleanupAdminSmoke,
-  closeAdminOverlay,
   ensureAdminLoggedIn,
   getAdminAccessToken,
   openAdminTab,
@@ -63,8 +62,8 @@ async function selectSession(page, options, sessionId) {
 }
 
 async function connectBrowser(page, options) {
-  await closeAdminOverlay(page);
-  await page.getByTestId('browser-connect').click();
+  await openAdminTab(page, 'sessions');
+  await page.getByTestId('session-join').click();
   await waitForBrowserConnected(page, options);
   await page.locator('[data-testid="browser-viewport"] canvas').first().waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await openAdminTab(page, 'recording');

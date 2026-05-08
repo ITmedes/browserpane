@@ -6,7 +6,6 @@ import {
   cleanupAdminSmoke,
   disconnectEmbeddedBrowser,
   ensureAdminLoggedIn,
-  closeAdminOverlay,
   openAdminTab,
   waitForBrowserConnected,
   waitForKillEnabled,
@@ -31,16 +30,14 @@ async function run() {
     await ensureAdminLoggedIn(page, options);
     await cleanupAdminBeforeRun(page, options, log);
 
-    log('Creating an admin-owned session.');
+    await openAdminTab(page, 'display');
+    await configureDisplayControls(page);
+
+    log('Creating and joining an admin-owned session.');
     await openAdminTab(page, 'sessions');
     await page.getByTestId('session-new').click();
     sessionId = await resolveSelectedSessionId(page, options);
-    await configureDisplayControls(page);
     await waitForMcpDelegationReady(page, options);
-
-    log(`Connecting embedded browser for ${sessionId}.`);
-    await closeAdminOverlay(page);
-    await page.getByTestId('browser-connect').click();
     await waitForBrowserConnected(page, options);
     await verifyBrowserPolicyPanel(page);
     await verifyRemainingPanels(page);
@@ -63,8 +60,8 @@ async function run() {
     await waitForSessionState(page, options, sessionId, 'stopped');
 
     log(`Reconnecting stopped session ${sessionId}.`);
-    await closeAdminOverlay(page);
-    await page.getByTestId('browser-connect').click();
+    await openAdminTab(page, 'sessions');
+    await page.getByTestId('session-join').click();
     await waitForBrowserConnected(page, options);
     await disconnectEmbeddedBrowser(page, options);
 

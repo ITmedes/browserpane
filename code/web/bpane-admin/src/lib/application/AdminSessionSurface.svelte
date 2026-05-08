@@ -33,6 +33,7 @@
   let browserConnecting = $state(false);
   let browserError = $state<string | null>(null);
   let browserStatus = $state('Disconnected');
+  let browserConnectRequestVersion = $state(0);
   let sessionFileCount = $state(0);
   let sessionFilesRefreshVersion = $state(0);
   let recordingsRefreshVersion = $state(0);
@@ -88,6 +89,7 @@
       pendingSelectedSessionId = created.id;
       upsertSession(created);
       setSessionList((await controlClient.listSessions()).sessions);
+      requestBrowserConnect();
     } catch (error) {
       sessionsError = errorMessage(error);
     } finally {
@@ -95,9 +97,7 @@
     }
   }
   async function refreshSelectedSession(): Promise<void> {
-    if (!selectedSession) {
-      return;
-    }
+    if (!selectedSession) return;
     sessionsLoading = true;
     try {
       upsertSession(await controlClient.getSession(selectedSession.id));
@@ -108,9 +108,7 @@
     }
   }
   async function runLifecycle(action: 'stop' | 'kill'): Promise<void> {
-    if (!selectedSession) {
-      return;
-    }
+    if (!selectedSession) return;
     sessionsLoading = true;
     sessionsError = null;
     try {
@@ -125,9 +123,7 @@
     }
   }
   async function connectBrowser(container: HTMLElement): Promise<void> {
-    if (!selectedSession) {
-      return;
-    }
+    if (!selectedSession) return;
     disconnectBrowser(false);
     browserConnecting = true;
     browserError = null;
@@ -168,6 +164,7 @@
     pendingSelectedSessionId = null;
     selectedSession = sessions.find((session) => session.id === sessionId) ?? selectedSession;
   }
+  function requestBrowserConnect(): void { browserConnectRequestVersion += 1; }
   function appendLog(entry: AdminLogEntry): void {
     logEntries = AdminLogEntryFactory.append(logEntries, entry);
   }
@@ -180,6 +177,7 @@
     <BrowserEmbedPanel
       viewModel={workspaceViewModel.browser} session={selectedSession}
       connectedSessionId={liveConnection?.sessionId ?? null} connecting={browserConnecting} error={browserError}
+      autoConnectVersion={browserConnectRequestVersion}
       onConnect={(container) => void connectBrowser(container)} onDisconnect={() => disconnectBrowser(true)}
     />
   {/snippet}
@@ -190,6 +188,7 @@
       {workspaceViewModel} {sessionListViewModel} {logEntries}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion}
       onRefreshSessions={loadSessions} onCreateSession={() => void createSession()}
+      onJoinSelectedSession={requestBrowserConnect}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
       onStopSession={() => void runLifecycle('stop')} onKillSession={() => void runLifecycle('kill')} onDisconnectEmbeddedBrowser={() => disconnectBrowser(false)}
       onFileCountChange={(count) => { sessionFileCount = count; }}
