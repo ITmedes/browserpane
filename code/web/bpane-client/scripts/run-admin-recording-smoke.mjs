@@ -106,6 +106,7 @@ async function verifyRecordingStateSurvivesOverlayToggle(page, options) {
 
 async function verifyRecordingLibrary(page, options, tempDir, sessionId, retained, expectedBytes) {
   await openAdminTab(page, 'recording');
+  await page.getByTestId('recording-library-refresh').click();
   const row = page.locator(`[data-testid="recording-library-row"][data-recording-id="${retained.id}"]`);
   await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await waitForEnabled(row.getByTestId('recording-segment-download'), options, 'segment download');

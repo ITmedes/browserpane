@@ -28,15 +28,19 @@ describe('SessionRecordingSurfaceRuntime', () => {
   let rafCallback: FrameRequestCallback | null;
   let cancelAnimationFrameSpy: ReturnType<typeof vi.fn>;
   let captureTrackStopSpy: ReturnType<typeof vi.fn>;
+  let requestFrameSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     contexts = new WeakMap();
     captureTrackStopSpy = vi.fn();
+    requestFrameSpy = vi.fn();
     captureStreamSpy = vi.fn(() => ({
-      getTracks: () => [{ stop: captureTrackStopSpy }],
+      getTracks: () => [{ stop: captureTrackStopSpy, requestFrame: requestFrameSpy }],
+      getVideoTracks: () => [{ stop: captureTrackStopSpy, requestFrame: requestFrameSpy }],
     }) as unknown as MediaStream);
     rafCallback = null;
     cancelAnimationFrameSpy = vi.fn();
+    vi.spyOn(performance, 'now').mockReturnValue(0);
 
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
       this: HTMLCanvasElement,
@@ -86,7 +90,7 @@ describe('SessionRecordingSurfaceRuntime', () => {
     expect(captureStreamSpy).toHaveBeenCalledWith(30);
     expect(rafCallback).toBeTypeOf('function');
 
-    rafCallback?.(0);
+    rafCallback?.(40);
 
     const recordingCanvas = captureStreamSpy.mock.instances[0] as HTMLCanvasElement;
     const recordingContext = contexts.get(recordingCanvas)! as any;
@@ -95,6 +99,7 @@ describe('SessionRecordingSurfaceRuntime', () => {
     expect(recordingContext.clearRect).toHaveBeenCalledWith(0, 0, 1280, 720);
     expect(recordingContext.drawImage).toHaveBeenNthCalledWith(1, sourceCanvas, 0, 0, 1280, 720);
     expect(recordingContext.drawImage).toHaveBeenNthCalledWith(2, cursorCanvas, 0, 0, 1280, 720);
+    expect(requestFrameSpy).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the source bitmap size when the displayed canvas is scaled down', () => {
