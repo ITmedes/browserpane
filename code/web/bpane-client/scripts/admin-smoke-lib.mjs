@@ -97,19 +97,23 @@ export async function openAdminTab(page, panelId) {
 }
 
 export async function ensureAdminOverlayOpen(page) {
-  if (await page.getByTestId('admin-overlay').isVisible().catch(() => false)) {
+  if (await adminOverlayOpen(page)) {
     return;
   }
   await page.getByTestId('admin-overlay-open').click();
-  await page.getByTestId('admin-overlay').waitFor({ state: 'visible' });
+  await poll('admin overlay open', async () => await adminOverlayOpen(page), Boolean, 5000, 100);
 }
 
 export async function closeAdminOverlay(page) {
-  if (!await page.getByTestId('admin-overlay').isVisible().catch(() => false)) {
+  if (!await adminOverlayOpen(page)) {
     return;
   }
   await page.getByTestId('admin-overlay-close').click();
-  await page.getByTestId('admin-overlay').waitFor({ state: 'detached' }).catch(() => {});
+  await poll('admin overlay closed', async () => await adminOverlayOpen(page), (open) => !open, 5000, 100);
+}
+
+async function adminOverlayOpen(page) {
+  return await page.getByTestId('admin-overlay').getAttribute('data-admin-open').then((value) => value === 'true').catch(() => false);
 }
 
 async function fillKeycloakLogin(page, authConfig, options) {

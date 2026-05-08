@@ -78,6 +78,7 @@
       void loadLibrary(currentSessionId);
     }
   });
+  $effect(() => { recording = liveConnection?.handle.isRecording?.() ?? false; });
 
   async function loadLibrary(sessionId = currentSessionId): Promise<void> {
     if (!sessionId) {
@@ -187,9 +188,7 @@
 
   function shouldReconcileLibrary(): boolean { return Boolean(currentSessionId && !libraryLoading && !downloadingRecordingId && !downloadingPlayback); }
 
-  function errorMessage(value: unknown): string {
-    return value instanceof Error ? value.message : 'Recording operation failed';
-  }
+  function errorMessage(value: unknown): string { return value instanceof Error ? value.message : 'Recording operation failed'; }
 </script>
 
 <RecordingPanel {viewModel} {autoDownload}
