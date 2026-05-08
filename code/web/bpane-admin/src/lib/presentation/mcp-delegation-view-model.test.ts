@@ -24,6 +24,8 @@ describe('McpDelegationViewModelBuilder', () => {
     expect(viewModel.status).toBe('No delegated session');
     expect(viewModel.canDelegate).toBe(true);
     expect(viewModel.canClear).toBe(false);
+    expect(viewModel.endpointUrl).toBe('http://localhost:8931/sessions/session-a/mcp');
+    expect(viewModel.canCopyEndpoint).toBe(true);
   });
 
   it('marks the selected session as active when bridge control matches', () => {
@@ -38,6 +40,33 @@ describe('McpDelegationViewModelBuilder', () => {
     expect(viewModel.status).toBe('This session delegated');
     expect(viewModel.tone).toBe('active');
     expect(viewModel.canClear).toBe(true);
+  });
+
+  it('surfaces direct session endpoint health for the selected session', () => {
+    const viewModel = McpDelegationViewModelBuilder.build({
+      bridge: BRIDGE,
+      session: sessionResource('session-a'),
+      health: health(null, [{
+        kind: 'selected',
+        session_id: 'session-a',
+        clients: 1,
+        state: 'active',
+        mode: 'session_runtime_pool',
+        visible: true,
+        backend_delegated: true,
+        mcp_owner: true,
+        cdp_endpoint: 'http://runtime:9223',
+        playwright_cdp_endpoint: 'http://runtime:9223',
+        playwright_effective_cdp_endpoint: 'http://runtime:9223',
+        alignment: 'aligned',
+      }]),
+      busy: false,
+      error: null,
+    });
+
+    expect(viewModel.status).toBe('Session endpoint active');
+    expect(viewModel.healthSummary).toBe('1 MCP client · MCP owns session · aligned');
+    expect(viewModel.canClear).toBe(false);
   });
 
   it('surfaces stale backend delegation when bridge health is unavailable', () => {
@@ -55,14 +84,18 @@ describe('McpDelegationViewModelBuilder', () => {
   });
 });
 
-function health(sessionId: string): McpBridgeHealth {
+function health(
+  sessionId: string | null,
+  managedSessions: McpBridgeHealth['managed_sessions'] = [],
+): McpBridgeHealth {
   return {
     status: 'ok',
     clients: 0,
     control_session_id: sessionId,
-    control_session_state: 'active',
-    control_session_backend_delegated: true,
+    control_session_state: sessionId ? 'active' : null,
+    control_session_backend_delegated: Boolean(sessionId),
     bridge_alignment: 'aligned',
+    managed_sessions: managedSessions,
   };
 }
 

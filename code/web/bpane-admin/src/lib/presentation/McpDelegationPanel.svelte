@@ -6,9 +6,10 @@
     readonly onRefresh: () => void;
     readonly onDelegate: () => void;
     readonly onClear: () => void;
+    readonly onCopyEndpoint: () => void;
   };
 
-  let { viewModel, onRefresh, onDelegate, onClear }: McpDelegationPanelProps = $props();
+  let { viewModel, onRefresh, onDelegate, onClear, onCopyEndpoint }: McpDelegationPanelProps = $props();
 
   function toneClass(tone: McpDelegationTone): string {
     if (tone === 'active') {
@@ -39,6 +40,28 @@
   </div>
 
   <p class="m-0 text-sm leading-normal text-admin-ink/68" data-testid="mcp-note">{viewModel.note}</p>
+
+  {#if viewModel.endpointUrl}
+    <div class="flex flex-col gap-2 rounded-xl border border-admin-ink/10 bg-admin-night/35 p-3 md:flex-row md:items-center">
+      <div class="min-w-0 flex-1">
+        <p class="admin-eyebrow mb-1">Session MCP endpoint</p>
+        <code class="block break-all text-xs font-bold text-admin-ink/78" data-testid="mcp-endpoint-url">{viewModel.endpointUrl}</code>
+      </div>
+      <button
+        class="admin-button-primary"
+        type="button"
+        data-testid="mcp-copy-endpoint"
+        disabled={!viewModel.canCopyEndpoint}
+        onclick={onCopyEndpoint}
+      >
+        Copy URL
+      </button>
+    </div>
+  {/if}
+
+  {#if viewModel.healthSummary}
+    <p class="m-0 text-xs font-bold text-admin-ink/62" data-testid="mcp-health-summary">{viewModel.healthSummary}</p>
+  {/if}
 
   <div class="flex flex-wrap gap-2">
     <button
