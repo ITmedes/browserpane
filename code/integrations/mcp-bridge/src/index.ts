@@ -19,6 +19,12 @@ import {
   GatewaySessionResource,
   SessionControlClient,
 } from "./session-control-client.js";
+import {
+  BPANE_SESSION_ID_HEADER,
+  isStreamableMcpPath,
+  isSsePath,
+  selectedBrowserPaneSessionId,
+} from "./session-selector.js";
 import { SupervisorMonitor } from "./supervisor-monitor.js";
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -37,7 +43,6 @@ const SESSION_BOOTSTRAP_MODE = (
   process.env.BPANE_SESSION_BOOTSTRAP_MODE ?? "off"
 ).trim().toLowerCase();
 const SESSION_ID = (process.env.BPANE_SESSION_ID ?? "").trim();
-const BPANE_SESSION_ID_HEADER = "bpane-session-id";
 const DEFAULT_RUNTIME_TARGET_KEY = "__default__";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -500,16 +505,6 @@ function runtimeTargetKey(session: GatewaySessionResource | null): string {
   return session?.id ?? DEFAULT_RUNTIME_TARGET_KEY;
 }
 
-function selectedBrowserPaneSessionId(
-  req: http.IncomingMessage,
-  url: URL,
-): string | null {
-  const headerValue = singleHeader(req.headers[BPANE_SESSION_ID_HEADER]);
-  const selected = headerValue ?? url.searchParams.get("bpaneSessionId");
-  const trimmed = selected?.trim() ?? "";
-  return trimmed.length > 0 ? trimmed : null;
-}
-
 // ── Per-connection MCP Server factory ────────────────────────────────
 
 function createServerForConnection(
@@ -757,6 +752,18 @@ async function main() {
         writeJsonRpcError(res, 404, "Session not found", -32001);
         return;
       }
+      try {
+        const selectedSessionId = selectedBrowserPaneSessionId(req, url);
+        const targetKey = mcpSessionTargetKeys.get(requestedSessionId);
+        if (selectedSessionId && targetKey && targetKey !== selectedSessionId) {
+          writeJsonRpcError(res, 409, "MCP session is bound to a different BrowserPane session", -32005);
+          return;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        writeJsonRpcError(res, 400, message, -32004);
+        return;
+      }
       await transport.handleRequest(req, res, parsedBody);
       return;
     }
@@ -991,12 +998,12 @@ async function main() {
       return;
     }
 
-    if (url.pathname === "/mcp") {
+    if (isStreamableMcpPath(url.pathname)) {
       await handleStreamableHttpRequest(req, res, url);
       return;
     }
 
-    if (url.pathname === "/sse") {
+    if (isSsePath(url.pathname)) {
       let target: RuntimeTarget;
       try {
         target = await runtimeTargetForRequest(req, url);

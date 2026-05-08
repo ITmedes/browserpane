@@ -19,6 +19,7 @@
     "smoke:admin-session-files": "node scripts/run-admin-session-files-smoke.mjs",
     "smoke:admin-metrics": "node scripts/run-admin-metrics-smoke.mjs",
     "smoke:admin-mcp": "node scripts/run-admin-mcp-smoke.mjs",
+    "smoke:mcp-session-endpoints": "node scripts/run-mcp-session-endpoints-smoke.mjs",
     "smoke:admin-recording": "node scripts/run-admin-recording-smoke.mjs",
     "smoke:admin-workflow": "node scripts/run-admin-workflow-smoke.mjs",
     "smoke:recording": "node scripts/run-recording-smoke.mjs",

@@ -77,7 +77,7 @@ browser client <-> bpane-gateway <-> bpane-host <-> Chromium inside Linux contai
 | `code/apps/bpane-gateway` | WebTransport entry point and shared-session coordinator. Relays frames between browser clients and the host, applies owner/viewer policy, and exposes the HTTP session/ownership API. |
 | `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
-| `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes Streamable HTTP on `/mcp` and legacy SSE on `/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
+| `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes Streamable HTTP on `/mcp`, session-scoped Streamable HTTP on `/sessions/{id}/mcp`, legacy SSE on `/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
 | `code/integrations/workflow-worker` | On-demand workflow executor. Downloads pinned workflow source snapshots, attaches with session automation access, runs Playwright workflow entrypoints, resolves credential/workspace inputs, and writes logs, outputs, and produced files back to the gateway. |
 | `code/integrations/recording-worker` | On-demand recording executor. Attaches as a passive recorder client, captures WebM output, and finalizes recording metadata into gateway-managed artifact storage. |
 | `deploy/` | Local runtime manifests and container images. This is the practical source of truth for how the dev stack is assembled and started. |
@@ -279,6 +279,8 @@ The local dev flow uses those routes to bridge browser-owned and automation-owne
 - the gateway routes the WebTransport connect through that explicit session id instead of one global token path
 - `Delegate MCP` assigns that session to the local `bpane-mcp-bridge` service principal
 - the page then calls `mcp-bridge` on `:8931/control-session` so the bridge adopts that same session for later ownership/status calls
+- external MCP clients can avoid the mutable bridge control target by connecting
+  directly to `:8931/sessions/{session_id}/mcp` after that session is delegated
 - the local `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource, so delegated control also works in `docker_pool` mode
 
 Current limitation:
@@ -290,7 +292,9 @@ Current limitation:
 - the optional `docker_single` backend can now start and stop one runtime container for the active session
 - the optional `docker_pool` backend can start multiple runtime containers in parallel, but only up to its configured runtime caps
 - Docker-backed runtime assignment metadata is now persisted and reconciled on gateway startup so pool-mode workers can survive a gateway restart cleanly
-- `mcp-bridge` now follows the selected delegated session's runtime endpoint, but each bridge instance still manages only one control session at a time
+- `mcp-bridge` keeps `/control-session` as a compatibility control target and
+  also supports per-connection session routing through
+  `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`
 - the default compose stack runs `docker_pool` for local multi-session testing
 - global compatibility routes like `/api/session/status` and `/api/session/mcp-owner` are compatibility-only and are not part of the frozen v1 contract; multi-runtime backends should use session-scoped `/api/v1/sessions/{id}/...` routes
 
