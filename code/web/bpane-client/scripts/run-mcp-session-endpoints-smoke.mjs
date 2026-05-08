@@ -12,6 +12,7 @@ import {
   openAdminTab,
   waitForBrowserConnected,
 } from './admin-smoke-lib.mjs';
+import { waitForManagedSessionClients } from './support/mcp-health-assertions.mjs';
 import { McpStreamableClient } from './support/mcp-streamable-client.mjs';
 import { DEFAULTS, createLogger, fetchAuthConfig, fetchJson, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
 
@@ -53,7 +54,7 @@ async function run() {
     clients.push(clientA);
     const clientB = await openMcpClient(bridge, sessionB, options);
     clients.push(clientB);
-    await waitForBridgeClients(bridge, options, [[sessionA, 1], [sessionB, 1]]);
+    const healthWithBoth = await waitForManagedSessionClients(bridge, options, [[sessionA, 1], [sessionB, 1]]);
     await waitForMcpOwner(accessToken, options, sessionA, true);
     await waitForMcpOwner(accessToken, options, sessionB, true);
 
@@ -63,9 +64,14 @@ async function run() {
     clients.splice(clients.indexOf(clientA), 1);
     await waitForMcpOwner(accessToken, options, sessionA, false);
     await waitForMcpOwner(accessToken, options, sessionB, true);
-    await waitForBridgeClients(bridge, options, [[sessionA, 0], [sessionB, 1]]);
+    const healthAfterCloseA = await waitForManagedSessionClients(bridge, options, [[sessionA, 0], [sessionB, 1]]);
 
-    await emitSummary(options, { sessionA, sessionB, markerA, markerB, sessionAClosedWithoutDroppingB: true }, log);
+    await emitSummary(options, {
+      sessionA, sessionB, markerA, markerB,
+      managedSessionsWithBoth: healthWithBoth.managed_sessions.length,
+      managedSessionsAfterCloseA: healthAfterCloseA.managed_sessions.length,
+      sessionAClosedWithoutDroppingB: true,
+    }, log);
   } finally {
     for (const client of clients.splice(0)) await client.close().catch(() => {});
     await cleanupSessions(accessToken, options, sessions);
@@ -126,13 +132,6 @@ async function verifyNavigation(client, targetContainer, otherContainer, session
   return marker;
 }
 
-async function waitForBridgeClients(bridge, options, expected) {
-  await poll('MCP bridge selected clients', () => fetchJson(healthUrl(bridge)), (health) => {
-    const entries = Array.isArray(health?.selected_session_clients) ? health.selected_session_clients : [];
-    return expected.every(([sessionId, count]) => clientCount(entries, sessionId) === count);
-  }, options.connectTimeoutMs);
-}
-
 async function waitForMcpOwner(accessToken, options, sessionId, expected) {
   await poll(`MCP owner ${sessionId}`, async () => {
     const status = await fetchJson(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/status`, {
@@ -167,16 +166,8 @@ async function clearBridgeControl(bridge) {
   if (!response.ok && response.status !== 404) throw new Error(`Could not clear MCP bridge control session: HTTP ${response.status}`);
 }
 
-function clientCount(entries, sessionId) {
-  return entries.find((entry) => entry?.session_id === sessionId)?.clients ?? 0;
-}
-
 function sessionMcpUrl(bridge, sessionId) {
   return `${new URL(bridge.controlUrl).origin}/sessions/${encodeURIComponent(sessionId)}/mcp`;
-}
-
-function healthUrl(bridge) {
-  return `${new URL(bridge.controlUrl).origin}/health`;
 }
 
 function apiOrigin(options) {

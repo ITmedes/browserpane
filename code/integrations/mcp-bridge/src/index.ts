@@ -15,6 +15,10 @@ import { lookup } from "node:dns/promises";
 import http from "node:http";
 import { isIP } from "node:net";
 import {
+  buildManagedSessionHealth,
+  type BridgeHealthAlignment,
+} from "./mcp-health.js";
+import {
   GatewaySessionAutomationAccessResponse,
   GatewaySessionResource,
   SessionControlClient,
@@ -269,13 +273,6 @@ function describeManagedCdpEndpoint(
     return null;
   }
 }
-
-type BridgeHealthAlignment =
-  | "unmanaged"
-  | "aligned"
-  | "control_session_not_visible"
-  | "control_session_not_delegated"
-  | "playwright_endpoint_mismatch";
 
 function isSessionDelegatedToBridge(session: GatewaySessionResource | null): boolean {
   if (!session?.automation_delegate) {
@@ -702,6 +699,69 @@ async function main() {
     }
     explicitRuntimeTargets.clear();
   }
+
+  async function managedSessionHealth(
+    kind: "control" | "selected",
+    session: GatewaySessionResource | null,
+    runtime: PlaywrightRuntimeController,
+    clients: number,
+  ) {
+    let visibleSession: GatewaySessionResource | null = null;
+    if (session) {
+      try {
+        visibleSession = await sessionControlClient.getSession(session.id);
+      } catch {
+        visibleSession = null;
+      }
+    }
+    const cdpEndpoint = describeManagedCdpEndpoint(
+      visibleSession ?? session,
+      automationAccessManager.getCached(session),
+    );
+    const playwrightCdpEndpoint = runtime.getCurrentEndpoint();
+    return {
+      visibleSession,
+      cdpEndpoint,
+      entry: buildManagedSessionHealth({
+        kind,
+        session,
+        visibleSession,
+        clients,
+        backendDelegated: isSessionDelegatedToBridge(visibleSession),
+        mcpOwner: await fetchMcpOwner(visibleSession ?? session),
+        cdpEndpoint,
+        playwrightCdpEndpoint,
+        playwrightEffectiveCdpEndpoint: runtime.getEffectiveEndpoint(),
+        alignment: deriveBridgeHealthAlignment(
+          session,
+          visibleSession,
+          cdpEndpoint,
+          playwrightCdpEndpoint,
+        ),
+      }),
+    };
+  }
+
+  async function fetchMcpOwner(session: GatewaySessionResource | null): Promise<boolean | null> {
+    if (!session) {
+      return null;
+    }
+    try {
+      const access = await automationAccessManager.get(session);
+      const headers = await gatewaySessionHeaders(session, automationAccessManager);
+      const response = await fetch(`${GATEWAY_API_URL}${automationStatusPath(session, access)}`, {
+        headers,
+      });
+      if (!response.ok) {
+        return null;
+      }
+      const payload = (await response.json()) as { mcp_owner?: unknown };
+      return typeof payload.mcp_owner === "boolean" ? payload.mcp_owner : null;
+    } catch {
+      return null;
+    }
+  }
+
   if (managedSession) {
     console.log(
       `[mcp-bridge] resolved control session ${managedSession.id} (${managedSession.state}, ${managedSession.connect.compatibility_mode})`,
@@ -862,19 +922,21 @@ async function main() {
     const url = new URL(req.url ?? "/", `http://localhost:${MCP_PORT}`);
 
     if (url.pathname === "/health") {
-      let visibleControlSession: GatewaySessionResource | null = null;
-      if (managedSession) {
-        try {
-          visibleControlSession = await sessionControlClient.getSession(managedSession.id);
-        } catch {
-          visibleControlSession = null;
-        }
-      }
-      const controlSessionCdpEndpoint = describeManagedCdpEndpoint(
-        visibleControlSession ?? managedSession,
-        automationAccessManager.getCached(managedSession),
+      const controlHealth = await managedSessionHealth(
+        "control",
+        managedSession,
+        playwrightRuntime,
+        managedSession ? clientCountForTarget(runtimeTargetKey(managedSession)) : 0,
       );
-      const playwrightCdpEndpoint = playwrightRuntime.getCurrentEndpoint();
+      const selectedHealth = await Promise.all(
+        Array.from(explicitRuntimeTargets.values()).map((target) =>
+          managedSessionHealth("selected", target.session, target.runtime, clientCountForTarget(target.key)),
+        ),
+      );
+      const managedSessions = [
+        ...(managedSession ? [controlHealth.entry] : []),
+        ...selectedHealth.map((health) => health.entry),
+      ];
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
@@ -884,22 +946,20 @@ async function main() {
           resolution: { width, height },
           supervised_delay_ms: SUPERVISED_DELAY_MS,
           control_session_id: managedSession?.id ?? null,
-          control_session_state: visibleControlSession?.state ?? managedSession?.state ?? null,
+          control_session_state:
+            controlHealth.visibleSession?.state ?? managedSession?.state ?? null,
           control_session_mode:
-            visibleControlSession?.connect.compatibility_mode
+            controlHealth.visibleSession?.connect.compatibility_mode
             ?? managedSession?.connect.compatibility_mode
             ?? null,
-          control_session_visible: Boolean(visibleControlSession),
-          control_session_backend_delegated: isSessionDelegatedToBridge(visibleControlSession),
-          bridge_alignment: deriveBridgeHealthAlignment(
-            managedSession,
-            visibleControlSession,
-            controlSessionCdpEndpoint,
-            playwrightCdpEndpoint,
-          ),
-          control_session_cdp_endpoint: controlSessionCdpEndpoint,
-          playwright_cdp_endpoint: playwrightCdpEndpoint,
+          control_session_visible: Boolean(controlHealth.visibleSession),
+          control_session_backend_delegated:
+            isSessionDelegatedToBridge(controlHealth.visibleSession),
+          bridge_alignment: controlHealth.entry.alignment,
+          control_session_cdp_endpoint: controlHealth.cdpEndpoint,
+          playwright_cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
           playwright_effective_cdp_endpoint: playwrightRuntime.getEffectiveEndpoint(),
+          managed_sessions: managedSessions,
           selected_session_clients: Array.from(explicitRuntimeTargets.values()).map((target) => ({
             session_id: target.session?.id ?? null,
             clients: clientCountForTarget(target.key),
