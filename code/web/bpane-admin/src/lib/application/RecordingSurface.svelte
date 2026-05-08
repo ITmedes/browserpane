@@ -1,10 +1,14 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { ControlClient } from '../api/control-client';
   import type { SessionResource } from '../api/control-types';
   import type { SessionRecordingPlaybackResource, SessionRecordingResource } from '../api/recording-types';
   import type { LiveBrowserSessionConnection } from '../session/browser-session-types';
   import RecordingPanel from '../presentation/RecordingPanel.svelte';
   import { RecordingViewModelBuilder } from '../presentation/recording-view-model';
+  import { saveBlob } from './recording-downloads';
+
+  const LIBRARY_RECONCILE_INTERVAL_MS = 2_500;
 
   type RecordingSurfaceProps = {
     readonly controlClient: ControlClient; readonly session: SessionResource | null;
@@ -44,6 +48,13 @@
     downloadingRecordingId,
     downloadingPlayback,
   }));
+
+  onMount(() => {
+    const timer = window.setInterval(() => {
+      if (shouldReconcileLibrary()) void loadLibrary(currentSessionId);
+    }, LIBRARY_RECONCILE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  });
 
   $effect(() => {
     const nextSessionId = session?.id ?? null;
@@ -174,33 +185,15 @@
     }
   }
 
-  function saveBlob(blob: Blob, fileName: string): void {
-    const url = URL.createObjectURL(blob);
-    try {
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.append(link);
-      link.click();
-      link.remove();
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }
+  function shouldReconcileLibrary(): boolean { return Boolean(currentSessionId && !libraryLoading && !downloadingRecordingId && !downloadingPlayback); }
 
   function errorMessage(value: unknown): string {
     return value instanceof Error ? value.message : 'Recording operation failed';
   }
 </script>
 
-<RecordingPanel
-  {viewModel}
-  {autoDownload}
+<RecordingPanel {viewModel} {autoDownload}
   onAutoDownloadChange={(enabled) => { autoDownload = enabled; }}
-  onStart={() => void startRecording()}
-  onStop={() => void stopRecording()}
-  onDownload={downloadLast}
-  onRefreshLibrary={() => void loadLibrary()}
-  onDownloadSegment={(recordingId) => void downloadSegment(recordingId)}
-  onDownloadPlayback={() => void downloadPlaybackExport()}
-/>
+  onStart={() => void startRecording()} onStop={() => void stopRecording()} onDownload={downloadLast}
+  onRefreshLibrary={() => void loadLibrary()} onDownloadSegment={(recordingId) => void downloadSegment(recordingId)}
+  onDownloadPlayback={() => void downloadPlaybackExport()} />
