@@ -34,12 +34,14 @@ async function run() {
 
     log('Creating and delegating first session through the admin MCP panel.');
     sessionA = await createAndConnectSession(page, options);
+    await assertMcpEndpoint(page, options, bridge, sessionA);
     log(`Delegating first session ${sessionA}.`);
     await delegateSelectedSession(page, options, bridge, sessionA);
 
     log('Switching delegation to a second connected session.');
     await disconnectEmbeddedBrowser(page, options);
     sessionB = await createAndConnectSession(page, options);
+    await assertMcpEndpoint(page, options, bridge, sessionB);
     log(`Delegating second session ${sessionB}.`);
     await delegateSelectedSession(page, options, bridge, sessionB);
     await assertSessionDelegate(accessToken, options, sessionA, null);
@@ -114,6 +116,14 @@ async function assertSessionDelegate(accessToken, options, sessionId, clientId) 
   }
 }
 
+async function assertMcpEndpoint(page, options, bridge, sessionId) {
+  const expected = sessionMcpUrl(bridge, sessionId);
+  await poll('admin MCP endpoint', async () => ({
+    text: await page.getByTestId('mcp-endpoint-url').textContent().catch(() => ''),
+    enabled: await page.getByTestId('mcp-copy-endpoint').isEnabled().catch(() => false),
+  }), (state) => state.text === expected && state.enabled, options.connectTimeoutMs);
+}
+
 async function clearBridgeFromPage(page) {
   if (await page.getByTestId('mcp-clear').isEnabled().catch(() => false)) {
     await page.getByTestId('mcp-clear').click();
@@ -163,6 +173,13 @@ async function emitSummary(options, summary, log) {
 function healthUrl(bridge) {
   const url = new URL(bridge.controlUrl);
   url.pathname = '/health';
+  url.search = '';
+  return url.toString();
+}
+
+function sessionMcpUrl(bridge, sessionId) {
+  const url = new URL(bridge.controlUrl);
+  url.pathname = `/sessions/${encodeURIComponent(sessionId)}/mcp`;
   url.search = '';
   return url.toString();
 }

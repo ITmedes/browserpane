@@ -13,6 +13,22 @@ export type McpBridgeHealth = {
   readonly control_session_state: string | null;
   readonly control_session_backend_delegated: boolean;
   readonly bridge_alignment: string | null;
+  readonly managed_sessions: readonly McpManagedSessionHealth[];
+};
+
+export type McpManagedSessionHealth = {
+  readonly kind: string;
+  readonly session_id: string;
+  readonly clients: number;
+  readonly state: string | null;
+  readonly mode: string | null;
+  readonly visible: boolean;
+  readonly backend_delegated: boolean;
+  readonly mcp_owner: boolean | null;
+  readonly cdp_endpoint: string | null;
+  readonly playwright_cdp_endpoint: string | null;
+  readonly playwright_effective_cdp_endpoint: string | null;
+  readonly alignment: string | null;
 };
 
 export type McpBridgeControlSession = {
@@ -81,6 +97,7 @@ class McpBridgeMapper {
         'control_session_backend_delegated',
       ),
       bridge_alignment: optionalString(object.bridge_alignment, 'bridge_alignment') ?? null,
+      managed_sessions: toManagedSessions(object.managed_sessions),
     };
   }
 
@@ -94,4 +111,48 @@ class McpBridgeMapper {
       cdp_endpoint: optionalString(object.cdp_endpoint, 'mcp bridge cdp_endpoint') ?? null,
     };
   }
+}
+
+function toManagedSessions(value: unknown): readonly McpManagedSessionHealth[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error('mcp bridge managed_sessions must be an array');
+  }
+  return value.map((entry, index) => toManagedSession(entry, index));
+}
+
+function toManagedSession(value: unknown, index: number): McpManagedSessionHealth {
+  const object = expectRecord(value, `mcp bridge managed_sessions[${index}]`);
+  return {
+    kind: expectString(object.kind, `mcp bridge managed_sessions[${index}].kind`),
+    session_id: expectString(object.session_id, `mcp bridge managed_sessions[${index}].session_id`),
+    clients: expectNumber(object.clients, `mcp bridge managed_sessions[${index}].clients`),
+    state: optionalString(object.state, `mcp bridge managed_sessions[${index}].state`) ?? null,
+    mode: optionalString(object.mode, `mcp bridge managed_sessions[${index}].mode`) ?? null,
+    visible: expectBoolean(object.visible ?? false, `mcp bridge managed_sessions[${index}].visible`),
+    backend_delegated: expectBoolean(
+      object.backend_delegated ?? false,
+      `mcp bridge managed_sessions[${index}].backend_delegated`,
+    ),
+    mcp_owner: optionalBoolean(object.mcp_owner, `mcp bridge managed_sessions[${index}].mcp_owner`),
+    cdp_endpoint: optionalString(object.cdp_endpoint, `mcp bridge managed_sessions[${index}].cdp_endpoint`) ?? null,
+    playwright_cdp_endpoint: optionalString(
+      object.playwright_cdp_endpoint,
+      `mcp bridge managed_sessions[${index}].playwright_cdp_endpoint`,
+    ) ?? null,
+    playwright_effective_cdp_endpoint: optionalString(
+      object.playwright_effective_cdp_endpoint,
+      `mcp bridge managed_sessions[${index}].playwright_effective_cdp_endpoint`,
+    ) ?? null,
+    alignment: optionalString(object.alignment, `mcp bridge managed_sessions[${index}].alignment`) ?? null,
+  };
+}
+
+function optionalBoolean(value: unknown, label: string): boolean | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  return expectBoolean(value, label);
 }

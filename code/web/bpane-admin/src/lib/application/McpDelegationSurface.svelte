@@ -121,6 +121,18 @@
     }
   }
 
+  async function copyEndpoint(): Promise<void> {
+    if (!viewModel.endpointUrl) {
+      return;
+    }
+    error = null;
+    try {
+      await navigator.clipboard.writeText(viewModel.endpointUrl);
+    } catch (copyError) {
+      error = errorMessage(copyError);
+    }
+  }
+
   async function clearPreviousDelegates(targetSessionId: string): Promise<void> {
     for (const session of sessions) {
       if (session.id !== targetSessionId && isDelegatedToBridge(session)) {
@@ -144,4 +156,5 @@
   onRefresh={() => void refreshBridge()}
   onDelegate={() => void delegateSelectedSession()}
   onClear={() => void clearBridge()}
+  onCopyEndpoint={() => void copyEndpoint()}
 />

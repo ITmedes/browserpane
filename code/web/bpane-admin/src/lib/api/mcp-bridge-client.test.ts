@@ -10,6 +10,20 @@ describe('McpBridgeClient', () => {
       control_session_state: 'active',
       control_session_backend_delegated: true,
       bridge_alignment: 'aligned',
+      managed_sessions: [{
+        kind: 'control',
+        session_id: 'session-a',
+        clients: 1,
+        state: 'active',
+        mode: 'session_runtime_pool',
+        visible: true,
+        backend_delegated: true,
+        mcp_owner: true,
+        cdp_endpoint: 'http://runtime:9223',
+        playwright_cdp_endpoint: 'http://runtime:9223',
+        playwright_effective_cdp_endpoint: 'http://runtime:9223',
+        alignment: 'aligned',
+      }],
     }));
     const client = new McpBridgeClient({
       controlUrl: 'http://localhost:8931/control-session',
@@ -20,6 +34,8 @@ describe('McpBridgeClient', () => {
 
     expect(health.control_session_id).toBe('session-a');
     expect(health.bridge_alignment).toBe('aligned');
+    expect(health.managed_sessions[0]?.mcp_owner).toBe(true);
+    expect(health.managed_sessions[0]?.clients).toBe(1);
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('http://localhost:8931/health'),
       expect.objectContaining({ method: 'GET' }),
