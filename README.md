@@ -295,6 +295,9 @@ Current limitation:
 - `mcp-bridge` keeps `/control-session` as a compatibility control target and
   also supports per-connection session routing through
   `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`
+- `mcp-bridge` exposes `/health.managed_sessions` so multi-session clients can
+  inspect each active control/session-bound target without relying only on the
+  legacy `control_session_*` fields
 - the default compose stack runs `docker_pool` for local multi-session testing
 - global compatibility routes like `/api/session/status` and `/api/session/mcp-owner` are compatibility-only and are not part of the frozen v1 contract; multi-runtime backends should use session-scoped `/api/v1/sessions/{id}/...` routes
 

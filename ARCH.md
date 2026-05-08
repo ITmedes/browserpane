@@ -388,6 +388,9 @@ running against the Chromium instance inside the host container.
   the bridge at an explicitly delegated session without restarting the service
 - Supports per-connection session routing so external MCP clients can bind to a
   delegated BrowserPane session without mutating one bridge-global target
+- `/health` keeps legacy `control_session_*` fields and also reports a
+  normalized `managed_sessions` array covering the compatibility control
+  session plus session-scoped MCP clients
 - Resolves the delegated session's runtime CDP endpoint from the gateway session
   resource before binding Playwright MCP
 - Graceful shutdown: always releases ownership on SIGINT/SIGTERM
