@@ -4,7 +4,6 @@ import { chromium } from 'playwright-core';
 import {
   cleanupAdminBeforeRun,
   cleanupAdminSmoke,
-  closeAdminOverlay,
   ensureAdminLoggedIn,
   openAdminTab,
   waitForBrowserConnected,
@@ -28,9 +27,7 @@ async function run() {
     await openAdminTab(page, 'sessions');
     await page.getByTestId('session-new').click();
     const sessionId = await resolveSelectedSessionId(page, options);
-    log(`Connecting embedded browser for ${sessionId}.`);
-    await closeAdminOverlay(page);
-    await page.getByTestId('browser-connect').click();
+    log(`Waiting for automatic browser join for ${sessionId}.`);
     await waitForBrowserConnected(page, options);
 
     await openAdminTab(page, 'metrics');

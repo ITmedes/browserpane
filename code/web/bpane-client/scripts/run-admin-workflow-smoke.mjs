@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
-import { cleanupAdminBeforeRun, cleanupAdminSmoke, ensureAdminLoggedIn, getAdminAccessToken, openAdminTab } from './admin-smoke-lib.mjs';
+import { cleanupAdminBeforeRun, cleanupAdminSmoke, ensureAdminLoggedIn, getAdminAccessToken, openAdminTab, waitForBrowserConnected } from './admin-smoke-lib.mjs';
 import { appendRunLog, createWorkflow, createWorkflowVersion, issueAutomationAccess, transitionRun } from './admin-workflow-smoke-lib.mjs';
 import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
 
@@ -28,6 +28,7 @@ async function run() {
     await openAdminTab(page, 'sessions');
     await page.getByTestId('session-new').click();
     sessionId = await resolveSelectedSessionId(page, options);
+    await waitForBrowserConnected(page, options);
 
     await openAdminTab(page, 'workflows');
     await page.getByTestId('workflow-definition-select').selectOption(workflow.id);

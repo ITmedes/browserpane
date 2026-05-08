@@ -51,6 +51,7 @@
     readonly mcpDelegationRefreshVersion: number;
     readonly onRefreshSessions: () => Promise<void>;
     readonly onCreateSession: () => void;
+    readonly onJoinSelectedSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
     readonly onRefreshSelectedSession: () => Promise<void>;
     readonly onStopSession: () => void;
@@ -129,6 +130,7 @@
           viewModel={props.sessionListViewModel}
           onRefresh={() => void props.onRefreshSessions()}
           onCreateSession={props.onCreateSession}
+          onJoinSession={props.onJoinSelectedSession}
           onSelectSessionId={props.onSelectSessionId}
         />
         <McpDelegationSurface

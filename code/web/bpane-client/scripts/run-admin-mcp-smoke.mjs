@@ -4,7 +4,6 @@ import { chromium } from 'playwright-core';
 import {
   cleanupAdminBeforeRun,
   cleanupAdminSmoke,
-  closeAdminOverlay,
   disconnectEmbeddedBrowser,
   ensureAdminLoggedIn,
   getAdminAccessToken,
@@ -75,8 +74,6 @@ async function createAndConnectSession(page, options) {
   const previousSessionId = await readSelectedSessionId(page);
   await page.getByTestId('session-new').click();
   const sessionId = await resolveSelectedSessionId(page, options, previousSessionId);
-  await closeAdminOverlay(page);
-  await page.getByTestId('browser-connect').click();
   await waitForBrowserConnected(page, options);
   await page.locator('[data-testid="browser-viewport"] canvas').first().waitFor({
     state: 'visible',

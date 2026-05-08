@@ -6,6 +6,7 @@
     readonly viewModel: SessionListPanelViewModel;
     readonly onRefresh: () => void;
     readonly onCreateSession: () => void;
+    readonly onJoinSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
   };
 
@@ -13,6 +14,7 @@
     viewModel,
     onRefresh,
     onCreateSession,
+    onJoinSession,
     onSelectSessionId,
   }: SessionListPanelProps = $props();
 </script>
@@ -27,6 +29,15 @@
       onclick={onCreateSession}
     >
       New session
+    </button>
+    <button
+      class="admin-button-primary"
+      type="button"
+      data-testid="session-join"
+      disabled={!viewModel.authenticated || viewModel.loading || !viewModel.selectedSessionId}
+      onclick={onJoinSession}
+    >
+      Join / reconnect
     </button>
     <button
       class="admin-button-primary"
