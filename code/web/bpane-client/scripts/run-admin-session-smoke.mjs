@@ -50,13 +50,14 @@ async function run() {
       throw new Error('Expected display upload control to be enabled after browser connect.');
     }
     await openAdminTab(page, 'lifecycle');
+    await verifySessionStatusInspector(page, options);
     const stopDisabled = await page.getByTestId('session-stop').isDisabled();
     if (!stopDisabled) {
       throw new Error('Expected session stop to be disabled while embedded browser is connected.');
     }
 
-    log('Disconnecting and stopping the selected session.');
-    await disconnectEmbeddedBrowser(page, options);
+    log('Disconnecting through the session inspector and stopping the selected session.');
+    await disconnectThroughSessionInspector(page, options);
     await waitForStopEnabled(page, options, sessionId);
     await page.getByTestId('session-stop').click();
     await waitForSessionState(page, options, sessionId, 'stopped');
@@ -104,6 +105,28 @@ async function verifyRemainingPanels(page) {
   await page.getByTestId('admin-log-count').waitFor({ state: 'visible' });
   await openAdminTab(page, 'workflows');
   await page.getByTestId('workflow-status').waitFor({ state: 'visible' });
+}
+
+async function verifySessionStatusInspector(page, options) {
+  await page.getByTestId('session-total-clients').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await page.getByTestId('session-connection-row').first().waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  const disconnectAllEnabled = await page.getByTestId('session-disconnect-all').isEnabled();
+  if (!disconnectAllEnabled) {
+    throw new Error('Expected session inspector disconnect-all to be enabled with a live connection.');
+  }
+}
+
+async function disconnectThroughSessionInspector(page, options) {
+  await page.getByTestId('session-disconnect-all').click();
+  await poll(
+    'admin embedded browser disconnect through session inspector',
+    async () => await page.getByTestId('browser-status').textContent(),
+    (status) => status === 'Disconnected',
+    options.connectTimeoutMs,
+  );
 }
 
 async function waitForMcpDelegationReady(page, options) {

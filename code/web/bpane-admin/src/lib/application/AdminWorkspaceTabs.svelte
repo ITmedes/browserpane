@@ -15,7 +15,6 @@
   import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
   import FeaturePlaceholderPanel from '../presentation/FeaturePlaceholderPanel.svelte';
-  import SessionDetailPanel from '../presentation/SessionDetailPanel.svelte';
   import SessionListPanel from '../presentation/SessionListPanel.svelte';
   import {
     type AdminFeaturePanelId,
@@ -23,7 +22,7 @@
     type AdminWorkspaceViewModel,
   } from '../presentation/admin-workspace-view-model';
   import type { AdminLogEntry } from '../presentation/logs-view-model';
-  import type { SessionDetailPanelViewModel, SessionListPanelViewModel } from '../presentation/session-view-model';
+  import type { SessionListPanelViewModel } from '../presentation/session-view-model';
   import type { BrowserSessionConnectPreferences, LiveBrowserSessionConnection } from '../session/browser-session-types';
   import BrowserPolicySurface from './BrowserPolicySurface.svelte';
   import DisplayControlsSurface from './DisplayControlsSurface.svelte';
@@ -31,6 +30,7 @@
   import McpDelegationSurface from './McpDelegationSurface.svelte';
   import MetricsSurface from './MetricsSurface.svelte';
   import RecordingSurface from './RecordingSurface.svelte';
+  import SessionLifecycleSurface from './SessionLifecycleSurface.svelte';
   import SessionFilesSurface from './SessionFilesSurface.svelte';
   import WorkflowOperationsSurface from './WorkflowOperationsSurface.svelte';
 
@@ -45,7 +45,6 @@
     readonly browserPreferences: BrowserSessionConnectPreferences;
     readonly workspaceViewModel: AdminWorkspaceViewModel;
     readonly sessionListViewModel: SessionListPanelViewModel;
-    readonly sessionDetailViewModel: SessionDetailPanelViewModel;
     readonly logEntries: readonly AdminLogEntry[];
     readonly sessionFilesRefreshVersion: number;
     readonly recordingsRefreshVersion: number;
@@ -56,6 +55,7 @@
     readonly onRefreshSelectedSession: () => Promise<void>;
     readonly onStopSession: () => void;
     readonly onKillSession: () => void;
+    readonly onDisconnectEmbeddedBrowser: () => void;
     readonly onFileCountChange: (count: number) => void;
     readonly onClearLogs: () => void;
     readonly onBrowserPreferencesChange: (preferences: BrowserSessionConnectPreferences) => void;
@@ -141,11 +141,15 @@
           onRefreshSelectedSession={props.onRefreshSelectedSession}
         />
       {:else if activePanel.id === 'lifecycle'}
-        <SessionDetailPanel
-          viewModel={props.sessionDetailViewModel}
-          onRefresh={() => void props.onRefreshSelectedSession()}
-          onStop={props.onStopSession}
-          onKill={props.onKillSession}
+        <SessionLifecycleSurface
+          controlClient={props.controlClient}
+          selectedSession={props.selectedSession}
+          connected={props.browserConnected}
+          resourceLoading={props.sessionListViewModel.loading}
+          onRefreshSelectedSession={props.onRefreshSelectedSession}
+          onStopSession={props.onStopSession}
+          onKillSession={props.onKillSession}
+          onDisconnectEmbeddedBrowser={props.onDisconnectEmbeddedBrowser}
         />
       {:else if activePanel.id === 'files'}
         <SessionFilesSurface

@@ -6,6 +6,8 @@
     readonly onRefresh: () => void;
     readonly onStop: () => void;
     readonly onKill: () => void;
+    readonly onDisconnectConnection: (connectionId: number) => void;
+    readonly onDisconnectAll: () => void;
   };
 
   let {
@@ -13,6 +15,8 @@
     onRefresh,
     onStop,
     onKill,
+    onDisconnectConnection,
+    onDisconnectAll,
   }: SessionDetailPanelProps = $props();
 </script>
 
@@ -51,6 +55,15 @@
     >
       Kill
     </button>
+    <button
+      class="admin-button-primary"
+      type="button"
+      data-testid="session-disconnect-all"
+      disabled={!viewModel.canDisconnectAll}
+      onclick={onDisconnectAll}
+    >
+      Disconnect all
+    </button>
   </div>
 
   {#if viewModel.facts.length === 0}
@@ -70,6 +83,46 @@
       <p class="admin-empty">{viewModel.hint}</p>
     {/if}
   {/if}
+
+  <div class="grid gap-2" aria-label="Live session connections">
+    <div class="flex items-center justify-between gap-3">
+      <p class="admin-eyebrow m-0">Connections</p>
+      {#if viewModel.loading}
+        <span class="text-xs font-bold text-admin-leaf">Loading</span>
+      {/if}
+    </div>
+    {#if viewModel.connections.length === 0}
+      <p class="admin-empty" data-testid="session-connection-empty">
+        {viewModel.statusHint ?? 'No live connections reported.'}
+      </p>
+    {:else}
+      <div class="grid gap-2">
+        {#each viewModel.connections as connection}
+          <div
+            class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-admin-ink/10 bg-admin-panel/68 p-3"
+            data-testid="session-connection-row"
+            data-connection-id={connection.id}
+          >
+            <span class="min-w-0">
+              <strong class="block font-mono text-sm text-admin-ink">{connection.label}</strong>
+              <span class="text-xs uppercase text-admin-ink/62" data-testid="session-connection-role">
+                {connection.role}
+              </span>
+            </span>
+            <button
+              class="admin-button-primary"
+              type="button"
+              data-testid="session-connection-disconnect"
+              disabled={!connection.canDisconnect}
+              onclick={() => onDisconnectConnection(connection.id)}
+            >
+              Disconnect
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
 
   {#if viewModel.error}
     <p class="admin-error">{viewModel.error}</p>
