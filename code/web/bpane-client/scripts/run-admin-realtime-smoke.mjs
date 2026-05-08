@@ -20,13 +20,14 @@ async function run() {
   const context = await browser.newContext({ viewport: { width: 1360, height: 920 } });
   const page = await context.newPage();
   let sessionId = '';
+  let accessToken = '';
 
   try {
     log(`Opening ${options.pageUrl}`);
     await ensureAdminLoggedIn(page, options);
     await cleanupAdminBeforeRun(page, options, log);
     await openAdminTab(page, 'sessions');
-    const accessToken = await getAdminAccessToken(page);
+    accessToken = await getAdminAccessToken(page);
 
     log('Creating a session through REST, not through the admin button.');
     const created = await createSession(accessToken, options);
@@ -50,6 +51,9 @@ async function run() {
     await waitForGatewayLogEntry(page, options, 'Gateway MCP delegation snapshot', '1 delegated');
     await emitSummary(options, sessionId, log, true);
   } finally {
+    if (accessToken && sessionId) {
+      await clearAutomationDelegate(accessToken, options, sessionId).catch(() => {});
+    }
     await cleanupAdminSmoke(page, options, log);
     await context.close();
     await browser.close();
@@ -95,6 +99,17 @@ async function setAutomationDelegate(accessToken, options, sessionId, bridge) {
       display_name: bridge.displayName,
     }),
   });
+}
+
+async function clearAutomationDelegate(accessToken, options, sessionId) {
+  const response = await fetch(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/automation-owner`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok && response.status !== 404) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+  }
 }
 
 async function waitForRealtimeSessionRow(page, options, sessionId) {
