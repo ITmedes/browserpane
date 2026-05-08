@@ -27,7 +27,7 @@ function queueWorkflowEntrypoint() {
   const targetUrl =
     input && typeof input.target_url === 'string' && input.target_url.trim()
       ? input.target_url.trim()
-      : 'http://web:8080';
+      : 'http://web:8080/test-embed.html';
   const holdMs =
     input && Number.isFinite(input.hold_ms)
       ? Number(input.hold_ms)
@@ -210,7 +210,7 @@ async function main() {
       },
       client_request_id: `${requestPrefix}-active`,
       input: {
-        target_url: 'http://web:8080',
+        target_url: 'http://web:8080/test-embed.html',
         hold_ms: 8000,
       },
       labels: {
@@ -237,7 +237,7 @@ async function main() {
       },
       client_request_id: `${requestPrefix}-queued`,
       input: {
-        target_url: 'http://web:8080',
+        target_url: 'http://web:8080/test-embed.html',
         hold_ms: 0,
       },
       labels: {

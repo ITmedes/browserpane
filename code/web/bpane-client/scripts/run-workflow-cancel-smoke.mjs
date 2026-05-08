@@ -22,7 +22,7 @@ const log = createLogger('workflow-cancel-smoke');
 function workflowCancelEntrypoint() {
   return `export default async function run({ page, sessionId }) {
   console.log(\`workflow cancel start \${sessionId}\`);
-  await page.goto('http://web:8080', { waitUntil: 'networkidle' });
+  await page.goto('http://web:8080/test-embed.html', { waitUntil: 'networkidle' });
   console.error('workflow awaiting cancellation');
   await page.waitForTimeout(60000);
   return {

@@ -1496,7 +1496,7 @@
     // When served via Docker/nginx: /dist/bpane.js
     // For local file:// dev: adjust path as needed, or run a local server.
     const SDK_PATH = location.protocol === 'file:'
-      ? '../code/web/bpane-client/dist/bpane.js'
+      ? '../../code/web/bpane-client/dist/bpane.js'
       : '/dist/bpane.js';
     const { BpaneSession } = await import(SDK_PATH);
 

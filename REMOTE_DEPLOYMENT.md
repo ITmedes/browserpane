@@ -12,7 +12,7 @@ with a certificate the browser trusts.
 
 Keep these values aligned when moving away from localhost:
 
-- Web origin: the HTTPS origin that serves `bpane-client` and `test-embed.html`.
+- Web origin: the HTTPS origin that serves the admin console, `bpane-client`, and any test fixtures such as `/test-embed.html`.
 - Gateway public URL: the externally reachable `https://...` WebTransport URL
   configured through `--public-gateway-url`.
 - OIDC issuer: the issuer embedded in browser access tokens.
