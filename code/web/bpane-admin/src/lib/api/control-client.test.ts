@@ -162,24 +162,36 @@ describe('ControlClient', () => {
 
   it('throws a typed API error for non-success responses', async () => {
     const fetchImpl = vi.fn<FetchLike>(async () => new Response('denied', { status: 403 }));
+    const onAuthenticationFailure = vi.fn();
     const client = new ControlClient({
       baseUrl: 'http://localhost:8932',
       accessTokenProvider: () => 'owner-token',
+      onAuthenticationFailure,
       fetchImpl,
     });
 
-    await expect(client.listSessions()).rejects.toMatchObject({
-      status: 403,
-      body: 'denied',
+    await expect(client.listSessions()).rejects.toMatchObject({ status: 403, body: 'denied' });
+    expect(onAuthenticationFailure).not.toHaveBeenCalled();
+  });
+
+  it('notifies the app about expired owner bearer auth', async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => new Response('expired', { status: 401 }));
+    const onAuthenticationFailure = vi.fn();
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      onAuthenticationFailure,
+      fetchImpl,
     });
+
+    await expect(client.listSessions()).rejects.toMatchObject({ status: 401 });
+    expect(onAuthenticationFailure).toHaveBeenCalledWith(expect.objectContaining({ status: 401, body: 'expired' }));
   });
 });
 
 function jsonFetch(payload: unknown): ReturnType<typeof vi.fn<FetchLike>> {
-  return vi.fn<FetchLike>(async () => {
-    return new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    });
-  });
+  return vi.fn<FetchLike>(async () => new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  }));
 }

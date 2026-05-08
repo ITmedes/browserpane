@@ -18,6 +18,7 @@
   let auth = $state<AuthSnapshot | null>(null);
   let authLoading = $state(true);
   let authError = $state<string | null>(null);
+  let authRedirecting = $state(false);
   let adminOpen = $state(true);
 
   onMount(() => {
@@ -54,7 +55,12 @@
     if (!authClient) {
       return;
     }
-    window.location.href = await authClient.buildLoginUrl(new URL(window.location.href));
+    try {
+      window.location.href = await authClient.buildLoginUrl(new URL(window.location.href));
+    } catch (error) {
+      authRedirecting = false;
+      authError = errorMessage(error);
+    }
   }
 
   async function logout(): Promise<void> {
@@ -63,9 +69,7 @@
     }
     const logoutUrl = await authClient.buildLogoutUrl(new URL(window.location.href));
     auth = authClient.getSnapshot();
-    controlClient = null;
-    adminEventClient = null;
-    workflowClient = null;
+    clearAuthenticatedClients();
     if (logoutUrl) {
       window.location.href = logoutUrl;
     }
@@ -86,6 +90,7 @@
     controlClient = new ControlClient({
       baseUrl: window.location.origin,
       accessTokenProvider: requireAccessToken,
+      onAuthenticationFailure: handleAuthenticationIssue,
     });
     adminEventClient = new AdminEventClient({
       baseUrl: window.location.origin,
@@ -94,15 +99,35 @@
     workflowClient = new WorkflowClient({
       baseUrl: window.location.origin,
       accessTokenProvider: requireAccessToken,
+      onAuthenticationFailure: handleAuthenticationIssue,
     });
   }
 
   async function requireAccessToken(): Promise<string> {
     const token = await authClient?.getValidAccessToken();
     if (!token) {
+      handleAuthenticationIssue();
       throw new Error('No active admin access token');
     }
     return token;
+  }
+
+  function handleAuthenticationIssue(): void {
+    if (authRedirecting) {
+      return;
+    }
+    authRedirecting = true;
+    authClient?.clear();
+    auth = authClient?.getSnapshot() ?? null;
+    clearAuthenticatedClients();
+    authError = 'Your admin session expired. Redirecting to sign in...';
+    void login();
+  }
+
+  function clearAuthenticatedClients(): void {
+    controlClient = null;
+    adminEventClient = null;
+    workflowClient = null;
   }
 
   function errorMessage(error: unknown): string {

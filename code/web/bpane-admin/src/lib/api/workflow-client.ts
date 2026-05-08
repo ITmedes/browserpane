@@ -1,4 +1,9 @@
-import { ControlApiError, type AccessTokenProvider, type FetchLike } from './control-client';
+import {
+  sendAuthenticatedRequest,
+  type AccessTokenProvider,
+  type AuthenticationFailureHandler,
+  type FetchLike,
+} from './authenticated-api';
 import { WorkflowMapper } from './workflow-mapper';
 import { WorkflowRunMapper } from './workflow-run-mapper';
 import type {
@@ -19,17 +24,20 @@ import type {
 export type WorkflowClientOptions = {
   readonly baseUrl: string | URL;
   readonly accessTokenProvider: AccessTokenProvider;
+  readonly onAuthenticationFailure?: AuthenticationFailureHandler;
   readonly fetchImpl?: FetchLike;
 };
 
 export class WorkflowClient {
   readonly #baseUrl: URL;
   readonly #accessTokenProvider: AccessTokenProvider;
+  readonly #onAuthenticationFailure: AuthenticationFailureHandler | undefined;
   readonly #fetchImpl: FetchLike;
 
   constructor(options: WorkflowClientOptions) {
     this.#baseUrl = new URL(options.baseUrl);
     this.#accessTokenProvider = options.accessTokenProvider;
+    this.#onAuthenticationFailure = options.onAuthenticationFailure;
     this.#fetchImpl = options.fetchImpl ?? fetch;
   }
 
@@ -134,24 +142,15 @@ export class WorkflowClient {
   }
 
   async #send(method: string, path: string, body?: unknown, accept = 'application/json'): Promise<Response> {
-    const accessToken = await this.#accessTokenProvider();
-    const headers: Record<string, string> = {
-      accept,
-      authorization: `Bearer ${accessToken}`,
-    };
-    const init: RequestInit = {
+    return await sendAuthenticatedRequest({
+      baseUrl: this.#baseUrl,
+      accessTokenProvider: this.#accessTokenProvider,
+      fetchImpl: this.#fetchImpl,
+      onAuthenticationFailure: this.#onAuthenticationFailure,
       method,
-      headers,
-    };
-    if (body !== undefined) {
-      headers['content-type'] = 'application/json';
-      init.body = JSON.stringify(body);
-    }
-
-    const response = await this.#fetchImpl(new URL(path, this.#baseUrl), init);
-    if (!response.ok) {
-      throw new ControlApiError(response.status, await response.text());
-    }
-    return response;
+      path,
+      body,
+      accept,
+    });
   }
 }
