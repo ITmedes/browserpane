@@ -33,8 +33,9 @@
   let lastBlob = $state<Blob | null>(null);
   let lastArtifactName = $state<string | null>(null);
   let error = $state<string | null>(null);
+  const activeConnection = $derived(liveConnection?.sessionId === currentSessionId ? liveConnection : null);
   const viewModel = $derived(RecordingViewModelBuilder.build({
-    liveConnection,
+    liveConnection: activeConnection,
     selectedSessionId: currentSessionId,
     recording,
     busy,
@@ -78,7 +79,7 @@
       void loadLibrary(currentSessionId);
     }
   });
-  $effect(() => { recording = liveConnection?.handle.isRecording?.() ?? false; });
+  $effect(() => { recording = activeConnection?.handle.isRecording?.() ?? false; });
 
   async function loadLibrary(sessionId = currentSessionId): Promise<void> {
     if (!sessionId) {
@@ -145,13 +146,13 @@
   }
 
   async function startRecording(): Promise<void> {
-    if (!liveConnection?.handle.startRecording) {
+    if (!activeConnection?.handle.startRecording) {
       return;
     }
     busy = true;
     error = null;
     try {
-      await liveConnection.handle.startRecording({ frameRate: 24 });
+      await activeConnection.handle.startRecording({ frameRate: 24 });
       recording = true;
     } catch (startError) {
       error = errorMessage(startError);
@@ -161,14 +162,14 @@
   }
 
   async function stopRecording(): Promise<void> {
-    if (!liveConnection?.handle.stopRecording) {
+    if (!activeConnection?.handle.stopRecording) {
       return;
     }
     busy = true;
     error = null;
     try {
-      lastBlob = await liveConnection.handle.stopRecording();
-      lastArtifactName = `bpane-${liveConnection?.sessionId ?? 'session'}-${Date.now()}.webm`;
+      lastBlob = await activeConnection.handle.stopRecording();
+      lastArtifactName = `bpane-${activeConnection.sessionId}-${Date.now()}.webm`;
       recording = false;
       if (autoDownload) {
         downloadLast();

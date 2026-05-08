@@ -60,7 +60,8 @@ export type RecordingViewModelInput = {
 
 export class RecordingViewModelBuilder {
   static build(input: RecordingViewModelInput): RecordingViewModel {
-    const handle = input.liveConnection?.handle;
+    const liveConnection = input.liveConnection?.sessionId === input.selectedSessionId ? input.liveConnection : null;
+    const handle = liveConnection?.handle;
     const supported = Boolean(handle?.startRecording && handle.stopRecording);
     const catalogBusy = input.libraryLoading
       || Boolean(input.downloadingRecordingId)
@@ -68,13 +69,13 @@ export class RecordingViewModelBuilder {
     const selected = Boolean(input.selectedSessionId);
     return {
       status: input.recording ? 'recording' : 'idle',
-      sessionLabel: input.selectedSessionId ?? input.liveConnection?.sessionId ?? '--',
+      sessionLabel: input.selectedSessionId ?? liveConnection?.sessionId ?? '--',
       artifactLabel: input.lastArtifactName ?? '--',
       note: supported
         ? 'Records the composed browser view as a local WebM artifact.'
         : 'Connect to a session with recording-capable browser handle support.',
-      canStart: Boolean(input.liveConnection) && supported && !input.recording && !input.busy,
-      canStop: Boolean(input.liveConnection) && supported && input.recording && !input.busy,
+      canStart: Boolean(liveConnection) && supported && !input.recording && !input.busy,
+      canStop: Boolean(liveConnection) && supported && input.recording && !input.busy,
       canDownload: Boolean(input.lastArtifactName) && !input.busy,
       busy: input.busy,
       error: input.error,

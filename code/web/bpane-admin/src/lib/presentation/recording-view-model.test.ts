@@ -7,6 +7,7 @@ describe('RecordingViewModelBuilder', () => {
   it('enables start for connected recording-capable sessions', () => {
     const viewModel = RecordingViewModelBuilder.build(input({
       liveConnection: connection(),
+      selectedSessionId: 'session-a',
       recording: false,
     }));
 
@@ -18,6 +19,7 @@ describe('RecordingViewModelBuilder', () => {
   it('enables stop while recording and download after an artifact exists', () => {
     const viewModel = RecordingViewModelBuilder.build(input({
       liveConnection: connection(),
+      selectedSessionId: 'session-a',
       recording: true,
       lastArtifactName: 'session.webm',
     }));
@@ -32,6 +34,16 @@ describe('RecordingViewModelBuilder', () => {
 
     expect(viewModel.canStart).toBe(false);
     expect(viewModel.note).toContain('Connect');
+  });
+
+  it('disables local recording when the live browser belongs to another session', () => {
+    const viewModel = RecordingViewModelBuilder.build(input({
+      liveConnection: connection('session-a'),
+      selectedSessionId: 'session-b',
+    }));
+
+    expect(viewModel.canStart).toBe(false);
+    expect(viewModel.sessionLabel).toBe('session-b');
   });
 
   it('summarizes retained recordings and playback export state', () => {
@@ -63,9 +75,9 @@ describe('RecordingViewModelBuilder', () => {
   });
 });
 
-function connection(): LiveBrowserSessionConnection {
+function connection(sessionId = 'session-a'): LiveBrowserSessionConnection {
   return {
-    sessionId: 'session-a',
+    sessionId,
     gatewayUrl: 'https://localhost:4433/session',
     handle: {
       disconnect: () => {},
