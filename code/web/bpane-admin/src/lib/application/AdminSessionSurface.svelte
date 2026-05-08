@@ -165,23 +165,20 @@
     selectedSession = sessions.find((session) => session.id === sessionId) ?? selectedSession;
   }
   function requestBrowserConnect(): void { browserConnectRequestVersion += 1; }
-  function appendLog(entry: AdminLogEntry): void {
-    logEntries = AdminLogEntryFactory.append(logEntries, entry);
-  }
-  function errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : 'Unexpected admin console error';
-  }
+  function appendLog(entry: AdminLogEntry): void { logEntries = AdminLogEntryFactory.append(logEntries, entry); }
+  function errorMessage(error: unknown): string { return error instanceof Error ? error.message : 'Unexpected admin console error'; }
 </script>
-<BrowserWorkspaceOverlayLayout {adminOpen} {onAdminOpenChange}>
-  {#snippet browser()}
+<section class="relative min-h-[calc(100vh-76px)]">
+  <main class="min-w-0">
     <BrowserEmbedPanel
       viewModel={workspaceViewModel.browser} session={selectedSession}
       connectedSessionId={liveConnection?.sessionId ?? null} connecting={browserConnecting} error={browserError}
       autoConnectVersion={browserConnectRequestVersion}
       onConnect={(container) => void connectBrowser(container)} onDisconnect={() => disconnectBrowser(true)}
     />
-  {/snippet}
-  {#snippet admin()}
+  </main>
+  <BrowserWorkspaceOverlayLayout {adminOpen} {onAdminOpenChange}>
+    {#snippet admin()}
     <AdminWorkspaceTabs
       {controlClient} {workflowClient} {selectedSession} {sessions} {mcpBridge}
       {liveConnection} {browserPreferences} {browserConnected}
@@ -195,5 +192,6 @@
       onClearLogs={() => { logEntries = []; }}
       onBrowserPreferencesChange={(next) => { browserPreferences = next; }}
     />
-  {/snippet}
-</BrowserWorkspaceOverlayLayout>
+    {/snippet}
+  </BrowserWorkspaceOverlayLayout>
+</section>

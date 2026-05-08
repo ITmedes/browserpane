@@ -6,7 +6,9 @@ import { chromium } from 'playwright-core';
 import {
   cleanupAdminBeforeRun,
   cleanupAdminSmoke,
+  closeAdminOverlay,
   ensureAdminLoggedIn,
+  ensureAdminOverlayOpen,
   getAdminAccessToken,
   openAdminTab,
   waitForBrowserConnected,
@@ -71,6 +73,7 @@ async function connectBrowser(page, options) {
 
 async function captureLocalRecording(page, options, tempDir, sessionId) {
   await page.getByTestId('recording-auto-download').setChecked(false);
+  await verifyRecordingStateSurvivesOverlayToggle(page, options);
   await waitForEnabled(page.getByTestId('recording-start'), options, 'recording start');
   await page.getByTestId('recording-start').click();
   await waitForRecordingStarted(page, options);
@@ -86,6 +89,19 @@ async function captureLocalRecording(page, options, tempDir, sessionId) {
     throw new Error(`Admin local recording was unexpectedly small (${saved.bytes} bytes).`);
   }
   return saved;
+}
+
+async function verifyRecordingStateSurvivesOverlayToggle(page, options) {
+  await waitForEnabled(page.getByTestId('recording-start'), options, 'recording start before overlay toggle');
+  await page.getByTestId('recording-start').click();
+  await waitForRecordingStarted(page, options);
+  await closeAdminOverlay(page);
+  await ensureAdminOverlayOpen(page);
+  await page.getByTestId('workspace-panel-recording').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await waitForRecordingStarted(page, options);
+  await waitForEnabled(page.getByTestId('recording-stop'), options, 'recording stop after overlay toggle');
+  await page.getByTestId('recording-stop').click();
+  await waitForEnabled(page.getByTestId('recording-download'), options, 'recording stopped after overlay toggle');
 }
 
 async function verifyRecordingLibrary(page, options, tempDir, sessionId, retained, expectedBytes) {
