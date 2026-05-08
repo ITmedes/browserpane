@@ -2,6 +2,12 @@ import { ControlSessionMapper } from './control-session-mapper';
 import { ControlSessionFileMapper } from './control-session-file-mapper';
 import { ControlSessionStatusMapper } from './control-session-status-mapper';
 import { RecordingMapper } from './recording-mapper';
+import {
+  sendAuthenticatedRequest,
+  type AccessTokenProvider,
+  type AuthenticationFailureHandler,
+  type FetchLike,
+} from './authenticated-api';
 import type {
   CreateSessionCommand,
   SessionAccessTokenResponse,
@@ -18,32 +24,30 @@ import type {
 } from './recording-types';
 import type { SessionStatus } from './session-status-types';
 
-export type AccessTokenProvider = () => Promise<string> | string;
-export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+export {
+  ControlApiError,
+  type AccessTokenProvider,
+  type AuthenticationFailureHandler,
+  type FetchLike,
+} from './authenticated-api';
 
 export type ControlClientOptions = {
   readonly baseUrl: string | URL;
   readonly accessTokenProvider: AccessTokenProvider;
+  readonly onAuthenticationFailure?: AuthenticationFailureHandler;
   readonly fetchImpl?: FetchLike;
 };
-
-export class ControlApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly body: string,
-  ) {
-    super(`BrowserPane control API returned HTTP ${status}`);
-  }
-}
 
 export class ControlClient {
   readonly #baseUrl: URL;
   readonly #accessTokenProvider: AccessTokenProvider;
+  readonly #onAuthenticationFailure: AuthenticationFailureHandler | undefined;
   readonly #fetchImpl: FetchLike;
 
   constructor(options: ControlClientOptions) {
     this.#baseUrl = new URL(options.baseUrl);
     this.#accessTokenProvider = options.accessTokenProvider;
+    this.#onAuthenticationFailure = options.onAuthenticationFailure;
     this.#fetchImpl = options.fetchImpl ?? fetch;
   }
 
@@ -173,24 +177,15 @@ export class ControlClient {
   }
 
   async #send(method: string, path: string, body?: unknown, accept = 'application/json'): Promise<Response> {
-    const accessToken = await this.#accessTokenProvider();
-    const headers: Record<string, string> = {
-      accept,
-      authorization: `Bearer ${accessToken}`,
-    };
-    const init: RequestInit = {
+    return await sendAuthenticatedRequest({
+      baseUrl: this.#baseUrl,
+      accessTokenProvider: this.#accessTokenProvider,
+      fetchImpl: this.#fetchImpl,
+      onAuthenticationFailure: this.#onAuthenticationFailure,
       method,
-      headers,
-    };
-    if (body !== undefined) {
-      headers['content-type'] = 'application/json';
-      init.body = JSON.stringify(body);
-    }
-
-    const response = await this.#fetchImpl(new URL(path, this.#baseUrl), init);
-    if (!response.ok) {
-      throw new ControlApiError(response.status, await response.text());
-    }
-    return response;
+      path,
+      body,
+      accept,
+    });
   }
 }
