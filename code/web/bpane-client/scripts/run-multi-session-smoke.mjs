@@ -4,6 +4,7 @@ import process from 'node:process';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright-core';
 import { McpStreamableClient } from './support/mcp-streamable-client.mjs';
+import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -153,7 +154,7 @@ async function fetchAuthConfig(options) {
 }
 
 async function configurePage(page, options) {
-  await page.goto(options.pageUrl, { waitUntil: 'networkidle' });
+  await page.goto(testEmbedPageUrl(options), { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean(window.__bpaneAuth));
 }
 

@@ -76,7 +76,8 @@ long-lived compose service.
                      v
        ┌──────────────────────────┐
        │  nginx (web, :8080)      │
-       │  / -> test-embed.html    │
+       │  / -> /admin/ redirect   │
+       │  /test-embed.html        │
        │  /dist/ -> bpane-client   │
        │  /auth-config.json       │
        │  /cert-hash -> cert.pem  │
@@ -384,8 +385,8 @@ running against the Chromium instance inside the host container.
 - Lazy registration: only claims MCP ownership on first MCP client connect
 - Registers/clears MCP ownership with the gateway so delegated automation can attach without forcing browser clients into viewer mode
 - Uses OIDC client-credentials for gateway API access in the local compose stack
-- Exposes a local compatibility control-session API on `:8931` so the browser
-  test page can point the bridge at an explicitly delegated session without
+- Exposes a local compatibility control-session API on `:8931` so the admin
+  console can point the bridge at an explicitly delegated session without
   restarting the service
 - Supports per-connection session routing so external MCP clients can bind to a
   delegated BrowserPane session without mutating one bridge-global target
@@ -427,12 +428,12 @@ Gateway-supervised passive session recorder.
 The default dev stack no longer uses a shared token file.
 
 - `web` serves `/auth-config.json`
-- `test-embed.html` discovers the OIDC provider and performs Authorization Code + PKCE
+- the admin console discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
-- after login, `test-embed.html` lists owner-scoped `/api/v1/sessions`, lets the user join an existing session or start a new one, and then uses the selected session resource's connect metadata
-- the page then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
-- test-page-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
+- after login, the admin console lists owner-scoped `/api/v1/sessions`, lets the user join an existing session or start a new one, and then uses the selected session resource's connect metadata
+- the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
+- admin-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via compatibility `PUT /control-session`
 - the console shows whether the currently selected session is the exact session delegated to `mcp-bridge` and exposes the recommended `/sessions/{session_id}/mcp` endpoint for external clients
 - `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource and lazily binds Playwright MCP on first client connect

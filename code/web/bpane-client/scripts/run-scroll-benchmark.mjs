@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import process from 'node:process';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright-core';
+import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -330,7 +331,7 @@ async function setRemotePage(options) {
 }
 
 async function configurePage(page, options) {
-  await page.goto(options.pageUrl, { waitUntil: 'networkidle' });
+  await page.goto(testEmbedPageUrl(options), { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean(window.__bpaneBenchmarkMetrics));
   await page.selectOption('#render-backend-select', options.renderBackend);
   await page.locator('#scroll-copy-toggle').setChecked(options.scrollCopy);

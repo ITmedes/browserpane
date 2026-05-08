@@ -19,7 +19,7 @@ const log = createLogger('workflow-admission-smoke');
 function workflowAdmissionEntrypoint() {
   return `export default async function run({ page, input, sessionId }) {
   const holdMs = Number(input && typeof input.hold_ms === 'number' ? input.hold_ms : 0);
-  await page.goto('http://web:8080', { waitUntil: 'networkidle' });
+  await page.goto('http://web:8080/test-embed.html', { waitUntil: 'networkidle' });
   if (holdMs > 0) {
     await new Promise((resolve) => setTimeout(resolve, holdMs));
   }

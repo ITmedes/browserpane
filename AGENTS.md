@@ -171,10 +171,10 @@ Run these where applicable:
 1. `./deploy/gen-dev-cert.sh dev/certs`
 2. Start the local stack:
    `BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 docker compose -f deploy/compose.yml up --build`
-3. Open `http://localhost:8080` in Chromium.
+3. Open `http://localhost:8080/admin/` in Chromium. The web root redirects there for local development.
 4. Log in through the local Keycloak realm with `demo / demo-demo`.
-5. The test page will resolve or create an owner-scoped `/api/v1/sessions` resource before transport connect.
-6. The test page will mint a short-lived session-scoped connect ticket before WebTransport connect.
+5. The admin console will resolve or create an owner-scoped `/api/v1/sessions` resource before transport connect.
+6. The admin console will mint a short-lived session-scoped connect ticket before WebTransport connect.
 7. Use `Delegate MCP` if you want the local `mcp-bridge` to adopt that same session.
 8. If needed, use the SPKI fingerprint from `http://localhost:8080/cert-fingerprint` so Chromium trusts the local gateway cert. `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem`.
 9. `vault` listens on `:8200`, `keycloak` on `:8091`, `postgres` on `:5433`, `mcp-bridge` on `:8931`, and the gateway HTTP API on `:8932`.
