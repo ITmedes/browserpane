@@ -26,7 +26,7 @@
   <div class="flex flex-wrap items-start justify-between gap-2">
     <div class="min-w-0">
       <p class="admin-eyebrow">Workflows</p>
-      <h2 class="m-0 text-base font-extrabold text-admin-night">{props.viewModel.title}</h2>
+      <h2 class="m-0 text-base font-extrabold text-admin-ink">{props.viewModel.title}</h2>
     </div>
     <span class="rounded-full bg-admin-warm/12 px-3 py-1 text-xs font-extrabold text-admin-warm" data-testid="workflow-status">
       {props.viewModel.status}
@@ -98,7 +98,8 @@
   </div>
 
   <div class="grid min-w-0 grid-cols-2 gap-2 xl:grid-cols-4 max-[640px]:grid-cols-1">
-    {@render Metric('Session', props.viewModel.selectedSessionLabel, 'workflow-session-id')}
+    {@render Metric('Baseline', props.viewModel.selectedSessionLabel, 'workflow-session-id')}
+    {@render Metric('Run session', props.viewModel.runSessionLabel, 'workflow-run-session-id')}
     {@render Metric('Run', props.viewModel.currentRunState, 'workflow-run-state')}
     {@render Metric('Logs', String(props.viewModel.logCount), 'workflow-log-count')}
     {@render Metric('Artifacts', String(props.viewModel.fileCount), 'workflow-produced-file-count')}
@@ -107,6 +108,7 @@
   <div class="grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-cream/55 p-3">
     <div class="grid min-w-0 gap-1 text-sm text-admin-ink/70">
       <span><strong>Executor:</strong> {props.viewModel.executorLabel}</span>
+      <span data-testid="workflow-run-session-note"><strong>Session:</strong> {props.viewModel.runSessionNote}</span>
       <span class="[overflow-wrap:anywhere]" data-testid="workflow-run-id"><strong>Run id:</strong> {props.viewModel.currentRunId}</span>
       <span data-testid="workflow-event-count"><strong>Events:</strong> {props.viewModel.eventCount}</span>
     </div>
@@ -138,7 +140,7 @@
   </div>
 
   <div class="grid min-w-0 gap-2">
-    <h3 class="m-0 text-sm font-extrabold text-admin-night">Produced files</h3>
+    <h3 class="m-0 text-sm font-extrabold text-admin-ink">Produced files</h3>
     {#if props.viewModel.producedFiles.length === 0}
       <p class="admin-empty">No produced artifacts loaded.</p>
     {:else}
@@ -163,7 +165,7 @@
 
 {#snippet Timeline(title: string, rows: WorkflowOperationsViewModel['recentLogs'], empty: string)}
   <div class="grid min-w-0 gap-2 rounded-[16px] bg-admin-cream/55 p-3">
-    <h3 class="m-0 text-sm font-extrabold text-admin-night">{title}</h3>
+    <h3 class="m-0 text-sm font-extrabold text-admin-ink">{title}</h3>
     {#if rows.length === 0}
       <p class="admin-empty">{empty}</p>
     {:else}

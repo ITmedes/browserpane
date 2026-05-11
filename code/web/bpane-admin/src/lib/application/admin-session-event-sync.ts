@@ -1,4 +1,5 @@
 import type { AdminEventClient, AdminEventSubscription } from '../api/admin-event-client';
+import type { AdminWorkflowRunSnapshot } from '../api/admin-event-snapshots';
 import type { SessionResource } from '../api/control-types';
 import type { AdminLogEntry } from '../presentation/logs-view-model';
 import { AdminLogEntryFactory } from './admin-log-entries';
@@ -11,6 +12,7 @@ type AdminSessionEventSyncHandlers = {
   readonly onSessionFilesSnapshot?: () => void;
   readonly onRecordingsSnapshot?: () => void;
   readonly onMcpDelegationSnapshot?: () => void;
+  readonly onWorkflowRunsSnapshot?: (runs: readonly AdminWorkflowRunSnapshot[]) => void;
 };
 
 export function subscribeAdminSessionEvents(
@@ -26,6 +28,8 @@ export function subscribeAdminSessionEvents(
         handlers.onSessions(event.sessions);
       } else if (event.type === 'admin.error') {
         handlers.onError(event.error);
+      } else if (event.type === 'workflow_runs.snapshot') {
+        handlers.onWorkflowRunsSnapshot?.(event.workflowRuns);
       } else if (event.type === 'session_files.snapshot') {
         handlers.onSessionFilesSnapshot?.();
       } else if (event.type === 'recordings.snapshot') {

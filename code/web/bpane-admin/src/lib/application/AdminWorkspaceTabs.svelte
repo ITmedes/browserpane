@@ -26,6 +26,7 @@
   import type { BrowserSessionConnectPreferences, LiveBrowserSessionConnection } from '../session/browser-session-types';
   import BrowserPolicySurface from './BrowserPolicySurface.svelte';
   import DisplayControlsSurface from './DisplayControlsSurface.svelte';
+  import LiveSessionActionsSurface from './LiveSessionActionsSurface.svelte';
   import LogsSurface from './LogsSurface.svelte';
   import McpDelegationSurface from './McpDelegationSurface.svelte';
   import MetricsSurface from './MetricsSurface.svelte';
@@ -83,7 +84,8 @@
   } satisfies Record<AdminFeaturePanelId, typeof Activity>;
 </script>
 
-<section class="grid h-full min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden" data-testid="admin-workspace-tabs">
+<section class="grid h-full min-w-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden" data-testid="admin-workspace-tabs">
+  <LiveSessionActionsSurface liveConnection={props.liveConnection} connected={props.browserConnected} />
   <div class="border-b border-[#90a6cc]/18 p-3">
     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3" role="tablist" aria-label="Admin panels">
       {#each props.workspaceViewModel.panels as panel (panel.id)}
@@ -162,7 +164,6 @@
         />
       {:else if activePanel.id === 'display'}
         <DisplayControlsSurface
-          liveConnection={props.liveConnection}
           connected={props.browserConnected}
           preferences={props.browserPreferences}
           onPreferencesChange={props.onBrowserPreferencesChange}

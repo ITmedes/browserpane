@@ -23,7 +23,7 @@
 <div class="grid gap-4" aria-label="Selected session detail">
   <div>
     <p class="admin-eyebrow">Selected session</p>
-    <h2 class="m-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-base text-admin-night">
+    <h2 class="m-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-base text-admin-ink">
       {viewModel.title}
     </h2>
   </div>

@@ -25,7 +25,7 @@
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div>
       <p class="admin-eyebrow">Browser policy</p>
-      <h2 class="m-0 text-base font-extrabold text-admin-night">{viewModel.title}</h2>
+      <h2 class="m-0 text-base font-extrabold text-admin-ink">{viewModel.title}</h2>
     </div>
     <span class="rounded-full border border-admin-leaf/20 bg-admin-leaf/10 px-3 py-1 text-xs font-extrabold text-admin-leaf" data-testid="policy-mode">
       Mode: {viewModel.mode}

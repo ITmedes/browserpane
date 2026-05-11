@@ -19,6 +19,8 @@ export type WorkflowOperationsViewModel = {
   readonly status: string;
   readonly note: string;
   readonly selectedSessionLabel: string;
+  readonly runSessionLabel: string;
+  readonly runSessionNote: string;
   readonly definitionOptions: readonly WorkflowDefinitionOption[];
   readonly selectedWorkflowId: string;
   readonly selectedVersion: string;
@@ -80,6 +82,8 @@ export class WorkflowOperationsViewModelBuilder {
       status: statusLabel(input.loading, input.error, input.currentRun),
       note: note(input.definitions.length, hasSession, input.error),
       selectedSessionLabel: input.selectedSession?.id ?? '--',
+      runSessionLabel: input.currentRun?.session_id ?? '--',
+      runSessionNote: runSessionNote(input.selectedSession?.id ?? null, input.currentRun?.session_id ?? null),
       definitionOptions: input.definitions.map(toDefinitionOption),
       selectedWorkflowId: input.selectedWorkflowId,
       selectedVersion: input.selectedVersion,
@@ -140,8 +144,18 @@ function note(definitionCount: number, hasSession: boolean, error: string | null
   return 'Invoke a workflow against the selected session and inspect run output.';
 }
 
+function runSessionNote(baselineSessionId: string | null, runSessionId: string | null): string {
+  if (!runSessionId) {
+    return 'The run session appears after invocation.';
+  }
+  if (baselineSessionId && baselineSessionId !== runSessionId) {
+    return 'Run session differs from the selected baseline session.';
+  }
+  return 'Run uses the selected baseline session.';
+}
+
 function isTerminal(state: string | null): boolean {
-  return state === 'succeeded' || state === 'failed' || state === 'cancelled';
+  return state === 'succeeded' || state === 'failed' || state === 'cancelled' || state === 'timed_out';
 }
 
 function toLogRow(log: WorkflowRunLogResource): WorkflowRunTextRow {

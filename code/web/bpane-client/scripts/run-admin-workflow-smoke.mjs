@@ -36,6 +36,8 @@ async function run() {
     await page.getByTestId('workflow-input').fill('{\n  "task": "admin workflow smoke"\n}');
     await page.getByTestId('workflow-invoke').click();
     const runId = await waitForRunId(page, options);
+    await waitForText(page, options, 'workflow-run-session-id', sessionId);
+    await waitForContains(page, options, 'workflow-run-session-note', 'selected baseline session');
 
     const automation = await issueAutomationAccess(accessToken, rootUrl, sessionId);
     await transitionRun(automation.token, rootUrl, runId, { state: 'running', message: 'manual executor attached' });
@@ -123,6 +125,14 @@ async function waitForState(page, options, state) {
   await poll(`admin workflow state ${state}`, async () => {
     return await page.getByTestId('workflow-run-state').textContent();
   }, (value) => value === state, options.connectTimeoutMs);
+}
+
+async function waitForText(page, options, testId, expected) {
+  await poll(testId, async () => await page.getByTestId(testId).textContent(), (value) => value === expected, options.connectTimeoutMs);
+}
+
+async function waitForContains(page, options, testId, expected) {
+  await poll(testId, async () => await page.getByTestId(testId).textContent(), (value) => value?.includes(expected), options.connectTimeoutMs);
 }
 
 async function waitForEnabled(locator, options, description) {
