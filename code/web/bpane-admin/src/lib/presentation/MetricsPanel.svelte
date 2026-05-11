@@ -33,6 +33,24 @@
     {/each}
   </div>
 
+  {#if viewModel.details.length > 0}
+    <div class="grid gap-3" data-testid="metrics-detail-sections">
+      {#each viewModel.details as section}
+        <section class="rounded-[14px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label={section.title}>
+          <p class="admin-eyebrow mb-2">{section.title}</p>
+          <div class="grid grid-cols-2 gap-2 max-[760px]:grid-cols-1">
+            {#each section.items as item}
+              <span class="rounded-[12px] bg-admin-cream/72 p-2 text-xs font-bold text-admin-ink/60 uppercase">
+                {item.label}
+                <strong class="mt-1 block text-admin-ink normal-case" data-testid={item.testId}>{item.value}</strong>
+              </span>
+            {/each}
+          </div>
+        </section>
+      {/each}
+    </div>
+  {/if}
+
   <div class="flex flex-wrap gap-2">
     <button class="admin-button-primary" type="button" data-testid="metrics-start" disabled={!viewModel.canStart} onclick={onStart}>
       Start sample
