@@ -98,7 +98,7 @@ export class NalReassembler {
       });
     }
     const entry = this.pending.get(nalId)!;
-    entry.frags.set(fragSeq, data);
+    entry.frags.set(fragSeq, Uint8Array.from(data));
 
     if (entry.frags.size === entry.total) {
       this.pending.delete(nalId);
