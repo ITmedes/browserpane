@@ -168,8 +168,8 @@
   function appendLog(entry: AdminLogEntry): void { logEntries = AdminLogEntryFactory.append(logEntries, entry); }
   function errorMessage(error: unknown): string { return error instanceof Error ? error.message : 'Unexpected admin console error'; }
 </script>
-<section class="relative min-h-[calc(100vh-76px)]">
-  <main class="min-w-0">
+<section class="relative h-[calc(100dvh-96px)] min-h-[520px]">
+  <main class="h-full min-w-0">
     <BrowserEmbedPanel
       viewModel={workspaceViewModel.browser} session={selectedSession}
       connectedSessionId={liveConnection?.sessionId ?? null} connecting={browserConnecting} error={browserError}

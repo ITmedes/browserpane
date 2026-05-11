@@ -59,8 +59,8 @@ export class SessionResizeRuntime {
     return dims;
   }
 
-  getContainerResizeDims(): { width: number; height: number } {
-    const rect = this.container.getBoundingClientRect();
+  getContainerResizeDims(fallback?: { width: number; height: number }): { width: number; height: number } {
+    const rect = this.getResizeSource(fallback);
     return this.scaledDims(rect.width, rect.height);
   }
 
@@ -75,7 +75,7 @@ export class SessionResizeRuntime {
 
     this.resizeTimeout = this.setTimeoutFn(() => {
       this.resizeTimeout = null;
-      const dims = this.scaledDims(width, height);
+      const dims = this.getContainerResizeDims({ width, height });
       this.applyCanvasSize(dims.width, dims.height);
       this.markDisplayDirty();
       this.sendResizeRequest(dims.width, dims.height);
@@ -176,6 +176,13 @@ export class SessionResizeRuntime {
       return 1;
     }
     return Math.max(1, Math.min(3, this.getDevicePixelRatio()));
+  }
+
+  private getResizeSource(fallback?: { width: number; height: number }): { width: number; height: number } {
+    const canvasRect = this.canvas.getBoundingClientRect();
+    if (canvasRect.width > 0 && canvasRect.height > 0) return canvasRect;
+    if (fallback && fallback.width > 0 && fallback.height > 0) return fallback;
+    return this.container.getBoundingClientRect();
   }
 
   private scaledDims(width: number, height: number): { width: number; height: number } {

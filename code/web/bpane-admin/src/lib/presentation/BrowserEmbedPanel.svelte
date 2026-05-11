@@ -45,7 +45,7 @@
   }
 </script>
 
-<section class="flex min-h-[calc(100vh-96px)] flex-col rounded-2xl border border-[#90a6cc]/18 bg-admin-night/92 p-3 shadow-[0_24px_64px_rgb(0_0_0_/_34%)] sm:p-4" aria-label="Live browser session">
+<section class="flex h-full min-h-0 flex-col rounded-2xl border border-[#90a6cc]/18 bg-admin-night/92 p-3 shadow-[0_24px_64px_rgb(0_0_0_/_34%)] sm:p-4" aria-label="Live browser session">
   <div class="flex items-center justify-between gap-3">
     <div class="flex min-w-0 items-center gap-3">
       <span class="shrink-0 text-xs font-bold tracking-[0.16em] text-[#9fb1cf] uppercase">Live browser</span>
@@ -77,7 +77,7 @@
   </div>
 
   <div
-    class="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-[#c4d5f4]/10 bg-[#050806] max-[1100px]:min-h-[64vh] max-[760px]:min-h-[420px]"
+    class="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-[#c4d5f4]/10 bg-[#050806]"
     data-testid="browser-viewport"
     bind:this={container}
   >
