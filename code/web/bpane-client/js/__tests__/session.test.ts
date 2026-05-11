@@ -526,14 +526,14 @@ describe('BpaneSession', () => {
       expect(MockMediaRecorder.instances[0].start).toHaveBeenCalledOnce();
       expect((HTMLCanvasElement.prototype as any).captureStream).toHaveBeenCalledWith(24);
 
-      MockMediaRecorder.instances[0].emitData([1, 2, 3, 4]);
+      MockMediaRecorder.instances[0].emitData(Array.from({ length: 2048 }, (_, index) => index % 256));
       const stopPromise = session.stopRecording();
       expect(MockMediaRecorder.instances[0].requestData).toHaveBeenCalledOnce();
       expect(MockMediaRecorder.instances[0].stop).toHaveBeenCalledOnce();
       MockMediaRecorder.instances[0].emitStop();
 
       const blob = await stopPromise;
-      expect(blob.size).toBe(4);
+      expect(blob.size).toBe(2048);
       expect(session.isRecording()).toBe(false);
     });
   });
