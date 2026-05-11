@@ -3,14 +3,23 @@ import type { SessionStatus } from '../api/session-status-types';
 
 export type SessionListItemViewModel = {
   readonly id: string;
+  readonly shortId: string;
   readonly lifecycle: string;
   readonly runtime: string;
   readonly presence: string;
   readonly clients: number;
+  readonly updatedAt: string;
+  readonly mcpDelegation: string;
+};
+
+export type SelectedSessionViewModel = SessionListItemViewModel & {
+  readonly ownerMode: string;
+  readonly runtimeBinding: string;
 };
 
 export type SessionListPanelViewModel = {
   readonly sessions: readonly SessionListItemViewModel[];
+  readonly selectedSession: SelectedSessionViewModel | null;
   readonly selectedSessionId: string | null;
   readonly authenticated: boolean;
   readonly loading: boolean;
@@ -52,14 +61,10 @@ export class SessionViewModelBuilder {
     readonly loading: boolean;
     readonly error: string | null;
   }): SessionListPanelViewModel {
+    const selectedSession = input.sessions.find((session) => session.id === input.selectedSessionId) ?? null;
     return {
-      sessions: input.sessions.map((session) => ({
-        id: session.id,
-        lifecycle: session.state,
-        runtime: session.status.runtime_state,
-        presence: session.status.presence_state,
-        clients: session.status.connection_counts.total_clients,
-      })),
+      sessions: input.sessions.map(toListItem),
+      selectedSession: selectedSession ? toSelectedSession(selectedSession) : null,
       selectedSessionId: input.selectedSessionId,
       authenticated: input.authenticated,
       loading: input.loading,
@@ -127,6 +132,27 @@ export class SessionViewModelBuilder {
   }
 }
 
+function toListItem(session: SessionResource): SessionListItemViewModel {
+  return {
+    id: session.id,
+    shortId: shortId(session.id),
+    lifecycle: session.state,
+    runtime: session.status.runtime_state,
+    presence: session.status.presence_state,
+    clients: session.status.connection_counts.total_clients,
+    updatedAt: session.updated_at,
+    mcpDelegation: mcpDelegationLabel(session),
+  };
+}
+
+function toSelectedSession(session: SessionResource): SelectedSessionViewModel {
+  return {
+    ...toListItem(session),
+    ownerMode: session.owner_mode,
+    runtimeBinding: session.runtime.binding,
+  };
+}
+
 function statusFacts(status: SessionStatus | null): SessionFactViewModel[] {
   if (!status) {
     return [];
@@ -159,4 +185,12 @@ function resolveHint(connected: boolean, stopEligibility: SessionStopEligibility
 
 function yesNo(value: boolean): string {
   return value ? 'yes' : 'no';
+}
+
+function mcpDelegationLabel(session: SessionResource): string {
+  return session.automation_delegate ? 'MCP delegated' : 'MCP not delegated';
+}
+
+function shortId(value: string): string {
+  return value.length > 13 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
 }
