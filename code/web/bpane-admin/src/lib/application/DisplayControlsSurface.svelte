@@ -63,13 +63,12 @@
       });
       return;
     }
-    const startMicrophone = handle.startMicrophone;
-    if (!startMicrophone) {
+    if (!handle.startMicrophone) {
       error = 'The connected browser handle does not expose microphone control.';
       return;
     }
     await runLiveAction('microphone', async () => {
-      await startMicrophone();
+      await handle.startMicrophone?.();
       microphoneActive = true;
     });
   }
@@ -86,24 +85,23 @@
       });
       return;
     }
-    const startCamera = handle.startCamera;
-    if (!startCamera) {
+    if (!handle.startCamera) {
       error = 'The connected browser handle does not expose camera control.';
       return;
     }
     await runLiveAction('camera', async () => {
-      await startCamera();
+      await handle.startCamera?.();
       cameraActive = true;
     });
   }
 
   async function uploadFiles(files: FileList): Promise<void> {
-    const upload = liveConnection?.handle.uploadFiles;
-    if (!upload) {
+    const handle = liveConnection?.handle;
+    if (!handle?.uploadFiles) {
       error = 'The connected browser handle does not expose file upload.';
       return;
     }
-    await runLiveAction('upload', async () => upload(files));
+    await runLiveAction('upload', async () => handle.uploadFiles?.(files));
   }
 
   async function runLiveAction(action: DisplayAction, operation: () => Promise<void>): Promise<void> {
