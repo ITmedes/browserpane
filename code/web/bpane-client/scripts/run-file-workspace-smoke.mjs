@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
+import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
 
 const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
@@ -126,7 +127,7 @@ async function fetchAuthConfig(options) {
 }
 
 async function configurePage(page, options) {
-  await page.goto(options.pageUrl, { waitUntil: 'networkidle' });
+  await page.goto(testEmbedPageUrl(options), { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean(window.__bpaneAuth));
 }
 

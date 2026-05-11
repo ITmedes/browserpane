@@ -24,7 +24,7 @@ function workflowReconnectEntrypoint() {
   const targetUrl =
     input && typeof input.target_url === 'string' && input.target_url.trim()
       ? input.target_url.trim()
-      : 'http://web:8080';
+      : 'http://web:8080/test-embed.html';
   const runWaitMs =
     input && Number.isFinite(input.run_wait_ms)
       ? Number(input.run_wait_ms)
@@ -128,7 +128,7 @@ async function createWorkflowRun(accessToken, options, workflowId, sessionId) {
         existing_session_id: sessionId,
       },
       input: {
-        target_url: 'http://web:8080',
+        target_url: 'http://web:8080/test-embed.html',
         run_wait_ms: 6000,
       },
       labels: {

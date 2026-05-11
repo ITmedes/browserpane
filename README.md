@@ -89,7 +89,7 @@ bpane-gateway also talks to:
 | `code/apps/bpane-gateway` | WebTransport entry point and shared-session coordinator. Relays frames between browser clients and the host, applies owner/viewer policy, and exposes the HTTP session/ownership API. |
 | `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
-| `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes Streamable HTTP on `/mcp` and legacy SSE on `/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
+| `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes compatibility Streamable HTTP on `/mcp`, session-scoped Streamable HTTP on `/sessions/{id}/mcp`, compatibility SSE on `/sse`, session-scoped SSE on `/sessions/{id}/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
 | `code/integrations/workflow-worker` | On-demand workflow executor. Downloads pinned workflow source snapshots, attaches with session automation access, runs Playwright workflow entrypoints, resolves credential/workspace inputs, and writes logs, outputs, and produced files back to the gateway. |
 | `code/integrations/recording-worker` | On-demand recording executor. Attaches as a passive recorder client, captures WebM output, and finalizes recording metadata into gateway-managed artifact storage. |
 | `deploy/` | Local runtime manifests and container images. This is the practical source of truth for how the dev stack is assembled and started. |
@@ -132,7 +132,7 @@ BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \
 docker compose -f deploy/compose.yml up --build
 ```
 
-Then open `http://localhost:8080` in Chromium.
+Then open `http://localhost:8080/admin/` in Chromium. The web root redirects to the admin console.
 
 Use these local dev credentials on the login screen:
 
@@ -145,6 +145,7 @@ Then:
 2. Click `Start New Session` to create a fresh browser, or select an older session and click `Join / Reconnect`
 3. Open the same selected session in another signed-in browser window if you want to share it live with another user
 4. Click `Delegate MCP` if you want the local `mcp-bridge` to drive that exact session
+5. For external MCP clients, prefer the session-scoped URL shown in the admin MCP panel, for example `http://localhost:8931/sessions/{session_id}/mcp`
 
 If you explicitly want the older single-runtime compatibility stack, opt into it:
 
@@ -161,7 +162,7 @@ The compose stack starts:
 - `vault`: local HashiCorp Vault dev server on `:8200` for workflow credential bindings
 - `keycloak`: local OIDC provider on `:8091`
 - `web`: local frontend on `:8080`
-- `mcp-bridge`: MCP bridge on `:8931` (`/mcp` for Streamable HTTP, `/sse` for legacy SSE)
+- `mcp-bridge`: MCP bridge on `:8931` (`/sessions/{id}/mcp` for recommended session-scoped Streamable HTTP, `/sessions/{id}/sse` for session-scoped legacy SSE, `/mcp` and `/sse` for compatibility)
 
 The local compose file also defines a `workflow-worker` image profile. The gateway launches workflow-worker containers on demand; you normally do not start that container as a long-lived service yourself.
 
@@ -188,13 +189,13 @@ docker compose -f deploy/compose.yml up --build
 
 The default local auth flow is OIDC-based:
 
-- open `http://localhost:8080`
+- open `http://localhost:8080/admin/`
 - click `Login`
 - authenticate against the local Keycloak realm
 - use the demo account `demo / demo-demo`
-- return to the page and either select an existing session or click `Start New Session`
-- the page joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
-- sessions created from the test page use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
+- return to the admin console and either select an existing session or click `Start New Session`
+- the admin console joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
+- sessions created from the admin console use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
 - reconnecting a stopped session now restarts the same session resource instead of creating a new one
 - the console UI now shows whether the currently selected session is the exact session delegated to the local MCP bridge
 - in Docker-backed runtime modes, BrowserPane mounts session-specific browser data for the Chromium profile, uploads, and downloads so cookies, cache, downloads, and Chromium session-restore state survive worker restarts without sharing one browser data root across sessions
@@ -202,8 +203,8 @@ The default local auth flow is OIDC-based:
 - exact in-memory browser process state is only preserved while the worker is still alive; once idle-stop shuts a worker down, reconnect restores the browser from its persisted profile rather than from a true container checkpoint
 - if you want the local `mcp-bridge` to follow that same session, click `Delegate MCP`
 
-`test-embed.html` fetches `/auth-config.json` and performs an Authorization Code + PKCE login. The browser client then connects to the gateway with an OIDC access token.
-Before WebTransport connect, the page now mints a short-lived session-scoped connect ticket from the session API and uses that ticket on the transport URL instead of the long-lived bearer token.
+The admin console fetches `/auth-config.json` and performs an Authorization Code + PKCE login. The browser client then connects to the gateway with an OIDC access token.
+Before WebTransport connect, the console mints a short-lived session-scoped connect ticket from the session API and uses that ticket on the transport URL instead of the long-lived bearer token. The legacy development harness remains available at `/test-embed.html` for smoke tests that still exercise harness-specific hooks.
 
 For Chromium, WebTransport still needs trusted TLS on localhost. The current runtime SPKI fingerprint is served at:
 
@@ -212,6 +213,17 @@ http://localhost:8080/cert-fingerprint
 ```
 
 `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem` for CLI use.
+
+### Remote / Self-Hosted Testing
+
+The checked-in compose stack is a local development and regression environment,
+not a production deployment guide. Remote testing needs HTTPS for the web UI,
+a browser-trusted WebTransport gateway certificate, aligned OIDC issuer and
+redirect settings, and private handling for dev-only services such as Postgres,
+Vault, Keycloak admin surfaces, gateway internals, and the MCP bridge.
+
+See [REMOTE_DEPLOYMENT.md](REMOTE_DEPLOYMENT.md) for the current remote
+deployment assumptions and compose override notes.
 
 ### Session Control Plane
 
@@ -275,12 +287,30 @@ Lifecycle control semantics are now explicit:
 
 The local dev flow uses those routes to bridge browser-owned and automation-owned control:
 
-- `test-embed.html` resolves or creates an owner-scoped session before connect
+- the admin console resolves or creates an owner-scoped session before connect
 - it then mints a short-lived `session_connect_ticket` from `POST /api/v1/sessions/{id}/access-tokens`
 - the gateway routes the WebTransport connect through that explicit session id instead of one global token path
 - `Delegate MCP` assigns that session to the local `bpane-mcp-bridge` service principal
-- the page then calls `mcp-bridge` on `:8931/control-session` so the bridge adopts that same session for later ownership/status calls
+- the console then calls `mcp-bridge` on `:8931/control-session` so the bridge adopts that same session for later ownership/status calls
+- external MCP clients can avoid the mutable bridge control target by connecting
+  directly to `:8931/sessions/{session_id}/mcp` after that session is delegated
+- `/control-session` remains a local compatibility control target. It is useful
+  for the legacy test page and single-target tooling, but it is not the
+  recommended external-client mode when multiple BrowserPane sessions may be
+  delegated at the same time.
 - the local `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource, so delegated control also works in `docker_pool` mode
+
+MCP delegation terminology:
+
+- gateway delegation: the owner grants the `bpane-mcp-bridge` service principal
+  access to a session through `POST /api/v1/sessions/{id}/automation-owner`
+- bridge-adopted session: the compatibility `/control-session` pointer targets
+  that session
+- MCP-owned session: the bridge has claimed session-scoped `/mcp-owner` while
+  at least one MCP client is active
+- connected MCP client: one streamable HTTP or SSE MCP transport is bound to a
+  bridge target; with `/sessions/{id}/mcp` that target is immutable for the
+  connection lifetime
 
 Current limitation:
 
@@ -291,7 +321,12 @@ Current limitation:
 - the optional `docker_single` backend can now start and stop one runtime container for the active session
 - the optional `docker_pool` backend can start multiple runtime containers in parallel, but only up to its configured runtime caps
 - Docker-backed runtime assignment metadata is now persisted and reconciled on gateway startup so pool-mode workers can survive a gateway restart cleanly
-- `mcp-bridge` now follows the selected delegated session's runtime endpoint, but each bridge instance still manages only one control session at a time
+- `mcp-bridge` keeps `/control-session` as a compatibility control target and
+  supports recommended per-connection session routing through
+  `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`
+- `mcp-bridge` exposes `/health.managed_sessions` so multi-session clients can
+  inspect each active control/session-bound target without relying only on the
+  legacy `control_session_*` fields
 - the default compose stack runs `docker_pool` for local multi-session testing
 - global compatibility routes like `/api/session/status` and `/api/session/mcp-owner` are compatibility-only and are not part of the frozen v1 contract; multi-runtime backends should use session-scoped `/api/v1/sessions/{id}/...` routes
 
@@ -314,9 +349,9 @@ Primary routes:
 
 Local manual flow:
 
-1. Open `http://localhost:8080`
+1. Open `http://localhost:8080/admin/`
 2. Start or reconnect a session
-3. Use the recording controls in `test-embed.html`
+3. Use the recording controls in the admin console
 4. Download individual segments or the playback export bundle from the recording library
 
 ### Workflow Platform
@@ -372,14 +407,14 @@ Workflow boundary:
 
 Local usage options:
 
-- UI: use the workflow panel in `test-embed.html`
+- UI: use the workflow panel in the admin console
 - CLI: use `code/web/bpane-client/scripts/workflow-cli.mjs`
 - raw API: use the OpenAPI contract in `openapi/bpane-control-v1.yaml`
 
 Typical local workflow path:
 
-1. Start the local compose stack and log in at `http://localhost:8080`
-2. Create or reconnect a browser session from `test-embed.html`
+1. Start the local compose stack and log in at `http://localhost:8080/admin/`
+2. Create or reconnect a browser session from the admin console
 3. Create reusable inputs as needed:
    - file workspace for reusable input/output files
    - credential binding for Vault-backed secrets

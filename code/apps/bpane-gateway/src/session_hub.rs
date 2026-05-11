@@ -8,6 +8,7 @@ use bpane_protocol::frame::Frame;
 use bpane_protocol::ControlMessage;
 
 use crate::relay::Relay;
+use crate::session_files::SessionFileRecorder;
 
 mod membership;
 mod policy;
@@ -82,6 +83,21 @@ impl SessionHub {
         max_viewers: u32,
         exclusive_browser_owner: bool,
     ) -> anyhow::Result<Self> {
+        Self::new_with_file_recorder(
+            agent_socket_path,
+            max_viewers,
+            exclusive_browser_owner,
+            None,
+        )
+        .await
+    }
+
+    pub async fn new_with_file_recorder(
+        agent_socket_path: &str,
+        max_viewers: u32,
+        exclusive_browser_owner: bool,
+        file_recorder: Option<SessionFileRecorder>,
+    ) -> anyhow::Result<Self> {
         let relay = Relay::new(agent_socket_path.to_string());
         let (from_agent_rx, to_agent_tx, relay_handle) = relay.connect().await?;
 
@@ -102,6 +118,7 @@ impl SessionHub {
                 cached_session_ready: cached_session_ready.clone(),
                 current_resolution: current_resolution.clone(),
             },
+            file_recorder,
         );
 
         Ok(Self {

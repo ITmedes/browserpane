@@ -5,6 +5,7 @@ import process from 'node:process';
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright-core';
+import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
 
 const execFile = promisify(execFileCallback);
 
@@ -140,7 +141,7 @@ async function fetchAuthConfig(options) {
   }
 }
 
-async function configurePage(page, options, pageUrl = options.pageUrl) {
+async function configurePage(page, options, pageUrl = testEmbedPageUrl(options)) {
   await page.goto(pageUrl, { waitUntil: 'networkidle' });
   await page.waitForFunction(
     () => Boolean(window.__bpaneAuth && window.__bpaneControl && window.__bpaneRecording),
@@ -205,7 +206,7 @@ async function getAccessToken(page) {
 }
 
 function buildBrowserOnlyPageUrl(pageUrl) {
-  const url = new URL(pageUrl);
+  const url = new URL(testEmbedPageUrl({ pageUrl }));
   url.searchParams.set('layout', 'browser-only');
   return url.toString();
 }
@@ -591,7 +592,7 @@ async function main() {
     });
 
     ownerPage = await context.newPage();
-    await configurePage(ownerPage, options, options.pageUrl);
+    await configurePage(ownerPage, options);
     await ensureLoggedIn(ownerPage, options);
     accessToken = (await getAccessToken(ownerPage)) ?? '';
     if (!accessToken) {
@@ -599,7 +600,7 @@ async function main() {
     }
 
     recorderPage = await context.newPage();
-    await configurePage(recorderPage, options, options.pageUrl);
+    await configurePage(recorderPage, options);
     await ensureLoggedIn(recorderPage, options);
     await configurePage(recorderPage, options, buildRecorderPageUrl(options.pageUrl));
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-recording-smoke-'));

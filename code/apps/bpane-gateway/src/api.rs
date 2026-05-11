@@ -43,7 +43,10 @@ use crate::session_control::{
     SessionRecordingResource, SessionRecordingState, SessionRecordingTerminationReason,
     SessionResource, SetAutomationDelegateRequest, StoredSession, StoredSessionRecording,
 };
-use crate::session_files::{SessionFileBindingListResponse, SessionFileBindingResource};
+use crate::session_files::{
+    SessionFileBindingListResponse, SessionFileBindingResource, SessionFileListResponse,
+    SessionFileResource,
+};
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_manager::{SessionManagerError, SessionRuntime};
 use crate::workflow::{
@@ -73,6 +76,7 @@ use crate::workspaces::{
     StoreWorkspaceFileRequest, WorkspaceFileStoreError,
 };
 
+mod admin_events;
 mod authz;
 mod automation_tasks;
 mod credential_bindings;

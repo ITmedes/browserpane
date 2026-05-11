@@ -3,6 +3,7 @@ import type { SessionRecordingOptions } from './bpane-types.js';
 const DEFAULT_RECORDING_FRAME_RATE = 24;
 const DEFAULT_RECORDING_VIDEO_BITS_PER_SECOND = 2_000_000;
 const DEFAULT_RECORDING_AUDIO_BITS_PER_SECOND = 64_000;
+const MIN_RECORDING_ARTIFACT_BYTES = 1024;
 const PREFERRED_RECORDING_MIME_TYPES = [
   'video/webm;codecs=vp9,opus',
   'video/webm;codecs=vp8,opus',
@@ -89,6 +90,10 @@ export class SessionRecordingRuntime {
       recorder.onstop = () => {
         const blob = new Blob(this.chunks, { type: this.lastMimeType });
         this.reset();
+        if (blob.size < MIN_RECORDING_ARTIFACT_BYTES) {
+          reject(new Error(`recording produced an empty artifact (${blob.size} bytes)`));
+          return;
+        }
         resolve(blob);
       };
       recorder.onerror = () => {

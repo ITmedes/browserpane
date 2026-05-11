@@ -28,7 +28,7 @@ function workflowCliEntrypoint() {
   const targetUrl =
     input && typeof input.target_url === 'string' && input.target_url.trim()
       ? input.target_url.trim()
-      : 'http://web:8080';
+      : 'http://web:8080/test-embed.html';
   const workspaceId =
     input && typeof input.workspace_id === 'string' && input.workspace_id.trim()
       ? input.workspace_id.trim()
@@ -229,7 +229,7 @@ async function main() {
       source_reference: 'process-instance-123/task-7',
       client_request_id: clientRequestId,
       input: {
-        target_url: 'http://web:8080',
+        target_url: 'http://web:8080/test-embed.html',
         workspace_id: workspace.id,
       },
       labels: {

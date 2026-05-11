@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+@theme {
+  --color-admin-cream: #0d1522;
+  --color-admin-ink: #eef3ff;
+  --color-admin-panel: #0e1829;
+  --color-admin-field: #16243c;
+  --color-admin-leaf: #4fd1a8;
+  --color-admin-warm: #ffd166;
+  --color-admin-danger: #ff7d7d;
+  --color-admin-night: #08101d;
+  --font-display: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", "Cascadia Code", monospace;
+  --font-sans: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+}
+
+@layer base {
+  :root {
+    color: #eef3ff;
+    background: #0d1522;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    background:
+      radial-gradient(circle at top left, rgb(79 209 168 / 12%), transparent 32%),
+      radial-gradient(circle at top right, rgb(255 209 102 / 8%), transparent 30%),
+      linear-gradient(180deg, #132238 0%, #0b131f 100%);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  .admin-panel {
+    @apply mt-[22px] rounded-2xl border border-[#90a6cc]/20 bg-admin-panel/90 p-6 shadow-[0_24px_64px_rgb(0_0_0_/_34%)];
+  }
+
+  .admin-header {
+    @apply flex items-center justify-between gap-3 max-[860px]:flex-col max-[860px]:items-stretch;
+  }
+
+  .admin-header-button {
+    @apply min-h-8 cursor-pointer rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-xs font-bold text-admin-ink shadow-sm disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .admin-actions {
+    @apply flex items-center gap-3 max-[860px]:flex-col max-[860px]:items-stretch;
+  }
+
+  .admin-eyebrow {
+    @apply m-0 mb-2 text-xs font-bold tracking-[0.16em] text-[#9fb1cf] uppercase;
+  }
+
+  .admin-eyebrow-warm {
+    @apply text-admin-warm;
+  }
+
+  .admin-eyebrow-light {
+    @apply text-[#a7c7a1];
+  }
+
+  .admin-section-title {
+    @apply m-0 text-xl font-bold text-admin-ink;
+  }
+
+  .admin-button-primary {
+    @apply min-h-10 cursor-pointer rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3.5 font-bold text-admin-ink transition hover:border-[#90a6cc]/30 hover:bg-[#1d2e4b] disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .admin-button-light {
+    @apply min-h-10 cursor-pointer rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3.5 font-bold text-admin-ink transition hover:border-[#90a6cc]/30 hover:bg-[#1d2e4b] disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  .admin-button-ghost {
+    @apply inline-flex min-h-[42px] cursor-pointer items-center rounded-xl border border-[#90a6cc]/20 bg-admin-panel/80 px-4 font-bold text-admin-ink no-underline;
+  }
+
+  .admin-empty {
+    @apply mt-[18px] mb-0 text-[#c1d0e8] leading-normal;
+  }
+
+  .admin-empty-spacious {
+    @apply mt-[22px];
+  }
+
+  .admin-error {
+    @apply mt-4 mb-0 text-admin-danger leading-normal;
+  }
+
+  .admin-code-pill {
+    @apply rounded-[7px] bg-admin-leaf/12 px-1.5 py-0.5;
+  }
+}

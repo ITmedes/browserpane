@@ -31,6 +31,52 @@ validate_session_data_path() {
   fi
 }
 
+validate_browser_local_file_policy() {
+  local policy_file="$1"
+  BPANE_CHROMIUM_POLICY_FILE="$policy_file" python3 - <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+policy_path = Path(os.environ["BPANE_CHROMIUM_POLICY_FILE"])
+try:
+    policy = json.loads(policy_path.read_text())
+except FileNotFoundError:
+    print(f"missing Chromium managed policy file: {policy_path}", file=sys.stderr)
+    sys.exit(64)
+except json.JSONDecodeError as error:
+    print(f"invalid Chromium managed policy JSON {policy_path}: {error}", file=sys.stderr)
+    sys.exit(64)
+
+url_blocklist = policy.get("URLBlocklist")
+blocks_file_urls = (
+    isinstance(url_blocklist, list)
+    and ("file://*" in url_blocklist or "file:///*" in url_blocklist)
+)
+blocks_file_system_read = policy.get("DefaultFileSystemReadGuardSetting") == 2
+blocks_file_system_write = policy.get("DefaultFileSystemWriteGuardSetting") == 2
+mode = (
+    "deny_all"
+    if blocks_file_urls and blocks_file_system_read and blocks_file_system_write
+    else "custom_or_incomplete"
+)
+
+print(
+    "Browser local file access policy: "
+    f"mode={mode} "
+    f"file_url_navigation={'blocked' if blocks_file_urls else 'not_blocked'} "
+    f"file_system_read={'blocked' if blocks_file_system_read else 'not_blocked'} "
+    f"file_system_write={'blocked' if blocks_file_system_write else 'not_blocked'} "
+    f"policy_file={policy_path}",
+    file=sys.stderr,
+)
+
+if mode != "deny_all":
+    sys.exit(64)
+PY
+}
+
 # Create a dedicated Chromium profile and transfer roots for the current
 # BrowserPane session. Docker-backed runtimes provide BPANE_SESSION_DATA_DIR and
 # must keep browser data below that root; static_single remains a legacy path.
@@ -40,6 +86,12 @@ SESSION_STATE_DIR="${BPANE_PROFILE_ROOT%/}/${BPANE_SESSION_ID}"
 PROFILE_DIR="${BPANE_PROFILE_DIR:-${SESSION_STATE_DIR}/chromium}"
 BPANE_UPLOAD_DIR="${BPANE_UPLOAD_DIR:-${SESSION_STATE_DIR}/uploads}"
 BPANE_DOWNLOAD_DIR="${BPANE_DOWNLOAD_DIR:-${SESSION_STATE_DIR}/downloads}"
+BPANE_CHROMIUM_POLICY_FILE="${BPANE_CHROMIUM_POLICY_FILE:-/etc/chromium/policies/managed/bpane.json}"
+
+if [ "${BPANE_VALIDATE_BROWSER_POLICY_ONLY:-0}" = "1" ]; then
+  validate_browser_local_file_policy "$BPANE_CHROMIUM_POLICY_FILE"
+  exit 0
+fi
 
 if [ -n "${BPANE_SESSION_DATA_DIR:-}" ]; then
   BPANE_SESSION_DATA_DIR="$(normalize_path "$BPANE_SESSION_DATA_DIR")"
@@ -57,6 +109,8 @@ export BPANE_SESSION_ID BPANE_PROFILE_ROOT PROFILE_DIR BPANE_UPLOAD_DIR BPANE_DO
 if [ "${BPANE_VALIDATE_RUNTIME_PATHS_ONLY:-0}" = "1" ]; then
   exit 0
 fi
+
+validate_browser_local_file_policy "$BPANE_CHROMIUM_POLICY_FILE"
 
 # Clean stale lock files
 rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
@@ -111,25 +165,40 @@ write_openbox_config() {
     <screenEdgeWarpTime>0</screenEdgeWarpTime>
   </mouse>
   <applications>
-    <!-- Match common Chromium WM_CLASS values, hide the WM frame, and pin them
-         maximized. Chromium still uses the native frame path internally, but
-         Openbox does not render that frame. -->
-    <application class="Chromium">
+    <!-- Match common Chromium browser windows, hide the WM frame, and pin only
+         top-level normal windows maximized. Native dialogs share Chromium's
+         WM_CLASS, but must keep their requested dialog size. -->
+    <application class="Chromium" type="normal">
       <decor>no</decor>
       <maximized>yes</maximized>
     </application>
-    <application class="chromium">
+    <application class="chromium" type="normal">
       <decor>no</decor>
       <maximized>yes</maximized>
     </application>
-    <application class="chromium-browser">
+    <application class="chromium-browser" type="normal">
       <decor>no</decor>
       <maximized>yes</maximized>
     </application>
-    <!-- Fallback: all normal windows stay undecorated and start maximized. -->
-    <application type="normal">
+    <application type="dialog">
+      <decor>no</decor>
+      <maximized>no</maximized>
+      <position force="yes">
+        <x>center</x>
+        <y>center</y>
+      </position>
+    </application>
+    <application role="GtkFileChooserDialog" type="dialog">
       <decor>no</decor>
       <maximized>yes</maximized>
+    </application>
+    <application type="utility">
+      <decor>no</decor>
+      <maximized>no</maximized>
+      <position force="yes">
+        <x>center</x>
+        <y>center</y>
+      </position>
     </application>
   </applications>
 </openbox_config>
@@ -142,8 +211,8 @@ openbox &
 sleep 0.5
 openbox --reconfigure
 
-# GTK scale factors (integer + fractional tweak)
-export GDK_SCALE=${GDK_SCALE:-3}
+# GTK scale factors for native dialogs and Chromium chrome.
+export GDK_SCALE=${GDK_SCALE:-2}
 export GDK_DPI_SCALE=${GDK_DPI_SCALE:-0.8}
 
 # Chromium on Linux reads caret blink behavior from GTK settings.
