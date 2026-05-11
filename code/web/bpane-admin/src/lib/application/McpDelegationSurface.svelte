@@ -10,7 +10,6 @@
   type McpDelegationSurfaceProps = {
     readonly controlClient: ControlClient;
     readonly selectedSession: SessionResource | null;
-    readonly sessions: readonly SessionResource[];
     readonly mcpBridge: McpBridgeConfig | null;
     readonly refreshVersion: number;
     readonly onRefreshSessions: () => Promise<void>;
@@ -20,7 +19,6 @@
   let {
     controlClient,
     selectedSession,
-    sessions,
     mcpBridge,
     refreshVersion,
     onRefreshSessions,
@@ -78,23 +76,17 @@
     }
   }
 
-  async function delegateSelectedSession(): Promise<void> {
-    if (!selectedSession || !mcpBridge || !bridgeClient) {
+  async function authorizeSelectedSession(): Promise<void> {
+    if (!selectedSession || !mcpBridge) {
       return;
     }
     loading = true;
     error = null;
     try {
-      await controlClient.setAutomationDelegate(selectedSession.id, {
-        client_id: mcpBridge.clientId,
-        issuer: mcpBridge.issuer,
-        display_name: mcpBridge.displayName,
-      });
-      await bridgeClient.setControlSession(selectedSession.id);
-      await clearPreviousDelegates(selectedSession.id);
+      await authorizeSession(selectedSession.id);
       await onRefreshSessions();
       await onRefreshSelectedSession();
-      health = await bridgeClient.getHealth();
+      health = await bridgeClient?.getHealth() ?? health;
     } catch (delegateError) {
       error = errorMessage(delegateError);
     } finally {
@@ -102,7 +94,50 @@
     }
   }
 
-  async function clearBridge(): Promise<void> {
+  async function revokeSelectedSession(): Promise<void> {
+    if (!selectedSession) {
+      return;
+    }
+    if (health?.control_session_id === selectedSession.id) {
+      error = 'Clear the default MCP session before revoking this authorization.';
+      return;
+    }
+    loading = true;
+    error = null;
+    try {
+      await controlClient.clearAutomationDelegate(selectedSession.id);
+      await onRefreshSessions();
+      await onRefreshSelectedSession();
+      health = await bridgeClient?.getHealth() ?? health;
+    } catch (clearError) {
+      error = errorMessage(clearError);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function setDefaultSession(): Promise<void> {
+    if (!selectedSession || !mcpBridge || !bridgeClient) {
+      return;
+    }
+    loading = true;
+    error = null;
+    try {
+      if (!isDelegatedToBridge(selectedSession)) {
+        await authorizeSession(selectedSession.id);
+      }
+      await bridgeClient.setControlSession(selectedSession.id);
+      await onRefreshSessions();
+      await onRefreshSelectedSession();
+      health = await bridgeClient.getHealth();
+    } catch (clearError) {
+      error = errorMessage(clearError);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function clearDefaultSession(): Promise<void> {
     if (!bridgeClient) {
       return;
     }
@@ -110,7 +145,6 @@
     error = null;
     try {
       await bridgeClient.clearControlSession();
-      await clearPreviousDelegates('');
       await onRefreshSessions();
       await onRefreshSelectedSession();
       health = await bridgeClient.getHealth();
@@ -126,24 +160,22 @@
       return;
     }
     error = null;
-    try {
-      await navigator.clipboard.writeText(viewModel.endpointUrl);
-    } catch (copyError) {
-      error = errorMessage(copyError);
-    }
+    try { await navigator.clipboard.writeText(viewModel.endpointUrl); }
+    catch (copyError) { error = errorMessage(copyError); }
   }
 
-  async function clearPreviousDelegates(targetSessionId: string): Promise<void> {
-    for (const session of sessions) {
-      if (session.id !== targetSessionId && isDelegatedToBridge(session)) {
-        await controlClient.clearAutomationDelegate(session.id);
-      }
-    }
+  async function authorizeSession(sessionId: string): Promise<void> {
+    if (!mcpBridge) return;
+    await controlClient.setAutomationDelegate(sessionId, {
+      client_id: mcpBridge.clientId,
+      issuer: mcpBridge.issuer,
+      display_name: mcpBridge.displayName,
+    });
   }
 
   function isDelegatedToBridge(session: SessionResource): boolean {
     const delegate = session.automation_delegate;
-    return Boolean(delegate && mcpBridge && delegate.client_id === mcpBridge.clientId);
+    return Boolean(delegate && mcpBridge && delegate.client_id === mcpBridge.clientId && (!mcpBridge.issuer || delegate.issuer === mcpBridge.issuer));
   }
 
   function errorMessage(value: unknown): string {
@@ -154,7 +186,9 @@
 <McpDelegationPanel
   {viewModel}
   onRefresh={() => void refreshBridge()}
-  onDelegate={() => void delegateSelectedSession()}
-  onClear={() => void clearBridge()}
+  onAuthorize={() => void authorizeSelectedSession()}
+  onRevoke={() => void revokeSelectedSession()}
+  onSetDefault={() => void setDefaultSession()}
+  onClearDefault={() => void clearDefaultSession()}
   onCopyEndpoint={() => void copyEndpoint()}
 />

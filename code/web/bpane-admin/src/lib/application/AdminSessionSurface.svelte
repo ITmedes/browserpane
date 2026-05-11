@@ -183,7 +183,7 @@
   <BrowserWorkspaceOverlayLayout {adminOpen} {onAdminOpenChange}>
     {#snippet admin()}
     <AdminWorkspaceTabs
-      {controlClient} {workflowClient} {selectedSession} {sessions} {mcpBridge} {liveConnection}
+      {controlClient} {workflowClient} {selectedSession} {mcpBridge} {liveConnection}
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={() => void createSession()} onJoinSelectedSession={requestBrowserConnect}

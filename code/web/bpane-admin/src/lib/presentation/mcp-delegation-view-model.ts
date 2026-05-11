@@ -10,8 +10,10 @@ export type McpDelegationViewModel = {
   readonly note: string;
   readonly tone: McpDelegationTone;
   readonly canRefresh: boolean;
-  readonly canDelegate: boolean;
-  readonly canClear: boolean;
+  readonly canAuthorize: boolean;
+  readonly canRevoke: boolean;
+  readonly canSetDefault: boolean;
+  readonly canClearDefault: boolean;
   readonly endpointUrl: string | null;
   readonly canCopyEndpoint: boolean;
   readonly healthSummary: string | null;
@@ -32,7 +34,8 @@ export class McpDelegationViewModelBuilder {
     const bridgeName = input.bridge?.displayName ?? input.bridge?.clientId ?? 'MCP bridge';
     const selectedId = input.session?.id ?? null;
     const controlId = input.health?.control_session_id ?? null;
-    const backendDelegated = this.#isDelegatedToBridge(input.session, input.bridge);
+    const authorized = isDelegatedToBridge(input.session, input.bridge);
+    const defaultSelected = Boolean(selectedId && controlId === selectedId);
     const selectedHealth = selectedManagedSession(input.health, selectedId);
     if (!input.bridge) {
       return viewModel(bridgeName, 'Unavailable', 'MCP bridge delegation is not configured.', 'unavailable', input);
@@ -41,29 +44,21 @@ export class McpDelegationViewModelBuilder {
       return viewModel(bridgeName, 'No session selected', 'Select a session before delegating MCP.', 'ready', input);
     }
     if (input.error) {
-      return viewModel(bridgeName, backendDelegated ? 'Delegated, bridge unchecked' : 'Bridge unavailable', input.error, 'warning', input, true);
+      return viewModel(bridgeName, authorized ? 'Authorized, bridge unchecked' : 'Bridge unavailable', input.error, 'warning', input);
     }
-    if (selectedHealth && selectedHealth.clients > 0 && controlId !== selectedId) {
-      return viewModel(bridgeName, 'Session endpoint active', `${bridgeName} has direct MCP clients on this session endpoint.`, 'active', input, true);
+    if (authorized && defaultSelected) {
+      return viewModel(bridgeName, 'Authorized default', `${bridgeName} uses this session for legacy /mcp and session-scoped clients.`, 'active', input);
     }
-    if (!controlId && backendDelegated) {
-      return viewModel(bridgeName, 'Backend delegated', `${bridgeName} has backend access but no attached control session.`, 'warning', input, true);
+    if (authorized && selectedHealth && selectedHealth.clients > 0) {
+      return viewModel(bridgeName, 'Authorized active', `${bridgeName} has session-scoped MCP clients attached here.`, 'active', input);
     }
-    if (!controlId) {
-      return viewModel(bridgeName, 'No delegated session', `${shortId(selectedId)} is not attached to ${bridgeName}.`, 'ready', input, true);
+    if (authorized) {
+      return viewModel(bridgeName, 'Authorized', `${shortId(selectedId)} can be reached through its session-scoped MCP endpoint.`, 'active', input);
     }
-    if (controlId === selectedId) {
-      return viewModel(bridgeName, 'This session delegated', `${bridgeName} drives the selected browser session.`, 'active', input, true, true);
+    if (controlId) {
+      return viewModel(bridgeName, 'Not authorized', `${bridgeName} default is session ${shortId(controlId)}. Authorize this session to use its endpoint.`, 'warning', input);
     }
-    return viewModel(bridgeName, `Session ${shortId(controlId)} delegated`, `${bridgeName} is attached to a different session.`, 'warning', input, true, true);
-  }
-
-  static #isDelegatedToBridge(session: SessionResource | null, bridge: McpBridgeConfig | null): boolean {
-    const delegate = session?.automation_delegate;
-    if (!delegate || !bridge) {
-      return false;
-    }
-    return delegate.client_id === bridge.clientId && (!bridge.issuer || delegate.issuer === bridge.issuer);
+    return viewModel(bridgeName, 'Not authorized', `${shortId(selectedId)} is not authorized for ${bridgeName}.`, 'ready', input);
   }
 }
 
@@ -73,23 +68,36 @@ function viewModel(
   note: string,
   tone: McpDelegationTone,
   input: McpDelegationViewModelInput,
-  canDelegate = false,
-  canClear = false,
 ): McpDelegationViewModel {
+  const selectedId = input.session?.id ?? null;
+  const controlId = input.health?.control_session_id ?? null;
+  const authorized = isDelegatedToBridge(input.session, input.bridge);
+  const defaultSelected = Boolean(selectedId && controlId === selectedId);
+  const canAct = Boolean(input.bridge && selectedId) && !input.busy;
   return {
     title,
     status,
     note,
     tone,
     canRefresh: Boolean(input.bridge) && !input.busy,
-    canDelegate: canDelegate && !input.busy,
-    canClear: canClear && !input.busy,
+    canAuthorize: canAct && !authorized,
+    canRevoke: canAct && authorized && !defaultSelected,
+    canSetDefault: canAct && !defaultSelected,
+    canClearDefault: canAct && defaultSelected,
     endpointUrl: sessionEndpointUrl(input.bridge, input.session?.id ?? null),
     canCopyEndpoint: Boolean(sessionEndpointUrl(input.bridge, input.session?.id ?? null)) && !input.busy,
     healthSummary: managedSessionSummary(input.health, input.session?.id ?? null),
     busy: input.busy,
     error: input.error,
   };
+}
+
+function isDelegatedToBridge(session: SessionResource | null, bridge: McpBridgeConfig | null): boolean {
+  const delegate = session?.automation_delegate;
+  if (!delegate || !bridge) {
+    return false;
+  }
+  return delegate.client_id === bridge.clientId && (!bridge.issuer || delegate.issuer === bridge.issuer);
 }
 
 function sessionEndpointUrl(bridge: McpBridgeConfig | null, sessionId: string | null): string | null {

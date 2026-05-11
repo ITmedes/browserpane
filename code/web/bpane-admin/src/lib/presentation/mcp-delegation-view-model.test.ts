@@ -12,7 +12,7 @@ const BRIDGE: McpBridgeConfig = {
 };
 
 describe('McpDelegationViewModelBuilder', () => {
-  it('enables delegation when a configured bridge and selected session exist', () => {
+  it('enables authorization when a configured bridge and selected session exist', () => {
     const viewModel = McpDelegationViewModelBuilder.build({
       bridge: BRIDGE,
       session: sessionResource('session-a'),
@@ -21,31 +21,35 @@ describe('McpDelegationViewModelBuilder', () => {
       error: null,
     });
 
-    expect(viewModel.status).toBe('No delegated session');
-    expect(viewModel.canDelegate).toBe(true);
-    expect(viewModel.canClear).toBe(false);
+    expect(viewModel.status).toBe('Not authorized');
+    expect(viewModel.canAuthorize).toBe(true);
+    expect(viewModel.canRevoke).toBe(false);
+    expect(viewModel.canSetDefault).toBe(true);
+    expect(viewModel.canClearDefault).toBe(false);
     expect(viewModel.endpointUrl).toBe('http://localhost:8931/sessions/session-a/mcp');
     expect(viewModel.canCopyEndpoint).toBe(true);
   });
 
-  it('marks the selected session as active when bridge control matches', () => {
+  it('marks the selected session as default when bridge control matches', () => {
     const viewModel = McpDelegationViewModelBuilder.build({
       bridge: BRIDGE,
-      session: sessionResource('session-a'),
+      session: sessionResource('session-a', true),
       health: health('session-a'),
       busy: false,
       error: null,
     });
 
-    expect(viewModel.status).toBe('This session delegated');
+    expect(viewModel.status).toBe('Authorized default');
     expect(viewModel.tone).toBe('active');
-    expect(viewModel.canClear).toBe(true);
+    expect(viewModel.canAuthorize).toBe(false);
+    expect(viewModel.canRevoke).toBe(false);
+    expect(viewModel.canClearDefault).toBe(true);
   });
 
   it('surfaces direct session endpoint health for the selected session', () => {
     const viewModel = McpDelegationViewModelBuilder.build({
       bridge: BRIDGE,
-      session: sessionResource('session-a'),
+      session: sessionResource('session-a', true),
       health: health(null, [{
         kind: 'selected',
         session_id: 'session-a',
@@ -64,12 +68,13 @@ describe('McpDelegationViewModelBuilder', () => {
       error: null,
     });
 
-    expect(viewModel.status).toBe('Session endpoint active');
+    expect(viewModel.status).toBe('Authorized active');
     expect(viewModel.healthSummary).toBe('1 MCP client · MCP owns session · aligned');
-    expect(viewModel.canClear).toBe(false);
+    expect(viewModel.canRevoke).toBe(true);
+    expect(viewModel.canClearDefault).toBe(false);
   });
 
-  it('surfaces stale backend delegation when bridge health is unavailable', () => {
+  it('surfaces authorized sessions when bridge health is unavailable', () => {
     const viewModel = McpDelegationViewModelBuilder.build({
       bridge: BRIDGE,
       session: sessionResource('session-a', true),
@@ -78,9 +83,26 @@ describe('McpDelegationViewModelBuilder', () => {
       error: 'Bridge status could not be loaded.',
     });
 
-    expect(viewModel.status).toBe('Delegated, bridge unchecked');
+    expect(viewModel.status).toBe('Authorized, bridge unchecked');
     expect(viewModel.tone).toBe('warning');
-    expect(viewModel.canDelegate).toBe(true);
+    expect(viewModel.canAuthorize).toBe(false);
+    expect(viewModel.canRevoke).toBe(true);
+    expect(viewModel.canSetDefault).toBe(true);
+  });
+
+  it('warns when a different default session is selected but not authorized', () => {
+    const viewModel = McpDelegationViewModelBuilder.build({
+      bridge: BRIDGE,
+      session: sessionResource('session-a'),
+      health: health('session-b'),
+      busy: false,
+      error: null,
+    });
+
+    expect(viewModel.status).toBe('Not authorized');
+    expect(viewModel.tone).toBe('warning');
+    expect(viewModel.canAuthorize).toBe(true);
+    expect(viewModel.canSetDefault).toBe(true);
   });
 });
 
