@@ -97,6 +97,21 @@ describe('NalReassembler', () => {
     expect(result!.isKeyframe).toBe(false);
   });
 
+  it('copies retained fragments so reusable stream buffers cannot corrupt them', () => {
+    const nal = new NalReassembler();
+    const part0 = new Uint8Array([0x00, 0x00, 0x01]);
+    const part1 = new Uint8Array([0x65, 0xBB]);
+    const d0 = buildDatagram({ nalId: 77, fragSeq: 0, fragTotal: 2, isKeyframe: true, data: part0 });
+    const d1 = buildDatagram({ nalId: 77, fragSeq: 1, fragTotal: 2, isKeyframe: true, data: part1 });
+
+    expect(nal.push(d0)).toBeNull();
+    d0.fill(0xEE, 21, 21 + part0.byteLength);
+
+    const result = nal.push(d1);
+    expect(result).not.toBeNull();
+    expect(result!.data).toEqual(new Uint8Array([0x00, 0x00, 0x01, 0x65, 0xBB]));
+  });
+
   it('reassembles three fragments in order', () => {
     const nal = new NalReassembler();
     const d0 = buildDatagram({ nalId: 1, fragSeq: 0, fragTotal: 3, isKeyframe: true, data: new Uint8Array([0xAA]) });

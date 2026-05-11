@@ -105,6 +105,36 @@ describe('SessionVideoDecoderRuntime', () => {
     expect(onDecodedFrame).toHaveBeenCalledWith(expect.any(Object), createTileInfo());
   });
 
+  it('copies retained parameter NALs before the caller buffer can be reused', () => {
+    const runtime = new SessionVideoDecoderRuntime({
+      onDecodedFrame: vi.fn(),
+      incrementFrameCount: vi.fn(),
+      incrementDroppedFrame: vi.fn(),
+      onDecoderError: vi.fn(),
+      videoDecoderCtor: MockVideoDecoder as unknown as typeof VideoDecoder,
+      encodedVideoChunkCtor: MockEncodedVideoChunk as unknown as typeof EncodedVideoChunk,
+    });
+    const sps = new Uint8Array([0x00, 0x00, 0x01, 0x67, 0x42]);
+    const pps = new Uint8Array([0x00, 0x00, 0x01, 0x68, 0xce]);
+    const sei = new Uint8Array([0x00, 0x00, 0x01, 0x06, 0x05]);
+    const idr = new Uint8Array([0x00, 0x00, 0x01, 0x65, 0x88]);
+
+    runtime.decodeNal(sps, null);
+    runtime.decodeNal(pps, null);
+    runtime.decodeNal(sei, null);
+    sps.fill(0xff);
+    pps.fill(0xff);
+    sei.fill(0xff);
+    runtime.decodeNal(idr, null);
+
+    expect(MockVideoDecoder.instances[0].decodedChunks[0].data).toEqual(new Uint8Array([
+      0x00, 0x00, 0x01, 0x67, 0x42,
+      0x00, 0x00, 0x01, 0x68, 0xce,
+      0x00, 0x00, 0x01, 0x06, 0x05,
+      ...idr,
+    ]));
+  });
+
   it('ignores non-VCL NALs and does not create a decoder for SEI alone', () => {
     const runtime = new SessionVideoDecoderRuntime({
       onDecodedFrame: vi.fn(),
