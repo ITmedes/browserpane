@@ -18,12 +18,15 @@ in PRs, issues, and release notes.
 
 ## Active Issue Map
 
-- Admin productization: #82, #63.
+- Umbrella roadmap: #6, #7, #63.
+- Admin productization: #82.
 - Automation and workflow APIs: #69, #68, #47.
-- Artifacts, logs, and support evidence: #43, #21, #20, #29, #30, #81, #42.
+- Artifacts, logs, events, and support evidence: #43, #21, #20, #28, #29,
+  #30, #81, #42.
 - Identity, governance, and policy: #52, #70, #72, #76, #77, #78, #79, #80.
 - Deployment and operations: #66, #73, #74, #75, #34.
-- Session resource model: #15, #19, #22, #24, #25, #27, #31, #33.
+- Session resource model, network, and egress: #15, #19, #22, #24, #25, #26,
+  #27, #31, #33.
 - Handoff and challenge handling: #67, #71.
 - Developer and experimental surface: #16, #35, #36, #37, #38, #39, #40, #41.
 
@@ -61,9 +64,9 @@ Acceptance:
 - Destructive controls explain disabled states and capture an operator reason
   where appropriate.
 
-## P0: Durable Observability And Support Evidence
+## P0: Durable Observability, Events, And Support Evidence
 
-Issue focus: #20, #29, #30, #81, #42.
+Issue focus: #20, #28, #29, #30, #81, #42.
 
 Gateway snapshot events and local UI diagnostics are useful, but they are not a
 complete support timeline.
@@ -193,7 +196,7 @@ Acceptance:
 
 ## P1: Session Resource Model
 
-Issue focus: #15, #19, #22, #24, #25, #27, #31, #33.
+Issue focus: #15, #19, #22, #24, #25, #26, #27, #31, #33.
 
 Remaining work:
 
@@ -205,6 +208,8 @@ Remaining work:
 - Add explicit keep-alive and release semantics for live runtimes.
 - Add projects or namespaces with quota and policy boundaries.
 - Add browser context save/restore plus export/import for reusable contexts.
+- Add network identity and operator-defined egress profiles with upstream
+  proxy, bypass rules, and custom CA trust where supported.
 - Add first-class mobile and device-mode sessions if they become a supported
   product target.
 
