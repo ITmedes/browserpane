@@ -17,7 +17,7 @@ export async function ensureAdminLoggedIn(page, options) {
   await page.getByTestId('admin-login').click();
   await fillKeycloakLogin(page, authConfig, options);
   await page.waitForURL(urlPatternFor(options.pageUrl), { timeout: options.connectTimeoutMs });
-  await page.getByTestId('session-new').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await waitForAdminAuthenticated(page, options);
   return authConfig;
 }
 
@@ -120,7 +120,7 @@ async function fillKeycloakLogin(page, authConfig, options) {
   const username = page.locator('input[name="username"], #username').first();
   const password = page.locator('input[name="password"], #password').first();
   const loginState = await poll('admin OIDC login readiness', async () => ({
-    authenticated: await page.getByTestId('session-new').isVisible().catch(() => false),
+    authenticated: await adminAuthenticatedVisible(page),
     usernameVisible: await username.isVisible().catch(() => false),
   }), (value) => value.authenticated || value.usernameVisible, options.connectTimeoutMs);
   if (loginState.authenticated) {
@@ -136,8 +136,22 @@ async function fillKeycloakLogin(page, authConfig, options) {
 async function waitForAdminAuthSurface(page, options) {
   return await poll('admin auth surface', async () => ({
     login: await page.getByTestId('admin-login').isVisible().catch(() => false),
-    authenticated: await page.getByTestId('session-new').isVisible().catch(() => false),
+    authenticated: await adminAuthenticatedVisible(page),
   }), (state) => state.login || state.authenticated, options.connectTimeoutMs);
+}
+
+async function waitForAdminAuthenticated(page, options) {
+  await poll(
+    'admin authenticated route surface',
+    async () => await adminAuthenticatedVisible(page),
+    Boolean,
+    options.connectTimeoutMs,
+  );
+}
+
+async function adminAuthenticatedVisible(page) {
+  return await page.getByTestId('session-new').isVisible().catch(() => false)
+    || await page.getByTestId('session-inspector-new').isVisible().catch(() => false);
 }
 
 async function waitForSessionClients(page, options, sessionId, expectedClients) {
