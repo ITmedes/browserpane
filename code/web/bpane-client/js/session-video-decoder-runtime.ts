@@ -54,15 +54,15 @@ export class SessionVideoDecoderRuntime {
     const nalType = getNalType(nalData);
 
     if (nalType === 7) {
-      this.spsNal = nalData;
+      this.spsNal = Uint8Array.from(nalData);
       return;
     }
     if (nalType === 8) {
-      this.ppsNal = nalData;
+      this.ppsNal = Uint8Array.from(nalData);
       return;
     }
     if (nalType === 6) {
-      this.seiNals.push(nalData);
+      this.seiNals.push(Uint8Array.from(nalData));
       return;
     }
     if (nalType !== 1 && nalType !== 5) {

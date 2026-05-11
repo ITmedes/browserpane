@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import SessionTable from './SessionTable.svelte';
   import type { SessionListPanelViewModel } from './session-view-model';
 
@@ -17,6 +18,10 @@
     onJoinSession,
     onSelectSessionId,
   }: SessionListPanelProps = $props();
+
+  function detailHref(sessionId: string): string {
+    return `${base}/sessions/${encodeURIComponent(sessionId)}`;
+  }
 </script>
 
 <div class="grid gap-3" aria-label="Owner-scoped sessions">
@@ -59,6 +64,11 @@
       >
         Join / reconnect
       </button>
+      {#if viewModel.selectedSessionId}
+        <a class="admin-button-ghost" data-testid="session-detail-link" href={detailHref(viewModel.selectedSessionId)}>
+          Inspect details
+        </a>
+      {/if}
     </div>
   </section>
 
