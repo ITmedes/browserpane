@@ -24,7 +24,6 @@ import {
   SessionControlClient,
 } from "./session-control-client.js";
 import {
-  BPANE_SESSION_ID_HEADER,
   isStreamableMcpPath,
   isSsePath,
   selectedBrowserPaneSessionId,
