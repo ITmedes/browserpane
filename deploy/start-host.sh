@@ -165,25 +165,40 @@ write_openbox_config() {
     <screenEdgeWarpTime>0</screenEdgeWarpTime>
   </mouse>
   <applications>
-    <!-- Match common Chromium WM_CLASS values, hide the WM frame, and pin them
-         maximized. Chromium still uses the native frame path internally, but
-         Openbox does not render that frame. -->
-    <application class="Chromium">
+    <!-- Match common Chromium browser windows, hide the WM frame, and pin only
+         top-level normal windows maximized. Native dialogs share Chromium's
+         WM_CLASS, but must keep their requested dialog size. -->
+    <application class="Chromium" type="normal">
       <decor>no</decor>
       <maximized>yes</maximized>
     </application>
-    <application class="chromium">
+    <application class="chromium" type="normal">
       <decor>no</decor>
       <maximized>yes</maximized>
     </application>
-    <application class="chromium-browser">
+    <application class="chromium-browser" type="normal">
       <decor>no</decor>
       <maximized>yes</maximized>
     </application>
-    <!-- Fallback: all normal windows stay undecorated and start maximized. -->
-    <application type="normal">
+    <application type="dialog">
+      <decor>no</decor>
+      <maximized>no</maximized>
+      <position force="yes">
+        <x>center</x>
+        <y>center</y>
+      </position>
+    </application>
+    <application role="GtkFileChooserDialog" type="dialog">
       <decor>no</decor>
       <maximized>yes</maximized>
+    </application>
+    <application type="utility">
+      <decor>no</decor>
+      <maximized>no</maximized>
+      <position force="yes">
+        <x>center</x>
+        <y>center</y>
+      </position>
     </application>
   </applications>
 </openbox_config>
@@ -196,8 +211,8 @@ openbox &
 sleep 0.5
 openbox --reconfigure
 
-# GTK scale factors (integer + fractional tweak)
-export GDK_SCALE=${GDK_SCALE:-3}
+# GTK scale factors for native dialogs and Chromium chrome.
+export GDK_SCALE=${GDK_SCALE:-2}
 export GDK_DPI_SCALE=${GDK_DPI_SCALE:-0.8}
 
 # Chromium on Linux reads caret blink behavior from GTK settings.
