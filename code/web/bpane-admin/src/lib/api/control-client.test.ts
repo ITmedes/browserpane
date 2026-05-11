@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ControlApiError, ControlClient, type FetchLike } from './control-client';
+import { ControlClient, type FetchLike } from './control-client';
 
 const SESSION = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
