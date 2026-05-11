@@ -53,15 +53,6 @@
       <button
         class="admin-button-primary"
         type="button"
-        data-testid="session-new"
-        disabled={!viewModel.authenticated || viewModel.loading}
-        onclick={onCreateSession}
-      >
-        New session
-      </button>
-      <button
-        class="admin-button-primary"
-        type="button"
         data-testid="session-join"
         disabled={!viewModel.authenticated || viewModel.loading || !viewModel.selectedSessionId}
         onclick={onJoinSession}
@@ -77,15 +68,26 @@
         <p class="admin-eyebrow mb-1">Session switcher</p>
         <p class="m-0 text-sm font-bold text-admin-ink/72">{viewModel.sessions.length} visible sessions</p>
       </div>
-      <button
-        class="admin-button-primary"
-        type="button"
-        data-testid="session-refresh"
-        disabled={!viewModel.authenticated || viewModel.loading}
-        onclick={onRefresh}
-      >
-        Refresh
-      </button>
+      <div class="flex flex-wrap gap-2">
+        <button
+          class="admin-button-primary"
+          type="button"
+          data-testid="session-new"
+          disabled={!viewModel.authenticated || viewModel.loading}
+          onclick={onCreateSession}
+        >
+          New session
+        </button>
+        <button
+          class="admin-button-primary"
+          type="button"
+          data-testid="session-refresh"
+          disabled={!viewModel.authenticated || viewModel.loading}
+          onclick={onRefresh}
+        >
+          Refresh
+        </button>
+      </div>
     </div>
 
     {#if !viewModel.authenticated}
