@@ -251,3 +251,43 @@ fn normalize_session_file_mount_path(mount_path: &str) -> Result<String, Session
 
     Ok(parts.join("/"))
 }
+
+pub(in crate::session_control) fn validate_session_file_request(
+    request: &PersistSessionFileRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "session file name must not be empty".to_string(),
+        ));
+    }
+    if let Some(media_type) = &request.media_type {
+        if media_type.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "session file media_type must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    if request.sha256_hex.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "session file sha256_hex must not be empty".to_string(),
+        ));
+    }
+    if request.artifact_ref.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "session file artifact_ref must not be empty".to_string(),
+        ));
+    }
+    for (key, value) in &request.labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "session file label keys must not be empty".to_string(),
+            ));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "session file label values must not be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}

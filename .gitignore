@@ -18,6 +18,8 @@ code/tests/e2e
 # Node modules (if Vite is set up)
 node_modules/
 dist/
+code/web/bpane-admin/.svelte-kit/
+code/web/bpane-admin/build/
 
 # IDE
 .vscode/

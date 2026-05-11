@@ -76,7 +76,8 @@ long-lived compose service.
                      v
        ┌──────────────────────────┐
        │  nginx (web, :8080)      │
-       │  / -> test-embed.html    │
+       │  / -> /admin/ redirect   │
+       │  /test-embed.html        │
        │  /dist/ -> bpane-client   │
        │  /auth-config.json       │
        │  /cert-hash -> cert.pem  │
@@ -113,7 +114,7 @@ long-lived compose service.
 - `4433/tcp+udp` — WebTransport (QUIC)
 - `8932/tcp` — gateway HTTP API
 - `8091/tcp` — local Keycloak realm for dev/testing
-- `8931/tcp` — MCP bridge (`/mcp` for Streamable HTTP, `/sse` for legacy SSE)
+- `8931/tcp` — MCP bridge (`/mcp`, `/sessions/{id}/mcp`, `/sse`, `/sessions/{id}/sse`)
 - `5433/tcp` — local Postgres for the session control plane
 - `8200/tcp` — local Vault dev server for credential bindings
 
@@ -375,15 +376,23 @@ decompression.
 Optional. Bridges external MCP clients (e.g., Claude Code) to Playwright MCP
 running against the Chromium instance inside the host container.
 
-- Streamable HTTP server on `/mcp` and legacy SSE endpoint on `/sse`
+- Compatibility Streamable HTTP server on `/mcp`, recommended session-scoped
+  Streamable HTTP on `/sessions/{id}/mcp`, compatibility SSE on `/sse`, and
+  session-scoped legacy SSE on `/sessions/{id}/sse`
 - Proxies tool calls to @playwright/mcp subprocess (STDIO mode)
 - Supervisor-aware: adds configurable delay (default 1500ms) when browser
   viewers are watching (polls gateway status every 2s)
 - Lazy registration: only claims MCP ownership on first MCP client connect
 - Registers/clears MCP ownership with the gateway so delegated automation can attach without forcing browser clients into viewer mode
 - Uses OIDC client-credentials for gateway API access in the local compose stack
-- Exposes a local control-session API on `:8931` so the browser test page can point
-  the bridge at an explicitly delegated session without restarting the service
+- Exposes a local compatibility control-session API on `:8931` so the admin
+  console can point the bridge at an explicitly delegated session without
+  restarting the service
+- Supports per-connection session routing so external MCP clients can bind to a
+  delegated BrowserPane session without mutating one bridge-global target
+- `/health` keeps legacy `control_session_*` fields and also reports a
+  normalized `managed_sessions` array covering the compatibility control
+  session plus session-scoped MCP clients
 - Resolves the delegated session's runtime CDP endpoint from the gateway session
   resource before binding Playwright MCP
 - Graceful shutdown: always releases ownership on SIGINT/SIGTERM
@@ -419,14 +428,14 @@ Gateway-supervised passive session recorder.
 The default dev stack no longer uses a shared token file.
 
 - `web` serves `/auth-config.json`
-- `test-embed.html` discovers the OIDC provider and performs Authorization Code + PKCE
+- the admin console discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
-- after login, `test-embed.html` lists owner-scoped `/api/v1/sessions`, lets the user join an existing session or start a new one, and then uses the selected session resource's connect metadata
-- the page then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
-- test-page-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
-- `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via `PUT /control-session`
-- the console shows whether the currently selected session is the exact session delegated to `mcp-bridge`
+- after login, the admin console lists owner-scoped `/api/v1/sessions`, lets the user join an existing session or start a new one, and then uses the selected session resource's connect metadata
+- the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
+- admin-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
+- `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via compatibility `PUT /control-session`
+- the console shows whether the currently selected session is the exact session delegated to `mcp-bridge` and exposes the recommended `/sessions/{session_id}/mcp` endpoint for external clients
 - `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource and lazily binds Playwright MCP on first client connect
 - `workflow-worker` uses OIDC client credentials in local compose for gateway API bootstrap and then switches to run-scoped automation access
 - the resulting access token is sent to `bpane-gateway` as:
@@ -440,11 +449,19 @@ The default dev stack no longer uses a shared token file.
 - the default compose stack still runs the `static_single` runtime backend, so that control-plane flow still lands on one active host worker
 - `docker_single` keeps the old single-runtime compatibility behavior with start/stop-on-idle worker lifecycle
 - `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
-- `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` / `BPANE_SESSION_BOOTSTRAP_MODE`), explicit delegated-session assignment through its local `/control-session` API, and one active managed runtime per bridge instance
+- `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` /
+  `BPANE_SESSION_BOOTSTRAP_MODE`), compatibility delegated-session assignment
+  through its local `/control-session` API, and per-connection session routing
+  through `/sessions/{session_id}/mcp`
+- for external clients, `/sessions/{session_id}/mcp` and
+  `/sessions/{session_id}/sse` are the preferred MCP connection surfaces
+  because the BrowserPane session binding is immutable for that connection;
+  `/control-session` remains a compatibility bridge-global target
 - the local smoke path for this model now lives in `code/web/bpane-client/scripts/run-multi-session-smoke.mjs` and verifies:
   - two parallel pool-mode browser sessions
   - viewer join on an existing session
   - MCP delegation and bridge runtime switching
+  - explicit per-session MCP clients route actions to their selected runtimes
   - clean teardown back to zero active runtime assignments
 
 The default imported local realm contains:

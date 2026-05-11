@@ -15,8 +15,10 @@ use super::tasks::{
 use crate::idle_stop::schedule_idle_session_stop;
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_control::SessionStore;
+use crate::session_files::{SessionFileRecorder, SessionFileSource};
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
+use crate::workspaces::WorkspaceFileStore;
 
 use super::session::Session;
 
@@ -26,6 +28,7 @@ pub(super) struct SessionTaskContext {
     pub connect_request: ValidatedConnectRequest,
     pub session_manager: Arc<SessionManager>,
     pub session_store: SessionStore,
+    pub workspace_file_store: Arc<WorkspaceFileStore>,
     pub idle_stop_timeout: Duration,
     pub agent_socket_path: String,
     pub heartbeat_timeout: Duration,
@@ -40,6 +43,7 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
         connect_request,
         session_manager,
         session_store,
+        workspace_file_store,
         idle_stop_timeout,
         agent_socket_path,
         heartbeat_timeout,
@@ -111,6 +115,12 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
         client_id,
         recv_stream,
         to_host,
+        SessionFileRecorder::new(
+            routed_session_id,
+            SessionFileSource::BrowserUpload,
+            session_store.clone(),
+            workspace_file_store,
+        ),
     );
 
     let direct_control_task =

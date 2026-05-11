@@ -14,6 +14,7 @@ async fn get_workflow_operations(
 
 pub(crate) fn build_api_router(state: Arc<ApiState>) -> Router {
     Router::new()
+        .merge(admin_events::admin_event_routes())
         .merge(sessions::session_routes())
         .merge(extensions::extension_routes())
         .merge(credential_bindings::credential_binding_routes())

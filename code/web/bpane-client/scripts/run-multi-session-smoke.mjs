@@ -3,12 +3,15 @@ import { execFile } from 'node:child_process';
 import process from 'node:process';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright-core';
+import { McpStreamableClient } from './support/mcp-streamable-client.mjs';
+import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
 
 const execFileAsync = promisify(execFile);
 
 const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
   mcpHealthUrl: 'http://localhost:8931/health',
+  mcpUrl: 'http://localhost:8931/mcp',
   mcpRegisterUrl: 'http://localhost:8931/register',
   mcpControlUrl: 'http://localhost:8931/control-session',
   certSpki: process.env.BPANE_BENCHMARK_CERT_SPKI ?? '',
@@ -40,6 +43,9 @@ function parseArgs(argv) {
       i++;
     } else if (arg === '--mcp-health-url' && next) {
       options.mcpHealthUrl = next;
+      i++;
+    } else if (arg === '--mcp-url' && next) {
+      options.mcpUrl = next;
       i++;
     } else if (arg === '--mcp-register-url' && next) {
       options.mcpRegisterUrl = next;
@@ -75,6 +81,7 @@ Usage: node scripts/run-multi-session-smoke.mjs [options]
 Options:
   --page-url <url>            Local test page URL (default: ${DEFAULTS.pageUrl})
   --mcp-health-url <url>      MCP bridge health URL (default: ${DEFAULTS.mcpHealthUrl})
+  --mcp-url <url>             MCP streamable HTTP URL (default: ${DEFAULTS.mcpUrl})
   --mcp-register-url <url>    MCP bridge register URL (default: ${DEFAULTS.mcpRegisterUrl})
   --mcp-control-url <url>     MCP bridge control URL (default: ${DEFAULTS.mcpControlUrl})
   --cert-spki <base64>        SPKI pin for the local gateway cert
@@ -147,7 +154,7 @@ async function fetchAuthConfig(options) {
 }
 
 async function configurePage(page, options) {
-  await page.goto(options.pageUrl, { waitUntil: 'networkidle' });
+  await page.goto(testEmbedPageUrl(options), { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean(window.__bpaneAuth));
 }
 
@@ -326,6 +333,83 @@ async function lookupRuntimeContainerId(sessionId) {
   return stdout.trim();
 }
 
+async function fetchRuntimeTargetUrls(containerId) {
+  const script = `
+import json
+import sys
+import urllib.request
+
+with urllib.request.urlopen("http://127.0.0.1:9222/json/list", timeout=5) as response:
+    sys.stdout.write(response.read().decode("utf-8"))
+`;
+  const { stdout } = await execFileAsync('docker', ['exec', containerId, 'python3', '-c', script]);
+  const targets = JSON.parse(stdout);
+  if (!Array.isArray(targets)) {
+    return [];
+  }
+  return targets
+    .map((target) => (typeof target?.url === 'string' ? target.url : ''))
+    .filter(Boolean);
+}
+
+function buildMcpProbeUrl(sessionId) {
+  const marker = `bpane-mcp-probe-${sessionId}-${Date.now()}`;
+  const document = `<title>${marker}</title><body>${marker}</body>`;
+  return {
+    marker,
+    url: `data:text/html,${encodeURIComponent(document)}`,
+  };
+}
+
+async function verifyMcpNavigationLandsInSession({
+  options,
+  targetContainer,
+  nonTargetContainer,
+  targetSession,
+  bpaneSessionId = '',
+}) {
+  const probe = buildMcpProbeUrl(targetSession);
+  const client = new McpStreamableClient({
+    endpointUrl: options.mcpUrl,
+    requestTimeoutMs: options.connectTimeoutMs,
+    bpaneSessionId,
+  });
+
+  try {
+    await client.initialize();
+    const tools = await client.listTools();
+    if (!tools.some((tool) => tool?.name === 'browser_navigate')) {
+      throw new Error('MCP bridge did not expose the browser_navigate tool.');
+    }
+    const result = await client.callTool('browser_navigate', { url: probe.url });
+    if (result?.isError === true) {
+      throw new Error(`MCP browser_navigate reported an error: ${JSON.stringify(result)}`);
+    }
+
+    const targetUrls = await poll(
+      `MCP navigation target in session ${targetSession}`,
+      () => fetchRuntimeTargetUrls(targetContainer),
+      (urls) => urls.some((url) => url.includes(probe.marker)),
+      options.connectTimeoutMs,
+      1000,
+    );
+    const nonTargetUrls = await fetchRuntimeTargetUrls(nonTargetContainer);
+    if (nonTargetUrls.some((url) => url.includes(probe.marker))) {
+      throw new Error(`MCP browser_navigate side effect landed outside selected session ${targetSession}.`);
+    }
+
+    return {
+      client,
+      marker: probe.marker,
+      target_session_urls: targetUrls,
+      non_target_session_urls: nonTargetUrls,
+    };
+  } catch (error) {
+    await client.close().catch(() => {});
+    throw error;
+  }
+}
+
 async function fetchSessionResource(accessToken, options, sessionId) {
   return await fetchJson(`${options.pageUrl}/api/v1/sessions/${sessionId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -349,6 +433,21 @@ async function clearAutomationOwner(accessToken, options, sessionId) {
       `cleanup warning: failed to clear automation delegate for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+async function delegateSessionToBridge(accessToken, options, sessionId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/sessions/${sessionId}/automation-owner`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      client_id: 'bpane-mcp-bridge',
+      issuer: 'http://localhost:8091/realms/browserpane-dev',
+      display_name: 'BrowserPane MCP bridge',
+    }),
+  });
 }
 
 async function deleteSession(accessToken, options, sessionId) {
@@ -392,6 +491,8 @@ async function main() {
   let pageOwnerA = null;
   let pageOwnerB = null;
   let pageViewer = null;
+  let mcpClient = null;
+  const mcpSelectedClients = [];
   let accessToken = '';
   const createdSessions = [];
 
@@ -458,6 +559,18 @@ async function main() {
     const healthAfterB = await delegateMcp(pageOwnerB, sessionB, options);
     const registerAfterB = await registerMcp(options);
     const healthAfterRegisterB = await fetchJson(options.mcpHealthUrl);
+    log(`Verifying MCP browser action lands in session ${sessionB}`);
+    const mcpSideEffect = await verifyMcpNavigationLandsInSession({
+      options,
+      targetContainer: containerB,
+      nonTargetContainer: containerA,
+      targetSession: sessionB,
+    });
+    mcpClient = mcpSideEffect.client;
+    const sessionAResourceAfterSwitch = await fetchSessionResource(accessToken, options, sessionA);
+    const sessionBResourceAfterSwitch = await fetchSessionResource(accessToken, options, sessionB);
+    const sessionAStatusAfterSwitch = await fetchSessionStatus(accessToken, options, sessionA);
+    const sessionBStatusAfterSwitch = await fetchSessionStatus(accessToken, options, sessionB);
 
     const summary = {
       scenario: 'multi-session-compose-smoke',
@@ -468,12 +581,20 @@ async function main() {
           worker_container_id: containerA,
           runtime: sessionAResource.runtime,
           status: sessionAStatus,
+          after_mcp_switch: {
+            automation_delegate: sessionAResourceAfterSwitch.automation_delegate,
+            status: sessionAStatusAfterSwitch,
+          },
         },
         ownerB: {
           id: sessionB,
           worker_container_id: containerB,
           runtime: sessionBResource.runtime,
           status: sessionBStatus,
+          after_mcp_switch: {
+            automation_delegate: sessionBResourceAfterSwitch.automation_delegate,
+            status: sessionBStatusAfterSwitch,
+          },
         },
         viewer: {
           joined_session_id: joinedSession,
@@ -485,6 +606,11 @@ async function main() {
         after_delegate_b: healthAfterB,
         after_register_b: registerAfterB,
         final_health: healthAfterRegisterB,
+        side_effect: {
+          marker: mcpSideEffect.marker,
+          target_session_url_count: mcpSideEffect.target_session_urls.length,
+          non_target_session_url_count: mcpSideEffect.non_target_session_urls.length,
+        },
       },
     };
 
@@ -505,6 +631,56 @@ async function main() {
     if (healthAfterRegisterB.playwright_cdp_endpoint !== sessionBResource.runtime.cdp_endpoint) {
       throw new Error('MCP bridge Playwright endpoint did not match session B runtime metadata.');
     }
+    if (healthAfterRegisterB.bridge_alignment !== 'aligned') {
+      throw new Error(`MCP bridge health reported non-aligned state: ${healthAfterRegisterB.bridge_alignment}`);
+    }
+    if (healthAfterRegisterB.control_session_backend_delegated !== true) {
+      throw new Error('MCP bridge health did not report the active control session as backend-delegated.');
+    }
+    if (sessionAResourceAfterSwitch.automation_delegate !== null) {
+      throw new Error('Switching MCP to session B left session A delegated in the control plane.');
+    }
+    if (sessionAStatusAfterSwitch.mcp_owner !== false) {
+      throw new Error('Switching MCP to session B left session A marked as MCP-owned.');
+    }
+    if (sessionBResourceAfterSwitch.automation_delegate?.client_id !== 'bpane-mcp-bridge') {
+      throw new Error('Session B is not delegated to the MCP bridge after switching control.');
+    }
+    if (sessionBStatusAfterSwitch.mcp_owner !== true) {
+      throw new Error('Session B is not marked as MCP-owned after bridge registration.');
+    }
+
+    log('Verifying explicit MCP client session selection for both sessions.');
+    await delegateSessionToBridge(accessToken, options, sessionA);
+    await delegateSessionToBridge(accessToken, options, sessionB);
+    const selectedSessionA = await verifyMcpNavigationLandsInSession({
+      options,
+      targetContainer: containerA,
+      nonTargetContainer: containerB,
+      targetSession: sessionA,
+      bpaneSessionId: sessionA,
+    });
+    mcpSelectedClients.push(selectedSessionA.client);
+    const selectedSessionB = await verifyMcpNavigationLandsInSession({
+      options,
+      targetContainer: containerB,
+      nonTargetContainer: containerA,
+      targetSession: sessionB,
+      bpaneSessionId: sessionB,
+    });
+    mcpSelectedClients.push(selectedSessionB.client);
+    const healthAfterExplicitSelection = await fetchJson(options.mcpHealthUrl);
+    const selectedClientSessions = Array.isArray(healthAfterExplicitSelection.selected_session_clients)
+      ? healthAfterExplicitSelection.selected_session_clients.map((entry) => entry?.session_id)
+      : [];
+    if (!selectedClientSessions.includes(sessionA)) {
+      throw new Error('MCP bridge health did not expose the explicitly selected session A client.');
+    }
+    summary.bridge.explicit_selection = {
+      health: healthAfterExplicitSelection,
+      session_a_marker: selectedSessionA.marker,
+      session_b_marker: selectedSessionB.marker,
+    };
 
     log(`Verified two parallel sessions (${sessionA}, ${sessionB}) and MCP bridge switching.`);
     console.log(JSON.stringify(summary, null, 2));
@@ -512,6 +688,16 @@ async function main() {
       await fs.writeFile(options.outputPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
     }
   } finally {
+    for (const client of mcpSelectedClients.splice(0)) {
+      await client.close().catch((error) => {
+        log(`cleanup warning: failed to close selected MCP client: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+    if (mcpClient) {
+      await mcpClient.close().catch((error) => {
+        log(`cleanup warning: failed to close MCP client: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
     if (pageViewer) {
       await disconnectSession(pageViewer).catch(() => {});
     }

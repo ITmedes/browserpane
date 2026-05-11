@@ -247,6 +247,53 @@ pub(in crate::session_control) fn row_to_stored_file_workspace_file(
     })
 }
 
+pub(in crate::session_control) fn row_to_stored_session_file(
+    row: &Row,
+) -> Result<StoredSessionFile, SessionStoreError> {
+    let byte_count = u64::try_from(row.get::<_, i64>("byte_count")).map_err(|error| {
+        SessionStoreError::Backend(format!(
+            "session file byte_count must be non-negative and fit u64: {error}"
+        ))
+    })?;
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("session file labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("session file label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let source = row
+        .get::<_, String>("source")
+        .parse::<SessionFileSource>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+
+    Ok(StoredSessionFile {
+        id: row.get("id"),
+        session_id: row.get("session_id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        media_type: row.get("media_type"),
+        byte_count,
+        sha256_hex: row.get("sha256_hex"),
+        artifact_ref: row.get("artifact_ref"),
+        source,
+        labels,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
 pub(in crate::session_control) fn row_to_stored_session_file_binding(
     row: &Row,
 ) -> Result<StoredSessionFileBinding, SessionStoreError> {

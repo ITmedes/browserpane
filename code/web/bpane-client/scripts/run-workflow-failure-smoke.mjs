@@ -24,7 +24,7 @@ function workflowFailureEntrypoint() {
   const targetUrl =
     input && typeof input.target_url === 'string' && input.target_url.trim()
       ? input.target_url.trim()
-      : 'http://web:8080';
+      : 'http://web:8080/test-embed.html';
   console.log(\`workflow failure start \${sessionId}\`);
   await page.goto(targetUrl, { waitUntil: 'networkidle' });
   await page.waitForTimeout(2000);
@@ -99,7 +99,7 @@ async function createWorkflowRun(accessToken, options, workflowId) {
       workflow_id: workflowId,
       version: 'v1',
       input: {
-        target_url: 'http://web:8080',
+        target_url: 'http://web:8080/test-embed.html',
       },
       labels: {
         suite: 'workflow-failure-smoke',

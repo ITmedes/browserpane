@@ -4,7 +4,7 @@
 #   ./deploy/gen-dev-cert.sh dev/certs   # generate TLS cert (once)
 #   docker compose -f deploy/compose.yml up --build
 #
-# Then open http://localhost:8080 in Chrome and log in.
+# Then open http://localhost:8080/admin/ in Chrome and log in.
 #
 # The local stack defaults to docker_pool runtime workers:
 #   BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \

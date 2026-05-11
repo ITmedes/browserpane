@@ -9,10 +9,11 @@ import {
   launchChrome,
   parseSmokeArgs,
   poll,
+  testEmbedPageUrl,
 } from './workflow-smoke-lib.mjs';
 
 async function configureEmbedPage(page, options) {
-  await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
+  await page.goto(testEmbedPageUrl(options), { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(
     () => Boolean(window.__bpaneAuth && window.__bpaneControl),
     { timeout: options.connectTimeoutMs },
@@ -61,7 +62,7 @@ async function ensureEmbedLoggedIn(page, options) {
     await page.locator('input[type="submit"], #kc-login').click();
   }
 
-  const pageUrl = new URL(options.pageUrl);
+  const pageUrl = new URL(testEmbedPageUrl(options));
   const targetPrefix = `${pageUrl.origin}${pageUrl.pathname}`;
   await page.waitForURL(new RegExp(`^${targetPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), {
     timeout: options.connectTimeoutMs,
@@ -83,7 +84,7 @@ async function run() {
   const page = await context.newPage();
 
   try {
-    log(`Opening ${options.pageUrl}`);
+    log(`Opening ${testEmbedPageUrl(options)}`);
     await configureEmbedPage(page, options);
     await ensureEmbedLoggedIn(page, options);
 

@@ -5,8 +5,11 @@ use tokio::sync::Mutex;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
+use crate::session_control::SessionStore;
+use crate::session_files::{SessionFileRecorder, SessionFileSource};
 use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_hub::{BrowserClientRole, ClientHandle, SessionHub, SessionTerminationReason};
+use crate::workspaces::WorkspaceFileStore;
 
 /// Maps agent socket paths to active SessionHubs.
 ///
@@ -16,6 +19,13 @@ pub struct SessionRegistry {
     hubs: Mutex<HashMap<Uuid, Arc<SessionHub>>>,
     max_viewers: u32,
     exclusive_browser_owner: bool,
+    session_file_recording: Mutex<Option<SessionFileRecordingConfig>>,
+}
+
+#[derive(Clone)]
+struct SessionFileRecordingConfig {
+    session_store: SessionStore,
+    workspace_file_store: Arc<WorkspaceFileStore>,
 }
 
 impl SessionRegistry {
@@ -24,7 +34,19 @@ impl SessionRegistry {
             hubs: Mutex::new(HashMap::new()),
             max_viewers,
             exclusive_browser_owner,
+            session_file_recording: Mutex::new(None),
         }
+    }
+
+    pub async fn attach_session_file_recording(
+        &self,
+        session_store: SessionStore,
+        workspace_file_store: Arc<WorkspaceFileStore>,
+    ) {
+        *self.session_file_recording.lock().await = Some(SessionFileRecordingConfig {
+            session_store,
+            workspace_file_store,
+        });
     }
 
     fn prune_inactive_hubs(hubs: &mut HashMap<Uuid, Arc<SessionHub>>) {
@@ -110,14 +132,39 @@ impl SessionRegistry {
             return Ok((hub, false));
         }
 
-        let new_hub = Arc::new(
-            SessionHub::new(
-                agent_socket_path,
-                self.max_viewers,
-                self.exclusive_browser_owner,
+        let file_recorder = self
+            .session_file_recording
+            .lock()
+            .await
+            .as_ref()
+            .map(|config| {
+                SessionFileRecorder::new(
+                    session_id,
+                    SessionFileSource::BrowserDownload,
+                    config.session_store.clone(),
+                    config.workspace_file_store.clone(),
+                )
+            });
+        let new_hub = if let Some(file_recorder) = file_recorder {
+            Arc::new(
+                SessionHub::new_with_file_recorder(
+                    agent_socket_path,
+                    self.max_viewers,
+                    self.exclusive_browser_owner,
+                    Some(file_recorder),
+                )
+                .await?,
             )
-            .await?,
-        );
+        } else {
+            Arc::new(
+                SessionHub::new(
+                    agent_socket_path,
+                    self.max_viewers,
+                    self.exclusive_browser_owner,
+                )
+                .await?,
+            )
+        };
 
         Ok(self.insert_or_get_live_hub(session_id, new_hub).await)
     }

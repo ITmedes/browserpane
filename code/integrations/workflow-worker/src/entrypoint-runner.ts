@@ -84,7 +84,7 @@ async function main(): Promise<void> {
     },
   );
   try {
-    const page = await resolveExecutionPage(browser);
+    const page = await createExecutionPage(browser);
     const module = (await import(pathToFileURL(context.entrypointPath).href)) as WorkflowEntrypointModule;
     const execute = resolveEntrypointFunction(module, context.entrypointPath);
     const output = await execute({
@@ -137,16 +137,14 @@ async function normalizeCdpEndpointUrl(endpointUrl: string): Promise<string> {
   return url.toString();
 }
 
-async function resolveExecutionPage(browser: Browser): Promise<Page> {
+async function createExecutionPage(browser: Browser): Promise<Page> {
   const context = browser.contexts()[0];
   if (!context) {
     throw new Error("workflow session did not expose a browser context over CDP");
   }
-  const existingPage = context.pages()[0];
-  if (existingPage) {
-    return existingPage;
-  }
-  return context.newPage();
+  const page = await context.newPage();
+  await page.bringToFront().catch(() => {});
+  return page;
 }
 
 function resolveEntrypointFunction(

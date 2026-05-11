@@ -13,6 +13,8 @@ export const DEFAULTS = {
   outputPath: '',
 };
 
+export const TEST_EMBED_PATH = '/test-embed.html';
+
 const COMMON_CHROME_PATHS = [
   process.env.BPANE_BENCHMARK_CHROME,
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -59,7 +61,7 @@ function printHelp(usageLabel) {
 Usage: node scripts/${usageLabel} [options]
 
 Options:
-  --page-url <url>            Local test page URL (default: ${DEFAULTS.pageUrl})
+  --page-url <url>            Local web origin or test page URL (default: ${DEFAULTS.pageUrl})
   --cert-spki <base64>        SPKI pin for the local gateway cert
   --connect-timeout-ms <ms>   Connect timeout (default: ${DEFAULTS.connectTimeoutMs})
   --output <path>             Write JSON summary to file
@@ -119,9 +121,21 @@ export async function resolveCertSpki(options) {
   }
 }
 
+export function apiOrigin(options) {
+  return new URL('/', options.pageUrl).origin;
+}
+
+export function testEmbedPageUrl(options) {
+  const url = new URL(options.pageUrl);
+  if (url.pathname === '/' || url.pathname === '') {
+    url.pathname = TEST_EMBED_PATH;
+  }
+  return url.toString();
+}
+
 export async function fetchAuthConfig(options) {
   try {
-    const response = await fetch(new URL('/auth-config.json', options.pageUrl));
+    const response = await fetch(new URL('/auth-config.json', apiOrigin(options)));
     if (!response.ok) {
       return null;
     }
@@ -132,7 +146,7 @@ export async function fetchAuthConfig(options) {
 }
 
 export async function configurePage(page, options) {
-  await page.goto(options.pageUrl, { waitUntil: 'networkidle' });
+  await page.goto(testEmbedPageUrl(options), { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean(window.__bpaneAuth));
 }
 
@@ -178,7 +192,7 @@ export async function ensureLoggedIn(page, options) {
     await page.locator('input[type="submit"], #kc-login').click();
   }
 
-  const pageUrl = new URL(options.pageUrl);
+  const pageUrl = new URL(testEmbedPageUrl(options));
   const targetPrefix = `${pageUrl.origin}${pageUrl.pathname}`;
   await page.waitForURL(new RegExp(`^${targetPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), {
     timeout: options.connectTimeoutMs,
@@ -212,13 +226,13 @@ export async function fetchBytes(url, init) {
 }
 
 export async function listSessions(accessToken, options) {
-  return await fetchJson(`${options.pageUrl}/api/v1/sessions`, {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/sessions`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
 
 export async function deleteSession(accessToken, options, sessionId) {
-  const response = await fetch(`${options.pageUrl}/api/v1/sessions/${sessionId}`, {
+  const response = await fetch(`${apiOrigin(options)}/api/v1/sessions/${sessionId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -226,7 +240,7 @@ export async function deleteSession(accessToken, options, sessionId) {
     return;
   }
   if (response.status === 409) {
-    const killResponse = await fetch(`${options.pageUrl}/api/v1/sessions/${sessionId}/kill`, {
+    const killResponse = await fetch(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/kill`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
     });

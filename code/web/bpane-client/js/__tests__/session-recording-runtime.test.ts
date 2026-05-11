@@ -111,14 +111,14 @@ describe('SessionRecordingRuntime', () => {
     expect(MockMediaRecorder.instances[0].stream.getVideoTracks()).toHaveLength(1);
     expect(MockMediaRecorder.instances[0].stream.getAudioTracks()).toHaveLength(1);
 
-    MockMediaRecorder.instances[0].emitData([1, 2, 3, 4]);
+    MockMediaRecorder.instances[0].emitData(Array.from({ length: 2048 }, (_, index) => index % 256));
     const stopPromise = runtime.stop();
     expect(MockMediaRecorder.instances[0].requestData).toHaveBeenCalledOnce();
     expect(MockMediaRecorder.instances[0].stop).toHaveBeenCalledOnce();
     MockMediaRecorder.instances[0].emitStop();
 
     const blob = await stopPromise;
-    expect(blob.size).toBe(4);
+    expect(blob.size).toBe(2048);
     expect(runtime.isRecording()).toBe(false);
     expect(stopVideoStream).toHaveBeenCalledOnce();
   });

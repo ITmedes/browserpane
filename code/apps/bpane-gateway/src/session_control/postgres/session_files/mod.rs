@@ -9,6 +9,54 @@ impl PostgresSessionStore {
         SessionFileRepository { store: self }
     }
 
+    pub(in crate::session_control) async fn record_session_file(
+        &self,
+        request: PersistSessionFileRequest,
+    ) -> Result<StoredSessionFile, SessionStoreError> {
+        self.session_file_repository()
+            .record_session_file(request)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_session_files_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<StoredSessionFile>, SessionStoreError> {
+        self.session_file_repository()
+            .list_session_files_for_session(session_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_session_file_for_session(
+        &self,
+        session_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredSessionFile>, SessionStoreError> {
+        self.session_file_repository()
+            .get_session_file_for_session(session_id, file_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_session_file_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+        retention: ChronoDuration,
+    ) -> Result<Vec<SessionFileRetentionCandidate>, SessionStoreError> {
+        self.session_file_repository()
+            .list_session_file_retention_candidates(now, retention)
+            .await
+    }
+
+    pub(in crate::session_control) async fn delete_session_file_for_session(
+        &self,
+        session_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredSessionFile>, SessionStoreError> {
+        self.session_file_repository()
+            .delete_session_file_for_session(session_id, file_id)
+            .await
+    }
+
     pub(in crate::session_control) async fn create_session_file_binding_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -82,6 +130,246 @@ impl PostgresSessionStore {
 }
 
 impl SessionFileRepository<'_> {
+    pub(in crate::session_control) async fn record_session_file(
+        &self,
+        request: PersistSessionFileRequest,
+    ) -> Result<StoredSessionFile, SessionStoreError> {
+        let Some(session) = self.store.get_session_by_id(request.session_id).await? else {
+            return Err(SessionStoreError::NotFound(format!(
+                "session {} not found",
+                request.session_id
+            )));
+        };
+
+        let now = Utc::now();
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_one(
+                r#"
+                INSERT INTO control_session_files (
+                    id,
+                    session_id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    artifact_ref,
+                    source,
+                    labels,
+                    created_at,
+                    updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+                RETURNING
+                    id,
+                    session_id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    artifact_ref,
+                    source,
+                    labels,
+                    created_at,
+                    updated_at
+                "#,
+                &[
+                    &request.id,
+                    &session.id,
+                    &session.owner.subject,
+                    &session.owner.issuer,
+                    &request.name,
+                    &request.media_type,
+                    &(request.byte_count as i64),
+                    &request.sha256_hex,
+                    &request.artifact_ref,
+                    &request.source.as_str(),
+                    &json_labels(&request.labels),
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to create session file: {}",
+                    describe_postgres_error(&error)
+                ))
+            })?;
+        row_to_stored_session_file(&row)
+    }
+
+    pub(in crate::session_control) async fn list_session_files_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<StoredSessionFile>, SessionStoreError> {
+        let rows = self
+            .store
+            .db
+            .client()
+            .await?
+            .query(
+                r#"
+                SELECT
+                    id,
+                    session_id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    artifact_ref,
+                    source,
+                    labels,
+                    created_at,
+                    updated_at
+                FROM control_session_files
+                WHERE session_id = $1
+                ORDER BY created_at DESC
+                "#,
+                &[&session_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to list session files: {error}"))
+            })?;
+        rows.iter().map(row_to_stored_session_file).collect()
+    }
+
+    pub(in crate::session_control) async fn get_session_file_for_session(
+        &self,
+        session_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredSessionFile>, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                SELECT
+                    id,
+                    session_id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    artifact_ref,
+                    source,
+                    labels,
+                    created_at,
+                    updated_at
+                FROM control_session_files
+                WHERE session_id = $1
+                  AND id = $2
+                "#,
+                &[&session_id, &file_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to fetch session file: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_session_file).transpose()
+    }
+
+    pub(in crate::session_control) async fn list_session_file_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+        retention: ChronoDuration,
+    ) -> Result<Vec<SessionFileRetentionCandidate>, SessionStoreError> {
+        let rows = self
+            .store
+            .db
+            .client()
+            .await?
+            .query(
+                r#"
+                SELECT
+                    id,
+                    session_id,
+                    artifact_ref,
+                    created_at
+                FROM control_session_files
+                ORDER BY created_at ASC
+                "#,
+                &[],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list session file retention candidates: {error}"
+                ))
+            })?;
+
+        let mut candidates = rows
+            .iter()
+            .filter_map(|row| {
+                let created_at = row.get::<_, DateTime<Utc>>("created_at");
+                let expires_at = created_at + retention;
+                if expires_at > now {
+                    return None;
+                }
+                Some(SessionFileRetentionCandidate {
+                    session_id: row.get("session_id"),
+                    file_id: row.get("id"),
+                    artifact_ref: row.get("artifact_ref"),
+                    expires_at,
+                })
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| left.expires_at.cmp(&right.expires_at));
+        Ok(candidates)
+    }
+
+    pub(in crate::session_control) async fn delete_session_file_for_session(
+        &self,
+        session_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<StoredSessionFile>, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                DELETE FROM control_session_files
+                WHERE session_id = $1
+                  AND id = $2
+                RETURNING
+                    id,
+                    session_id,
+                    owner_subject,
+                    owner_issuer,
+                    name,
+                    media_type,
+                    byte_count,
+                    sha256_hex,
+                    artifact_ref,
+                    source,
+                    labels,
+                    created_at,
+                    updated_at
+                "#,
+                &[&session_id, &file_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to delete session file: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_session_file).transpose()
+    }
+
     pub(in crate::session_control) async fn create_session_file_binding_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,

@@ -5,6 +5,7 @@ import process from 'node:process';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
 
 const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
@@ -131,7 +132,7 @@ async function fetchAuthConfig(options) {
 }
 
 async function configurePage(page, options) {
-  await page.goto(options.pageUrl, { waitUntil: 'networkidle' });
+  await page.goto(testEmbedPageUrl(options), { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean(window.__bpaneAuth));
 }
 
@@ -258,7 +259,7 @@ async function createLocalWorkflowRepo() {
   const targetUrl =
     input && typeof input.target_url === 'string' && input.target_url.trim()
       ? input.target_url.trim()
-      : 'http://web:8080';
+      : 'http://web:8080/test-embed.html';
   const outputWorkspaceId =
     input && typeof input.output_workspace_id === 'string' && input.output_workspace_id.trim()
       ? input.output_workspace_id.trim()
@@ -407,7 +408,7 @@ async function createWorkflowRun(accessToken, options, workflowId, workspaceId) 
       workflow_id: workflowId,
       version: 'v1',
       input: {
-        target_url: 'http://web:8080',
+        target_url: 'http://web:8080/test-embed.html',
         output_workspace_id: workspaceId,
       },
       labels: {

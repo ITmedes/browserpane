@@ -15,10 +15,19 @@ import { lookup } from "node:dns/promises";
 import http from "node:http";
 import { isIP } from "node:net";
 import {
+  buildManagedSessionHealth,
+  type BridgeHealthAlignment,
+} from "./mcp-health.js";
+import {
   GatewaySessionAutomationAccessResponse,
   GatewaySessionResource,
   SessionControlClient,
 } from "./session-control-client.js";
+import {
+  isStreamableMcpPath,
+  isSsePath,
+  selectedBrowserPaneSessionId,
+} from "./session-selector.js";
 import { SupervisorMonitor } from "./supervisor-monitor.js";
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -37,6 +46,7 @@ const SESSION_BOOTSTRAP_MODE = (
   process.env.BPANE_SESSION_BOOTSTRAP_MODE ?? "off"
 ).trim().toLowerCase();
 const SESSION_ID = (process.env.BPANE_SESSION_ID ?? "").trim();
+const DEFAULT_RUNTIME_TARGET_KEY = "__default__";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -148,44 +158,39 @@ class GatewayTokenManager {
 const gatewayTokenManager = new GatewayTokenManager();
 
 class SessionAutomationAccessManager {
-  private cachedAccess: GatewaySessionAutomationAccessResponse | null = null;
+  private cachedAccessBySessionId = new Map<string, GatewaySessionAutomationAccessResponse>();
 
   constructor(private sessionControlClient: SessionControlClient) {}
 
   clear(sessionId?: string | null): void {
-    if (!this.cachedAccess) {
+    if (!sessionId) {
+      this.cachedAccessBySessionId.clear();
       return;
     }
-    if (sessionId && this.cachedAccess.session_id !== sessionId) {
-      return;
-    }
-    this.cachedAccess = null;
+    this.cachedAccessBySessionId.delete(sessionId);
   }
 
   getCached(session: GatewaySessionResource | null): GatewaySessionAutomationAccessResponse | null {
-    if (!session || !this.cachedAccess) {
+    if (!session) {
       return null;
     }
-    if (this.cachedAccess.session_id !== session.id) {
-      return null;
-    }
-    return this.cachedAccess;
+    return this.cachedAccessBySessionId.get(session.id) ?? null;
   }
 
   async get(session: GatewaySessionResource | null): Promise<GatewaySessionAutomationAccessResponse | null> {
     if (!session) {
-      this.cachedAccess = null;
       return null;
     }
     const now = Date.now();
-    if (this.cachedAccess && this.cachedAccess.session_id === session.id) {
-      const expiresAtMs = Date.parse(this.cachedAccess.expires_at);
+    const cachedAccess = this.cachedAccessBySessionId.get(session.id);
+    if (cachedAccess) {
+      const expiresAtMs = Date.parse(cachedAccess.expires_at);
       if (Number.isFinite(expiresAtMs) && now < expiresAtMs - 30_000) {
-        return this.cachedAccess;
+        return cachedAccess;
       }
     }
     const issued = await this.sessionControlClient.issueAutomationAccess(session.id);
-    this.cachedAccess = issued;
+    this.cachedAccessBySessionId.set(session.id, issued);
     return issued;
   }
 }
@@ -266,6 +271,41 @@ function describeManagedCdpEndpoint(
   } catch {
     return null;
   }
+}
+
+function isSessionDelegatedToBridge(session: GatewaySessionResource | null): boolean {
+  if (!session?.automation_delegate) {
+    return false;
+  }
+  if (!GATEWAY_OIDC_CLIENT_ID) {
+    return true;
+  }
+  return session.automation_delegate.client_id === GATEWAY_OIDC_CLIENT_ID;
+}
+
+function deriveBridgeHealthAlignment(
+  selectedSession: GatewaySessionResource | null,
+  visibleSession: GatewaySessionResource | null,
+  expectedCdpEndpoint: string | null,
+  playwrightCdpEndpoint: string | null,
+): BridgeHealthAlignment {
+  if (!selectedSession) {
+    return "unmanaged";
+  }
+  if (!visibleSession) {
+    return "control_session_not_visible";
+  }
+  if (!isSessionDelegatedToBridge(visibleSession)) {
+    return "control_session_not_delegated";
+  }
+  if (
+    expectedCdpEndpoint
+    && playwrightCdpEndpoint
+    && expectedCdpEndpoint !== playwrightCdpEndpoint
+  ) {
+    return "playwright_endpoint_mismatch";
+  }
+  return "aligned";
 }
 
 function isChromiumDevToolsSafeHostname(hostname: string): boolean {
@@ -449,6 +489,18 @@ class PlaywrightRuntimeController {
   }
 }
 
+type RuntimeTarget = {
+  key: string;
+  session: GatewaySessionResource | null;
+  runtime: PlaywrightRuntimeController;
+  monitor: SupervisorMonitor;
+  explicit: boolean;
+};
+
+function runtimeTargetKey(session: GatewaySessionResource | null): string {
+  return session?.id ?? DEFAULT_RUNTIME_TARGET_KEY;
+}
+
 // ── Per-connection MCP Server factory ────────────────────────────────
 
 function createServerForConnection(
@@ -546,6 +598,8 @@ async function main() {
     automationStatusPath(managedSession, automationAccessManager.getCached(managedSession)),
   );
   monitor.start();
+  const explicitRuntimeTargets = new Map<string, RuntimeTarget>();
+  const mcpSessionTargetKeys = new Map<string, string>();
 
   function setManagedSession(next: GatewaySessionResource | null): void {
     const previousSessionId = managedSession?.id ?? null;
@@ -555,6 +609,158 @@ async function main() {
       automationStatusPath(managedSession, automationAccessManager.getCached(managedSession)),
     );
   }
+
+  function defaultRuntimeTarget(): RuntimeTarget {
+    return {
+      key: runtimeTargetKey(managedSession),
+      session: managedSession,
+      runtime: playwrightRuntime,
+      monitor,
+      explicit: false,
+    };
+  }
+
+  async function explicitRuntimeTarget(sessionId: string): Promise<RuntimeTarget> {
+    const resolved = await sessionControlClient.getSession(sessionId);
+    if (!resolved) {
+      throw new Error(`BrowserPane session ${sessionId} is not visible to the MCP bridge`);
+    }
+    if (!isSessionDelegatedToBridge(resolved)) {
+      throw new Error(`BrowserPane session ${sessionId} is not delegated to the MCP bridge`);
+    }
+    if (managedSession?.id === resolved.id) {
+      return defaultRuntimeTarget();
+    }
+
+    const existing = explicitRuntimeTargets.get(resolved.id);
+    if (existing) {
+      return existing;
+    }
+
+    const targetMonitor = new SupervisorMonitor(
+      GATEWAY_API_URL,
+      POLL_INTERVAL_MS,
+      () => gatewaySessionHeaders(resolved, automationAccessManager),
+      sessionStatusPath(resolved),
+    );
+    targetMonitor.start();
+    const target = {
+      key: runtimeTargetKey(resolved),
+      session: resolved,
+      runtime: new PlaywrightRuntimeController(),
+      monitor: targetMonitor,
+      explicit: true,
+    };
+    explicitRuntimeTargets.set(resolved.id, target);
+    return target;
+  }
+
+  async function runtimeTargetForRequest(
+    req: http.IncomingMessage,
+    url: URL,
+  ): Promise<RuntimeTarget> {
+    const selectedSessionId = selectedBrowserPaneSessionId(req, url);
+    return selectedSessionId
+      ? await explicitRuntimeTarget(selectedSessionId)
+      : defaultRuntimeTarget();
+  }
+
+  function clientCountForTarget(targetKey: string): number {
+    let count = 0;
+    for (const value of mcpSessionTargetKeys.values()) {
+      if (value === targetKey) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  async function releaseOwnershipIfIdle(target: RuntimeTarget): Promise<void> {
+    if (clientCountForTarget(target.key) > 0) {
+      return;
+    }
+    console.log(`[mcp-bridge] no MCP clients remaining for target ${target.key} — clearing ownership`);
+    await unregisterMcpOwner(target.session, automationAccessManager);
+    await target.runtime.close();
+    if (target.explicit && target.session) {
+      target.monitor.stop();
+      explicitRuntimeTargets.delete(target.session.id);
+    }
+  }
+
+  async function closeAllRuntimeTargets(): Promise<void> {
+    await unregisterMcpOwner(managedSession, automationAccessManager);
+    await playwrightRuntime.close();
+    for (const target of explicitRuntimeTargets.values()) {
+      await unregisterMcpOwner(target.session, automationAccessManager);
+      await target.runtime.close();
+      target.monitor.stop();
+    }
+    explicitRuntimeTargets.clear();
+  }
+
+  async function managedSessionHealth(
+    kind: "control" | "selected",
+    session: GatewaySessionResource | null,
+    runtime: PlaywrightRuntimeController,
+    clients: number,
+  ) {
+    let visibleSession: GatewaySessionResource | null = null;
+    if (session) {
+      try {
+        visibleSession = await sessionControlClient.getSession(session.id);
+      } catch {
+        visibleSession = null;
+      }
+    }
+    const cdpEndpoint = describeManagedCdpEndpoint(
+      visibleSession ?? session,
+      automationAccessManager.getCached(session),
+    );
+    const playwrightCdpEndpoint = runtime.getCurrentEndpoint();
+    return {
+      visibleSession,
+      cdpEndpoint,
+      entry: buildManagedSessionHealth({
+        kind,
+        session,
+        visibleSession,
+        clients,
+        backendDelegated: isSessionDelegatedToBridge(visibleSession),
+        mcpOwner: await fetchMcpOwner(visibleSession ?? session),
+        cdpEndpoint,
+        playwrightCdpEndpoint,
+        playwrightEffectiveCdpEndpoint: runtime.getEffectiveEndpoint(),
+        alignment: deriveBridgeHealthAlignment(
+          session,
+          visibleSession,
+          cdpEndpoint,
+          playwrightCdpEndpoint,
+        ),
+      }),
+    };
+  }
+
+  async function fetchMcpOwner(session: GatewaySessionResource | null): Promise<boolean | null> {
+    if (!session) {
+      return null;
+    }
+    try {
+      const access = await automationAccessManager.get(session);
+      const headers = await gatewaySessionHeaders(session, automationAccessManager);
+      const response = await fetch(`${GATEWAY_API_URL}${automationStatusPath(session, access)}`, {
+        headers,
+      });
+      if (!response.ok) {
+        return null;
+      }
+      const payload = (await response.json()) as { mcp_owner?: unknown };
+      return typeof payload.mcp_owner === "boolean" ? payload.mcp_owner : null;
+    } catch {
+      return null;
+    }
+  }
+
   if (managedSession) {
     console.log(
       `[mcp-bridge] resolved control session ${managedSession.id} (${managedSession.state}, ${managedSession.connect.compatibility_mode})`,
@@ -582,18 +788,10 @@ async function main() {
   const streamableTransports = new Map<string, StreamableHTTPServerTransport>();
   const servers = new Map<string, Server>();
 
-  async function releaseOwnershipIfIdle(): Promise<void> {
-    if (servers.size > 0) {
-      return;
-    }
-    console.log("[mcp-bridge] no MCP clients remaining — clearing ownership");
-    await unregisterMcpOwner(managedSession, automationAccessManager);
-    await playwrightRuntime.close();
-  }
-
   async function handleStreamableHttpRequest(
     req: http.IncomingMessage,
     res: http.ServerResponse,
+    url: URL,
   ): Promise<void> {
     let parsedBody: unknown | undefined;
     if (req.method === "POST") {
@@ -613,6 +811,18 @@ async function main() {
         writeJsonRpcError(res, 404, "Session not found", -32001);
         return;
       }
+      try {
+        const selectedSessionId = selectedBrowserPaneSessionId(req, url);
+        const targetKey = mcpSessionTargetKeys.get(requestedSessionId);
+        if (selectedSessionId && targetKey && targetKey !== selectedSessionId) {
+          writeJsonRpcError(res, 409, "MCP session is bound to a different BrowserPane session", -32005);
+          return;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        writeJsonRpcError(res, 400, message, -32004);
+        return;
+      }
       await transport.handleRequest(req, res, parsedBody);
       return;
     }
@@ -622,16 +832,25 @@ async function main() {
       return;
     }
 
-    const needsBridgeBootstrap = servers.size === 0;
+    let target: RuntimeTarget;
+    try {
+      target = await runtimeTargetForRequest(req, url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      writeJsonRpcError(res, 404, message, -32004);
+      return;
+    }
+
+    const needsBridgeBootstrap = clientCountForTarget(target.key) === 0;
     let sessionId: string | null = null;
     let server: Server | null = null;
     let transport: StreamableHTTPServerTransport | null = null;
     try {
       if (needsBridgeBootstrap) {
-        await registerMcpOwner(managedSession, automationAccessManager, width, height);
+        await registerMcpOwner(target.session, automationAccessManager, width, height);
       }
-      const playwrightClient = await playwrightRuntime.ensureConnected(
-        managedSession,
+      const playwrightClient = await target.runtime.ensureConnected(
+        target.session,
         automationAccessManager,
       );
 
@@ -642,22 +861,24 @@ async function main() {
           if (transport && server) {
             streamableTransports.set(initializedSessionId, transport);
             servers.set(initializedSessionId, server);
+            mcpSessionTargetKeys.set(initializedSessionId, target.key);
           }
           console.log(
-            `[mcp-bridge] MCP client connected (session=${initializedSessionId}, transport=streamable_http, total=${servers.size}, cdp=${playwrightRuntime.getCurrentEndpoint() ?? "unknown"})`,
+            `[mcp-bridge] MCP client connected (session=${initializedSessionId}, bpane_target=${target.key}, transport=streamable_http, total=${servers.size}, cdp=${target.runtime.getCurrentEndpoint() ?? "unknown"})`,
           );
         },
       });
-      server = createServerForConnection(playwrightClient, monitor);
+      server = createServerForConnection(playwrightClient, target.monitor);
       server.onclose = () => {
         const closedSessionId = sessionId ?? transport?.sessionId;
         if (closedSessionId) {
           streamableTransports.delete(closedSessionId);
           servers.delete(closedSessionId);
+          mcpSessionTargetKeys.delete(closedSessionId);
           console.log(
             `[mcp-bridge] MCP client disconnected (session=${closedSessionId}, transport=streamable_http, remaining=${servers.size})`,
           );
-          void releaseOwnershipIfIdle();
+          void releaseOwnershipIfIdle(target);
         }
       };
 
@@ -667,6 +888,7 @@ async function main() {
       if (sessionId) {
         streamableTransports.delete(sessionId);
         servers.delete(sessionId);
+        mcpSessionTargetKeys.delete(sessionId);
       }
       try {
         await server?.close();
@@ -674,7 +896,7 @@ async function main() {
         // ignore cleanup failures after a failed streamable HTTP request
       }
       if (needsBridgeBootstrap) {
-        await releaseOwnershipIfIdle();
+        await releaseOwnershipIfIdle(target);
       }
       const message = error instanceof Error ? error.message : String(error);
       writeJsonRpcError(res, 503, message, -32603);
@@ -687,7 +909,7 @@ async function main() {
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Accept, Content-Type, Authorization, Mcp-Protocol-Version, Mcp-Session-Id",
+      "Accept, Content-Type, Authorization, Mcp-Protocol-Version, Mcp-Session-Id, Bpane-Session-Id",
     );
 
     if (req.method === "OPTIONS") {
@@ -699,6 +921,21 @@ async function main() {
     const url = new URL(req.url ?? "/", `http://localhost:${MCP_PORT}`);
 
     if (url.pathname === "/health") {
+      const controlHealth = await managedSessionHealth(
+        "control",
+        managedSession,
+        playwrightRuntime,
+        managedSession ? clientCountForTarget(runtimeTargetKey(managedSession)) : 0,
+      );
+      const selectedHealth = await Promise.all(
+        Array.from(explicitRuntimeTargets.values()).map((target) =>
+          managedSessionHealth("selected", target.session, target.runtime, clientCountForTarget(target.key)),
+        ),
+      );
+      const managedSessions = [
+        ...(managedSession ? [controlHealth.entry] : []),
+        ...selectedHealth.map((health) => health.entry),
+      ];
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
@@ -708,14 +945,26 @@ async function main() {
           resolution: { width, height },
           supervised_delay_ms: SUPERVISED_DELAY_MS,
           control_session_id: managedSession?.id ?? null,
-          control_session_state: managedSession?.state ?? null,
-          control_session_mode: managedSession?.connect.compatibility_mode ?? null,
-          control_session_cdp_endpoint: describeManagedCdpEndpoint(
-            managedSession,
-            automationAccessManager.getCached(managedSession),
-          ),
+          control_session_state:
+            controlHealth.visibleSession?.state ?? managedSession?.state ?? null,
+          control_session_mode:
+            controlHealth.visibleSession?.connect.compatibility_mode
+            ?? managedSession?.connect.compatibility_mode
+            ?? null,
+          control_session_visible: Boolean(controlHealth.visibleSession),
+          control_session_backend_delegated:
+            isSessionDelegatedToBridge(controlHealth.visibleSession),
+          bridge_alignment: controlHealth.entry.alignment,
+          control_session_cdp_endpoint: controlHealth.cdpEndpoint,
           playwright_cdp_endpoint: playwrightRuntime.getCurrentEndpoint(),
           playwright_effective_cdp_endpoint: playwrightRuntime.getEffectiveEndpoint(),
+          managed_sessions: managedSessions,
+          selected_session_clients: Array.from(explicitRuntimeTargets.values()).map((target) => ({
+            session_id: target.session?.id ?? null,
+            clients: clientCountForTarget(target.key),
+            playwright_cdp_endpoint: target.runtime.getCurrentEndpoint(),
+            playwright_effective_cdp_endpoint: target.runtime.getEffectiveEndpoint(),
+          })),
         }),
       );
       return;
@@ -765,14 +1014,14 @@ async function main() {
           res.end(JSON.stringify({ error: `session ${sessionId} not found or not delegated` }));
           return;
         }
-        const nextAccess = await automationAccessManager.get(resolved);
-        const nextCdpEndpoint = resolveManagedCdpEndpoint(resolved, nextAccess);
         const previousSession = managedSession;
         if (previousSession?.id && previousSession.id !== resolved.id) {
           await unregisterMcpOwner(previousSession, automationAccessManager);
         }
         await playwrightRuntime.close();
         setManagedSession(resolved);
+        const nextAccess = await automationAccessManager.get(resolved);
+        const nextCdpEndpoint = resolveManagedCdpEndpoint(resolved, nextAccess);
         console.log(
           `[mcp-bridge] control session set to ${resolved.id} (${resolved.state}) via ${nextCdpEndpoint}`,
         );
@@ -808,49 +1057,54 @@ async function main() {
       return;
     }
 
-    if (url.pathname === "/mcp") {
-      await handleStreamableHttpRequest(req, res);
+    if (isStreamableMcpPath(url.pathname)) {
+      await handleStreamableHttpRequest(req, res, url);
       return;
     }
 
-    if (url.pathname === "/sse") {
-      const needsBridgeBootstrap = servers.size === 0;
+    if (isSsePath(url.pathname)) {
+      let target: RuntimeTarget;
+      try {
+        target = await runtimeTargetForRequest(req, url);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: message }));
+        return;
+      }
+      const needsBridgeBootstrap = clientCountForTarget(target.key) === 0;
       try {
         if (needsBridgeBootstrap) {
-          await registerMcpOwner(managedSession, automationAccessManager, width, height);
+          await registerMcpOwner(target.session, automationAccessManager, width, height);
         }
-        const playwrightClient = await playwrightRuntime.ensureConnected(
-          managedSession,
+        const playwrightClient = await target.runtime.ensureConnected(
+          target.session,
           automationAccessManager,
         );
         const transport = new SSEServerTransport("/messages", res);
         const sessionId = transport.sessionId;
-        const server = createServerForConnection(playwrightClient, monitor);
+        const server = createServerForConnection(playwrightClient, target.monitor);
 
         transports.set(sessionId, transport);
         servers.set(sessionId, server);
+        mcpSessionTargetKeys.set(sessionId, target.key);
 
         console.log(
-          `[mcp-bridge] MCP client connected (session=${sessionId}, total=${servers.size}, cdp=${playwrightRuntime.getCurrentEndpoint() ?? "unknown"})`,
+          `[mcp-bridge] MCP client connected (session=${sessionId}, bpane_target=${target.key}, total=${servers.size}, cdp=${target.runtime.getCurrentEndpoint() ?? "unknown"})`,
         );
 
         res.on("close", async () => {
           transports.delete(sessionId);
           servers.delete(sessionId);
+          mcpSessionTargetKeys.delete(sessionId);
           console.log(`[mcp-bridge] MCP client disconnected (session=${sessionId}, remaining=${servers.size})`);
-
-          // When all MCP clients disconnect, clear ownership so resolution unlocks
-          if (servers.size === 0) {
-            console.log("[mcp-bridge] no MCP clients remaining — clearing ownership");
-            await unregisterMcpOwner(managedSession, automationAccessManager);
-            await playwrightRuntime.close();
-          }
+          await releaseOwnershipIfIdle(target);
         });
 
         await server.connect(transport);
       } catch (error) {
         if (needsBridgeBootstrap) {
-          await unregisterMcpOwner(managedSession, automationAccessManager);
+          await unregisterMcpOwner(target.session, automationAccessManager);
         }
         const message = error instanceof Error ? error.message : String(error);
         res.writeHead(503, { "Content-Type": "application/json" });
@@ -908,8 +1162,7 @@ async function main() {
   const shutdown = async () => {
     console.log("\n[mcp-bridge] shutting down...");
     monitor.stop();
-    await unregisterMcpOwner(managedSession, automationAccessManager);
-    await playwrightRuntime.close();
+    await closeAllRuntimeTargets();
     httpServer.close();
     process.exit(0);
   };
@@ -920,13 +1173,13 @@ async function main() {
   // Safety net: clear MCP ownership on unexpected crash
   process.on("uncaughtException", async (err) => {
     console.error("[mcp-bridge] uncaught exception:", err);
-    await unregisterMcpOwner(managedSession, automationAccessManager);
+    await closeAllRuntimeTargets();
     process.exit(1);
   });
 
   process.on("unhandledRejection", async (reason) => {
     console.error("[mcp-bridge] unhandled rejection:", reason);
-    await unregisterMcpOwner(managedSession, automationAccessManager);
+    await closeAllRuntimeTargets();
     process.exit(1);
   });
 }

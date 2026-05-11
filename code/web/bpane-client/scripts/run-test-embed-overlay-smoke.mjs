@@ -9,10 +9,11 @@ import {
   launchChrome,
   parseSmokeArgs,
   poll,
+  testEmbedPageUrl,
 } from './workflow-smoke-lib.mjs';
 
 function buildBrowserOnlyPageUrl(pageUrl) {
-  const url = new URL(pageUrl);
+  const url = new URL(testEmbedPageUrl({ pageUrl }));
   url.searchParams.set('layout', 'browser-only');
   return url.toString();
 }

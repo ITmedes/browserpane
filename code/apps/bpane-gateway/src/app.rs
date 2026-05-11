@@ -9,8 +9,8 @@ use crate::workspaces::WorkspaceFileStore;
 mod builders;
 
 use builders::{
-    build_credential_provider, default_owner_mode, AuthServices, RecordingServices,
-    RuntimeServices, WorkflowServices,
+    build_credential_provider, default_owner_mode, start_session_file_retention, AuthServices,
+    RecordingServices, RuntimeServices, WorkflowServices,
 };
 
 pub(crate) struct GatewayApp {
@@ -29,6 +29,19 @@ impl GatewayApp {
             .session_manager
             .attach_workspace_file_store(workspace_file_store.clone())
             .await;
+        runtime_services
+            .registry
+            .attach_session_file_recording(
+                runtime_services.session_store.clone(),
+                workspace_file_store.clone(),
+            )
+            .await;
+        start_session_file_retention(
+            &config,
+            runtime_services.session_store.clone(),
+            workspace_file_store.clone(),
+        )
+        .await?;
         let credential_provider = build_credential_provider(&config)?;
         let recording_services = RecordingServices::build(
             &config,
@@ -61,6 +74,7 @@ impl GatewayApp {
             auth_validator: auth_services.auth_validator.clone(),
             connect_ticket_manager: auth_services.connect_ticket_manager.clone(),
             session_store: session_store.clone(),
+            workspace_file_store: workspace_file_store.clone(),
             recording_lifecycle: recording_services.lifecycle.clone(),
             idle_stop_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
             heartbeat_timeout: Duration::from_secs(config.gateway.heartbeat_timeout_secs),

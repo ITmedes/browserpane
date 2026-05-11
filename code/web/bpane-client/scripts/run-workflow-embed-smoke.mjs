@@ -5,6 +5,7 @@ import process from 'node:process';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { apiOrigin, testEmbedPageUrl } from './workflow-smoke-lib.mjs';
 
 const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
@@ -131,7 +132,7 @@ async function fetchAuthConfig(options) {
 }
 
 async function configurePage(page, options) {
-  await page.goto(options.pageUrl, { waitUntil: 'networkidle' });
+  await page.goto(testEmbedPageUrl(options), { waitUntil: 'networkidle' });
   await page.waitForFunction(
     () => Boolean(window.__bpaneAuth && window.__bpaneWorkflow),
     { timeout: options.connectTimeoutMs },
@@ -205,13 +206,13 @@ async function fetchJson(url, init) {
 }
 
 async function listSessions(accessToken, options) {
-  return await fetchJson(`${options.pageUrl.replace(/\/$/, '')}/api/v1/sessions`, {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/sessions`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
 
 async function deleteSession(accessToken, options, sessionId) {
-  const response = await fetch(`${options.pageUrl.replace(/\/$/, '')}/api/v1/sessions/${sessionId}`, {
+  const response = await fetch(`${apiOrigin(options)}/api/v1/sessions/${sessionId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -274,7 +275,7 @@ async function createLocalWorkflowRepo() {
   const targetUrl =
     input && typeof input.target_url === 'string' && input.target_url.trim()
       ? input.target_url.trim()
-      : 'http://web:8080/';
+      : 'http://web:8080/test-embed.html';
   if (!input?.output_workspace_id) {
     throw new Error('workflow embed smoke requires input.output_workspace_id');
   }
@@ -320,7 +321,7 @@ async function createLocalWorkflowRepo() {
 }
 
 async function createFileWorkspace(accessToken, options) {
-  return await fetchJson(`${options.pageUrl.replace(/\/dev\/test-embed\.html$/, '')}/api/v1/file-workspaces`, {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/file-workspaces`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -338,7 +339,7 @@ async function createFileWorkspace(accessToken, options) {
 }
 
 async function createWorkflow(accessToken, options) {
-  return await fetchJson(`${options.pageUrl.replace(/\/dev\/test-embed\.html$/, '')}/api/v1/workflows`, {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/workflows`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -357,7 +358,7 @@ async function createWorkflow(accessToken, options) {
 
 async function createWorkflowVersion(accessToken, options, workflowId, source, workspaceId) {
   return await fetchJson(
-    `${options.pageUrl.replace(/\/dev\/test-embed\.html$/, '')}/api/v1/workflows/${workflowId}/versions`,
+    `${apiOrigin(options)}/api/v1/workflows/${workflowId}/versions`,
     {
       method: 'POST',
       headers: {
@@ -482,7 +483,7 @@ async function main() {
         window.__bpaneWorkflow.setVersion(versionName);
         await window.__bpaneWorkflow.loadVersion({ silent: true });
         window.__bpaneWorkflow.setInput({
-          target_url: 'http://web:8080/',
+          target_url: 'http://web:8080/test-embed.html',
           output_workspace_id: outputWorkspaceId,
         });
         return await window.__bpaneWorkflow.invokeSelected({ silent: true });

@@ -3,13 +3,18 @@ export interface SessionRecordingSurfaceRuntimeInput {
   cursorCanvas: HTMLCanvasElement | null;
 }
 
+type CanvasCaptureTrack = MediaStreamTrack & { requestFrame?: () => void };
+
 export class SessionRecordingSurfaceRuntime {
   private readonly sourceCanvas: HTMLCanvasElement;
   private readonly cursorCanvas: HTMLCanvasElement | null;
   private recordingCanvas: HTMLCanvasElement | null = null;
   private recordingContext: CanvasRenderingContext2D | null = null;
   private recordingStream: MediaStream | null = null;
+  private recordingTrack: CanvasCaptureTrack | null = null;
   private animationFrameId: number | null = null;
+  private captureFrameIntervalMs = 1000 / 30;
+  private lastCaptureFrameAtMs = Number.NEGATIVE_INFINITY;
 
   constructor(input: SessionRecordingSurfaceRuntimeInput) {
     this.sourceCanvas = input.sourceCanvas;
@@ -38,8 +43,12 @@ export class SessionRecordingSurfaceRuntime {
 
     this.recordingCanvas = recordingCanvas;
     this.recordingContext = recordingContext;
-    this.drawFrame();
+    this.captureFrameIntervalMs = 1000 / Math.max(1, frameRate);
+    this.lastCaptureFrameAtMs = Number.NEGATIVE_INFINITY;
     this.recordingStream = captureStream.call(recordingCanvas, frameRate);
+    const getVideoTracks = this.recordingStream.getVideoTracks?.bind(this.recordingStream);
+    this.recordingTrack = getVideoTracks?.()[0] as CanvasCaptureTrack | undefined ?? null;
+    this.drawFrame();
     return this.recordingStream;
   }
 
@@ -58,11 +67,12 @@ export class SessionRecordingSurfaceRuntime {
       }
     }
     this.recordingStream = null;
+    this.recordingTrack = null;
     this.recordingContext = null;
     this.recordingCanvas = null;
   }
 
-  private drawFrame = (): void => {
+  private drawFrame = (now = performance.now()): void => {
     const canvas = this.recordingCanvas;
     const context = this.recordingContext;
     if (!canvas || !context) {
@@ -80,9 +90,22 @@ export class SessionRecordingSurfaceRuntime {
     if (this.cursorCanvas) {
       context.drawImage(this.cursorCanvas, 0, 0, canvas.width, canvas.height);
     }
+    this.requestCaptureFrame(now);
 
     this.animationFrameId = requestAnimationFrame(this.drawFrame);
   };
+
+  private requestCaptureFrame(now: number): void {
+    if (now - this.lastCaptureFrameAtMs < this.captureFrameIntervalMs) {
+      return;
+    }
+    try {
+      this.recordingTrack?.requestFrame?.();
+      this.lastCaptureFrameAtMs = now;
+    } catch (_) {
+      // Ignore browser-specific requestFrame failures; the timed capture stream is still active.
+    }
+  }
 
   private getOutputSize(): { width: number; height: number } {
     const sourceRect = this.sourceCanvas.getBoundingClientRect();
