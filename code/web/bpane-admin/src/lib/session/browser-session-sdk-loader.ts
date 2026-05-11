@@ -1,12 +1,15 @@
 import type { BrowserSessionConnectOptions, BrowserSessionHandle, BrowserSessionSdk } from './browser-session-types';
 
 const DEFAULT_SDK_URL = '/dist/bpane.js';
+const DEFAULT_SDK_CACHE_PARAM = 'bpane_admin_sdk';
 
 export type BrowserSessionModuleImporter = (moduleUrl: string) => Promise<unknown>;
 
 export type BrowserSessionSdkLoaderOptions = {
   readonly moduleUrl?: string;
   readonly importer?: BrowserSessionModuleImporter;
+  readonly cacheBust?: boolean;
+  readonly cacheToken?: string;
 };
 
 export class BrowserSessionSdkLoader {
@@ -14,7 +17,10 @@ export class BrowserSessionSdkLoader {
   readonly #importer: BrowserSessionModuleImporter;
 
   constructor(options: BrowserSessionSdkLoaderOptions = {}) {
-    this.#moduleUrl = options.moduleUrl ?? DEFAULT_SDK_URL;
+    const cacheBust = options.cacheBust ?? !options.moduleUrl;
+    this.#moduleUrl = cacheBust
+      ? appendCacheToken(options.moduleUrl ?? DEFAULT_SDK_URL, options.cacheToken ?? defaultCacheToken())
+      : options.moduleUrl ?? DEFAULT_SDK_URL;
     this.#importer = options.importer ?? defaultBrowserSessionModuleImporter;
   }
 
@@ -67,4 +73,16 @@ function expectObjectLike(value: unknown, label: string): Record<string, unknown
     throw new Error(`${label} must be an object or function`);
   }
   return value as Record<string, unknown>;
+}
+
+function appendCacheToken(moduleUrl: string, cacheToken: string): string {
+  const hashIndex = moduleUrl.indexOf('#');
+  const baseUrl = hashIndex === -1 ? moduleUrl : moduleUrl.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? '' : moduleUrl.slice(hashIndex);
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  return `${baseUrl}${separator}${DEFAULT_SDK_CACHE_PARAM}=${encodeURIComponent(cacheToken)}${hash}`;
+}
+
+function defaultCacheToken(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
