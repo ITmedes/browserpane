@@ -33,7 +33,7 @@ async function run() {
     await openAdminTab(page, 'metrics');
     await waitForEnabled(page.getByTestId('metrics-start'), options, 'metrics start');
     await page.getByTestId('metrics-start').click();
-    await waitForText(page, options, 'metrics-sample', 'running');
+    await waitForText(page, options, 'metrics-sample', (value) => value.startsWith('running'));
     await exerciseBrowserViewport(page, options);
     await waitForEnabled(page.getByTestId('metrics-stop'), options, 'metrics stop');
     await page.getByTestId('metrics-stop').click();
@@ -80,9 +80,13 @@ function validateMetricsPayload(payload) {
   assertNumber(payload.frames?.delta, 'frames.delta');
   assertNumber(payload.transfer?.rxBytes, 'transfer.rxBytes');
   assertNumber(payload.transfer?.txBytes, 'transfer.txBytes');
+  assertNumber(payload.transfer?.peakRxRate, 'transfer.peakRxRate');
+  assertNumber(payload.transfer?.avgTileRate, 'transfer.avgTileRate');
   assertNumber(payload.tiles?.totalCommands, 'tiles.totalCommands');
   assertNumber(payload.tiles?.cache?.hitRate, 'tiles.cache.hitRate');
+  assertNumber(payload.tiles?.batches?.maxPendingCommands, 'tiles.batches.maxPendingCommands');
   assertNumber(payload.scroll?.hostFallbackRate, 'scroll.hostFallbackRate');
+  assertNumber(payload.scroll?.hostFallbacks, 'scroll.hostFallbacks');
   assertNumber(payload.video?.datagrams, 'video.datagrams');
   if (!payload.render || typeof payload.render.backend !== 'string') {
     throw new Error('Metrics payload did not include render diagnostics.');
@@ -107,8 +111,8 @@ async function waitForEnabled(locator, options, description) {
   await poll(description, async () => await locator.isEnabled(), Boolean, options.connectTimeoutMs);
 }
 
-async function waitForText(page, options, testId, text) {
-  await poll(testId, async () => await page.getByTestId(testId).textContent(), (value) => value === text, options.connectTimeoutMs);
+async function waitForText(page, options, testId, predicate) {
+  await poll(testId, async () => await page.getByTestId(testId).textContent(), (value) => predicate(value ?? ''), options.connectTimeoutMs);
 }
 
 async function emitSummary(options, summary, log) {

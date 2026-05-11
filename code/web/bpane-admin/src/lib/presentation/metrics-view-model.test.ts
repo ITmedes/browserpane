@@ -21,16 +21,19 @@ describe('MetricsViewModelBuilder', () => {
       frameCount: 10,
       stats: sampleStats({ rxBytes: 100, txBytes: 25, totalCommands: 2 }),
       diagnostics: renderDiagnostics(),
+      tileCache: null,
     }, {
       capturedAtMs: 2_000,
       frameCount: 40,
       stats: sampleStats({ rxBytes: 1_124, txBytes: 281, totalCommands: 9 }),
       diagnostics: renderDiagnostics(),
+      tileCache: null,
     });
 
     expect(summary.sample).toContain('30 frames');
     expect(summary.throughput).toContain('1.0 KB/s');
     expect(summary.tiles).toContain('7 commands');
+    expect(summary.details.length).toBeGreaterThan(0);
   });
 
   it('builds a stable copyable diagnostics payload with deep counters', () => {
@@ -47,6 +50,14 @@ describe('MetricsViewModelBuilder', () => {
         videoDroppedFrames: 0,
       }),
       diagnostics: renderDiagnostics(),
+      tileCache: {
+        bytes: 512,
+        evictions: 1,
+        batchesQueued: 1,
+        totalBatchCommands: 2,
+        maxBatchCommands: 2,
+        pendingCommandsHighWaterMark: 1,
+      },
     }, {
       capturedAtMs: 2_500,
       frameCount: 55,
@@ -64,11 +75,25 @@ describe('MetricsViewModelBuilder', () => {
         scrollSavedTiles: 32,
         scrollPotentialTiles: 40,
         hostFallbackRate: 2.5,
+        hostScrollBatches: 8,
+        hostScrollFallbacks: 2,
+        hostNonQuantizedFallbacks: 1,
+        hostZeroSavedBatches: 1,
         videoDatagrams: 8,
         videoDatagramBytes: 4_096,
         videoDroppedFrames: 2,
       }),
       diagnostics: renderDiagnostics(),
+      tileCache: {
+        bytes: 8_192,
+        evictions: 3,
+        batchesQueued: 5,
+        totalBatchCommands: 22,
+        maxBatchCommands: 8,
+        lastBatchCommands: 8,
+        currentPendingCommands: 3,
+        pendingCommandsHighWaterMark: 4,
+      },
     });
 
     expect(summary.payload).toEqual(expect.objectContaining({
@@ -79,13 +104,17 @@ describe('MetricsViewModelBuilder', () => {
       tiles: expect.objectContaining({
         commandBytes: 2_048,
         totalCommands: 15,
-        cache: expect.objectContaining({ hits: 9, misses: 3, size: 12 }),
+        cache: expect.objectContaining({ hits: 9, misses: 3, size: 12, bytes: 8_192, evictions: 2 }),
+        batches: expect.objectContaining({ queued: 4, totalCommands: 20, maxCommands: 8 }),
       }),
       scroll: expect.objectContaining({
         batches: 4,
         savedTiles: 32,
         potentialTiles: 40,
         hostFallbackRate: 2.5,
+        hostBatches: 8,
+        hostFallbacks: 2,
+        dominantHostFallbackReason: 'nonQuantized',
       }),
       video: expect.objectContaining({ datagrams: 7, datagramBytes: 4_096, droppedFrames: 2 }),
       render: renderDiagnostics(),
@@ -122,6 +151,10 @@ function sampleStats(input: {
   readonly scrollSavedTiles?: number;
   readonly scrollPotentialTiles?: number;
   readonly hostFallbackRate?: number;
+  readonly hostScrollBatches?: number;
+  readonly hostScrollFallbacks?: number;
+  readonly hostNonQuantizedFallbacks?: number;
+  readonly hostZeroSavedBatches?: number;
   readonly videoDatagrams?: number;
   readonly videoDatagramBytes?: number;
   readonly videoDroppedFrames?: number;
@@ -144,7 +177,13 @@ function sampleStats(input: {
         scrollSavedTiles: input.scrollSavedTiles ?? 0,
         scrollPotentialTiles: input.scrollPotentialTiles ?? 0,
       },
-      scrollHealth: { hostFallbackRate: input.hostFallbackRate ?? 0 },
+      scrollHealth: {
+        hostFallbackRate: input.hostFallbackRate ?? 0,
+        hostScrollBatchesTotal: input.hostScrollBatches ?? 0,
+        hostScrollFallbacksTotal: input.hostScrollFallbacks ?? 0,
+        hostScrollNonQuantizedFallbacksTotal: input.hostNonQuantizedFallbacks ?? 0,
+        hostScrollZeroSavedBatchesTotal: input.hostZeroSavedBatches ?? 0,
+      },
     },
     video: {
       datagrams: input.videoDatagrams ?? 0,

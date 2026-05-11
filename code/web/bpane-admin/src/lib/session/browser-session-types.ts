@@ -54,9 +54,27 @@ export type BrowserSessionStatsSnapshot = {
       readonly subTileScrollReuseRate?: number;
     };
     readonly scrollHealth?: {
+      readonly hostScrollBatchesTotal?: number;
+      readonly hostScrollFallbacksTotal?: number;
+      readonly hostScrollNonQuantizedFallbacksTotal?: number;
+      readonly hostScrollResidualFullRepaintsTotal?: number;
+      readonly hostScrollResidualInteriorLimitFallbacksTotal?: number;
+      readonly hostScrollResidualLowSavedRatioFallbacksTotal?: number;
+      readonly hostScrollResidualLargeRowShiftFallbacksTotal?: number;
+      readonly hostScrollResidualOtherFallbacksTotal?: number;
+      readonly hostScrollZeroSavedBatchesTotal?: number;
+      readonly hostScrollSplitRegionBatchesTotal?: number;
+      readonly hostScrollStickyBandBatchesTotal?: number;
+      readonly hostScrollChromeTilesTotal?: number;
+      readonly hostScrollPotentialTilesTotal?: number;
+      readonly hostScrollSavedTilesTotal?: number;
+      readonly hostScrollSavedRate?: number;
       readonly hostFallbackRate?: number;
       readonly hostFallbackRateRecent20?: number;
       readonly hostFallbackRateRecent50?: number;
+      readonly hostSentHashEntries?: number;
+      readonly hostSentHashEvictionsTotal?: number;
+      readonly hostCacheMissReportsTotal?: number;
     };
   };
   readonly video?: {
@@ -65,6 +83,17 @@ export type BrowserSessionStatsSnapshot = {
     readonly droppedFrames?: number;
     readonly datagramBytes?: number;
   };
+};
+
+export type BrowserSessionTileCacheStats = {
+  readonly bytes?: number;
+  readonly evictions?: number;
+  readonly batchesQueued?: number;
+  readonly totalBatchCommands?: number;
+  readonly maxBatchCommands?: number;
+  readonly lastBatchCommands?: number;
+  readonly currentPendingCommands?: number;
+  readonly pendingCommandsHighWaterMark?: number;
 };
 
 export type BrowserSessionConnectPreferences = {
@@ -122,6 +151,7 @@ export type BrowserSessionHandle = {
   readonly stopRecording?: () => Promise<Blob>;
   readonly getSessionStats?: () => BrowserSessionStatsSnapshot;
   readonly getRenderDiagnostics?: () => BrowserSessionRenderDiagnostics;
+  readonly getTileCacheStats?: () => BrowserSessionTileCacheStats;
 };
 
 export type BrowserSessionSdk = {
