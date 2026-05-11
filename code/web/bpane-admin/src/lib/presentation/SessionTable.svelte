@@ -8,12 +8,16 @@
   };
 
   let { sessions, selectedSessionId, onSelectSessionId }: SessionTableProps = $props();
+
+  function clientLabel(count: number): string {
+    return count === 1 ? '1 client' : `${count} clients`;
+  }
 </script>
 
-<div class="mt-4 grid min-w-0 gap-2" aria-label="Session list">
+<div class="grid max-h-[min(360px,42vh)] min-w-0 gap-1 overflow-y-auto pr-1" aria-label="Session list">
   {#each sessions as session}
     <button
-      class={`grid w-full min-w-0 cursor-pointer gap-3 rounded-xl border p-3 text-left text-admin-ink/78 hover:border-admin-leaf/42 hover:bg-admin-field/84 ${
+      class={`grid w-full min-w-0 cursor-pointer grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border p-2 text-left text-admin-ink/78 hover:border-admin-leaf/42 hover:bg-admin-field/84 ${
         session.id === selectedSessionId
           ? 'border-admin-leaf/42 bg-admin-field/84'
           : 'border-admin-ink/10 bg-admin-panel/68'
@@ -24,14 +28,21 @@
       data-session-id={session.id}
       onclick={() => onSelectSessionId(session.id)}
     >
-      <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sm text-admin-ink" title={session.id}>
-        {session.id}
+      <span class={`h-full min-h-12 rounded-full ${session.id === selectedSessionId ? 'bg-admin-leaf' : 'bg-admin-ink/12'}`}></span>
+      <span class="grid min-w-0 gap-1">
+        <span class="flex min-w-0 items-center gap-2">
+          <strong class="min-w-0 truncate font-mono text-sm text-admin-ink" title={session.id}>{session.shortId}</strong>
+          {#if session.id === selectedSessionId}
+            <span class="rounded-full bg-admin-leaf/14 px-2 py-0.5 text-[0.68rem] font-extrabold text-admin-leaf">selected</span>
+          {/if}
+        </span>
+        <span class="min-w-0 truncate text-xs text-admin-ink/52">
+          {session.mcpDelegation} | updated {session.updatedAt}
+        </span>
       </span>
-      <span class="grid min-w-0 grid-cols-2 gap-2 text-xs text-[#c1d0e8] sm:grid-cols-4">
-        <span class="min-w-0 truncate rounded-lg bg-admin-field/72 px-2 py-1">State: {session.lifecycle}</span>
-        <span class="min-w-0 truncate rounded-lg bg-admin-field/72 px-2 py-1">Runtime: {session.runtime}</span>
-        <span class="min-w-0 truncate rounded-lg bg-admin-field/72 px-2 py-1">Presence: {session.presence}</span>
-        <span class="min-w-0 truncate rounded-lg bg-admin-field/72 px-2 py-1">Clients: {session.clients}</span>
+      <span class="grid justify-items-end gap-1 text-xs text-[#c1d0e8]">
+        <span class="rounded-lg bg-admin-field/72 px-2 py-1">{session.lifecycle}</span>
+        <span class="rounded-lg bg-admin-field/72 px-2 py-1">{clientLabel(session.clients)}</span>
       </span>
     </button>
   {/each}

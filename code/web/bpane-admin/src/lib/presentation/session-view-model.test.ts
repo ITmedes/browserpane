@@ -109,10 +109,17 @@ describe('SessionViewModelBuilder', () => {
 
     expect(viewModel.sessions[0]).toMatchObject({
       id: SESSION.id,
+      shortId: '019df4d2...82f6',
       lifecycle: 'active',
       runtime: 'running',
       presence: 'connected',
       clients: 1,
+      mcpDelegation: 'MCP not delegated',
+    });
+    expect(viewModel.selectedSession).toMatchObject({
+      id: SESSION.id,
+      ownerMode: 'shared',
+      runtimeBinding: 'docker_runtime_pool',
     });
   });
 

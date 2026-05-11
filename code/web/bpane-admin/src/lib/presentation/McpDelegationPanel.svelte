@@ -25,11 +25,11 @@
   }
 </script>
 
-<section class="mt-4 grid gap-3 rounded-[18px] border border-admin-ink/10 bg-admin-cream/58 p-3" aria-label="MCP delegation">
+<section class="mt-3 grid gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="MCP delegation">
   <div class="flex flex-wrap items-start justify-between gap-2">
-    <div>
-      <p class="admin-eyebrow mb-1">MCP delegation</p>
-      <h3 class="m-0 text-sm font-extrabold text-admin-ink">{viewModel.title}</h3>
+    <div class="min-w-0">
+      <p class="admin-eyebrow mb-1">Selected session MCP</p>
+      <h3 class="m-0 truncate text-sm font-extrabold text-admin-ink">{viewModel.title}</h3>
     </div>
     <span
       class={`rounded-full border px-3 py-1 text-xs font-extrabold ${toneClass(viewModel.tone)}`}
@@ -48,7 +48,7 @@
         <code class="block break-all text-xs font-bold text-admin-ink/78" data-testid="mcp-endpoint-url">{viewModel.endpointUrl}</code>
       </div>
       <button
-        class="admin-button-primary"
+        class="rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-xs font-bold text-admin-ink disabled:cursor-not-allowed disabled:opacity-45"
         type="button"
         data-testid="mcp-copy-endpoint"
         disabled={!viewModel.canCopyEndpoint}
@@ -65,7 +65,7 @@
 
   <div class="flex flex-wrap gap-2">
     <button
-      class="admin-button-primary"
+      class="rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-xs font-bold text-admin-ink disabled:cursor-not-allowed disabled:opacity-45"
       type="button"
       data-testid="mcp-refresh"
       disabled={!viewModel.canRefresh}
@@ -74,7 +74,7 @@
       Refresh MCP
     </button>
     <button
-      class="admin-button-primary"
+      class="rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-xs font-bold text-admin-ink disabled:cursor-not-allowed disabled:opacity-45"
       type="button"
       data-testid="mcp-delegate"
       disabled={!viewModel.canDelegate}
@@ -83,7 +83,7 @@
       Delegate MCP
     </button>
     <button
-      class="admin-button-primary"
+      class="rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-xs font-bold text-admin-ink disabled:cursor-not-allowed disabled:opacity-45"
       type="button"
       data-testid="mcp-clear"
       disabled={!viewModel.canClear}
