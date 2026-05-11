@@ -1,12 +1,14 @@
 # BrowserPane
 
-BrowserPane is planned to be a self-hostable remote browser and workflow execution platform for humans and agents.
+BrowserPane is a self-hostable remote browser and workflow execution platform for humans and agents.
 
 Most browser automation products stop at managed browsers, CDP endpoints, or live debug links. BrowserPane treats the live browser session itself as the product surface: a real Chromium session that browser users, supervisors, and automation can all attach to with shared-session policy, owner/viewer controls, and persistent session resources.
 
+The key technical difference is that BrowserPane includes its own host-layer remote browser stack. The Rust `bpane-host` process runs next to Chromium inside the Linux runtime, captures and classifies the desktop surface, streams tiles, ROI video, audio, cursor, clipboard, files, input, microphone, camera, and resize events through BrowserPane's protocol, and lets the web client render the live session in a regular browser page.
+
 BrowserPane is intended to be integrated into larger automation and workflow systems. Its workflow layer is primarily about browser-run execution, supervision, artifacts, and human intervention around a live browser session, not about replacing a general scheduler or DAG orchestrator.
 
-It runs a real Chromium session inside a Linux environment, captures that surface on the host, transports it over WebTransport, and renders it in a browser client with a tile-first pipeline plus optional ROI H.264 video for media-heavy regions.
+This means BrowserPane is not only a wrapper around Playwright, CDP, screenshots, or a hosted debug iframe. It owns the live browser transport path from the Linux host to the browser client.
 
 Checkout on youtube: [https://www.youtube.com/watch?v=zhj2_B4vLMs](https://www.youtube.com/watch?v=zhj2_B4vLMs)
 
@@ -18,6 +20,7 @@ The frozen v1 session-control contract now lives in [openapi/bpane-control-v1.ya
 
 BrowserPane will be worth considering if you need more than "a browser for an agent."
 
+- BrowserPane owns the remote browser protocol. `bpane-host`, `bpane-gateway`, `bpane-protocol`, and `bpane-client` form a browser-native live session stack rather than delegating the user experience to a generic remote desktop product.
 - Shared sessions are a first-class feature, not an afterthought. Multiple browser clients can join the same session with collaborative or restricted viewer behavior.
 - Automation attaches to governed sessions instead of bypassing session policy. MCP and other automation flows operate through explicit ownership and session-control APIs.
 - The remoting stack is browser-native. BrowserPane uses WebTransport plus a tile-first render path with optional ROI H.264 instead of relying only on full-frame streaming or vendor-hosted live debug UIs.
@@ -62,11 +65,20 @@ At a high level, BrowserPane has five responsibilities:
 The default local runtime looks like this:
 
 ```text
-browser client <-> bpane-gateway <-> bpane-host <-> Chromium inside Linux container
-                       |
-                       +-> postgres
-                       |
-                       +-> mcp-bridge
+browser client
+  <-> bpane-gateway
+  <-> bpane-host
+  <-> Chromium + Xorg/Openbox inside a Linux runtime
+
+bpane-host captures the browser desktop surface and emits BrowserPane protocol frames.
+bpane-gateway applies session policy and relays WebTransport traffic.
+bpane-client renders the live session and sends input/media/file events back.
+
+bpane-gateway also talks to:
+  - postgres
+  - mcp-bridge
+  - workflow-worker
+  - recording-worker
 ```
 
 ## Projects And Responsibilities
