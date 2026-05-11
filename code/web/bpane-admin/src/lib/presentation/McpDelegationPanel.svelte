@@ -4,12 +4,22 @@
   type McpDelegationPanelProps = {
     readonly viewModel: McpDelegationViewModel;
     readonly onRefresh: () => void;
-    readonly onDelegate: () => void;
-    readonly onClear: () => void;
+    readonly onAuthorize: () => void;
+    readonly onRevoke: () => void;
+    readonly onSetDefault: () => void;
+    readonly onClearDefault: () => void;
     readonly onCopyEndpoint: () => void;
   };
 
-  let { viewModel, onRefresh, onDelegate, onClear, onCopyEndpoint }: McpDelegationPanelProps = $props();
+  let {
+    viewModel,
+    onRefresh,
+    onAuthorize,
+    onRevoke,
+    onSetDefault,
+    onClearDefault,
+    onCopyEndpoint,
+  }: McpDelegationPanelProps = $props();
 
   function toneClass(tone: McpDelegationTone): string {
     if (tone === 'active') {
@@ -77,19 +87,37 @@
       class="rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-xs font-bold text-admin-ink disabled:cursor-not-allowed disabled:opacity-45"
       type="button"
       data-testid="mcp-delegate"
-      disabled={!viewModel.canDelegate}
-      onclick={onDelegate}
+      disabled={!viewModel.canAuthorize}
+      onclick={onAuthorize}
     >
-      Delegate MCP
+      Authorize MCP
+    </button>
+    <button
+      class="rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-xs font-bold text-admin-ink disabled:cursor-not-allowed disabled:opacity-45"
+      type="button"
+      data-testid="mcp-revoke"
+      disabled={!viewModel.canRevoke}
+      onclick={onRevoke}
+    >
+      Revoke
+    </button>
+    <button
+      class="rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-xs font-bold text-admin-ink disabled:cursor-not-allowed disabled:opacity-45"
+      type="button"
+      data-testid="mcp-set-default"
+      disabled={!viewModel.canSetDefault}
+      onclick={onSetDefault}
+    >
+      Set default
     </button>
     <button
       class="rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-xs font-bold text-admin-ink disabled:cursor-not-allowed disabled:opacity-45"
       type="button"
       data-testid="mcp-clear"
-      disabled={!viewModel.canClear}
-      onclick={onClear}
+      disabled={!viewModel.canClearDefault}
+      onclick={onClearDefault}
     >
-      Clear bridge
+      Clear default
     </button>
   </div>
 

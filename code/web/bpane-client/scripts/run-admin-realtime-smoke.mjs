@@ -121,7 +121,7 @@ async function waitForRealtimeMcpDelegation(page, options) {
   await openAdminTab(page, 'sessions');
   await poll('admin realtime MCP delegation state', async () => {
     return await page.getByTestId('mcp-status').textContent().catch(() => '');
-  }, (status) => status === 'Backend delegated', options.connectTimeoutMs);
+  }, (status) => status?.startsWith('Authorized'), options.connectTimeoutMs);
 }
 
 async function waitForGatewayLogEntry(page, options, ...textParts) {

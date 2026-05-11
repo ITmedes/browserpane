@@ -31,27 +31,36 @@ async function run() {
     await waitForBridgeControl(bridge, null, options);
     const accessToken = await getAdminAccessToken(page);
 
-    log('Creating and delegating first session through the admin MCP panel.');
+    log('Creating and authorizing first session through the admin MCP panel.');
     sessionA = await createAndConnectSession(page, options);
     await assertMcpEndpoint(page, options, bridge, sessionA);
-    log(`Delegating first session ${sessionA}.`);
-    await delegateSelectedSession(page, options, bridge, sessionA);
+    await clickMcpAction(page, options, 'mcp-delegate', 'Authorized');
+    await assertSessionDelegate(accessToken, options, sessionA, bridge.clientId);
+    await clickMcpAction(page, options, 'mcp-set-default', 'Authorized default');
+    await waitForBridgeControl(bridge, sessionA, options);
 
-    log('Switching delegation to a second connected session.');
+    log('Authorizing a second connected session without clearing the first.');
     await disconnectEmbeddedBrowser(page, options);
     sessionB = await createAndConnectSession(page, options);
     await assertMcpEndpoint(page, options, bridge, sessionB);
-    log(`Delegating second session ${sessionB}.`);
-    await delegateSelectedSession(page, options, bridge, sessionB);
-    await assertSessionDelegate(accessToken, options, sessionA, null);
+    await clickMcpAction(page, options, 'mcp-delegate', 'Authorized');
+    await waitForBridgeControl(bridge, sessionA, options);
+    await assertSessionDelegate(accessToken, options, sessionA, bridge.clientId);
     await assertSessionDelegate(accessToken, options, sessionB, bridge.clientId);
 
-    log('Clearing MCP bridge delegation through the admin panel.');
-    await page.getByTestId('mcp-clear').click();
-    await waitForMcpStatus(page, options, 'No delegated session');
+    log('Moving only the default MCP session, then clearing it.');
+    await clickMcpAction(page, options, 'mcp-set-default', 'Authorized default');
+    await waitForBridgeControl(bridge, sessionB, options);
+    await assertSessionDelegate(accessToken, options, sessionA, bridge.clientId);
+    await clickMcpAction(page, options, 'mcp-clear', 'Authorized');
     await waitForBridgeControl(bridge, null, options);
+    await assertSessionDelegate(accessToken, options, sessionB, bridge.clientId);
+    await clickMcpAction(page, options, 'mcp-revoke', 'Not authorized');
     await assertSessionDelegate(accessToken, options, sessionB, null);
-    await emitSummary(options, { sessionA, sessionB, uiDelegateSwitch: true, uiClear: true }, log);
+    await selectSession(page, options, sessionA);
+    await clickMcpAction(page, options, 'mcp-revoke', 'Not authorized');
+    await assertSessionDelegate(accessToken, options, sessionA, null);
+    await emitSummary(options, { sessionA, sessionB, multiAuthorize: true, defaultSwitch: true }, log);
   } finally {
     await clearBridgeFromPage(page).catch(() => {});
     await cleanupAdminSmoke(page, options, log);
@@ -83,14 +92,10 @@ async function createAndConnectSession(page, options) {
   return sessionId;
 }
 
-async function delegateSelectedSession(page, options, bridge, sessionId) {
-  await waitForEnabled(page.getByTestId('mcp-delegate'), options, 'admin MCP delegate');
-  await page.getByTestId('mcp-delegate').click();
-  await waitForMcpStatus(page, options, 'This session delegated');
-  const health = await waitForBridgeControl(bridge, sessionId, options);
-  if (health.bridge_alignment !== 'aligned') {
-    throw new Error(`Expected aligned bridge health, got ${health.bridge_alignment}`);
-  }
+async function clickMcpAction(page, options, testId, status) {
+  await waitForEnabled(page.getByTestId(testId), options, `admin ${testId}`);
+  await page.getByTestId(testId).click();
+  await waitForMcpStatus(page, options, status);
 }
 
 async function waitForBridgeControl(bridge, sessionId, options) {
@@ -125,6 +130,9 @@ async function clearBridgeFromPage(page) {
   if (await page.getByTestId('mcp-clear').isEnabled().catch(() => false)) {
     await page.getByTestId('mcp-clear').click();
   }
+  if (await page.getByTestId('mcp-revoke').isEnabled().catch(() => false)) {
+    await page.getByTestId('mcp-revoke').click();
+  }
 }
 
 async function clearBridgeControl(bridge) {
@@ -136,15 +144,29 @@ async function clearBridgeControl(bridge) {
 }
 
 async function waitForMcpStatus(page, options, status) {
-  await poll('admin MCP status', async () => {
-    return await page.getByTestId('mcp-status').textContent().catch(() => '');
-  }, (value) => value === status, options.connectTimeoutMs);
+  let latest = '';
+  try {
+    await poll('admin MCP status', async () => {
+      latest = await page.getByTestId('mcp-status').textContent().catch(() => '');
+      return latest;
+    }, (value) => value === status || (status === 'Authorized' && value.startsWith('Authorized')), options.connectTimeoutMs);
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : error}; expected ${status}, last status ${latest || 'empty'}`);
+  }
 }
 
 async function resolveSelectedSessionId(page, options, previousSessionId) {
   return await poll('new admin selected session', async () => {
     return await readSelectedSessionId(page);
   }, (sessionId) => Boolean(sessionId && sessionId !== previousSessionId), options.connectTimeoutMs);
+}
+
+async function selectSession(page, options, sessionId) {
+  await openAdminTab(page, 'sessions');
+  await page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`).click();
+  await poll('selected admin session', async () => {
+    return await readSelectedSessionId(page);
+  }, (selectedId) => selectedId === sessionId, options.connectTimeoutMs);
 }
 
 async function readSelectedSessionId(page) {
@@ -167,23 +189,10 @@ async function emitSummary(options, summary, log) {
   }
 }
 
-function healthUrl(bridge) {
-  const url = new URL(bridge.controlUrl);
-  url.pathname = '/health';
-  url.search = '';
-  return url.toString();
-}
-
-function sessionMcpUrl(bridge, sessionId) {
-  const url = new URL(bridge.controlUrl);
-  url.pathname = `/sessions/${encodeURIComponent(sessionId)}/mcp`;
-  url.search = '';
-  return url.toString();
-}
-
-function apiOrigin(options) {
-  return new URL('/', options.pageUrl).origin;
-}
+function healthUrl(bridge) { return bridgeUrl(bridge, '/health'); }
+function sessionMcpUrl(bridge, sessionId) { return bridgeUrl(bridge, `/sessions/${encodeURIComponent(sessionId)}/mcp`); }
+function apiOrigin(options) { return new URL('/', options.pageUrl).origin; }
+function bridgeUrl(bridge, pathname) { const url = new URL(bridge.controlUrl); url.pathname = pathname; url.search = ''; return url.toString(); }
 
 run().catch((error) => {
   console.error(`[admin-mcp-smoke] ${error.stack || error.message}`);

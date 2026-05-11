@@ -39,7 +39,6 @@
     readonly controlClient: ControlClient;
     readonly workflowClient: WorkflowClient;
     readonly selectedSession: SessionResource | null;
-    readonly sessions: readonly SessionResource[];
     readonly mcpBridge: McpBridgeConfig | null;
     readonly liveConnection: LiveBrowserSessionConnection | null;
     readonly browserConnected: boolean;
@@ -138,7 +137,6 @@
         <McpDelegationSurface
           controlClient={props.controlClient}
           selectedSession={props.selectedSession}
-          sessions={props.sessions}
           mcpBridge={props.mcpBridge}
           refreshVersion={props.mcpDelegationRefreshVersion}
           onRefreshSessions={props.onRefreshSessions}
