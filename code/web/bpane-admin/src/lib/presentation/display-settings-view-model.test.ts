@@ -11,40 +11,22 @@ describe('DisplaySettingsViewModelBuilder', () => {
         hiDpi: false,
       },
       connected: false,
-      microphoneAvailable: false,
-      cameraAvailable: false,
-      uploadAvailable: false,
-      microphoneActive: false,
-      cameraActive: false,
-      busy: false,
-      error: null,
     });
 
     expect(viewModel.renderBackend).toBe('webgl2');
     expect(viewModel.hiDpiEnabled).toBe(false);
-    expect(viewModel.microphoneDisabled).toBe(true);
-    expect(viewModel.uploadDisabled).toBe(true);
     expect(viewModel.reconnectHint).toContain('next connect');
   });
 
-  it('enables live media actions only when the connected handle supports them', () => {
+  it('exposes render preferences while connected', () => {
     const viewModel = DisplaySettingsViewModelBuilder.build({
       preferences: DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES,
       connected: true,
-      microphoneAvailable: true,
-      cameraAvailable: false,
-      uploadAvailable: true,
-      microphoneActive: true,
-      cameraActive: false,
-      busy: false,
-      error: 'media permission denied',
     });
 
-    expect(viewModel.microphoneLabel).toBe('Stop microphone');
-    expect(viewModel.microphoneDisabled).toBe(false);
-    expect(viewModel.cameraDisabled).toBe(true);
-    expect(viewModel.uploadDisabled).toBe(false);
-    expect(viewModel.error).toBe('media permission denied');
+    expect(viewModel.connectionLabel).toBe('Live browser connected');
+    expect(viewModel.reconnectHint).toContain('after reconnect');
+    expect(viewModel.scrollCopyEnabled).toBe(true);
   });
 
   it('exposes the supported render backend order', () => {

@@ -51,6 +51,8 @@ describe('WorkflowOperationsViewModelBuilder', () => {
 
     expect(viewModel.definitionOptions[0]?.label).toBe('operator-check (v1)');
     expect(viewModel.executorLabel).toBe('manual');
+    expect(viewModel.selectedSessionLabel).toBe(SESSION.id);
+    expect(viewModel.runSessionLabel).toBe('--');
     expect(viewModel.canRun).toBe(true);
   });
 
@@ -86,6 +88,8 @@ describe('WorkflowOperationsViewModelBuilder', () => {
 
     expect(viewModel.status).toBe('awaiting_input');
     expect(viewModel.pendingPrompt).toBe('Approve checkout?');
+    expect(viewModel.runSessionLabel).toBe(SESSION.id);
+    expect(viewModel.runSessionNote).toBe('Run uses the selected baseline session.');
     expect(viewModel.canReleaseHold).toBe(true);
     expect(viewModel.canSubmitInput).toBe(true);
     expect(viewModel.logCount).toBe(1);

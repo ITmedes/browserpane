@@ -71,6 +71,27 @@ describe('subscribeAdminSessionEvents', () => {
     expect(refreshes).toBe(1);
   });
 
+  it('passes workflow run snapshots to the follow handler', () => {
+    const client = new FakeAdminEventClient();
+    const runs: Array<readonly { readonly id: string; readonly sessionId: string }[]> = [];
+
+    subscribeAdminSessionEvents(client as never, {
+      onSessions: () => undefined,
+      onLoadingChange: () => undefined,
+      onError: () => undefined,
+      onLog: () => undefined,
+      onWorkflowRunsSnapshot: (next) => runs.push(next),
+    });
+    client.handlers.onEvent({
+      type: 'workflow_runs.snapshot',
+      sequence: 5,
+      createdAt: '2026-05-04T19:02:00Z',
+      workflowRuns: [{ id: 'run-a', sessionId: 'session-a', state: 'running', updatedAt: '2026-05-04T19:01:00Z' }],
+    });
+
+    expect(runs).toEqual([[{ id: 'run-a', sessionId: 'session-a', state: 'running', updatedAt: '2026-05-04T19:01:00Z' }]]);
+  });
+
   it('notifies panel refresh boundaries when recordings change', () => {
     const client = new FakeAdminEventClient();
     let refreshes = 0;

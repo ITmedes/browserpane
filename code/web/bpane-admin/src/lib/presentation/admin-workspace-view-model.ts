@@ -57,11 +57,10 @@ export class AdminWorkspaceViewModelBuilder {
           'Kill selected',
           'Disconnect all clients',
         ], ['runtime', 'presence', 'connections']),
-        panel('display', 'Display', 'Render backend, HiDPI, scroll copy, media controls', 'Session display and browser media controls from the dev harness.', input.connected ? 'live' : 'next connect', true, [
+        panel('display', 'Display', 'Render backend, HiDPI, scroll copy', 'Session display controls from the dev harness.', input.connected ? 'live' : 'next connect', true, [
           'Render backend',
           'HiDPI',
           'Scroll copy',
-          'Camera / microphone / upload',
         ], ['resolution', 'render backend', 'tile stats']),
         panel('files', 'Files', 'Runtime uploads and downloads', 'Owner-scoped file artifacts recorded for the selected session.', `${input.fileCount} files`, true, [
           'Refresh files',

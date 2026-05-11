@@ -29,7 +29,7 @@
   <div class="flex flex-wrap items-start justify-between gap-2">
     <div>
       <p class="admin-eyebrow mb-1">MCP delegation</p>
-      <h3 class="m-0 text-sm font-extrabold text-admin-night">{viewModel.title}</h3>
+      <h3 class="m-0 text-sm font-extrabold text-admin-ink">{viewModel.title}</h3>
     </div>
     <span
       class={`rounded-full border px-3 py-1 text-xs font-extrabold ${toneClass(viewModel.tone)}`}

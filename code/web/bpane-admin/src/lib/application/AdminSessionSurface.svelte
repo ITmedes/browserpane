@@ -15,6 +15,7 @@
   import { AdminLogEntryFactory } from './admin-log-entries';
   import { AdminSessionSelection } from './admin-session-selection';
   import { subscribeAdminSessionEvents } from './admin-session-event-sync';
+  import { AdminWorkflowSessionFollower } from './admin-workflow-follow';
   import BrowserWorkspaceOverlayLayout from './BrowserWorkspaceOverlayLayout.svelte';
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient; readonly adminEventClient: AdminEventClient; readonly workflowClient: WorkflowClient;
@@ -42,6 +43,11 @@
   let lastLogSignature = $state('');
   let browserPreferences = $state<BrowserSessionConnectPreferences>({ ...DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES });
   const browserConnected = $derived(Boolean(liveConnection && liveConnection.sessionId === selectedSession?.id));
+  const workflowFollower = $derived(new AdminWorkflowSessionFollower({
+    controlClient, getSessions: () => sessions, getConnectedSessionId: () => liveConnection?.sessionId ?? null,
+    upsertSession, requestBrowserConnect,
+    onError: (message) => { sessionsError = message; },
+  }));
   const workspaceViewModel = $derived(AdminWorkspaceViewModelBuilder.build({
     browserStatus, selectedSessionId: selectedSession?.id ?? null,
     sessionCount: sessions.length, fileCount: sessionFileCount, connected: browserConnected,
@@ -66,6 +72,7 @@
       onSessionFilesSnapshot: () => { sessionFilesRefreshVersion += 1; },
       onRecordingsSnapshot: () => { recordingsRefreshVersion += 1; },
       onMcpDelegationSnapshot: () => { mcpDelegationRefreshVersion += 1; },
+      onWorkflowRunsSnapshot: (runs) => void workflowFollower.followRuns(runs),
     });
     void loadSessions();
     return () => { subscription.close(); disconnectBrowser(false); };
@@ -99,13 +106,9 @@
   async function refreshSelectedSession(): Promise<void> {
     if (!selectedSession) return;
     sessionsLoading = true;
-    try {
-      upsertSession(await controlClient.getSession(selectedSession.id));
-    } catch (error) {
-      sessionsError = errorMessage(error);
-    } finally {
-      sessionsLoading = false;
-    }
+    try { upsertSession(await controlClient.getSession(selectedSession.id)); }
+    catch (error) { sessionsError = errorMessage(error); }
+    finally { sessionsLoading = false; }
   }
   async function runLifecycle(action: 'stop' | 'kill'): Promise<void> {
     if (!selectedSession) return;
@@ -180,12 +183,10 @@
   <BrowserWorkspaceOverlayLayout {adminOpen} {onAdminOpenChange}>
     {#snippet admin()}
     <AdminWorkspaceTabs
-      {controlClient} {workflowClient} {selectedSession} {sessions} {mcpBridge}
-      {liveConnection} {browserPreferences} {browserConnected}
-      {workspaceViewModel} {sessionListViewModel} {logEntries}
-      {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion}
-      onRefreshSessions={loadSessions} onCreateSession={() => void createSession()}
-      onJoinSelectedSession={requestBrowserConnect}
+      {controlClient} {workflowClient} {selectedSession} {sessions} {mcpBridge} {liveConnection}
+      {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries}
+      {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
+      onCreateSession={() => void createSession()} onJoinSelectedSession={requestBrowserConnect}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
       onStopSession={() => void runLifecycle('stop')} onKillSession={() => void runLifecycle('kill')} onDisconnectEmbeddedBrowser={() => disconnectBrowser(false)}
       onFileCountChange={(count) => { sessionFileCount = count; }}
