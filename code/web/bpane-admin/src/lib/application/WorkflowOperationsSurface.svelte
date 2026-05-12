@@ -10,9 +10,18 @@
   type WorkflowOperationsSurfaceProps = {
     readonly workflowClient: WorkflowClient;
     readonly selectedSession: SessionResource | null;
+    readonly connected: boolean;
+    readonly onCreateSession: () => void;
+    readonly onConnectSession: () => void;
   };
 
-  let { workflowClient, selectedSession }: WorkflowOperationsSurfaceProps = $props();
+  let {
+    workflowClient,
+    selectedSession,
+    connected,
+    onCreateSession,
+    onConnectSession,
+  }: WorkflowOperationsSurfaceProps = $props();
   const workflowService = $derived(new WorkflowOperationsService(workflowClient));
   let definitions = $state<readonly WorkflowDefinitionResource[]>([]);
   let selectedWorkflowId = $state('');
@@ -33,7 +42,7 @@
   const interventionInputValid = $derived(isJson(interventionInputText));
   const viewModel = $derived(WorkflowOperationsViewModelBuilder.build({
     selectedSession, definitions, selectedWorkflowId, selectedVersion, selectedVersionResource,
-    currentRun, logs, events, files, loading, actionInFlight, error, inputValid,
+    currentRun, logs, events, files, loading, actionInFlight, error, inputValid, connected,
     interventionInputValid,
   }));
 
@@ -90,7 +99,12 @@
   }
 
   async function invokeRun(): Promise<void> {
-    if (!selectedSession || !selectedWorkflowId || !selectedVersion) {
+    if (viewModel.invokeBlockedReason) {
+      error = viewModel.invokeBlockedReason;
+      return;
+    }
+    if (!selectedSession) {
+      error = 'Select or create a session before invoking a workflow. The selected session is the workflow baseline.';
       return;
     }
     await runAction(async () => {
@@ -191,6 +205,8 @@
   onVersionChange={(version) => { selectedVersion = version.trim(); selectedVersionResource = null; }}
   onInputTextChange={(next) => { inputText = next; }}
   onInterventionInputChange={(next) => { interventionInputText = next; }}
+  onCreateSession={onCreateSession}
+  onConnectSession={onConnectSession}
   onInvokeRun={() => void invokeRun()}
   onRefreshRun={() => void refreshRunResources()}
   onCancelRun={() => currentRun && void mutateRun(() => workflowService.cancelRun(currentRun!.id))}

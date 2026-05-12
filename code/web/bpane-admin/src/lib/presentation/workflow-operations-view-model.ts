@@ -38,6 +38,9 @@ export type WorkflowOperationsViewModel = {
   readonly loading: boolean;
   readonly canRefresh: boolean;
   readonly canRun: boolean;
+  readonly canCreateBaseline: boolean;
+  readonly canConnectBaseline: boolean;
+  readonly invokeBlockedReason: string | null;
   readonly canRefreshRun: boolean;
   readonly canCancel: boolean;
   readonly canReleaseHold: boolean;
@@ -71,12 +74,14 @@ export class WorkflowOperationsViewModelBuilder {
     readonly actionInFlight: boolean;
     readonly error: string | null;
     readonly inputValid: boolean;
+    readonly connected: boolean;
     readonly interventionInputValid: boolean;
   }): WorkflowOperationsViewModel {
     const hasSession = Boolean(input.selectedSession);
     const hasDefinition = Boolean(input.selectedWorkflowId && input.selectedVersion);
     const terminal = isTerminal(input.currentRun?.state ?? null);
     const pendingRequest = input.currentRun?.intervention.pending_request ?? null;
+    const invokeBlockedReason = blockedInvokeReason(input);
     return {
       title: hasSession ? 'Workflow run controls' : 'Select a session for workflow runs',
       status: statusLabel(input.loading, input.error, input.currentRun),
@@ -100,7 +105,10 @@ export class WorkflowOperationsViewModelBuilder {
       error: input.error,
       loading: input.loading || input.actionInFlight,
       canRefresh: !input.loading && !input.actionInFlight,
-      canRun: hasSession && hasDefinition && input.inputValid && !input.actionInFlight,
+      canRun: invokeBlockedReason === null,
+      canCreateBaseline: !hasSession && !input.loading && !input.actionInFlight,
+      canConnectBaseline: hasSession && !input.connected && !input.loading && !input.actionInFlight,
+      invokeBlockedReason,
       canRefreshRun: Boolean(input.currentRun) && !input.actionInFlight,
       canCancel: Boolean(input.currentRun) && !terminal && !input.actionInFlight,
       canReleaseHold: Boolean(pendingRequest) && !input.actionInFlight,
@@ -131,6 +139,33 @@ function statusLabel(
   return currentRun?.state ?? 'ready';
 }
 
+function blockedInvokeReason(input: {
+  readonly selectedSession: SessionResource | null;
+  readonly selectedWorkflowId: string;
+  readonly selectedVersion: string;
+  readonly loading: boolean;
+  readonly actionInFlight: boolean;
+  readonly inputValid: boolean;
+  readonly connected: boolean;
+}): string | null {
+  if (input.loading || input.actionInFlight) {
+    return 'Workflow data is still loading.';
+  }
+  if (!input.selectedSession) {
+    return 'Select or create a session before invoking a workflow. The selected session is the workflow baseline.';
+  }
+  if (!input.connected) {
+    return 'Connect the selected session before invoking a workflow from the admin view.';
+  }
+  if (!input.selectedWorkflowId || !input.selectedVersion) {
+    return 'Select a workflow definition and version before invoking a workflow.';
+  }
+  if (!input.inputValid) {
+    return 'Run input must be valid JSON.';
+  }
+  return null;
+}
+
 function note(definitionCount: number, hasSession: boolean, error: string | null): string {
   if (error) {
     return error;
@@ -139,7 +174,7 @@ function note(definitionCount: number, hasSession: boolean, error: string | null
     return 'Select or create a session before invoking a workflow.';
   }
   if (definitionCount === 0) {
-    return 'No workflow definitions are available for this owner yet.';
+    return 'No workflow templates are available for this owner yet.';
   }
   return 'Invoke a workflow against the selected session and inspect run output.';
 }
