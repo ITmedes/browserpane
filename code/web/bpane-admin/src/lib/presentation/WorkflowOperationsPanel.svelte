@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { Download, Play, RefreshCw, Send, Unlock, XCircle } from 'lucide-svelte';
   import type { WorkflowOperationsViewModel } from './workflow-operations-view-model';
 
@@ -20,6 +21,10 @@
   };
 
   let props: WorkflowOperationsPanelProps = $props();
+
+  function runDetailHref(runId: string): string {
+    return `${base}/workflow-runs/${encodeURIComponent(runId)}`;
+  }
 </script>
 
 <section class="grid min-w-0 gap-4" aria-label="Workflow operations">
@@ -94,6 +99,11 @@
       <button class="admin-button-primary" type="button" data-testid="workflow-cancel" disabled={!props.viewModel.canCancel} onclick={props.onCancelRun}>
         <XCircle size={14} aria-hidden="true" /> Cancel
       </button>
+      {#if props.viewModel.currentRunId !== '--'}
+        <a class="admin-button-ghost" data-testid="workflow-run-detail-link" href={runDetailHref(props.viewModel.currentRunId)}>
+          Inspect details
+        </a>
+      {/if}
     </div>
   </div>
 

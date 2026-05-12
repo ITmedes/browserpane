@@ -87,6 +87,10 @@ export type WorkflowRunResource = {
   readonly updated_at: string;
 };
 
+export type WorkflowRunListResponse = {
+  readonly runs: readonly WorkflowRunResource[];
+};
+
 export type WorkflowRunInterventionResource = {
   readonly pending_request?: WorkflowRunInterventionRequestResource | null;
 };

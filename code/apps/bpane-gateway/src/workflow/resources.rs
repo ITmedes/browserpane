@@ -150,6 +150,11 @@ pub struct WorkflowRunResource {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WorkflowRunListResponse {
+    pub runs: Vec<WorkflowRunResource>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct WorkflowRunEventResource {
     pub id: Uuid,
