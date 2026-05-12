@@ -15,6 +15,7 @@ import type {
   WorkflowDefinitionResource,
   WorkflowDefinitionVersionResource,
   WorkflowRunEventListResponse,
+  WorkflowRunListResponse,
   WorkflowRunLogListResponse,
   WorkflowRunProducedFileListResponse,
   WorkflowRunProducedFileResource,
@@ -65,6 +66,11 @@ export class WorkflowClient {
   async createRun(command: CreateWorkflowRunCommand): Promise<WorkflowRunResource> {
     const payload = await this.#request('POST', '/api/v1/workflow-runs', command);
     return WorkflowRunMapper.toRun(payload);
+  }
+
+  async listRuns(): Promise<WorkflowRunListResponse> {
+    const payload = await this.#request('GET', '/api/v1/workflow-runs');
+    return WorkflowRunMapper.toRunList(payload);
   }
 
   async getRun(runId: string): Promise<WorkflowRunResource> {

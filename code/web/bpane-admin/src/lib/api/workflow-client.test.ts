@@ -112,6 +112,19 @@ describe('WorkflowClient', () => {
     );
   });
 
+  it('lists workflow runs for the current owner', async () => {
+    const fetchImpl = jsonFetch({ runs: [RUN] });
+    const client = newClient(fetchImpl);
+
+    const response = await client.listRuns();
+
+    expect(response.runs[0]?.id).toBe(RUN.id);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/workflow-runs'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('controls workflow run cancellation and resume', async () => {
     const fetchImpl = jsonFetchSequence([{ ...RUN, state: 'cancelled' }, { ...RUN, state: 'running' }]);
     const client = newClient(fetchImpl);
