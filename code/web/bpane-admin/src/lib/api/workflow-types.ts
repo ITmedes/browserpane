@@ -12,6 +12,12 @@ export type WorkflowDefinitionListResponse = {
   readonly workflows: readonly WorkflowDefinitionResource[];
 };
 
+export type CreateWorkflowDefinitionCommand = {
+  readonly name: string;
+  readonly description?: string;
+  readonly labels?: Readonly<Record<string, string>>;
+};
+
 export type WorkflowDefinitionVersionResource = {
   readonly id: string;
   readonly workflow_definition_id: string;
@@ -26,6 +32,19 @@ export type WorkflowDefinitionVersionResource = {
   readonly allowed_extension_ids: readonly string[];
   readonly allowed_file_workspace_ids: readonly string[];
   readonly created_at: string;
+};
+
+export type CreateWorkflowDefinitionVersionCommand = {
+  readonly version: string;
+  readonly executor: string;
+  readonly entrypoint: string;
+  readonly source?: unknown;
+  readonly input_schema?: unknown;
+  readonly output_schema?: unknown;
+  readonly default_session?: unknown;
+  readonly allowed_credential_binding_ids?: readonly string[];
+  readonly allowed_extension_ids?: readonly string[];
+  readonly allowed_file_workspace_ids?: readonly string[];
 };
 
 export type WorkflowRunSessionCommand = {
@@ -85,6 +104,10 @@ export type WorkflowRunResource = {
   readonly logs_path: string;
   readonly created_at: string;
   readonly updated_at: string;
+};
+
+export type WorkflowRunListResponse = {
+  readonly runs: readonly WorkflowRunResource[];
 };
 
 export type WorkflowRunInterventionResource = {

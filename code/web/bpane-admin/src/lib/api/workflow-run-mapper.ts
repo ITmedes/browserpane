@@ -3,6 +3,7 @@ import type {
   WorkflowRunEventResource,
   WorkflowRunInterventionRequestResource,
   WorkflowRunInterventionResource,
+  WorkflowRunListResponse,
   WorkflowRunLogListResponse,
   WorkflowRunLogResource,
   WorkflowRunProducedFileListResponse,
@@ -20,6 +21,13 @@ import {
 } from './control-wire';
 
 export class WorkflowRunMapper {
+  static toRunList(payload: unknown): WorkflowRunListResponse {
+    const object = expectRecord(payload, 'workflow run list response');
+    return {
+      runs: expectArray(object.runs, 'workflow run list runs').map((entry) => this.toRun(entry)),
+    };
+  }
+
   static toRun(payload: unknown): WorkflowRunResource {
     const object = expectRecord(payload, 'workflow run resource');
     const sourceSystem = optionalString(object.source_system, 'workflow run source_system');

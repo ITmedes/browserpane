@@ -71,6 +71,43 @@ describe('WorkflowClient', () => {
     );
   });
 
+  it('creates workflow definitions and versions', async () => {
+    const fetchImpl = jsonFetchSequence([WORKFLOW, VERSION]);
+    const client = newClient(fetchImpl);
+
+    const workflow = await client.createDefinition({
+      name: WORKFLOW.name,
+      description: WORKFLOW.description ?? undefined,
+      labels: WORKFLOW.labels,
+    });
+    const version = await client.createDefinitionVersion(WORKFLOW.id, {
+      version: 'v1',
+      executor: 'playwright',
+      entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
+      source: { kind: 'git', repository_url: '/workspace', ref: 'HEAD', root_path: 'dev' },
+    });
+
+    expect(workflow.id).toBe(WORKFLOW.id);
+    expect(version.entrypoint).toBe(VERSION.entrypoint);
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      new URL('http://localhost:8932/api/v1/workflows'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: WORKFLOW.name,
+          description: WORKFLOW.description,
+          labels: WORKFLOW.labels,
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      new URL(`http://localhost:8932/api/v1/workflows/${WORKFLOW.id}/versions`),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('encodes workflow and version identifiers', async () => {
     const fetchImpl = jsonFetch(VERSION);
     const client = newClient(fetchImpl);
@@ -109,6 +146,19 @@ describe('WorkflowClient', () => {
           client_request_id: 'admin-run-1',
         }),
       }),
+    );
+  });
+
+  it('lists workflow runs for the current owner', async () => {
+    const fetchImpl = jsonFetch({ runs: [RUN] });
+    const client = newClient(fetchImpl);
+
+    const response = await client.listRuns();
+
+    expect(response.runs[0]?.id).toBe(RUN.id);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/workflow-runs'),
+      expect.objectContaining({ method: 'GET' }),
     );
   });
 

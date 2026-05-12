@@ -7,6 +7,8 @@ import {
 import { WorkflowMapper } from './workflow-mapper';
 import { WorkflowRunMapper } from './workflow-run-mapper';
 import type {
+  CreateWorkflowDefinitionCommand,
+  CreateWorkflowDefinitionVersionCommand,
   CreateWorkflowRunCommand,
   RejectWorkflowRunCommand,
   ResumeWorkflowRunCommand,
@@ -15,6 +17,7 @@ import type {
   WorkflowDefinitionResource,
   WorkflowDefinitionVersionResource,
   WorkflowRunEventListResponse,
+  WorkflowRunListResponse,
   WorkflowRunLogListResponse,
   WorkflowRunProducedFileListResponse,
   WorkflowRunProducedFileResource,
@@ -46,9 +49,26 @@ export class WorkflowClient {
     return WorkflowMapper.toDefinitionList(payload);
   }
 
+  async createDefinition(command: CreateWorkflowDefinitionCommand): Promise<WorkflowDefinitionResource> {
+    const payload = await this.#request('POST', '/api/v1/workflows', command);
+    return WorkflowMapper.toDefinition(payload);
+  }
+
   async getDefinition(workflowId: string): Promise<WorkflowDefinitionResource> {
     const payload = await this.#request('GET', `/api/v1/workflows/${encodeURIComponent(workflowId)}`);
     return WorkflowMapper.toDefinition(payload);
+  }
+
+  async createDefinitionVersion(
+    workflowId: string,
+    command: CreateWorkflowDefinitionVersionCommand,
+  ): Promise<WorkflowDefinitionVersionResource> {
+    const payload = await this.#request(
+      'POST',
+      `/api/v1/workflows/${encodeURIComponent(workflowId)}/versions`,
+      command,
+    );
+    return WorkflowMapper.toDefinitionVersion(payload);
   }
 
   async getDefinitionVersion(
@@ -65,6 +85,11 @@ export class WorkflowClient {
   async createRun(command: CreateWorkflowRunCommand): Promise<WorkflowRunResource> {
     const payload = await this.#request('POST', '/api/v1/workflow-runs', command);
     return WorkflowRunMapper.toRun(payload);
+  }
+
+  async listRuns(): Promise<WorkflowRunListResponse> {
+    const payload = await this.#request('GET', '/api/v1/workflow-runs');
+    return WorkflowRunMapper.toRunList(payload);
   }
 
   async getRun(runId: string): Promise<WorkflowRunResource> {
