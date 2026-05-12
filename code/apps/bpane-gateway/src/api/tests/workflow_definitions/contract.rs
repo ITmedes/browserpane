@@ -1,8 +1,13 @@
 use super::*;
 
 #[tokio::test]
-async fn creates_workflow_definitions_versions_and_runs_with_default_sessions() {
-    let (app, token) = test_router();
+async fn creates_workflow_definitions_versions_and_workflow_runs_with_default_sessions() {
+    let (app, token, state) = test_router_with_state();
+    sleep(Duration::from_secs(1)).await;
+    let foreign_token = state
+        .auth_validator
+        .generate_token()
+        .expect("hmac auth validator should generate a second dev token");
 
     let create_workflow = app
         .clone()
@@ -130,6 +135,95 @@ async fn creates_workflow_definitions_versions_and_runs_with_default_sessions() 
     assert_eq!(run["workflow_definition_id"], workflow_id);
     assert_eq!(run["workflow_version"], "v1");
     assert_eq!(run["state"], "pending");
+
+    let list_runs = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_runs.status(), StatusCode::OK);
+    let runs_body = response_json(list_runs).await;
+    let runs = runs_body["runs"].as_array().unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0]["id"], run_id);
+    assert_eq!(runs[0]["session_id"], session_id);
+    assert_eq!(
+        runs[0]["events_path"],
+        format!("/api/v1/workflow-runs/{run_id}/events")
+    );
+    assert_eq!(
+        runs[0]["logs_path"],
+        format!("/api/v1/workflow-runs/{run_id}/logs")
+    );
+
+    let foreign_list_runs = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&foreign_token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(foreign_list_runs.status(), StatusCode::OK);
+    let foreign_runs_body = response_json(foreign_list_runs).await;
+    assert_eq!(foreign_runs_body["runs"].as_array().unwrap().len(), 0);
+
+    let create_second_run = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "session": {
+                            "existing_session_id": session_id
+                        },
+                        "input": {
+                            "month": "2026-04",
+                            "country_code": "DE"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_second_run.status(), StatusCode::CREATED);
+    let second_run = response_json(create_second_run).await;
+    let second_run_id = second_run["id"].as_str().unwrap().to_string();
+
+    let ordered_list_runs = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ordered_list_runs.status(), StatusCode::OK);
+    let ordered_runs_body = response_json(ordered_list_runs).await;
+    let ordered_runs = ordered_runs_body["runs"].as_array().unwrap();
+    assert_eq!(ordered_runs.len(), 2);
+    assert_eq!(ordered_runs[0]["id"], second_run_id);
+    assert_eq!(ordered_runs[1]["id"], run_id);
 
     let get_run = app
         .clone()

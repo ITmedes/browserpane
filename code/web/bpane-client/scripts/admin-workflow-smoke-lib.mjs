@@ -7,7 +7,10 @@ export async function createWorkflow(accessToken, rootUrl) {
     body: JSON.stringify({
       name: `admin-workflow-smoke-${Date.now()}`,
       description: 'Validate admin workflow operations controls',
-      labels: { suite: 'admin-workflow-smoke' },
+      labels: {
+        suite: 'admin-workflow-smoke',
+        bpane_admin_hidden: 'true',
+      },
     }),
   });
 }

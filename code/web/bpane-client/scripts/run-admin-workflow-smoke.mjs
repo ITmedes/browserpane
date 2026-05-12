@@ -20,18 +20,22 @@ async function run() {
   try {
     log(`Opening ${options.pageUrl}`);
     await ensureAdminLoggedIn(page, options);
+    await page.evaluate(() => {
+      sessionStorage.setItem('bpane.admin.showHiddenWorkflowDefinitions', 'true');
+    });
     await cleanupAdminBeforeRun(page, options, log);
     const accessToken = await getAdminAccessToken(page);
     const workflow = await createWorkflow(accessToken, rootUrl);
     const version = await createWorkflowVersion(accessToken, rootUrl, workflow.id);
 
     await openAdminTab(page, 'sessions');
-    await page.getByTestId('session-new').click();
-    sessionId = await resolveSelectedSessionId(page, options);
-    await waitForBrowserConnected(page, options);
-
+    await page.getByTestId('session-refresh').click();
     await openAdminTab(page, 'workflows');
     await page.getByTestId('workflow-definition-select').selectOption(workflow.id);
+    await prepareWorkflowBaseline(page, options);
+    sessionId = await resolveWorkflowBaselineSessionId(page, options);
+    await waitForBrowserConnected(page, options);
+
     await waitForEnabled(page.getByTestId('workflow-invoke'), options, 'admin workflow invoke');
     await page.getByTestId('workflow-input').fill('{\n  "task": "admin workflow smoke"\n}');
     await page.getByTestId('workflow-invoke').click();
@@ -99,14 +103,13 @@ async function run() {
   }
 }
 
-async function resolveSelectedSessionId(page, options) {
-  const row = page.getByTestId('session-row').first();
-  await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  const sessionId = await row.getAttribute('data-session-id') ?? '';
-  if (!sessionId) {
-    throw new Error('Admin session row did not expose a session id.');
-  }
-  return sessionId;
+async function resolveWorkflowBaselineSessionId(page, options) {
+  return await poll(
+    'admin workflow baseline session id',
+    async () => await page.getByTestId('workflow-session-id').textContent(),
+    (value) => Boolean(value && value !== '--'),
+    options.connectTimeoutMs,
+  );
 }
 
 async function waitForRunId(page, options) {
@@ -133,6 +136,31 @@ async function waitForText(page, options, testId, expected) {
 
 async function waitForContains(page, options, testId, expected) {
   await poll(testId, async () => await page.getByTestId(testId).textContent(), (value) => value?.includes(expected), options.connectTimeoutMs);
+}
+
+async function prepareWorkflowBaseline(page, options) {
+  const state = await poll('workflow baseline prerequisite action', async () => {
+    const invokeEnabled = await page.getByTestId('workflow-invoke').isEnabled().catch(() => false);
+    const createVisible = await page.getByTestId('workflow-create-session').isVisible().catch(() => false);
+    const connectVisible = await page.getByTestId('workflow-connect-session').isVisible().catch(() => false);
+    const reason = await page.getByTestId('workflow-invoke-disabled-reason').textContent().catch(() => '');
+    return { invokeEnabled, createVisible, connectVisible, reason };
+  }, (value) => value.invokeEnabled || value.createVisible || value.connectVisible, options.connectTimeoutMs);
+  if (state.invokeEnabled) {
+    return;
+  }
+  if (!state.reason) {
+    throw new Error('Workflow invoke was blocked without a visible reason.');
+  }
+  if (state.createVisible) {
+    await page.getByTestId('workflow-create-session').click();
+    return;
+  }
+  if (state.connectVisible) {
+    await page.getByTestId('workflow-connect-session').click();
+    return;
+  }
+  throw new Error(`Workflow baseline is blocked without an action: ${state.reason}`);
 }
 
 async function waitForEnabled(locator, options, description) {

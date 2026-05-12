@@ -44,8 +44,7 @@ async function run() {
     const accessToken = await getAdminAccessToken(page);
     const source = createWorkspaceSource();
     buildWorkflowWorkerImage();
-    const workflow = await createWorkflow(accessToken, rootUrl);
-    await createWorkflowVersion(accessToken, rootUrl, workflow.id, source);
+    const workflow = await ensureBrowserPaneTourWorkflow(accessToken, rootUrl, source);
     await createAndJoinSession(page, options);
     const runId = await invokeWorkflow(page, options, workflow.id);
     const state = await waitForTerminalState(page, options);
@@ -95,15 +94,44 @@ function createWorkspaceSource() {
   return { repositoryUrl: '/workspace', ref: `refs/heads/${ref}` };
 }
 
+async function ensureBrowserPaneTourWorkflow(accessToken, rootUrl, source) {
+  const workflows = await listWorkflows(accessToken, rootUrl);
+  const existing = workflows.find((workflow) => {
+    return workflow?.labels?.bpane_admin_template === 'browserpane-tour';
+  });
+  if (existing?.latest_version) {
+    return existing;
+  }
+  const workflow = existing ?? await createWorkflow(accessToken, rootUrl);
+  await createWorkflowVersion(accessToken, rootUrl, workflow.id, source);
+  return await fetchWorkflow(accessToken, rootUrl, workflow.id);
+}
+
+async function listWorkflows(accessToken, rootUrl) {
+  const response = await fetchJson(`${rootUrl}/api/v1/workflows`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return Array.isArray(response.workflows) ? response.workflows : [];
+}
+
 async function createWorkflow(accessToken, rootUrl) {
   return await fetchJson(`${rootUrl}/api/v1/workflows`, {
     method: 'POST',
     headers: jsonHeaders(accessToken),
     body: JSON.stringify({
-      name: `browserpane-tour-${Date.now()}`,
+      name: 'BrowserPane Tour',
       description: 'Example workflow that tours browserpane.io and the GitHub repository',
-      labels: { suite: 'admin-browserpane-tour' },
+      labels: {
+        bpane_admin_template: 'browserpane-tour',
+        source: 'bpane-admin-template',
+      },
     }),
+  });
+}
+
+async function fetchWorkflow(accessToken, rootUrl, workflowId) {
+  return await fetchJson(`${rootUrl}/api/v1/workflows/${encodeURIComponent(workflowId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
 

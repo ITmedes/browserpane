@@ -23,12 +23,16 @@ describe('WorkflowOperationsViewModelBuilder', () => {
       actionInFlight: false,
       error: null,
       inputValid: true,
+      connected: false,
       interventionInputValid: true,
     });
 
     expect(viewModel.status).toBe('ready');
     expect(viewModel.canRun).toBe(false);
+    expect(viewModel.canCreateBaseline).toBe(true);
+    expect(viewModel.canConnectBaseline).toBe(false);
     expect(viewModel.note).toContain('Select or create');
+    expect(viewModel.invokeBlockedReason).toContain('selected session is the workflow baseline');
   });
 
   it('enables invocation for a selected session and workflow version', () => {
@@ -46,6 +50,7 @@ describe('WorkflowOperationsViewModelBuilder', () => {
       actionInFlight: false,
       error: null,
       inputValid: true,
+      connected: true,
       interventionInputValid: true,
     });
 
@@ -54,6 +59,77 @@ describe('WorkflowOperationsViewModelBuilder', () => {
     expect(viewModel.selectedSessionLabel).toBe(SESSION.id);
     expect(viewModel.runSessionLabel).toBe('--');
     expect(viewModel.canRun).toBe(true);
+    expect(viewModel.canCreateBaseline).toBe(false);
+    expect(viewModel.canConnectBaseline).toBe(false);
+    expect(viewModel.invokeBlockedReason).toBeNull();
+  });
+
+  it('requires the selected baseline session to be connected in the admin view', () => {
+    const viewModel = WorkflowOperationsViewModelBuilder.build({
+      selectedSession: SESSION,
+      definitions: [WORKFLOW],
+      selectedWorkflowId: WORKFLOW.id,
+      selectedVersion: 'v1',
+      selectedVersionResource: VERSION,
+      currentRun: null,
+      logs: [],
+      events: [],
+      files: [],
+      loading: false,
+      actionInFlight: false,
+      error: null,
+      inputValid: true,
+      connected: false,
+      interventionInputValid: true,
+    });
+
+    expect(viewModel.canRun).toBe(false);
+    expect(viewModel.canConnectBaseline).toBe(true);
+    expect(viewModel.invokeBlockedReason).toBe(
+      'Connect the selected session before invoking a workflow from the admin view.',
+    );
+  });
+
+  it('explains missing definitions and invalid run input before invocation', () => {
+    const missingDefinition = WorkflowOperationsViewModelBuilder.build({
+      selectedSession: SESSION,
+      definitions: [],
+      selectedWorkflowId: '',
+      selectedVersion: '',
+      selectedVersionResource: null,
+      currentRun: null,
+      logs: [],
+      events: [],
+      files: [],
+      loading: false,
+      actionInFlight: false,
+      error: null,
+      inputValid: true,
+      connected: true,
+      interventionInputValid: true,
+    });
+    expect(missingDefinition.canRun).toBe(false);
+    expect(missingDefinition.invokeBlockedReason).toContain('workflow definition and version');
+
+    const invalidInput = WorkflowOperationsViewModelBuilder.build({
+      selectedSession: SESSION,
+      definitions: [WORKFLOW],
+      selectedWorkflowId: WORKFLOW.id,
+      selectedVersion: 'v1',
+      selectedVersionResource: VERSION,
+      currentRun: null,
+      logs: [],
+      events: [],
+      files: [],
+      loading: false,
+      actionInFlight: false,
+      error: null,
+      inputValid: false,
+      connected: true,
+      interventionInputValid: true,
+    });
+    expect(invalidInput.canRun).toBe(false);
+    expect(invalidInput.invokeBlockedReason).toBe('Run input must be valid JSON.');
   });
 
   it('enables intervention actions only for awaiting-input runs', () => {
@@ -83,6 +159,7 @@ describe('WorkflowOperationsViewModelBuilder', () => {
       actionInFlight: false,
       error: null,
       inputValid: true,
+      connected: true,
       interventionInputValid: true,
     });
 
