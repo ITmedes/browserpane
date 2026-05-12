@@ -1,5 +1,7 @@
 import type { WorkflowClient } from '../api/workflow-client';
 import type {
+  CreateWorkflowDefinitionCommand,
+  CreateWorkflowDefinitionVersionCommand,
   WorkflowDefinitionResource,
   WorkflowDefinitionVersionResource,
   WorkflowRunEventResource,
@@ -22,6 +24,40 @@ export type WorkflowRunSnapshot = {
   readonly files: readonly WorkflowRunProducedFileResource[];
 };
 
+const ADMIN_TEMPLATE_LABEL = 'bpane_admin_template';
+const ADMIN_HIDDEN_LABEL = 'bpane_admin_hidden';
+const BROWSERPANE_TOUR_TEMPLATE = 'browserpane-tour';
+const INCLUDE_HIDDEN_STORAGE_KEY = 'bpane.admin.showHiddenWorkflowDefinitions';
+
+const BROWSERPANE_TOUR_DEFINITION = {
+  name: 'BrowserPane Tour',
+  description: 'Example workflow that tours browserpane.io and the BrowserPane GitHub repository',
+  labels: {
+    [ADMIN_TEMPLATE_LABEL]: BROWSERPANE_TOUR_TEMPLATE,
+    source: 'bpane-admin-template',
+  },
+} satisfies CreateWorkflowDefinitionCommand;
+
+const BROWSERPANE_TOUR_VERSION = {
+  version: 'v1',
+  executor: 'playwright',
+  entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
+  source: {
+    kind: 'git',
+    repository_url: '/workspace',
+    ref: 'HEAD',
+    root_path: 'dev',
+  },
+  input_schema: {
+    type: 'object',
+    properties: {
+      scroll_delay_ms: { type: 'number' },
+      scroll_step_px: { type: 'number' },
+      max_scroll_steps: { type: 'number' },
+    },
+  },
+} satisfies CreateWorkflowDefinitionVersionCommand;
+
 export class WorkflowOperationsService {
   constructor(private readonly workflowClient: WorkflowClient) {}
 
@@ -29,12 +65,12 @@ export class WorkflowOperationsService {
     selectedWorkflowId: string,
     selectedVersion: string,
   ): Promise<WorkflowDefinitionSelection> {
-    const definitions = (await this.workflowClient.listDefinitions()).workflows;
+    const definitions = await this.loadVisibleDefinitions();
     const selected = definitions.find((entry) => entry.id === selectedWorkflowId)
       ?? definitions[0]
       ?? null;
     const workflowId = selected?.id ?? '';
-    const version = selected?.latest_version ?? selectedVersion;
+    const version = selected ? (selected.latest_version ?? selectedVersion) : '';
     return {
       definitions,
       selectedWorkflowId: workflowId,
@@ -101,5 +137,81 @@ export class WorkflowOperationsService {
 
   async downloadFile(file: WorkflowRunProducedFileResource): Promise<Blob> {
     return await this.workflowClient.downloadProducedFileContent(file);
+  }
+
+  async loadVisibleDefinitions(): Promise<readonly WorkflowDefinitionResource[]> {
+    const definitions = (await this.workflowClient.listDefinitions()).workflows;
+    const withTemplate = await this.ensureBrowserPaneTourTemplate(definitions);
+    if (includeHiddenWorkflowDefinitions()) {
+      return withTemplate;
+    }
+    return visibleWorkflowDefinitions(withTemplate);
+  }
+
+  async ensureBrowserPaneTourTemplate(
+    definitions: readonly WorkflowDefinitionResource[],
+  ): Promise<readonly WorkflowDefinitionResource[]> {
+    const existingTemplate = definitions.find(isBrowserPaneTourDefinition);
+    if (!existingTemplate) {
+      return [await this.createBrowserPaneTourTemplate(), ...definitions];
+    }
+    if (existingTemplate.latest_version) {
+      return definitions;
+    }
+    await this.workflowClient.createDefinitionVersion(
+      existingTemplate.id,
+      BROWSERPANE_TOUR_VERSION,
+    );
+    const refreshedTemplate = await this.workflowClient.getDefinition(existingTemplate.id);
+    return [
+      refreshedTemplate,
+      ...definitions.filter((definition) => definition.id !== existingTemplate.id),
+    ];
+  }
+
+  async createBrowserPaneTourTemplate(): Promise<WorkflowDefinitionResource> {
+    const definition = await this.workflowClient.createDefinition(BROWSERPANE_TOUR_DEFINITION);
+    await this.workflowClient.createDefinitionVersion(definition.id, BROWSERPANE_TOUR_VERSION);
+    return await this.workflowClient.getDefinition(definition.id);
+  }
+}
+
+function visibleWorkflowDefinitions(
+  definitions: readonly WorkflowDefinitionResource[],
+): readonly WorkflowDefinitionResource[] {
+  const visible = definitions.filter(isVisibleWorkflowDefinition);
+  const templates = visible.filter(isAdminTemplateDefinition);
+  const others = visible.filter((definition) => !isAdminTemplateDefinition(definition));
+  return [...templates.sort(compareByName), ...others];
+}
+
+function isVisibleWorkflowDefinition(definition: WorkflowDefinitionResource): boolean {
+  if (definition.labels[ADMIN_HIDDEN_LABEL] === 'true') {
+    return false;
+  }
+  if (isAdminTemplateDefinition(definition)) {
+    return Boolean(definition.latest_version);
+  }
+  const suite = definition.labels.suite ?? '';
+  return !suite.toLowerCase().includes('smoke') && !definition.name.toLowerCase().includes('smoke');
+}
+
+function isBrowserPaneTourDefinition(definition: WorkflowDefinitionResource): boolean {
+  return definition.labels[ADMIN_TEMPLATE_LABEL] === BROWSERPANE_TOUR_TEMPLATE;
+}
+
+function isAdminTemplateDefinition(definition: WorkflowDefinitionResource): boolean {
+  return Boolean(definition.labels[ADMIN_TEMPLATE_LABEL]);
+}
+
+function compareByName(left: WorkflowDefinitionResource, right: WorkflowDefinitionResource): number {
+  return left.name.localeCompare(right.name);
+}
+
+function includeHiddenWorkflowDefinitions(): boolean {
+  try {
+    return globalThis.sessionStorage?.getItem(INCLUDE_HIDDEN_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
   }
 }

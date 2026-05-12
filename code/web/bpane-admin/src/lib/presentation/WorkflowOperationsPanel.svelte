@@ -1,6 +1,6 @@
 <script lang="ts">
   import { base } from '$app/paths';
-  import { Download, Play, RefreshCw, Send, Unlock, XCircle } from 'lucide-svelte';
+  import { Download, Play, Plug, RefreshCw, Send, Unlock, XCircle } from 'lucide-svelte';
   import type { WorkflowOperationsViewModel } from './workflow-operations-view-model';
 
   type WorkflowOperationsPanelProps = {
@@ -12,6 +12,8 @@
     readonly onVersionChange: (version: string) => void;
     readonly onInputTextChange: (value: string) => void;
     readonly onInterventionInputChange: (value: string) => void;
+    readonly onCreateSession: () => void;
+    readonly onConnectSession: () => void;
     readonly onInvokeRun: () => void;
     readonly onRefreshRun: () => void;
     readonly onCancelRun: () => void;
@@ -46,7 +48,7 @@
   <div class="grid min-w-0 gap-3 rounded-[16px] bg-admin-cream/70 p-3">
     <div class="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(8rem,12rem)]">
       <label class="grid min-w-0 gap-1.5 text-sm font-bold text-admin-ink">
-        Definition
+        Template
         <select
           class="min-h-10 min-w-0 rounded-xl border border-admin-ink/14 bg-admin-cream px-3 text-admin-ink"
           data-testid="workflow-definition-select"
@@ -55,7 +57,7 @@
           onchange={(event) => props.onWorkflowChange(event.currentTarget.value)}
         >
           {#if props.viewModel.definitionOptions.length === 0}
-            <option value="">No workflow definitions</option>
+            <option value="">No workflow templates</option>
           {:else}
             {#each props.viewModel.definitionOptions as definition}
               <option value={definition.id}>{definition.label}</option>
@@ -90,7 +92,25 @@
       <button class="admin-button-primary" type="button" data-testid="workflow-refresh" disabled={!props.viewModel.canRefresh} onclick={props.onRefreshDefinitions}>
         <RefreshCw size={14} aria-hidden="true" /> Refresh
       </button>
-      <button class="admin-button-primary" type="button" data-testid="workflow-invoke" disabled={!props.viewModel.canRun} onclick={props.onInvokeRun}>
+      {#if props.viewModel.canCreateBaseline}
+        <button class="admin-button-primary" type="button" data-testid="workflow-create-session" onclick={props.onCreateSession}>
+          <Plug size={14} aria-hidden="true" /> Create session
+        </button>
+      {/if}
+      {#if props.viewModel.canConnectBaseline}
+        <button class="admin-button-primary" type="button" data-testid="workflow-connect-session" onclick={props.onConnectSession}>
+          <Plug size={14} aria-hidden="true" /> Connect session
+        </button>
+      {/if}
+      <button
+        class="admin-button-primary"
+        type="button"
+        data-testid="workflow-invoke"
+        disabled={!props.viewModel.canRun}
+        title={props.viewModel.invokeBlockedReason ?? 'Invoke workflow run'}
+        aria-describedby={props.viewModel.invokeBlockedReason ? 'workflow-invoke-disabled-reason' : undefined}
+        onclick={props.onInvokeRun}
+      >
         <Play size={14} aria-hidden="true" /> Invoke run
       </button>
       <button class="admin-button-primary" type="button" data-testid="workflow-run-refresh" disabled={!props.viewModel.canRefreshRun} onclick={props.onRefreshRun}>
@@ -105,6 +125,15 @@
         </a>
       {/if}
     </div>
+    {#if props.viewModel.invokeBlockedReason}
+      <p
+        class="m-0 rounded-xl border border-admin-warm/20 bg-admin-warm/10 px-3 py-2 text-sm font-bold text-admin-ink"
+        id="workflow-invoke-disabled-reason"
+        data-testid="workflow-invoke-disabled-reason"
+      >
+        {props.viewModel.invokeBlockedReason}
+      </p>
+    {/if}
   </div>
 
   <div class="grid min-w-0 grid-cols-2 gap-2 xl:grid-cols-4 max-[640px]:grid-cols-1">

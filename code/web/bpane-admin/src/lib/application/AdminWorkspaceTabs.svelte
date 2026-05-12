@@ -180,7 +180,13 @@
       {:else if activePanel.id === 'logs'}
         <LogsSurface entries={props.logEntries} onClear={props.onClearLogs} />
       {:else if activePanel.id === 'workflows'}
-        <WorkflowOperationsSurface workflowClient={props.workflowClient} selectedSession={props.selectedSession} />
+        <WorkflowOperationsSurface
+          workflowClient={props.workflowClient}
+          selectedSession={props.selectedSession}
+          connected={props.browserConnected}
+          onCreateSession={props.onCreateSession}
+          onConnectSession={props.onJoinSelectedSession}
+        />
       {:else}
         <FeaturePlaceholderPanel panel={activePanel} />
       {/if}
