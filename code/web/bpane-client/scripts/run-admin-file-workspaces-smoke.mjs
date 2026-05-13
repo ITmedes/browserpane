@@ -5,7 +5,6 @@ import process from 'node:process';
 import { chromium } from 'playwright-core';
 import { ensureAdminLoggedIn, getAdminAccessToken } from './admin-smoke-lib.mjs';
 import {
-  DEFAULTS,
   createLogger,
   deleteSession,
   fetchJson,
