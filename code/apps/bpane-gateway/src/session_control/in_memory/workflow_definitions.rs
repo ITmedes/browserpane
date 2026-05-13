@@ -145,6 +145,30 @@ impl InMemorySessionStore {
             .cloned())
     }
 
+    pub(in crate::session_control) async fn list_workflow_definition_versions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workflow_definition_id: Uuid,
+    ) -> Result<Vec<StoredWorkflowDefinitionVersion>, SessionStoreError> {
+        if self
+            .get_workflow_definition_for_owner(principal, workflow_definition_id)
+            .await?
+            .is_none()
+        {
+            return Ok(Vec::new());
+        }
+        let mut versions = self
+            .workflow_definition_versions
+            .lock()
+            .await
+            .iter()
+            .filter(|stored| stored.workflow_definition_id == workflow_definition_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        versions.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+        Ok(versions)
+    }
+
     pub(in crate::session_control) async fn get_workflow_definition_version_by_id(
         &self,
         id: Uuid,

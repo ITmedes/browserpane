@@ -98,6 +98,11 @@ pub struct WorkflowDefinitionListResponse {
     pub workflows: Vec<WorkflowDefinitionResource>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WorkflowDefinitionVersionListResponse {
+    pub versions: Vec<WorkflowDefinitionVersionResource>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct WorkflowDefinitionVersionResource {
     pub id: Uuid,
