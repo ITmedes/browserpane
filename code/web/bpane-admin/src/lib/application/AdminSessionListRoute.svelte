@@ -95,6 +95,7 @@
       </div>
       <div class="admin-actions">
         <a class="admin-button-ghost" href={`${base}/`}>Live workspace</a>
+        <a class="admin-button-ghost" href={`${base}/files/workspaces`}>File workspaces</a>
         <button
           class="admin-button-primary"
           type="button"

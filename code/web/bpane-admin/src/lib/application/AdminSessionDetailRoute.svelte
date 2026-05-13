@@ -2,11 +2,16 @@
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import { ControlApiError, type ControlClient } from '../api/control-client';
-  import type { SessionFileResource, SessionResource } from '../api/control-types';
+  import type {
+    SessionFileBindingResource,
+    SessionFileResource,
+    SessionResource,
+  } from '../api/control-types';
   import type { SessionRecordingPlaybackResource, SessionRecordingResource } from '../api/recording-types';
   import type { SessionStatus } from '../api/session-status-types';
   import SessionDetailPanel from '../presentation/SessionDetailPanel.svelte';
   import { SessionViewModelBuilder } from '../presentation/session-view-model';
+  import SessionFileBindingsSurface from './SessionFileBindingsSurface.svelte';
 
   type AdminSessionDetailRouteProps = {
     readonly controlClient: ControlClient;
@@ -17,6 +22,7 @@
   let session = $state<SessionResource | null>(null);
   let status = $state<SessionStatus | null>(null);
   let files = $state<readonly SessionFileResource[]>([]);
+  let bindings = $state<readonly SessionFileBindingResource[]>([]);
   let recordings = $state<readonly SessionRecordingResource[]>([]);
   let playback = $state<SessionRecordingPlaybackResource | null>(null);
   let loading = $state(false);
@@ -57,8 +63,9 @@
   }
 
   async function loadRelatedResources(): Promise<void> {
-    const [fileResult, recordingResult, playbackResult] = await Promise.allSettled([
+    const [fileResult, bindingResult, recordingResult, playbackResult] = await Promise.allSettled([
       controlClient.listSessionFiles(sessionId),
+      controlClient.listSessionFileBindings(sessionId),
       controlClient.listSessionRecordings(sessionId),
       controlClient.getSessionRecordingPlayback(sessionId),
     ]);
@@ -68,6 +75,12 @@
     } else {
       files = [];
       errors.push(errorMessage(fileResult.reason, 'Session file summary failed'));
+    }
+    if (bindingResult.status === 'fulfilled') {
+      bindings = bindingResult.value.bindings;
+    } else {
+      bindings = [];
+      errors.push(errorMessage(bindingResult.reason, 'Session file binding summary failed'));
     }
     if (recordingResult.status === 'fulfilled') {
       recordings = recordingResult.value.recordings;
@@ -156,6 +169,7 @@
   const readyRecordingCount = $derived(recordings.filter((entry) => entry.state === 'ready').length);
   const activeRecordingCount = $derived(recordings.filter((entry) => entry.state === 'recording').length);
   const fileBytes = $derived(files.reduce((total, file) => total + file.byte_count, 0));
+  const bindingBytes = $derived(bindings.reduce((total, binding) => total + binding.byte_count, 0));
 </script>
 
 <section class="grid gap-5" data-testid="session-inspector-detail">
@@ -169,6 +183,7 @@
       </div>
       <div class="admin-actions">
         <a class="admin-button-ghost" href={`${base}/sessions`}>Sessions</a>
+        <a class="admin-button-ghost" href={`${base}/files/workspaces`}>File workspaces</a>
         <a class="admin-button-ghost" href={`${base}/`}>Live workspace</a>
         <button
           class="admin-button-primary"
@@ -206,13 +221,21 @@
       />
     </section>
 
-    <section class="grid gap-3 md:grid-cols-3" aria-label="Related session resources">
+    <section class="grid gap-3 md:grid-cols-4" aria-label="Related session resources">
       <article class="rounded-2xl border border-admin-ink/10 bg-admin-panel/82 p-4">
         <p class="admin-eyebrow">Runtime files</p>
         <strong class="block text-2xl text-admin-ink" data-testid="session-inspector-files-count">
           {files.length}
         </strong>
         <p class="m-0 mt-2 text-sm text-admin-ink/62">{byteLabel(fileBytes)} retained runtime data</p>
+      </article>
+
+      <article class="rounded-2xl border border-admin-ink/10 bg-admin-panel/82 p-4">
+        <p class="admin-eyebrow">Input bindings</p>
+        <strong class="block text-2xl text-admin-ink" data-testid="session-inspector-binding-count">
+          {bindings.length}
+        </strong>
+        <p class="m-0 mt-2 text-sm text-admin-ink/62">{byteLabel(bindingBytes)} mounted workspace inputs</p>
       </article>
 
       <article class="rounded-2xl border border-admin-ink/10 bg-admin-panel/82 p-4">
@@ -239,5 +262,16 @@
     {#if relatedError}
       <p class="admin-error" data-testid="session-inspector-related-error">{relatedError}</p>
     {/if}
+
+    <SessionFileBindingsSurface
+      {controlClient}
+      {sessionId}
+      onBindingCountChange={(count) => {
+        if (count === bindings.length) {
+          return;
+        }
+        void loadRelatedResources();
+      }}
+    />
   {/if}
 </section>
