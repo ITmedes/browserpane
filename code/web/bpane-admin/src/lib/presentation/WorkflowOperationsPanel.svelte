@@ -27,6 +27,10 @@
   function runDetailHref(runId: string): string {
     return `${base}/workflow-runs/${encodeURIComponent(runId)}`;
   }
+
+  function workflowDetailHref(workflowId: string): string {
+    return `${base}/workflows/${encodeURIComponent(workflowId)}`;
+  }
 </script>
 
 <section class="grid min-w-0 gap-4" aria-label="Workflow operations">
@@ -92,6 +96,14 @@
       <button class="admin-button-primary" type="button" data-testid="workflow-refresh" disabled={!props.viewModel.canRefresh} onclick={props.onRefreshDefinitions}>
         <RefreshCw size={14} aria-hidden="true" /> Refresh
       </button>
+      <a class="admin-button-ghost" data-testid="workflow-catalog-link" href={`${base}/workflows`}>
+        Catalog
+      </a>
+      {#if props.viewModel.selectedWorkflowId}
+        <a class="admin-button-ghost" data-testid="workflow-definition-detail-link" href={workflowDetailHref(props.viewModel.selectedWorkflowId)}>
+          Template detail
+        </a>
+      {/if}
       {#if props.viewModel.canCreateBaseline}
         <button class="admin-button-primary" type="button" data-testid="workflow-create-session" onclick={props.onCreateSession}>
           <Plug size={14} aria-hidden="true" /> Create session

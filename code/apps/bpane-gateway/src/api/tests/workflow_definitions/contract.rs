@@ -104,6 +104,22 @@ async fn creates_workflow_definitions_versions_and_workflow_runs_with_default_se
         .unwrap();
     assert_eq!(get_version.status(), StatusCode::OK);
 
+    let list_versions = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_versions.status(), StatusCode::OK);
+    let versions = response_json(list_versions).await;
+    assert_eq!(versions["versions"].as_array().unwrap().len(), 1);
+    assert_eq!(versions["versions"][0]["version"], "v1");
+
     let create_run = app
         .clone()
         .oneshot(

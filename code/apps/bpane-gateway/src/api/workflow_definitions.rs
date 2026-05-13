@@ -14,7 +14,7 @@ pub(super) fn workflow_definition_routes() -> Router<Arc<ApiState>> {
         )
         .route(
             "/api/v1/workflows/{workflow_id}/versions",
-            post(create_workflow_definition_version),
+            post(create_workflow_definition_version).get(list_workflow_definition_versions),
         )
         .route(
             "/api/v1/workflows/{workflow_id}/versions/{version}",
@@ -85,6 +85,38 @@ async fn get_workflow_definition(
             )
         })?;
     Ok(Json(workflow.to_resource()))
+}
+
+async fn list_workflow_definition_versions(
+    headers: HeaderMap,
+    Path(workflow_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowDefinitionVersionListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workflow = state
+        .session_store
+        .get_workflow_definition_for_owner(&principal, workflow_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow definition {workflow_id} not found"),
+                }),
+            )
+        })?;
+    let versions = state
+        .session_store
+        .list_workflow_definition_versions_for_owner(&principal, workflow.id)
+        .await
+        .map_err(map_session_store_error)?
+        .into_iter()
+        .map(|version| version.to_resource())
+        .collect();
+    Ok(Json(WorkflowDefinitionVersionListResponse { versions }))
 }
 
 async fn create_workflow_definition_version(

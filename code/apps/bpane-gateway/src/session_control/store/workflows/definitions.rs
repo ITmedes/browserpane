@@ -94,6 +94,25 @@ impl SessionStore {
         }
     }
 
+    pub async fn list_workflow_definition_versions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workflow_definition_id: Uuid,
+    ) -> Result<Vec<StoredWorkflowDefinitionVersion>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .list_workflow_definition_versions_for_owner(principal, workflow_definition_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .list_workflow_definition_versions_for_owner(principal, workflow_definition_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn get_workflow_definition_version_by_id(
         &self,
         id: Uuid,

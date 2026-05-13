@@ -169,6 +169,48 @@ impl WorkflowDefinitionRepository<'_> {
             .transpose()
     }
 
+    pub(in crate::session_control) async fn list_workflow_definition_versions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workflow_definition_id: Uuid,
+    ) -> Result<Vec<StoredWorkflowDefinitionVersion>, SessionStoreError> {
+        let query = format!(
+            r#"
+            SELECT
+                {WORKFLOW_DEFINITION_VERSION_COLUMNS_FROM_VERSION_ALIAS}
+            FROM control_workflow_definition_versions version
+            JOIN control_workflow_definitions workflow
+              ON workflow.id = version.workflow_definition_id
+            WHERE version.workflow_definition_id = $1
+              AND workflow.owner_subject = $2
+              AND workflow.owner_issuer = $3
+            ORDER BY version.created_at DESC
+            "#
+        );
+        let rows = self
+            .store
+            .db
+            .client()
+            .await?
+            .query(
+                &query,
+                &[
+                    &workflow_definition_id,
+                    &principal.subject,
+                    &principal.issuer,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list workflow definition versions: {error}"
+                ))
+            })?;
+        rows.iter()
+            .map(row_to_stored_workflow_definition_version)
+            .collect()
+    }
+
     pub(in crate::session_control) async fn get_workflow_definition_version_by_id(
         &self,
         id: Uuid,

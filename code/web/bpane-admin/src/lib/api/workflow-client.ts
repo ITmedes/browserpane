@@ -15,6 +15,7 @@ import type {
   SubmitWorkflowRunInputCommand,
   WorkflowDefinitionListResponse,
   WorkflowDefinitionResource,
+  WorkflowDefinitionVersionListResponse,
   WorkflowDefinitionVersionResource,
   WorkflowRunEventListResponse,
   WorkflowRunListResponse,
@@ -57,6 +58,14 @@ export class WorkflowClient {
   async getDefinition(workflowId: string): Promise<WorkflowDefinitionResource> {
     const payload = await this.#request('GET', `/api/v1/workflows/${encodeURIComponent(workflowId)}`);
     return WorkflowMapper.toDefinition(payload);
+  }
+
+  async listDefinitionVersions(workflowId: string): Promise<WorkflowDefinitionVersionListResponse> {
+    const payload = await this.#request(
+      'GET',
+      `/api/v1/workflows/${encodeURIComponent(workflowId)}/versions`,
+    );
+    return WorkflowMapper.toDefinitionVersionList(payload);
   }
 
   async createDefinitionVersion(
