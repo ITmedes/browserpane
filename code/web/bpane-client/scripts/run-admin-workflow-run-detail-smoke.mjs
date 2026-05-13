@@ -59,7 +59,7 @@ async function run() {
 
     log('Verifying workflow run list and detail routes.');
     await verifyRunList(page, options, runResource.id);
-    await verifyRunDetail(page, options, runResource.id, session.id);
+    await verifyRunDetail(page, options, runResource.id, session.id, workflow.id);
     await page.getByTestId('workflow-run-detail-operator-input').fill('{\n  "approved": true\n}');
     await page.getByTestId('workflow-run-detail-submit-input').click();
     await waitForDetailState(page, options, 'running');
@@ -128,7 +128,7 @@ async function verifyRunList(page, options, runId) {
   await page.waitForURL(/\/workflow-runs\/[^/]+$/, { timeout: options.connectTimeoutMs });
 }
 
-async function verifyRunDetail(page, options, runId, sessionId) {
+async function verifyRunDetail(page, options, runId, sessionId, workflowId) {
   await waitForDetailUrl(page, options, runId);
   await page.getByTestId('workflow-run-inspector-detail').waitFor({
     state: 'visible',
@@ -145,6 +145,10 @@ async function verifyRunDetail(page, options, runId, sessionId) {
   const sessionHref = await page.getByTestId('workflow-run-session-link').getAttribute('href');
   if (!sessionHref?.includes(`/sessions/${sessionId}`)) {
     throw new Error(`Expected workflow run session link for ${sessionId}, got ${sessionHref}`);
+  }
+  const workflowHref = await page.getByTestId('workflow-run-definition-link').getAttribute('href');
+  if (!workflowHref?.includes(`/workflows/${workflowId}`)) {
+    throw new Error(`Expected workflow run definition link for ${workflowId}, got ${workflowHref}`);
   }
 }
 

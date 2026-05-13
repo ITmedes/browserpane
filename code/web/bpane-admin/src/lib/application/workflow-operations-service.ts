@@ -9,6 +9,13 @@ import type {
   WorkflowRunProducedFileResource,
   WorkflowRunResource,
 } from '../api/workflow-types';
+import {
+  ADMIN_TEMPLATE_LABEL,
+  BROWSERPANE_TOUR_TEMPLATE,
+  includeHiddenWorkflowDefinitions,
+  isBrowserPaneTourDefinition,
+  visibleWorkflowDefinitions,
+} from './workflow-definition-visibility';
 
 export type WorkflowDefinitionSelection = {
   readonly definitions: readonly WorkflowDefinitionResource[];
@@ -23,11 +30,6 @@ export type WorkflowRunSnapshot = {
   readonly logs: readonly WorkflowRunLogResource[];
   readonly files: readonly WorkflowRunProducedFileResource[];
 };
-
-const ADMIN_TEMPLATE_LABEL = 'bpane_admin_template';
-const ADMIN_HIDDEN_LABEL = 'bpane_admin_hidden';
-const BROWSERPANE_TOUR_TEMPLATE = 'browserpane-tour';
-const INCLUDE_HIDDEN_STORAGE_KEY = 'bpane.admin.showHiddenWorkflowDefinitions';
 
 const BROWSERPANE_TOUR_DEFINITION = {
   name: 'BrowserPane Tour',
@@ -173,45 +175,5 @@ export class WorkflowOperationsService {
     const definition = await this.workflowClient.createDefinition(BROWSERPANE_TOUR_DEFINITION);
     await this.workflowClient.createDefinitionVersion(definition.id, BROWSERPANE_TOUR_VERSION);
     return await this.workflowClient.getDefinition(definition.id);
-  }
-}
-
-function visibleWorkflowDefinitions(
-  definitions: readonly WorkflowDefinitionResource[],
-): readonly WorkflowDefinitionResource[] {
-  const visible = definitions.filter(isVisibleWorkflowDefinition);
-  const templates = visible.filter(isAdminTemplateDefinition);
-  const others = visible.filter((definition) => !isAdminTemplateDefinition(definition));
-  return [...templates.sort(compareByName), ...others];
-}
-
-function isVisibleWorkflowDefinition(definition: WorkflowDefinitionResource): boolean {
-  if (definition.labels[ADMIN_HIDDEN_LABEL] === 'true') {
-    return false;
-  }
-  if (isAdminTemplateDefinition(definition)) {
-    return Boolean(definition.latest_version);
-  }
-  const suite = definition.labels.suite ?? '';
-  return !suite.toLowerCase().includes('smoke') && !definition.name.toLowerCase().includes('smoke');
-}
-
-function isBrowserPaneTourDefinition(definition: WorkflowDefinitionResource): boolean {
-  return definition.labels[ADMIN_TEMPLATE_LABEL] === BROWSERPANE_TOUR_TEMPLATE;
-}
-
-function isAdminTemplateDefinition(definition: WorkflowDefinitionResource): boolean {
-  return Boolean(definition.labels[ADMIN_TEMPLATE_LABEL]);
-}
-
-function compareByName(left: WorkflowDefinitionResource, right: WorkflowDefinitionResource): number {
-  return left.name.localeCompare(right.name);
-}
-
-function includeHiddenWorkflowDefinitions(): boolean {
-  try {
-    return globalThis.sessionStorage?.getItem(INCLUDE_HIDDEN_STORAGE_KEY) === 'true';
-  } catch {
-    return false;
   }
 }

@@ -22,6 +22,7 @@
     "smoke:mcp-session-endpoints": "node scripts/run-mcp-session-endpoints-smoke.mjs",
     "smoke:admin-recording": "node scripts/run-admin-recording-smoke.mjs",
     "smoke:admin-workflow": "node scripts/run-admin-workflow-smoke.mjs",
+    "smoke:admin-workflow-catalog": "node scripts/run-admin-workflow-catalog-smoke.mjs",
     "smoke:admin-workflow-run-detail": "node scripts/run-admin-workflow-run-detail-smoke.mjs",
     "smoke:admin-browserpane-tour": "node scripts/run-admin-browserpane-tour-workflow.mjs",
     "smoke:admin-session-detail": "node scripts/run-admin-session-detail-smoke.mjs",

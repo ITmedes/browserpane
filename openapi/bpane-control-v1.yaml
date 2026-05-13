@@ -324,6 +324,23 @@ paths:
   /api/v1/workflows/{workflow_id}/versions:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
+    get:
+      tags: [Workflows]
+      summary: List immutable versions for one workflow definition
+      operationId: listWorkflowDefinitionVersions
+      responses:
+        '200':
+          description: Workflow definition version list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionVersionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
     post:
       tags: [Workflows]
       summary: Create an immutable workflow definition version
@@ -3082,6 +3099,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkflowDefinitionResource'
+    WorkflowDefinitionVersionListResponse:
+      type: object
+      required: [versions]
+      properties:
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowDefinitionVersionResource'
     CreateWorkflowDefinitionVersionRequest:
       type: object
       additionalProperties: false
