@@ -17,6 +17,7 @@
     "smoke:admin-realtime": "node scripts/run-admin-realtime-smoke.mjs",
     "smoke:admin-event-reconnect": "node scripts/run-admin-event-reconnect-smoke.mjs",
     "smoke:admin-session-files": "node scripts/run-admin-session-files-smoke.mjs",
+    "smoke:admin-file-workspaces": "node scripts/run-admin-file-workspaces-smoke.mjs",
     "smoke:admin-metrics": "node scripts/run-admin-metrics-smoke.mjs",
     "smoke:admin-mcp": "node scripts/run-admin-mcp-smoke.mjs",
     "smoke:mcp-session-endpoints": "node scripts/run-mcp-session-endpoints-smoke.mjs",
