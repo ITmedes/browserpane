@@ -11,6 +11,9 @@ type AuthenticatedRequestOptions = {
   readonly path: string;
   readonly body?: unknown;
   readonly accept?: string;
+  readonly bodyMode?: 'json' | 'raw' | undefined;
+  readonly contentType?: string | null | undefined;
+  readonly headers?: Readonly<Record<string, string>> | undefined;
 };
 
 export class ControlApiError extends Error {
@@ -18,7 +21,7 @@ export class ControlApiError extends Error {
     readonly status: number,
     readonly body: string,
   ) {
-    super(`BrowserPane control API returned HTTP ${status}`);
+    super(`BrowserPane control API returned HTTP ${status}${body ? `: ${body}` : ''}`);
   }
 }
 
@@ -27,11 +30,19 @@ export async function sendAuthenticatedRequest(options: AuthenticatedRequestOpti
   const headers: Record<string, string> = {
     accept: options.accept ?? 'application/json',
     authorization: `Bearer ${accessToken}`,
+    ...(options.headers ?? {}),
   };
   const init: RequestInit = { method: options.method, headers };
   if (options.body !== undefined) {
-    headers['content-type'] = 'application/json';
-    init.body = JSON.stringify(options.body);
+    if (options.bodyMode === 'raw') {
+      if (options.contentType !== null) {
+        headers['content-type'] = options.contentType ?? 'application/octet-stream';
+      }
+      init.body = options.body as BodyInit;
+    } else {
+      headers['content-type'] = options.contentType ?? 'application/json';
+      init.body = JSON.stringify(options.body);
+    }
   }
 
   const response = await options.fetchImpl(new URL(options.path, options.baseUrl), init);
