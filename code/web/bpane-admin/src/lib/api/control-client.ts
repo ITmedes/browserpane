@@ -1,4 +1,5 @@
 import { ControlSessionMapper } from './control-session-mapper';
+import { ControlFileWorkspaceMapper } from './control-file-workspace-mapper';
 import { ControlSessionFileMapper } from './control-session-file-mapper';
 import { ControlSessionStatusMapper } from './control-session-status-mapper';
 import { RecordingMapper } from './recording-mapper';
@@ -10,12 +11,21 @@ import {
 } from './authenticated-api';
 import type {
   CreateSessionCommand,
+  CreateFileWorkspaceCommand,
+  CreateSessionFileBindingCommand,
+  FileWorkspaceFileListResponse,
+  FileWorkspaceFileResource,
+  FileWorkspaceListResponse,
+  FileWorkspaceResource,
   SessionAccessTokenResponse,
+  SessionFileBindingListResponse,
+  SessionFileBindingResource,
   SessionFileListResponse,
   SessionFileResource,
   SessionListResponse,
   SessionResource,
   SetAutomationDelegateCommand,
+  UploadFileWorkspaceFileCommand,
 } from './control-types';
 import type {
   SessionRecordingListResponse,
@@ -143,6 +153,136 @@ export class ControlClient {
     return await response.blob();
   }
 
+  async listFileWorkspaces(): Promise<FileWorkspaceListResponse> {
+    const payload = await this.#request('GET', '/api/v1/file-workspaces');
+    return ControlFileWorkspaceMapper.toWorkspaceList(payload);
+  }
+
+  async createFileWorkspace(command: CreateFileWorkspaceCommand): Promise<FileWorkspaceResource> {
+    const payload = await this.#request('POST', '/api/v1/file-workspaces', {
+      ...command,
+      labels: command.labels ?? {},
+    });
+    return ControlFileWorkspaceMapper.toWorkspace(payload);
+  }
+
+  async getFileWorkspace(workspaceId: string): Promise<FileWorkspaceResource> {
+    const payload = await this.#request(
+      'GET',
+      `/api/v1/file-workspaces/${encodeURIComponent(workspaceId)}`,
+    );
+    return ControlFileWorkspaceMapper.toWorkspace(payload);
+  }
+
+  async listFileWorkspaceFiles(workspaceId: string): Promise<FileWorkspaceFileListResponse> {
+    const payload = await this.#request(
+      'GET',
+      `/api/v1/file-workspaces/${encodeURIComponent(workspaceId)}/files`,
+    );
+    return ControlFileWorkspaceMapper.toWorkspaceFileList(payload);
+  }
+
+  async uploadFileWorkspaceFile(
+    workspaceId: string,
+    command: UploadFileWorkspaceFileCommand,
+  ): Promise<FileWorkspaceFileResource> {
+    const headers: Record<string, string> = {
+      'x-bpane-file-name': command.fileName,
+    };
+    if (command.provenance !== undefined && command.provenance !== null) {
+      headers['x-bpane-file-provenance'] = JSON.stringify(command.provenance);
+    }
+    const response = await this.#send(
+      'POST',
+      `/api/v1/file-workspaces/${encodeURIComponent(workspaceId)}/files`,
+      command.content,
+      'application/json',
+      {
+        bodyMode: 'raw',
+        contentType: command.mediaType ?? 'application/octet-stream',
+        headers,
+      },
+    );
+    return ControlFileWorkspaceMapper.toWorkspaceFile(await response.json());
+  }
+
+  async getFileWorkspaceFile(
+    workspaceId: string,
+    fileId: string,
+  ): Promise<FileWorkspaceFileResource> {
+    const payload = await this.#request(
+      'GET',
+      `/api/v1/file-workspaces/${encodeURIComponent(workspaceId)}/files/${encodeURIComponent(fileId)}`,
+    );
+    return ControlFileWorkspaceMapper.toWorkspaceFile(payload);
+  }
+
+  async deleteFileWorkspaceFile(
+    workspaceId: string,
+    fileId: string,
+  ): Promise<FileWorkspaceFileResource> {
+    const payload = await this.#request(
+      'DELETE',
+      `/api/v1/file-workspaces/${encodeURIComponent(workspaceId)}/files/${encodeURIComponent(fileId)}`,
+    );
+    return ControlFileWorkspaceMapper.toWorkspaceFile(payload);
+  }
+
+  async downloadFileWorkspaceFileContent(file: FileWorkspaceFileResource): Promise<Blob> {
+    const response = await this.#send('GET', file.content_path, undefined, '*/*');
+    return await response.blob();
+  }
+
+  async listSessionFileBindings(sessionId: string): Promise<SessionFileBindingListResponse> {
+    const payload = await this.#request(
+      'GET',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/file-bindings`,
+    );
+    return ControlFileWorkspaceMapper.toSessionFileBindingList(payload);
+  }
+
+  async createSessionFileBinding(
+    sessionId: string,
+    command: CreateSessionFileBindingCommand,
+  ): Promise<SessionFileBindingResource> {
+    const payload = await this.#request(
+      'POST',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/file-bindings`,
+      {
+        ...command,
+        labels: command.labels ?? {},
+      },
+    );
+    return ControlFileWorkspaceMapper.toSessionFileBinding(payload);
+  }
+
+  async getSessionFileBinding(
+    sessionId: string,
+    bindingId: string,
+  ): Promise<SessionFileBindingResource> {
+    const payload = await this.#request(
+      'GET',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/file-bindings/${encodeURIComponent(bindingId)}`,
+    );
+    return ControlFileWorkspaceMapper.toSessionFileBinding(payload);
+  }
+
+  async removeSessionFileBinding(
+    sessionId: string,
+    bindingId: string,
+  ): Promise<SessionFileBindingResource> {
+    const payload = await this.#request(
+      'DELETE',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/file-bindings/${encodeURIComponent(bindingId)}`,
+    );
+    return ControlFileWorkspaceMapper.toSessionFileBinding(payload);
+  }
+
+  async downloadSessionFileBindingContent(binding: SessionFileBindingResource): Promise<Blob> {
+    const response = await this.#send('GET', binding.content_path, undefined, '*/*');
+    return await response.blob();
+  }
+
   async listSessionRecordings(sessionId: string): Promise<SessionRecordingListResponse> {
     const payload = await this.#request(
       'GET',
@@ -176,7 +316,17 @@ export class ControlClient {
     return await response.json();
   }
 
-  async #send(method: string, path: string, body?: unknown, accept = 'application/json'): Promise<Response> {
+  async #send(
+    method: string,
+    path: string,
+    body?: unknown,
+    accept = 'application/json',
+    options: {
+      readonly bodyMode?: 'json' | 'raw';
+      readonly contentType?: string | null;
+      readonly headers?: Readonly<Record<string, string>>;
+    } = {},
+  ): Promise<Response> {
     return await sendAuthenticatedRequest({
       baseUrl: this.#baseUrl,
       accessTokenProvider: this.#accessTokenProvider,
@@ -186,6 +336,9 @@ export class ControlClient {
       path,
       body,
       accept,
+      bodyMode: options.bodyMode,
+      contentType: options.contentType,
+      headers: options.headers,
     });
   }
 }

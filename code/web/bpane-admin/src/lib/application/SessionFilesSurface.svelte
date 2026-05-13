@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import type { ControlClient } from '../api/control-client';
   import type { SessionFileResource, SessionResource } from '../api/control-types';
   import SessionFileCard from '../presentation/SessionFileCard.svelte';
@@ -103,15 +104,18 @@
     <span class="text-sm font-bold text-admin-ink/68">
       {session ? `${files.length} session file${files.length === 1 ? '' : 's'}` : 'No session selected'}
     </span>
-    <button
-      class="admin-button-primary"
-      type="button"
-      data-testid="session-files-refresh"
-      disabled={!session || loading || Boolean(downloadingFileId)}
-      onclick={() => void loadFiles()}
-    >
-      {loading ? 'Loading...' : 'Refresh files'}
-    </button>
+    <div class="flex flex-wrap gap-2">
+      <a class="admin-button-ghost" href={`${base}/files/workspaces`}>File workspaces</a>
+      <button
+        class="admin-button-primary"
+        type="button"
+        data-testid="session-files-refresh"
+        disabled={!session || loading || Boolean(downloadingFileId)}
+        onclick={() => void loadFiles()}
+      >
+        {loading ? 'Loading...' : 'Refresh files'}
+      </button>
+    </div>
   </div>
 
   {#if error}
