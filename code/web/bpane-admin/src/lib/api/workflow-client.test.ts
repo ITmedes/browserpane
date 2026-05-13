@@ -109,13 +109,21 @@ describe('WorkflowClient', () => {
   });
 
   it('encodes workflow and version identifiers', async () => {
-    const fetchImpl = jsonFetch(VERSION);
+    const fetchImpl = jsonFetchSequence([{ versions: [VERSION] }, VERSION]);
     const client = newClient(fetchImpl);
 
+    const versions = await client.listDefinitionVersions('workflow/with/slash');
     const response = await client.getDefinitionVersion('workflow/with/slash', 'v1/candidate');
 
+    expect(versions.versions[0]?.version).toBe('v1');
     expect(response.executor).toBe('manual');
-    expect(fetchImpl).toHaveBeenCalledWith(
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      new URL('http://localhost:8932/api/v1/workflows/workflow%2Fwith%2Fslash/versions'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
       new URL('http://localhost:8932/api/v1/workflows/workflow%2Fwith%2Fslash/versions/v1%2Fcandidate'),
       expect.objectContaining({ method: 'GET' }),
     );

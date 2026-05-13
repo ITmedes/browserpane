@@ -164,6 +164,10 @@
   function errorMessage(value: unknown, fallback: string): string {
     return value instanceof Error ? value.message : fallback;
   }
+
+  function workflowHref(workflowId: string): string {
+    return `${base}/workflows/${encodeURIComponent(workflowId)}`;
+  }
 </script>
 
 <section class="grid gap-5" data-testid="workflow-run-inspector-detail">
@@ -178,6 +182,7 @@
       <div class="admin-actions">
         <a class="admin-button-ghost" href={`${base}/workflow-runs`}>Workflow runs</a>
         {#if run}
+          <a class="admin-button-ghost" data-testid="workflow-run-definition-link" href={workflowHref(run.workflow_definition_id)}>Workflow</a>
           <a class="admin-button-ghost" data-testid="workflow-run-session-link" href={`${base}/sessions/${encodeURIComponent(run.session_id)}`}>Session</a>
         {/if}
         <a class="admin-button-ghost" href={`${base}/`}>Live workspace</a>
@@ -220,7 +225,7 @@
     <section class="admin-panel mt-0 grid gap-4">
       <div class="grid gap-3 lg:grid-cols-2">
         <div class="grid min-w-0 gap-2 text-sm text-admin-ink/72">
-          <span><strong>Workflow:</strong> <code class="admin-code-pill">{run.workflow_definition_id}</code></span>
+          <span><strong>Workflow:</strong> <a class="admin-code-pill text-admin-ink no-underline" href={workflowHref(run.workflow_definition_id)}>{run.workflow_definition_id}</a></span>
           <span><strong>Version id:</strong> <code class="admin-code-pill">{run.workflow_definition_version_id}</code></span>
           <span><strong>Session:</strong> <code class="admin-code-pill" data-testid="workflow-run-detail-session-id">{run.session_id}</code></span>
           <span><strong>Automation task:</strong> <code class="admin-code-pill">{run.automation_task_id}</code></span>

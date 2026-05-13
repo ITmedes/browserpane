@@ -12,6 +12,16 @@ export type WorkflowDefinitionListResponse = {
   readonly workflows: readonly WorkflowDefinitionResource[];
 };
 
+export type WorkflowGitSourceResource = {
+  readonly kind: 'git';
+  readonly repository_url: string;
+  readonly ref?: string | null;
+  readonly resolved_commit?: string | null;
+  readonly root_path?: string | null;
+};
+
+export type WorkflowSourceResource = WorkflowGitSourceResource;
+
 export type CreateWorkflowDefinitionCommand = {
   readonly name: string;
   readonly description?: string;
@@ -24,7 +34,7 @@ export type WorkflowDefinitionVersionResource = {
   readonly version: string;
   readonly executor: string;
   readonly entrypoint: string;
-  readonly source?: unknown;
+  readonly source?: WorkflowSourceResource | null;
   readonly input_schema?: unknown;
   readonly output_schema?: unknown;
   readonly default_session?: unknown;
@@ -32,6 +42,10 @@ export type WorkflowDefinitionVersionResource = {
   readonly allowed_extension_ids: readonly string[];
   readonly allowed_file_workspace_ids: readonly string[];
   readonly created_at: string;
+};
+
+export type WorkflowDefinitionVersionListResponse = {
+  readonly versions: readonly WorkflowDefinitionVersionResource[];
 };
 
 export type CreateWorkflowDefinitionVersionCommand = {

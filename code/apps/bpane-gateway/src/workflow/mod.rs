@@ -7,7 +7,8 @@ pub mod state;
 
 pub use observability::{WorkflowObservability, WorkflowObservabilitySnapshot};
 pub use resources::{
-    WorkflowDefinitionListResponse, WorkflowDefinitionResource, WorkflowDefinitionVersionResource,
+    WorkflowDefinitionListResponse, WorkflowDefinitionResource,
+    WorkflowDefinitionVersionListResponse, WorkflowDefinitionVersionResource,
     WorkflowRunEventListResponse, WorkflowRunEventResource, WorkflowRunListResponse,
     WorkflowRunLogListResponse, WorkflowRunLogResource, WorkflowRunProducedFileResource,
     WorkflowRunRecordingResource, WorkflowRunResource, WorkflowRunRetentionResource,

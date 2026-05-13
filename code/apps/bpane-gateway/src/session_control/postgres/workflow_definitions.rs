@@ -107,6 +107,16 @@ impl PostgresSessionStore {
             .await
     }
 
+    pub(in crate::session_control) async fn list_workflow_definition_versions_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        workflow_definition_id: Uuid,
+    ) -> Result<Vec<StoredWorkflowDefinitionVersion>, SessionStoreError> {
+        self.workflow_definition_repository()
+            .list_workflow_definition_versions_for_owner(principal, workflow_definition_id)
+            .await
+    }
+
     pub(in crate::session_control) async fn get_workflow_definition_version_by_id(
         &self,
         id: Uuid,
