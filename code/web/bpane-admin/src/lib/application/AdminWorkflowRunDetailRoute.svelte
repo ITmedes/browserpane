@@ -39,6 +39,7 @@
   });
 
   async function refreshInspector(showFeedback = true): Promise<void> {
+    const previousState = run?.state ?? null;
     loading = true;
     error = null;
     evidenceError = null;
@@ -50,7 +51,11 @@
       await loadEvidence();
       lastRefreshedAt = new Date().toISOString();
       if (showFeedback) {
-        actionFeedback = successFeedback('Workflow run detail refreshed.');
+        actionFeedback = successFeedback(
+          previousState && previousState !== run.state
+            ? `Workflow run state changed from ${previousState} to ${run.state}.`
+            : 'Workflow run detail refreshed.',
+        );
       }
     } catch (refreshError) {
       error = errorMessage(refreshError, 'Unexpected workflow run detail error');
@@ -90,11 +95,12 @@
 
   async function mutateRun(
     action: () => Promise<WorkflowRunResource>,
+    progressMessage: string,
     successMessage: (updated: WorkflowRunResource) => string,
   ): Promise<void> {
     actionInFlight = true;
     error = null;
-    actionFeedback = null;
+    actionFeedback = detailFeedback('loading', 'Workflow run action', progressMessage);
     try {
       run = await action();
       await loadEvidence();
@@ -114,7 +120,7 @@
       return;
     }
     error = null;
-    actionFeedback = null;
+    actionFeedback = detailFeedback('loading', 'Produced file download', `Preparing download for ${file.file_name}.`);
     try {
       const url = URL.createObjectURL(await workflowClient.downloadProducedFileContent(file));
       const link = document.createElement('a');
@@ -140,7 +146,7 @@
     void mutateRun(() => workflowClient.submitRunInput(runId, {
       input: parseJson(operatorInputText),
       comment: 'operator input from workflow run detail',
-    }), () => 'Operator input submitted.');
+    }), 'Submitting operator input...', () => 'Operator input submitted.');
   }
 
   function formatDate(value: string | null | undefined): string {
@@ -187,7 +193,15 @@
   }
 
   function successFeedback(message: string): AdminMessageFeedback {
-    return { variant: 'success', title: 'Workflow run updated', message, testId: 'workflow-run-detail-action-message' };
+    return detailFeedback('success', 'Workflow run updated', message);
+  }
+
+  function detailFeedback(
+    variant: AdminMessageFeedback['variant'],
+    title: string,
+    message: string,
+  ): AdminMessageFeedback {
+    return { variant, title, message, testId: 'workflow-run-detail-action-message' };
   }
 
   function workflowHref(workflowId: string): string {
@@ -292,7 +306,11 @@
             type="button"
             data-testid="workflow-run-detail-cancel"
             disabled={terminal || actionInFlight}
-            onclick={() => void mutateRun(() => workflowClient.cancelRun(runId), () => 'Workflow run cancellation requested.')}
+            onclick={() => void mutateRun(
+              () => workflowClient.cancelRun(runId),
+              'Requesting workflow run cancellation...',
+              () => 'Workflow run cancellation requested.',
+            )}
           >
             Cancel
           </button>
@@ -303,6 +321,7 @@
             disabled={!pendingRequest || actionInFlight}
             onclick={() => void mutateRun(
               () => workflowClient.resumeRun(runId, { comment: 'released from workflow run detail' }),
+              'Releasing workflow run hold...',
               () => 'Workflow run resumed.',
             )}
           >
@@ -349,6 +368,7 @@
           disabled={!pendingRequest || rejectReason.trim().length === 0 || actionInFlight}
           onclick={() => void mutateRun(
             () => workflowClient.rejectRun(runId, { reason: rejectReason.trim() }),
+            'Rejecting workflow run input request...',
             () => 'Workflow run input request rejected.',
           )}
         >

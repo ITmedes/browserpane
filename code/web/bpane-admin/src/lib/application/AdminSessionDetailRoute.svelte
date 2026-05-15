@@ -46,6 +46,7 @@
   });
 
   async function refreshInspector(showFeedback = true): Promise<void> {
+    const previousState = session?.state ?? null;
     loading = true;
     error = null;
     relatedError = null;
@@ -60,7 +61,13 @@
       await loadRelatedResources();
       lastRefreshedAt = new Date().toISOString();
       if (showFeedback) {
-        actionFeedback = lifecycleFeedback('success', 'Session refreshed', 'Session detail refreshed.');
+        actionFeedback = lifecycleFeedback(
+          'success',
+          'Session refreshed',
+          previousState && previousState !== nextSession.state
+            ? `Session state changed from ${previousState} to ${nextSession.state}.`
+            : 'Session detail refreshed.',
+        );
       }
     } catch (refreshError) {
       error = errorMessage(refreshError, 'Unexpected session detail error');
