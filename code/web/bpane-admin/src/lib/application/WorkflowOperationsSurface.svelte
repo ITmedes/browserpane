@@ -62,6 +62,7 @@
     events = [];
     logs = [];
     files = [];
+    actionInFlight = false;
     error = null;
     feedback = null;
   });
@@ -90,6 +91,7 @@
   async function selectWorkflow(workflowId: string): Promise<void> {
     error = null;
     feedback = null;
+    actionInFlight = false;
     selectedWorkflowId = workflowId;
     selectedVersion = definitions.find((entry) => entry.id === workflowId)?.latest_version ?? '';
     selectedVersionResource = null;
@@ -99,21 +101,28 @@
   function updateSelectedVersion(version: string): void {
     selectedVersion = version.trim();
     selectedVersionResource = null;
+    actionInFlight = false;
     error = null;
     feedback = null;
   }
 
   async function loadSelectedVersion(): Promise<void> {
+    const workflowId = selectedWorkflowId;
+    const version = selectedVersion;
     selectedVersionResource = null;
-    if (!selectedWorkflowId || !selectedVersion) {
+    if (!workflowId || !version) {
       return;
     }
     await runAction(async () => {
-      selectedVersionResource = await workflowService.loadVersionOrNull(
-        selectedWorkflowId,
-        selectedVersion,
+      const resource = await workflowService.loadVersionOrNull(
+        workflowId,
+        version,
       );
-    });
+      if (!isCurrentWorkflowSelection(workflowId, version)) {
+        return false;
+      }
+      selectedVersionResource = resource;
+    }, undefined, () => isCurrentWorkflowSelection(workflowId, version));
   }
 
   async function invokeRun(): Promise<void> {
@@ -127,36 +136,56 @@
       feedback = null;
       return;
     }
+    const sessionId = selectedSession.id;
+    const workflowId = selectedWorkflowId;
+    const version = selectedVersion;
     await runAction(async () => {
-      if (!selectedVersionResource) {
-        selectedVersionResource = await workflowService.loadVersionOrNull(
-          selectedWorkflowId,
-          selectedVersion,
-        );
+      let versionResource = selectedVersionResource;
+      if (!versionResource) {
+        versionResource = await workflowService.loadVersionOrNull(workflowId, version);
+        if (!isCurrentSession(sessionId) || !isCurrentWorkflowSelection(workflowId, version)) {
+          return false;
+        }
+        selectedVersionResource = versionResource;
       }
-      currentRun = await workflowService.invokeRun({
-        sessionId: selectedSession.id,
-        workflowId: selectedWorkflowId,
-        version: selectedVersion,
+      const run = await workflowService.invokeRun({
+        sessionId,
+        workflowId,
+        version,
         runInput: parseJson(inputText),
       });
-      await refreshRunResources(false);
-    }, () => currentRun ? `Workflow run ${shortId(currentRun.id)} was invoked.` : 'Workflow run was invoked.');
+      if (!isCurrentSession(sessionId) || run.session_id !== sessionId) {
+        return false;
+      }
+      currentRun = run;
+      await refreshRunResources(false, sessionId, run.id);
+    }, () => currentRun ? `Workflow run ${shortId(currentRun.id)} was invoked.` : 'Workflow run was invoked.', () => isCurrentSession(sessionId));
   }
 
-  async function refreshRunResources(withBusy = true): Promise<void> {
-    if (!currentRun) {
+  async function refreshRunResources(
+    withBusy = true,
+    requestSessionId = currentRun?.session_id ?? currentSessionId,
+    runId = currentRun?.id ?? null,
+  ): Promise<void> {
+    if (!requestSessionId || !runId) {
       return;
     }
     const refresh = async (): Promise<void> => {
-      const snapshot = await workflowService.refreshRun(currentRun!.id);
+      const snapshot = await workflowService.refreshRun(runId);
+      if (!isCurrentSession(requestSessionId) || snapshot.run.session_id !== requestSessionId || snapshot.run.id !== runId) {
+        return;
+      }
       currentRun = snapshot.run;
       events = snapshot.events;
       logs = snapshot.logs;
       files = snapshot.files;
     };
     if (withBusy) {
-      await runAction(refresh, () => currentRun ? `Workflow run ${shortId(currentRun.id)} refreshed.` : 'Workflow run refreshed.');
+      await runAction(
+        refresh,
+        () => currentRun ? `Workflow run ${shortId(currentRun.id)} refreshed.` : 'Workflow run refreshed.',
+        () => isCurrentSession(requestSessionId) && currentRun?.id === runId,
+      );
     } else {
       await refresh();
     }
@@ -164,37 +193,53 @@
 
   async function mutateRun(
     successMessage: (run: WorkflowRunResource) => string,
-    action: () => Promise<WorkflowRunResource>,
+    action: (run: WorkflowRunResource) => Promise<WorkflowRunResource>,
   ): Promise<void> {
+    const initialRun = currentRun;
+    if (!initialRun) {
+      return;
+    }
+    const requestSessionId = initialRun.session_id;
+    const runId = initialRun.id;
     await runAction(async () => {
-      currentRun = await action();
-      await refreshRunResources(false);
-    }, () => currentRun ? successMessage(currentRun) : 'Workflow run updated.');
+      const updated = await action(initialRun);
+      if (!isCurrentSession(requestSessionId) || updated.session_id !== requestSessionId || updated.id !== runId) {
+        return false;
+      }
+      currentRun = updated;
+      await refreshRunResources(false, requestSessionId, runId);
+    }, () => currentRun ? successMessage(currentRun) : 'Workflow run updated.', () => isCurrentSession(requestSessionId) && currentRun?.id === runId);
   }
 
   async function runAction(
-    action: () => Promise<void>,
+    action: () => Promise<boolean | void>,
     successMessage?: () => string,
+    isCurrent = () => true,
   ): Promise<void> {
     actionInFlight = true;
     error = null;
     feedback = null;
     try {
-      await action();
-      if (successMessage) {
+      const applied = await action();
+      if (applied !== false && successMessage && isCurrent()) {
         feedback = successFeedback(successMessage());
       }
     } catch (actionError) {
-      error = errorMessage(actionError);
-      feedback = null;
+      if (isCurrent()) {
+        error = errorMessage(actionError);
+        feedback = null;
+      }
     } finally {
-      actionInFlight = false;
+      if (isCurrent()) {
+        actionInFlight = false;
+      }
     }
   }
 
   async function downloadProducedFile(fileId: string): Promise<void> {
+    const requestSessionId = currentRun?.session_id ?? currentSessionId;
     const file = files.find((entry) => entry.file_id === fileId);
-    if (!file) {
+    if (!file || !requestSessionId) {
       return;
     }
     error = null;
@@ -208,10 +253,14 @@
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      feedback = successFeedback(`Produced file ${file.file_name} download started.`);
+      if (isCurrentSession(requestSessionId)) {
+        feedback = successFeedback(`Produced file ${file.file_name} download started.`);
+      }
     } catch (downloadError) {
-      error = errorMessage(downloadError);
-      feedback = null;
+      if (isCurrentSession(requestSessionId)) {
+        error = errorMessage(downloadError);
+        feedback = null;
+      }
     }
   }
 
@@ -236,6 +285,14 @@
     return { variant: 'success', title: 'Workflow updated', message, testId: 'workflow-message' };
   }
 
+  function isCurrentSession(sessionId: string): boolean {
+    return currentSessionId === sessionId;
+  }
+
+  function isCurrentWorkflowSelection(workflowId: string, version: string): boolean {
+    return selectedWorkflowId === workflowId && selectedVersion === version;
+  }
+
   function shortId(value: string): string {
     return value.length > 13 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
   }
@@ -252,8 +309,8 @@
   onConnectSession={onConnectSession}
   onInvokeRun={() => void invokeRun()}
   onRefreshRun={() => void refreshRunResources()}
-  onCancelRun={() => currentRun && void mutateRun((run) => `Workflow run ${shortId(run.id)} was cancelled.`, () => workflowService.cancelRun(currentRun!.id))}
-  onReleaseHold={() => currentRun && void mutateRun((run) => `Workflow run ${shortId(run.id)} hold was released.`, () => workflowService.releaseHold(currentRun!.id))}
-  onSubmitInput={() => currentRun && void mutateRun((run) => `Operator input was submitted for workflow run ${shortId(run.id)}.`, () => workflowService.submitInput(currentRun!.id, parseJson(interventionInputText)))}
+  onCancelRun={() => currentRun && void mutateRun((run) => `Workflow run ${shortId(run.id)} was cancelled.`, (run) => workflowService.cancelRun(run.id))}
+  onReleaseHold={() => currentRun && void mutateRun((run) => `Workflow run ${shortId(run.id)} hold was released.`, (run) => workflowService.releaseHold(run.id))}
+  onSubmitInput={() => currentRun && void mutateRun((run) => `Operator input was submitted for workflow run ${shortId(run.id)}.`, (run) => workflowService.submitInput(run.id, parseJson(interventionInputText)))}
   onDownloadProducedFile={(fileId) => void downloadProducedFile(fileId)}
 />
