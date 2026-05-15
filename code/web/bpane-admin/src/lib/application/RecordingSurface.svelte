@@ -134,8 +134,9 @@
   }
 
   async function downloadSegment(recordingId: string): Promise<void> {
+    const requestSessionId = currentSessionId;
     const segment = recordings.find((entry) => entry.id === recordingId);
-    if (!segment) {
+    if (!segment || !requestSessionId || segment.session_id !== requestSessionId) {
       return;
     }
     downloadingRecordingId = recordingId;
@@ -144,69 +145,101 @@
     try {
       const blob = await controlClient.downloadSessionRecordingContent(segment);
       saveBlob(blob, `browserpane-${segment.session_id}-${segment.id}.webm`);
-      feedback = successFeedback('Recording segment download started.');
+      if (currentSessionId === requestSessionId) {
+        feedback = successFeedback('Recording segment download started.');
+      }
     } catch (downloadError) {
-      libraryError = errorMessage(downloadError);
+      if (currentSessionId === requestSessionId) {
+        libraryError = errorMessage(downloadError);
+      }
     } finally {
-      downloadingRecordingId = null;
+      if (currentSessionId === requestSessionId) {
+        downloadingRecordingId = null;
+      }
     }
   }
 
   async function downloadPlaybackExport(): Promise<void> {
-    if (!playback) {
+    const requestSessionId = currentSessionId;
+    const activePlayback = playback;
+    if (!activePlayback || !requestSessionId || activePlayback.session_id !== requestSessionId) {
       return;
     }
     downloadingPlayback = true;
     libraryError = null;
     feedback = null;
     try {
-      const blob = await controlClient.downloadSessionRecordingPlaybackExport(playback);
-      saveBlob(blob, `browserpane-${playback.session_id}-recording-playback.zip`);
-      feedback = successFeedback('Session recording export download started.');
+      const blob = await controlClient.downloadSessionRecordingPlaybackExport(activePlayback);
+      saveBlob(blob, `browserpane-${activePlayback.session_id}-recording-playback.zip`);
+      if (currentSessionId === requestSessionId) {
+        feedback = successFeedback('Session recording export download started.');
+      }
     } catch (downloadError) {
-      libraryError = errorMessage(downloadError);
+      if (currentSessionId === requestSessionId) {
+        libraryError = errorMessage(downloadError);
+      }
     } finally {
-      downloadingPlayback = false;
+      if (currentSessionId === requestSessionId) {
+        downloadingPlayback = false;
+      }
     }
   }
 
   async function startRecording(): Promise<void> {
-    if (!activeConnection?.handle.startRecording) {
+    const connection = activeConnection;
+    const requestSessionId = connection?.sessionId ?? null;
+    if (!connection?.handle.startRecording || !requestSessionId) {
       return;
     }
     busy = true;
     error = null;
     feedback = null;
     try {
-      await activeConnection.handle.startRecording({ frameRate: 24 });
-      recording = true;
-      feedback = successFeedback('Recording started for the selected browser session.');
+      await connection.handle.startRecording({ frameRate: 24 });
+      if (currentSessionId === requestSessionId) {
+        recording = true;
+        feedback = successFeedback('Recording started for the selected browser session.');
+      }
     } catch (startError) {
-      error = errorMessage(startError);
+      if (currentSessionId === requestSessionId) {
+        error = errorMessage(startError);
+      }
     } finally {
-      busy = false;
+      if (currentSessionId === requestSessionId) {
+        busy = false;
+      }
     }
   }
 
   async function stopRecording(): Promise<void> {
-    if (!activeConnection?.handle.stopRecording) {
+    const connection = activeConnection;
+    const requestSessionId = connection?.sessionId ?? null;
+    if (!connection?.handle.stopRecording || !requestSessionId) {
       return;
     }
     busy = true;
     error = null;
     feedback = null;
     try {
-      lastBlob = await activeConnection.handle.stopRecording();
-      lastArtifactName = `bpane-${activeConnection.sessionId}-${Date.now()}.webm`;
+      const stoppedBlob = await connection.handle.stopRecording();
+      if (currentSessionId !== requestSessionId) {
+        return;
+      }
+      lastBlob = stoppedBlob;
+      lastArtifactName = `bpane-${connection.sessionId}-${Date.now()}.webm`;
       recording = false;
       feedback = successFeedback('Recording stopped. The latest WebM is ready.');
       if (autoDownload) {
         downloadLast();
       }
     } catch (stopError) {
-      error = errorMessage(stopError);
+      if (currentSessionId === requestSessionId) {
+        error = errorMessage(stopError);
+      }
     } finally {
-      busy = false;
+      if (currentSessionId === requestSessionId) {
+        busy = false;
+      }
     }
   }
 
