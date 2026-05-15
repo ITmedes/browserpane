@@ -8,6 +8,7 @@ export type AdminWorkflowSessionFollowerOptions = {
   readonly getConnectedSessionId: () => string | null;
   readonly upsertSession: (session: SessionResource) => void;
   readonly requestBrowserConnect: () => void;
+  readonly onFollow?: (run: AdminWorkflowRunSnapshot) => void;
   readonly onError: (message: string) => void;
 };
 
@@ -40,6 +41,7 @@ export class AdminWorkflowSessionFollower {
         ?? await this.options.controlClient.getSession(run.sessionId);
       this.options.upsertSession(session);
       this.followSignature = signature;
+      this.options.onFollow?.(run);
       this.options.requestBrowserConnect();
     } catch (error) {
       this.options.onError(AdminWorkflowSessionFollower.errorMessage(error));

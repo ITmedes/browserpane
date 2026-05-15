@@ -218,6 +218,40 @@ describe('AdminEventClient', () => {
     subscription.close();
     vi.useRealTimers();
   });
+
+  it('routes failed websocket authentication through the shared auth handler', async () => {
+    const sockets: FakeAdminEventWebSocket[] = [];
+    const authFailures: number[] = [];
+    const fetchImpl = vi.fn(async () => new Response('expired', { status: 401 }));
+    const client = new AdminEventClient({
+      baseUrl: 'http://localhost:8080/admin/',
+      accessTokenProvider: () => 'expired-token',
+      fetchImpl,
+      onAuthenticationFailure: (error) => authFailures.push(error.status),
+      webSocketFactory: (url) => {
+        sockets.push(new FakeAdminEventWebSocket(url));
+        return sockets.at(-1)!;
+      },
+    });
+    const subscription = client.subscribe({ onEvent: () => undefined });
+    await flushMicrotasks();
+
+    sockets[0]?.networkError();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8080/api/v1/sessions'),
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          authorization: 'Bearer expired-token',
+        }),
+      }),
+    );
+    expect(authFailures).toEqual([401]);
+    subscription.close();
+  });
 });
 
 class FakeAdminEventWebSocket implements AdminEventWebSocket {
@@ -238,6 +272,10 @@ class FakeAdminEventWebSocket implements AdminEventWebSocket {
 
   serverClose(): void {
     this.onclose?.();
+  }
+
+  networkError(): void {
+    this.onerror?.();
   }
 
   message(payload: unknown): void {

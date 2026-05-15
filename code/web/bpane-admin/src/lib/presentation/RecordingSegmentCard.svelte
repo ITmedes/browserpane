@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AdminMessage from './AdminMessage.svelte';
   import type { RecordingSegmentCardViewModel } from './recording-view-model';
 
   type RecordingSegmentCardProps = {
@@ -37,6 +38,8 @@
     {/each}
   </div>
   {#if viewModel.error}
-    <p class="admin-error col-span-full m-0">{viewModel.error}</p>
+    <div class="col-span-full">
+      <AdminMessage variant="error" message={viewModel.error} compact={true} />
+    </div>
   {/if}
 </article>

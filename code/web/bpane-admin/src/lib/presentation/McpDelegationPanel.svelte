@@ -1,4 +1,6 @@
 <script lang="ts">
+  import AdminMessage from './AdminMessage.svelte';
+  import type { AdminMessageFeedback } from './admin-message-types';
   import type { McpDelegationTone, McpDelegationViewModel } from './mcp-delegation-view-model';
 
   type McpDelegationPanelProps = {
@@ -9,6 +11,7 @@
     readonly onSetDefault: () => void;
     readonly onClearDefault: () => void;
     readonly onCopyEndpoint: () => void;
+    readonly feedback?: AdminMessageFeedback | null;
   };
 
   let {
@@ -19,6 +22,7 @@
     onSetDefault,
     onClearDefault,
     onCopyEndpoint,
+    feedback = null,
   }: McpDelegationPanelProps = $props();
 
   function toneClass(tone: McpDelegationTone): string {
@@ -122,9 +126,18 @@
   </div>
 
   {#if viewModel.busy}
-    <p class="admin-empty mt-0" data-testid="mcp-busy">Updating MCP delegation...</p>
+    <AdminMessage variant="loading" message="Updating MCP delegation..." testId="mcp-busy" compact={true} />
+  {/if}
+  {#if feedback}
+    <AdminMessage
+      variant={feedback.variant}
+      title={feedback.title}
+      message={feedback.message}
+      testId={feedback.testId}
+      compact={true}
+    />
   {/if}
   {#if viewModel.error}
-    <p class="admin-error mt-0" data-testid="mcp-error">{viewModel.error}</p>
+    <AdminMessage variant="error" message={viewModel.error} testId="mcp-error" compact={true} />
   {/if}
 </section>

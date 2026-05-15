@@ -1,12 +1,15 @@
 <script lang="ts">
   import { base } from '$app/paths';
   import { Download, Play, Plug, RefreshCw, Send, Unlock, XCircle } from 'lucide-svelte';
+  import AdminMessage from './AdminMessage.svelte';
+  import type { AdminMessageFeedback } from './admin-message-types';
   import type { WorkflowOperationsViewModel } from './workflow-operations-view-model';
 
   type WorkflowOperationsPanelProps = {
     readonly viewModel: WorkflowOperationsViewModel;
     readonly inputText: string;
     readonly interventionInputText: string;
+    readonly feedback?: AdminMessageFeedback | null;
     readonly onRefreshDefinitions: () => void;
     readonly onWorkflowChange: (workflowId: string) => void;
     readonly onVersionChange: (version: string) => void;
@@ -45,8 +48,17 @@
   </div>
 
   <p class="m-0 text-sm leading-normal text-admin-ink/68">{props.viewModel.note}</p>
+  {#if props.feedback}
+    <AdminMessage
+      variant={props.feedback.variant}
+      title={props.feedback.title}
+      message={props.feedback.message}
+      testId={props.feedback.testId}
+      compact={true}
+    />
+  {/if}
   {#if props.viewModel.error}
-    <p class="admin-error" data-testid="workflow-error">{props.viewModel.error}</p>
+    <AdminMessage variant="error" message={props.viewModel.error} testId="workflow-error" compact={true} />
   {/if}
 
   <div class="grid min-w-0 gap-3 rounded-[16px] bg-admin-cream/70 p-3">
@@ -138,13 +150,12 @@
       {/if}
     </div>
     {#if props.viewModel.invokeBlockedReason}
-      <p
-        class="m-0 rounded-xl border border-admin-warm/20 bg-admin-warm/10 px-3 py-2 text-sm font-bold text-admin-ink"
+      <div
         id="workflow-invoke-disabled-reason"
         data-testid="workflow-invoke-disabled-reason"
       >
-        {props.viewModel.invokeBlockedReason}
-      </p>
+        <AdminMessage variant="warning" message={props.viewModel.invokeBlockedReason} compact={true} />
+      </div>
     {/if}
   </div>
 
@@ -193,7 +204,7 @@
   <div class="grid min-w-0 gap-2">
     <h3 class="m-0 text-sm font-extrabold text-admin-ink">Produced files</h3>
     {#if props.viewModel.producedFiles.length === 0}
-      <p class="admin-empty">No produced artifacts loaded.</p>
+      <AdminMessage variant="empty" message="No produced artifacts loaded." compact={true} />
     {:else}
       <div class="grid min-w-0 gap-2">
         {#each props.viewModel.producedFiles as file}
@@ -218,7 +229,7 @@
   <div class="grid min-w-0 gap-2 rounded-[16px] bg-admin-cream/55 p-3">
     <h3 class="m-0 text-sm font-extrabold text-admin-ink">{title}</h3>
     {#if rows.length === 0}
-      <p class="admin-empty">{empty}</p>
+      <AdminMessage variant="empty" message={empty} compact={true} />
     {:else}
       {#each rows as row}
         <p class="m-0 min-w-0 rounded-xl bg-admin-night/5 p-2 text-xs text-admin-ink/70">

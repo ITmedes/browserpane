@@ -15,6 +15,7 @@ import {
   expectNumber,
   expectRecord,
   expectString,
+  expectStringRecord,
   optionalString,
 } from './control-wire';
 
@@ -38,6 +39,8 @@ export class ControlSessionMapper {
       id: expectString(object.id, 'session resource id'),
       state: expectString(object.state, 'session resource state'),
       owner_mode: expectString(object.owner_mode, 'session resource owner_mode'),
+      idle_timeout_sec: optionalNumber(object.idle_timeout_sec, 'session resource idle_timeout_sec') ?? null,
+      labels: expectStringRecord(object.labels ?? {}, 'session resource labels'),
       ...(automationDelegate !== undefined ? { automation_delegate: automationDelegate } : {}),
       connect: toConnectInfo(object.connect),
       runtime: toRuntimeInfo(object.runtime),
@@ -58,6 +61,13 @@ export class ControlSessionMapper {
       connect: toConnectInfo(object.connect),
     };
   }
+}
+
+function optionalNumber(value: unknown, label: string): number | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return expectNumber(value, label);
 }
 
 function toConnectInfo(value: unknown): SessionConnectInfo {

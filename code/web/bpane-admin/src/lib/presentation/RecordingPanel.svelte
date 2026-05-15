@@ -1,4 +1,6 @@
 <script lang="ts">
+  import AdminMessage from './AdminMessage.svelte';
+  import type { AdminMessageFeedback } from './admin-message-types';
   import type { RecordingViewModel } from './recording-view-model';
   import RecordingSegmentCard from './RecordingSegmentCard.svelte';
 
@@ -12,6 +14,7 @@
     readonly onRefreshLibrary: () => void;
     readonly onDownloadSegment: (recordingId: string) => void;
     readonly onDownloadPlayback: () => void;
+    readonly feedback?: AdminMessageFeedback | null;
   };
 
   let {
@@ -24,6 +27,7 @@
     onRefreshLibrary,
     onDownloadSegment,
     onDownloadPlayback,
+    feedback = null,
   }: RecordingPanelProps = $props();
 </script>
 
@@ -72,10 +76,19 @@
   </div>
 
   {#if viewModel.busy}
-    <p class="admin-empty mt-0">Recording operation in progress...</p>
+    <AdminMessage variant="loading" message="Recording operation in progress..." compact={true} />
+  {/if}
+  {#if feedback}
+    <AdminMessage
+      variant={feedback.variant}
+      title={feedback.title}
+      message={feedback.message}
+      testId={feedback.testId}
+      compact={true}
+    />
   {/if}
   {#if viewModel.error}
-    <p class="admin-error mt-0" data-testid="recording-error">{viewModel.error}</p>
+    <AdminMessage variant="error" message={viewModel.error} testId="recording-error" compact={true} />
   {/if}
 
   <div class="border-t border-[#90a6cc]/18 pt-4">
@@ -110,10 +123,15 @@
       </div>
     </div>
 
-    <p class="admin-empty mt-0" data-testid="recording-library-note">{viewModel.libraryNote}</p>
+    <AdminMessage variant="info" role="note" message={viewModel.libraryNote} testId="recording-library-note" compact={true} />
 
     {#if viewModel.segments.length === 0}
-      <p class="admin-empty" data-testid="recording-library-empty">{viewModel.emptyLibraryLabel}</p>
+      <AdminMessage
+        variant="empty"
+        message={viewModel.emptyLibraryLabel}
+        testId="recording-library-empty"
+        compact={true}
+      />
     {:else}
       <div class="grid gap-3">
         {#each viewModel.segments as segment (segment.id)}
