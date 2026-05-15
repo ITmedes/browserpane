@@ -29,6 +29,7 @@
   }: SessionLifecycleSurfaceProps = $props();
 
   let status = $state<SessionStatus | null>(null);
+  let lifecycleSessionId = $state<string | null>(null);
   let statusSessionId = $state<string | null>(null);
   let requestedSessionId = $state<string | null>(null);
   let statusLoading = $state(false);
@@ -46,10 +47,17 @@
 
   $effect(() => {
     const sessionId = selectedSession?.id ?? null;
+    if (sessionId !== lifecycleSessionId) {
+      lifecycleSessionId = sessionId;
+      statusError = null;
+      feedback = null;
+    }
     if (!sessionId) {
       status = null;
       statusSessionId = null;
       requestedSessionId = null;
+      statusError = null;
+      feedback = null;
       return;
     }
     if (sessionId !== statusSessionId && sessionId !== requestedSessionId) {

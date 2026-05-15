@@ -65,7 +65,19 @@
       return;
     }
     currentSessionId = nextSessionId;
-    recordings = []; playback = null; libraryLoaded = false; libraryError = null; feedback = null;
+    recordings = [];
+    playback = null;
+    libraryLoading = false;
+    libraryLoaded = false;
+    libraryError = null;
+    downloadingRecordingId = null;
+    downloadingPlayback = false;
+    recording = false;
+    busy = false;
+    lastBlob = null;
+    lastArtifactName = null;
+    error = null;
+    feedback = null;
     libraryRequest += 1;
     if (nextSessionId) {
       void loadLibrary(nextSessionId, false);

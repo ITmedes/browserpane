@@ -22,7 +22,43 @@
   let summary = $state<MetricsSampleSummary | null>(null);
   let copied = $state(false);
   let feedback = $state<AdminMessageFeedback | null>(null);
+  let observedConnectionSessionId = $state<string | null>(null);
+  let connectionInitialized = false;
   const viewModel = $derived(MetricsViewModelBuilder.build({ liveConnection, active, summary }));
+
+  $effect(() => {
+    const nextSessionId = liveConnection?.sessionId ?? null;
+    if (!connectionInitialized) {
+      connectionInitialized = true;
+      observedConnectionSessionId = nextSessionId;
+      return;
+    }
+    if (nextSessionId === observedConnectionSessionId) {
+      return;
+    }
+    const previousSessionId = observedConnectionSessionId;
+    observedConnectionSessionId = nextSessionId;
+    copied = false;
+    if (active) {
+      active = false;
+      feedback = {
+        variant: 'warning',
+        title: 'Metrics sampling stopped',
+        message: 'The browser connection changed before the metrics sample was stopped.',
+        testId: 'metrics-message',
+      };
+      return;
+    }
+    if (summary && nextSessionId && previousSessionId && nextSessionId !== previousSessionId) {
+      clearSampleState();
+      feedback = {
+        variant: 'info',
+        title: 'Metrics reset',
+        message: 'Previous metrics were cleared for the new browser session.',
+        testId: 'metrics-message',
+      };
+    }
+  });
 
   $effect(() => {
     if (!active) {
@@ -70,13 +106,17 @@
   }
 
   function reset(): void {
+    clearSampleState();
+    feedback = { variant: 'info', title: 'Metrics reset', message: 'Metrics sample state cleared.', testId: 'metrics-message' };
+  }
+
+  function clearSampleState(): void {
     active = false;
     startSample = null;
     previousSample = null;
     extrema = null;
     summary = null;
     copied = false;
-    feedback = { variant: 'info', title: 'Metrics reset', message: 'Metrics sample state cleared.', testId: 'metrics-message' };
   }
 
   function updateActiveSummary(): void {

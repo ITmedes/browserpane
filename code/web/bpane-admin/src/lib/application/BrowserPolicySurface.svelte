@@ -11,10 +11,25 @@
   };
 
   let { selectedSession, onRefreshSelectedSession }: BrowserPolicySurfaceProps = $props();
+  let currentSessionId = $state<string | null>(null);
   let copied = $state(false);
   let feedback = $state<AdminMessageFeedback | null>(null);
   let copyTimer: ReturnType<typeof setTimeout> | null = null;
   const viewModel = $derived(BrowserPolicyViewModelBuilder.build(selectedSession));
+
+  $effect(() => {
+    const nextSessionId = selectedSession?.id ?? null;
+    if (nextSessionId === currentSessionId) {
+      return;
+    }
+    currentSessionId = nextSessionId;
+    copied = false;
+    feedback = null;
+    if (copyTimer) {
+      clearTimeout(copyTimer);
+      copyTimer = null;
+    }
+  });
 
   onDestroy(() => {
     if (copyTimer) {
