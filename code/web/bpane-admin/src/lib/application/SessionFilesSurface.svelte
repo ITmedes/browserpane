@@ -30,6 +30,8 @@
     currentSessionId = nextSessionId;
     files = [];
     onFileCountChange?.(0);
+    loading = false;
+    downloadingFileId = null;
     error = null;
     actionMessage = null;
     if (nextSessionId) {
@@ -76,8 +78,9 @@
   }
 
   async function downloadFile(fileId: string): Promise<void> {
+    const sessionId = currentSessionId;
     const file = files.find((entry) => entry.id === fileId);
-    if (!file) {
+    if (!file || !sessionId) {
       return;
     }
     downloadingFileId = file.id;
@@ -96,11 +99,17 @@
       } finally {
         URL.revokeObjectURL(url);
       }
-      actionMessage = `Download started for ${file.name}.`;
+      if (currentSessionId === sessionId) {
+        actionMessage = `Download started for ${file.name}.`;
+      }
     } catch (downloadError) {
-      error = errorMessage(downloadError);
+      if (currentSessionId === sessionId) {
+        error = errorMessage(downloadError);
+      }
     } finally {
-      downloadingFileId = null;
+      if (currentSessionId === sessionId) {
+        downloadingFileId = null;
+      }
     }
   }
 
