@@ -15,6 +15,8 @@
     WorkflowTemplateCatalogViewModelBuilder,
     type WorkflowCatalogItem,
   } from '../presentation/workflow-template-catalog-view-model';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import { WorkflowOperationsService } from './workflow-operations-service';
 
   type AdminWorkflowCatalogRouteProps = {
@@ -27,6 +29,7 @@
   let hiddenCount = $state(0);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let search = $state('');
   let lastRefreshedAt = $state<string | null>(null);
 
@@ -37,12 +40,13 @@
   }));
 
   onMount(() => {
-    void loadCatalog();
+    void loadCatalog(false);
   });
 
-  async function loadCatalog(): Promise<void> {
+  async function loadCatalog(showFeedback = true): Promise<void> {
     loading = true;
     error = null;
+    actionFeedback = null;
     try {
       const definitions = (await workflowClient.listDefinitions()).workflows;
       const withTemplate = await workflowService.ensureBrowserPaneTourTemplate(definitions);
@@ -52,8 +56,12 @@
       hiddenCount = includeHiddenWorkflowDefinitions() ? 0 : hiddenWorkflowDefinitions(withTemplate).length;
       items = await loadCatalogItems(visible);
       lastRefreshedAt = new Date().toISOString();
+      if (showFeedback) {
+        actionFeedback = successFeedback(`${items.length} workflow template${items.length === 1 ? '' : 's'} refreshed.`);
+      }
     } catch (loadError) {
       error = errorMessage(loadError);
+      actionFeedback = null;
     } finally {
       loading = false;
     }
@@ -96,6 +104,10 @@
   function errorMessage(value: unknown): string {
     return value instanceof Error ? value.message : 'Unexpected workflow catalog error';
   }
+
+  function successFeedback(message: string): AdminMessageFeedback {
+    return { variant: 'success', title: 'Workflow catalog refreshed', message, testId: 'workflow-catalog-message' };
+  }
 </script>
 
 <section class="grid gap-5" data-testid="workflow-catalog">
@@ -137,17 +149,32 @@
     </div>
   </div>
 
+  {#if actionFeedback}
+    <AdminMessage
+      variant={actionFeedback.variant}
+      title={actionFeedback.title}
+      message={actionFeedback.message}
+      testId={actionFeedback.testId}
+      compact={true}
+    />
+  {/if}
+
   {#if loading && items.length === 0}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0">Loading workflow templates...</p>
+      <AdminMessage variant="loading" message="Loading workflow templates..." compact={true} />
     </section>
   {:else if error}
     <section class="admin-panel mt-0">
-      <p class="admin-error mt-0" data-testid="workflow-catalog-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="workflow-catalog-error" compact={true} />
     </section>
   {:else if viewModel.rows.length === 0}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0" data-testid="workflow-catalog-empty">{viewModel.emptyMessage}</p>
+      <AdminMessage
+        variant="empty"
+        message={viewModel.emptyMessage}
+        testId="workflow-catalog-empty"
+        compact={true}
+      />
     </section>
   {:else}
     <section class="grid gap-2" aria-label="Workflow catalog table">

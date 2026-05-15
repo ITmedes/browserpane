@@ -4,6 +4,7 @@
   import type { McpBridgeHealth } from '../api/mcp-bridge-client';
   import type { SessionResource } from '../api/control-types';
   import type { McpBridgeConfig } from '../auth/auth-config';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import McpDelegationPanel from '../presentation/McpDelegationPanel.svelte';
   import { McpDelegationViewModelBuilder } from '../presentation/mcp-delegation-view-model';
 
@@ -29,6 +30,7 @@
   let health = $state<McpBridgeHealth | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let feedback = $state<AdminMessageFeedback | null>(null);
   const bridgeClient = $derived(mcpBridge ? new McpBridgeClient({ controlUrl: mcpBridge.controlUrl }) : null);
   const viewModel = $derived(McpDelegationViewModelBuilder.build({
     bridge: mcpBridge,
@@ -46,8 +48,9 @@
     currentKey = nextKey;
     health = null;
     error = null;
+    feedback = null;
     if (bridgeClient) {
-      void refreshBridge();
+      void refreshBridge(false);
     }
   });
 
@@ -57,20 +60,25 @@
     }
     lastRefreshVersion = refreshVersion;
     if (bridgeClient) {
-      void refreshBridge();
+      void refreshBridge(false);
     }
   });
 
-  async function refreshBridge(): Promise<void> {
+  async function refreshBridge(showFeedback = true): Promise<void> {
     if (!bridgeClient) {
       return;
     }
     loading = true;
     error = null;
+    feedback = null;
     try {
       health = await bridgeClient.getHealth();
+      if (showFeedback) {
+        feedback = successFeedback('MCP bridge status refreshed.');
+      }
     } catch (refreshError) {
       error = errorMessage(refreshError);
+      feedback = null;
     } finally {
       loading = false;
     }
@@ -82,11 +90,13 @@
     }
     loading = true;
     error = null;
+    feedback = null;
     try {
       await authorizeSession(selectedSession.id);
       await onRefreshSessions();
       await onRefreshSelectedSession();
       health = await bridgeClient?.getHealth() ?? health;
+      feedback = successFeedback('MCP authorized for the selected session.');
     } catch (delegateError) {
       error = errorMessage(delegateError);
     } finally {
@@ -100,15 +110,18 @@
     }
     if (health?.control_session_id === selectedSession.id) {
       error = 'Clear the default MCP session before revoking this authorization.';
+      feedback = null;
       return;
     }
     loading = true;
     error = null;
+    feedback = null;
     try {
       await controlClient.clearAutomationDelegate(selectedSession.id);
       await onRefreshSessions();
       await onRefreshSelectedSession();
       health = await bridgeClient?.getHealth() ?? health;
+      feedback = successFeedback('MCP authorization was revoked for the selected session.');
     } catch (clearError) {
       error = errorMessage(clearError);
     } finally {
@@ -122,6 +135,7 @@
     }
     loading = true;
     error = null;
+    feedback = null;
     try {
       if (!isDelegatedToBridge(selectedSession)) {
         await authorizeSession(selectedSession.id);
@@ -130,6 +144,7 @@
       await onRefreshSessions();
       await onRefreshSelectedSession();
       health = await bridgeClient.getHealth();
+      feedback = successFeedback('Selected session is now the default MCP session.');
     } catch (clearError) {
       error = errorMessage(clearError);
     } finally {
@@ -143,11 +158,13 @@
     }
     loading = true;
     error = null;
+    feedback = null;
     try {
       await bridgeClient.clearControlSession();
       await onRefreshSessions();
       await onRefreshSelectedSession();
       health = await bridgeClient.getHealth();
+      feedback = successFeedback('Default MCP session was cleared.');
     } catch (clearError) {
       error = errorMessage(clearError);
     } finally {
@@ -160,8 +177,13 @@
       return;
     }
     error = null;
-    try { await navigator.clipboard.writeText(viewModel.endpointUrl); }
-    catch (copyError) { error = errorMessage(copyError); }
+    feedback = null;
+    try {
+      await navigator.clipboard.writeText(viewModel.endpointUrl);
+      feedback = successFeedback('Session MCP endpoint copied.');
+    } catch (copyError) {
+      error = errorMessage(copyError);
+    }
   }
 
   async function authorizeSession(sessionId: string): Promise<void> {
@@ -181,10 +203,15 @@
   function errorMessage(value: unknown): string {
     return value instanceof Error ? value.message : 'Unexpected MCP delegation error';
   }
+
+  function successFeedback(message: string): AdminMessageFeedback {
+    return { variant: 'success', title: 'MCP updated', message, testId: 'mcp-message' };
+  }
 </script>
 
 <McpDelegationPanel
   {viewModel}
+  {feedback}
   onRefresh={() => void refreshBridge()}
   onAuthorize={() => void authorizeSelectedSession()}
   onRevoke={() => void revokeSelectedSession()}

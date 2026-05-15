@@ -7,6 +7,8 @@ const SESSION: SessionResource = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
   state: 'active',
   owner_mode: 'shared',
+  idle_timeout_sec: 1800,
+  labels: { case: '1234', purpose: 'import-repro' },
   connect: {
     gateway_url: 'https://localhost:4433',
     transport_path: '/session',
@@ -115,6 +117,7 @@ describe('SessionViewModelBuilder', () => {
       presence: 'connected',
       clients: 1,
       mcpDelegation: 'MCP not delegated',
+      labels: 'case=1234, purpose=import-repro',
     });
     expect(viewModel.selectedSession).toMatchObject({
       id: SESSION.id,
@@ -149,6 +152,11 @@ describe('SessionViewModelBuilder', () => {
       label: 'mcp owner',
       value: 'yes',
       testId: 'session-mcp-owner',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'labels',
+      value: 'case=1234, purpose=import-repro',
+      testId: 'session-labels',
     });
     expect(viewModel.connections).toEqual([{
       id: 7,

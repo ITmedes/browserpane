@@ -48,6 +48,8 @@ export type SessionResource = {
   readonly id: string;
   readonly state: string;
   readonly owner_mode: string;
+  readonly idle_timeout_sec?: number | null;
+  readonly labels?: Readonly<Record<string, string>>;
   readonly automation_delegate?: SessionAutomationDelegate | null;
   readonly connect: SessionConnectInfo;
   readonly runtime: SessionRuntimeInfo;

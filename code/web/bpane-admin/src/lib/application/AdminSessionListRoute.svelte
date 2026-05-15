@@ -3,7 +3,10 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import type { ControlClient } from '../api/control-client';
-  import type { SessionResource } from '../api/control-types';
+  import type { CreateSessionCommand, SessionResource } from '../api/control-types';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
+  import SessionCreateConfigurator from '../presentation/SessionCreateConfigurator.svelte';
   import { SessionViewModelBuilder, type SessionListItemViewModel } from '../presentation/session-view-model';
 
   type AdminSessionListRouteProps = {
@@ -14,6 +17,7 @@
   let sessions = $state<readonly SessionResource[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let search = $state('');
 
   const viewModel = $derived(SessionViewModelBuilder.list({
@@ -26,26 +30,32 @@
   const filteredSessions = $derived(filterSessions(viewModel.sessions, search));
 
   onMount(() => {
-    void loadSessions();
+    void loadSessions(false);
   });
 
-  async function loadSessions(): Promise<void> {
+  async function loadSessions(showFeedback = true): Promise<void> {
     loading = true;
     error = null;
+    actionFeedback = null;
     try {
       sessions = (await controlClient.listSessions()).sessions;
+      if (showFeedback) {
+        actionFeedback = successFeedback(`${sessions.length} session${sessions.length === 1 ? '' : 's'} refreshed.`);
+      }
     } catch (loadError) {
       error = errorMessage(loadError);
+      actionFeedback = null;
     } finally {
       loading = false;
     }
   }
 
-  async function createSession(): Promise<void> {
+  async function createSession(command: CreateSessionCommand): Promise<void> {
     loading = true;
     error = null;
+    actionFeedback = null;
     try {
-      const created = await controlClient.createSession();
+      const created = await controlClient.createSession(command);
       sessions = [created, ...sessions.filter((session) => session.id !== created.id)];
       await goto(detailHref(created.id));
     } catch (createError) {
@@ -74,6 +84,7 @@
       session.runtime,
       session.presence,
       session.mcpDelegation,
+      session.labels,
     ].some((value) => value.toLowerCase().includes(normalized)));
   }
 
@@ -83,6 +94,10 @@
 
   function errorMessage(value: unknown): string {
     return value instanceof Error ? value.message : 'Unexpected session list error';
+  }
+
+  function successFeedback(message: string): AdminMessageFeedback {
+    return { variant: 'success', title: 'Sessions refreshed', message, testId: 'session-inspector-list-message' };
   }
 </script>
 
@@ -96,15 +111,6 @@
       <div class="admin-actions">
         <a class="admin-button-ghost" href={`${base}/`}>Live workspace</a>
         <a class="admin-button-ghost" href={`${base}/files/workspaces`}>File workspaces</a>
-        <button
-          class="admin-button-primary"
-          type="button"
-          data-testid="session-inspector-new"
-          disabled={loading}
-          onclick={() => void createSession()}
-        >
-          New session
-        </button>
         <button
           class="admin-button-primary"
           type="button"
@@ -132,19 +138,41 @@
     </div>
   </div>
 
+  <SessionCreateConfigurator
+    loading={loading}
+    submitTestId="session-inspector-new"
+    submitLabel="Create and inspect"
+    variant="panel"
+    payloadInitiallyOpen={true}
+    onCreateSession={(command) => void createSession(command)}
+  />
+
+  {#if actionFeedback}
+    <AdminMessage
+      variant={actionFeedback.variant}
+      title={actionFeedback.title}
+      message={actionFeedback.message}
+      testId={actionFeedback.testId}
+      compact={true}
+    />
+  {/if}
+
   {#if loading && sessions.length === 0}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0">Loading sessions...</p>
+      <AdminMessage variant="loading" message="Loading sessions..." compact={true} />
     </section>
   {:else if error}
     <section class="admin-panel mt-0">
-      <p class="admin-error mt-0" data-testid="session-inspector-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="session-inspector-error" compact={true} />
     </section>
   {:else if filteredSessions.length === 0}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0" data-testid="session-inspector-empty">
-        No sessions match the current filter.
-      </p>
+      <AdminMessage
+        variant="empty"
+        message="No sessions match the current filter."
+        testId="session-inspector-empty"
+        compact={true}
+      />
     </section>
   {:else}
     <section class="grid gap-2" aria-label="Session table">
@@ -158,7 +186,7 @@
           <span class="grid min-w-0 gap-1">
             <strong class="truncate font-mono text-sm" title={session.id}>{session.id}</strong>
             <span class="truncate text-xs text-admin-ink/58">
-              {session.mcpDelegation} | updated {session.updatedAt}
+              {session.mcpDelegation} | {session.labels} | updated {session.updatedAt}
             </span>
           </span>
           <span class="grid justify-items-end gap-1 text-xs text-[#c1d0e8]">

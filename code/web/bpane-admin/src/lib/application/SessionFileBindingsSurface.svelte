@@ -12,6 +12,7 @@
     validateSessionMountPath,
     type SessionFileBindingViewModel,
   } from '../presentation/file-workspace-view-model';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
 
   type SessionFileBindingsSurfaceProps = {
     readonly controlClient: ControlClient;
@@ -58,7 +59,7 @@
       return;
     }
     loadedSessionId = sessionId;
-    void loadBindingsAndWorkspaces();
+    void loadBindingsAndWorkspaces(false);
   });
 
   $effect(() => {
@@ -66,7 +67,7 @@
       return;
     }
     lastRefreshVersion = refreshVersion;
-    void loadBindingsAndWorkspaces();
+    void loadBindingsAndWorkspaces(false);
   });
 
   $effect(() => {
@@ -77,7 +78,7 @@
     void loadWorkspaceFiles(selectedWorkspaceId);
   });
 
-  async function loadBindingsAndWorkspaces(): Promise<void> {
+  async function loadBindingsAndWorkspaces(showFeedback = true): Promise<void> {
     loading = true;
     error = null;
     actionMessage = null;
@@ -108,6 +109,9 @@
           .filter(Boolean)
           .join(' | ');
       }
+      if (showFeedback && !error) {
+        actionMessage = `Refreshed ${bindings.length} binding${bindings.length === 1 ? '' : 's'} and ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'}.`;
+      }
     } finally {
       loading = false;
     }
@@ -133,6 +137,7 @@
   }
 
   async function createBinding(): Promise<void> {
+    actionMessage = null;
     if (!selectedWorkspaceId || !selectedFileId) {
       error = 'Choose a workspace file before creating a binding.';
       return;
@@ -143,7 +148,6 @@
     }
     mutating = true;
     error = null;
-    actionMessage = null;
     try {
       const created = await controlClient.createSessionFileBinding(sessionId, {
         workspace_id: selectedWorkspaceId,
@@ -186,9 +190,11 @@
     }
     downloadingBindingId = bindingId;
     error = null;
+    actionMessage = null;
     try {
       const blob = await controlClient.downloadSessionFileBindingContent(binding);
       triggerDownload(blob, binding.file_name);
+      actionMessage = `Download started for ${binding.file_name}.`;
     } catch (downloadError) {
       error = errorMessage(downloadError, 'Unexpected session file binding download error');
     } finally {
@@ -318,22 +324,28 @@
   </div>
 
   {#if error}
-    <p class="admin-error mt-0" data-testid="session-file-bindings-error">{error}</p>
+    <AdminMessage variant="error" message={error} testId="session-file-bindings-error" compact={true} />
   {/if}
   {#if actionMessage}
-    <p class="m-0 text-sm font-bold text-admin-leaf" data-testid="session-file-bindings-message">{actionMessage}</p>
+    <AdminMessage variant="success" message={actionMessage} testId="session-file-bindings-message" compact={true} />
   {/if}
 
   {#if loading && bindings.length === 0}
-    <p class="admin-empty mt-0">Loading session file bindings...</p>
+    <AdminMessage variant="loading" message="Loading session file bindings..." compact={true} />
   {:else if workspaces.length === 0}
-    <p class="admin-empty mt-0" data-testid="session-file-bindings-empty">
-      No file workspaces are available. Create a workspace before binding inputs into this session.
-    </p>
+    <AdminMessage
+      variant="empty"
+      message="No file workspaces are available. Create a workspace before binding inputs into this session."
+      testId="session-file-bindings-empty"
+      compact={true}
+    />
   {:else if bindingRows.length === 0}
-    <p class="admin-empty mt-0" data-testid="session-file-bindings-empty">
-      No workspace files are bound to this session yet.
-    </p>
+    <AdminMessage
+      variant="empty"
+      message="No workspace files are bound to this session yet."
+      testId="session-file-bindings-empty"
+      compact={true}
+    />
   {:else}
     <div class="grid gap-3">
       {#each bindingRows as binding}
