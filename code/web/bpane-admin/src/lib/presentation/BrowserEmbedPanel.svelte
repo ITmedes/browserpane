@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { SessionResource } from '../api/control-types';
+  import AdminMessage from './AdminMessage.svelte';
   import type { BrowserStageViewModel } from './admin-workspace-view-model';
 
   type BrowserEmbedPanelProps = {
@@ -93,7 +94,9 @@
   </div>
 
   {#if error}
-    <p class="mt-4 mb-0 text-[#f49a7d] leading-normal" data-testid="browser-error">{error}</p>
+    <div class="mt-4">
+      <AdminMessage variant="error" message={error} testId="browser-error" compact={true} />
+    </div>
   {/if}
   <p class="sr-only" data-testid="browser-status">{viewModel.status}</p>
 </section>

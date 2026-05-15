@@ -4,6 +4,7 @@
   import type { SessionResource } from '../api/control-types';
   import type { SessionRecordingPlaybackResource, SessionRecordingResource } from '../api/recording-types';
   import type { LiveBrowserSessionConnection } from '../session/browser-session-types';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import RecordingPanel from '../presentation/RecordingPanel.svelte';
   import { RecordingViewModelBuilder } from '../presentation/recording-view-model';
   import { saveBlob } from './recording-downloads';
@@ -33,6 +34,7 @@
   let lastBlob = $state<Blob | null>(null);
   let lastArtifactName = $state<string | null>(null);
   let error = $state<string | null>(null);
+  let feedback = $state<AdminMessageFeedback | null>(null);
   const activeConnection = $derived(liveConnection?.sessionId === currentSessionId ? liveConnection : null);
   const viewModel = $derived(RecordingViewModelBuilder.build({
     liveConnection: activeConnection,
@@ -52,7 +54,7 @@
 
   onMount(() => {
     const timer = window.setInterval(() => {
-      if (shouldReconcileLibrary()) void loadLibrary(currentSessionId);
+      if (shouldReconcileLibrary()) void loadLibrary(currentSessionId, false);
     }, LIBRARY_RECONCILE_INTERVAL_MS);
     return () => window.clearInterval(timer);
   });
@@ -63,10 +65,10 @@
       return;
     }
     currentSessionId = nextSessionId;
-    recordings = []; playback = null; libraryLoaded = false; libraryError = null;
+    recordings = []; playback = null; libraryLoaded = false; libraryError = null; feedback = null;
     libraryRequest += 1;
     if (nextSessionId) {
-      void loadLibrary(nextSessionId);
+      void loadLibrary(nextSessionId, false);
     }
   });
 
@@ -76,18 +78,21 @@
     }
     lastRefreshVersion = refreshVersion;
     if (currentSessionId) {
-      void loadLibrary(currentSessionId);
+      void loadLibrary(currentSessionId, false);
     }
   });
   $effect(() => { recording = activeConnection?.handle.isRecording?.() ?? false; });
 
-  async function loadLibrary(sessionId = currentSessionId): Promise<void> {
+  async function loadLibrary(sessionId = currentSessionId, showFeedback = true): Promise<void> {
     if (!sessionId) {
       return;
     }
     const requestId = ++libraryRequest;
     libraryLoading = true;
     libraryError = null;
+    if (showFeedback) {
+      feedback = null;
+    }
     try {
       const [recordingList, nextPlayback] = await Promise.all([
         controlClient.listSessionRecordings(sessionId),
@@ -97,6 +102,9 @@
         recordings = recordingList.recordings;
         playback = nextPlayback;
         libraryLoaded = true;
+        if (showFeedback) {
+          feedback = successFeedback(`Recording library refreshed with ${recordingList.recordings.length} segment${recordingList.recordings.length === 1 ? '' : 's'}.`);
+        }
       }
     } catch (loadError) {
       if (currentSessionId === sessionId && libraryRequest === requestId) {
@@ -104,6 +112,7 @@
         playback = null;
         libraryLoaded = true;
         libraryError = errorMessage(loadError);
+        feedback = null;
       }
     } finally {
       if (currentSessionId === sessionId && libraryRequest === requestId) {
@@ -119,9 +128,11 @@
     }
     downloadingRecordingId = recordingId;
     libraryError = null;
+    feedback = null;
     try {
       const blob = await controlClient.downloadSessionRecordingContent(segment);
       saveBlob(blob, `browserpane-${segment.session_id}-${segment.id}.webm`);
+      feedback = successFeedback('Recording segment download started.');
     } catch (downloadError) {
       libraryError = errorMessage(downloadError);
     } finally {
@@ -135,9 +146,11 @@
     }
     downloadingPlayback = true;
     libraryError = null;
+    feedback = null;
     try {
       const blob = await controlClient.downloadSessionRecordingPlaybackExport(playback);
       saveBlob(blob, `browserpane-${playback.session_id}-recording-playback.zip`);
+      feedback = successFeedback('Session recording export download started.');
     } catch (downloadError) {
       libraryError = errorMessage(downloadError);
     } finally {
@@ -151,9 +164,11 @@
     }
     busy = true;
     error = null;
+    feedback = null;
     try {
       await activeConnection.handle.startRecording({ frameRate: 24 });
       recording = true;
+      feedback = successFeedback('Recording started for the selected browser session.');
     } catch (startError) {
       error = errorMessage(startError);
     } finally {
@@ -167,10 +182,12 @@
     }
     busy = true;
     error = null;
+    feedback = null;
     try {
       lastBlob = await activeConnection.handle.stopRecording();
       lastArtifactName = `bpane-${activeConnection.sessionId}-${Date.now()}.webm`;
       recording = false;
+      feedback = successFeedback('Recording stopped. The latest WebM is ready.');
       if (autoDownload) {
         downloadLast();
       }
@@ -184,16 +201,31 @@
   function downloadLast(): void {
     if (lastBlob && lastArtifactName) {
       saveBlob(lastBlob, lastArtifactName);
+      feedback = successFeedback('Latest recording download started.');
     }
+  }
+
+  function setAutoDownload(enabled: boolean): void {
+    autoDownload = enabled;
+    feedback = {
+      variant: 'info',
+      title: 'Recording preference updated',
+      message: enabled ? 'Auto download is enabled.' : 'Auto download is disabled.',
+      testId: 'recording-message',
+    };
   }
 
   function shouldReconcileLibrary(): boolean { return Boolean(currentSessionId && !libraryLoading && !downloadingRecordingId && !downloadingPlayback); }
 
   function errorMessage(value: unknown): string { return value instanceof Error ? value.message : 'Recording operation failed'; }
+
+  function successFeedback(message: string): AdminMessageFeedback {
+    return { variant: 'success', title: 'Recording updated', message, testId: 'recording-message' };
+  }
 </script>
 
-<RecordingPanel {viewModel} {autoDownload}
-  onAutoDownloadChange={(enabled) => { autoDownload = enabled; }}
+<RecordingPanel {viewModel} {autoDownload} {feedback}
+  onAutoDownloadChange={setAutoDownload}
   onStart={() => void startRecording()} onStop={() => void stopRecording()} onDownload={downloadLast}
   onRefreshLibrary={() => void loadLibrary()} onDownloadSegment={(recordingId) => void downloadSegment(recordingId)}
   onDownloadPlayback={() => void downloadPlaybackExport()} />

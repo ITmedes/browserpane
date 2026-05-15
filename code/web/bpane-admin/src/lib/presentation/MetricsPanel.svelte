@@ -1,16 +1,27 @@
 <script lang="ts">
+  import AdminMessage from './AdminMessage.svelte';
+  import type { AdminMessageFeedback } from './admin-message-types';
   import type { MetricsViewModel } from './metrics-view-model';
 
   type MetricsPanelProps = {
     readonly viewModel: MetricsViewModel;
     readonly copied: boolean;
+    readonly feedback?: AdminMessageFeedback | null;
     readonly onStart: () => void;
     readonly onStop: () => void;
     readonly onCopy: () => void;
     readonly onReset: () => void;
   };
 
-  let { viewModel, copied, onStart, onStop, onCopy, onReset }: MetricsPanelProps = $props();
+  let {
+    viewModel,
+    copied,
+    feedback = null,
+    onStart,
+    onStop,
+    onCopy,
+    onReset,
+  }: MetricsPanelProps = $props();
   const rows = $derived([
     ['sample', viewModel.sample],
     ['render', viewModel.render],
@@ -23,6 +34,15 @@
 
 <section class="grid gap-4" aria-label="Metrics controls">
   <p class="m-0 text-sm leading-normal text-admin-ink/68">{viewModel.note}</p>
+  {#if feedback}
+    <AdminMessage
+      variant={feedback.variant}
+      title={feedback.title}
+      message={feedback.message}
+      testId={feedback.testId}
+      compact={true}
+    />
+  {/if}
 
   <div class="grid grid-cols-2 gap-2 max-[760px]:grid-cols-1">
     {#each rows as row}

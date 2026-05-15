@@ -6,6 +6,7 @@
     FileWorkspaceFileResource,
     FileWorkspaceResource,
   } from '../api/control-types';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
   import {
     FileWorkspaceViewModelBuilder,
     type FileWorkspaceFileViewModel,
@@ -31,10 +32,10 @@
   const fileRows = $derived(files.map((file) => FileWorkspaceViewModelBuilder.workspaceFile(file)));
 
   onMount(() => {
-    void loadDetail();
+    void loadDetail(false);
   });
 
-  async function loadDetail(): Promise<void> {
+  async function loadDetail(showFeedback = true): Promise<void> {
     loading = true;
     error = null;
     actionMessage = null;
@@ -46,8 +47,12 @@
       workspace = nextWorkspace;
       files = nextFiles.files;
       lastRefreshedAt = new Date().toISOString();
+      if (showFeedback) {
+        actionMessage = `Refreshed ${nextFiles.files.length} workspace file${nextFiles.files.length === 1 ? '' : 's'}.`;
+      }
     } catch (loadError) {
       error = errorMessage(loadError, 'Unexpected file workspace detail error');
+      actionMessage = null;
     } finally {
       loading = false;
     }
@@ -55,13 +60,13 @@
 
   async function uploadFile(): Promise<void> {
     const selectedFile = fileInput?.files?.[0];
+    actionMessage = null;
     if (!selectedFile) {
       error = 'Choose a file before uploading.';
       return;
     }
     uploading = true;
     error = null;
-    actionMessage = null;
     try {
       const uploaded = await controlClient.uploadFileWorkspaceFile(workspaceId, {
         fileName: selectedFile.name,
@@ -91,9 +96,11 @@
     }
     downloadingFileId = fileId;
     error = null;
+    actionMessage = null;
     try {
       const blob = await controlClient.downloadFileWorkspaceFileContent(file);
       triggerDownload(blob, file.name);
+      actionMessage = `Download started for ${file.name}.`;
     } catch (downloadError) {
       error = errorMessage(downloadError, 'Unexpected workspace file download error');
     } finally {
@@ -173,11 +180,11 @@
 
   {#if loading && !workspace}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0">Loading file workspace...</p>
+      <AdminMessage variant="loading" message="Loading file workspace..." compact={true} />
     </section>
   {:else if error && !workspace}
     <section class="admin-panel mt-0">
-      <p class="admin-error mt-0" data-testid="file-workspace-detail-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="file-workspace-detail-error" compact={true} />
     </section>
   {:else}
     {#if workspace}
@@ -227,10 +234,10 @@
     </section>
 
     {#if error}
-      <p class="admin-error" data-testid="file-workspace-action-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="file-workspace-action-error" compact={true} />
     {/if}
     {#if actionMessage}
-      <p class="m-0 text-sm font-bold text-admin-leaf" data-testid="file-workspace-action-message">{actionMessage}</p>
+      <AdminMessage variant="success" message={actionMessage} testId="file-workspace-action-message" compact={true} />
     {/if}
 
     <section class="admin-panel mt-0 grid gap-3">
@@ -241,7 +248,12 @@
         </div>
       </div>
       {#if fileRows.length === 0}
-        <p class="admin-empty mt-0" data-testid="file-workspace-files-empty">No files have been uploaded to this workspace yet.</p>
+        <AdminMessage
+          variant="empty"
+          message="No files have been uploaded to this workspace yet."
+          testId="file-workspace-files-empty"
+          compact={true}
+        />
       {:else}
         <div class="grid gap-3">
           {#each fileRows as file}

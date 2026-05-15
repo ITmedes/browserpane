@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import type { SessionResource } from '../api/control-types';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import BrowserPolicyPanel from '../presentation/BrowserPolicyPanel.svelte';
   import { BrowserPolicyViewModelBuilder } from '../presentation/browser-policy-view-model';
 
@@ -11,6 +12,7 @@
 
   let { selectedSession, onRefreshSelectedSession }: BrowserPolicySurfaceProps = $props();
   let copied = $state(false);
+  let feedback = $state<AdminMessageFeedback | null>(null);
   let copyTimer: ReturnType<typeof setTimeout> | null = null;
   const viewModel = $derived(BrowserPolicyViewModelBuilder.build(selectedSession));
 
@@ -24,21 +26,57 @@
     if (!viewModel.probeCommand) {
       return;
     }
-    await navigator.clipboard.writeText(viewModel.probeCommand);
-    copied = true;
-    if (copyTimer) {
-      clearTimeout(copyTimer);
+    try {
+      await navigator.clipboard.writeText(viewModel.probeCommand);
+      copied = true;
+      feedback = {
+        variant: 'success',
+        title: 'Policy command copied',
+        message: 'CDP local-file policy probe command copied.',
+        testId: 'policy-message',
+      };
+      if (copyTimer) {
+        clearTimeout(copyTimer);
+      }
+      copyTimer = setTimeout(() => {
+        copied = false;
+        copyTimer = null;
+      }, 1600);
+    } catch (error) {
+      feedback = {
+        variant: 'error',
+        title: 'Copy failed',
+        message: error instanceof Error ? error.message : 'Could not copy policy probe command.',
+        testId: 'policy-message',
+      };
     }
-    copyTimer = setTimeout(() => {
-      copied = false;
-      copyTimer = null;
-    }, 1600);
+  }
+
+  async function refreshPolicy(): Promise<void> {
+    feedback = null;
+    try {
+      await onRefreshSelectedSession();
+      feedback = {
+        variant: 'success',
+        title: 'Policy refreshed',
+        message: 'Selected session policy data refreshed.',
+        testId: 'policy-message',
+      };
+    } catch (error) {
+      feedback = {
+        variant: 'error',
+        title: 'Policy refresh failed',
+        message: error instanceof Error ? error.message : 'Could not refresh selected session policy data.',
+        testId: 'policy-message',
+      };
+    }
   }
 </script>
 
 <BrowserPolicyPanel
   {viewModel}
   {copied}
-  onRefresh={() => void onRefreshSelectedSession()}
+  {feedback}
+  onRefresh={() => void refreshPolicy()}
   onCopyProbeCommand={() => void copyProbeCommand()}
 />

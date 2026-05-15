@@ -1,12 +1,15 @@
 <script lang="ts">
   import { base } from '$app/paths';
+  import type { CreateSessionCommand } from '../api/control-types';
+  import AdminMessage from './AdminMessage.svelte';
+  import SessionCreateConfigurator from './SessionCreateConfigurator.svelte';
   import SessionTable from './SessionTable.svelte';
   import type { SessionListPanelViewModel } from './session-view-model';
 
   type SessionListPanelProps = {
     readonly viewModel: SessionListPanelViewModel;
     readonly onRefresh: () => void;
-    readonly onCreateSession: () => void;
+    readonly onCreateSession: (command: CreateSessionCommand) => void;
     readonly onJoinSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
   };
@@ -18,6 +21,7 @@
     onJoinSession,
     onSelectSessionId,
   }: SessionListPanelProps = $props();
+  let createPayloadOpen = $state(false);
 
   function detailHref(sessionId: string): string {
     return `${base}/sessions/${encodeURIComponent(sessionId)}`;
@@ -46,7 +50,7 @@
         {@render Fact('MCP', viewModel.selectedSession.mcpDelegation, 'session-selected-mcp')}
       </div>
       <p class="m-0 truncate text-xs text-admin-ink/58">
-        {viewModel.selectedSession.ownerMode} | {viewModel.selectedSession.runtimeBinding} | updated {viewModel.selectedSession.updatedAt}
+        {viewModel.selectedSession.ownerMode} | {viewModel.selectedSession.runtimeBinding} | {viewModel.selectedSession.labels} | updated {viewModel.selectedSession.updatedAt}
       </p>
     {:else}
       <p class="m-0 text-sm leading-normal text-admin-ink/68">
@@ -72,6 +76,16 @@
     </div>
   </section>
 
+  <SessionCreateConfigurator
+    loading={viewModel.loading}
+    disabled={!viewModel.authenticated}
+    submitTestId="session-new"
+    variant="inline"
+    payloadOpen={createPayloadOpen}
+    onPayloadOpenChange={(open) => { createPayloadOpen = open; }}
+    {onCreateSession}
+  />
+
   <section class="grid gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Session switcher">
     <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
       <div>
@@ -79,15 +93,6 @@
         <p class="m-0 text-sm font-bold text-admin-ink/72">{viewModel.sessions.length} visible sessions</p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button
-          class="admin-button-primary"
-          type="button"
-          data-testid="session-new"
-          disabled={!viewModel.authenticated || viewModel.loading}
-          onclick={onCreateSession}
-        >
-          New session
-        </button>
         <button
           class="admin-button-primary"
           type="button"
@@ -101,15 +106,22 @@
     </div>
 
     {#if !viewModel.authenticated}
-      <p class="admin-empty mt-0">
-        Sign in to inspect sessions from <code class="admin-code-pill">/api/v1/sessions</code>.
-      </p>
+      <AdminMessage
+        variant="warning"
+        title="Sign in required"
+        message="Sign in to inspect sessions from /api/v1/sessions."
+        compact={true}
+      />
     {:else if viewModel.loading}
-      <p class="admin-empty mt-0">Loading sessions...</p>
+      <AdminMessage variant="loading" message="Loading sessions..." compact={true} />
     {:else if viewModel.error}
-      <p class="admin-error mt-0">{viewModel.error}</p>
+      <AdminMessage variant="error" message={viewModel.error} compact={true} />
     {:else if viewModel.sessions.length === 0}
-      <p class="admin-empty mt-0">No owner-scoped sessions are visible for this operator.</p>
+      <AdminMessage
+        variant="empty"
+        message="No owner-scoped sessions are visible for this operator."
+        compact={true}
+      />
     {:else}
       <SessionTable
         sessions={viewModel.sessions}

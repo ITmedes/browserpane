@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Mic, Upload, Video } from 'lucide-svelte';
+  import AdminMessage from './AdminMessage.svelte';
+  import type { AdminMessageFeedback } from './admin-message-types';
   import type { LiveSessionActionsViewModel } from './live-session-actions-view-model';
 
   type LiveSessionActionsPanelProps = {
@@ -7,6 +9,7 @@
     readonly onCameraToggle: () => void;
     readonly onMicrophoneToggle: () => void;
     readonly onUploadFiles: (files: FileList) => void;
+    readonly feedback?: AdminMessageFeedback | null;
   };
 
   let {
@@ -14,6 +17,7 @@
     onCameraToggle,
     onMicrophoneToggle,
     onUploadFiles,
+    feedback = null,
   }: LiveSessionActionsPanelProps = $props();
   let fileInput: HTMLInputElement | null = null;
 
@@ -66,10 +70,25 @@
 
   <input class="sr-only" type="file" multiple data-testid="display-upload-input" bind:this={fileInput} onchange={handleUploadChange} />
 
+  {#if feedback}
+    <div class="mt-3">
+      <AdminMessage
+        variant={feedback.variant}
+        title={feedback.title}
+        message={feedback.message}
+        testId={feedback.testId}
+        compact={true}
+      />
+    </div>
+  {/if}
   {#if viewModel.busy}
-    <p class="admin-empty mt-3" data-testid="display-busy">Applying live action...</p>
+    <div class="mt-3">
+      <AdminMessage variant="loading" message="Applying live action..." testId="display-busy" compact={true} />
+    </div>
   {/if}
   {#if viewModel.error}
-    <p class="admin-error mt-3" data-testid="display-error">{viewModel.error}</p>
+    <div class="mt-3">
+      <AdminMessage variant="error" message={viewModel.error} testId="display-error" compact={true} />
+    </div>
   {/if}
 </section>

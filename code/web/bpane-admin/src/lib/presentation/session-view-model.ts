@@ -10,6 +10,7 @@ export type SessionListItemViewModel = {
   readonly clients: number;
   readonly updatedAt: string;
   readonly mcpDelegation: string;
+  readonly labels: string;
 };
 
 export type SelectedSessionViewModel = SessionListItemViewModel & {
@@ -103,7 +104,9 @@ export class SessionViewModelBuilder {
       title: session.id,
       facts: [
         { label: 'state', value: session.state, testId: 'session-state' },
-        { label: 'owner', value: session.owner_mode },
+        { label: 'owner', value: session.owner_mode, testId: 'session-owner-mode' },
+        { label: 'idle override', value: session.idle_timeout_sec?.toString() ?? 'default', testId: 'session-idle-timeout' },
+        { label: 'labels', value: labelSummary(session.labels ?? {}), testId: 'session-labels' },
         { label: 'runtime', value: session.status.runtime_state, testId: 'session-runtime-state' },
         { label: 'presence', value: session.status.presence_state, testId: 'session-presence-state' },
         { label: 'clients', value: String(connectionCount), testId: 'session-total-clients' },
@@ -142,6 +145,7 @@ function toListItem(session: SessionResource): SessionListItemViewModel {
     clients: session.status.connection_counts.total_clients,
     updatedAt: session.updated_at,
     mcpDelegation: mcpDelegationLabel(session),
+    labels: labelSummary(session.labels ?? {}),
   };
 }
 
@@ -189,6 +193,14 @@ function yesNo(value: boolean): string {
 
 function mcpDelegationLabel(session: SessionResource): string {
   return session.automation_delegate ? 'MCP delegated' : 'MCP not delegated';
+}
+
+function labelSummary(labels: Readonly<Record<string, string>>): string {
+  const entries = Object.entries(labels).sort(([left], [right]) => left.localeCompare(right));
+  if (entries.length === 0) {
+    return 'No labels';
+  }
+  return entries.map(([key, value]) => `${key}=${value}`).join(', ');
 }
 
 function shortId(value: string): string {

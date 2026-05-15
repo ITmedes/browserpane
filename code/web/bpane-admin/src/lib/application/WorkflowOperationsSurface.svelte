@@ -3,6 +3,7 @@
   import type { SessionResource } from '../api/control-types';
   import type { WorkflowClient } from '../api/workflow-client';
   import type { WorkflowDefinitionResource, WorkflowDefinitionVersionResource, WorkflowRunEventResource, WorkflowRunLogResource, WorkflowRunProducedFileResource, WorkflowRunResource } from '../api/workflow-types';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import WorkflowOperationsPanel from '../presentation/WorkflowOperationsPanel.svelte';
   import { WorkflowOperationsViewModelBuilder } from '../presentation/workflow-operations-view-model';
   import { WorkflowOperationsService } from './workflow-operations-service';
@@ -36,6 +37,7 @@
   let loading = $state(false);
   let actionInFlight = $state(false);
   let error = $state<string | null>(null);
+  let feedback = $state<AdminMessageFeedback | null>(null);
   let currentSessionId = $state<string | null>(null);
 
   const inputValid = $derived(isJson(inputText));
@@ -47,7 +49,7 @@
   }));
 
   onMount(() => {
-    void loadDefinitions();
+    void loadDefinitions(false);
   });
 
   $effect(() => {
@@ -61,28 +63,44 @@
     logs = [];
     files = [];
     error = null;
+    feedback = null;
   });
 
-  async function loadDefinitions(): Promise<void> {
+  async function loadDefinitions(showFeedback = true): Promise<void> {
     loading = true;
     error = null;
+    feedback = null;
     try {
       const selection = await workflowService.loadDefinitions(selectedWorkflowId, selectedVersion);
       definitions = selection.definitions;
       selectedWorkflowId = selection.selectedWorkflowId;
       selectedVersion = selection.selectedVersion;
       selectedVersionResource = selection.selectedVersionResource;
+      if (showFeedback) {
+        feedback = successFeedback(`${selection.definitions.length} workflow template${selection.definitions.length === 1 ? '' : 's'} refreshed.`);
+      }
     } catch (loadError) {
       error = errorMessage(loadError);
+      feedback = null;
     } finally {
       loading = false;
     }
   }
 
   async function selectWorkflow(workflowId: string): Promise<void> {
+    error = null;
+    feedback = null;
     selectedWorkflowId = workflowId;
     selectedVersion = definitions.find((entry) => entry.id === workflowId)?.latest_version ?? '';
+    selectedVersionResource = null;
     await loadSelectedVersion();
+  }
+
+  function updateSelectedVersion(version: string): void {
+    selectedVersion = version.trim();
+    selectedVersionResource = null;
+    error = null;
+    feedback = null;
   }
 
   async function loadSelectedVersion(): Promise<void> {
@@ -101,10 +119,12 @@
   async function invokeRun(): Promise<void> {
     if (viewModel.invokeBlockedReason) {
       error = viewModel.invokeBlockedReason;
+      feedback = null;
       return;
     }
     if (!selectedSession) {
       error = 'Select or create a session before invoking a workflow. The selected session is the workflow baseline.';
+      feedback = null;
       return;
     }
     await runAction(async () => {
@@ -121,7 +141,7 @@
         runInput: parseJson(inputText),
       });
       await refreshRunResources(false);
-    });
+    }, () => currentRun ? `Workflow run ${shortId(currentRun.id)} was invoked.` : 'Workflow run was invoked.');
   }
 
   async function refreshRunResources(withBusy = true): Promise<void> {
@@ -136,26 +156,37 @@
       files = snapshot.files;
     };
     if (withBusy) {
-      await runAction(refresh);
+      await runAction(refresh, () => currentRun ? `Workflow run ${shortId(currentRun.id)} refreshed.` : 'Workflow run refreshed.');
     } else {
       await refresh();
     }
   }
 
-  async function mutateRun(action: () => Promise<WorkflowRunResource>): Promise<void> {
+  async function mutateRun(
+    successMessage: (run: WorkflowRunResource) => string,
+    action: () => Promise<WorkflowRunResource>,
+  ): Promise<void> {
     await runAction(async () => {
       currentRun = await action();
       await refreshRunResources(false);
-    });
+    }, () => currentRun ? successMessage(currentRun) : 'Workflow run updated.');
   }
 
-  async function runAction(action: () => Promise<void>): Promise<void> {
+  async function runAction(
+    action: () => Promise<void>,
+    successMessage?: () => string,
+  ): Promise<void> {
     actionInFlight = true;
     error = null;
+    feedback = null;
     try {
       await action();
+      if (successMessage) {
+        feedback = successFeedback(successMessage());
+      }
     } catch (actionError) {
       error = errorMessage(actionError);
+      feedback = null;
     } finally {
       actionInFlight = false;
     }
@@ -166,6 +197,8 @@
     if (!file) {
       return;
     }
+    error = null;
+    feedback = null;
     try {
       const url = URL.createObjectURL(await workflowService.downloadFile(file));
       const link = document.createElement('a');
@@ -175,8 +208,10 @@
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      feedback = successFeedback(`Produced file ${file.file_name} download started.`);
     } catch (downloadError) {
       error = errorMessage(downloadError);
+      feedback = null;
     }
   }
 
@@ -196,21 +231,29 @@
   function errorMessage(value: unknown): string {
     return value instanceof Error ? value.message : 'Unexpected workflow operation error';
   }
+
+  function successFeedback(message: string): AdminMessageFeedback {
+    return { variant: 'success', title: 'Workflow updated', message, testId: 'workflow-message' };
+  }
+
+  function shortId(value: string): string {
+    return value.length > 13 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+  }
 </script>
 
 <WorkflowOperationsPanel
-  {viewModel} {inputText} {interventionInputText}
+  {viewModel} {inputText} {interventionInputText} {feedback}
   onRefreshDefinitions={() => void loadDefinitions()}
   onWorkflowChange={(workflowId) => void selectWorkflow(workflowId)}
-  onVersionChange={(version) => { selectedVersion = version.trim(); selectedVersionResource = null; }}
+  onVersionChange={updateSelectedVersion}
   onInputTextChange={(next) => { inputText = next; }}
   onInterventionInputChange={(next) => { interventionInputText = next; }}
   onCreateSession={onCreateSession}
   onConnectSession={onConnectSession}
   onInvokeRun={() => void invokeRun()}
   onRefreshRun={() => void refreshRunResources()}
-  onCancelRun={() => currentRun && void mutateRun(() => workflowService.cancelRun(currentRun!.id))}
-  onReleaseHold={() => currentRun && void mutateRun(() => workflowService.releaseHold(currentRun!.id))}
-  onSubmitInput={() => currentRun && void mutateRun(() => workflowService.submitInput(currentRun!.id, parseJson(interventionInputText)))}
+  onCancelRun={() => currentRun && void mutateRun((run) => `Workflow run ${shortId(run.id)} was cancelled.`, () => workflowService.cancelRun(currentRun!.id))}
+  onReleaseHold={() => currentRun && void mutateRun((run) => `Workflow run ${shortId(run.id)} hold was released.`, () => workflowService.releaseHold(currentRun!.id))}
+  onSubmitInput={() => currentRun && void mutateRun((run) => `Operator input was submitted for workflow run ${shortId(run.id)}.`, () => workflowService.submitInput(currentRun!.id, parseJson(interventionInputText)))}
   onDownloadProducedFile={(fileId) => void downloadProducedFile(fileId)}
 />
