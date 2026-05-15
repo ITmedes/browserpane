@@ -145,16 +145,32 @@
       requestBrowserConnect();
     } catch (error) {
       sessionsError = errorMessage(error);
+      showGlobalMessage('error', 'Session create failed', sessionsError);
     } finally {
       sessionsLoading = false;
     }
   }
-  async function refreshSelectedSession(): Promise<void> {
+  async function refreshSelectedSession(options: { readonly showGlobalError?: boolean } = {}): Promise<void> {
     if (!selectedSession) return;
     sessionsLoading = true;
+    sessionsError = null;
     try { upsertSession(await controlClient.getSession(selectedSession.id)); }
-    catch (error) { sessionsError = errorMessage(error); }
+    catch (error) {
+      sessionsError = errorMessage(error);
+      if (options.showGlobalError) {
+        showGlobalMessage('warning', 'Session refresh failed', sessionsError);
+      }
+      throw error;
+    }
     finally { sessionsLoading = false; }
+  }
+  async function refreshSelectedSessionInBackground(): Promise<void> {
+    try {
+      await refreshSelectedSession({ showGlobalError: true });
+    } catch {
+      // The foreground action already succeeded; keep its state instead of
+      // turning a follow-up refresh failure into a failed action.
+    }
   }
   async function runLifecycle(action: 'stop' | 'kill'): Promise<void> {
     if (!selectedSession) return;
@@ -183,7 +199,7 @@
       liveConnection = await browserConnector.connect(selectedSession, container, browserPreferences);
       browserStatus = `Connected to ${selectedSession.id}`;
       showGlobalMessage('success', 'Browser connected', `Connected to session ${shortAdminId(selectedSession.id)}.`);
-      await refreshSelectedSession();
+      void refreshSelectedSessionInBackground();
     } catch (error) {
       browserError = errorMessage(error);
       browserStatus = 'Connection failed';
@@ -206,7 +222,7 @@
       );
     }
     if (hadLiveConnection && refreshAfterDisconnect) {
-      window.setTimeout(() => void refreshSelectedSession(), 250);
+      window.setTimeout(() => void refreshSelectedSessionInBackground(), 250);
     }
   }
   function setSessionList(next: readonly SessionResource[], source: 'event' | 'manual' | 'local' = 'manual'): void {
