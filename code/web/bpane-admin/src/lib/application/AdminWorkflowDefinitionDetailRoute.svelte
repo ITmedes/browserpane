@@ -43,6 +43,8 @@
   });
 
   async function loadDetail(showFeedback = true): Promise<void> {
+    const previousLatestVersion = definition?.latest_version ?? null;
+    const previousRunCount = runs.length;
     loading = true;
     error = null;
     actionFeedback = null;
@@ -58,7 +60,12 @@
       selectedVersion = selectedVersionFor(definitionResource, versionList.versions, selectedVersion);
       lastRefreshedAt = new Date().toISOString();
       if (showFeedback) {
-        actionFeedback = successFeedback('Workflow template detail refreshed.');
+        actionFeedback = successFeedback(refreshMessage(
+          previousLatestVersion,
+          definitionResource.latest_version,
+          previousRunCount,
+          runList.runs.length,
+        ));
       }
     } catch (loadError) {
       error = errorMessage(loadError);
@@ -92,6 +99,21 @@
 
   function errorMessage(value: unknown): string {
     return value instanceof Error ? value.message : 'Unexpected workflow definition detail error';
+  }
+
+  function refreshMessage(
+    previousLatestVersion: string | null,
+    nextLatestVersion: string | null,
+    previousRunCount: number,
+    nextRunCount: number,
+  ): string {
+    if (previousLatestVersion && previousLatestVersion !== nextLatestVersion) {
+      return `Latest workflow version changed from ${previousLatestVersion} to ${nextLatestVersion ?? 'none'}.`;
+    }
+    if (previousRunCount !== nextRunCount) {
+      return `Workflow run count changed from ${previousRunCount} to ${nextRunCount}.`;
+    }
+    return 'Workflow template detail refreshed.';
   }
 
   function successFeedback(message: string): AdminMessageFeedback {

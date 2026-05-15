@@ -49,6 +49,7 @@
     const sessionId = selectedSession?.id ?? null;
     if (sessionId !== lifecycleSessionId) {
       lifecycleSessionId = sessionId;
+      statusLoading = false;
       statusError = null;
       feedback = null;
     }
@@ -66,14 +67,25 @@
   });
 
   async function refreshPanel(): Promise<void> {
+    const requestSessionId = selectedSession?.id ?? null;
+    if (!requestSessionId) {
+      return;
+    }
     feedback = loadingFeedback('Refreshing session status...');
     try {
       await onRefreshSelectedSession();
-      await refreshStatus();
-      feedback = successFeedback('Session status refreshed.');
+      if (!isCurrentSession(requestSessionId)) {
+        return;
+      }
+      await refreshStatusFor(requestSessionId);
+      if (isCurrentSession(requestSessionId)) {
+        feedback = successFeedback('Session status refreshed.');
+      }
     } catch (error) {
-      statusError = errorMessage(error);
-      feedback = null;
+      if (isCurrentSession(requestSessionId)) {
+        statusError = errorMessage(error);
+        feedback = null;
+      }
     }
   }
 
@@ -121,15 +133,24 @@
     feedback = loadingFeedback(progressMessage);
     try {
       const nextStatus = await action();
+      if (!isCurrentSession(sessionId)) {
+        return;
+      }
       applyStatus(sessionId, nextStatus);
       syncEmbeddedBrowserAfterDisconnect(nextStatus);
       await onRefreshSelectedSession();
-      feedback = successFeedback(successMessage);
+      if (isCurrentSession(sessionId)) {
+        feedback = successFeedback(successMessage);
+      }
     } catch (error) {
-      statusError = errorMessage(error);
-      feedback = null;
+      if (isCurrentSession(sessionId)) {
+        statusError = errorMessage(error);
+        feedback = null;
+      }
     } finally {
-      statusLoading = false;
+      if (isCurrentSession(sessionId)) {
+        statusLoading = false;
+      }
     }
   }
 
@@ -138,14 +159,25 @@
     successMessage: string,
     action: () => Promise<void>,
   ): Promise<void> {
+    const requestSessionId = selectedSession?.id ?? null;
+    if (!requestSessionId) {
+      return;
+    }
     feedback = loadingFeedback(progressMessage);
     try {
       await action();
-      await refreshStatus();
-      feedback = successFeedback(successMessage);
+      if (!isCurrentSession(requestSessionId)) {
+        return;
+      }
+      await refreshStatusFor(requestSessionId);
+      if (isCurrentSession(requestSessionId)) {
+        feedback = successFeedback(successMessage);
+      }
     } catch (error) {
-      statusError = errorMessage(error);
-      feedback = null;
+      if (isCurrentSession(requestSessionId)) {
+        statusError = errorMessage(error);
+        feedback = null;
+      }
     }
   }
 
@@ -154,13 +186,20 @@
     statusLoading = true;
     statusError = null;
     try {
-      applyStatus(sessionId, await controlClient.getSessionStatus(sessionId));
+      const nextStatus = await controlClient.getSessionStatus(sessionId);
+      if (isCurrentSession(sessionId) && requestedSessionId === sessionId) {
+        applyStatus(sessionId, nextStatus);
+      }
     } catch (error) {
-      statusError = errorMessage(error);
+      if (isCurrentSession(sessionId) && requestedSessionId === sessionId) {
+        statusError = errorMessage(error);
+      }
     } finally {
       if (requestedSessionId === sessionId) {
         requestedSessionId = null;
-        statusLoading = false;
+        if (isCurrentSession(sessionId)) {
+          statusLoading = false;
+        }
       }
     }
   }
@@ -174,6 +213,10 @@
     if (connected && nextStatus.connection_counts.total_clients === 0) {
       onDisconnectEmbeddedBrowser();
     }
+  }
+
+  function isCurrentSession(sessionId: string): boolean {
+    return selectedSession?.id === sessionId;
   }
 
   function errorMessage(error: unknown): string {

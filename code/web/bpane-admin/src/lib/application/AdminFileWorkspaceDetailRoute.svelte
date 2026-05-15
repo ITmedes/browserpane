@@ -36,6 +36,7 @@
   });
 
   async function loadDetail(showFeedback = true): Promise<void> {
+    const previousFileCount = files.length;
     loading = true;
     error = null;
     actionMessage = null;
@@ -48,7 +49,9 @@
       files = nextFiles.files;
       lastRefreshedAt = new Date().toISOString();
       if (showFeedback) {
-        actionMessage = `Refreshed ${nextFiles.files.length} workspace file${nextFiles.files.length === 1 ? '' : 's'}.`;
+        actionMessage = previousFileCount !== nextFiles.files.length
+          ? `Workspace file count changed from ${previousFileCount} to ${nextFiles.files.length}.`
+          : `Refreshed ${nextFiles.files.length} workspace file${nextFiles.files.length === 1 ? '' : 's'}.`;
       }
     } catch (loadError) {
       error = errorMessage(loadError, 'Unexpected file workspace detail error');

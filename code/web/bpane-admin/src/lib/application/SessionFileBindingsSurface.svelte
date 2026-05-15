@@ -92,6 +92,8 @@
 
   async function loadBindingsAndWorkspaces(showFeedback = true): Promise<void> {
     const requestSessionId = sessionId;
+    const previousBindingCount = bindings.length;
+    const previousWorkspaceCount = workspaces.length;
     loading = true;
     error = null;
     actionMessage = null;
@@ -126,7 +128,12 @@
           .join(' | ');
       }
       if (showFeedback && !error) {
-        actionMessage = `Refreshed ${bindings.length} binding${bindings.length === 1 ? '' : 's'} and ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'}.`;
+        actionMessage = refreshMessage(
+          previousBindingCount,
+          bindings.length,
+          previousWorkspaceCount,
+          workspaces.length,
+        );
       }
     } finally {
       if (loadedSessionId === requestSessionId) {
@@ -271,6 +278,21 @@
 
   function errorMessage(value: unknown, fallback: string): string {
     return value instanceof Error ? value.message : fallback;
+  }
+
+  function refreshMessage(
+    previousBindingCount: number,
+    nextBindingCount: number,
+    previousWorkspaceCount: number,
+    nextWorkspaceCount: number,
+  ): string {
+    if (previousBindingCount !== nextBindingCount) {
+      return `Binding count changed from ${previousBindingCount} to ${nextBindingCount}.`;
+    }
+    if (previousWorkspaceCount !== nextWorkspaceCount) {
+      return `Workspace count changed from ${previousWorkspaceCount} to ${nextWorkspaceCount}.`;
+    }
+    return `Refreshed ${nextBindingCount} binding${nextBindingCount === 1 ? '' : 's'} and ${nextWorkspaceCount} workspace${nextWorkspaceCount === 1 ? '' : 's'}.`;
   }
 </script>
 
