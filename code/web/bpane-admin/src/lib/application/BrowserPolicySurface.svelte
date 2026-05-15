@@ -38,11 +38,16 @@
   });
 
   async function copyProbeCommand(): Promise<void> {
-    if (!viewModel.probeCommand) {
+    const requestSessionId = currentSessionId;
+    const probeCommand = viewModel.probeCommand;
+    if (!probeCommand || !requestSessionId) {
       return;
     }
     try {
-      await navigator.clipboard.writeText(viewModel.probeCommand);
+      await navigator.clipboard.writeText(probeCommand);
+      if (currentSessionId !== requestSessionId) {
+        return;
+      }
       copied = true;
       feedback = {
         variant: 'success',
@@ -58,19 +63,28 @@
         copyTimer = null;
       }, 1600);
     } catch (error) {
-      feedback = {
-        variant: 'error',
-        title: 'Copy failed',
-        message: error instanceof Error ? error.message : 'Could not copy policy probe command.',
-        testId: 'policy-message',
-      };
+      if (currentSessionId === requestSessionId) {
+        feedback = {
+          variant: 'error',
+          title: 'Copy failed',
+          message: error instanceof Error ? error.message : 'Could not copy policy probe command.',
+          testId: 'policy-message',
+        };
+      }
     }
   }
 
   async function refreshPolicy(): Promise<void> {
+    const requestSessionId = currentSessionId;
+    if (!requestSessionId) {
+      return;
+    }
     feedback = null;
     try {
       await onRefreshSelectedSession();
+      if (currentSessionId !== requestSessionId) {
+        return;
+      }
       feedback = {
         variant: 'success',
         title: 'Policy refreshed',
@@ -78,12 +92,14 @@
         testId: 'policy-message',
       };
     } catch (error) {
-      feedback = {
-        variant: 'error',
-        title: 'Policy refresh failed',
-        message: error instanceof Error ? error.message : 'Could not refresh selected session policy data.',
-        testId: 'policy-message',
-      };
+      if (currentSessionId === requestSessionId) {
+        feedback = {
+          variant: 'error',
+          title: 'Policy refresh failed',
+          message: error instanceof Error ? error.message : 'Could not refresh selected session policy data.',
+          testId: 'policy-message',
+        };
+      }
     }
   }
 </script>

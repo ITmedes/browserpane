@@ -47,6 +47,7 @@
     }
     currentKey = nextKey;
     health = null;
+    loading = false;
     error = null;
     feedback = null;
     if (bridgeClient) {
@@ -65,50 +66,80 @@
   });
 
   async function refreshBridge(showFeedback = true): Promise<void> {
-    if (!bridgeClient) {
+    const client = bridgeClient;
+    const requestKey = currentKey;
+    if (!client) {
       return;
     }
     loading = true;
     error = null;
     feedback = null;
     try {
-      health = await bridgeClient.getHealth();
+      const nextHealth = await client.getHealth();
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
+      health = nextHealth;
       if (showFeedback) {
         feedback = successFeedback('MCP bridge status refreshed.');
       }
     } catch (refreshError) {
-      error = errorMessage(refreshError);
-      feedback = null;
+      if (isCurrentRequest(requestKey)) {
+        error = errorMessage(refreshError);
+        feedback = null;
+      }
     } finally {
-      loading = false;
+      if (isCurrentRequest(requestKey)) {
+        loading = false;
+      }
     }
   }
 
   async function authorizeSelectedSession(): Promise<void> {
-    if (!selectedSession || !mcpBridge) {
+    const session = selectedSession;
+    const bridge = mcpBridge;
+    const client = bridgeClient;
+    const requestKey = currentKey;
+    if (!session || !bridge) {
       return;
     }
     loading = true;
     error = null;
     feedback = null;
     try {
-      await authorizeSession(selectedSession.id);
+      await authorizeSession(session.id, bridge);
       await onRefreshSessions();
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
       await onRefreshSelectedSession();
-      health = await bridgeClient?.getHealth() ?? health;
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
+      health = await client?.getHealth() ?? health;
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
       feedback = successFeedback('MCP authorized for the selected session.');
     } catch (delegateError) {
-      error = errorMessage(delegateError);
+      if (isCurrentRequest(requestKey)) {
+        error = errorMessage(delegateError);
+      }
     } finally {
-      loading = false;
+      if (isCurrentRequest(requestKey)) {
+        loading = false;
+      }
     }
   }
 
   async function revokeSelectedSession(): Promise<void> {
-    if (!selectedSession) {
+    const session = selectedSession;
+    const client = bridgeClient;
+    const requestKey = currentKey;
+    if (!session) {
       return;
     }
-    if (health?.control_session_id === selectedSession.id) {
+    if (health?.control_session_id === session.id) {
       error = 'Clear the default MCP session before revoking this authorization.';
       feedback = null;
       return;
@@ -117,87 +148,141 @@
     error = null;
     feedback = null;
     try {
-      await controlClient.clearAutomationDelegate(selectedSession.id);
+      await controlClient.clearAutomationDelegate(session.id);
       await onRefreshSessions();
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
       await onRefreshSelectedSession();
-      health = await bridgeClient?.getHealth() ?? health;
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
+      health = await client?.getHealth() ?? health;
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
       feedback = successFeedback('MCP authorization was revoked for the selected session.');
     } catch (clearError) {
-      error = errorMessage(clearError);
+      if (isCurrentRequest(requestKey)) {
+        error = errorMessage(clearError);
+      }
     } finally {
-      loading = false;
+      if (isCurrentRequest(requestKey)) {
+        loading = false;
+      }
     }
   }
 
   async function setDefaultSession(): Promise<void> {
-    if (!selectedSession || !mcpBridge || !bridgeClient) {
+    const session = selectedSession;
+    const bridge = mcpBridge;
+    const client = bridgeClient;
+    const requestKey = currentKey;
+    if (!session || !bridge || !client) {
       return;
     }
     loading = true;
     error = null;
     feedback = null;
     try {
-      if (!isDelegatedToBridge(selectedSession)) {
-        await authorizeSession(selectedSession.id);
+      if (!isDelegatedToBridge(session, bridge)) {
+        await authorizeSession(session.id, bridge);
       }
-      await bridgeClient.setControlSession(selectedSession.id);
+      await client.setControlSession(session.id);
       await onRefreshSessions();
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
       await onRefreshSelectedSession();
-      health = await bridgeClient.getHealth();
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
+      health = await client.getHealth();
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
       feedback = successFeedback('Selected session is now the default MCP session.');
     } catch (clearError) {
-      error = errorMessage(clearError);
+      if (isCurrentRequest(requestKey)) {
+        error = errorMessage(clearError);
+      }
     } finally {
-      loading = false;
+      if (isCurrentRequest(requestKey)) {
+        loading = false;
+      }
     }
   }
 
   async function clearDefaultSession(): Promise<void> {
-    if (!bridgeClient) {
+    const client = bridgeClient;
+    const requestKey = currentKey;
+    if (!client) {
       return;
     }
     loading = true;
     error = null;
     feedback = null;
     try {
-      await bridgeClient.clearControlSession();
+      await client.clearControlSession();
       await onRefreshSessions();
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
       await onRefreshSelectedSession();
-      health = await bridgeClient.getHealth();
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
+      health = await client.getHealth();
+      if (!isCurrentRequest(requestKey)) {
+        return;
+      }
       feedback = successFeedback('Default MCP session was cleared.');
     } catch (clearError) {
-      error = errorMessage(clearError);
+      if (isCurrentRequest(requestKey)) {
+        error = errorMessage(clearError);
+      }
     } finally {
-      loading = false;
+      if (isCurrentRequest(requestKey)) {
+        loading = false;
+      }
     }
   }
 
   async function copyEndpoint(): Promise<void> {
-    if (!viewModel.endpointUrl) {
+    const endpointUrl = viewModel.endpointUrl;
+    const requestKey = currentKey;
+    if (!endpointUrl) {
       return;
     }
     error = null;
     feedback = null;
     try {
-      await navigator.clipboard.writeText(viewModel.endpointUrl);
-      feedback = successFeedback('Session MCP endpoint copied.');
+      await navigator.clipboard.writeText(endpointUrl);
+      if (isCurrentRequest(requestKey)) {
+        feedback = successFeedback('Session MCP endpoint copied.');
+      }
     } catch (copyError) {
-      error = errorMessage(copyError);
+      if (isCurrentRequest(requestKey)) {
+        error = errorMessage(copyError);
+      }
     }
   }
 
-  async function authorizeSession(sessionId: string): Promise<void> {
-    if (!mcpBridge) return;
+  async function authorizeSession(sessionId: string, bridge: McpBridgeConfig): Promise<void> {
     await controlClient.setAutomationDelegate(sessionId, {
-      client_id: mcpBridge.clientId,
-      issuer: mcpBridge.issuer,
-      display_name: mcpBridge.displayName,
+      client_id: bridge.clientId,
+      issuer: bridge.issuer,
+      display_name: bridge.displayName,
     });
   }
 
-  function isDelegatedToBridge(session: SessionResource): boolean {
+  function isDelegatedToBridge(session: SessionResource, bridge = mcpBridge): boolean {
     const delegate = session.automation_delegate;
-    return Boolean(delegate && mcpBridge && delegate.client_id === mcpBridge.clientId && (!mcpBridge.issuer || delegate.issuer === mcpBridge.issuer));
+    return Boolean(delegate && bridge && delegate.client_id === bridge.clientId && (!bridge.issuer || delegate.issuer === bridge.issuer));
+  }
+
+  function isCurrentRequest(requestKey: string): boolean {
+    return requestKey === currentKey;
   }
 
   function errorMessage(value: unknown): string {
