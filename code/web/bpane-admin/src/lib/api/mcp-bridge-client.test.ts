@@ -42,6 +42,29 @@ describe('McpBridgeClient', () => {
     );
   });
 
+  it('preserves path prefixes when loading bridge health', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({
+      status: 'ok',
+      clients: 0,
+      control_session_id: null,
+      control_session_state: null,
+      control_session_backend_delegated: false,
+      bridge_alignment: null,
+      managed_sessions: [],
+    }));
+    const client = new McpBridgeClient({
+      controlUrl: 'https://example.test/mcp-control/control-session',
+      fetchImpl,
+    });
+
+    await client.getHealth();
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('https://example.test/mcp-control/health'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('sets and clears the bridge control session', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({
       session: { id: 'session-b' },
