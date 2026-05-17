@@ -78,7 +78,11 @@ export class McpBridgeClient {
 
   #healthUrl(): URL {
     const healthUrl = new URL(this.#controlUrl);
-    healthUrl.pathname = '/health';
+    const controlPath = healthUrl.pathname.endsWith('/')
+      ? healthUrl.pathname.slice(0, -1)
+      : healthUrl.pathname;
+    const lastSeparator = controlPath.lastIndexOf('/');
+    healthUrl.pathname = `${controlPath.slice(0, lastSeparator + 1)}health`;
     healthUrl.search = '';
     return healthUrl;
   }
