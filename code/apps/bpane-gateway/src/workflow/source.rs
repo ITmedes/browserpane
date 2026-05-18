@@ -43,8 +43,14 @@ pub enum WorkflowSourceError {
     Invalid(String),
     #[error("failed to resolve workflow source: {0}")]
     Resolve(String),
+    #[error("failed to access workflow source repository: {0}")]
+    RepositoryAccess(String),
     #[error("failed to materialize workflow source: {0}")]
     Materialize(String),
+    #[error("failed to create workflow source snapshot: {0}")]
+    Snapshot(String),
+    #[error("workflow source infrastructure unavailable: {0}")]
+    Infrastructure(String),
 }
 
 #[derive(Debug, Clone)]

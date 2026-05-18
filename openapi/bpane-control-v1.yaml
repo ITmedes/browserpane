@@ -5119,3 +5119,12 @@ components:
       properties:
         error:
           type: string
+        code:
+          type: string
+          description: Optional machine-readable error code for structured gateway errors.
+        category:
+          type: string
+          description: Optional broad error category.
+        recovery_hint:
+          type: string
+          description: Optional operator-facing remediation hint.

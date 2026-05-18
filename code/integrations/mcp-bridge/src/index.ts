@@ -28,6 +28,7 @@ import {
   isSsePath,
   selectedBrowserPaneSessionId,
 } from "./session-selector.js";
+import { resolvePlaywrightMcpCommand } from "./playwright-mcp-runtime.js";
 import { SupervisorMonitor } from "./supervisor-monitor.js";
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -410,9 +411,13 @@ async function unregisterMcpOwner(
 // ── Spawn @playwright/mcp subprocess (STDIO mode) ───────────────────
 
 function spawnPlaywrightMcp(cdpEndpoint: string): StdioClientTransport {
+  const command = resolvePlaywrightMcpCommand(cdpEndpoint);
+  console.log(
+    `[mcp-bridge] starting local @playwright/mcp ${command.packageVersion} from ${command.executablePath}`,
+  );
   return new StdioClientTransport({
-    command: "npx",
-    args: ["@playwright/mcp@latest", "--cdp-endpoint", cdpEndpoint],
+    command: command.command,
+    args: [...command.args],
   });
 }
 

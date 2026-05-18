@@ -32,6 +32,8 @@ RUN apt-get update && apt-get install -y \
     docker.io \
     && rm -rf /var/lib/apt/lists/*
 
+RUN git config --system --add safe.directory /workspace
+
 COPY --from=builder /build/target/release/bpane-gateway /usr/local/bin/bpane-gateway
 
 EXPOSE 4433/udp

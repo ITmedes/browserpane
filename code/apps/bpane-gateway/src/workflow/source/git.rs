@@ -51,25 +51,22 @@ impl WorkflowSourceResolver {
         let output = timeout(self.resolve_timeout, command.output())
             .await
             .map_err(|_| {
-                WorkflowSourceError::Resolve(format!(
+                WorkflowSourceError::RepositoryAccess(format!(
                     "timed out resolving git ref {ref_name} for {repository_url}"
                 ))
             })?
             .map_err(|error| {
-                WorkflowSourceError::Resolve(format!(
+                WorkflowSourceError::Infrastructure(format!(
                     "failed to run git ls-remote for {repository_url}: {error}"
                 ))
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            return Err(WorkflowSourceError::Resolve(format!(
+            let detail = git_failure_detail(&stderr, output.status.to_string());
+            return Err(WorkflowSourceError::RepositoryAccess(format!(
                 "git ls-remote failed for {repository_url}: {}",
-                if stderr.is_empty() {
-                    format!("exit status {}", output.status)
-                } else {
-                    stderr
-                }
+                with_safe_directory_hint(detail)
             )));
         }
 
@@ -150,7 +147,9 @@ impl WorkflowSourceResolver {
                 WorkflowSourceError::Materialize(format!("timed out attempting to {context}"))
             })?
             .map_err(|error| {
-                WorkflowSourceError::Materialize(format!("failed to {context}: {error}"))
+                WorkflowSourceError::Infrastructure(format!(
+                    "failed to run git while attempting to {context}: {error}"
+                ))
             })?;
 
         if output.status.success() {
@@ -158,13 +157,40 @@ impl WorkflowSourceResolver {
         }
 
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let detail =
+            with_safe_directory_hint(git_failure_detail(&stderr, output.status.to_string()));
+        if matches!(args.first().map(String::as_str), Some("clone"))
+            || is_safe_directory_failure(&stderr)
+        {
+            return Err(WorkflowSourceError::RepositoryAccess(format!(
+                "failed to {context}: {detail}"
+            )));
+        }
         Err(WorkflowSourceError::Materialize(format!(
-            "failed to {context}: {}",
-            if stderr.is_empty() {
-                format!("exit status {}", output.status)
-            } else {
-                stderr
-            }
+            "failed to {context}: {detail}"
         )))
     }
+}
+
+fn git_failure_detail(stderr: &str, fallback: String) -> String {
+    if stderr.is_empty() {
+        fallback
+    } else {
+        stderr.to_string()
+    }
+}
+
+fn with_safe_directory_hint(detail: String) -> String {
+    if is_safe_directory_failure(&detail) {
+        format!(
+            "{detail}. The local compose gateway must trust the mounted checkout; configure git safe.directory for /workspace."
+        )
+    } else {
+        detail
+    }
+}
+
+fn is_safe_directory_failure(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("dubious ownership") || lower.contains("safe.directory")
 }
