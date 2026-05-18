@@ -66,7 +66,7 @@
         disabled={!viewModel.authenticated || viewModel.loading || !viewModel.selectedSessionId || !viewModel.selectedSession?.canJoin}
         onclick={onJoinSession}
       >
-        Join / reconnect
+        Start / reconnect
       </button>
       {#if viewModel.selectedSessionId}
         <a class="admin-button-ghost" data-testid="session-detail-link" href={detailHref(viewModel.selectedSessionId)}>

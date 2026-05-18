@@ -76,7 +76,11 @@ async function run() {
     await page.getByTestId('session-stop').click();
     await waitForSessionState(page, options, sessionId, 'stopped');
     await expectLifecycleMessage(page, options, 'Selected session stopped.');
-    await expectStoppedSessionJoinDisabled(page, options);
+    await reconnectStoppedSession(page, options, sessionId);
+    await disconnectEmbeddedBrowser(page, options);
+    await waitForStopEnabled(page, options, sessionId);
+    await page.getByTestId('session-stop').click();
+    await waitForSessionState(page, options, sessionId, 'stopped');
     await emitSummary(page, options, sessionId, stopDisabled, log);
   } finally {
     await cleanupAdminSmoke(page, options, log);
@@ -157,15 +161,18 @@ async function expectRuntimeResumeMode(page, options, expectedText) {
   );
 }
 
-async function expectStoppedSessionJoinDisabled(page, options) {
+async function reconnectStoppedSession(page, options, sessionId) {
   await openAdminTab(page, 'sessions');
   await poll(
-    'admin stopped session join disabled',
-    async () => await page.getByTestId('session-join').isDisabled(),
+    'admin stopped session join enabled',
+    async () => await page.getByTestId('session-join').isEnabled(),
     Boolean,
     options.connectTimeoutMs,
     100,
   );
+  await page.getByTestId('session-join').click();
+  await waitForBrowserConnected(page, options);
+  await expectRuntimeResumeMode(page, options, 'profile_restart');
 }
 
 async function expectGlobalMessage(page, options, matches) {

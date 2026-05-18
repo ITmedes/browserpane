@@ -48,7 +48,7 @@ export class AdminWorkspaceViewModelBuilder {
       panels: [
         panel('sessions', 'Sessions', 'Login, start, reconnect, share', 'Owner-scoped session entrypoint.', `${input.sessionCount} visible`, true, [
           'New session',
-          'Join / reconnect',
+          'Start / reconnect',
           'MCP authorization',
         ], ['visible sessions', 'selected session']),
         panel('lifecycle', 'Lifecycle', 'Runtime state, stop blockers, live clients', 'Inspect lifecycle safety before mutating a runtime.', input.connected ? 'busy' : 'ready', true, [

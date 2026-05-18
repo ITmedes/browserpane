@@ -278,12 +278,6 @@ impl SessionRepository<'_> {
             })?;
             return Ok(Some(current));
         }
-        if current.state == SessionLifecycleState::Stopped {
-            return Err(SessionStoreError::Conflict(format!(
-                "session {id} is stopped; create a new session before connecting"
-            )));
-        }
-
         let active_runtime_candidates = self
             .count_active_runtime_candidates_in_transaction(&transaction)
             .await?;
@@ -299,6 +293,7 @@ impl SessionRepository<'_> {
             SET
                 state = 'ready',
                 updated_at = NOW(),
+                runtime_released_at = COALESCE(stopped_at, runtime_released_at, NOW()),
                 stopped_at = NULL
             WHERE id = $1
             RETURNING

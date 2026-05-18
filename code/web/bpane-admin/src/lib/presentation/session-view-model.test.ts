@@ -231,7 +231,7 @@ describe('SessionViewModelBuilder', () => {
     });
   });
 
-  it('blocks join actions for stopped sessions', () => {
+  it('allows start actions for stopped sessions', () => {
     const stoppedSession: SessionResource = {
       ...SESSION,
       state: 'stopped',
@@ -246,6 +246,6 @@ describe('SessionViewModelBuilder', () => {
       error: null,
     });
 
-    expect(viewModel.selectedSession?.canJoin).toBe(false);
+    expect(viewModel.selectedSession?.canJoin).toBe(true);
   });
 });

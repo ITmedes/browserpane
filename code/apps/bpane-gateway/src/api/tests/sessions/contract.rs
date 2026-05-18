@@ -362,7 +362,7 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
 }
 
 #[tokio::test]
-async fn stopped_session_cannot_issue_a_new_connect_ticket() {
+async fn stopped_session_can_issue_a_new_connect_ticket_for_profile_restart() {
     let (app, token) = test_router();
 
     let created = response_json(
@@ -408,7 +408,10 @@ async fn stopped_session_cannot_issue_a_new_connect_ticket() {
         )
         .await
         .unwrap();
-    assert_eq!(issue_response.status(), StatusCode::CONFLICT);
+    assert_eq!(issue_response.status(), StatusCode::OK);
+    let issued = response_json(issue_response).await;
+    assert_eq!(issued["session_id"], session_id);
+    assert_eq!(issued["token_type"], "session_connect_ticket");
 
     let get_response = app
         .clone()
@@ -423,8 +426,11 @@ async fn stopped_session_cannot_issue_a_new_connect_ticket() {
         .unwrap();
     assert_eq!(get_response.status(), StatusCode::OK);
     let fetched = response_json(get_response).await;
-    assert_eq!(fetched["state"], "stopped");
-    assert!(fetched["stopped_at"].is_string());
+    assert_eq!(fetched["state"], "ready");
+    assert_eq!(fetched["status"]["runtime_state"], "not_started");
+    assert_eq!(fetched["status"]["runtime_resume_mode"], "profile_restart");
+    assert!(fetched["runtime_released_at"].is_string());
+    assert!(fetched["stopped_at"].is_null());
 }
 
 #[tokio::test]
