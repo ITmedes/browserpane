@@ -43,6 +43,7 @@ export class SessionSurfaceRuntime {
   private readonly resizeRuntime: SessionResizeRuntime;
   private readonly recordingSurfaceRuntime: SessionRecordingSurfaceRuntime;
   private readonly videoDisplayRuntime: SessionVideoDisplayRuntime;
+  private readonly previousContainerPosition: string;
   private glRenderer: WebGLTileRenderer | null = null;
   private renderDiagnostics: WebGLRendererDiagnostics = {
     backend: 'canvas2d',
@@ -55,6 +56,7 @@ export class SessionSurfaceRuntime {
   constructor(input: SessionSurfaceRuntimeInput) {
     this.container = input.container;
     this.tileCompositor = input.tileCompositor;
+    this.previousContainerPosition = this.container.style.position;
 
     this.canvas = document.createElement('canvas');
     this.canvas.style.width = '100%';
@@ -231,5 +233,6 @@ export class SessionSurfaceRuntime {
       this.cursorEl.parentNode.removeChild(this.cursorEl);
       this.cursorEl = null;
     }
+    this.container.style.position = this.previousContainerPosition;
   }
 }
