@@ -184,7 +184,7 @@ impl SessionRepository<'_> {
             UPDATE control_sessions
             SET
                 state = $2,
-                updated_at = NOW()
+                updated_at = CASE WHEN state = $2 THEN updated_at ELSE NOW() END
             WHERE id = $1
               AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
             RETURNING

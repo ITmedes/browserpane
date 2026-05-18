@@ -9,6 +9,7 @@ import type {
   AdminSessionFilesSnapshot,
   AdminWorkflowRunSnapshot,
 } from '../api/admin-event-snapshots';
+import type { AdminEvent } from '../api/admin-event-mapper';
 import type { SessionResource } from '../api/control-types';
 import type { AdminLogEntry } from '../presentation/logs-view-model';
 import { AdminLogEntryFactory } from './admin-log-entries';
@@ -29,9 +30,13 @@ export function subscribeAdminSessionEvents(
   adminEventClient: AdminEventClient,
   handlers: AdminSessionEventSyncHandlers,
 ): AdminEventSubscription {
+  const lastLogSignatures = new Map<string, string>();
+
   return adminEventClient.subscribe({
     onEvent: (event) => {
-      handlers.onLog(AdminLogEntryFactory.fromAdminEvent(event));
+      if (shouldLogAdminEvent(event, lastLogSignatures)) {
+        handlers.onLog(AdminLogEntryFactory.fromAdminEvent(event));
+      }
       if (event.type === 'sessions.snapshot') {
         handlers.onLoadingChange(false);
         handlers.onError(null);
@@ -57,4 +62,16 @@ export function subscribeAdminSessionEvents(
       handlers.onLog(AdminLogEntryFactory.fromStreamError(error));
     },
   });
+}
+
+function shouldLogAdminEvent(event: AdminEvent, lastLogSignatures: Map<string, string>): boolean {
+  const signature = AdminLogEntryFactory.eventLogSignature(event);
+  if (!signature) {
+    return true;
+  }
+  if (lastLogSignatures.get(event.type) === signature) {
+    return false;
+  }
+  lastLogSignatures.set(event.type, signature);
+  return true;
 }
