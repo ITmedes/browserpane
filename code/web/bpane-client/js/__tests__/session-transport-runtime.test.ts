@@ -225,7 +225,7 @@ describe('SessionTransportRuntime', () => {
       certHashUrl: '/cert-hash',
     });
 
-    expect(fetchFn).toHaveBeenCalledWith('/cert-hash');
+    expect(fetchFn).toHaveBeenCalledWith('/cert-hash', { cache: 'no-store' });
     const [, options] = createTransport.mock.calls[0];
     expect(options).toEqual({
       serverCertificateHashes: [{
@@ -248,9 +248,11 @@ describe('SessionTransportRuntime', () => {
     (globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = vi.fn(function fetchWithReceiver(
       this: unknown,
       url: string | URL | Request,
+      init?: RequestInit,
     ) {
       expect(this).toBe(globalThis);
       expect(url).toBe('/cert-hash');
+      expect(init).toEqual({ cache: 'no-store' });
       return Promise.resolve({
         ok: true,
         text: async () => btoa(String.fromCharCode(...certHashBytes)),

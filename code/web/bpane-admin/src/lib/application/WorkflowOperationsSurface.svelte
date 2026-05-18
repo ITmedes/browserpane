@@ -6,6 +6,7 @@
   import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import WorkflowOperationsPanel from '../presentation/WorkflowOperationsPanel.svelte';
   import { WorkflowOperationsViewModelBuilder } from '../presentation/workflow-operations-view-model';
+  import { workflowOperationErrorMessage } from './workflow-error-messages';
   import { WorkflowOperationsService } from './workflow-operations-service';
 
   type WorkflowOperationsSurfaceProps = {
@@ -278,7 +279,7 @@
   }
 
   function errorMessage(value: unknown): string {
-    return value instanceof Error ? value.message : 'Unexpected workflow operation error';
+    return workflowOperationErrorMessage(value);
   }
 
   function successFeedback(message: string): AdminMessageFeedback {

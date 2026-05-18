@@ -144,7 +144,7 @@ export class SessionTransportRuntime {
 
   private async fetchCertHash(url: string): Promise<Uint8Array | null> {
     try {
-      const response = await this.fetchFn(url);
+      const response = await this.fetchFn(url, { cache: 'no-store' });
       if (!response.ok) {
         return null;
       }
