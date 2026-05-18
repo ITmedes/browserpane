@@ -5,6 +5,7 @@
     MetricsViewModelBuilder,
     type MetricsSampleSummary,
   } from '../presentation/metrics-view-model';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import type { MetricsRawSample } from '../presentation/metrics-diagnostics-payload';
   import { MetricsSampleExtremaBuilder, type MetricsSampleExtrema } from '../presentation/metrics-sample-extrema';
   import type { LiveBrowserSessionConnection } from '../session/browser-session-types';
@@ -20,7 +21,44 @@
   let extrema = $state<MetricsSampleExtrema | null>(null);
   let summary = $state<MetricsSampleSummary | null>(null);
   let copied = $state(false);
+  let feedback = $state<AdminMessageFeedback | null>(null);
+  let observedConnectionSessionId = $state<string | null>(null);
+  let connectionInitialized = false;
   const viewModel = $derived(MetricsViewModelBuilder.build({ liveConnection, active, summary }));
+
+  $effect(() => {
+    const nextSessionId = liveConnection?.sessionId ?? null;
+    if (!connectionInitialized) {
+      connectionInitialized = true;
+      observedConnectionSessionId = nextSessionId;
+      return;
+    }
+    if (nextSessionId === observedConnectionSessionId) {
+      return;
+    }
+    const previousSessionId = observedConnectionSessionId;
+    observedConnectionSessionId = nextSessionId;
+    copied = false;
+    if (active) {
+      active = false;
+      feedback = {
+        variant: 'warning',
+        title: 'Metrics sampling stopped',
+        message: 'The browser connection changed before the metrics sample was stopped.',
+        testId: 'metrics-message',
+      };
+      return;
+    }
+    if (summary && nextSessionId && previousSessionId && nextSessionId !== previousSessionId) {
+      clearSampleState();
+      feedback = {
+        variant: 'info',
+        title: 'Metrics reset',
+        message: 'Previous metrics were cleared for the new browser session.',
+        testId: 'metrics-message',
+      };
+    }
+  });
 
   $effect(() => {
     if (!active) {
@@ -37,6 +75,7 @@
     summary = MetricsSampleSummaryBuilder.fromSamples(startSample, startSample, extrema);
     active = true;
     copied = false;
+    feedback = { variant: 'info', title: 'Metrics sampling', message: 'Metrics sample started.', testId: 'metrics-message' };
   }
 
   function stop(): void {
@@ -45,17 +84,33 @@
     }
     updateActiveSummary();
     active = false;
+    feedback = { variant: 'success', title: 'Metrics sample ready', message: 'Metrics sample stopped and summary is ready.', testId: 'metrics-message' };
   }
 
   async function copy(): Promise<void> {
     if (!summary) {
       return;
     }
-    await navigator.clipboard?.writeText(JSON.stringify(summary.payload, null, 2));
-    copied = true;
+    try {
+      await navigator.clipboard?.writeText(JSON.stringify(summary.payload, null, 2));
+      copied = true;
+      feedback = { variant: 'success', title: 'Metrics copied', message: 'Metrics diagnostics payload copied.', testId: 'metrics-message' };
+    } catch (error) {
+      feedback = {
+        variant: 'error',
+        title: 'Metrics copy failed',
+        message: error instanceof Error ? error.message : 'Could not copy metrics diagnostics payload.',
+        testId: 'metrics-message',
+      };
+    }
   }
 
   function reset(): void {
+    clearSampleState();
+    feedback = { variant: 'info', title: 'Metrics reset', message: 'Metrics sample state cleared.', testId: 'metrics-message' };
+  }
+
+  function clearSampleState(): void {
     active = false;
     startSample = null;
     previousSample = null;
@@ -90,6 +145,7 @@
 <MetricsPanel
   {viewModel}
   {copied}
+  {feedback}
   onStart={start}
   onStop={stop}
   onCopy={() => void copy()}

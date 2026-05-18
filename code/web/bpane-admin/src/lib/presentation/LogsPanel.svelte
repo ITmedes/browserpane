@@ -1,14 +1,17 @@
 <script lang="ts">
+  import AdminMessage from './AdminMessage.svelte';
+  import type { AdminMessageFeedback } from './admin-message-types';
   import type { AdminLogEntry, AdminLogsViewModel } from './logs-view-model';
 
   type LogsPanelProps = {
     readonly viewModel: AdminLogsViewModel;
     readonly copied: boolean;
+    readonly feedback?: AdminMessageFeedback | null;
     readonly onClear: () => void;
     readonly onCopy: () => void;
   };
 
-  let { viewModel, copied, onClear, onCopy }: LogsPanelProps = $props();
+  let { viewModel, copied, feedback = null, onClear, onCopy }: LogsPanelProps = $props();
 
   function levelClass(entry: AdminLogEntry): string {
     return entry.level === 'warn' ? 'text-admin-warm' : 'text-admin-leaf';
@@ -39,8 +42,18 @@
     </button>
   </div>
 
+  {#if feedback}
+    <AdminMessage
+      variant={feedback.variant}
+      title={feedback.title}
+      message={feedback.message}
+      testId={feedback.testId}
+      compact={true}
+    />
+  {/if}
+
   {#if viewModel.entries.length === 0}
-    <p class="admin-empty mt-0">{viewModel.emptyLabel}</p>
+    <AdminMessage variant="empty" message={viewModel.emptyLabel} compact={true} />
   {:else}
     <ol class="grid max-h-64 gap-2 overflow-auto p-0">
       {#each viewModel.entries as entry}

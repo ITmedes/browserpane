@@ -3,6 +3,8 @@
   import { onMount } from 'svelte';
   import type { WorkflowClient } from '../api/workflow-client';
   import type { WorkflowRunResource } from '../api/workflow-types';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
 
   type AdminWorkflowRunListRouteProps = {
     readonly workflowClient: WorkflowClient;
@@ -12,23 +14,29 @@
   let runs = $state<readonly WorkflowRunResource[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let search = $state('');
   let lastRefreshedAt = $state<string | null>(null);
 
   const filteredRuns = $derived(filterRuns(runs, search));
 
   onMount(() => {
-    void loadRuns();
+    void loadRuns(false);
   });
 
-  async function loadRuns(): Promise<void> {
+  async function loadRuns(showFeedback = true): Promise<void> {
     loading = true;
     error = null;
+    actionFeedback = null;
     try {
       runs = (await workflowClient.listRuns()).runs;
       lastRefreshedAt = new Date().toISOString();
+      if (showFeedback) {
+        actionFeedback = successFeedback(`${runs.length} workflow run${runs.length === 1 ? '' : 's'} refreshed.`);
+      }
     } catch (loadError) {
       error = errorMessage(loadError);
+      actionFeedback = null;
     } finally {
       loading = false;
     }
@@ -77,6 +85,10 @@
   function errorMessage(value: unknown): string {
     return value instanceof Error ? value.message : 'Unexpected workflow run list error';
   }
+
+  function successFeedback(message: string): AdminMessageFeedback {
+    return { variant: 'success', title: 'Workflow runs refreshed', message, testId: 'workflow-run-inspector-message' };
+  }
 </script>
 
 <section class="grid gap-5" data-testid="workflow-run-inspector-list">
@@ -117,19 +129,32 @@
     </div>
   </div>
 
+  {#if actionFeedback}
+    <AdminMessage
+      variant={actionFeedback.variant}
+      title={actionFeedback.title}
+      message={actionFeedback.message}
+      testId={actionFeedback.testId}
+      compact={true}
+    />
+  {/if}
+
   {#if loading && runs.length === 0}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0">Loading workflow runs...</p>
+      <AdminMessage variant="loading" message="Loading workflow runs..." compact={true} />
     </section>
   {:else if error}
     <section class="admin-panel mt-0">
-      <p class="admin-error mt-0" data-testid="workflow-run-inspector-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="workflow-run-inspector-error" compact={true} />
     </section>
   {:else if filteredRuns.length === 0}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0" data-testid="workflow-run-inspector-empty">
-        No workflow runs match the current filter.
-      </p>
+      <AdminMessage
+        variant="empty"
+        message="No workflow runs match the current filter."
+        testId="workflow-run-inspector-empty"
+        compact={true}
+      />
     </section>
   {:else}
     <section class="grid gap-2" aria-label="Workflow run table">

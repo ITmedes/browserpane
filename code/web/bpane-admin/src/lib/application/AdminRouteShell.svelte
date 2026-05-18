@@ -8,6 +8,7 @@
   import { OidcAuthClient } from '../auth/oidc-auth-client';
   import type { AuthSnapshot } from '../auth/oidc-types';
   import AdminHeader from '../presentation/AdminHeader.svelte';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
   import type { AdminRouteContext } from './admin-route-context';
 
   type AdminRouteShellProps = {
@@ -121,6 +122,7 @@
     adminEventClient = new AdminEventClient({
       baseUrl: window.location.origin,
       accessTokenProvider: requireAccessToken,
+      onAuthenticationFailure: handleAuthenticationIssue,
     });
     workflowClient = new WorkflowClient({
       baseUrl: window.location.origin,
@@ -183,7 +185,7 @@
 <main class={contentClass}>
   {#if authError && !auth?.authenticated}
     <section class="admin-panel">
-      <p class="admin-error mt-0">{authError}</p>
+      <AdminMessage variant="error" message={authError} compact={true} />
     </section>
   {/if}
 

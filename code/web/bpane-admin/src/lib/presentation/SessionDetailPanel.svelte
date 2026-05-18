@@ -1,4 +1,6 @@
 <script lang="ts">
+  import AdminMessage from './AdminMessage.svelte';
+  import type { AdminMessageFeedback } from './admin-message-types';
   import type { SessionDetailPanelViewModel } from './session-view-model';
 
   type SessionDetailPanelProps = {
@@ -8,6 +10,7 @@
     readonly onKill: () => void;
     readonly onDisconnectConnection: (connectionId: number) => void;
     readonly onDisconnectAll: () => void;
+    readonly feedback?: AdminMessageFeedback | null;
   };
 
   let {
@@ -17,6 +20,7 @@
     onKill,
     onDisconnectConnection,
     onDisconnectAll,
+    feedback = null,
   }: SessionDetailPanelProps = $props();
 </script>
 
@@ -66,8 +70,18 @@
     </button>
   </div>
 
+  {#if feedback}
+    <AdminMessage
+      variant={feedback.variant}
+      title={feedback.title}
+      message={feedback.message}
+      testId={feedback.testId}
+      compact={true}
+    />
+  {/if}
+
   {#if viewModel.facts.length === 0}
-    <p class="admin-empty">{viewModel.hint}</p>
+    <AdminMessage variant="empty" message={viewModel.hint} compact={true} />
   {:else}
     <div class="grid grid-cols-2 gap-2.5 max-[860px]:grid-cols-1">
       {#each viewModel.facts as fact}
@@ -80,7 +94,7 @@
       {/each}
     </div>
     {#if viewModel.hint}
-      <p class="admin-empty">{viewModel.hint}</p>
+      <AdminMessage variant="info" role="note" message={viewModel.hint} compact={true} />
     {/if}
   {/if}
 
@@ -92,9 +106,12 @@
       {/if}
     </div>
     {#if viewModel.connections.length === 0}
-      <p class="admin-empty" data-testid="session-connection-empty">
-        {viewModel.statusHint ?? 'No live connections reported.'}
-      </p>
+      <AdminMessage
+        variant="empty"
+        message={viewModel.statusHint ?? 'No live connections reported.'}
+        testId="session-connection-empty"
+        compact={true}
+      />
     {:else}
       <div class="grid gap-2">
         {#each viewModel.connections as connection}
@@ -125,6 +142,6 @@
   </div>
 
   {#if viewModel.error}
-    <p class="admin-error">{viewModel.error}</p>
+    <AdminMessage variant="error" message={viewModel.error} compact={true} />
   {/if}
 </div>

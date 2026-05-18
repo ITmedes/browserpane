@@ -8,6 +8,8 @@
     WorkflowRunProducedFileResource,
     WorkflowRunResource,
   } from '../api/workflow-types';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
 
   type AdminWorkflowRunDetailRouteProps = {
     readonly workflowClient: WorkflowClient;
@@ -22,6 +24,7 @@
   let loading = $state(false);
   let actionInFlight = $state(false);
   let error = $state<string | null>(null);
+  let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let evidenceError = $state<string | null>(null);
   let lastRefreshedAt = $state<string | null>(null);
   let operatorInputText = $state('{}');
@@ -32,19 +35,31 @@
   const operatorInputValid = $derived(isJson(operatorInputText));
 
   onMount(() => {
-    void refreshInspector();
+    void refreshInspector(false);
   });
 
-  async function refreshInspector(): Promise<void> {
+  async function refreshInspector(showFeedback = true): Promise<void> {
+    const previousState = run?.state ?? null;
     loading = true;
     error = null;
     evidenceError = null;
+    if (showFeedback) {
+      actionFeedback = null;
+    }
     try {
       run = await workflowClient.getRun(runId);
       await loadEvidence();
       lastRefreshedAt = new Date().toISOString();
+      if (showFeedback) {
+        actionFeedback = successFeedback(
+          previousState && previousState !== run.state
+            ? `Workflow run state changed from ${previousState} to ${run.state}.`
+            : 'Workflow run detail refreshed.',
+        );
+      }
     } catch (refreshError) {
       error = errorMessage(refreshError, 'Unexpected workflow run detail error');
+      actionFeedback = null;
     } finally {
       loading = false;
     }
@@ -78,15 +93,22 @@
     evidenceError = errors.length > 0 ? errors.join(' | ') : null;
   }
 
-  async function mutateRun(action: () => Promise<WorkflowRunResource>): Promise<void> {
+  async function mutateRun(
+    action: () => Promise<WorkflowRunResource>,
+    progressMessage: string,
+    successMessage: (updated: WorkflowRunResource) => string,
+  ): Promise<void> {
     actionInFlight = true;
     error = null;
+    actionFeedback = detailFeedback('loading', 'Workflow run action', progressMessage);
     try {
       run = await action();
       await loadEvidence();
       lastRefreshedAt = new Date().toISOString();
+      actionFeedback = successFeedback(successMessage(run));
     } catch (mutationError) {
       error = errorMessage(mutationError, 'Unexpected workflow run action error');
+      actionFeedback = null;
     } finally {
       actionInFlight = false;
     }
@@ -97,6 +119,8 @@
     if (!file) {
       return;
     }
+    error = null;
+    actionFeedback = detailFeedback('loading', 'Produced file download', `Preparing download for ${file.file_name}.`);
     try {
       const url = URL.createObjectURL(await workflowClient.downloadProducedFileContent(file));
       const link = document.createElement('a');
@@ -106,20 +130,23 @@
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      actionFeedback = successFeedback(`Produced file ${file.file_name} download started.`);
     } catch (downloadError) {
       error = errorMessage(downloadError, 'Produced file download failed');
+      actionFeedback = null;
     }
   }
 
   function submitInput(): void {
     if (!operatorInputValid) {
       error = 'Operator input must be valid JSON.';
+      actionFeedback = null;
       return;
     }
     void mutateRun(() => workflowClient.submitRunInput(runId, {
       input: parseJson(operatorInputText),
       comment: 'operator input from workflow run detail',
-    }));
+    }), 'Submitting operator input...', () => 'Operator input submitted.');
   }
 
   function formatDate(value: string | null | undefined): string {
@@ -165,6 +192,18 @@
     return value instanceof Error ? value.message : fallback;
   }
 
+  function successFeedback(message: string): AdminMessageFeedback {
+    return detailFeedback('success', 'Workflow run updated', message);
+  }
+
+  function detailFeedback(
+    variant: AdminMessageFeedback['variant'],
+    title: string,
+    message: string,
+  ): AdminMessageFeedback {
+    return { variant, title, message, testId: 'workflow-run-detail-action-message' };
+  }
+
   function workflowHref(workflowId: string): string {
     return `${base}/workflows/${encodeURIComponent(workflowId)}`;
   }
@@ -204,15 +243,24 @@
 
   {#if loading && !run}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0">Loading workflow run...</p>
+      <AdminMessage variant="loading" message="Loading workflow run..." compact={true} />
     </section>
   {:else if error && !run}
     <section class="admin-panel mt-0">
-      <p class="admin-error mt-0" data-testid="workflow-run-inspector-detail-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="workflow-run-inspector-detail-error" compact={true} />
     </section>
   {:else if run}
     {#if error}
-      <p class="admin-error" data-testid="workflow-run-inspector-action-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="workflow-run-inspector-action-error" compact={true} />
+    {/if}
+    {#if actionFeedback}
+      <AdminMessage
+        variant={actionFeedback.variant}
+        title={actionFeedback.title}
+        message={actionFeedback.message}
+        testId={actionFeedback.testId}
+        compact={true}
+      />
     {/if}
 
     <section class="grid gap-3 md:grid-cols-4" aria-label="Workflow run facts">
@@ -242,7 +290,7 @@
         </div>
       </div>
       {#if run.error}
-        <p class="admin-error m-0" data-testid="workflow-run-detail-terminal-error">{run.error}</p>
+        <AdminMessage variant="error" message={run.error} testId="workflow-run-detail-terminal-error" compact={true} />
       {/if}
     </section>
 
@@ -258,7 +306,11 @@
             type="button"
             data-testid="workflow-run-detail-cancel"
             disabled={terminal || actionInFlight}
-            onclick={() => void mutateRun(() => workflowClient.cancelRun(runId))}
+            onclick={() => void mutateRun(
+              () => workflowClient.cancelRun(runId),
+              'Requesting workflow run cancellation...',
+              () => 'Workflow run cancellation requested.',
+            )}
           >
             Cancel
           </button>
@@ -267,7 +319,11 @@
             type="button"
             data-testid="workflow-run-detail-resume"
             disabled={!pendingRequest || actionInFlight}
-            onclick={() => void mutateRun(() => workflowClient.resumeRun(runId, { comment: 'released from workflow run detail' }))}
+            onclick={() => void mutateRun(
+              () => workflowClient.resumeRun(runId, { comment: 'released from workflow run detail' }),
+              'Releasing workflow run hold...',
+              () => 'Workflow run resumed.',
+            )}
           >
             Resume
           </button>
@@ -310,7 +366,11 @@
           type="button"
           data-testid="workflow-run-detail-reject"
           disabled={!pendingRequest || rejectReason.trim().length === 0 || actionInFlight}
-          onclick={() => void mutateRun(() => workflowClient.rejectRun(runId, { reason: rejectReason.trim() }))}
+          onclick={() => void mutateRun(
+            () => workflowClient.rejectRun(runId, { reason: rejectReason.trim() }),
+            'Rejecting workflow run input request...',
+            () => 'Workflow run input request rejected.',
+          )}
         >
           Reject
         </button>
@@ -338,7 +398,7 @@
         </span>
       </div>
       {#if files.length === 0}
-        <p class="admin-empty mt-0">No produced files loaded.</p>
+        <AdminMessage variant="empty" message="No produced files loaded." compact={true} />
       {:else}
         <div class="grid gap-2">
           {#each files as file}
@@ -355,7 +415,7 @@
         </div>
       {/if}
       {#if evidenceError}
-        <p class="admin-error" data-testid="workflow-run-inspector-evidence-error">{evidenceError}</p>
+        <AdminMessage variant="error" message={evidenceError} testId="workflow-run-inspector-evidence-error" compact={true} />
       {/if}
     </section>
   {/if}
@@ -384,7 +444,7 @@
       </div>
     </div>
     {#if rows.length === 0}
-      <p class="admin-empty mt-0">{empty}</p>
+      <AdminMessage variant="empty" message={empty} compact={true} />
     {:else}
       <div class="mt-3 grid gap-2">
         {#each rows.slice(-8).reverse() as row}
@@ -407,7 +467,7 @@
       </div>
     </div>
     {#if rows.length === 0}
-      <p class="admin-empty mt-0">{empty}</p>
+      <AdminMessage variant="empty" message={empty} compact={true} />
     {:else}
       <div class="mt-3 grid gap-2">
         {#each rows.slice(-8).reverse() as row}

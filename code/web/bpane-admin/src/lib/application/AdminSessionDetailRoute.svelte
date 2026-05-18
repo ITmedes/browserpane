@@ -9,6 +9,8 @@
   } from '../api/control-types';
   import type { SessionRecordingPlaybackResource, SessionRecordingResource } from '../api/recording-types';
   import type { SessionStatus } from '../api/session-status-types';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import SessionDetailPanel from '../presentation/SessionDetailPanel.svelte';
   import { SessionViewModelBuilder } from '../presentation/session-view-model';
   import SessionFileBindingsSurface from './SessionFileBindingsSurface.svelte';
@@ -28,6 +30,7 @@
   let loading = $state(false);
   let error = $state<string | null>(null);
   let relatedError = $state<string | null>(null);
+  let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let lastRefreshedAt = $state<string | null>(null);
 
   const viewModel = $derived(SessionViewModelBuilder.detail({
@@ -39,13 +42,15 @@
   }));
 
   onMount(() => {
-    void refreshInspector();
+    void refreshInspector(false);
   });
 
-  async function refreshInspector(): Promise<void> {
+  async function refreshInspector(showFeedback = true): Promise<void> {
+    const previousState = session?.state ?? null;
     loading = true;
     error = null;
     relatedError = null;
+    actionFeedback = null;
     try {
       const [nextSession, nextStatus] = await Promise.all([
         controlClient.getSession(sessionId),
@@ -55,8 +60,18 @@
       status = nextStatus;
       await loadRelatedResources();
       lastRefreshedAt = new Date().toISOString();
+      if (showFeedback) {
+        actionFeedback = lifecycleFeedback(
+          'success',
+          'Session refreshed',
+          previousState && previousState !== nextSession.state
+            ? `Session state changed from ${previousState} to ${nextSession.state}.`
+            : 'Session detail refreshed.',
+        );
+      }
     } catch (refreshError) {
       error = errorMessage(refreshError, 'Unexpected session detail error');
+      actionFeedback = null;
     } finally {
       loading = false;
     }
@@ -98,45 +113,75 @@
   }
 
   async function stopSession(): Promise<void> {
-    await mutateSession(() => controlClient.stopSession(sessionId));
+    await mutateSession(
+      'Stopping selected session...',
+      'Selected session stopped.',
+      () => controlClient.stopSession(sessionId),
+    );
   }
 
   async function killSession(): Promise<void> {
-    await mutateSession(() => controlClient.killSession(sessionId));
+    await mutateSession(
+      'Killing selected session...',
+      'Selected session was force killed.',
+      () => controlClient.killSession(sessionId),
+    );
   }
 
   async function disconnectConnection(connectionId: number): Promise<void> {
-    await mutateStatus(() => controlClient.disconnectSessionConnection(sessionId, connectionId));
+    await mutateStatus(
+      `Disconnecting client #${connectionId}...`,
+      `Disconnected client #${connectionId}.`,
+      () => controlClient.disconnectSessionConnection(sessionId, connectionId),
+    );
   }
 
   async function disconnectAllConnections(): Promise<void> {
-    await mutateStatus(() => controlClient.disconnectAllSessionConnections(sessionId));
+    await mutateStatus(
+      'Disconnecting all live clients...',
+      'Disconnected all live clients.',
+      () => controlClient.disconnectAllSessionConnections(sessionId),
+    );
   }
 
-  async function mutateSession(action: () => Promise<SessionResource>): Promise<void> {
+  async function mutateSession(
+    progressMessage: string,
+    successMessage: string,
+    action: () => Promise<SessionResource>,
+  ): Promise<void> {
     loading = true;
     error = null;
+    actionFeedback = lifecycleFeedback('loading', 'Lifecycle operation', progressMessage);
     try {
       session = await action();
       status = await controlClient.getSessionStatus(sessionId);
       await loadRelatedResources();
       lastRefreshedAt = new Date().toISOString();
+      actionFeedback = lifecycleFeedback('success', 'Lifecycle updated', successMessage);
     } catch (mutationError) {
       error = errorMessage(mutationError, 'Unexpected session action error');
+      actionFeedback = null;
     } finally {
       loading = false;
     }
   }
 
-  async function mutateStatus(action: () => Promise<SessionStatus>): Promise<void> {
+  async function mutateStatus(
+    progressMessage: string,
+    successMessage: string,
+    action: () => Promise<SessionStatus>,
+  ): Promise<void> {
     loading = true;
     error = null;
+    actionFeedback = lifecycleFeedback('loading', 'Connection operation', progressMessage);
     try {
       status = await action();
       session = await controlClient.getSession(sessionId);
       lastRefreshedAt = new Date().toISOString();
+      actionFeedback = lifecycleFeedback('success', 'Connections updated', successMessage);
     } catch (mutationError) {
       error = errorMessage(mutationError, 'Unexpected connection action error');
+      actionFeedback = null;
     } finally {
       loading = false;
     }
@@ -164,6 +209,14 @@
       return `${(value / 1024).toFixed(1)} KiB`;
     }
     return `${(value / 1024 / 1024).toFixed(1)} MiB`;
+  }
+
+  function lifecycleFeedback(
+    variant: AdminMessageFeedback['variant'],
+    title: string,
+    message: string,
+  ): AdminMessageFeedback {
+    return { variant, title, message, testId: 'session-detail-action-message' };
   }
 
   const readyRecordingCount = $derived(recordings.filter((entry) => entry.state === 'ready').length);
@@ -203,16 +256,17 @@
 
   {#if loading && !session}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0">Loading session...</p>
+      <AdminMessage variant="loading" message="Loading session..." compact={true} />
     </section>
   {:else if error && !session}
     <section class="admin-panel mt-0">
-      <p class="admin-error mt-0" data-testid="session-inspector-detail-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="session-inspector-detail-error" compact={true} />
     </section>
   {:else}
     <section class="admin-panel mt-0">
       <SessionDetailPanel
         {viewModel}
+        feedback={actionFeedback}
         onRefresh={() => void refreshInspector()}
         onStop={() => void stopSession()}
         onKill={() => void killSession()}
@@ -260,7 +314,7 @@
     </section>
 
     {#if relatedError}
-      <p class="admin-error" data-testid="session-inspector-related-error">{relatedError}</p>
+      <AdminMessage variant="error" message={relatedError} testId="session-inspector-related-error" compact={true} />
     {/if}
 
     <SessionFileBindingsSurface

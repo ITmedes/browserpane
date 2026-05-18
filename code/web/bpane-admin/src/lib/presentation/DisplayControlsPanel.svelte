@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { BrowserSessionRenderBackend } from '../session/browser-session-types';
+  import AdminMessage from './AdminMessage.svelte';
+  import type { AdminMessageFeedback } from './admin-message-types';
   import {
     DISPLAY_BACKEND_OPTIONS,
     type DisplaySettingsViewModel,
@@ -7,6 +9,7 @@
 
   type DisplayControlsPanelProps = {
     readonly viewModel: DisplaySettingsViewModel;
+    readonly feedback?: AdminMessageFeedback | null;
     readonly onRenderBackendChange: (value: BrowserSessionRenderBackend) => void;
     readonly onHiDpiChange: (value: boolean) => void;
     readonly onScrollCopyChange: (value: boolean) => void;
@@ -14,6 +17,7 @@
 
   let {
     viewModel,
+    feedback = null,
     onRenderBackendChange,
     onHiDpiChange,
     onScrollCopyChange,
@@ -32,6 +36,15 @@
   <p class="m-0 text-sm font-bold text-admin-ink/68" data-testid="display-connection-label">
     {viewModel.connectionLabel}
   </p>
+  {#if feedback}
+    <AdminMessage
+      variant={feedback.variant}
+      title={feedback.title}
+      message={feedback.message}
+      testId={feedback.testId}
+      compact={true}
+    />
+  {/if}
 
   <div class="grid gap-3">
     <label class="grid gap-1.5 text-sm font-bold text-admin-ink">

@@ -3,6 +3,7 @@
   import type { SessionResource } from '../api/control-types';
   import type { SessionStatus } from '../api/session-status-types';
   import SessionDetailPanel from '../presentation/SessionDetailPanel.svelte';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import { SessionViewModelBuilder } from '../presentation/session-view-model';
 
   type SessionLifecycleSurfaceProps = {
@@ -11,8 +12,8 @@
     readonly connected: boolean;
     readonly resourceLoading: boolean;
     readonly onRefreshSelectedSession: () => Promise<void>;
-    readonly onStopSession: () => void;
-    readonly onKillSession: () => void;
+    readonly onStopSession: () => Promise<void>;
+    readonly onKillSession: () => Promise<void>;
     readonly onDisconnectEmbeddedBrowser: () => void;
   };
 
@@ -28,10 +29,12 @@
   }: SessionLifecycleSurfaceProps = $props();
 
   let status = $state<SessionStatus | null>(null);
+  let lifecycleSessionId = $state<string | null>(null);
   let statusSessionId = $state<string | null>(null);
   let requestedSessionId = $state<string | null>(null);
   let statusLoading = $state(false);
   let statusError = $state<string | null>(null);
+  let feedback = $state<AdminMessageFeedback | null>(null);
   const visibleStatus = $derived(statusSessionId === selectedSession?.id ? status : null);
   const loading = $derived(resourceLoading || statusLoading);
   const viewModel = $derived(SessionViewModelBuilder.detail({
@@ -44,10 +47,18 @@
 
   $effect(() => {
     const sessionId = selectedSession?.id ?? null;
+    if (sessionId !== lifecycleSessionId) {
+      lifecycleSessionId = sessionId;
+      statusLoading = false;
+      statusError = null;
+      feedback = null;
+    }
     if (!sessionId) {
       status = null;
       statusSessionId = null;
       requestedSessionId = null;
+      statusError = null;
+      feedback = null;
       return;
     }
     if (sessionId !== statusSessionId && sessionId !== requestedSessionId) {
@@ -56,8 +67,26 @@
   });
 
   async function refreshPanel(): Promise<void> {
-    await onRefreshSelectedSession();
-    await refreshStatus();
+    const requestSessionId = selectedSession?.id ?? null;
+    if (!requestSessionId) {
+      return;
+    }
+    feedback = loadingFeedback('Refreshing session status...');
+    try {
+      await onRefreshSelectedSession();
+      if (!isCurrentSession(requestSessionId)) {
+        return;
+      }
+      await refreshStatusFor(requestSessionId);
+      if (isCurrentSession(requestSessionId)) {
+        feedback = successFeedback('Session status refreshed.');
+      }
+    } catch (error) {
+      if (isCurrentSession(requestSessionId)) {
+        statusError = errorMessage(error);
+        feedback = null;
+      }
+    }
   }
 
   async function refreshStatus(): Promise<void> {
@@ -72,7 +101,12 @@
     if (!sessionId) {
       return;
     }
-    await runDisconnect(sessionId, () => controlClient.disconnectSessionConnection(sessionId, connectionId));
+    await runDisconnect(
+      sessionId,
+      `Disconnecting client #${connectionId}...`,
+      `Disconnected client #${connectionId}.`,
+      () => controlClient.disconnectSessionConnection(sessionId, connectionId),
+    );
   }
 
   async function disconnectAllConnections(): Promise<void> {
@@ -80,24 +114,70 @@
     if (!sessionId) {
       return;
     }
-    await runDisconnect(sessionId, () => controlClient.disconnectAllSessionConnections(sessionId));
+    await runDisconnect(
+      sessionId,
+      'Disconnecting all live clients...',
+      'Disconnected all live clients.',
+      () => controlClient.disconnectAllSessionConnections(sessionId),
+    );
   }
 
   async function runDisconnect(
     sessionId: string,
+    progressMessage: string,
+    successMessage: string,
     action: () => Promise<SessionStatus>,
   ): Promise<void> {
     statusLoading = true;
     statusError = null;
+    feedback = loadingFeedback(progressMessage);
     try {
       const nextStatus = await action();
+      if (!isCurrentSession(sessionId)) {
+        return;
+      }
       applyStatus(sessionId, nextStatus);
       syncEmbeddedBrowserAfterDisconnect(nextStatus);
       await onRefreshSelectedSession();
+      if (isCurrentSession(sessionId)) {
+        feedback = successFeedback(successMessage);
+      }
     } catch (error) {
-      statusError = errorMessage(error);
+      if (isCurrentSession(sessionId)) {
+        statusError = errorMessage(error);
+        feedback = null;
+      }
     } finally {
-      statusLoading = false;
+      if (isCurrentSession(sessionId)) {
+        statusLoading = false;
+      }
+    }
+  }
+
+  async function runLifecycleAction(
+    progressMessage: string,
+    successMessage: string,
+    action: () => Promise<void>,
+  ): Promise<void> {
+    const requestSessionId = selectedSession?.id ?? null;
+    if (!requestSessionId) {
+      return;
+    }
+    feedback = loadingFeedback(progressMessage);
+    try {
+      await action();
+      if (!isCurrentSession(requestSessionId)) {
+        return;
+      }
+      await refreshStatusFor(requestSessionId);
+      if (isCurrentSession(requestSessionId)) {
+        feedback = successFeedback(successMessage);
+      }
+    } catch (error) {
+      if (isCurrentSession(requestSessionId)) {
+        statusError = errorMessage(error);
+        feedback = null;
+      }
     }
   }
 
@@ -106,13 +186,20 @@
     statusLoading = true;
     statusError = null;
     try {
-      applyStatus(sessionId, await controlClient.getSessionStatus(sessionId));
+      const nextStatus = await controlClient.getSessionStatus(sessionId);
+      if (isCurrentSession(sessionId) && requestedSessionId === sessionId) {
+        applyStatus(sessionId, nextStatus);
+      }
     } catch (error) {
-      statusError = errorMessage(error);
+      if (isCurrentSession(sessionId) && requestedSessionId === sessionId) {
+        statusError = errorMessage(error);
+      }
     } finally {
       if (requestedSessionId === sessionId) {
         requestedSessionId = null;
-        statusLoading = false;
+        if (isCurrentSession(sessionId)) {
+          statusLoading = false;
+        }
       }
     }
   }
@@ -128,16 +215,29 @@
     }
   }
 
+  function isCurrentSession(sessionId: string): boolean {
+    return selectedSession?.id === sessionId;
+  }
+
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : 'Unexpected session status error';
+  }
+
+  function loadingFeedback(message: string): AdminMessageFeedback {
+    return { variant: 'loading', title: 'Lifecycle operation', message, testId: 'session-lifecycle-message' };
+  }
+
+  function successFeedback(message: string): AdminMessageFeedback {
+    return { variant: 'success', title: 'Lifecycle updated', message, testId: 'session-lifecycle-message' };
   }
 </script>
 
 <SessionDetailPanel
   {viewModel}
+  {feedback}
   onRefresh={() => void refreshPanel()}
-  onStop={onStopSession}
-  onKill={onKillSession}
+  onStop={() => void runLifecycleAction('Stopping selected session...', 'Selected session stopped.', onStopSession)}
+  onKill={() => void runLifecycleAction('Killing selected session...', 'Selected session was force killed.', onKillSession)}
   onDisconnectConnection={(connectionId) => void disconnectConnection(connectionId)}
   onDisconnectAll={() => void disconnectAllConnections()}
 />

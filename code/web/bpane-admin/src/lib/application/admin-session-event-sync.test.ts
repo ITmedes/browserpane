@@ -52,14 +52,14 @@ describe('subscribeAdminSessionEvents', () => {
 
   it('notifies panel refresh boundaries when session files change', () => {
     const client = new FakeAdminEventClient();
-    let refreshes = 0;
+    const snapshots: Array<readonly { readonly sessionId: string; readonly fileCount: number }[]> = [];
 
     subscribeAdminSessionEvents(client as never, {
       onSessions: () => undefined,
       onLoadingChange: () => undefined,
       onError: () => undefined,
       onLog: () => undefined,
-      onSessionFilesSnapshot: () => { refreshes += 1; },
+      onSessionFilesSnapshot: (next) => snapshots.push(next),
     });
     client.handlers.onEvent({
       type: 'session_files.snapshot',
@@ -68,7 +68,7 @@ describe('subscribeAdminSessionEvents', () => {
       sessionFiles: [{ sessionId: 'session-a', fileCount: 1, latestUpdatedAt: null }],
     });
 
-    expect(refreshes).toBe(1);
+    expect(snapshots).toEqual([[{ sessionId: 'session-a', fileCount: 1, latestUpdatedAt: null }]]);
   });
 
   it('passes workflow run snapshots to the follow handler', () => {
@@ -94,14 +94,14 @@ describe('subscribeAdminSessionEvents', () => {
 
   it('notifies panel refresh boundaries when recordings change', () => {
     const client = new FakeAdminEventClient();
-    let refreshes = 0;
+    const snapshots: Array<readonly { readonly sessionId: string; readonly readyCount: number }[]> = [];
 
     subscribeAdminSessionEvents(client as never, {
       onSessions: () => undefined,
       onLoadingChange: () => undefined,
       onError: () => undefined,
       onLog: () => undefined,
-      onRecordingsSnapshot: () => { refreshes += 1; },
+      onRecordingsSnapshot: (next) => snapshots.push(next),
     });
     client.handlers.onEvent({
       type: 'recordings.snapshot',
@@ -116,19 +116,27 @@ describe('subscribeAdminSessionEvents', () => {
       }],
     });
 
-    expect(refreshes).toBe(1);
+    expect(snapshots).toEqual([[
+      {
+        sessionId: 'session-a',
+        recordingCount: 1,
+        activeCount: 0,
+        readyCount: 1,
+        latestUpdatedAt: null,
+      },
+    ]]);
   });
 
   it('notifies panel refresh boundaries when MCP delegation changes', () => {
     const client = new FakeAdminEventClient();
-    let refreshes = 0;
+    const snapshots: Array<readonly { readonly sessionId: string; readonly delegatedClientId: string | null }[]> = [];
 
     subscribeAdminSessionEvents(client as never, {
       onSessions: () => undefined,
       onLoadingChange: () => undefined,
       onError: () => undefined,
       onLog: () => undefined,
-      onMcpDelegationSnapshot: () => { refreshes += 1; },
+      onMcpDelegationSnapshot: (next) => snapshots.push(next),
     });
     client.handlers.onEvent({
       type: 'mcp_delegation.snapshot',
@@ -143,7 +151,15 @@ describe('subscribeAdminSessionEvents', () => {
       }],
     });
 
-    expect(refreshes).toBe(1);
+    expect(snapshots).toEqual([[
+      {
+        sessionId: 'session-a',
+        delegatedClientId: 'bpane-mcp-bridge',
+        delegatedIssuer: 'local-compose',
+        mcpOwner: false,
+        updatedAt: '2026-05-04T19:01:00Z',
+      },
+    ]]);
   });
 });
 

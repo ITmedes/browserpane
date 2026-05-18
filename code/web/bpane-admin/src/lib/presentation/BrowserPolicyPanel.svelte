@@ -1,14 +1,23 @@
 <script lang="ts">
+  import AdminMessage from './AdminMessage.svelte';
+  import type { AdminMessageFeedback } from './admin-message-types';
   import type { BrowserPolicySignal, BrowserPolicyViewModel } from './browser-policy-view-model';
 
   type BrowserPolicyPanelProps = {
     readonly viewModel: BrowserPolicyViewModel;
     readonly copied: boolean;
+    readonly feedback?: AdminMessageFeedback | null;
     readonly onRefresh: () => void;
     readonly onCopyProbeCommand: () => void;
   };
 
-  let { viewModel, copied, onRefresh, onCopyProbeCommand }: BrowserPolicyPanelProps = $props();
+  let {
+    viewModel,
+    copied,
+    feedback = null,
+    onRefresh,
+    onCopyProbeCommand,
+  }: BrowserPolicyPanelProps = $props();
 
   function signalClass(signal: BrowserPolicySignal): string {
     if (signal.tone === 'ok') {
@@ -33,6 +42,15 @@
   </div>
 
   <p class="m-0 text-sm leading-normal text-admin-ink/68" data-testid="policy-note">{viewModel.note}</p>
+  {#if feedback}
+    <AdminMessage
+      variant={feedback.variant}
+      title={feedback.title}
+      message={feedback.message}
+      testId={feedback.testId}
+      compact={true}
+    />
+  {/if}
 
   <div class="grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
     {#each viewModel.signals as signal}

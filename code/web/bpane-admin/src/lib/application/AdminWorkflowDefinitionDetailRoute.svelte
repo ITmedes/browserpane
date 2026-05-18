@@ -7,6 +7,8 @@
     WorkflowDefinitionVersionResource,
     WorkflowRunResource,
   } from '../api/workflow-types';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import {
     WorkflowTemplateCatalogViewModelBuilder,
     type MetadataRow,
@@ -24,6 +26,7 @@
   let selectedVersion = $state('');
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let lastRefreshedAt = $state<string | null>(null);
 
   const viewModel = $derived(definition
@@ -36,12 +39,15 @@
     : null);
 
   onMount(() => {
-    void loadDetail();
+    void loadDetail(false);
   });
 
-  async function loadDetail(): Promise<void> {
+  async function loadDetail(showFeedback = true): Promise<void> {
+    const previousLatestVersion = definition?.latest_version ?? null;
+    const previousRunCount = runs.length;
     loading = true;
     error = null;
+    actionFeedback = null;
     try {
       const [definitionResource, versionList, runList] = await Promise.all([
         workflowClient.getDefinition(workflowId),
@@ -53,8 +59,17 @@
       runs = runList.runs;
       selectedVersion = selectedVersionFor(definitionResource, versionList.versions, selectedVersion);
       lastRefreshedAt = new Date().toISOString();
+      if (showFeedback) {
+        actionFeedback = successFeedback(refreshMessage(
+          previousLatestVersion,
+          definitionResource.latest_version,
+          previousRunCount,
+          runList.runs.length,
+        ));
+      }
     } catch (loadError) {
       error = errorMessage(loadError);
+      actionFeedback = null;
     } finally {
       loading = false;
     }
@@ -84,6 +99,25 @@
 
   function errorMessage(value: unknown): string {
     return value instanceof Error ? value.message : 'Unexpected workflow definition detail error';
+  }
+
+  function refreshMessage(
+    previousLatestVersion: string | null,
+    nextLatestVersion: string | null,
+    previousRunCount: number,
+    nextRunCount: number,
+  ): string {
+    if (previousLatestVersion && previousLatestVersion !== nextLatestVersion) {
+      return `Latest workflow version changed from ${previousLatestVersion} to ${nextLatestVersion ?? 'none'}.`;
+    }
+    if (previousRunCount !== nextRunCount) {
+      return `Workflow run count changed from ${previousRunCount} to ${nextRunCount}.`;
+    }
+    return 'Workflow template detail refreshed.';
+  }
+
+  function successFeedback(message: string): AdminMessageFeedback {
+    return { variant: 'success', title: 'Workflow template refreshed', message, testId: 'workflow-definition-detail-message' };
   }
 </script>
 
@@ -122,15 +156,24 @@
 
   {#if loading && !viewModel}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0">Loading workflow template...</p>
+      <AdminMessage variant="loading" message="Loading workflow template..." compact={true} />
     </section>
   {:else if error && !viewModel}
     <section class="admin-panel mt-0">
-      <p class="admin-error mt-0" data-testid="workflow-definition-detail-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="workflow-definition-detail-error" compact={true} />
     </section>
   {:else if viewModel}
     {#if error}
-      <p class="admin-error" data-testid="workflow-definition-detail-action-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="workflow-definition-detail-action-error" compact={true} />
+    {/if}
+    {#if actionFeedback}
+      <AdminMessage
+        variant={actionFeedback.variant}
+        title={actionFeedback.title}
+        message={actionFeedback.message}
+        testId={actionFeedback.testId}
+        compact={true}
+      />
     {/if}
 
     <section class="grid gap-3 md:grid-cols-4" aria-label="Workflow definition facts">
@@ -157,7 +200,7 @@
       <div class="admin-panel mt-0 grid self-start gap-2">
         <p class="admin-eyebrow">Versions</p>
         {#if viewModel.versionRows.length === 0}
-          <p class="admin-empty mt-0">No workflow versions are published yet.</p>
+          <AdminMessage variant="empty" message="No workflow versions are published yet." compact={true} />
         {:else}
           {#each viewModel.versionRows as version}
             <button
@@ -209,7 +252,7 @@
             {@render MetadataPanel('Schemas', viewModel.selectedVersion.schemaRows, 'workflow-definition-schemas')}
           </div>
         {:else}
-          <p class="admin-empty mt-0">No version metadata is available.</p>
+          <AdminMessage variant="empty" message="No version metadata is available." compact={true} />
         {/if}
       </div>
     </section>
@@ -222,7 +265,7 @@
         </div>
       </div>
       {#if viewModel.recentRuns.length === 0}
-        <p class="admin-empty mt-0">No workflow runs found for this definition.</p>
+        <AdminMessage variant="empty" message="No workflow runs found for this definition." compact={true} />
       {:else}
         <div class="grid gap-2">
           {#each viewModel.recentRuns as run}
