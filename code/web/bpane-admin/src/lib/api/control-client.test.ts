@@ -19,6 +19,7 @@ const SESSION = {
   },
   status: {
     runtime_state: 'running',
+    runtime_resume_mode: 'exact_live',
     presence_state: 'connected',
     connection_counts: {
       interactive_clients: 1,
@@ -94,9 +95,14 @@ describe('ControlClient', () => {
     });
 
     await client.stopSession('session/with/slash');
+    await client.releaseSessionRuntime('session/with/slash');
 
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('http://localhost:8932/api/v1/sessions/session%2Fwith%2Fslash/stop'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/sessions/session%2Fwith%2Fslash/release'),
       expect.objectContaining({ method: 'POST' }),
     );
   });

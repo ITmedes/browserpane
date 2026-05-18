@@ -64,6 +64,7 @@ function sessionResource(input: {
     },
     status: {
       runtime_state: 'running',
+      runtime_resume_mode: 'exact_live',
       presence_state: 'connected',
       connection_counts: {
         interactive_clients: 0,

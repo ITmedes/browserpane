@@ -56,6 +56,7 @@ impl InMemorySessionStore {
             recording: request.recording,
             created_at: now,
             updated_at: now,
+            runtime_released_at: None,
             stopped_at: None,
         };
         sessions.push(session.clone());
@@ -152,6 +153,40 @@ impl InMemorySessionStore {
         Ok(Some(session.clone()))
     }
 
+    pub(in crate::session_control) async fn release_session_runtime_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| {
+            session.id == id
+                && session.owner.subject == principal.subject
+                && session.owner.issuer == principal.issuer
+        }) else {
+            return Ok(None);
+        };
+
+        if session.state == SessionLifecycleState::Stopped {
+            return Err(SessionStoreError::Conflict(format!(
+                "session {id} is stopped; create a new session instead of releasing it"
+            )));
+        }
+        if !session.state.is_runtime_candidate() && session.state != SessionLifecycleState::Released
+        {
+            return Err(SessionStoreError::Conflict(format!(
+                "session {id} cannot release a runtime from state {}",
+                session.state.as_str()
+            )));
+        }
+
+        session.state = SessionLifecycleState::Released;
+        session.updated_at = Utc::now();
+        session.runtime_released_at = Some(session.updated_at);
+        session.stopped_at = None;
+        Ok(Some(session.clone()))
+    }
+
     pub(in crate::session_control) async fn mark_session_state(
         &self,
         id: Uuid,
@@ -163,6 +198,9 @@ impl InMemorySessionStore {
         };
 
         if !session.state.is_runtime_candidate() {
+            return Ok(Some(session.clone()));
+        }
+        if session.state == state {
             return Ok(Some(session.clone()));
         }
 
@@ -203,10 +241,9 @@ impl InMemorySessionStore {
         };
 
         let state = sessions[index].state;
-        if state != SessionLifecycleState::Stopped {
+        if state != SessionLifecycleState::Released && state != SessionLifecycleState::Stopped {
             return Ok(Some(sessions[index].clone()));
         }
-
         let active_runtime_candidates = active_runtime_candidate_count(&sessions);
         if active_runtime_candidates >= self.config.max_runtime_candidates {
             return Err(SessionStoreError::ActiveSessionConflict {
@@ -215,6 +252,12 @@ impl InMemorySessionStore {
         }
 
         let session = &mut sessions[index];
+        if state == SessionLifecycleState::Stopped {
+            session.runtime_released_at = session
+                .stopped_at
+                .or(session.runtime_released_at)
+                .or_else(|| Some(Utc::now()));
+        }
         session.state = SessionLifecycleState::Ready;
         session.updated_at = Utc::now();
         session.stopped_at = None;

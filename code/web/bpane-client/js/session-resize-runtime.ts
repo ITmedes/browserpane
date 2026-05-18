@@ -106,7 +106,9 @@ export class SessionResizeRuntime {
       this.clearTimeoutFn(this.resizeTimeout);
       this.resizeTimeout = null;
     }
+    this.resolutionLocked = false;
     this.resizeObserver.disconnect();
+    this.clearContainerSizing();
   }
 
   private setResolutionLock(width: number, height: number): void {
@@ -147,12 +149,7 @@ export class SessionResizeRuntime {
     }
 
     this.resolutionLocked = false;
-    this.container.style.flex = '';
-    this.container.style.width = '';
-    this.container.style.height = '';
-    this.container.style.resize = '';
-    this.container.style.maxWidth = '';
-    this.container.style.maxHeight = '';
+    this.clearContainerSizing();
     this.resizeObserver.observe(this.container);
 
     const dims = this.getContainerResizeDims();
@@ -169,6 +166,15 @@ export class SessionResizeRuntime {
       this.cursorEl.width = width;
       this.cursorEl.height = height;
     }
+  }
+
+  private clearContainerSizing(): void {
+    this.container.style.flex = '';
+    this.container.style.width = '';
+    this.container.style.height = '';
+    this.container.style.resize = '';
+    this.container.style.maxWidth = '';
+    this.container.style.maxHeight = '';
   }
 
   private computeScale(): number {

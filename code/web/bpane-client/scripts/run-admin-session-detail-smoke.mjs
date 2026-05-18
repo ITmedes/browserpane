@@ -4,8 +4,10 @@ import { chromium } from 'playwright-core';
 import {
   cleanupAdminBeforeRun,
   cleanupAdminSmoke,
+  disconnectEmbeddedBrowser,
   ensureAdminLoggedIn,
   openAdminTab,
+  waitForBrowserConnected,
 } from './admin-smoke-lib.mjs';
 import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
 
@@ -37,6 +39,7 @@ async function run() {
     await verifySessionDetail(page, options, sessionId);
     await verifyListDeepLink(page, options, sessionId);
     await verifyLiveWorkspaceDetailLink(page, options, sessionId);
+    await verifyDetailLifecycleDisabledWithLiveClient(page, options, sessionId);
     await emitSummary(page, options, sessionId, log);
   } finally {
     await cleanupAdminSmoke(page, options, log);
@@ -93,9 +96,60 @@ async function verifyLiveWorkspaceDetailLink(page, options, sessionId) {
   await row.click();
   const detailLink = page.getByTestId('session-detail-link');
   await detailLink.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  const href = await detailLink.getAttribute('href');
+  const href = await poll(
+    'live workspace detail link selection',
+    async () => await detailLink.getAttribute('href'),
+    (value) => value?.includes(`/sessions/${sessionId}`),
+    options.connectTimeoutMs,
+    100,
+  );
   if (!href?.includes(`/sessions/${sessionId}`)) {
     throw new Error(`Expected live workspace detail link for ${sessionId}, got ${href}`);
+  }
+}
+
+async function verifyDetailLifecycleDisabledWithLiveClient(page, options, sessionId) {
+  const detailPage = await page.context().newPage();
+  try {
+    await ensureAdminLoggedIn(detailPage, options);
+    await detailPage.goto(adminRouteUrl(options, `sessions/${sessionId}`), { waitUntil: 'domcontentloaded' });
+    await detailPage.getByTestId('session-inspector-detail').waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+
+    await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
+    await openAdminTab(page, 'sessions');
+    const row = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
+    await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+    await row.click();
+    await poll(
+      'live workspace selected session before join',
+      async () => await page.getByTestId('session-detail-link').getAttribute('href').catch(() => ''),
+      (value) => value?.includes(`/sessions/${sessionId}`),
+      options.connectTimeoutMs,
+      100,
+    );
+    await page.getByTestId('session-join').click();
+    await waitForBrowserConnected(page, options);
+    await detailPage.getByTestId('session-inspector-detail-refresh').click();
+
+    await poll(
+      'session detail live client count',
+      async () => await detailPage.getByTestId('session-total-clients').textContent().catch(() => ''),
+      (value) => Number(value) > 0,
+      options.connectTimeoutMs,
+      100,
+    );
+    for (const testId of ['session-release-runtime', 'session-stop', 'session-kill']) {
+      const disabled = await detailPage.getByTestId(testId).isDisabled();
+      if (!disabled) {
+        throw new Error(`Expected ${testId} to be disabled while another admin page is connected.`);
+      }
+    }
+  } finally {
+    await detailPage.close().catch(() => {});
+    await disconnectEmbeddedBrowser(page, options).catch(() => {});
   }
 }
 

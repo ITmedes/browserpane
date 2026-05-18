@@ -83,7 +83,7 @@ pub(super) async fn subscribe(
     let initial_frames = gather_initial_frames(hub).await;
     let initial_access_state = super::policy::initial_access_state(hub, client_id).await;
 
-    if prev_count > 0 || should_request_automation_repaint(hub, client_role) {
+    if should_request_join_repaint(hub, client_role, prev_count).await {
         let tiles_requested = hub.request_full_refresh().await;
         if tiles_requested > 0 {
             hub.record_refresh_burst(tiles_requested);
@@ -106,8 +106,18 @@ pub(super) async fn subscribe(
     })
 }
 
-fn should_request_automation_repaint(hub: &SessionHub, client_role: BrowserClientRole) -> bool {
-    client_role == BrowserClientRole::Interactive && hub.mcp_is_owner.load(Ordering::Relaxed)
+async fn should_request_join_repaint(
+    hub: &SessionHub,
+    client_role: BrowserClientRole,
+    prev_count: u32,
+) -> bool {
+    if client_role != BrowserClientRole::Interactive {
+        return false;
+    }
+    if prev_count > 0 || hub.mcp_is_owner.load(Ordering::Relaxed) {
+        return true;
+    }
+    hub.cached_grid_config.lock().await.is_some()
 }
 
 pub(super) async fn unsubscribe(hub: &SessionHub, client_id: u64) {

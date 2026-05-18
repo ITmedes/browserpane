@@ -3,9 +3,9 @@ use std::collections::HashSet;
 
 use crate::auth::AuthenticatedPrincipal;
 use crate::session_control::{
-    SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionRuntimeState,
-    SessionStatusSummary, SessionStopBlocker, SessionStopBlockerKind, SessionStopEligibility,
-    SessionStoreError, StoredSession,
+    SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionRuntimeResumeMode,
+    SessionRuntimeState, SessionStatusSummary, SessionStopBlocker, SessionStopBlockerKind,
+    SessionStopEligibility, SessionStoreError, StoredSession,
 };
 use crate::session_manager::SessionRuntimeAssignmentStatus;
 
@@ -23,6 +23,8 @@ pub(super) async fn session_status_summary(
         .describe_session_runtime_assignment_status(stored.id)
         .await;
     let runtime_state = derive_session_runtime_state(stored.state, runtime_assignment);
+    let runtime_resume_mode =
+        derive_session_runtime_resume_mode(stored, runtime_assignment, runtime_state);
     let connection_counts = session_connection_counts_from_snapshot(snapshot);
     let presence_state = derive_session_presence_state(stored.state, &connection_counts);
     let owner = session_owner_principal(stored);
@@ -67,6 +69,7 @@ pub(super) async fn session_status_summary(
 
     Ok(SessionStatusSummary {
         runtime_state,
+        runtime_resume_mode,
         presence_state,
         connection_counts,
         stop_eligibility,
@@ -138,6 +141,7 @@ fn derive_session_runtime_state(
         SessionLifecycleState::Stopped
         | SessionLifecycleState::Failed
         | SessionLifecycleState::Expired => SessionRuntimeState::Stopped,
+        SessionLifecycleState::Released => SessionRuntimeState::Released,
         SessionLifecycleState::Stopping => SessionRuntimeState::Stopping,
         SessionLifecycleState::Starting => SessionRuntimeState::Starting,
         SessionLifecycleState::Pending => match runtime_assignment {
@@ -151,6 +155,33 @@ fn derive_session_runtime_state(
             Some(SessionRuntimeAssignmentStatus::Starting) => SessionRuntimeState::Starting,
             Some(SessionRuntimeAssignmentStatus::Ready) => SessionRuntimeState::Running,
             None => SessionRuntimeState::NotStarted,
+        },
+    }
+}
+
+fn derive_session_runtime_resume_mode(
+    stored: &StoredSession,
+    runtime_assignment: Option<SessionRuntimeAssignmentStatus>,
+    runtime_state: SessionRuntimeState,
+) -> SessionRuntimeResumeMode {
+    match runtime_state {
+        SessionRuntimeState::Stopped | SessionRuntimeState::Stopping => {
+            SessionRuntimeResumeMode::Stopped
+        }
+        SessionRuntimeState::Released => SessionRuntimeResumeMode::Released,
+        SessionRuntimeState::Running | SessionRuntimeState::Starting => {
+            if stored.runtime_released_at.is_some() {
+                SessionRuntimeResumeMode::ProfileRestart
+            } else {
+                SessionRuntimeResumeMode::ExactLive
+            }
+        }
+        SessionRuntimeState::NotStarted => match runtime_assignment {
+            Some(_) => SessionRuntimeResumeMode::ExactLive,
+            None if stored.runtime_released_at.is_some() => {
+                SessionRuntimeResumeMode::ProfileRestart
+            }
+            None => SessionRuntimeResumeMode::FreshStart,
         },
     }
 }

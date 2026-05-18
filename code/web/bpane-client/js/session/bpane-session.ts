@@ -63,6 +63,7 @@ export class BpaneSession {
   private videoDecoderRuntime: SessionVideoDecoderRuntime;
   private recordingRuntime: SessionRecordingRuntime;
   private stats = new SessionStats();
+  private destroyed = false;
 
   private constructor(options: BpaneOptions) {
     this.options = options;
@@ -128,11 +129,7 @@ export class BpaneSession {
           this.options.onConnect?.();
         },
         onDisconnect: (reason) => {
-          if (!this.connected) {
-            return;
-          }
-          this.connected = false;
-          this.options.onDisconnect?.(reason);
+          this.teardown(reason, { closeTransport: true, notify: true });
         },
         onError: (error) => {
           this.options.onError?.(error);
@@ -177,21 +174,26 @@ export class BpaneSession {
   static async connect(options: BpaneOptions): Promise<BpaneSession> {
     SessionConnectOptionsValidator.validate(options);
     const session = new BpaneSession(options);
-    session.microphoneEncoderSupported = await AudioController.isMicrophoneSupported();
-    session.cameraEncoderSupported = await CameraController.isSupported();
-    await session.setupTransport();
-    session.input = new InputController({
-      canvas: session.surfaceRuntime.getCanvas(),
-      sendFrame: (channelId, payload) => session.sendFrame(channelId, payload),
-      drawCursor: (_shape, x, y) => session.surfaceRuntime.drawCursorMove(x, y),
-      getRemoteDims: () => ({
-        width: session.remoteWidth || session.surfaceRuntime.getCanvas().width,
-        height: session.remoteHeight || session.surfaceRuntime.getCanvas().height,
-      }),
-      clipboardEnabled: options.clipboard !== false,
-    });
-    session.input.setup();
-    return session;
+    try {
+      session.microphoneEncoderSupported = await AudioController.isMicrophoneSupported();
+      session.cameraEncoderSupported = await CameraController.isSupported();
+      await session.setupTransport();
+      session.input = new InputController({
+        canvas: session.surfaceRuntime.getCanvas(),
+        sendFrame: (channelId, payload) => session.sendFrame(channelId, payload),
+        drawCursor: (_shape, x, y) => session.surfaceRuntime.drawCursorMove(x, y),
+        getRemoteDims: () => ({
+          width: session.remoteWidth || session.surfaceRuntime.getCanvas().width,
+          height: session.remoteHeight || session.surfaceRuntime.getCanvas().height,
+        }),
+        clipboardEnabled: options.clipboard !== false,
+      });
+      session.input.setup();
+      return session;
+    } catch (error) {
+      session.teardown('connect failed', { closeTransport: true, notify: false });
+      throw error;
+    }
   }
 
   getFrameCount(): number { return this.stats.frameCount; }
@@ -277,7 +279,17 @@ export class BpaneSession {
   }
 
   disconnect(): void {
-    if (!this.connected) return;
+    this.teardown('user disconnected', { closeTransport: true, notify: true });
+  }
+
+  private teardown(
+    reason: string,
+    options: { readonly closeTransport: boolean; readonly notify: boolean },
+  ): void {
+    if (this.destroyed) {
+      return;
+    }
+    this.destroyed = true;
     this.connected = false;
     this.recordingRuntime.destroy();
     if (this.input) {
@@ -291,9 +303,12 @@ export class BpaneSession {
       this.fileTransfer.destroy();
       this.fileTransfer = null;
     }
-    this.transportRuntime.disconnect();
+    if (options.closeTransport) {
+      this.transportRuntime.disconnect();
+    }
     this.surfaceRuntime.destroy();
     this.tileCompositor.reset();
+    this.nalReassembler = new NalReassembler();
     this.sendRuntime.destroy();
     this.remoteWidth = 0;
     this.remoteHeight = 0;
@@ -310,7 +325,9 @@ export class BpaneSession {
       keyboardLayout: false,
     };
     this.stats.frameCount = 0;
-    this.options.onDisconnect?.('user disconnected');
+    if (options.notify) {
+      this.options.onDisconnect?.(reason);
+    }
   }
 
   private clearVideoOverlay(): void {

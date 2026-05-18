@@ -6,6 +6,7 @@
   type SessionDetailPanelProps = {
     readonly viewModel: SessionDetailPanelViewModel;
     readonly onRefresh: () => void;
+    readonly onRelease: () => void;
     readonly onStop: () => void;
     readonly onKill: () => void;
     readonly onDisconnectConnection: (connectionId: number) => void;
@@ -16,6 +17,7 @@
   let {
     viewModel,
     onRefresh,
+    onRelease,
     onStop,
     onKill,
     onDisconnectConnection,
@@ -40,6 +42,15 @@
       onclick={onRefresh}
     >
       Refresh
+    </button>
+    <button
+      class="admin-button-primary"
+      type="button"
+      data-testid="session-release-runtime"
+      disabled={!viewModel.canRelease}
+      onclick={onRelease}
+    >
+      Release runtime
     </button>
     <button
       class="admin-button-primary"

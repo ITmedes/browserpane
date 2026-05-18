@@ -39,6 +39,7 @@ export type SessionConnectionCounts = {
 
 export type SessionStatusSummary = {
   readonly runtime_state: string;
+  readonly runtime_resume_mode: string;
   readonly presence_state: string;
   readonly connection_counts: SessionConnectionCounts;
   readonly stop_eligibility: SessionStopEligibility;
@@ -56,6 +57,7 @@ export type SessionResource = {
   readonly status: SessionStatusSummary;
   readonly created_at: string;
   readonly updated_at: string;
+  readonly runtime_released_at?: string | null;
   readonly stopped_at?: string | null;
 };
 

@@ -268,4 +268,32 @@ describe('SessionResizeRuntime', () => {
     expect(resizeObserver.disconnect).toHaveBeenCalledOnce();
     expect(sendResizeRequest).not.toHaveBeenCalled();
   });
+
+  it('clears fixed resolution container styles on destroy without sending a resize', () => {
+    const largeContainer = createContainer(1600, 1000);
+    const {
+      runtime,
+      resizeObserver,
+      sendResizeRequest,
+    } = createRuntime({
+      container: largeContainer.container,
+    });
+
+    runtime.applyClientAccessState(0x02, 1280, 720);
+    expect(largeContainer.container.style.width).toBe('1280px');
+    expect(largeContainer.container.style.height).toBe('720px');
+
+    sendResizeRequest.mockClear();
+    runtime.destroy();
+
+    expect(runtime.isResolutionLocked()).toBe(false);
+    expect(largeContainer.container.style.flex).toBe('');
+    expect(largeContainer.container.style.width).toBe('');
+    expect(largeContainer.container.style.height).toBe('');
+    expect(largeContainer.container.style.resize).toBe('');
+    expect(largeContainer.container.style.maxWidth).toBe('');
+    expect(largeContainer.container.style.maxHeight).toBe('');
+    expect(resizeObserver.disconnect).toHaveBeenCalled();
+    expect(sendResizeRequest).not.toHaveBeenCalled();
+  });
 });

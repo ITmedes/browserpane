@@ -16,6 +16,7 @@ export type SessionListItemViewModel = {
 export type SelectedSessionViewModel = SessionListItemViewModel & {
   readonly ownerMode: string;
   readonly runtimeBinding: string;
+  readonly canJoin: boolean;
 };
 
 export type SessionListPanelViewModel = {
@@ -49,6 +50,7 @@ export type SessionDetailPanelViewModel = {
   readonly canRefresh: boolean;
   readonly canStop: boolean;
   readonly canKill: boolean;
+  readonly canRelease: boolean;
   readonly canDisconnectAll: boolean;
   readonly loading: boolean;
   readonly error: string | null;
@@ -91,6 +93,7 @@ export class SessionViewModelBuilder {
         canRefresh: false,
         canStop: false,
         canKill: false,
+        canRelease: false,
         canDisconnectAll: false,
         loading: input.loading,
         error: input.error,
@@ -100,6 +103,7 @@ export class SessionViewModelBuilder {
     const stopEligibility = status?.stop_eligibility ?? session.status.stop_eligibility;
     const connectionCount = status?.connection_counts.total_clients
       ?? session.status.connection_counts.total_clients;
+    const hasLiveClients = input.connected || connectionCount > 0;
     return {
       title: session.id,
       facts: [
@@ -108,12 +112,14 @@ export class SessionViewModelBuilder {
         { label: 'idle override', value: session.idle_timeout_sec?.toString() ?? 'default', testId: 'session-idle-timeout' },
         { label: 'labels', value: labelSummary(session.labels ?? {}), testId: 'session-labels' },
         { label: 'runtime', value: session.status.runtime_state, testId: 'session-runtime-state' },
+        { label: 'resume', value: session.status.runtime_resume_mode, testId: 'session-runtime-resume-mode' },
         { label: 'presence', value: session.status.presence_state, testId: 'session-presence-state' },
         { label: 'clients', value: String(connectionCount), testId: 'session-total-clients' },
         { label: 'binding', value: session.runtime.binding },
         { label: 'transport', value: session.connect.compatibility_mode },
         { label: 'created', value: session.created_at },
         { label: 'updated', value: session.updated_at },
+        ...(session.runtime_released_at ? [{ label: 'runtime released', value: session.runtime_released_at }] : []),
         ...(session.stopped_at ? [{ label: 'stopped', value: session.stopped_at }] : []),
         ...statusFacts(status),
       ],
@@ -123,11 +129,12 @@ export class SessionViewModelBuilder {
         role: connection.role,
         canDisconnect: !input.loading,
       })) ?? [],
-      hint: resolveHint(input.connected, stopEligibility),
+      hint: resolveHint(hasLiveClients, stopEligibility),
       statusHint: status ? null : 'Live status is loaded from the session status API.',
       canRefresh: !input.loading,
-      canStop: !input.loading && !input.connected && stopEligibility.allowed,
-      canKill: !input.loading && !input.connected,
+      canStop: !input.loading && !hasLiveClients && stopEligibility.allowed,
+      canKill: !input.loading && !hasLiveClients,
+      canRelease: !input.loading && !hasLiveClients && stopEligibility.allowed && !['released', 'stopped'].includes(session.state),
       canDisconnectAll: !input.loading && (status?.connections.length ?? 0) > 0,
       loading: input.loading,
       error: input.error,
@@ -154,7 +161,12 @@ function toSelectedSession(session: SessionResource): SelectedSessionViewModel {
     ...toListItem(session),
     ownerMode: session.owner_mode,
     runtimeBinding: session.runtime.binding,
+    canJoin: canConnectSession(session.state),
   };
+}
+
+function canConnectSession(state: string): boolean {
+  return ['pending', 'starting', 'ready', 'active', 'idle', 'released', 'stopped'].includes(state);
 }
 
 function statusFacts(status: SessionStatus | null): SessionFactViewModel[] {

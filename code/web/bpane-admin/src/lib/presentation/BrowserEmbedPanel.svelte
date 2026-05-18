@@ -24,9 +24,17 @@
     onConnect,
     onDisconnect,
   }: BrowserEmbedPanelProps = $props();
-  let container: HTMLElement;
+  let container: HTMLElement | null = null;
   let lastAutoConnectVersion = $state(0);
   const isConnected = $derived(Boolean(session && connectedSessionId === session.id));
+
+  $effect(() => {
+    if (!container || isConnected || connecting) {
+      return;
+    }
+    container.replaceChildren();
+    container.removeAttribute('style');
+  });
 
   $effect(() => {
     if (autoConnectVersion === 0 || autoConnectVersion === lastAutoConnectVersion || !session || !container) {
@@ -80,8 +88,12 @@
   <div
     class="relative mt-3 min-h-0 flex-1 overflow-hidden rounded-xl border border-[#c4d5f4]/10 bg-[#050806]"
     data-testid="browser-viewport"
-    bind:this={container}
   >
+    <div
+      class="h-full min-h-0 w-full"
+      data-testid="browser-viewport-mount"
+      bind:this={container}
+    ></div>
     {#if !isConnected}
       <div class="absolute inset-0 grid place-content-center gap-2 bg-[radial-gradient(circle_at_top,rgba(79,209,168,0.08),transparent_34%),linear-gradient(180deg,rgba(14,24,41,0.24),rgba(7,12,21,0.56))] p-6 text-center text-[#9fb1cf]">
         <strong class="text-[1.3rem] text-admin-ink">{session ? 'Ready to connect' : 'No session selected'}</strong>

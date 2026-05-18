@@ -1920,6 +1920,32 @@ paths:
                 $ref: '#/components/schemas/SessionStopConflictResponse'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/release:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Sessions]
+      summary: Release the live runtime while preserving the session resource and profile
+      operationId: releaseSessionRuntime
+      responses:
+        '200':
+          description: Session runtime released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Session runtime cannot be released while blockers remain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionStopConflictResponse'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/kill:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -2211,6 +2237,7 @@ components:
         - ready
         - active
         - idle
+        - released
         - stopping
         - stopped
         - failed
@@ -4192,7 +4219,16 @@ components:
         - not_started
         - starting
         - running
+        - released
         - stopping
+        - stopped
+    SessionRuntimeResumeMode:
+      type: string
+      enum:
+        - fresh_start
+        - exact_live
+        - profile_restart
+        - released
         - stopped
     SessionPresenceState:
       type: string
@@ -4304,6 +4340,7 @@ components:
       type: object
       required:
         - runtime_state
+        - runtime_resume_mode
         - presence_state
         - connection_counts
         - stop_eligibility
@@ -4311,6 +4348,8 @@ components:
       properties:
         runtime_state:
           $ref: '#/components/schemas/SessionRuntimeState'
+        runtime_resume_mode:
+          $ref: '#/components/schemas/SessionRuntimeResumeMode'
         presence_state:
           $ref: '#/components/schemas/SessionPresenceState'
         connection_counts:
@@ -4340,6 +4379,7 @@ components:
         - status
         - created_at
         - updated_at
+        - runtime_released_at
         - stopped_at
       properties:
         id:
@@ -4392,6 +4432,10 @@ components:
         updated_at:
           type: string
           format: date-time
+        runtime_released_at:
+          type: string
+          format: date-time
+          nullable: true
         stopped_at:
           type: string
           format: date-time
@@ -4776,6 +4820,7 @@ components:
       required:
         - state
         - runtime_state
+        - runtime_resume_mode
         - presence_state
         - connection_counts
         - stop_eligibility
@@ -4797,6 +4842,8 @@ components:
           $ref: '#/components/schemas/SessionLifecycleState'
         runtime_state:
           $ref: '#/components/schemas/SessionRuntimeState'
+        runtime_resume_mode:
+          $ref: '#/components/schemas/SessionRuntimeResumeMode'
         presence_state:
           $ref: '#/components/schemas/SessionPresenceState'
         connection_counts:
