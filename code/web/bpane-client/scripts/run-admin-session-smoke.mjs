@@ -6,12 +6,13 @@ import {
   cleanupAdminSmoke,
   disconnectEmbeddedBrowser,
   ensureAdminLoggedIn,
+  getAdminAccessToken,
   openAdminTab,
   waitForBrowserConnected,
   waitForSessionState,
   waitForStopEnabled,
 } from './admin-smoke-lib.mjs';
-import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
+import { DEFAULTS, apiOrigin, createLogger, fetchJson, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
 
 async function run() {
   const options = parseSmokeArgs(process.argv.slice(2), 'run-admin-session-smoke.mjs');
@@ -39,6 +40,7 @@ async function run() {
     await waitForMcpDelegationReady(page, options);
     await waitForBrowserConnected(page, options);
     await expectSessionDisconnectControl(page);
+    await verifySessionSwitchDisconnect(page, options, sessionId);
     await expectGlobalMessage(page, options, (message) => message.trim().length > 0);
     await dismissGlobalMessage(page, options);
     await verifyBrowserPolicyPanel(page);
@@ -157,6 +159,62 @@ async function expectSessionDisconnectControl(page) {
   if (!disconnectEnabled) {
     throw new Error('Expected session area disconnect control to be enabled after browser connect.');
   }
+}
+
+async function verifySessionSwitchDisconnect(page, options, originalSessionId) {
+  const accessToken = await getAdminAccessToken(page);
+  const switchTarget = await createSwitchTargetSession(accessToken, options);
+
+  await openAdminTab(page, 'sessions');
+  await waitForSessionRow(page, options, switchTarget.id);
+  await page.locator(`[data-testid="session-row"][data-session-id="${switchTarget.id}"]`).click();
+  await poll(
+    'admin browser disconnect on session switch',
+    async () => await page.getByTestId('browser-status').textContent(),
+    (status) => status === 'Disconnected',
+    options.connectTimeoutMs,
+    100,
+  );
+  const disconnectEnabled = await page.getByTestId('session-disconnect').isEnabled();
+  if (disconnectEnabled) {
+    throw new Error('Expected session area disconnect control to be disabled after switching away from the live session.');
+  }
+
+  await page.locator(`[data-testid="session-row"][data-session-id="${originalSessionId}"]`).click();
+  await poll(
+    'admin session join enabled after switch-back',
+    async () => await page.getByTestId('session-join').isEnabled(),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+  await page.getByTestId('session-join').click();
+  await waitForBrowserConnected(page, options);
+  await expectSessionDisconnectControl(page);
+}
+
+async function createSwitchTargetSession(accessToken, options) {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/sessions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ labels: { suite: 'admin-session-switch-smoke' } }),
+  });
+}
+
+async function waitForSessionRow(page, options, sessionId) {
+  await poll(
+    `admin session row ${sessionId}`,
+    async () => {
+      const row = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
+      return await row.isVisible().catch(() => false);
+    },
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
 }
 
 async function expectLifecycleMessage(page, options, expectedText) {
