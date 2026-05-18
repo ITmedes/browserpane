@@ -73,6 +73,7 @@ function createSession(id: string): SessionResource {
     runtime: { binding: 'docker', compatibility_mode: 'direct' },
     status: {
       runtime_state: 'running',
+      runtime_resume_mode: 'exact_live',
       presence_state: 'connected',
       connection_counts: {
         interactive_clients: 0, owner_clients: 0, viewer_clients: 0,

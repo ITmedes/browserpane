@@ -120,6 +120,14 @@
     );
   }
 
+  async function releaseSessionRuntime(): Promise<void> {
+    await mutateSession(
+      'Releasing selected session runtime...',
+      'Selected session runtime was released.',
+      () => controlClient.releaseSessionRuntime(sessionId),
+    );
+  }
+
   async function killSession(): Promise<void> {
     await mutateSession(
       'Killing selected session...',
@@ -268,6 +276,7 @@
         {viewModel}
         feedback={actionFeedback}
         onRefresh={() => void refreshInspector()}
+        onRelease={() => void releaseSessionRuntime()}
         onStop={() => void stopSession()}
         onKill={() => void killSession()}
         onDisconnectConnection={(connectionId) => void disconnectConnection(connectionId)}

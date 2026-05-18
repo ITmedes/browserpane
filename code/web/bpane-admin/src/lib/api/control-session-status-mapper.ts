@@ -21,6 +21,7 @@ export class ControlSessionStatusMapper {
     return {
       state: expectString(object.state, 'session status state'),
       runtime_state: expectString(object.runtime_state, 'session status runtime_state'),
+      runtime_resume_mode: expectString(object.runtime_resume_mode, 'session status runtime_resume_mode'),
       presence_state: expectString(object.presence_state, 'session status presence_state'),
       connection_counts: toConnectionCounts(object.connection_counts),
       stop_eligibility: toStopEligibility(object.stop_eligibility),

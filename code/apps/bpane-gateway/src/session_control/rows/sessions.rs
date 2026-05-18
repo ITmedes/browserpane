@@ -73,6 +73,7 @@ pub(in crate::session_control) fn row_to_stored_session(
         recording,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
+        runtime_released_at: row.get("runtime_released_at"),
         stopped_at: row.get("stopped_at"),
     })
 }

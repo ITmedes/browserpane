@@ -69,6 +69,7 @@ function sessionStatusPayload(overrides: {
   return {
     state: overrides.state ?? 'active',
     runtime_state: 'running',
+    runtime_resume_mode: 'exact_live',
     presence_state: 'connected',
     connection_counts: counts(overrides.connections?.length ?? 1),
     stop_eligibility: { allowed: false, blockers: [{ kind: 'owner_clients', count: 1 }] },

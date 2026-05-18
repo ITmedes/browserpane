@@ -8,7 +8,6 @@ import {
   ensureAdminLoggedIn,
   openAdminTab,
   waitForBrowserConnected,
-  waitForKillEnabled,
   waitForSessionState,
   waitForStopEnabled,
 } from './admin-smoke-lib.mjs';
@@ -56,24 +55,28 @@ async function run() {
       throw new Error('Expected session stop to be disabled while embedded browser is connected.');
     }
 
-    log('Disconnecting through the session inspector and stopping the selected session.');
+    log('Disconnecting through the session inspector and releasing the selected session runtime.');
     await disconnectThroughSessionInspector(page, options);
+    await waitForStopEnabled(page, options, sessionId);
+    await page.getByTestId('session-release-runtime').click();
+    await waitForSessionState(page, options, sessionId, 'released');
+    await expectLifecycleMessage(page, options, 'Selected session runtime was released.');
+    await expectRuntimeResumeMode(page, options, 'released');
+
+    log(`Reconnecting released session ${sessionId}.`);
+    await openAdminTab(page, 'sessions');
+    await page.getByTestId('session-join').click();
+    await waitForBrowserConnected(page, options);
+    await openAdminTab(page, 'lifecycle');
+    await expectRuntimeResumeMode(page, options, 'profile_restart');
+    await disconnectEmbeddedBrowser(page, options);
+
+    log(`Stopping reconnected session ${sessionId}.`);
     await waitForStopEnabled(page, options, sessionId);
     await page.getByTestId('session-stop').click();
     await waitForSessionState(page, options, sessionId, 'stopped');
     await expectLifecycleMessage(page, options, 'Selected session stopped.');
-
-    log(`Reconnecting stopped session ${sessionId}.`);
-    await openAdminTab(page, 'sessions');
-    await page.getByTestId('session-join').click();
-    await waitForBrowserConnected(page, options);
-    await disconnectEmbeddedBrowser(page, options);
-
-    log(`Force killing reconnected session ${sessionId}.`);
-    await waitForKillEnabled(page, options, sessionId);
-    await page.getByTestId('session-kill').click();
-    await waitForSessionState(page, options, sessionId, 'stopped');
-    await expectLifecycleMessage(page, options, 'Selected session was force killed.');
+    await expectStoppedSessionJoinDisabled(page, options);
     await emitSummary(page, options, sessionId, stopDisabled, log);
   } finally {
     await cleanupAdminSmoke(page, options, log);
@@ -137,6 +140,29 @@ async function expectLifecycleMessage(page, options, expectedText) {
     `admin lifecycle message ${expectedText}`,
     async () => await page.getByTestId('session-lifecycle-message').textContent().catch(() => ''),
     (message) => message.includes(expectedText),
+    options.connectTimeoutMs,
+    100,
+  );
+}
+
+async function expectRuntimeResumeMode(page, options, expectedText) {
+  await openAdminTab(page, 'lifecycle');
+  await page.getByTestId('session-detail-refresh').click();
+  await poll(
+    `admin runtime resume mode ${expectedText}`,
+    async () => await page.getByTestId('session-runtime-resume-mode').textContent().catch(() => ''),
+    (value) => value === expectedText,
+    options.connectTimeoutMs,
+    100,
+  );
+}
+
+async function expectStoppedSessionJoinDisabled(page, options) {
+  await openAdminTab(page, 'sessions');
+  await poll(
+    'admin stopped session join disabled',
+    async () => await page.getByTestId('session-join').isDisabled(),
+    Boolean,
     options.connectTimeoutMs,
     100,
   );

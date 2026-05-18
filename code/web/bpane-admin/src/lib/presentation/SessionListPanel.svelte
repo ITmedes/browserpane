@@ -63,7 +63,7 @@
         class="admin-button-primary"
         type="button"
         data-testid="session-join"
-        disabled={!viewModel.authenticated || viewModel.loading || !viewModel.selectedSessionId}
+        disabled={!viewModel.authenticated || viewModel.loading || !viewModel.selectedSessionId || !viewModel.selectedSession?.canJoin}
         onclick={onJoinSession}
       >
         Join / reconnect

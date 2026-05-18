@@ -95,8 +95,9 @@ pub(in crate::api) async fn prepare_runtime_access_session(
             )
         })?;
     let was_stopped = stored.state == SessionLifecycleState::Stopped;
+    let was_released = stored.state == SessionLifecycleState::Released;
 
-    let connectable = if was_stopped {
+    let connectable = if was_stopped || was_released {
         let prepared = state
             .session_store
             .prepare_session_for_connect(session_id)
@@ -128,7 +129,12 @@ pub(in crate::api) async fn prepare_runtime_access_session(
         .ensure_auto_recording(&connectable)
         .await
     {
-        if was_stopped {
+        if was_released {
+            let _ = state
+                .session_store
+                .release_session_runtime_for_owner(principal, session_id)
+                .await;
+        } else if was_stopped {
             let _ = state.session_store.stop_session_if_idle(session_id).await;
             state.session_manager.release(session_id).await;
             state.registry.remove_session(session_id).await;

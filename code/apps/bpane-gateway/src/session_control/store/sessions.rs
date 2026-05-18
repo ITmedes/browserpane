@@ -58,6 +58,21 @@ impl SessionStore {
         }
     }
 
+    pub async fn release_session_runtime_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.release_session_runtime_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.release_session_runtime_for_owner(principal, id).await
+            }
+        }
+    }
+
     pub async fn get_session_for_principal(
         &self,
         principal: &AuthenticatedPrincipal,
