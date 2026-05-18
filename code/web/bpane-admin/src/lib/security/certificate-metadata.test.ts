@@ -22,6 +22,14 @@ describe('CertificateMetadataClient', () => {
       spkiFingerprint: 'spki-value',
       certificateHash: 'hash-value',
     });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8080/cert-fingerprint'),
+      { cache: 'no-store' },
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8080/cert-hash'),
+      { cache: 'no-store' },
+    );
   });
 
   it('uses null values when local certificate metadata is unavailable', async () => {

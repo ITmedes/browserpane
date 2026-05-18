@@ -2,6 +2,13 @@ export type AccessTokenProvider = () => Promise<string> | string;
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export type AuthenticationFailureHandler = (error: ControlApiError) => void;
 
+export type ControlApiErrorDetails = {
+  readonly message: string;
+  readonly code?: string;
+  readonly category?: string;
+  readonly recoveryHint?: string;
+};
+
 type AuthenticatedRequestOptions = {
   readonly baseUrl: URL;
   readonly accessTokenProvider: AccessTokenProvider;
@@ -17,11 +24,48 @@ type AuthenticatedRequestOptions = {
 };
 
 export class ControlApiError extends Error {
+  readonly status: number;
+  readonly body: string;
+  readonly apiMessage: string;
+  readonly apiCode: string | undefined;
+  readonly apiCategory: string | undefined;
+  readonly recoveryHint: string | undefined;
+
   constructor(
-    readonly status: number,
-    readonly body: string,
+    status: number,
+    body: string,
   ) {
-    super(`BrowserPane control API returned HTTP ${status}${body ? `: ${body}` : ''}`);
+    const details = parseControlApiErrorBody(body);
+    super(`BrowserPane control API returned HTTP ${status}${details.message ? `: ${details.message}` : ''}`);
+    this.status = status;
+    this.body = body;
+    this.apiMessage = details.message;
+    this.apiCode = details.code;
+    this.apiCategory = details.category;
+    this.recoveryHint = details.recoveryHint;
+  }
+}
+
+export function parseControlApiErrorBody(body: string): ControlApiErrorDetails {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return { message: '' };
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== 'object') {
+      return { message: trimmed };
+    }
+    const record = parsed as Record<string, unknown>;
+    const error = typeof record.error === 'string' ? record.error : trimmed;
+    return {
+      message: error,
+      ...(typeof record.code === 'string' ? { code: record.code } : {}),
+      ...(typeof record.category === 'string' ? { category: record.category } : {}),
+      ...(typeof record.recovery_hint === 'string' ? { recoveryHint: record.recovery_hint } : {}),
+    };
+  } catch {
+    return { message: trimmed };
   }
 }
 

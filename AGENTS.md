@@ -183,6 +183,16 @@ Run these where applicable:
 
 - Trust code and runtime manifests over stale prose. `README.md` may lag behind implementation.
 - For Rust work, follow `RUST_STANDARDS.md` in addition to this file.
+- Before starting a planned implementation slice, create or update a dedicated
+  plan file under `docs/` whose filename matches `*_PLAN.md`. Each plan must
+  include the targeted issue, an example use case, and a post-implementation
+  smoke test sequence.
+- When working with GitHub issues, keep issue state implementation-oriented:
+  prefer one canonical issue per shippable slice, document the business case,
+  scope, acceptance criteria, example use case, and smoke sequence on that
+  issue, and close duplicates only after commenting with the canonical target.
+  Keep the local `docs/*_PLAN.md` file aligned with the canonical issue before
+  implementation starts.
 - Do not edit generated or vendored output:
   - `code/web/bpane-client/dist/`
   - `node_modules/`
