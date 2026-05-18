@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use bpane_protocol::frame::Frame;
+
 use super::*;
 
 #[tokio::test]
@@ -47,6 +49,43 @@ async fn late_joiner_gets_cached_session_ready() {
 }
 
 #[tokio::test]
+async fn reconnect_after_last_client_requests_full_tile_refresh() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("test.sock");
+    let sock_str = sock.to_str().unwrap();
+
+    let _agent = mock_agent(sock_str).await;
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let hub = SessionHub::new(sock_str, 10, false).await.unwrap();
+    let first = hub.subscribe().await.unwrap();
+    *hub.cached_grid_config.lock().await = Some(Arc::new(
+        TileMessage::GridConfig {
+            tile_size: 64,
+            cols: 2,
+            rows: 1,
+            screen_w: 128,
+            screen_h: 64,
+        }
+        .to_frame(),
+    ));
+
+    hub.unsubscribe(first.client_id).await;
+
+    let mut reconnect = hub.subscribe().await.unwrap();
+    let repaint = next_tile_frame(&mut reconnect).await;
+    assert_eq!(repaint.channel, ChannelId::Tiles);
+    assert!(matches!(
+        TileMessage::decode(&repaint.payload).unwrap(),
+        TileMessage::Fill { .. }
+    ));
+
+    let snapshot = hub.telemetry_snapshot().await;
+    assert_eq!(snapshot.full_refresh_requests, 1);
+    assert_eq!(snapshot.full_refresh_tiles_requested, 2);
+}
+
+#[tokio::test]
 async fn hub_reports_active_while_agent_connected() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("test.sock");
@@ -57,6 +96,21 @@ async fn hub_reports_active_while_agent_connected() {
 
     let hub = SessionHub::new(sock_str, 10, false).await.unwrap();
     assert!(hub.is_active());
+}
+
+async fn next_tile_frame(handle: &mut crate::session_hub::ClientHandle) -> Arc<Frame> {
+    for _ in 0..4 {
+        let frame =
+            tokio::time::timeout(std::time::Duration::from_secs(1), handle.from_host.recv())
+                .await
+                .unwrap()
+                .unwrap();
+        if frame.channel == ChannelId::Tiles {
+            return frame;
+        }
+    }
+
+    panic!("did not receive a tile repaint frame");
 }
 
 #[tokio::test]
