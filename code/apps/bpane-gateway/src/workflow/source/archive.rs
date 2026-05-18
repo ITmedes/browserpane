@@ -71,7 +71,7 @@ impl WorkflowSourceResolver {
                 })
                 .await
                 .map_err(|error| {
-                    WorkflowSourceError::Materialize(format!(
+                    WorkflowSourceError::Snapshot(format!(
                         "workflow source archive task failed: {error}"
                     ))
                 })??;
@@ -93,7 +93,7 @@ fn archive_workflow_source_tree(
     let mut files = Vec::new();
     collect_archive_files(repo_root, archive_root, &mut files)?;
     if files.is_empty() {
-        return Err(WorkflowSourceError::Materialize(
+        return Err(WorkflowSourceError::Snapshot(
             "workflow source archive would be empty".to_string(),
         ));
     }
@@ -105,24 +105,24 @@ fn archive_workflow_source_tree(
     for (source_path, archive_path) in files {
         let archive_name = archive_path.to_string_lossy().replace('\\', "/");
         writer.start_file(&archive_name, options).map_err(|error| {
-            WorkflowSourceError::Materialize(format!(
+            WorkflowSourceError::Snapshot(format!(
                 "failed to add {archive_name} to workflow source archive: {error}"
             ))
         })?;
         let bytes = fs::read(&source_path).map_err(|error| {
-            WorkflowSourceError::Materialize(format!(
+            WorkflowSourceError::Snapshot(format!(
                 "failed to read workflow source file {}: {error}",
                 source_path.display()
             ))
         })?;
         writer.write_all(&bytes).map_err(|error| {
-            WorkflowSourceError::Materialize(format!(
+            WorkflowSourceError::Snapshot(format!(
                 "failed to write {archive_name} into workflow source archive: {error}"
             ))
         })?;
     }
     let cursor = writer.finish().map_err(|error| {
-        WorkflowSourceError::Materialize(format!(
+        WorkflowSourceError::Snapshot(format!(
             "failed to finalize workflow source archive: {error}"
         ))
     })?;
@@ -135,14 +135,14 @@ fn collect_archive_files(
     files: &mut Vec<(PathBuf, PathBuf)>,
 ) -> Result<(), WorkflowSourceError> {
     let metadata = fs::symlink_metadata(current).map_err(|error| {
-        WorkflowSourceError::Materialize(format!(
+        WorkflowSourceError::Snapshot(format!(
             "failed to inspect workflow source path {}: {error}",
             current.display()
         ))
     })?;
     if metadata.is_file() {
         let archive_path = current.strip_prefix(repo_root).map_err(|error| {
-            WorkflowSourceError::Materialize(format!(
+            WorkflowSourceError::Snapshot(format!(
                 "failed to derive workflow source archive path for {}: {error}",
                 current.display()
             ))
@@ -151,7 +151,7 @@ fn collect_archive_files(
         return Ok(());
     }
     if !metadata.is_dir() {
-        return Err(WorkflowSourceError::Materialize(format!(
+        return Err(WorkflowSourceError::Snapshot(format!(
             "workflow source path {} is not a regular file or directory",
             current.display()
         )));
@@ -159,14 +159,14 @@ fn collect_archive_files(
 
     let mut entries = fs::read_dir(current)
         .map_err(|error| {
-            WorkflowSourceError::Materialize(format!(
+            WorkflowSourceError::Snapshot(format!(
                 "failed to read workflow source directory {}: {error}",
                 current.display()
             ))
         })?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| {
-            WorkflowSourceError::Materialize(format!(
+            WorkflowSourceError::Snapshot(format!(
                 "failed to enumerate workflow source directory {}: {error}",
                 current.display()
             ))

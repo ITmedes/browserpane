@@ -26,7 +26,7 @@ export class CertificateMetadataClient {
   }
 
   async #readOptionalText(path: string): Promise<string | null> {
-    const response = await this.#fetchImpl(new URL(path, this.#baseUrl));
+    const response = await this.#fetchImpl(new URL(path, this.#baseUrl), { cache: 'no-store' });
     if (response.status === 404) {
       return null;
     }
