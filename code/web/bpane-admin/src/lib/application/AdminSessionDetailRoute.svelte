@@ -32,11 +32,14 @@
   let relatedError = $state<string | null>(null);
   let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let lastRefreshedAt = $state<string | null>(null);
+  const connected = $derived(
+    (status?.connection_counts.total_clients ?? session?.status.connection_counts.total_clients ?? 0) > 0,
+  );
 
   const viewModel = $derived(SessionViewModelBuilder.detail({
     session,
     status,
-    connected: false,
+    connected,
     loading,
     error,
   }));

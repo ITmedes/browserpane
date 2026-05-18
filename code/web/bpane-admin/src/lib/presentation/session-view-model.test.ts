@@ -167,7 +167,34 @@ describe('SessionViewModelBuilder', () => {
       role: 'owner',
       canDisconnect: true,
     }]);
+    expect(viewModel.canStop).toBe(false);
+    expect(viewModel.canKill).toBe(false);
+    expect(viewModel.canRelease).toBe(false);
     expect(viewModel.canDisconnectAll).toBe(true);
+  });
+
+  it('disables lifecycle actions when remote status reports live clients', () => {
+    const viewModel = SessionViewModelBuilder.detail({
+      session: {
+        ...SESSION,
+        status: {
+          ...SESSION.status,
+          stop_eligibility: { allowed: true, blockers: [] },
+        },
+      },
+      status: {
+        ...STATUS,
+        stop_eligibility: { allowed: true, blockers: [] },
+      },
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(viewModel.canStop).toBe(false);
+    expect(viewModel.canKill).toBe(false);
+    expect(viewModel.canRelease).toBe(false);
+    expect(viewModel.hint).toContain('Disconnect');
   });
 
   it('exposes runtime release only for disconnected runtime candidates', () => {

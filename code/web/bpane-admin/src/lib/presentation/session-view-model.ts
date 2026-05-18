@@ -103,6 +103,7 @@ export class SessionViewModelBuilder {
     const stopEligibility = status?.stop_eligibility ?? session.status.stop_eligibility;
     const connectionCount = status?.connection_counts.total_clients
       ?? session.status.connection_counts.total_clients;
+    const hasLiveClients = input.connected || connectionCount > 0;
     return {
       title: session.id,
       facts: [
@@ -128,12 +129,12 @@ export class SessionViewModelBuilder {
         role: connection.role,
         canDisconnect: !input.loading,
       })) ?? [],
-      hint: resolveHint(input.connected, stopEligibility),
+      hint: resolveHint(hasLiveClients, stopEligibility),
       statusHint: status ? null : 'Live status is loaded from the session status API.',
       canRefresh: !input.loading,
-      canStop: !input.loading && !input.connected && stopEligibility.allowed,
-      canKill: !input.loading && !input.connected,
-      canRelease: !input.loading && !input.connected && stopEligibility.allowed && !['released', 'stopped'].includes(session.state),
+      canStop: !input.loading && !hasLiveClients && stopEligibility.allowed,
+      canKill: !input.loading && !hasLiveClients,
+      canRelease: !input.loading && !hasLiveClients && stopEligibility.allowed && !['released', 'stopped'].includes(session.state),
       canDisconnectAll: !input.loading && (status?.connections.length ?? 0) > 0,
       loading: input.loading,
       error: input.error,
