@@ -109,7 +109,12 @@ function createMockTransport() {
   const bidiStream = new MockBidiStream();
   const incomingBidi = new MockReadableStream();
   const datagramReadable = new MockReadableStream();
-  const closedPromise = new Promise<void>(() => {}); // never resolves by default
+  let resolveClosed = () => {};
+  let rejectClosed = (_error: unknown) => {};
+  const closedPromise = new Promise<void>((resolve, reject) => {
+    resolveClosed = resolve;
+    rejectClosed = reject;
+  });
 
   const transport = {
     ready: Promise.resolve(),
@@ -126,6 +131,8 @@ function createMockTransport() {
     _bidiStream: bidiStream,
     _incomingBidi: incomingBidi,
     _datagramReadable: datagramReadable,
+    _resolveClosed: resolveClosed,
+    _rejectClosed: rejectClosed,
   };
 
   return transport;
@@ -514,6 +521,23 @@ describe('BpaneSession', () => {
       const { session } = await createSession();
       session.disconnect();
       expect(mockTransport.close).toHaveBeenCalled();
+    });
+
+    it('tears down mounted browser state when the transport closes first', async () => {
+      const onDisconnect = vi.fn();
+      const { session, container } = await createSession({ onDisconnect });
+
+      expect(container.querySelectorAll('canvas')).toHaveLength(2);
+
+      mockTransport._resolveClosed();
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(container.querySelectorAll('canvas')).toHaveLength(0);
+      expect(onDisconnect).toHaveBeenCalledWith('transport closed');
+
+      session.disconnect();
+      expect(onDisconnect).toHaveBeenCalledTimes(1);
+      expect(container.querySelectorAll('canvas')).toHaveLength(0);
     });
 
     it('starts and stops programmatic recording from the composed session output', async () => {
@@ -1374,9 +1398,10 @@ describe('BpaneSession', () => {
       (globalThis as any).WebTransport = undefined;
       const { BpaneSession } = await import('../bpane.js');
       const { UnsupportedFeatureError } = await import('../shared/errors.js');
+      const container = createContainer();
 
       const error = await BpaneSession.connect({
-        container: createContainer(),
+        container,
         gatewayUrl: 'https://localhost:4433',
         token: 'test',
         onError,
@@ -1388,6 +1413,7 @@ describe('BpaneSession', () => {
         message: 'WebTransport is unavailable in this browser',
       });
       expect(onError).toHaveBeenCalledWith(error);
+      expect(container.querySelectorAll('canvas')).toHaveLength(0);
     });
 
     it('rejects microphone start when disabled in session options', async () => {
@@ -1442,6 +1468,7 @@ describe('BpaneSession', () => {
 
     it('calls onError when WebTransport fails', async () => {
       const onError = vi.fn();
+      const container = createContainer();
       (globalThis as any).WebTransport = vi.fn(() => ({
         ready: Promise.reject(new Error('connection failed')),
         closed: new Promise(() => {}),
@@ -1453,13 +1480,14 @@ describe('BpaneSession', () => {
       const { BpaneSession } = await import('../bpane.js');
 
       await expect(BpaneSession.connect({
-        container: createContainer(),
+        container,
         gatewayUrl: 'https://localhost:4433',
         token: 'test',
         onError,
       })).rejects.toThrow('connection failed');
 
       expect(onError).toHaveBeenCalled();
+      expect(container.querySelectorAll('canvas')).toHaveLength(0);
     });
   });
 });
