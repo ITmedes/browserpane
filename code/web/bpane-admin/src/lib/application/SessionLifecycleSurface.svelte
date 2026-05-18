@@ -12,6 +12,7 @@
     readonly connected: boolean;
     readonly resourceLoading: boolean;
     readonly onRefreshSelectedSession: () => Promise<void>;
+    readonly onReleaseSessionRuntime: () => Promise<void>;
     readonly onStopSession: () => Promise<void>;
     readonly onKillSession: () => Promise<void>;
     readonly onDisconnectEmbeddedBrowser: () => void;
@@ -23,6 +24,7 @@
     connected,
     resourceLoading,
     onRefreshSelectedSession,
+    onReleaseSessionRuntime,
     onStopSession,
     onKillSession,
     onDisconnectEmbeddedBrowser,
@@ -236,6 +238,7 @@
   {viewModel}
   {feedback}
   onRefresh={() => void refreshPanel()}
+  onRelease={() => void runLifecycleAction('Releasing selected session runtime...', 'Selected session runtime was released.', onReleaseSessionRuntime)}
   onStop={() => void runLifecycleAction('Stopping selected session...', 'Selected session stopped.', onStopSession)}
   onKill={() => void runLifecycleAction('Killing selected session...', 'Selected session was force killed.', onKillSession)}
   onDisconnectConnection={(connectionId) => void disconnectConnection(connectionId)}

@@ -147,6 +147,7 @@ function session(overrides: { readonly state?: string; readonly totalClients?: n
     },
     status: {
       runtime_state: 'running',
+      runtime_resume_mode: 'exact_live',
       presence_state: totalClients > 0 ? 'connected' : 'idle',
       connection_counts: {
         interactive_clients: totalClients,

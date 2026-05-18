@@ -8,6 +8,7 @@ mod disconnect;
 mod kill;
 mod mcp;
 mod ownership;
+mod release;
 mod status;
 mod stop;
 
@@ -52,6 +53,10 @@ pub(super) fn session_operation_routes() -> Router<Arc<ApiState>> {
         .route(
             "/api/v1/sessions/{session_id}/kill",
             post(kill::kill_session),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/release",
+            post(release::release_session_runtime),
         )
         .route(
             "/api/v1/sessions/{session_id}/stop",

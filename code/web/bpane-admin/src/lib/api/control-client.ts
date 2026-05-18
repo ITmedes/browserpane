@@ -91,6 +91,11 @@ export class ControlClient {
     return ControlSessionMapper.toSessionResource(payload);
   }
 
+  async releaseSessionRuntime(sessionId: string): Promise<SessionResource> {
+    const payload = await this.#request('POST', `/api/v1/sessions/${encodeURIComponent(sessionId)}/release`);
+    return ControlSessionMapper.toSessionResource(payload);
+  }
+
   async disconnectSessionConnection(sessionId: string, connectionId: number): Promise<SessionStatus> {
     const payload = await this.#request(
       'POST',

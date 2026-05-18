@@ -49,6 +49,7 @@ const SESSION_RECOVERY_COLUMNS: &str = r#"
     recording,
     created_at,
     updated_at,
+    runtime_released_at,
     stopped_at
 "#;
 

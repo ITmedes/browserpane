@@ -6,13 +6,13 @@ import {
   cleanupAdminSmoke,
   disconnectEmbeddedBrowser,
   ensureAdminLoggedIn,
+  getAdminAccessToken,
   openAdminTab,
   waitForBrowserConnected,
-  waitForKillEnabled,
   waitForSessionState,
   waitForStopEnabled,
 } from './admin-smoke-lib.mjs';
-import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
+import { DEFAULTS, apiOrigin, createLogger, fetchJson, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
 
 async function run() {
   const options = parseSmokeArgs(process.argv.slice(2), 'run-admin-session-smoke.mjs');
@@ -39,6 +39,8 @@ async function run() {
     sessionId = await resolveSelectedSessionId(page, options);
     await waitForMcpDelegationReady(page, options);
     await waitForBrowserConnected(page, options);
+    await expectSessionDisconnectControl(page);
+    await verifySessionSwitchDisconnect(page, options, sessionId);
     await expectGlobalMessage(page, options, (message) => message.trim().length > 0);
     await dismissGlobalMessage(page, options);
     await verifyBrowserPolicyPanel(page);
@@ -56,24 +58,32 @@ async function run() {
       throw new Error('Expected session stop to be disabled while embedded browser is connected.');
     }
 
-    log('Disconnecting through the session inspector and stopping the selected session.');
+    log('Disconnecting through the session inspector and releasing the selected session runtime.');
     await disconnectThroughSessionInspector(page, options);
+    await waitForStopEnabled(page, options, sessionId);
+    await page.getByTestId('session-release-runtime').click();
+    await waitForSessionState(page, options, sessionId, 'released');
+    await expectLifecycleMessage(page, options, 'Selected session runtime was released.');
+    await expectRuntimeResumeMode(page, options, 'released');
+
+    log(`Reconnecting released session ${sessionId}.`);
+    await openAdminTab(page, 'sessions');
+    await page.getByTestId('session-join').click();
+    await waitForBrowserConnected(page, options);
+    await openAdminTab(page, 'lifecycle');
+    await expectRuntimeResumeMode(page, options, 'profile_restart');
+    await disconnectThroughSessionArea(page, options);
+
+    log(`Stopping reconnected session ${sessionId}.`);
     await waitForStopEnabled(page, options, sessionId);
     await page.getByTestId('session-stop').click();
     await waitForSessionState(page, options, sessionId, 'stopped');
     await expectLifecycleMessage(page, options, 'Selected session stopped.');
-
-    log(`Reconnecting stopped session ${sessionId}.`);
-    await openAdminTab(page, 'sessions');
-    await page.getByTestId('session-join').click();
-    await waitForBrowserConnected(page, options);
+    await reconnectStoppedSession(page, options, sessionId);
     await disconnectEmbeddedBrowser(page, options);
-
-    log(`Force killing reconnected session ${sessionId}.`);
-    await waitForKillEnabled(page, options, sessionId);
-    await page.getByTestId('session-kill').click();
+    await waitForStopEnabled(page, options, sessionId);
+    await page.getByTestId('session-stop').click();
     await waitForSessionState(page, options, sessionId, 'stopped');
-    await expectLifecycleMessage(page, options, 'Selected session was force killed.');
     await emitSummary(page, options, sessionId, stopDisabled, log);
   } finally {
     await cleanupAdminSmoke(page, options, log);
@@ -132,6 +142,81 @@ async function disconnectThroughSessionInspector(page, options) {
   await expectLifecycleMessage(page, options, 'Disconnected all live clients.');
 }
 
+async function disconnectThroughSessionArea(page, options) {
+  await openAdminTab(page, 'sessions');
+  await page.getByTestId('session-disconnect').click();
+  await poll(
+    'admin embedded browser disconnect through session area',
+    async () => await page.getByTestId('browser-status').textContent(),
+    (status) => status === 'Disconnected',
+    options.connectTimeoutMs,
+  );
+}
+
+async function expectSessionDisconnectControl(page) {
+  await openAdminTab(page, 'sessions');
+  const disconnectEnabled = await page.getByTestId('session-disconnect').isEnabled();
+  if (!disconnectEnabled) {
+    throw new Error('Expected session area disconnect control to be enabled after browser connect.');
+  }
+}
+
+async function verifySessionSwitchDisconnect(page, options, originalSessionId) {
+  const accessToken = await getAdminAccessToken(page);
+  const switchTarget = await createSwitchTargetSession(accessToken, options);
+
+  await openAdminTab(page, 'sessions');
+  await waitForSessionRow(page, options, switchTarget.id);
+  await page.locator(`[data-testid="session-row"][data-session-id="${switchTarget.id}"]`).click();
+  await poll(
+    'admin browser disconnect on session switch',
+    async () => await page.getByTestId('browser-status').textContent(),
+    (status) => status === 'Disconnected',
+    options.connectTimeoutMs,
+    100,
+  );
+  const disconnectEnabled = await page.getByTestId('session-disconnect').isEnabled();
+  if (disconnectEnabled) {
+    throw new Error('Expected session area disconnect control to be disabled after switching away from the live session.');
+  }
+
+  await page.locator(`[data-testid="session-row"][data-session-id="${originalSessionId}"]`).click();
+  await poll(
+    'admin session join enabled after switch-back',
+    async () => await page.getByTestId('session-join').isEnabled(),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+  await page.getByTestId('session-join').click();
+  await waitForBrowserConnected(page, options);
+  await expectSessionDisconnectControl(page);
+}
+
+async function createSwitchTargetSession(accessToken, options) {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/sessions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ labels: { suite: 'admin-session-switch-smoke' } }),
+  });
+}
+
+async function waitForSessionRow(page, options, sessionId) {
+  await poll(
+    `admin session row ${sessionId}`,
+    async () => {
+      const row = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
+      return await row.isVisible().catch(() => false);
+    },
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+}
+
 async function expectLifecycleMessage(page, options, expectedText) {
   await poll(
     `admin lifecycle message ${expectedText}`,
@@ -140,6 +225,32 @@ async function expectLifecycleMessage(page, options, expectedText) {
     options.connectTimeoutMs,
     100,
   );
+}
+
+async function expectRuntimeResumeMode(page, options, expectedText) {
+  await openAdminTab(page, 'lifecycle');
+  await page.getByTestId('session-detail-refresh').click();
+  await poll(
+    `admin runtime resume mode ${expectedText}`,
+    async () => await page.getByTestId('session-runtime-resume-mode').textContent().catch(() => ''),
+    (value) => value === expectedText,
+    options.connectTimeoutMs,
+    100,
+  );
+}
+
+async function reconnectStoppedSession(page, options, sessionId) {
+  await openAdminTab(page, 'sessions');
+  await poll(
+    'admin stopped session join enabled',
+    async () => await page.getByTestId('session-join').isEnabled(),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+  await page.getByTestId('session-join').click();
+  await waitForBrowserConnected(page, options);
+  await expectRuntimeResumeMode(page, options, 'profile_restart');
 }
 
 async function expectGlobalMessage(page, options, matches) {

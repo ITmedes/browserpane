@@ -1,7 +1,8 @@
 use super::*;
 use crate::session_control::{
-    SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionRuntimeState,
-    SessionStatusSummary, SessionStopBlocker, SessionStopBlockerKind, SessionStopEligibility,
+    SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionRuntimeResumeMode,
+    SessionRuntimeState, SessionStatusSummary, SessionStopBlocker, SessionStopBlockerKind,
+    SessionStopEligibility,
 };
 use crate::session_hub::{SessionConnectionTelemetry, SessionConnectionTelemetryRole};
 
@@ -46,6 +47,7 @@ fn session_status_maps_recorder_clients() {
         SessionLifecycleState::Active,
         SessionStatusSummary {
             runtime_state: SessionRuntimeState::Running,
+            runtime_resume_mode: SessionRuntimeResumeMode::ExactLive,
             presence_state: SessionPresenceState::Connected,
             connection_counts: SessionConnectionCounts {
                 interactive_clients: 2,
@@ -360,7 +362,7 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
 }
 
 #[tokio::test]
-async fn stopped_session_can_issue_a_new_connect_ticket_and_resume() {
+async fn stopped_session_can_issue_a_new_connect_ticket_for_profile_restart() {
     let (app, token) = test_router();
 
     let created = response_json(
@@ -425,5 +427,85 @@ async fn stopped_session_can_issue_a_new_connect_ticket_and_resume() {
     assert_eq!(get_response.status(), StatusCode::OK);
     let fetched = response_json(get_response).await;
     assert_eq!(fetched["state"], "ready");
+    assert_eq!(fetched["status"]["runtime_state"], "not_started");
+    assert_eq!(fetched["status"]["runtime_resume_mode"], "profile_restart");
+    assert!(fetched["runtime_released_at"].is_string());
     assert!(fetched["stopped_at"].is_null());
+}
+
+#[tokio::test]
+async fn released_session_can_issue_a_new_connect_ticket_for_profile_restart() {
+    let (app, token) = test_router();
+
+    let created = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "idle_timeout_sec": 300 }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let release_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/release"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(release_response.status(), StatusCode::OK);
+    let released = response_json(release_response).await;
+    assert_eq!(released["state"], "released");
+    assert_eq!(released["status"]["runtime_state"], "released");
+    assert_eq!(released["status"]["runtime_resume_mode"], "released");
+    assert!(released["runtime_released_at"].is_string());
+    assert!(released["stopped_at"].is_null());
+
+    let issue_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/access-tokens"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(issue_response.status(), StatusCode::OK);
+    let issued = response_json(issue_response).await;
+    assert_eq!(issued["session_id"], session_id);
+    assert_eq!(issued["token_type"], "session_connect_ticket");
+
+    let get_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let fetched = response_json(get_response).await;
+    assert_eq!(fetched["state"], "ready");
+    assert_eq!(fetched["status"]["runtime_state"], "not_started");
+    assert_eq!(fetched["status"]["runtime_resume_mode"], "profile_restart");
+    assert!(fetched["runtime_released_at"].is_string());
 }

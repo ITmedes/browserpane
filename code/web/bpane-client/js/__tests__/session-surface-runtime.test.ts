@@ -91,6 +91,7 @@ describe('SessionSurfaceRuntime', () => {
 
   it('tears down observers, compositor hooks, and mounted canvases on destroy', () => {
     const container = createContainer();
+    container.style.position = 'absolute';
     const tileCompositor = createTileCompositor();
     const runtime = new SessionSurfaceRuntime({
       container,
@@ -106,6 +107,7 @@ describe('SessionSurfaceRuntime', () => {
 
     expect(disconnect).toHaveBeenCalledOnce();
     expect(container.querySelectorAll('canvas')).toHaveLength(0);
+    expect(container.style.position).toBe('absolute');
     expect(tileCompositor.setCacheMissHandler).toHaveBeenLastCalledWith(null);
     expect(tileCompositor.setWebGLRenderer).toHaveBeenCalledWith(null);
   });

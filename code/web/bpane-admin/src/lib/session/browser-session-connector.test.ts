@@ -25,6 +25,7 @@ const SESSION: SessionResource = {
   },
   status: {
     runtime_state: 'running',
+    runtime_resume_mode: 'exact_live',
     presence_state: 'connected',
     connection_counts: {
       interactive_clients: 1,
@@ -120,6 +121,35 @@ describe('BrowserSessionConnector', () => {
       microphone: true,
       camera: true,
     });
+  });
+
+  it('clears stale SDK mount state before connecting', async () => {
+    const handle = { disconnect: vi.fn() };
+    const connector = new BrowserSessionConnector({
+      controlClient: new ControlClient({
+        baseUrl: 'http://localhost:8932',
+        accessTokenProvider: () => 'owner-token',
+        fetchImpl: ticketFetch(),
+      }),
+      sdkProvider: {
+        load: async () => ({
+          BpaneSession: {
+            connect: async (options) => {
+              expect(options.container.childElementCount).toBe(0);
+              expect(options.container.getAttribute('style')).toBeNull();
+              return handle;
+            },
+          },
+        }),
+      },
+    });
+    const container = document.createElement('div');
+    container.style.width = '1280px';
+    container.innerHTML = '<canvas></canvas><canvas></canvas>';
+
+    const connection = await connector.connect(SESSION, container);
+
+    expect(connection.handle).toBe(handle);
   });
 });
 

@@ -21,6 +21,7 @@ const SESSION: SessionResource = {
   },
   status: {
     runtime_state: 'running',
+    runtime_resume_mode: 'exact_live',
     presence_state: 'connected',
     connection_counts: {
       interactive_clients: 1,
@@ -42,6 +43,7 @@ const SESSION: SessionResource = {
 const STATUS: SessionStatus = {
   state: 'active',
   runtime_state: 'running',
+  runtime_resume_mode: 'exact_live',
   presence_state: 'connected',
   connection_counts: SESSION.status.connection_counts,
   stop_eligibility: SESSION.status.stop_eligibility,
@@ -123,6 +125,7 @@ describe('SessionViewModelBuilder', () => {
       id: SESSION.id,
       ownerMode: 'shared',
       runtimeBinding: 'docker_runtime_pool',
+      canJoin: true,
     });
   });
 
@@ -164,6 +167,85 @@ describe('SessionViewModelBuilder', () => {
       role: 'owner',
       canDisconnect: true,
     }]);
+    expect(viewModel.canStop).toBe(false);
+    expect(viewModel.canKill).toBe(false);
+    expect(viewModel.canRelease).toBe(false);
     expect(viewModel.canDisconnectAll).toBe(true);
+  });
+
+  it('disables lifecycle actions when remote status reports live clients', () => {
+    const viewModel = SessionViewModelBuilder.detail({
+      session: {
+        ...SESSION,
+        status: {
+          ...SESSION.status,
+          stop_eligibility: { allowed: true, blockers: [] },
+        },
+      },
+      status: {
+        ...STATUS,
+        stop_eligibility: { allowed: true, blockers: [] },
+      },
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(viewModel.canStop).toBe(false);
+    expect(viewModel.canKill).toBe(false);
+    expect(viewModel.canRelease).toBe(false);
+    expect(viewModel.hint).toContain('Disconnect');
+  });
+
+  it('exposes runtime release only for disconnected runtime candidates', () => {
+    const releasableSession: SessionResource = {
+      ...SESSION,
+      state: 'idle',
+      status: {
+        ...SESSION.status,
+        presence_state: 'idle',
+        connection_counts: {
+          interactive_clients: 0,
+          owner_clients: 0,
+          viewer_clients: 0,
+          recorder_clients: 0,
+          automation_clients: 0,
+          total_clients: 0,
+        },
+        stop_eligibility: { allowed: true, blockers: [] },
+      },
+    };
+
+    const viewModel = SessionViewModelBuilder.detail({
+      session: releasableSession,
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(viewModel.canRelease).toBe(true);
+    expect(viewModel.facts).toContainEqual({
+      label: 'resume',
+      value: 'exact_live',
+      testId: 'session-runtime-resume-mode',
+    });
+  });
+
+  it('allows start actions for stopped sessions', () => {
+    const stoppedSession: SessionResource = {
+      ...SESSION,
+      state: 'stopped',
+      stopped_at: '2026-05-04T19:05:00Z',
+    };
+
+    const viewModel = SessionViewModelBuilder.list({
+      sessions: [stoppedSession],
+      selectedSessionId: stoppedSession.id,
+      authenticated: true,
+      loading: false,
+      error: null,
+    });
+
+    expect(viewModel.selectedSession?.canJoin).toBe(true);
   });
 });

@@ -32,11 +32,14 @@
   let relatedError = $state<string | null>(null);
   let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let lastRefreshedAt = $state<string | null>(null);
+  const connected = $derived(
+    (status?.connection_counts.total_clients ?? session?.status.connection_counts.total_clients ?? 0) > 0,
+  );
 
   const viewModel = $derived(SessionViewModelBuilder.detail({
     session,
     status,
-    connected: false,
+    connected,
     loading,
     error,
   }));
@@ -117,6 +120,14 @@
       'Stopping selected session...',
       'Selected session stopped.',
       () => controlClient.stopSession(sessionId),
+    );
+  }
+
+  async function releaseSessionRuntime(): Promise<void> {
+    await mutateSession(
+      'Releasing selected session runtime...',
+      'Selected session runtime was released.',
+      () => controlClient.releaseSessionRuntime(sessionId),
     );
   }
 
@@ -268,6 +279,7 @@
         {viewModel}
         feedback={actionFeedback}
         onRefresh={() => void refreshInspector()}
+        onRelease={() => void releaseSessionRuntime()}
         onStop={() => void stopSession()}
         onKill={() => void killSession()}
         onDisconnectConnection={(connectionId) => void disconnectConnection(connectionId)}

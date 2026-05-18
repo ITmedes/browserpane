@@ -17,6 +17,87 @@ type UiStateLogInput = {
 };
 
 export class AdminLogEntryFactory {
+  static eventLogSignature(event: AdminEvent): string | null {
+    if (event.type === 'sessions.snapshot') {
+      return stableSignature([
+        event.type,
+        event.sessions
+          .map((session) => [
+            session.id,
+            session.state ?? null,
+            session.owner_mode ?? null,
+            sortedRecordEntries(session.labels),
+            session.automation_delegate?.client_id ?? null,
+            session.automation_delegate?.issuer ?? null,
+            session.automation_delegate?.display_name ?? null,
+            session.runtime?.binding ?? null,
+            session.runtime?.compatibility_mode ?? null,
+            session.runtime?.cdp_endpoint ?? null,
+            session.status?.runtime_state ?? null,
+            session.status?.runtime_resume_mode ?? null,
+            session.status?.presence_state ?? null,
+            session.status?.connection_counts?.interactive_clients ?? null,
+            session.status?.connection_counts?.owner_clients ?? null,
+            session.status?.connection_counts?.viewer_clients ?? null,
+            session.status?.connection_counts?.recorder_clients ?? null,
+            session.status?.connection_counts?.automation_clients ?? null,
+            session.status?.connection_counts?.total_clients ?? null,
+            session.status?.stop_eligibility?.allowed ?? null,
+            session.status?.stop_eligibility?.blockers
+              ?.map((blocker) => [blocker.kind, blocker.count])
+              .sort(compareSignatureParts) ?? [],
+            session.runtime_released_at ?? null,
+            session.stopped_at ?? null,
+          ])
+          .sort(compareSignatureParts),
+      ]);
+    }
+    if (event.type === 'workflow_runs.snapshot') {
+      return stableSignature([
+        event.type,
+        event.workflowRuns
+          .map((run) => [run.id, run.sessionId, run.state, run.updatedAt])
+          .sort(compareSignatureParts),
+      ]);
+    }
+    if (event.type === 'session_files.snapshot') {
+      return stableSignature([
+        event.type,
+        event.sessionFiles
+          .map((session) => [session.sessionId, session.fileCount, session.latestUpdatedAt])
+          .sort(compareSignatureParts),
+      ]);
+    }
+    if (event.type === 'recordings.snapshot') {
+      return stableSignature([
+        event.type,
+        event.recordings
+          .map((session) => [
+            session.sessionId,
+            session.recordingCount,
+            session.activeCount,
+            session.readyCount,
+            session.latestUpdatedAt,
+          ])
+          .sort(compareSignatureParts),
+      ]);
+    }
+    if (event.type === 'mcp_delegation.snapshot') {
+      return stableSignature([
+        event.type,
+        event.delegations
+          .map((delegation) => [
+            delegation.sessionId,
+            delegation.delegatedClientId,
+            delegation.delegatedIssuer,
+            delegation.mcpOwner,
+          ])
+          .sort(compareSignatureParts),
+      ]);
+    }
+    return null;
+  }
+
   static fromAdminEvent(event: AdminEvent): AdminLogEntry {
     if (event.type === 'sessions.snapshot') {
       return entry({
@@ -118,6 +199,18 @@ export class AdminLogEntryFactory {
 }
 
 const TERMINAL_WORKFLOW_STATES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out']);
+
+function sortedRecordEntries(record: Readonly<Record<string, string>> | undefined): readonly [string, string][] {
+  return Object.entries(record ?? {}).sort(([left], [right]) => left.localeCompare(right));
+}
+
+function stableSignature(value: unknown): string {
+  return JSON.stringify(value);
+}
+
+function compareSignatureParts(left: readonly unknown[], right: readonly unknown[]): number {
+  return JSON.stringify(left).localeCompare(JSON.stringify(right));
+}
 
 function entry(input: {
   readonly timestamp?: string;

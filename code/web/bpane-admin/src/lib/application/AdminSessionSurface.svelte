@@ -172,14 +172,16 @@
       // turning a follow-up refresh failure into a failed action.
     }
   }
-  async function runLifecycle(action: 'stop' | 'kill'): Promise<void> {
+  async function runLifecycle(action: 'release' | 'stop' | 'kill'): Promise<void> {
     if (!selectedSession) return;
     sessionsLoading = true;
     sessionsError = null;
     try {
-      const updated = action === 'stop'
-        ? await controlClient.stopSession(selectedSession.id)
-        : await controlClient.killSession(selectedSession.id);
+      const updated = action === 'release'
+        ? await controlClient.releaseSessionRuntime(selectedSession.id)
+        : action === 'stop'
+          ? await controlClient.stopSession(selectedSession.id)
+          : await controlClient.killSession(selectedSession.id);
       upsertSession(updated);
     } catch (error) {
       sessionsError = errorMessage(error);
@@ -189,16 +191,23 @@
     }
   }
   async function connectBrowser(container: HTMLElement): Promise<void> {
-    if (!selectedSession) return;
+    const session = selectedSession;
+    if (!session) return;
     disconnectBrowser(false);
     browserConnecting = true;
     browserError = null;
-    browserStatus = `Connecting to ${selectedSession.id}`;
-    showGlobalMessage('loading', 'Browser connection', `Connecting to session ${shortAdminId(selectedSession.id)}...`);
+    browserStatus = `Connecting to ${session.id}`;
+    showGlobalMessage('loading', 'Browser connection', `Connecting to session ${shortAdminId(session.id)}...`);
     try {
-      liveConnection = await browserConnector.connect(selectedSession, container, browserPreferences);
-      browserStatus = `Connected to ${selectedSession.id}`;
-      showGlobalMessage('success', 'Browser connected', `Connected to session ${shortAdminId(selectedSession.id)}.`);
+      const connection = await browserConnector.connect(session, container, browserPreferences);
+      if (selectedSession?.id !== session.id) {
+        connection.handle.disconnect();
+        browserStatus = 'Disconnected';
+        return;
+      }
+      liveConnection = connection;
+      browserStatus = `Connected to ${session.id}`;
+      showGlobalMessage('success', 'Browser connected', `Connected to session ${shortAdminId(session.id)}.`);
       void refreshSelectedSessionInBackground();
     } catch (error) {
       browserError = errorMessage(error);
@@ -243,8 +252,29 @@
       : [session, ...sessions];
   }
   function selectSession(sessionId: string): void {
+    const nextSession = sessions.find((session) => session.id === sessionId) ?? null;
     pendingSelectedSessionId = null;
-    selectedSession = sessions.find((session) => session.id === sessionId) ?? selectedSession;
+    if (!nextSession) {
+      showGlobalMessage('warning', 'Session selection failed', `Session ${shortAdminId(sessionId)} is not visible.`);
+      return;
+    }
+    const previousLiveSessionId = liveConnection?.sessionId ?? null;
+    const disconnectForSwitch = Boolean(previousLiveSessionId && previousLiveSessionId !== nextSession.id);
+    if (disconnectForSwitch) {
+      liveConnection?.handle.disconnect();
+      liveConnection = null;
+      browserError = null;
+      browserStatus = 'Disconnected';
+    }
+    selectedSession = nextSession;
+    if (disconnectForSwitch && previousLiveSessionId) {
+      showGlobalMessage(
+        'info',
+        'Session switched',
+        `Disconnected from session ${shortAdminId(previousLiveSessionId)} and selected session ${shortAdminId(nextSession.id)}.`,
+      );
+      return;
+    }
     showGlobalMessage('info', 'Session selected', `Selected session ${shortAdminId(selectedSession?.id ?? sessionId)}.`);
   }
   function requestBrowserConnect(): void { browserConnectRequestVersion += 1; }
@@ -317,6 +347,7 @@
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
+      onReleaseSessionRuntime={() => runLifecycle('release')}
       onStopSession={() => runLifecycle('stop')} onKillSession={() => runLifecycle('kill')} onDisconnectEmbeddedBrowser={() => disconnectBrowser(false)}
       onFileCountChange={(count) => { sessionFileCount = count; }}
       onClearLogs={() => { logEntries = []; }}

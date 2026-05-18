@@ -24,6 +24,7 @@ const SESSION_COLUMNS: &str = r#"
     recording,
     created_at,
     updated_at,
+    runtime_released_at,
     stopped_at
 "#;
 
@@ -98,6 +99,16 @@ impl PostgresSessionStore {
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         self.session_repository()
             .stop_session_for_owner(principal, id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn release_session_runtime_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .release_session_runtime_for_owner(principal, id)
             .await
     }
 

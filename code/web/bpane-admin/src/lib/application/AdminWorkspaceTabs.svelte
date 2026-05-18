@@ -57,6 +57,7 @@
     readonly onJoinSelectedSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
     readonly onRefreshSelectedSession: () => Promise<void>;
+    readonly onReleaseSessionRuntime: () => Promise<void>;
     readonly onStopSession: () => Promise<void>;
     readonly onKillSession: () => Promise<void>;
     readonly onDisconnectEmbeddedBrowser: () => void;
@@ -146,9 +147,11 @@
         {#if activePanel.id === 'sessions'}
         <SessionListPanel
           viewModel={props.sessionListViewModel}
+          connected={props.browserConnected}
           onRefresh={() => void props.onRefreshSessions(true)}
           onCreateSession={props.onCreateSession}
           onJoinSession={props.onJoinSelectedSession}
+          onDisconnectSession={props.onDisconnectEmbeddedBrowser}
           onSelectSessionId={props.onSelectSessionId}
         />
         <McpDelegationSurface
@@ -166,6 +169,7 @@
           connected={props.browserConnected}
           resourceLoading={props.sessionListViewModel.loading}
           onRefreshSelectedSession={props.onRefreshSelectedSession}
+          onReleaseSessionRuntime={props.onReleaseSessionRuntime}
           onStopSession={props.onStopSession}
           onKillSession={props.onKillSession}
           onDisconnectEmbeddedBrowser={props.onDisconnectEmbeddedBrowser}

@@ -34,6 +34,7 @@ export class BrowserSessionConnector {
     container: HTMLElement,
     preferences: BrowserSessionConnectPreferences = DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES,
   ): Promise<LiveBrowserSessionConnection> {
+    resetSessionContainer(container);
     const access = await this.#controlClient.issueSessionAccessToken(session.id);
     if (access.token_type !== 'session_connect_ticket') {
       throw new Error(`unsupported session access token type ${access.token_type}`);
@@ -56,4 +57,9 @@ export class BrowserSessionConnector {
       handle,
     };
   }
+}
+
+function resetSessionContainer(container: HTMLElement): void {
+  container.replaceChildren();
+  container.removeAttribute('style');
 }
