@@ -34,6 +34,10 @@ export class ControlSessionMapper {
   static toSessionResource(payload: unknown): SessionResource {
     const object = expectRecord(payload, 'session resource');
     const stoppedAt = optionalString(object.stopped_at, 'session resource stopped_at');
+    const runtimeReleasedAt = optionalString(
+      object.runtime_released_at,
+      'session resource runtime_released_at',
+    );
     const automationDelegate = toAutomationDelegate(object.automation_delegate);
     return {
       id: expectString(object.id, 'session resource id'),
@@ -47,6 +51,7 @@ export class ControlSessionMapper {
       status: toStatusSummary(object.status),
       created_at: expectString(object.created_at, 'session resource created_at'),
       updated_at: expectString(object.updated_at, 'session resource updated_at'),
+      ...(runtimeReleasedAt !== undefined ? { runtime_released_at: runtimeReleasedAt } : {}),
       ...(stoppedAt !== undefined ? { stopped_at: stoppedAt } : {}),
     };
   }
@@ -112,6 +117,7 @@ function toStatusSummary(value: unknown): SessionStatusSummary {
   const object = expectRecord(value, 'session resource status');
   return {
     runtime_state: expectString(object.runtime_state, 'session status runtime_state'),
+    runtime_resume_mode: expectString(object.runtime_resume_mode, 'session status runtime_resume_mode'),
     presence_state: expectString(object.presence_state, 'session status presence_state'),
     connection_counts: toConnectionCounts(object.connection_counts),
     stop_eligibility: toStopEligibility(object.stop_eligibility),

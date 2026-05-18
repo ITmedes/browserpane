@@ -123,6 +123,57 @@ impl SessionRepository<'_> {
         row.as_ref().map(row_to_stored_session).transpose()
     }
 
+    pub(in crate::session_control) async fn release_session_runtime_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let current = self
+            .get_session_for_owner(principal, id)
+            .await?
+            .ok_or_else(|| SessionStoreError::NotFound(format!("session {id} not found")))?;
+        if current.state == SessionLifecycleState::Stopped {
+            return Err(SessionStoreError::Conflict(format!(
+                "session {id} is stopped; create a new session instead of releasing it"
+            )));
+        }
+        if !current.state.is_runtime_candidate() && current.state != SessionLifecycleState::Released
+        {
+            return Err(SessionStoreError::Conflict(format!(
+                "session {id} cannot release a runtime from state {}",
+                current.state.as_str()
+            )));
+        }
+
+        let update_query = format!(
+            r#"
+            UPDATE control_sessions
+            SET
+                state = 'released',
+                updated_at = NOW(),
+                runtime_released_at = NOW(),
+                stopped_at = NULL
+            WHERE id = $1
+              AND owner_subject = $2
+              AND owner_issuer = $3
+            RETURNING
+                {SESSION_COLUMNS}
+            "#
+        );
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(&update_query, &[&id, &principal.subject, &principal.issuer])
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to release session runtime: {error}"))
+            })?;
+
+        row.as_ref().map(row_to_stored_session).transpose()
+    }
+
     pub(in crate::session_control) async fn mark_session_state(
         &self,
         id: Uuid,
@@ -219,11 +270,18 @@ impl SessionRepository<'_> {
         };
 
         let current = row_to_stored_session(&current_row)?;
-        if current.state != SessionLifecycleState::Stopped {
+        if current.state != SessionLifecycleState::Released
+            && current.state != SessionLifecycleState::Stopped
+        {
             transaction.commit().await.map_err(|error| {
                 SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
             })?;
             return Ok(Some(current));
+        }
+        if current.state == SessionLifecycleState::Stopped {
+            return Err(SessionStoreError::Conflict(format!(
+                "session {id} is stopped; create a new session before connecting"
+            )));
         }
 
         let active_runtime_candidates = self

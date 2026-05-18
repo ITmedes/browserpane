@@ -140,6 +140,7 @@ function sessionResource(id: string, delegated = false): SessionResource {
     runtime: { binding: 'docker_runtime_pool', compatibility_mode: 'session_runtime_pool' },
     status: {
       runtime_state: 'running',
+      runtime_resume_mode: 'exact_live',
       presence_state: 'connected',
       connection_counts: {
         interactive_clients: 0,

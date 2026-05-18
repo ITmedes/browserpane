@@ -23,6 +23,7 @@ const SESSION = {
   },
   status: {
     runtime_state: 'not_started',
+    runtime_resume_mode: 'fresh_start',
     presence_state: 'empty',
     connection_counts: {
       interactive_clients: 0,

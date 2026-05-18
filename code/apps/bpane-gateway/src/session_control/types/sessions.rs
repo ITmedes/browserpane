@@ -20,6 +20,7 @@ pub enum SessionLifecycleState {
     Ready,
     Active,
     Idle,
+    Released,
     Stopping,
     Stopped,
     Failed,
@@ -34,6 +35,7 @@ impl SessionLifecycleState {
             Self::Ready => "ready",
             Self::Active => "active",
             Self::Idle => "idle",
+            Self::Released => "released",
             Self::Stopping => "stopping",
             Self::Stopped => "stopped",
             Self::Failed => "failed",
@@ -59,6 +61,7 @@ impl FromStr for SessionLifecycleState {
             "ready" => Ok(Self::Ready),
             "active" => Ok(Self::Active),
             "idle" => Ok(Self::Idle),
+            "released" => Ok(Self::Released),
             "stopping" => Ok(Self::Stopping),
             "stopped" => Ok(Self::Stopped),
             "failed" => Ok(Self::Failed),
@@ -182,7 +185,18 @@ pub enum SessionRuntimeState {
     NotStarted,
     Starting,
     Running,
+    Released,
     Stopping,
+    Stopped,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionRuntimeResumeMode {
+    FreshStart,
+    ExactLive,
+    ProfileRestart,
+    Released,
     Stopped,
 }
 
@@ -240,6 +254,7 @@ pub struct SessionIdleStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SessionStatusSummary {
     pub runtime_state: SessionRuntimeState,
+    pub runtime_resume_mode: SessionRuntimeResumeMode,
     pub presence_state: SessionPresenceState,
     pub connection_counts: SessionConnectionCounts,
     pub stop_eligibility: SessionStopEligibility,
@@ -266,6 +281,7 @@ pub struct SessionResource {
     pub status: SessionStatusSummary,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub runtime_released_at: Option<DateTime<Utc>>,
     pub stopped_at: Option<DateTime<Utc>>,
 }
 
@@ -321,6 +337,7 @@ pub struct StoredSession {
     pub recording: crate::session_control::SessionRecordingPolicy,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub runtime_released_at: Option<DateTime<Utc>>,
     pub stopped_at: Option<DateTime<Utc>>,
 }
 
@@ -361,6 +378,7 @@ impl StoredSession {
             status,
             created_at: self.created_at,
             updated_at: self.updated_at,
+            runtime_released_at: self.runtime_released_at,
             stopped_at: self.stopped_at,
         }
     }

@@ -45,6 +45,7 @@ export type SessionTelemetry = {
 export type SessionStatus = {
   readonly state: string;
   readonly runtime_state: string;
+  readonly runtime_resume_mode: string;
   readonly presence_state: string;
   readonly connection_counts: SessionConnectionCounts;
   readonly stop_eligibility: SessionStopEligibility;

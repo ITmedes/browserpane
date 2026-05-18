@@ -57,6 +57,7 @@
     readonly onJoinSelectedSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
     readonly onRefreshSelectedSession: () => Promise<void>;
+    readonly onReleaseSessionRuntime: () => Promise<void>;
     readonly onStopSession: () => Promise<void>;
     readonly onKillSession: () => Promise<void>;
     readonly onDisconnectEmbeddedBrowser: () => void;
@@ -166,6 +167,7 @@
           connected={props.browserConnected}
           resourceLoading={props.sessionListViewModel.loading}
           onRefreshSelectedSession={props.onRefreshSelectedSession}
+          onReleaseSessionRuntime={props.onReleaseSessionRuntime}
           onStopSession={props.onStopSession}
           onKillSession={props.onKillSession}
           onDisconnectEmbeddedBrowser={props.onDisconnectEmbeddedBrowser}

@@ -172,14 +172,16 @@
       // turning a follow-up refresh failure into a failed action.
     }
   }
-  async function runLifecycle(action: 'stop' | 'kill'): Promise<void> {
+  async function runLifecycle(action: 'release' | 'stop' | 'kill'): Promise<void> {
     if (!selectedSession) return;
     sessionsLoading = true;
     sessionsError = null;
     try {
-      const updated = action === 'stop'
-        ? await controlClient.stopSession(selectedSession.id)
-        : await controlClient.killSession(selectedSession.id);
+      const updated = action === 'release'
+        ? await controlClient.releaseSessionRuntime(selectedSession.id)
+        : action === 'stop'
+          ? await controlClient.stopSession(selectedSession.id)
+          : await controlClient.killSession(selectedSession.id);
       upsertSession(updated);
     } catch (error) {
       sessionsError = errorMessage(error);
@@ -317,6 +319,7 @@
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
+      onReleaseSessionRuntime={() => runLifecycle('release')}
       onStopSession={() => runLifecycle('stop')} onKillSession={() => runLifecycle('kill')} onDisconnectEmbeddedBrowser={() => disconnectBrowser(false)}
       onFileCountChange={(count) => { sessionFileCount = count; }}
       onClearLogs={() => { logEntries = []; }}
