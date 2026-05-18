@@ -55,9 +55,17 @@ async fn in_memory_store_stops_unused_ready_sessions_and_idle_sessions() {
         .unwrap()
         .unwrap();
     assert_eq!(active.state, SessionLifecycleState::Active);
+    let active_again = store
+        .mark_session_active(created.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(active_again.updated_at, active.updated_at);
 
     let idle = store.mark_session_idle(created.id).await.unwrap().unwrap();
     assert_eq!(idle.state, SessionLifecycleState::Idle);
+    let idle_again = store.mark_session_idle(created.id).await.unwrap().unwrap();
+    assert_eq!(idle_again.updated_at, idle.updated_at);
 
     let stopped = store
         .stop_session_if_idle(created.id)

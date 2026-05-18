@@ -200,6 +200,9 @@ impl InMemorySessionStore {
         if !session.state.is_runtime_candidate() {
             return Ok(Some(session.clone()));
         }
+        if session.state == state {
+            return Ok(Some(session.clone()));
+        }
 
         session.state = state;
         session.updated_at = Utc::now();
