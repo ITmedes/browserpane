@@ -161,8 +161,12 @@ function toSelectedSession(session: SessionResource): SelectedSessionViewModel {
     ...toListItem(session),
     ownerMode: session.owner_mode,
     runtimeBinding: session.runtime.binding,
-    canJoin: session.state !== 'stopped',
+    canJoin: canConnectSession(session.state),
   };
+}
+
+function canConnectSession(state: string): boolean {
+  return ['pending', 'starting', 'ready', 'active', 'idle', 'released', 'stopped'].includes(state);
 }
 
 function statusFacts(status: SessionStatus | null): SessionFactViewModel[] {

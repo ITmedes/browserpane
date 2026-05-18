@@ -172,5 +172,10 @@ async fn reconnect_prep_respects_runtime_pool_capacity() {
         .prepare_session_for_connect(stopped.id)
         .await
         .unwrap_err();
-    assert!(matches!(error, SessionStoreError::Conflict(_)));
+    assert!(matches!(
+        error,
+        SessionStoreError::ActiveSessionConflict {
+            max_runtime_sessions: 1
+        }
+    ));
 }

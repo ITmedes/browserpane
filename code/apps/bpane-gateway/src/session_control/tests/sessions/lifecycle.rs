@@ -75,7 +75,7 @@ async fn in_memory_store_stops_unused_ready_sessions_and_idle_sessions() {
 }
 
 #[tokio::test]
-async fn in_memory_store_rejects_stopped_session_reconnect_prep() {
+async fn in_memory_store_can_prepare_a_stopped_session_for_reconnect() {
     let store = SessionStore::in_memory();
     let owner = principal("owner");
     let created = store
@@ -104,11 +104,14 @@ async fn in_memory_store_rejects_stopped_session_reconnect_prep() {
         .unwrap();
     assert_eq!(stopped.state, SessionLifecycleState::Stopped);
 
-    let error = store
+    let resumed = store
         .prepare_session_for_connect(created.id)
         .await
-        .unwrap_err();
-    assert!(matches!(error, SessionStoreError::Conflict(_)));
+        .unwrap()
+        .unwrap();
+    assert_eq!(resumed.state, SessionLifecycleState::Ready);
+    assert!(resumed.stopped_at.is_none());
+    assert!(resumed.runtime_released_at.is_some());
 }
 
 #[tokio::test]

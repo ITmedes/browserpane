@@ -241,12 +241,6 @@ impl InMemorySessionStore {
         if state != SessionLifecycleState::Released && state != SessionLifecycleState::Stopped {
             return Ok(Some(sessions[index].clone()));
         }
-        if state == SessionLifecycleState::Stopped {
-            return Err(SessionStoreError::Conflict(format!(
-                "session {id} is stopped; create a new session before connecting"
-            )));
-        }
-
         let active_runtime_candidates = active_runtime_candidate_count(&sessions);
         if active_runtime_candidates >= self.config.max_runtime_candidates {
             return Err(SessionStoreError::ActiveSessionConflict {
@@ -255,6 +249,12 @@ impl InMemorySessionStore {
         }
 
         let session = &mut sessions[index];
+        if state == SessionLifecycleState::Stopped {
+            session.runtime_released_at = session
+                .stopped_at
+                .or(session.runtime_released_at)
+                .or_else(|| Some(Utc::now()));
+        }
         session.state = SessionLifecycleState::Ready;
         session.updated_at = Utc::now();
         session.stopped_at = None;
