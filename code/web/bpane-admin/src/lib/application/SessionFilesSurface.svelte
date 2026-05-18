@@ -2,6 +2,7 @@
   import { base } from '$app/paths';
   import type { ControlClient } from '../api/control-client';
   import type { SessionFileResource, SessionResource } from '../api/control-types';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
   import SessionFileCard from '../presentation/SessionFileCard.svelte';
   import { SessionFileViewModelBuilder } from '../presentation/session-file-view-model';
 
@@ -18,6 +19,7 @@
   let files = $state<readonly SessionFileResource[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let actionMessage = $state<string | null>(null);
   let downloadingFileId = $state<string | null>(null);
 
   $effect(() => {
@@ -28,9 +30,12 @@
     currentSessionId = nextSessionId;
     files = [];
     onFileCountChange?.(0);
+    loading = false;
+    downloadingFileId = null;
     error = null;
+    actionMessage = null;
     if (nextSessionId) {
-      void loadFiles(nextSessionId);
+      void loadFiles(nextSessionId, false);
     }
   });
 
@@ -40,25 +45,30 @@
     }
     lastRefreshVersion = refreshVersion;
     if (currentSessionId) {
-      void loadFiles(currentSessionId);
+      void loadFiles(currentSessionId, false);
     }
   });
 
-  async function loadFiles(sessionId = currentSessionId): Promise<void> {
+  async function loadFiles(sessionId = currentSessionId, showFeedback = true): Promise<void> {
     if (!sessionId) {
       return;
     }
     loading = true;
     error = null;
+    actionMessage = null;
     try {
       const response = await controlClient.listSessionFiles(sessionId);
       if (currentSessionId === sessionId) {
         files = response.files;
         onFileCountChange?.(response.files.length);
+        if (showFeedback) {
+          actionMessage = `Refreshed ${response.files.length} runtime file${response.files.length === 1 ? '' : 's'}.`;
+        }
       }
     } catch (loadError) {
       if (currentSessionId === sessionId) {
         error = errorMessage(loadError);
+        actionMessage = null;
       }
     } finally {
       if (currentSessionId === sessionId) {
@@ -68,12 +78,14 @@
   }
 
   async function downloadFile(fileId: string): Promise<void> {
+    const sessionId = currentSessionId;
     const file = files.find((entry) => entry.id === fileId);
-    if (!file) {
+    if (!file || !sessionId) {
       return;
     }
     downloadingFileId = file.id;
     error = null;
+    actionMessage = null;
     try {
       const blob = await controlClient.downloadSessionFileContent(file);
       const url = URL.createObjectURL(blob);
@@ -87,10 +99,17 @@
       } finally {
         URL.revokeObjectURL(url);
       }
+      if (currentSessionId === sessionId) {
+        actionMessage = `Download started for ${file.name}.`;
+      }
     } catch (downloadError) {
-      error = errorMessage(downloadError);
+      if (currentSessionId === sessionId) {
+        error = errorMessage(downloadError);
+      }
     } finally {
-      downloadingFileId = null;
+      if (currentSessionId === sessionId) {
+        downloadingFileId = null;
+      }
     }
   }
 
@@ -119,13 +138,28 @@
   </div>
 
   {#if error}
-    <p class="admin-error" data-testid="session-files-error">{error}</p>
-  {:else if !session}
-    <p class="admin-empty" data-testid="session-files-empty">Select a session to inspect file artifacts.</p>
+    <AdminMessage variant="error" message={error} testId="session-files-error" compact={true} />
+  {/if}
+  {#if actionMessage}
+    <AdminMessage variant="success" message={actionMessage} testId="session-files-message" compact={true} />
+  {/if}
+
+  {#if !session}
+    <AdminMessage
+      variant="empty"
+      message="Select a session to inspect file artifacts."
+      testId="session-files-empty"
+      compact={true}
+    />
   {:else if loading}
-    <p class="admin-empty">Loading runtime upload/download artifacts...</p>
+    <AdminMessage variant="loading" message="Loading runtime upload/download artifacts..." compact={true} />
   {:else if files.length === 0}
-    <p class="admin-empty" data-testid="session-files-empty">No runtime files are recorded for this session yet.</p>
+    <AdminMessage
+      variant="empty"
+      message="No runtime files are recorded for this session yet."
+      testId="session-files-empty"
+      compact={true}
+    />
   {:else}
     <div class="mt-[18px] grid gap-3">
       {#each files as file (file.id)}

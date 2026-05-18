@@ -4,6 +4,8 @@
   import { onMount } from 'svelte';
   import type { ControlClient } from '../api/control-client';
   import type { FileWorkspaceResource } from '../api/control-types';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import { FileWorkspaceViewModelBuilder } from '../presentation/file-workspace-view-model';
 
   type AdminFileWorkspaceListRouteProps = {
@@ -16,6 +18,7 @@
   let loading = $state(false);
   let creating = $state(false);
   let error = $state<string | null>(null);
+  let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let search = $state('');
   let name = $state('');
   let description = $state('');
@@ -25,19 +28,24 @@
   const viewModel = $derived(FileWorkspaceViewModelBuilder.list({ workspaces, search }));
 
   onMount(() => {
-    void loadWorkspaces();
+    void loadWorkspaces(false);
   });
 
-  async function loadWorkspaces(): Promise<void> {
+  async function loadWorkspaces(showFeedback = true): Promise<void> {
     loading = true;
     error = null;
+    actionFeedback = null;
     try {
       const response = await controlClient.listFileWorkspaces();
       workspaces = response.workspaces;
       lastRefreshedAt = new Date().toISOString();
       void loadFileCounts(response.workspaces);
+      if (showFeedback) {
+        actionFeedback = successFeedback(`${response.workspaces.length} workspace${response.workspaces.length === 1 ? '' : 's'} refreshed.`);
+      }
     } catch (loadError) {
       error = errorMessage(loadError, 'Unexpected file workspace list error');
+      actionFeedback = null;
     } finally {
       loading = false;
     }
@@ -56,6 +64,7 @@
 
   async function createWorkspace(): Promise<void> {
     const trimmedName = name.trim();
+    actionFeedback = null;
     if (!trimmedName) {
       error = 'Workspace name is required.';
       return;
@@ -116,6 +125,10 @@
 
   function errorMessage(value: unknown, fallback: string): string {
     return value instanceof Error ? value.message : fallback;
+  }
+
+  function successFeedback(message: string): AdminMessageFeedback {
+    return { variant: 'success', title: 'File workspaces refreshed', message, testId: 'file-workspace-list-message' };
   }
 </script>
 
@@ -209,17 +222,32 @@
     </form>
   </section>
 
+  {#if actionFeedback}
+    <AdminMessage
+      variant={actionFeedback.variant}
+      title={actionFeedback.title}
+      message={actionFeedback.message}
+      testId={actionFeedback.testId}
+      compact={true}
+    />
+  {/if}
+
   {#if error}
     <section class="admin-panel mt-0">
-      <p class="admin-error mt-0" data-testid="file-workspace-error">{error}</p>
+      <AdminMessage variant="error" message={error} testId="file-workspace-error" compact={true} />
     </section>
   {:else if loading && workspaces.length === 0}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0">Loading file workspaces...</p>
+      <AdminMessage variant="loading" message="Loading file workspaces..." compact={true} />
     </section>
   {:else if viewModel.rows.length === 0}
     <section class="admin-panel mt-0">
-      <p class="admin-empty mt-0" data-testid="file-workspace-empty">{viewModel.emptyMessage}</p>
+      <AdminMessage
+        variant="empty"
+        message={viewModel.emptyMessage}
+        testId="file-workspace-empty"
+        compact={true}
+      />
     </section>
   {:else}
     <section class="grid gap-2" aria-label="File workspace table">

@@ -39,6 +39,8 @@ async function run() {
     sessionId = await resolveSelectedSessionId(page, options);
     await waitForMcpDelegationReady(page, options);
     await waitForBrowserConnected(page, options);
+    await expectGlobalMessage(page, options, (message) => message.trim().length > 0);
+    await dismissGlobalMessage(page, options);
     await verifyBrowserPolicyPanel(page);
     await verifyRemainingPanels(page);
     await openAdminTab(page, 'display');
@@ -59,6 +61,7 @@ async function run() {
     await waitForStopEnabled(page, options, sessionId);
     await page.getByTestId('session-stop').click();
     await waitForSessionState(page, options, sessionId, 'stopped');
+    await expectLifecycleMessage(page, options, 'Selected session stopped.');
 
     log(`Reconnecting stopped session ${sessionId}.`);
     await openAdminTab(page, 'sessions');
@@ -70,6 +73,7 @@ async function run() {
     await waitForKillEnabled(page, options, sessionId);
     await page.getByTestId('session-kill').click();
     await waitForSessionState(page, options, sessionId, 'stopped');
+    await expectLifecycleMessage(page, options, 'Selected session was force killed.');
     await emitSummary(page, options, sessionId, stopDisabled, log);
   } finally {
     await cleanupAdminSmoke(page, options, log);
@@ -125,6 +129,33 @@ async function disconnectThroughSessionInspector(page, options) {
     (status) => status === 'Disconnected',
     options.connectTimeoutMs,
   );
+  await expectLifecycleMessage(page, options, 'Disconnected all live clients.');
+}
+
+async function expectLifecycleMessage(page, options, expectedText) {
+  await poll(
+    `admin lifecycle message ${expectedText}`,
+    async () => await page.getByTestId('session-lifecycle-message').textContent().catch(() => ''),
+    (message) => message.includes(expectedText),
+    options.connectTimeoutMs,
+    100,
+  );
+}
+
+async function expectGlobalMessage(page, options, matches) {
+  await page.getByTestId('admin-global-message-region').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await poll(
+    'admin global message',
+    async () => await page.getByTestId('admin-global-message').textContent().catch(() => ''),
+    matches,
+    options.connectTimeoutMs,
+    100,
+  );
+}
+
+async function dismissGlobalMessage(page, options) {
+  await page.getByTestId('admin-global-message-dismiss').click();
+  await page.getByTestId('admin-global-message-region').waitFor({ state: 'hidden', timeout: options.connectTimeoutMs });
 }
 
 async function waitForMcpDelegationReady(page, options) {

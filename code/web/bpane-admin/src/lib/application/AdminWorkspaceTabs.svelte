@@ -11,11 +11,13 @@
     Video,
   } from 'lucide-svelte';
   import type { ControlClient } from '../api/control-client';
-  import type { SessionResource } from '../api/control-types';
+  import type { CreateSessionCommand, SessionResource } from '../api/control-types';
   import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
   import FeaturePlaceholderPanel from '../presentation/FeaturePlaceholderPanel.svelte';
   import SessionListPanel from '../presentation/SessionListPanel.svelte';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import {
     type AdminFeaturePanelId,
     type AdminFeaturePanelViewModel,
@@ -46,20 +48,22 @@
     readonly workspaceViewModel: AdminWorkspaceViewModel;
     readonly sessionListViewModel: SessionListPanelViewModel;
     readonly logEntries: readonly AdminLogEntry[];
+    readonly globalMessage?: AdminMessageFeedback | null;
     readonly sessionFilesRefreshVersion: number;
     readonly recordingsRefreshVersion: number;
     readonly mcpDelegationRefreshVersion: number;
-    readonly onRefreshSessions: () => Promise<void>;
-    readonly onCreateSession: () => void;
+    readonly onRefreshSessions: (showFeedback?: boolean) => Promise<void>;
+    readonly onCreateSession: (command?: CreateSessionCommand) => void;
     readonly onJoinSelectedSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
     readonly onRefreshSelectedSession: () => Promise<void>;
-    readonly onStopSession: () => void;
-    readonly onKillSession: () => void;
+    readonly onStopSession: () => Promise<void>;
+    readonly onKillSession: () => Promise<void>;
     readonly onDisconnectEmbeddedBrowser: () => void;
     readonly onFileCountChange: (count: number) => void;
     readonly onClearLogs: () => void;
     readonly onBrowserPreferencesChange: (preferences: BrowserSessionConnectPreferences) => void;
+    readonly onDismissGlobalMessage?: () => void;
   };
 
   let props: AdminWorkspaceTabsProps = $props();
@@ -83,7 +87,7 @@
   } satisfies Record<AdminFeaturePanelId, typeof Activity>;
 </script>
 
-<section class="grid h-full min-w-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden" data-testid="admin-workspace-tabs">
+<section class="grid h-full min-w-0 grid-rows-[auto_auto_auto_minmax(0,1fr)] overflow-hidden" data-testid="admin-workspace-tabs">
   <LiveSessionActionsSurface liveConnection={props.liveConnection} connected={props.browserConnected} />
   <div class="border-b border-[#90a6cc]/18 p-3">
     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3" role="tablist" aria-label="Admin panels">
@@ -107,6 +111,19 @@
       {/each}
     </div>
   </div>
+  <div class={`border-b border-[#90a6cc]/18 p-3 ${props.globalMessage ? '' : 'hidden'}`} data-testid="admin-global-message-region">
+    {#if props.globalMessage}
+      <AdminMessage
+        variant={props.globalMessage.variant}
+        title={props.globalMessage.title}
+        message={props.globalMessage.message}
+        testId={props.globalMessage.testId ?? 'admin-global-message'}
+        compact={true}
+        onDismiss={props.onDismissGlobalMessage}
+        dismissTestId="admin-global-message-dismiss"
+      />
+    {/if}
+  </div>
 
   {#if activePanel}
     <div
@@ -129,7 +146,7 @@
         {#if activePanel.id === 'sessions'}
         <SessionListPanel
           viewModel={props.sessionListViewModel}
-          onRefresh={() => void props.onRefreshSessions()}
+          onRefresh={() => void props.onRefreshSessions(true)}
           onCreateSession={props.onCreateSession}
           onJoinSession={props.onJoinSelectedSession}
           onSelectSessionId={props.onSelectSessionId}
@@ -139,7 +156,7 @@
           selectedSession={props.selectedSession}
           mcpBridge={props.mcpBridge}
           refreshVersion={props.mcpDelegationRefreshVersion}
-          onRefreshSessions={props.onRefreshSessions}
+          onRefreshSessions={() => props.onRefreshSessions(false)}
           onRefreshSelectedSession={props.onRefreshSelectedSession}
         />
       {:else if activePanel.id === 'lifecycle'}

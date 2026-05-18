@@ -82,18 +82,6 @@
     @apply inline-flex min-h-[42px] cursor-pointer items-center rounded-xl border border-[#90a6cc]/20 bg-admin-panel/80 px-4 font-bold text-admin-ink no-underline;
   }
 
-  .admin-empty {
-    @apply mt-[18px] mb-0 text-[#c1d0e8] leading-normal;
-  }
-
-  .admin-empty-spacious {
-    @apply mt-[22px];
-  }
-
-  .admin-error {
-    @apply mt-4 mb-0 text-admin-danger leading-normal;
-  }
-
   .admin-code-pill {
     @apply rounded-[7px] bg-admin-leaf/12 px-1.5 py-0.5;
   }

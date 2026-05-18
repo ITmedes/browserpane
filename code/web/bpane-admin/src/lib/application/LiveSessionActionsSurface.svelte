@@ -1,5 +1,6 @@
 <script lang="ts">
   import LiveSessionActionsPanel from '../presentation/LiveSessionActionsPanel.svelte';
+  import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import {
     type LiveSessionActionId,
     LiveSessionActionsViewModelBuilder,
@@ -16,6 +17,9 @@
   let cameraActive = $state(false);
   let busyAction = $state<LiveSessionActionId | null>(null);
   let error = $state<string | null>(null);
+  let feedback = $state<AdminMessageFeedback | null>(null);
+  let observedConnectionSessionId = $state<string | null>(null);
+  const currentConnectionSessionId = $derived(connected ? liveConnection?.sessionId ?? null : null);
   const viewModel = $derived(LiveSessionActionsViewModelBuilder.build({
     connected,
     cameraAvailable: Boolean(liveConnection?.handle.startCamera && liveConnection?.handle.stopCamera),
@@ -28,78 +32,125 @@
   }));
 
   $effect(() => {
-    if (!connected) {
-      microphoneActive = false;
-      cameraActive = false;
-      busyAction = null;
-      error = null;
+    if (currentConnectionSessionId === observedConnectionSessionId) {
+      return;
     }
+    observedConnectionSessionId = currentConnectionSessionId;
+    microphoneActive = false;
+    cameraActive = false;
+    busyAction = null;
+    error = null;
+    feedback = null;
   });
 
   async function toggleMicrophone(): Promise<void> {
     const handle = liveConnection?.handle;
-    if (!handle) return;
+    const requestSessionId = currentConnectionSessionId;
+    if (!handle || !requestSessionId) return;
     if (microphoneActive) {
-      await runLiveAction('microphone', async () => {
+      await runLiveAction(requestSessionId, 'microphone', 'Microphone stopped.', async () => {
         handle.stopMicrophone?.();
+      }, () => {
         microphoneActive = false;
       });
       return;
     }
     if (!handle.startMicrophone) {
-      error = 'The connected browser handle does not expose microphone control.';
+      showCurrentError(requestSessionId, 'The connected browser handle does not expose microphone control.');
       return;
     }
-    await runLiveAction('microphone', async () => {
+    await runLiveAction(requestSessionId, 'microphone', 'Microphone started.', async () => {
       await handle.startMicrophone?.();
+    }, () => {
       microphoneActive = true;
     });
   }
 
   async function toggleCamera(): Promise<void> {
     const handle = liveConnection?.handle;
-    if (!handle) return;
+    const requestSessionId = currentConnectionSessionId;
+    if (!handle || !requestSessionId) return;
     if (cameraActive) {
-      await runLiveAction('camera', async () => {
+      await runLiveAction(requestSessionId, 'camera', 'Camera stopped.', async () => {
         handle.stopCamera?.();
+      }, () => {
         cameraActive = false;
       });
       return;
     }
     if (!handle.startCamera) {
-      error = 'The connected browser handle does not expose camera control.';
+      showCurrentError(requestSessionId, 'The connected browser handle does not expose camera control.');
       return;
     }
-    await runLiveAction('camera', async () => {
+    await runLiveAction(requestSessionId, 'camera', 'Camera started.', async () => {
       await handle.startCamera?.();
+    }, () => {
       cameraActive = true;
     });
   }
 
   async function uploadFiles(files: FileList): Promise<void> {
     const handle = liveConnection?.handle;
-    if (!handle?.uploadFiles) {
-      error = 'The connected browser handle does not expose file upload.';
+    const requestSessionId = currentConnectionSessionId;
+    if (!handle || !requestSessionId) {
       return;
     }
-    await runLiveAction('upload', async () => handle.uploadFiles?.(files));
+    if (!handle.uploadFiles) {
+      showCurrentError(requestSessionId, 'The connected browser handle does not expose file upload.');
+      return;
+    }
+    const count = files.length;
+    await runLiveAction(
+      requestSessionId,
+      'upload',
+      `${count} ${count === 1 ? 'file was' : 'files were'} sent to the session.`,
+      async () => handle.uploadFiles?.(files),
+    );
   }
 
-  async function runLiveAction(action: LiveSessionActionId, operation: () => Promise<void>): Promise<void> {
+  async function runLiveAction(
+    sessionId: string,
+    action: LiveSessionActionId,
+    successMessage: string,
+    operation: () => Promise<void>,
+    applySuccess?: () => void,
+  ): Promise<void> {
     busyAction = action;
     error = null;
+    feedback = null;
     try {
       await operation();
+      if (isCurrentLiveSession(sessionId)) {
+        applySuccess?.();
+        feedback = { variant: 'success', title: 'Operation complete', message: successMessage, testId: 'display-message' };
+      }
     } catch (actionError) {
-      error = actionError instanceof Error ? actionError.message : 'Live session action failed';
+      if (isCurrentLiveSession(sessionId)) {
+        error = actionError instanceof Error ? actionError.message : 'Live session action failed';
+        feedback = null;
+      }
     } finally {
-      busyAction = null;
+      if (isCurrentLiveSession(sessionId)) {
+        busyAction = null;
+      }
     }
+  }
+
+  function showCurrentError(sessionId: string, message: string): void {
+    if (isCurrentLiveSession(sessionId)) {
+      error = message;
+      feedback = null;
+    }
+  }
+
+  function isCurrentLiveSession(sessionId: string): boolean {
+    return currentConnectionSessionId === sessionId;
   }
 </script>
 
 <LiveSessionActionsPanel
   {viewModel}
+  {feedback}
   onCameraToggle={() => void toggleCamera()}
   onMicrophoneToggle={() => void toggleMicrophone()}
   onUploadFiles={(files) => void uploadFiles(files)}

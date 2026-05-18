@@ -12,6 +12,7 @@
     validateSessionMountPath,
     type SessionFileBindingViewModel,
   } from '../presentation/file-workspace-view-model';
+  import AdminMessage from '../presentation/AdminMessage.svelte';
 
   type SessionFileBindingsSurfaceProps = {
     readonly controlClient: ControlClient;
@@ -58,7 +59,19 @@
       return;
     }
     loadedSessionId = sessionId;
-    void loadBindingsAndWorkspaces();
+    loadedWorkspaceId = null;
+    bindings = [];
+    workspaceFiles = [];
+    selectedFileId = '';
+    mountPath = '';
+    loading = false;
+    loadingFiles = false;
+    mutating = false;
+    downloadingBindingId = null;
+    error = null;
+    actionMessage = null;
+    onBindingCountChange?.(0);
+    void loadBindingsAndWorkspaces(false);
   });
 
   $effect(() => {
@@ -66,7 +79,7 @@
       return;
     }
     lastRefreshVersion = refreshVersion;
-    void loadBindingsAndWorkspaces();
+    void loadBindingsAndWorkspaces(false);
   });
 
   $effect(() => {
@@ -77,15 +90,21 @@
     void loadWorkspaceFiles(selectedWorkspaceId);
   });
 
-  async function loadBindingsAndWorkspaces(): Promise<void> {
+  async function loadBindingsAndWorkspaces(showFeedback = true): Promise<void> {
+    const requestSessionId = sessionId;
+    const previousBindingCount = bindings.length;
+    const previousWorkspaceCount = workspaces.length;
     loading = true;
     error = null;
     actionMessage = null;
     try {
       const [bindingResult, workspaceResult] = await Promise.allSettled([
-        controlClient.listSessionFileBindings(sessionId),
+        controlClient.listSessionFileBindings(requestSessionId),
         controlClient.listFileWorkspaces(),
       ]);
+      if (loadedSessionId !== requestSessionId) {
+        return;
+      }
       if (bindingResult.status === 'fulfilled') {
         bindings = bindingResult.value.bindings;
         onBindingCountChange?.(bindingResult.value.bindings.length);
@@ -108,8 +127,18 @@
           .filter(Boolean)
           .join(' | ');
       }
+      if (showFeedback && !error) {
+        actionMessage = refreshMessage(
+          previousBindingCount,
+          bindings.length,
+          previousWorkspaceCount,
+          workspaces.length,
+        );
+      }
     } finally {
-      loading = false;
+      if (loadedSessionId === requestSessionId) {
+        loading = false;
+      }
     }
   }
 
@@ -118,21 +147,31 @@
     error = null;
     try {
       const response = await controlClient.listFileWorkspaceFiles(workspaceId);
+      if (loadedWorkspaceId !== workspaceId) {
+        return;
+      }
       workspaceFiles = response.files;
       selectedFileId = response.files[0]?.id ?? '';
       if (selectedFileId && !mountPath.trim()) {
         mountPath = `uploads/${response.files[0]?.name ?? 'input-file'}`;
       }
     } catch (loadError) {
+      if (loadedWorkspaceId !== workspaceId) {
+        return;
+      }
       workspaceFiles = [];
       selectedFileId = '';
       error = errorMessage(loadError, 'Workspace files are unavailable.');
     } finally {
-      loadingFiles = false;
+      if (loadedWorkspaceId === workspaceId) {
+        loadingFiles = false;
+      }
     }
   }
 
   async function createBinding(): Promise<void> {
+    const requestSessionId = sessionId;
+    actionMessage = null;
     if (!selectedWorkspaceId || !selectedFileId) {
       error = 'Choose a workspace file before creating a binding.';
       return;
@@ -143,56 +182,79 @@
     }
     mutating = true;
     error = null;
-    actionMessage = null;
     try {
-      const created = await controlClient.createSessionFileBinding(sessionId, {
+      const created = await controlClient.createSessionFileBinding(requestSessionId, {
         workspace_id: selectedWorkspaceId,
         file_id: selectedFileId,
         mount_path: validation.value,
         mode,
         labels: { source: 'admin' },
       });
+      if (loadedSessionId !== requestSessionId) {
+        return;
+      }
       bindings = [created, ...bindings.filter((binding) => binding.id !== created.id)];
       onBindingCountChange?.(bindings.length);
       actionMessage = `Bound ${created.file_name} to ${created.mount_path}.`;
       mountPath = '';
     } catch (createError) {
-      error = errorMessage(createError, 'Unexpected session file binding create error');
+      if (loadedSessionId === requestSessionId) {
+        error = errorMessage(createError, 'Unexpected session file binding create error');
+      }
     } finally {
-      mutating = false;
+      if (loadedSessionId === requestSessionId) {
+        mutating = false;
+      }
     }
   }
 
   async function removeBinding(bindingId: string): Promise<void> {
+    const requestSessionId = sessionId;
     mutating = true;
     error = null;
     actionMessage = null;
     try {
-      const removed = await controlClient.removeSessionFileBinding(sessionId, bindingId);
+      const removed = await controlClient.removeSessionFileBinding(requestSessionId, bindingId);
+      if (loadedSessionId !== requestSessionId) {
+        return;
+      }
       bindings = bindings.filter((binding) => binding.id !== bindingId);
       onBindingCountChange?.(bindings.length);
       actionMessage = `Removed binding for ${removed.file_name}.`;
     } catch (removeError) {
-      error = errorMessage(removeError, 'Unexpected session file binding remove error');
+      if (loadedSessionId === requestSessionId) {
+        error = errorMessage(removeError, 'Unexpected session file binding remove error');
+      }
     } finally {
-      mutating = false;
+      if (loadedSessionId === requestSessionId) {
+        mutating = false;
+      }
     }
   }
 
   async function downloadBinding(bindingId: string): Promise<void> {
+    const requestSessionId = sessionId;
     const binding = bindings.find((entry) => entry.id === bindingId);
     if (!binding) {
       return;
     }
     downloadingBindingId = bindingId;
     error = null;
+    actionMessage = null;
     try {
       const blob = await controlClient.downloadSessionFileBindingContent(binding);
       triggerDownload(blob, binding.file_name);
+      if (loadedSessionId === requestSessionId) {
+        actionMessage = `Download started for ${binding.file_name}.`;
+      }
     } catch (downloadError) {
-      error = errorMessage(downloadError, 'Unexpected session file binding download error');
+      if (loadedSessionId === requestSessionId) {
+        error = errorMessage(downloadError, 'Unexpected session file binding download error');
+      }
     } finally {
-      downloadingBindingId = null;
+      if (loadedSessionId === requestSessionId) {
+        downloadingBindingId = null;
+      }
     }
   }
 
@@ -216,6 +278,21 @@
 
   function errorMessage(value: unknown, fallback: string): string {
     return value instanceof Error ? value.message : fallback;
+  }
+
+  function refreshMessage(
+    previousBindingCount: number,
+    nextBindingCount: number,
+    previousWorkspaceCount: number,
+    nextWorkspaceCount: number,
+  ): string {
+    if (previousBindingCount !== nextBindingCount) {
+      return `Binding count changed from ${previousBindingCount} to ${nextBindingCount}.`;
+    }
+    if (previousWorkspaceCount !== nextWorkspaceCount) {
+      return `Workspace count changed from ${previousWorkspaceCount} to ${nextWorkspaceCount}.`;
+    }
+    return `Refreshed ${nextBindingCount} binding${nextBindingCount === 1 ? '' : 's'} and ${nextWorkspaceCount} workspace${nextWorkspaceCount === 1 ? '' : 's'}.`;
   }
 </script>
 
@@ -318,22 +395,28 @@
   </div>
 
   {#if error}
-    <p class="admin-error mt-0" data-testid="session-file-bindings-error">{error}</p>
+    <AdminMessage variant="error" message={error} testId="session-file-bindings-error" compact={true} />
   {/if}
   {#if actionMessage}
-    <p class="m-0 text-sm font-bold text-admin-leaf" data-testid="session-file-bindings-message">{actionMessage}</p>
+    <AdminMessage variant="success" message={actionMessage} testId="session-file-bindings-message" compact={true} />
   {/if}
 
   {#if loading && bindings.length === 0}
-    <p class="admin-empty mt-0">Loading session file bindings...</p>
+    <AdminMessage variant="loading" message="Loading session file bindings..." compact={true} />
   {:else if workspaces.length === 0}
-    <p class="admin-empty mt-0" data-testid="session-file-bindings-empty">
-      No file workspaces are available. Create a workspace before binding inputs into this session.
-    </p>
+    <AdminMessage
+      variant="empty"
+      message="No file workspaces are available. Create a workspace before binding inputs into this session."
+      testId="session-file-bindings-empty"
+      compact={true}
+    />
   {:else if bindingRows.length === 0}
-    <p class="admin-empty mt-0" data-testid="session-file-bindings-empty">
-      No workspace files are bound to this session yet.
-    </p>
+    <AdminMessage
+      variant="empty"
+      message="No workspace files are bound to this session yet."
+      testId="session-file-bindings-empty"
+      compact={true}
+    />
   {:else}
     <div class="grid gap-3">
       {#each bindingRows as binding}
