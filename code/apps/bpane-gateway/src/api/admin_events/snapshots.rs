@@ -19,6 +19,33 @@ pub(super) struct AdminSessionsSnapshotEvent {
 }
 
 #[derive(Debug, Serialize)]
+struct AdminSessionSnapshotChangeSummary {
+    id: Uuid,
+    state: crate::session_control::SessionLifecycleState,
+    template_id: Option<String>,
+    owner_mode: crate::session_control::SessionOwnerMode,
+    viewport: crate::session_control::SessionViewport,
+    automation_delegate: Option<crate::session_control::SessionAutomationDelegate>,
+    idle_timeout_sec: Option<u32>,
+    labels: Vec<(String, String)>,
+    extensions: Vec<AdminAppliedExtensionSummary>,
+    recording: crate::session_control::SessionRecordingPolicy,
+    runtime: crate::session_control::SessionRuntimeInfo,
+    status: crate::session_control::SessionStatusSummary,
+    created_at: chrono::DateTime<Utc>,
+    runtime_released_at: Option<chrono::DateTime<Utc>>,
+    stopped_at: Option<chrono::DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize)]
+struct AdminAppliedExtensionSummary {
+    extension_id: Uuid,
+    extension_version_id: Uuid,
+    name: String,
+    version: String,
+}
+
+#[derive(Debug, Serialize)]
 pub(super) struct AdminWorkflowRunsSnapshotEvent {
     event_type: &'static str,
     sequence: u64,
@@ -103,7 +130,11 @@ pub(super) async fn build_sessions_snapshot(
         resources.push(session_resource(state, &session, None).await?);
     }
     resources.sort_by_key(|session| session.id);
-    let change_key = serialized_change_key(&resources)?;
+    let change_summaries = resources
+        .iter()
+        .map(session_snapshot_change_summary)
+        .collect::<Vec<_>>();
+    let change_key = serialized_change_key(&change_summaries)?;
     Ok(AdminChangedEvent {
         event: AdminSessionsSnapshotEvent {
             event_type: SESSIONS_SNAPSHOT_EVENT_TYPE,
@@ -113,6 +144,51 @@ pub(super) async fn build_sessions_snapshot(
         },
         change_key,
     })
+}
+
+fn session_snapshot_change_summary(session: &SessionResource) -> AdminSessionSnapshotChangeSummary {
+    let mut labels = session
+        .labels
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<Vec<_>>();
+    labels.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+
+    let mut extensions = session
+        .extensions
+        .iter()
+        .map(|extension| AdminAppliedExtensionSummary {
+            extension_id: extension.extension_id,
+            extension_version_id: extension.extension_version_id,
+            name: extension.name.clone(),
+            version: extension.version.clone(),
+        })
+        .collect::<Vec<_>>();
+    extensions.sort_by(|left, right| {
+        left.extension_id
+            .cmp(&right.extension_id)
+            .then_with(|| left.extension_version_id.cmp(&right.extension_version_id))
+            .then_with(|| left.name.cmp(&right.name))
+            .then_with(|| left.version.cmp(&right.version))
+    });
+
+    AdminSessionSnapshotChangeSummary {
+        id: session.id,
+        state: session.state,
+        template_id: session.template_id.clone(),
+        owner_mode: session.owner_mode,
+        viewport: session.viewport.clone(),
+        automation_delegate: session.automation_delegate.clone(),
+        idle_timeout_sec: session.idle_timeout_sec,
+        labels,
+        extensions,
+        recording: session.recording.clone(),
+        runtime: session.runtime.clone(),
+        status: session.status.clone(),
+        created_at: session.created_at,
+        runtime_released_at: session.runtime_released_at,
+        stopped_at: session.stopped_at,
+    }
 }
 
 pub(super) async fn build_workflow_runs_snapshot(
@@ -290,14 +366,44 @@ fn serialized_change_key<T: Serialize>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session_control::{
+        SessionCapabilities, SessionConnectInfo, SessionConnectionCounts, SessionIdleStatus,
+        SessionOwner, SessionPresenceState, SessionRuntimeInfo, SessionRuntimeResumeMode,
+        SessionRuntimeState, SessionStatusSummary, SessionStopEligibility, SessionViewport,
+    };
+    use std::collections::HashMap;
 
     #[test]
-    fn session_snapshot_change_key_ignores_event_metadata() {
-        let payload = vec!["session-a".to_string(), "session-b".to_string()];
-        let first_key = serialized_change_key(&payload).unwrap();
-        let second_key = serialized_change_key(&payload).unwrap();
+    fn session_snapshot_change_key_uses_stable_summary_for_unchanged_resources() {
+        let first = session_resource_fixture(HashMap::from([
+            ("b".to_string(), "2".to_string()),
+            ("a".to_string(), "1".to_string()),
+        ]));
+        let mut second = session_resource_fixture(HashMap::from([
+            ("a".to_string(), "1".to_string()),
+            ("b".to_string(), "2".to_string()),
+        ]));
+        second.created_at = first.created_at;
+        second.updated_at = second.updated_at + chrono::Duration::seconds(1);
+        let first_key =
+            serialized_change_key(&vec![session_snapshot_change_summary(&first)]).unwrap();
+        let second_key =
+            serialized_change_key(&vec![session_snapshot_change_summary(&second)]).unwrap();
 
         assert_eq!(first_key, second_key);
+    }
+
+    #[test]
+    fn session_snapshot_change_key_tracks_session_state() {
+        let ready = session_resource_fixture(HashMap::new());
+        let mut active = ready.clone();
+        active.state = SessionLifecycleState::Active;
+        let ready_key =
+            serialized_change_key(&vec![session_snapshot_change_summary(&ready)]).unwrap();
+        let active_key =
+            serialized_change_key(&vec![session_snapshot_change_summary(&active)]).unwrap();
+
+        assert_ne!(ready_key, active_key);
     }
 
     #[test]
@@ -387,5 +493,59 @@ mod tests {
         .unwrap();
 
         assert_ne!(empty_key, delegated_key);
+    }
+
+    fn session_resource_fixture(labels: HashMap<String, String>) -> SessionResource {
+        let now = Utc::now();
+        SessionResource {
+            id: Uuid::nil(),
+            state: SessionLifecycleState::Ready,
+            template_id: None,
+            owner_mode: SessionOwnerMode::Collaborative,
+            viewport: SessionViewport {
+                width: 1600,
+                height: 900,
+            },
+            capabilities: SessionCapabilities::default(),
+            owner: SessionOwner {
+                subject: "owner".to_string(),
+                issuer: "issuer".to_string(),
+                display_name: None,
+            },
+            automation_delegate: None,
+            idle_timeout_sec: Some(300),
+            labels,
+            integration_context: None,
+            extensions: Vec::new(),
+            recording: SessionRecordingPolicy::default(),
+            connect: SessionConnectInfo {
+                gateway_url: "https://gateway.example".to_string(),
+                transport_path: "/session".to_string(),
+                auth_type: "session_connect_ticket".to_string(),
+                ticket_path: Some("/api/v1/sessions/000/access-tokens".to_string()),
+                compatibility_mode: "session_runtime_pool".to_string(),
+            },
+            runtime: SessionRuntimeInfo {
+                binding: "docker_pool".to_string(),
+                compatibility_mode: "session_runtime_pool".to_string(),
+                cdp_endpoint: None,
+            },
+            status: SessionStatusSummary {
+                runtime_state: SessionRuntimeState::NotStarted,
+                runtime_resume_mode: SessionRuntimeResumeMode::FreshStart,
+                presence_state: SessionPresenceState::Empty,
+                connection_counts: SessionConnectionCounts::default(),
+                stop_eligibility: SessionStopEligibility::default(),
+                idle: SessionIdleStatus {
+                    idle_timeout_sec: Some(300),
+                    idle_since: None,
+                    idle_deadline: None,
+                },
+            },
+            created_at: now,
+            updated_at: now,
+            runtime_released_at: None,
+            stopped_at: None,
+        }
     }
 }
