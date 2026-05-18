@@ -147,9 +147,11 @@
         {#if activePanel.id === 'sessions'}
         <SessionListPanel
           viewModel={props.sessionListViewModel}
+          connected={props.browserConnected}
           onRefresh={() => void props.onRefreshSessions(true)}
           onCreateSession={props.onCreateSession}
           onJoinSession={props.onJoinSelectedSession}
+          onDisconnectSession={props.onDisconnectEmbeddedBrowser}
           onSelectSessionId={props.onSelectSessionId}
         />
         <McpDelegationSurface
