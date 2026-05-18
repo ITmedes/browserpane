@@ -214,10 +214,6 @@ http://localhost:8080/cert-fingerprint
 
 `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem` for CLI use.
 
-For local setup failures around Docker, workflow sources, MCP, certificate
-metadata, Postgres, or camera provisioning, see
-[docs/BPANE_LOCAL_TROUBLESHOOTING.md](docs/BPANE_LOCAL_TROUBLESHOOTING.md).
-
 ### Remote / Self-Hosted Testing
 
 The checked-in compose stack is a local development and regression environment,

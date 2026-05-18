@@ -29,9 +29,6 @@ For a remote host, do not reuse localhost values such as
 `https://localhost:4433` in browser-facing configuration. They only work when
 the browser, Keycloak, web UI, and gateway all run on the same machine.
 
-For local compose troubleshooting before moving to remote testing, see
-[docs/BPANE_LOCAL_TROUBLESHOOTING.md](docs/BPANE_LOCAL_TROUBLESHOOTING.md).
-
 ## Compose Defaults And Runtime Mode
 
 `deploy/compose.yml` defaults to `docker_pool` for browser-session testing.
