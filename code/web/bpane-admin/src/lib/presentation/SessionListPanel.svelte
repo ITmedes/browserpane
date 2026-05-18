@@ -8,17 +8,21 @@
 
   type SessionListPanelProps = {
     readonly viewModel: SessionListPanelViewModel;
+    readonly connected: boolean;
     readonly onRefresh: () => void;
     readonly onCreateSession: (command: CreateSessionCommand) => void;
     readonly onJoinSession: () => void;
+    readonly onDisconnectSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
   };
 
   let {
     viewModel,
+    connected,
     onRefresh,
     onCreateSession,
     onJoinSession,
+    onDisconnectSession,
     onSelectSessionId,
   }: SessionListPanelProps = $props();
   let createPayloadOpen = $state(false);
@@ -67,6 +71,15 @@
         onclick={onJoinSession}
       >
         Start / reconnect
+      </button>
+      <button
+        class="admin-button-ghost"
+        type="button"
+        data-testid="session-disconnect"
+        disabled={!viewModel.authenticated || viewModel.loading || !viewModel.selectedSessionId || !connected}
+        onclick={onDisconnectSession}
+      >
+        Disconnect
       </button>
       {#if viewModel.selectedSessionId}
         <a class="admin-button-ghost" data-testid="session-detail-link" href={detailHref(viewModel.selectedSessionId)}>

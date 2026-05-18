@@ -38,6 +38,7 @@ async function run() {
     sessionId = await resolveSelectedSessionId(page, options);
     await waitForMcpDelegationReady(page, options);
     await waitForBrowserConnected(page, options);
+    await expectSessionDisconnectControl(page);
     await expectGlobalMessage(page, options, (message) => message.trim().length > 0);
     await dismissGlobalMessage(page, options);
     await verifyBrowserPolicyPanel(page);
@@ -69,7 +70,7 @@ async function run() {
     await waitForBrowserConnected(page, options);
     await openAdminTab(page, 'lifecycle');
     await expectRuntimeResumeMode(page, options, 'profile_restart');
-    await disconnectEmbeddedBrowser(page, options);
+    await disconnectThroughSessionArea(page, options);
 
     log(`Stopping reconnected session ${sessionId}.`);
     await waitForStopEnabled(page, options, sessionId);
@@ -137,6 +138,25 @@ async function disconnectThroughSessionInspector(page, options) {
     options.connectTimeoutMs,
   );
   await expectLifecycleMessage(page, options, 'Disconnected all live clients.');
+}
+
+async function disconnectThroughSessionArea(page, options) {
+  await openAdminTab(page, 'sessions');
+  await page.getByTestId('session-disconnect').click();
+  await poll(
+    'admin embedded browser disconnect through session area',
+    async () => await page.getByTestId('browser-status').textContent(),
+    (status) => status === 'Disconnected',
+    options.connectTimeoutMs,
+  );
+}
+
+async function expectSessionDisconnectControl(page) {
+  await openAdminTab(page, 'sessions');
+  const disconnectEnabled = await page.getByTestId('session-disconnect').isEnabled();
+  if (!disconnectEnabled) {
+    throw new Error('Expected session area disconnect control to be enabled after browser connect.');
+  }
 }
 
 async function expectLifecycleMessage(page, options, expectedText) {
