@@ -5,7 +5,6 @@ import { promisify } from 'node:util';
 import { chromium } from 'playwright-core';
 import {
   cleanupAdminBeforeRun,
-  closeAdminOverlay,
   disconnectEmbeddedBrowser,
   ensureAdminLoggedIn,
   getAdminAccessToken,
@@ -93,8 +92,6 @@ async function createConnectedSession(page, options) {
   const previous = await readSelectedSessionId(page);
   await page.getByTestId('session-new').click();
   const sessionId = await poll('new selected session', () => readSelectedSessionId(page), (id) => id && id !== previous, options.connectTimeoutMs);
-  await closeAdminOverlay(page);
-  await page.getByTestId('browser-connect').click();
   await waitForBrowserConnected(page, options);
   await page.locator('[data-testid="browser-viewport"] canvas').first().waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   return sessionId;
