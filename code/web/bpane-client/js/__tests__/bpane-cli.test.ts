@@ -91,6 +91,79 @@ describe('bpane operator CLI', () => {
     expect(calls[0].url).toBe('http://localhost:8080/api/v1/sessions/session%2Fwith%20space/status');
   });
 
+  it('creates a session with structured CLI options', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'session-1' }));
+
+    const code = await runBpaneCli(
+      [
+        'session',
+        'create',
+        '--label',
+        'suite=cli',
+        '--template-id',
+        'desktop',
+        '--owner-mode',
+        'collaborative',
+        '--width',
+        '1440',
+        '--height',
+        '900',
+        '--idle-timeout-sec',
+        '120',
+        '--integration-json',
+        '{"ticket":"abc"}',
+        '--extension-id',
+        '018f1a5b-0784-71bf-ae46-0c973f00aa11',
+        '--recording-mode',
+        'manual',
+        '--recording-retention-sec',
+        '3600',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toEqual({ id: 'session-1' });
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/sessions');
+    expect(calls[0].init.method).toBe('POST');
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      template_id: 'desktop',
+      owner_mode: 'collaborative',
+      viewport: { width: 1440, height: 900 },
+      idle_timeout_sec: 120,
+      labels: { suite: 'cli' },
+      integration_context: { ticket: 'abc' },
+      extension_ids: ['018f1a5b-0784-71bf-ae46-0c973f00aa11'],
+      recording: { mode: 'manual', format: 'webm', retention_sec: 3600 },
+    });
+  });
+
+  it('mints access, automation access, and disconnects all session clients', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ token_type: 'session_connect_ticket' }),
+      jsonResponse({ token_type: 'session_automation_access_token' }),
+      jsonResponse({ state: 'idle' }),
+    );
+
+    const env = { BPANE_ACCESS_TOKEN: 'token-1' };
+    const accessCode = await runBpaneCli(['session', 'access-token', 'session-1'], env, io.io, fetchImpl);
+    const automationCode = await runBpaneCli(['session', 'automation-access', 'session-1'], env, io.io, fetchImpl);
+    const disconnectCode = await runBpaneCli(['session', 'disconnect-all', 'session-1'], env, io.io, fetchImpl);
+
+    expect(accessCode).toBe(EXIT_CODES.ok);
+    expect(automationCode).toBe(EXIT_CODES.ok);
+    expect(disconnectCode).toBe(EXIT_CODES.ok);
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://localhost:8080/api/v1/sessions/session-1/access-tokens', 'POST'],
+      ['http://localhost:8080/api/v1/sessions/session-1/automation-access', 'POST'],
+      ['http://localhost:8080/api/v1/sessions/session-1/connections/disconnect-all', 'POST'],
+    ]);
+  });
+
   it('derives MCP health from the configured bridge control URL with path prefixes', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(
@@ -115,6 +188,48 @@ describe('bpane operator CLI', () => {
     expect(calls.map((call) => call.url)).toEqual([
       'http://bpane.example/auth-config.json',
       'http://mcp.example/prefix/health',
+    ]);
+  });
+
+  it('diagnoses MCP delegation mismatches with remediation hints', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({
+        mcpBridge: {
+          controlUrl: 'http://mcp.example/control-session',
+          clientId: 'bridge-client',
+        },
+      }),
+      jsonResponse({ status: 'ok', managed_sessions: [] }),
+      jsonResponse({ session: { id: 'other-session' } }),
+      jsonResponse({
+        id: 'session-1',
+        state: 'running',
+        automation_delegate: { client_id: 'other-client' },
+      }),
+      jsonResponse({ mcp_owner: false }),
+    );
+
+    const code = await runBpaneCli(
+      ['mcp', 'doctor', 'session-1', '--base-url', 'http://bpane.example'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    const output = parseStdout(io);
+    expect(output.ok).toBe(false);
+    expect(output.issues.map((issue) => issue.code)).toEqual([
+      'MCP_DELEGATE_MISMATCH',
+      'MCP_DEFAULT_SESSION_MISMATCH',
+    ]);
+    expect(calls.map((call) => call.url)).toEqual([
+      'http://bpane.example/auth-config.json',
+      'http://mcp.example/health',
+      'http://mcp.example/control-session',
+      'http://bpane.example/api/v1/sessions/session-1',
+      'http://bpane.example/api/v1/sessions/session-1/status',
     ]);
   });
 
@@ -171,6 +286,101 @@ describe('bpane operator CLI', () => {
       url: 'http://localhost:8931/control-session',
       init: { method: 'DELETE' },
     });
+  });
+
+  it('dry-runs bounded session cleanup by default', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({
+      sessions: [
+        {
+          id: 'session-1',
+          state: 'stopped',
+          labels: { suite: 'cli' },
+          automation_delegate: { client_id: 'bridge-client' },
+          status: { connection_counts: { total_clients: 0 } },
+          created_at: '2026-05-18T10:00:00Z',
+          updated_at: '2026-05-18T10:00:00Z',
+        },
+        {
+          id: 'session-2',
+          state: 'running',
+          labels: { suite: 'cli' },
+          created_at: '2026-05-18T10:00:00Z',
+        },
+      ],
+    }));
+
+    const code = await runBpaneCli(
+      ['session', 'cleanup', '--label', 'suite=cli'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toMatchObject({
+      dry_run: true,
+      candidate_count: 1,
+      candidates: [{ id: 'session-1', state: 'stopped' }],
+    });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('requires a bounding filter before confirmed cleanup', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ sessions: [] }));
+
+    const code = await runBpaneCli(
+      ['session', 'cleanup', '--confirm'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.usage);
+    expect(calls).toHaveLength(0);
+    expect(parseStderr(io).error).toContain('requires at least one bounding');
+  });
+
+  it('executes confirmed cleanup through revoke, disconnect, and kill operations', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({
+        sessions: [
+          {
+            id: 'session-1',
+            state: 'stopped',
+            labels: { suite: 'cli' },
+            automation_delegate: { client_id: 'bridge-client' },
+            status: { connection_counts: { total_clients: 0 } },
+            created_at: '2026-05-18T10:00:00Z',
+          },
+        ],
+      }),
+      jsonResponse({ id: 'session-1' }),
+      jsonResponse({ state: 'stopped' }),
+      jsonResponse({ id: 'session-1', state: 'stopped' }),
+    );
+
+    const code = await runBpaneCli(
+      ['session', 'cleanup', '--label', 'suite=cli', '--confirm'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toMatchObject({
+      dry_run: false,
+      result_count: 1,
+      results: [{ session: { id: 'session-1' } }],
+    });
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://localhost:8080/api/v1/sessions', undefined],
+      ['http://localhost:8080/api/v1/sessions/session-1/automation-owner', 'DELETE'],
+      ['http://localhost:8080/api/v1/sessions/session-1/connections/disconnect-all', 'POST'],
+      ['http://localhost:8080/api/v1/sessions/session-1/kill', 'POST'],
+    ]);
   });
 
   it('maps HTTP failures to a stable JSON error and exit code', async () => {
