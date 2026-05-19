@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "bpane": "scripts/bpane-cli.mjs"
+  },
   "scripts": {
     "build": "vite build && node scripts/copy-audio-worklet.mjs",
     "benchmark:scroll": "node scripts/run-scroll-benchmark.mjs",

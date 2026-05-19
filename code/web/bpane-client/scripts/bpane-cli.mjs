@@ -55,6 +55,7 @@ function usageText() {
     '  --state <state>           Repeatable cleanup state filter. Default: stopped.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --confirm                 Execute cleanup. Without it cleanup is a dry-run.',
+    '  --fail-on-issues          Make mcp doctor exit non-zero when diagnostics find issues.',
     '  --help                    Show this help.',
     '',
     'All successful command responses are emitted as JSON.',
@@ -217,6 +218,21 @@ function errorPayload(error) {
 
 function printJson(io, value) {
   io.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function commandResult(payload, exitCode = EXIT_CODES.ok) {
+  return {
+    __bpaneCliResult: true,
+    payload,
+    exitCode,
+  };
+}
+
+function normalizeCommandResult(result) {
+  if (result?.__bpaneCliResult === true) {
+    return result;
+  }
+  return commandResult(result);
 }
 
 async function parseResponseBody(response) {
@@ -728,10 +744,15 @@ async function handleSessionCommand(config, positionals, options) {
   throw new CliError('USAGE', `Unknown session command: ${action ?? ''}`.trim(), EXIT_CODES.usage);
 }
 
-async function handleMcpCommand(config, positionals) {
+async function handleMcpCommand(config, positionals, options) {
   const action = positionals[1];
   if ((action === 'doctor' || action === 'preflight') && positionals.length <= 3) {
-    return await runMcpDoctor(config, positionals[2] ?? null);
+    const diagnostics = await runMcpDoctor(config, positionals[2] ?? null);
+    const strict = action === 'preflight' || optionEnabled(options, 'fail-on-issues');
+    return commandResult(
+      diagnostics,
+      strict && !diagnostics.ok ? EXIT_CODES.api : EXIT_CODES.ok,
+    );
   }
   if (action === 'health' && positionals.length === 2) {
     const mcpConfig = await resolveMcpConfig(config, { control: true });
@@ -837,13 +858,14 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     if (scope === 'session') {
       result = await handleSessionCommand(config, positionals, options);
     } else if (scope === 'mcp') {
-      result = await handleMcpCommand(config, positionals);
+      result = await handleMcpCommand(config, positionals, options);
     } else {
       throw new CliError('USAGE', `Unknown command scope: ${scope}`, EXIT_CODES.usage);
     }
 
-    printJson(output, result);
-    return EXIT_CODES.ok;
+    const command = normalizeCommandResult(result);
+    printJson(output, command.payload);
+    return command.exitCode;
   } catch (error) {
     const payload = errorPayload(error);
     output.stderr.write(`${JSON.stringify(payload, null, 2)}\n`);
