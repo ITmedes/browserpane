@@ -312,6 +312,57 @@ MCP delegation terminology:
   bridge target; with `/sessions/{id}/mcp` that target is immutable for the
   connection lifetime
 
+Supported local operator CLI:
+
+- CLI entrypoint: `cd code/web/bpane-client && npm run bpane:cli -- <command>`
+- Installable package binary name: `bpane`
+- Configuration precedence: command flags, environment variables, selected
+  profile, then local defaults
+- Local profile path: `~/.config/bpane/config.json`, override with
+  `BPANE_CONFIG` or `--config`
+- Profile selection: `BPANE_PROFILE` or `--profile`
+- Bearer token source: `BPANE_ACCESS_TOKEN`, `--access-token`, or `--token`
+
+Minimal local operator setup:
+
+```bash
+cd code/web/bpane-client
+export BPANE_ACCESS_TOKEN=<owner bearer token>
+npm run bpane:cli -- profile init local \
+  --base-url http://localhost:8080 \
+  --mcp-control-url http://localhost:8931/control-session \
+  --set-default
+```
+
+Common session operations:
+
+```bash
+npm run bpane:cli -- session list
+npm run bpane:cli -- session list --state stopped --label suite=smoke --limit 5
+npm run bpane:cli -- session create --label purpose=manual-test
+npm run bpane:cli -- session status <session-id>
+npm run bpane:cli -- session disconnect-all <session-id>
+npm run bpane:cli -- session stop <session-id>
+npm run bpane:cli -- session kill <session-id>
+```
+
+MCP delegation and recovery operations:
+
+```bash
+npm run bpane:cli -- mcp health
+npm run bpane:cli -- mcp doctor <session-id>
+npm run bpane:cli -- mcp preflight <session-id>
+npm run bpane:cli -- mcp repair <session-id>
+npm run bpane:cli -- mcp clear-default
+```
+
+Use `mcp repair <session-id>` when the intended session should be delegated to
+the configured bridge client and selected as the bridge default target. It
+applies the missing delegation/default-session changes and then reruns strict
+diagnostics. Use `session cleanup` as a dry-run first, then add `--confirm`
+with at least one bounding `--label` or `--older-than-sec` filter for
+destructive cleanup.
+
 Current limitation:
 
 - the public session resource model is now versioned and persistent
@@ -464,6 +515,8 @@ npm ci
 npx tsc --noEmit
 npm test
 npm run build
+npm run bpane:cli -- --help
+npm run smoke:bpane-cli -- --headless
 npm run workflow:cli -- --help
 npm run smoke:recording -- --headless
 npm run smoke:workflow-cli -- --headless
@@ -482,6 +535,7 @@ cargo test -p bpane-host
 cargo test -p bpane-gateway
 cd code/integrations/mcp-bridge && npm run build
 cd code/integrations/workflow-worker && npm run build
+cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless
 cd code/web/bpane-client && npm run smoke:recording -- --headless
 cd code/web/bpane-client && npm run smoke:workflow-cli -- --headless
 cd code/web/bpane-client && npm run smoke:workflow-credential-injection -- --headless
