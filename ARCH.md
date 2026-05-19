@@ -68,7 +68,10 @@ The system has seven primary runtime roles plus persistent control-plane stores:
 Seven long-lived services on a Docker bridge network (`172.28.0.0/24`), plus an
 on-demand `workflow-worker` image profile launched by the gateway. Recording
 workers are launched separately by the gateway and are not modeled as a
-long-lived compose service.
+long-lived compose service. Local compose defaults to the `docker_pool`
+session runtime backend. The gateway image trusts the mounted local checkout at
+`/workspace` as a Git `safe.directory` so local git-backed workflow sources can
+resolve inside the container without dubious-ownership failures.
 
 ```
               Browser / E2E Test
@@ -117,6 +120,10 @@ long-lived compose service.
 - `8931/tcp` — MCP bridge (`/mcp`, `/sessions/{id}/mcp`, `/sse`, `/sessions/{id}/sse`)
 - `5433/tcp` — local Postgres for the session control plane
 - `8200/tcp` — local Vault dev server for credential bindings
+
+The local MCP bridge runs the package-installed `@playwright/mcp` executable
+from its own dependencies rather than downloading `@playwright/mcp@latest` at
+first client connect.
 
 **Host container internals:** Xorg with dummy video driver (3840x2160 virtual
 framebuffer, runtime resizable via xrandr), OpenBox WM (locked down, no
@@ -208,7 +215,8 @@ This is the architectural centerpiece. The screen is divided into a grid of
 
 ### bpane-gateway (~2,800 lines Rust)
 
-Stateless relay between host agent and browser clients.
+WebTransport relay, shared-session coordinator, and owner-scoped control-plane
+service.
 
 - **WebTransport server** (wtransport crate, QUIC + TLS on port 4433)
 - **Session hub** (`session_hub.rs`, ~850 lines): one host agent, N browser clients
@@ -236,12 +244,13 @@ Stateless relay between host agent and browser clients.
   - current backends are:
     - `static_single`: one shared host socket, with idle release semantics in the gateway
     - `docker_single`: opt-in Docker-backed worker startup/shutdown for the active session, with idle timeout and one active runtime at a time
-    - `docker_pool`: opt-in Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`
+    - `docker_pool`: Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`; this is the default local compose backend
   - session resources, runtime capacity, and compatibility routing now derive from this runtime profile
   - local compose is now wired so `docker_pool` can be exercised end to end for browser sessions via the Docker socket, a shared socket-only runtime volume, per-session browser data volumes, and a shared host-worker env profile
   - Docker runtime assignment metadata is now persisted in Postgres and reconciled on gateway startup, so an existing pool-mode worker can be rebound after a gateway restart without launching a duplicate runtime
   - Docker-backed workers now receive `BPANE_SESSION_ID` plus explicit profile/upload/download paths under a session-specific data root, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state without exposing one shared browser data root
   - this is profile-backed restoration, not true container/process suspension: exact live in-memory browser state only survives while the worker is still running
+  - release lifecycle preserves the session resource and profile while releasing the live runtime; status exposes `runtime_state`, `runtime_resume_mode`, and release/stop timestamps so callers can distinguish exact-live reconnects from profile-backed restarts
 - **MCP ownership**: atomic session-automation state in the gateway
   - MCP automation does not by itself demote browser clients into viewers
   - if MCP is the initial active connector it can seed and hold the session
@@ -258,12 +267,13 @@ Stateless relay between host agent and browser clients.
   - `DELETE /api/v1/sessions/{id}` — safe-stop one owner-scoped session resource
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
+  - `POST /api/v1/sessions/{id}/release` — release the live runtime while preserving the session resource and profile
   - `POST /api/v1/sessions/{id}/kill` — force-kill live attachments and release runtime
   - `POST /api/v1/sessions/{id}/connections/{connection_id}/disconnect` — disconnect one live attachment
   - `POST /api/v1/sessions/{id}/connections/disconnect-all` — disconnect all live attachments without force-killing the session
   - `POST /api/v1/sessions/{id}/automation-owner` — delegate one session to an automation principal
   - `DELETE /api/v1/sessions/{id}/automation-owner` — clear automation delegation
-  - `GET /api/v1/sessions/{id}/status` — side-effect-free session-scoped lifecycle/runtime/presence view, including role counts, idle timing, stop eligibility, live connection descriptors, and stopped-session snapshots
+  - `GET /api/v1/sessions/{id}/status` — side-effect-free session-scoped lifecycle/runtime/presence view, including runtime resume mode, role counts, idle timing, stop eligibility, live connection descriptors, and stopped-session snapshots
   - `POST /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership claim
   - `DELETE /api/v1/sessions/{id}/mcp-owner` — session-scoped MCP ownership release
   - session-scoped file binding routes attach owner-approved workspace files to
@@ -289,6 +299,7 @@ Stateless relay between host agent and browser clients.
   - exposes queued/admission state when worker capacity is exhausted
   - persists run logs, events, outputs, produced files, linked recordings, and correlation metadata
   - reconciles runtime hold/release semantics for paused runs
+  - returns structured workflow-source failures with machine-readable `code`, `category`, and `recovery_hint` fields that the admin app can surface directly
 - **Workflow event delivery** (`workflow_event_delivery.rs`):
   - persists owner-scoped outbound webhook subscriptions
   - signs lifecycle deliveries and records attempt diagnostics
@@ -380,6 +391,8 @@ running against the Chromium instance inside the host container.
   Streamable HTTP on `/sessions/{id}/mcp`, compatibility SSE on `/sse`, and
   session-scoped legacy SSE on `/sessions/{id}/sse`
 - Proxies tool calls to @playwright/mcp subprocess (STDIO mode)
+- Resolves the local package-installed @playwright/mcp executable instead of
+  invoking `npx @playwright/mcp@latest`
 - Supervisor-aware: adds configurable delay (default 1500ms) when browser
   viewers are watching (polls gateway status every 2s)
 - Lazy registration: only claims MCP ownership on first MCP client connect
@@ -393,6 +406,8 @@ running against the Chromium instance inside the host container.
 - `/health` keeps legacy `control_session_*` fields and also reports a
   normalized `managed_sessions` array covering the compatibility control
   session plus session-scoped MCP clients
+- Health URL derivation preserves path prefixes when the bridge is mounted
+  behind a reverse proxy.
 - Resolves the delegated session's runtime CDP endpoint from the gateway session
   resource before binding Playwright MCP
 - Graceful shutdown: always releases ownership on SIGINT/SIGTERM
@@ -434,6 +449,7 @@ The default dev stack no longer uses a shared token file.
 - after login, the admin console lists owner-scoped `/api/v1/sessions`, lets the user join an existing session or start a new one, and then uses the selected session resource's connect metadata
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
 - admin-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
+- switching the selected session disconnects the embedded browser from the previous live session before selecting the new one
 - `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via compatibility `PUT /control-session`
 - the console shows whether the currently selected session is the exact session delegated to `mcp-bridge` and exposes the recommended `/sessions/{session_id}/mcp` endpoint for external clients
 - `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource and lazily binds Playwright MCP on first client connect
@@ -445,8 +461,8 @@ The default dev stack no longer uses a shared token file.
 - `bpane-gateway` resolves that ticket back to the delegated or owner-visible `session_id` before admitting the transport
 - `mcp-bridge` obtains its own bearer token with client credentials
 - the versioned session API is also bearer-protected and owner-scoped
-- the current session resource connect contract advertises `auth_type: session_connect_ticket` and still carries `compatibility_mode: legacy_single_runtime`
-- the default compose stack still runs the `static_single` runtime backend, so that control-plane flow still lands on one active host worker
+- the current session resource connect contract advertises `auth_type: session_connect_ticket`; `compatibility_mode` reflects the selected runtime backend (`legacy_single_runtime` for `static_single` / `docker_single`, `session_runtime_pool` for `docker_pool`)
+- the default compose stack runs the `docker_pool` runtime backend for local multi-session testing
 - `docker_single` keeps the old single-runtime compatibility behavior with start/stop-on-idle worker lifecycle
 - `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
 - `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` /
@@ -486,6 +502,32 @@ The workflow layer sits on top of the owner-scoped session APIs.
 - owner actions now include durable `submit-input`, `resume`, `reject`, and `cancel` transitions on workflow runs
 - workflow lifecycle subscriptions provide signed outbound delivery plus persisted delivery diagnostics for external systems
 - local workflow CLI commands live in `code/web/bpane-client/scripts/workflow-cli.mjs` and exercise the same v1 HTTP routes as the browser UI
+- workflow source resolution and materialization errors are structured with a
+  machine-readable code/category plus recovery hint so operators can distinguish
+  invalid sources, ref resolution failures, repository access failures, snapshot
+  failures, and local infrastructure/tooling problems
+
+### Operator CLI
+
+The supported local operator CLI lives in
+`code/web/bpane-client/scripts/bpane-cli.mjs`, is exposed as the package binary
+`bpane`, and has a repo-level wrapper at `scripts/bpane`.
+
+- Commands cover profile inspection/init, session create/list/get/status,
+  access-ticket and automation-access minting, connection disconnect, stop,
+  kill, and bounded cleanup.
+- MCP commands cover health, authorize, revoke, set-default, clear-default,
+  doctor, preflight, and repair.
+- `mcp repair` applies missing automation delegation and bridge default-session
+  selection only after the target session is visible to the current owner token,
+  then reruns strict diagnostics.
+- CLI profile writes enforce `0600` file permissions. Access tokens are only
+  persisted when `profile init --save-token` is used.
+- All successful responses and structured errors are JSON, with stable exit
+  codes for usage, auth, API, and unexpected failures.
+- `code/web/bpane-client/scripts/run-bpane-cli-smoke.mjs` logs in through the
+  admin app and integration-smokes the main session, MCP, cleanup, and profile
+  paths against the local compose stack.
 
 ### Wire Protocol (bpane-protocol, ~2,800 lines Rust)
 
@@ -732,9 +774,11 @@ more custom code and therefore more surface area for bugs.
   VAAPI hardware encoding is specced but not implemented. For video-heavy
   workloads in production, this matters.
 
-- **Gateway is simple but limited.** Single-agent sessions, in-memory state,
-  no persistence. Fine for dev/demo but not production-grade. No reconnection
-  support — if the WebTransport connection drops, the session is gone.
+- **Production operations are still limited.** The gateway now has a durable
+  owner-scoped control plane, docker-backed runtime assignments, and
+  profile-backed reconnect/release semantics. It is still not an HA production
+  control plane: backup/restore, zero-downtime upgrades, multi-node runtime
+  scheduling, and full enterprise governance remain future work.
 
 - **No end-to-end testing of the visual pipeline.** The protocol has unit tests
   and integration tests for framing. The tile compositor has unit tests. But
