@@ -546,6 +546,123 @@ describe('bpane operator CLI', () => {
     expect(io.stderr()).toBe('');
   });
 
+  it('repairs MCP delegation and bridge default selection before strict diagnostics', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({
+        mcpBridge: {
+          controlUrl: 'http://mcp.example/control-session',
+          clientId: 'bridge-client',
+          issuer: 'issuer-1',
+          displayName: 'Bridge Display',
+        },
+      }),
+      jsonResponse({ status: 'ok', managed_sessions: [] }),
+      jsonResponse({ session: null }),
+      jsonResponse({
+        id: 'session-1',
+        state: 'running',
+        automation_delegate: null,
+      }),
+      jsonResponse({ mcp_owner: false }),
+      jsonResponse({ id: 'session-1', automation_delegate: { client_id: 'bridge-client' } }),
+      jsonResponse({ session: { id: 'session-1' } }),
+      jsonResponse({ status: 'ok', managed_sessions: [{ session_id: 'session-1' }] }),
+      jsonResponse({ session: { id: 'session-1' } }),
+      jsonResponse({
+        id: 'session-1',
+        state: 'running',
+        automation_delegate: { client_id: 'bridge-client' },
+      }),
+      jsonResponse({ mcp_owner: false }),
+    );
+
+    const code = await runBpaneCli(
+      ['mcp', 'repair', 'session-1', '--base-url', 'http://bpane.example'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toMatchObject({
+      ok: true,
+      session_id: 'session-1',
+      failure_count: 0,
+      actions: [
+        { action: 'authorize', attempted: true, ok: true },
+        { action: 'set-default', attempted: true, ok: true },
+      ],
+      diagnostics: { ok: true },
+    });
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://bpane.example/auth-config.json', undefined],
+      ['http://mcp.example/health', undefined],
+      ['http://mcp.example/control-session', 'GET'],
+      ['http://bpane.example/api/v1/sessions/session-1', undefined],
+      ['http://bpane.example/api/v1/sessions/session-1/status', undefined],
+      ['http://bpane.example/api/v1/sessions/session-1/automation-owner', 'POST'],
+      ['http://mcp.example/control-session', 'PUT'],
+      ['http://mcp.example/health', undefined],
+      ['http://mcp.example/control-session', 'GET'],
+      ['http://bpane.example/api/v1/sessions/session-1', undefined],
+      ['http://bpane.example/api/v1/sessions/session-1/status', undefined],
+    ]);
+    expect(JSON.parse(calls[5].init.body)).toEqual({
+      client_id: 'bridge-client',
+      issuer: 'issuer-1',
+      display_name: 'Bridge Display',
+    });
+    expect(JSON.parse(calls[6].init.body)).toEqual({ session_id: 'session-1' });
+  });
+
+  it('returns non-zero when MCP repair cannot resolve final diagnostics', async () => {
+    const io = createIo();
+    const { fetchImpl } = createFetch(
+      jsonResponse({
+        mcpBridge: {
+          controlUrl: 'http://mcp.example/control-session',
+          clientId: 'bridge-client',
+        },
+      }),
+      jsonResponse({ status: 'ok', managed_sessions: [] }),
+      jsonResponse({ session: null }),
+      jsonResponse({
+        id: 'session-1',
+        state: 'stopped',
+        automation_delegate: null,
+      }),
+      jsonResponse({ mcp_owner: false }),
+      jsonResponse({ id: 'session-1', automation_delegate: { client_id: 'bridge-client' } }),
+      jsonResponse({ session: { id: 'session-1' } }),
+      jsonResponse({ status: 'ok', managed_sessions: [{ session_id: 'session-1' }] }),
+      jsonResponse({ session: { id: 'session-1' } }),
+      jsonResponse({
+        id: 'session-1',
+        state: 'stopped',
+        automation_delegate: { client_id: 'bridge-client' },
+      }),
+      jsonResponse({ mcp_owner: false }),
+    );
+
+    const code = await runBpaneCli(
+      ['mcp', 'repair', 'session-1', '--base-url', 'http://bpane.example'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.api);
+    expect(parseStdout(io)).toMatchObject({
+      ok: false,
+      failure_count: 0,
+      diagnostics: {
+        ok: false,
+        issues: [{ code: 'SESSION_STOPPED' }],
+      },
+    });
+  });
+
   it('authorizes a session for the configured MCP bridge client', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'session-1' }));
