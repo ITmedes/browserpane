@@ -323,7 +323,8 @@ MCP delegation terminology:
 
 Supported local operator CLI:
 
-- CLI entrypoint: `cd code/web/bpane-client && npm run bpane:cli -- <command>`
+- Repo-level wrapper: `./scripts/bpane <command>`
+- Package entrypoint: `cd code/web/bpane-client && npm run bpane:cli -- <command>`
 - Installable package binary name: `bpane`
 - Configuration precedence: command flags, environment variables, selected
   profile, then local defaults
@@ -341,9 +342,8 @@ Supported local operator CLI:
 Minimal local operator setup:
 
 ```bash
-cd code/web/bpane-client
 export BPANE_ACCESS_TOKEN=<owner bearer token>
-npm run bpane:cli -- profile init local \
+./scripts/bpane profile init local \
   --base-url http://localhost:8080 \
   --mcp-control-url http://localhost:8931/control-session \
   --set-default
@@ -352,29 +352,29 @@ npm run bpane:cli -- profile init local \
 Common session operations:
 
 ```bash
-npm run bpane:cli -- session list
-npm run bpane:cli -- session list --state stopped --label suite=smoke --limit 5
-npm run bpane:cli -- session create --label purpose=manual-test
-npm run bpane:cli -- session get <session-id>
-npm run bpane:cli -- session status <session-id>
-npm run bpane:cli -- session access-token <session-id>
-npm run bpane:cli -- session automation-access <session-id>
-npm run bpane:cli -- session disconnect-all <session-id>
-npm run bpane:cli -- session stop <session-id>
-npm run bpane:cli -- session kill <session-id>
+./scripts/bpane session list
+./scripts/bpane session list --state stopped --label suite=smoke --limit 5
+./scripts/bpane session create --label purpose=manual-test
+./scripts/bpane session get <session-id>
+./scripts/bpane session status <session-id>
+./scripts/bpane session access-token <session-id>
+./scripts/bpane session automation-access <session-id>
+./scripts/bpane session disconnect-all <session-id>
+./scripts/bpane session stop <session-id>
+./scripts/bpane session kill <session-id>
 ```
 
 MCP delegation and recovery operations:
 
 ```bash
-npm run bpane:cli -- mcp health
-npm run bpane:cli -- mcp authorize <session-id>
-npm run bpane:cli -- mcp set-default <session-id>
-npm run bpane:cli -- mcp doctor <session-id>
-npm run bpane:cli -- mcp preflight <session-id>
-npm run bpane:cli -- mcp repair <session-id>
-npm run bpane:cli -- mcp revoke <session-id>
-npm run bpane:cli -- mcp clear-default
+./scripts/bpane mcp health
+./scripts/bpane mcp authorize <session-id>
+./scripts/bpane mcp set-default <session-id>
+./scripts/bpane mcp doctor <session-id>
+./scripts/bpane mcp preflight <session-id>
+./scripts/bpane mcp repair <session-id>
+./scripts/bpane mcp revoke <session-id>
+./scripts/bpane mcp clear-default
 ```
 
 Use `mcp repair <session-id>` when the intended session should be delegated to
@@ -551,7 +551,7 @@ npm ci
 npx tsc --noEmit
 npm test
 npm run build
-npm run bpane:cli -- --help
+../../scripts/bpane --help
 npm run smoke:bpane-cli -- --headless
 npm run workflow:cli -- --help
 npm run smoke:recording -- --headless
