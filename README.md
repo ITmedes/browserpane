@@ -16,14 +16,18 @@ Checkout on youtube: [https://www.youtube.com/watch?v=zhj2_B4vLMs](https://www.y
 
 <table>
   <tr>
-    <td><img src="assets/readme/browserpane-live-sessions-tab.jpg" alt="BrowserPane live workspace sessions tab" width="100%"></td>
-    <td><img src="assets/readme/browserpane-live-lifecycle-tab.jpg" alt="BrowserPane live workspace lifecycle tab" width="100%"></td>
-    <td><img src="assets/readme/browserpane-live-workflows-tab.jpg" alt="BrowserPane live workspace workflows tab" width="100%"></td>
-    <td><img src="assets/readme/browserpane-live-metrics-tab.jpg" alt="BrowserPane live workspace metrics tab" width="100%"></td>
+    <td width="50%"><img src="assets/readme/browserpane-live-sessions-tab.jpg" alt="BrowserPane live workspace sessions tab" width="100%"></td>
+    <td width="50%"><img src="assets/readme/browserpane-live-lifecycle-tab.jpg" alt="BrowserPane live workspace lifecycle tab" width="100%"></td>
   </tr>
   <tr>
     <td align="center"><sub>Sessions</sub></td>
     <td align="center"><sub>Lifecycle</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="assets/readme/browserpane-live-workflows-tab.jpg" alt="BrowserPane live workspace workflows tab" width="100%"></td>
+    <td width="50%"><img src="assets/readme/browserpane-live-metrics-tab.jpg" alt="BrowserPane live workspace metrics tab" width="100%"></td>
+  </tr>
+  <tr>
     <td align="center"><sub>Workflows</sub></td>
     <td align="center"><sub>Metrics</sub></td>
   </tr>
