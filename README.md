@@ -12,7 +12,18 @@ This means BrowserPane is not only a wrapper around Playwright, CDP, screenshots
 
 Checkout on youtube: [https://www.youtube.com/watch?v=zhj2_B4vLMs](https://www.youtube.com/watch?v=zhj2_B4vLMs)
 
-![BrowserPane example](example.png)
+<table>
+  <tr>
+    <td><img src="assets/readme/browserpane-admin-sessions.jpg" alt="Slide 1: BrowserPane admin session inspector" width="100%"></td>
+    <td><img src="assets/readme/browserpane-admin-workflows.jpg" alt="Slide 2: BrowserPane admin workflow catalog" width="100%"></td>
+    <td><img src="assets/readme/browserpane-admin-files.jpg" alt="Slide 3: BrowserPane admin file workspaces" width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Sessions</sub></td>
+    <td align="center"><sub>Workflow catalog</sub></td>
+    <td align="center"><sub>File workspaces</sub></td>
+  </tr>
+</table>
 
 The frozen v1 control-plane API contract now lives in [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
 
