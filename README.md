@@ -321,7 +321,13 @@ Supported local operator CLI:
 - Local profile path: `~/.config/bpane/config.json`, override with
   `BPANE_CONFIG` or `--config`
 - Profile selection: `BPANE_PROFILE` or `--profile`
+- Gateway URL source: `BPANE_BASE_URL`, `BPANE_API_URL`, `--base-url`, or
+  `--api-url`
 - Bearer token source: `BPANE_ACCESS_TOKEN`, `--access-token`, or `--token`
+- Profile files are written with `0600` permissions; access tokens are only
+  persisted when `profile init` is run with `--save-token`
+- Successful responses and CLI errors are emitted as structured JSON; unknown
+  options fail as usage errors instead of being ignored
 
 Minimal local operator setup:
 
@@ -340,7 +346,10 @@ Common session operations:
 npm run bpane:cli -- session list
 npm run bpane:cli -- session list --state stopped --label suite=smoke --limit 5
 npm run bpane:cli -- session create --label purpose=manual-test
+npm run bpane:cli -- session get <session-id>
 npm run bpane:cli -- session status <session-id>
+npm run bpane:cli -- session access-token <session-id>
+npm run bpane:cli -- session automation-access <session-id>
 npm run bpane:cli -- session disconnect-all <session-id>
 npm run bpane:cli -- session stop <session-id>
 npm run bpane:cli -- session kill <session-id>
@@ -350,9 +359,12 @@ MCP delegation and recovery operations:
 
 ```bash
 npm run bpane:cli -- mcp health
+npm run bpane:cli -- mcp authorize <session-id>
+npm run bpane:cli -- mcp set-default <session-id>
 npm run bpane:cli -- mcp doctor <session-id>
 npm run bpane:cli -- mcp preflight <session-id>
 npm run bpane:cli -- mcp repair <session-id>
+npm run bpane:cli -- mcp revoke <session-id>
 npm run bpane:cli -- mcp clear-default
 ```
 
@@ -361,8 +373,9 @@ the configured bridge client and selected as the bridge default target. It
 applies the missing delegation/default-session changes and then reruns strict
 diagnostics. Repair refuses to mutate delegation or the bridge default target
 unless the session is visible to the current owner token. Use `session cleanup`
-as a dry-run first, then add `--confirm` with at least one bounding `--label`
-or `--older-than-sec` filter for destructive cleanup.
+as a dry-run first, or pass `--dry-run` to force preview mode. Add `--confirm`
+with at least one bounding `--label` or `--older-than-sec` filter for
+destructive cleanup.
 
 Current limitation:
 
