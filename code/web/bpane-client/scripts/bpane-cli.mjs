@@ -65,6 +65,7 @@ function usageText() {
     '  --state <state>           Repeatable cleanup state filter. Default: stopped.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
+    '  --limit <count>           Limit filtered session list or cleanup candidates.',
     '  --confirm                 Execute cleanup. Without it cleanup is a dry-run.',
     '  --fail-on-issues          Make mcp doctor exit non-zero when diagnostics find issues.',
     '  --help                    Show this help.',
@@ -552,22 +553,35 @@ function buildCreateSessionRequest(options) {
   return body;
 }
 
-function cleanupStateFilters(options) {
+function sessionStateFilters(options, defaultStates = []) {
   const states = getOptions(options, 'state')
     .flatMap((value) => value.split(','))
     .map((value) => value.trim())
     .filter(Boolean);
-  return states.length ? states : ['stopped'];
+  return states.length ? states : defaultStates;
+}
+
+function sessionFilters(options, defaultStates = []) {
+  const olderThanSec = parseIntegerOption(options, 'older-than-sec');
+  const limit = parseIntegerOption(options, 'limit');
+  const labels = parseKeyValueOptions(options, 'label');
+  return {
+    states: sessionStateFilters(options, defaultStates),
+    labels,
+    older_than_sec: olderThanSec,
+    limit,
+  };
 }
 
 function cleanupFilters(options) {
-  const olderThanSec = parseIntegerOption(options, 'older-than-sec');
-  const labels = parseKeyValueOptions(options, 'label');
-  return {
-    states: cleanupStateFilters(options),
-    labels,
-    older_than_sec: olderThanSec,
-  };
+  return sessionFilters(options, ['stopped']);
+}
+
+function filtersAreActive(filters) {
+  return filters.states.length > 0
+    || Object.keys(filters.labels).length > 0
+    || filters.older_than_sec !== null
+    || filters.limit !== null;
 }
 
 function cleanupActions(options) {
@@ -604,6 +618,16 @@ function sessionMatchesLabels(session, labels) {
   return Object.entries(labels).every(([key, value]) => sessionLabels[key] === value);
 }
 
+function filterSessions(sessions, filters) {
+  const matched = sessions.filter((session) => {
+    return (!filters.states.length || filters.states.includes(session.state))
+      && sessionMatchesLabels(session, filters.labels)
+      && sessionCreatedBefore(session, filters.older_than_sec);
+  });
+  const limited = filters.limit === null ? matched : matched.slice(0, filters.limit);
+  return { matched, limited };
+}
+
 function sessionSummary(session) {
   return {
     id: session.id,
@@ -613,6 +637,21 @@ function sessionSummary(session) {
     total_clients: session.status?.connection_counts?.total_clients ?? null,
     created_at: session.created_at ?? null,
     updated_at: session.updated_at ?? null,
+  };
+}
+
+function filteredSessionList(listed, filters) {
+  const sessions = Array.isArray(listed?.sessions) ? listed.sessions : [];
+  if (!filtersAreActive(filters)) {
+    return listed;
+  }
+  const { matched, limited } = filterSessions(sessions, filters);
+  return {
+    filters,
+    total_count: sessions.length,
+    matched_count: matched.length,
+    returned_count: limited.length,
+    sessions: limited,
   };
 }
 
@@ -680,17 +719,15 @@ async function cleanupSessions(config, options) {
 
   const listed = await requestGateway(config, '/api/v1/sessions');
   const sessions = Array.isArray(listed?.sessions) ? listed.sessions : [];
-  const candidates = sessions.filter((session) => {
-    return filters.states.includes(session.state)
-      && sessionMatchesLabels(session, filters.labels)
-      && sessionCreatedBefore(session, filters.older_than_sec);
-  });
+  const { matched, limited: candidates } = filterSessions(sessions, filters);
   if (!confirmed) {
     return {
       dry_run: true,
       filters,
       planned_actions: actions,
       candidate_count: candidates.length,
+      matched_count: matched.length,
+      total_count: sessions.length,
       candidates: candidates.map(sessionSummary),
     };
   }
@@ -718,6 +755,8 @@ async function cleanupSessions(config, options) {
     filters,
     planned_actions: actions,
     result_count: results.length,
+    matched_count: matched.length,
+    total_count: sessions.length,
     failure_count: failureCount,
     results,
   }, failureCount > 0 ? EXIT_CODES.api : EXIT_CODES.ok);
@@ -886,7 +925,8 @@ async function handleSessionCommand(config, positionals, options) {
     });
   }
   if (action === 'list' && positionals.length === 2) {
-    return await requestGateway(config, '/api/v1/sessions');
+    const listed = await requestGateway(config, '/api/v1/sessions');
+    return filteredSessionList(listed, sessionFilters(options));
   }
   if (action === 'get') {
     const sessionId = requiredSessionId(positionals, 'session get');
