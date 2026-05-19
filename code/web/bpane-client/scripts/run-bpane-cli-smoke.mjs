@@ -48,25 +48,35 @@ async function run() {
     const bridge = await loadMcpBridgeConfig(options);
     configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-smoke-'));
     const configPath = path.join(configDir, 'config.json');
-    await fs.writeFile(configPath, JSON.stringify({
-      default_profile: 'smoke',
-      profiles: {
-        smoke: {
-          base_url: apiOrigin(options),
-          access_token: accessToken,
-          mcp_control_url: bridge.controlUrl,
-          mcp_client_id: bridge.clientId,
-          mcp_issuer: bridge.issuer ?? '',
-          mcp_display_name: bridge.displayName ?? '',
-        },
-      },
-    }), 'utf8');
 
     const cliEnv = {
       ...process.env,
       BPANE_CONFIG: configPath,
       BPANE_PROFILE: 'smoke',
     };
+
+    const initialized = runBpaneCli([
+      'profile',
+      'init',
+      'smoke',
+      '--base-url',
+      apiOrigin(options),
+      '--access-token',
+      accessToken,
+      '--mcp-control-url',
+      bridge.controlUrl,
+      '--mcp-client-id',
+      bridge.clientId,
+      '--mcp-issuer',
+      bridge.issuer ?? '',
+      '--mcp-display-name',
+      bridge.displayName ?? '',
+      '--save-token',
+      '--set-default',
+    ], cliEnv);
+    if (initialized.profile !== 'smoke' || initialized.token_saved !== true) {
+      throw new Error('CLI profile init did not create the smoke profile.');
+    }
 
     const profiles = runBpaneCli(['profile', 'list'], cliEnv);
     if (!profiles.profiles?.includes('smoke')) {

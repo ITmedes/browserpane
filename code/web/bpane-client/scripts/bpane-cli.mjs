@@ -27,6 +27,7 @@ class CliError extends Error {
 function usageText() {
   return [
     'Usage:',
+    '  bpane profile init [profile-name] [options]',
     '  bpane profile list [options]',
     '  bpane profile show [profile-name] [options]',
     '  bpane session create [options]',
@@ -50,6 +51,8 @@ function usageText() {
     'Options:',
     '  --config <path>          CLI config path. Env: BPANE_CONFIG. Default: ~/.config/bpane/config.json.',
     '  --profile <name>         CLI profile name. Env: BPANE_PROFILE. Defaults to config default_profile or default.',
+    '  --set-default            Make profile init set the selected profile as default.',
+    '  --save-token             Allow profile init to persist the provided access token.',
     '  --base-url <url>          Gateway/web origin. Env: BPANE_BASE_URL or BPANE_API_URL. Default: http://localhost:8080.',
     '  --access-token <token>    Bearer token. Env: BPANE_ACCESS_TOKEN.',
     '  --token <token>           Alias for --access-token.',
@@ -240,6 +243,10 @@ function profileValue(profile, camelName, snakeName = null) {
   return profile[camelName] ?? (snakeName ? profile[snakeName] : undefined) ?? null;
 }
 
+function optionOrEnv(options, env, optionName, envName, fallback = null) {
+  return getOption(options, optionName) ?? env[envName] ?? fallback;
+}
+
 function redactToken(value) {
   if (!value) {
     return '';
@@ -249,6 +256,52 @@ function redactToken(value) {
     return '********';
   }
   return `${token.slice(0, 4)}...${token.slice(-4)}`;
+}
+
+function profileInitName(options, env, cliConfig, positionals) {
+  if (positionals.length > 3) {
+    throw new CliError('USAGE', 'Usage: bpane profile init [profile-name] [options]', EXIT_CODES.usage);
+  }
+  return positionals[2] ?? resolveProfileName(options, env, cliConfig);
+}
+
+function profileInitValues(options, env) {
+  const values = {};
+  const baseUrl = getOption(options, 'base-url') ?? getOption(options, 'api-url') ?? env.BPANE_BASE_URL ?? env.BPANE_API_URL ?? null;
+  if (baseUrl) {
+    values.base_url = normalizeBaseUrl(baseUrl);
+  }
+  const mcpControlUrl = optionOrEnv(options, env, 'mcp-control-url', 'BPANE_MCP_CONTROL_URL');
+  if (mcpControlUrl) {
+    values.mcp_control_url = mcpControlUrl;
+  }
+  const mcpClientId = optionOrEnv(options, env, 'mcp-client-id', 'BPANE_MCP_CLIENT_ID');
+  if (mcpClientId) {
+    values.mcp_client_id = mcpClientId;
+  }
+  const mcpIssuer = optionOrEnv(options, env, 'mcp-issuer', 'BPANE_MCP_ISSUER');
+  if (mcpIssuer) {
+    values.mcp_issuer = mcpIssuer;
+  }
+  const mcpDisplayName = optionOrEnv(options, env, 'mcp-display-name', 'BPANE_MCP_DISPLAY_NAME');
+  if (mcpDisplayName) {
+    values.mcp_display_name = mcpDisplayName;
+  }
+  const accessToken = getOption(options, 'access-token') ?? getOption(options, 'token') ?? env.BPANE_ACCESS_TOKEN ?? null;
+  const tokenSaved = optionEnabled(options, 'save-token') && Boolean(accessToken);
+  if (tokenSaved) {
+    values.access_token = accessToken;
+  }
+  return {
+    values,
+    token_saved: tokenSaved,
+    token_available: Boolean(accessToken),
+  };
+}
+
+async function writeCliConfig(filePath, config) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
 }
 
 function normalizeBaseUrl(value) {
@@ -895,6 +948,41 @@ async function handleProfileCommand(options, env, positionals) {
   const action = positionals[1];
   const cliConfig = await readCliConfig(options, env);
   const profiles = configProfiles(cliConfig);
+  if (action === 'init' && positionals.length <= 3) {
+    const profileName = profileInitName(options, env, cliConfig, positionals);
+    const existingProfile = profiles[profileName] ?? {};
+    const init = profileInitValues(options, env);
+    const nextConfig = {
+      ...cliConfig.config,
+      profiles: {
+        ...profiles,
+        [profileName]: {
+          ...existingProfile,
+          ...init.values,
+        },
+      },
+    };
+    if (optionEnabled(options, 'set-default') || !nextConfig.default_profile) {
+      nextConfig.default_profile = profileName;
+    }
+    await writeCliConfig(cliConfig.path, nextConfig);
+    return {
+      config_path: cliConfig.path,
+      profile: profileName,
+      created: !profiles[profileName],
+      default_profile: nextConfig.default_profile,
+      token_saved: init.token_saved,
+      token_available: init.token_available,
+      values: {
+        base_url: nextConfig.profiles[profileName].base_url ?? nextConfig.profiles[profileName].baseUrl ?? null,
+        access_token: redactToken(nextConfig.profiles[profileName].access_token ?? nextConfig.profiles[profileName].accessToken),
+        mcp_control_url: nextConfig.profiles[profileName].mcp_control_url ?? nextConfig.profiles[profileName].mcpControlUrl ?? null,
+        mcp_client_id: nextConfig.profiles[profileName].mcp_client_id ?? nextConfig.profiles[profileName].mcpClientId ?? null,
+        mcp_issuer: nextConfig.profiles[profileName].mcp_issuer ?? nextConfig.profiles[profileName].mcpIssuer ?? null,
+        mcp_display_name: nextConfig.profiles[profileName].mcp_display_name ?? nextConfig.profiles[profileName].mcpDisplayName ?? null,
+      },
+    };
+  }
   if (action === 'list' && positionals.length === 2) {
     const activeProfile = resolveProfileName(options, env, cliConfig);
     return {
