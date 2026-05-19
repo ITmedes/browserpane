@@ -420,6 +420,49 @@ describe('bpane operator CLI', () => {
     });
   });
 
+  it('preserves equals signs in inline option values', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'session-1' }));
+
+    const code = await runBpaneCli(
+      [
+        'session',
+        'create',
+        '--label=token=a=b',
+        '--integration-json={"query":"a=b"}',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      labels: { token: 'a=b' },
+      integration_context: { query: 'a=b' },
+    });
+  });
+
+  it('rejects unsupported CLI options instead of ignoring typos', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ sessions: [] }));
+
+    const code = await runBpaneCli(
+      ['session', 'list', '--lable', 'suite=cli'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.usage);
+    expect(calls).toHaveLength(0);
+    expect(parseStderr(io)).toMatchObject({
+      ok: false,
+      code: 'USAGE',
+      error: 'Unsupported option: --lable',
+    });
+  });
+
   it('mints access, automation access, and disconnects all session clients', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(
