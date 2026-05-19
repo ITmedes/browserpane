@@ -663,6 +663,99 @@ describe('bpane operator CLI', () => {
     });
   });
 
+  it('refuses MCP repair mutations without an owner token', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({
+        mcpBridge: {
+          controlUrl: 'http://mcp.example/control-session',
+          clientId: 'bridge-client',
+        },
+      }),
+      jsonResponse({ status: 'ok', managed_sessions: [] }),
+      jsonResponse({ session: null }),
+    );
+
+    const code = await runBpaneCli(
+      ['mcp', 'repair', 'session-1', '--base-url', 'http://bpane.example'],
+      {},
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.api);
+    expect(parseStdout(io)).toMatchObject({
+      ok: false,
+      blocked: true,
+      blocking_issues: [{ code: 'AUTH_REQUIRED' }],
+      actions: [
+        { action: 'authorize', attempted: false, ok: false, blocked: true },
+        { action: 'set-default', attempted: false, ok: false, blocked: true },
+      ],
+      diagnostics: {
+        ok: false,
+        issues: [
+          { code: 'AUTH_REQUIRED' },
+          { code: 'MCP_DEFAULT_SESSION_MISMATCH' },
+        ],
+      },
+    });
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://bpane.example/auth-config.json', undefined],
+      ['http://mcp.example/health', undefined],
+      ['http://mcp.example/control-session', 'GET'],
+    ]);
+  });
+
+  it('refuses MCP repair mutations when the session is not visible', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({
+        mcpBridge: {
+          controlUrl: 'http://mcp.example/control-session',
+          clientId: 'bridge-client',
+        },
+      }),
+      jsonResponse({ status: 'ok', managed_sessions: [] }),
+      jsonResponse({ session: null }),
+      jsonResponse({ error: 'session not found' }, 404),
+      jsonResponse({ error: 'session not found' }, 404),
+    );
+
+    const code = await runBpaneCli(
+      ['mcp', 'repair', 'missing-session', '--base-url', 'http://bpane.example'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.api);
+    expect(parseStdout(io)).toMatchObject({
+      ok: false,
+      session_id: 'missing-session',
+      blocked: true,
+      blocking_issues: [{ code: 'SESSION_NOT_VISIBLE' }],
+      actions: [
+        { action: 'authorize', attempted: false, ok: false, blocked: true },
+        { action: 'set-default', attempted: false, ok: false, blocked: true },
+      ],
+      diagnostics: {
+        ok: false,
+        issues: [
+          { code: 'SESSION_NOT_VISIBLE' },
+          { code: 'MCP_DEFAULT_SESSION_MISMATCH' },
+        ],
+      },
+    });
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://bpane.example/auth-config.json', undefined],
+      ['http://mcp.example/health', undefined],
+      ['http://mcp.example/control-session', 'GET'],
+      ['http://bpane.example/api/v1/sessions/missing-session', undefined],
+      ['http://bpane.example/api/v1/sessions/missing-session/status', undefined],
+    ]);
+  });
+
   it('authorizes a session for the configured MCP bridge client', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'session-1' }));

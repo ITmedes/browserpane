@@ -359,9 +359,10 @@ npm run bpane:cli -- mcp clear-default
 Use `mcp repair <session-id>` when the intended session should be delegated to
 the configured bridge client and selected as the bridge default target. It
 applies the missing delegation/default-session changes and then reruns strict
-diagnostics. Use `session cleanup` as a dry-run first, then add `--confirm`
-with at least one bounding `--label` or `--older-than-sec` filter for
-destructive cleanup.
+diagnostics. Repair refuses to mutate delegation or the bridge default target
+unless the session is visible to the current owner token. Use `session cleanup`
+as a dry-run first, then add `--confirm` with at least one bounding `--label`
+or `--older-than-sec` filter for destructive cleanup.
 
 Current limitation:
 
