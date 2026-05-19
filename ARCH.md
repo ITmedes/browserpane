@@ -232,7 +232,7 @@ service.
   - Postgres-backed persistence in normal runtime
   - in-memory backend fallback for tests and dev fallback mode
   - session-scoped connect metadata and routing keyed by public `session_id`
-  - `legacy_single_runtime` compatibility gating so Phase 0 can expose session resources before true multi-session workers land
+  - runtime compatibility metadata so `static_single` / `docker_single` can expose the legacy single-runtime contract while `docker_pool` exposes true session-runtime routing
 - **Session manager** (`session_manager.rs`): internal gateway boundary for session lifecycle/runtime orchestration
   - this is the only runtime-lifecycle surface the rest of the gateway should depend on
   - current responsibilities are:
