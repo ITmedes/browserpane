@@ -14,6 +14,40 @@ export const EXIT_CODES = Object.freeze({
   unexpected: 5,
 });
 
+const KNOWN_OPTIONS = new Set([
+  'access-token',
+  'api-url',
+  'base-url',
+  'body-json',
+  'cleanup-action',
+  'config',
+  'confirm',
+  'dry-run',
+  'extension-id',
+  'fail-on-issues',
+  'height',
+  'help',
+  'idle-timeout-sec',
+  'integration-json',
+  'label',
+  'limit',
+  'mcp-client-id',
+  'mcp-control-url',
+  'mcp-display-name',
+  'mcp-issuer',
+  'older-than-sec',
+  'owner-mode',
+  'profile',
+  'recording-mode',
+  'recording-retention-sec',
+  'save-token',
+  'set-default',
+  'state',
+  'template-id',
+  'token',
+  'width',
+]);
+
 class CliError extends Error {
   constructor(code, message, exitCode, detail = {}) {
     super(message);
@@ -55,6 +89,7 @@ function usageText() {
     '  --set-default            Make profile init set the selected profile as default.',
     '  --save-token             Allow profile init to persist the provided access token.',
     '  --base-url <url>          Gateway/web origin. Env: BPANE_BASE_URL or BPANE_API_URL. Default: http://localhost:8080.',
+    '  --api-url <url>           Alias for --base-url.',
     '  --access-token <token>    Bearer token. Env: BPANE_ACCESS_TOKEN.',
     '  --token <token>           Alias for --access-token.',
     '  --mcp-control-url <url>   MCP bridge control URL. Env: BPANE_MCP_CONTROL_URL.',
@@ -68,6 +103,7 @@ function usageText() {
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
     '  --confirm                 Execute cleanup. Without it cleanup is a dry-run.',
+    '  --dry-run                 Force cleanup preview mode even when --confirm is present.',
     '  --fail-on-issues          Make mcp doctor exit non-zero when diagnostics find issues.',
     '  --help                    Show this help.',
     '',
@@ -89,7 +125,9 @@ function parseArgs(argv) {
       continue;
     }
 
-    const [rawName, inlineValue] = token.split('=', 2);
+    const equalsIndex = token.indexOf('=');
+    const rawName = equalsIndex === -1 ? token : token.slice(0, equalsIndex);
+    const inlineValue = equalsIndex === -1 ? undefined : token.slice(equalsIndex + 1);
     const name = rawName.slice(2);
     if (!name) {
       throw new CliError('USAGE', 'Encountered an empty option name.', EXIT_CODES.usage);
@@ -109,6 +147,17 @@ function parseArgs(argv) {
     }
   }
   return { positionals, options };
+}
+
+function validateOptions(options) {
+  const unknown = Array.from(options.keys()).filter((name) => !KNOWN_OPTIONS.has(name));
+  if (unknown.length) {
+    throw new CliError(
+      'USAGE',
+      `Unsupported option${unknown.length === 1 ? '' : 's'}: ${unknown.map((name) => `--${name}`).join(', ')}`,
+      EXIT_CODES.usage,
+    );
+  }
 }
 
 function getOption(options, name, fallback = null) {
@@ -1288,6 +1337,7 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
 
   try {
     const { positionals, options } = parseArgs(argv);
+    validateOptions(options);
     const wantsHelp = getOption(options, 'help') === 'true' || positionals[0] === 'help';
     if (wantsHelp) {
       output.stdout.write(`${usageText()}\n`);
