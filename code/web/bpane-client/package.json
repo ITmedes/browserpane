@@ -3,16 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "bpane": "scripts/bpane-cli.mjs"
+  },
   "scripts": {
     "build": "vite build && node scripts/copy-audio-worklet.mjs",
     "benchmark:scroll": "node scripts/run-scroll-benchmark.mjs",
     "benchmark:stress": "node scripts/run-scroll-benchmark.mjs --profile stress",
     "benchmark:realistic": "node scripts/run-scroll-benchmark.mjs --profile realistic",
+    "bpane:cli": "node scripts/bpane-cli.mjs",
     "workflow:cli": "node scripts/workflow-cli.mjs",
     "smoke:automation-tasks": "node scripts/run-automation-task-smoke.mjs",
     "smoke:file-workspaces": "node scripts/run-file-workspace-smoke.mjs",
     "smoke:session-files": "node scripts/run-session-files-smoke.mjs",
     "smoke:browser-policy": "node scripts/run-browser-policy-smoke.mjs",
+    "smoke:bpane-cli": "node scripts/run-bpane-cli-smoke.mjs",
     "smoke:admin-session": "node scripts/run-admin-session-smoke.mjs",
     "smoke:admin-session-configurator": "node scripts/run-admin-session-configurator-smoke.mjs",
     "smoke:admin-realtime": "node scripts/run-admin-realtime-smoke.mjs",

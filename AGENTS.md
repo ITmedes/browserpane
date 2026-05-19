@@ -183,6 +183,10 @@ Run these where applicable:
 
 - Trust code and runtime manifests over stale prose. `README.md` may lag behind implementation.
 - For Rust work, follow `RUST_STANDARDS.md` in addition to this file.
+- When an implementation changes user-visible behavior, local setup, runtime
+  topology, API routes, commands, support matrix, or validation flow, check
+  whether `README.md` needs a matching update in the same slice. If no README
+  change is needed, mention that explicitly in the PR or handoff notes.
 - Before starting a planned implementation slice, create or update a dedicated
   plan file under `docs/` whose filename matches `*_PLAN.md`. Each plan must
   include the targeted issue, an example use case, and a post-implementation
