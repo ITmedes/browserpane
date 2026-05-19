@@ -305,6 +305,7 @@ function profileInitValues(options, env) {
 async function writeCliConfig(filePath, config) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  await fs.chmod(filePath, 0o600);
 }
 
 function normalizeBaseUrl(value) {
