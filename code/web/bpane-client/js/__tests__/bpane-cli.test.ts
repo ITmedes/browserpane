@@ -580,6 +580,7 @@ describe('bpane operator CLI', () => {
     expect(code).toBe(EXIT_CODES.ok);
     expect(parseStdout(io)).toMatchObject({
       dry_run: true,
+      planned_actions: ['revoke-automation-owner', 'disconnect-all', 'kill'],
       candidate_count: 1,
       candidates: [{ id: 'session-1', state: 'stopped' }],
     });
@@ -632,7 +633,9 @@ describe('bpane operator CLI', () => {
     expect(code).toBe(EXIT_CODES.ok);
     expect(parseStdout(io)).toMatchObject({
       dry_run: false,
+      planned_actions: ['revoke-automation-owner', 'disconnect-all', 'kill'],
       result_count: 1,
+      failure_count: 0,
       results: [{ session: { id: 'session-1' } }],
     });
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([
@@ -640,6 +643,91 @@ describe('bpane operator CLI', () => {
       ['http://localhost:8080/api/v1/sessions/session-1/automation-owner', 'DELETE'],
       ['http://localhost:8080/api/v1/sessions/session-1/connections/disconnect-all', 'POST'],
       ['http://localhost:8080/api/v1/sessions/session-1/kill', 'POST'],
+    ]);
+  });
+
+  it('executes selected cleanup actions only', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({
+        sessions: [
+          {
+            id: 'session-1',
+            state: 'stopped',
+            labels: { suite: 'cli' },
+            created_at: '2026-05-18T10:00:00Z',
+          },
+        ],
+      }),
+      jsonResponse({ id: 'session-1', state: 'stopped' }),
+    );
+
+    const code = await runBpaneCli(
+      ['session', 'cleanup', '--label', 'suite=cli', '--cleanup-action', 'kill', '--confirm'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toMatchObject({
+      dry_run: false,
+      planned_actions: ['kill'],
+      failure_count: 0,
+    });
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://localhost:8080/api/v1/sessions', undefined],
+      ['http://localhost:8080/api/v1/sessions/session-1/kill', 'POST'],
+    ]);
+  });
+
+  it('returns non-zero when confirmed cleanup operations fail', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({
+        sessions: [
+          {
+            id: 'session-1',
+            state: 'stopped',
+            labels: { suite: 'cli' },
+            created_at: '2026-05-18T10:00:00Z',
+          },
+        ],
+      }),
+      jsonResponse({ error: 'session has active blockers' }, 409),
+    );
+
+    const code = await runBpaneCli(
+      ['session', 'cleanup', '--label', 'suite=cli', '--cleanup-action', 'stop', '--confirm'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.api);
+    expect(parseStdout(io)).toMatchObject({
+      dry_run: false,
+      planned_actions: ['stop'],
+      failure_count: 1,
+      results: [
+        {
+          operations: [
+            {
+              operation: 'stop',
+              ok: false,
+              error: {
+                code: 'HTTP_ERROR',
+                status: 409,
+                body: { error: 'session has active blockers' },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://localhost:8080/api/v1/sessions', undefined],
+      ['http://localhost:8080/api/v1/sessions/session-1/stop', 'POST'],
     ]);
   });
 
