@@ -141,9 +141,14 @@ async function run() {
       throw new Error(`CLI MCP health returned ${health.status ?? 'no status'}.`);
     }
 
-    const repaired = runBpaneCli(['mcp', 'repair', sessionId], cliEnv);
-    if (repaired.ok !== true || repaired.actions?.some((action) => action.ok !== true)) {
-      throw new Error(`CLI MCP repair did not align delegation: ${JSON.stringify(repaired)}`);
+    const authorized = runBpaneCli(['mcp', 'authorize', sessionId], cliEnv);
+    if (authorized.id !== sessionId) {
+      throw new Error('CLI MCP authorize did not return the session.');
+    }
+
+    const defaulted = runBpaneCli(['mcp', 'set-default', sessionId], cliEnv);
+    if (defaulted.session?.id !== sessionId) {
+      throw new Error('CLI MCP set-default did not select the smoke session.');
     }
 
     const doctor = runBpaneCli(['mcp', 'doctor', sessionId], cliEnv);
@@ -166,19 +171,50 @@ async function run() {
       throw new Error('CLI MCP revoke did not return the session.');
     }
 
+    const repaired = runBpaneCli(['mcp', 'repair', sessionId], cliEnv);
+    if (repaired.ok !== true || repaired.actions?.some((action) => action.ok !== true)) {
+      throw new Error(`CLI MCP repair did not align delegation: ${JSON.stringify(repaired)}`);
+    }
+
+    const repairedDoctor = runBpaneCli(['mcp', 'doctor', sessionId], cliEnv);
+    if (repairedDoctor.ok !== true) {
+      throw new Error(`CLI MCP doctor reported issues after repair: ${JSON.stringify(repairedDoctor.issues)}`);
+    }
+
+    const repairedPreflight = runBpaneCli(['mcp', 'preflight', sessionId], cliEnv);
+    if (repairedPreflight.ok !== true) {
+      throw new Error(`CLI MCP preflight reported issues after repair: ${JSON.stringify(repairedPreflight.issues)}`);
+    }
+
+    const clearedAfterRepair = runBpaneCli(['mcp', 'clear-default'], cliEnv);
+    if (clearedAfterRepair.ok !== true) {
+      throw new Error('CLI MCP clear-default after repair did not return ok=true.');
+    }
+
+    const stopped = runBpaneCli(['session', 'stop', sessionId], cliEnv);
+    if (stopped.id !== sessionId || stopped.state !== 'stopped') {
+      throw new Error('CLI session stop did not stop the session.');
+    }
+
     const killed = runBpaneCli(['session', 'kill', sessionId], cliEnv);
     if (killed.id !== sessionId || killed.state !== 'stopped') {
       throw new Error('CLI session kill did not stop the session.');
     }
 
-    const cleanupDryRun = runBpaneCli(['session', 'cleanup', '--label', `run_id=${runLabel}`, '--cleanup-action', 'kill'], cliEnv);
-    if (cleanupDryRun.dry_run !== true || cleanupDryRun.candidate_count < 1) {
-      throw new Error('CLI session cleanup dry-run did not find the stopped smoke session.');
+    const cleanupDryRun = runBpaneCli(['session', 'cleanup', '--label', `run_id=${runLabel}`], cliEnv);
+    if (
+      cleanupDryRun.dry_run !== true
+      || cleanupDryRun.candidate_count < 1
+      || !cleanupDryRun.planned_actions?.includes('revoke-automation-owner')
+      || !cleanupDryRun.planned_actions?.includes('disconnect-all')
+      || !cleanupDryRun.planned_actions?.includes('kill')
+    ) {
+      throw new Error('CLI session cleanup dry-run did not plan the default stopped-session cleanup actions.');
     }
 
-    const cleanupConfirmed = runBpaneCli(['session', 'cleanup', '--label', `run_id=${runLabel}`, '--cleanup-action', 'kill', '--confirm'], cliEnv);
+    const cleanupConfirmed = runBpaneCli(['session', 'cleanup', '--label', `run_id=${runLabel}`, '--confirm'], cliEnv);
     if (cleanupConfirmed.dry_run !== false || cleanupConfirmed.result_count < 1 || cleanupConfirmed.failure_count !== 0) {
-      throw new Error('CLI session cleanup confirm did not execute cleanup operations.');
+      throw new Error(`CLI session cleanup confirm did not execute cleanup operations: ${JSON.stringify(cleanupConfirmed)}`);
     }
     sessionId = '';
 
