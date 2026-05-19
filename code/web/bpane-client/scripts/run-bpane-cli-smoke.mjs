@@ -15,7 +15,6 @@ import {
   apiOrigin,
   createLogger,
   fetchAuthConfig,
-  fetchJson,
   launchChrome,
   parseSmokeArgs,
 } from './workflow-smoke-lib.mjs';
@@ -44,11 +43,6 @@ async function run() {
     }
 
     const bridge = await loadMcpBridgeConfig(options);
-    sessionId = (await createSession(accessToken, options)).id;
-    if (!sessionId) {
-      throw new Error('Session creation did not return an id.');
-    }
-
     const cliEnv = {
       ...process.env,
       BPANE_BASE_URL: apiOrigin(options),
@@ -58,6 +52,12 @@ async function run() {
       BPANE_MCP_ISSUER: bridge.issuer ?? '',
       BPANE_MCP_DISPLAY_NAME: bridge.displayName ?? '',
     };
+
+    const created = runBpaneCli(['session', 'create', '--label', 'suite=bpane-cli-smoke'], cliEnv);
+    sessionId = created.id;
+    if (!sessionId) {
+      throw new Error('CLI session create did not return an id.');
+    }
 
     const listed = runBpaneCli(['session', 'list'], cliEnv);
     if (!Array.isArray(listed.sessions) || !listed.sessions.some((session) => session.id === sessionId)) {
@@ -72,6 +72,21 @@ async function run() {
     const status = runBpaneCli(['session', 'status', sessionId], cliEnv);
     if (!status.connection_counts) {
       throw new Error('CLI session status did not return connection_counts.');
+    }
+
+    const accessTicket = runBpaneCli(['session', 'access-token', sessionId], cliEnv);
+    if (accessTicket.token_type !== 'session_connect_ticket' || !accessTicket.token) {
+      throw new Error('CLI session access-token did not mint a connect ticket.');
+    }
+
+    const automationAccess = runBpaneCli(['session', 'automation-access', sessionId], cliEnv);
+    if (automationAccess.token_type !== 'session_automation_access_token' || !automationAccess.automation?.endpoint_url) {
+      throw new Error('CLI session automation-access did not mint automation access.');
+    }
+
+    const disconnected = runBpaneCli(['session', 'disconnect-all', sessionId], cliEnv);
+    if (!disconnected.connection_counts) {
+      throw new Error('CLI session disconnect-all did not return session status.');
     }
 
     const health = runBpaneCli(['mcp', 'health'], cliEnv);
@@ -89,6 +104,11 @@ async function run() {
       throw new Error('CLI MCP set-default did not return the selected session.');
     }
 
+    const doctor = runBpaneCli(['mcp', 'doctor', sessionId], cliEnv);
+    if (doctor.ok !== true) {
+      throw new Error(`CLI MCP doctor reported issues: ${JSON.stringify(doctor.issues)}`);
+    }
+
     const cleared = runBpaneCli(['mcp', 'clear-default'], cliEnv);
     if (cleared.ok !== true) {
       throw new Error('CLI MCP clear-default did not return ok=true.');
@@ -102,6 +122,16 @@ async function run() {
     const killed = runBpaneCli(['session', 'kill', sessionId], cliEnv);
     if (killed.id !== sessionId || killed.state !== 'stopped') {
       throw new Error('CLI session kill did not stop the session.');
+    }
+
+    const cleanupDryRun = runBpaneCli(['session', 'cleanup', '--label', 'suite=bpane-cli-smoke'], cliEnv);
+    if (cleanupDryRun.dry_run !== true || cleanupDryRun.candidate_count < 1) {
+      throw new Error('CLI session cleanup dry-run did not find the stopped smoke session.');
+    }
+
+    const cleanupConfirmed = runBpaneCli(['session', 'cleanup', '--label', 'suite=bpane-cli-smoke', '--confirm'], cliEnv);
+    if (cleanupConfirmed.dry_run !== false || cleanupConfirmed.result_count < 1) {
+      throw new Error('CLI session cleanup confirm did not execute cleanup operations.');
     }
     sessionId = '';
 
@@ -131,21 +161,6 @@ async function loadMcpBridgeConfig(options) {
     throw new Error('Operator CLI smoke requires auth-config mcpBridge metadata.');
   }
   return bridge;
-}
-
-async function createSession(accessToken, options) {
-  return await fetchJson(`${apiOrigin(options)}/api/v1/sessions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      labels: {
-        suite: 'bpane-cli-smoke',
-      },
-    }),
-  });
 }
 
 async function clearMcpBridge(options) {
