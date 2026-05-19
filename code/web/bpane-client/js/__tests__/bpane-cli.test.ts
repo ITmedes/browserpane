@@ -61,6 +61,119 @@ async function withConfig(config: unknown, fn: (filePath: string) => Promise<voi
 }
 
 describe('bpane operator CLI', () => {
+  it('initializes a local CLI profile without persisting tokens by default', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-test-'));
+    const filePath = path.join(dir, 'nested', 'config.json');
+    try {
+      const io = createIo();
+      const code = await runBpaneCli(
+        [
+          'profile',
+          'init',
+          'local',
+          '--config',
+          filePath,
+          '--base-url',
+          'http://localhost:8080/admin/',
+          '--mcp-control-url',
+          'http://localhost:8931/control-session',
+          '--mcp-client-id',
+          'bpane-mcp-bridge',
+          '--set-default',
+        ],
+        { BPANE_ACCESS_TOKEN: 'env-token' },
+        io.io,
+        async () => {
+          throw new Error('profile init must not fetch');
+        },
+      );
+
+      expect(code).toBe(EXIT_CODES.ok);
+      expect(parseStdout(io)).toMatchObject({
+        config_path: filePath,
+        profile: 'local',
+        created: true,
+        default_profile: 'local',
+        token_saved: false,
+        token_available: true,
+        values: {
+          base_url: 'http://localhost:8080/admin',
+          access_token: '',
+          mcp_control_url: 'http://localhost:8931/control-session',
+          mcp_client_id: 'bpane-mcp-bridge',
+        },
+      });
+      const written = JSON.parse(await fs.readFile(filePath, 'utf8'));
+      expect(written).toEqual({
+        default_profile: 'local',
+        profiles: {
+          local: {
+            base_url: 'http://localhost:8080/admin',
+            mcp_control_url: 'http://localhost:8931/control-session',
+            mcp_client_id: 'bpane-mcp-bridge',
+          },
+        },
+      });
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('updates an existing CLI profile and saves tokens only when requested', async () => {
+    await withConfig({
+      default_profile: 'old',
+      profiles: {
+        local: {
+          base_url: 'http://old.example',
+          mcp_client_id: 'old-client',
+        },
+        old: {
+          base_url: 'http://old-default.example',
+        },
+      },
+    }, async (filePath) => {
+      const io = createIo();
+      const code = await runBpaneCli(
+        [
+          'profile',
+          'init',
+          'local',
+          '--config',
+          filePath,
+          '--base-url',
+          'http://new.example',
+          '--access-token',
+          'abcdefghijklmnop',
+          '--save-token',
+        ],
+        {},
+        io.io,
+        async () => {
+          throw new Error('profile init must not fetch');
+        },
+      );
+
+      expect(code).toBe(EXIT_CODES.ok);
+      expect(parseStdout(io)).toMatchObject({
+        created: false,
+        default_profile: 'old',
+        token_saved: true,
+        values: {
+          base_url: 'http://new.example',
+          access_token: 'abcd...mnop',
+          mcp_client_id: 'old-client',
+        },
+      });
+      const written = JSON.parse(await fs.readFile(filePath, 'utf8'));
+      expect(written.profiles.local).toMatchObject({
+        base_url: 'http://new.example',
+        access_token: 'abcdefghijklmnop',
+        mcp_client_id: 'old-client',
+      });
+      expect(written.default_profile).toBe('old');
+    });
+  });
+
   it('lists and shows local CLI profiles with redacted tokens', async () => {
     await withConfig({
       default_profile: 'local',
