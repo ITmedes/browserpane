@@ -171,6 +171,8 @@ describe('bpane operator CLI', () => {
         mcp_client_id: 'old-client',
       });
       expect(written.default_profile).toBe('old');
+      const stat = await fs.stat(filePath);
+      expect(stat.mode & 0o777).toBe(0o600);
     });
   });
 
