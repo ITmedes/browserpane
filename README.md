@@ -165,6 +165,9 @@ The compose stack starts:
 - `mcp-bridge`: MCP bridge on `:8931` (`/sessions/{id}/mcp` for recommended session-scoped Streamable HTTP, `/sessions/{id}/sse` for session-scoped legacy SSE, `/mcp` and `/sse` for compatibility)
 
 The local compose file also defines a `workflow-worker` image profile. The gateway launches workflow-worker containers on demand; you normally do not start that container as a long-lived service yourself.
+The gateway mounts the repository at `/workspace:ro` for local git-backed workflow sources, and the gateway image configures `/workspace` as a trusted Git `safe.directory`.
+
+The local MCP bridge uses the package-installed `@playwright/mcp` executable from its own dependencies. It should not download `@playwright/mcp@latest` on first connect; run `npm ci` in `code/integrations/mcp-bridge` or rebuild the image if that local executable is missing.
 
 The gateway supports three runtime backends:
 
@@ -197,6 +200,7 @@ The default local auth flow is OIDC-based:
 - the admin console joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
 - sessions created from the admin console use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
 - reconnecting a stopped session now restarts the same session resource instead of creating a new one
+- switching the selected session disconnects the embedded browser from the previous live session before selecting the new one
 - the console UI now shows whether the currently selected session is the exact session delegated to the local MCP bridge
 - in Docker-backed runtime modes, BrowserPane mounts session-specific browser data for the Chromium profile, uploads, and downloads so cookies, cache, downloads, and Chromium session-restore state survive worker restarts without sharing one browser data root across sessions
 - Docker-backed runtime assignments are now persisted in Postgres and recovered on gateway restart, so an existing pool-mode worker can be rebound without launching a duplicate container
@@ -210,9 +214,10 @@ For Chromium, WebTransport still needs trusted TLS on localhost. The current run
 
 ```text
 http://localhost:8080/cert-fingerprint
+http://localhost:8080/cert-hash
 ```
 
-`./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` from the same `cert.pem` for CLI use.
+`./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` and `dev/certs/cert-hash.txt` from the same `cert.pem` for CLI and WebTransport certificate-hash use. The admin app and browser client request these local certificate metadata endpoints without browser cache reuse so certificate rotations can be picked up after reload.
 
 ### Remote / Self-Hosted Testing
 
@@ -245,6 +250,7 @@ The same frozen API surface also includes session-scoped runtime routes:
 - `POST /api/v1/sessions/{id}/access-tokens`
 - `GET /api/v1/sessions/{id}/status`
 - `POST /api/v1/sessions/{id}/stop`
+- `POST /api/v1/sessions/{id}/release`
 - `POST /api/v1/sessions/{id}/kill`
 - `POST /api/v1/sessions/{id}/connections/{connection_id}/disconnect`
 - `POST /api/v1/sessions/{id}/connections/disconnect-all`
@@ -271,17 +277,20 @@ Session resources and status responses now expose a richer lifecycle model:
 
 - persisted `state`
 - derived `runtime_state`
+- derived `runtime_resume_mode`
 - derived `presence_state`
 - `connection_counts` by role
 - live `connections` descriptors on the status route
 - `stop_eligibility` with blocker details
 - idle timing metadata
+- `runtime_released_at` and `stopped_at` timestamps
 - side-effect-free status snapshots, including for stopped sessions
 
 Lifecycle control semantics are now explicit:
 
 - `DELETE /api/v1/sessions/{id}` follows safe-stop semantics
 - `POST /api/v1/sessions/{id}/stop` stops only when no blockers remain
+- `POST /api/v1/sessions/{id}/release` releases the live runtime while preserving the session resource and profile
 - `POST /api/v1/sessions/{id}/kill` force-terminates live attachments and releases the runtime
 - connection-level disconnect routes remove live attachments without stopping the session runtime
 
@@ -435,6 +444,7 @@ Current workflow capabilities:
 - signed outbound workflow lifecycle webhook delivery
 - git-backed workflow sources pinned to resolved commits
 - source snapshot materialization per run
+- structured workflow source errors with machine-readable `code`, `category`, and `recovery_hint` fields surfaced through the admin app
 - file workspaces for reusable inputs and durable outputs
 - Vault-backed credential bindings
 - approved extension references on workflow versions and sessions
@@ -454,6 +464,7 @@ Primary routes:
 - `GET /api/v1/workflow-runs/{id}/logs`
 - `GET /api/v1/workflow-runs/{id}/events`
 - `GET /api/v1/workflow-runs/{id}/produced-files`
+- `GET /api/v1/workflow-runs/{id}/source-snapshot/content`
 - `POST /api/v1/workflow-event-subscriptions`
 - `GET /api/v1/workflow-event-subscriptions`
 - `GET /api/v1/workflow-event-subscriptions/{id}/deliveries`
