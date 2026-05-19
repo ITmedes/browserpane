@@ -163,13 +163,13 @@ async function run() {
       throw new Error('CLI session kill did not stop the session.');
     }
 
-    const cleanupDryRun = runBpaneCli(['session', 'cleanup', '--label', 'suite=bpane-cli-smoke'], cliEnv);
+    const cleanupDryRun = runBpaneCli(['session', 'cleanup', '--label', 'suite=bpane-cli-smoke', '--cleanup-action', 'kill'], cliEnv);
     if (cleanupDryRun.dry_run !== true || cleanupDryRun.candidate_count < 1) {
       throw new Error('CLI session cleanup dry-run did not find the stopped smoke session.');
     }
 
-    const cleanupConfirmed = runBpaneCli(['session', 'cleanup', '--label', 'suite=bpane-cli-smoke', '--confirm'], cliEnv);
-    if (cleanupConfirmed.dry_run !== false || cleanupConfirmed.result_count < 1) {
+    const cleanupConfirmed = runBpaneCli(['session', 'cleanup', '--label', 'suite=bpane-cli-smoke', '--cleanup-action', 'kill', '--confirm'], cliEnv);
+    if (cleanupConfirmed.dry_run !== false || cleanupConfirmed.result_count < 1 || cleanupConfirmed.failure_count !== 0) {
       throw new Error('CLI session cleanup confirm did not execute cleanup operations.');
     }
     sessionId = '';

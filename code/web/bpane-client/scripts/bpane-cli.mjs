@@ -63,6 +63,7 @@ function usageText() {
     '  --body-json <json>        Raw JSON request body for session create.',
     '  --label <key=value>       Repeatable session label filter or create label.',
     '  --state <state>           Repeatable cleanup state filter. Default: stopped.',
+    '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --confirm                 Execute cleanup. Without it cleanup is a dry-run.',
     '  --fail-on-issues          Make mcp doctor exit non-zero when diagnostics find issues.',
@@ -569,6 +570,27 @@ function cleanupFilters(options) {
   };
 }
 
+function cleanupActions(options) {
+  const requested = getOptions(options, 'cleanup-action')
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const actions = requested.length
+    ? requested
+    : ['revoke-automation-owner', 'disconnect-all', 'kill'];
+  const allowed = new Set(['revoke-automation-owner', 'disconnect-all', 'stop', 'kill']);
+  for (const action of actions) {
+    if (!allowed.has(action)) {
+      throw new CliError(
+        'USAGE',
+        `Unsupported cleanup action ${action}. Supported actions: ${Array.from(allowed).join(', ')}.`,
+        EXIT_CODES.usage,
+      );
+    }
+  }
+  return Array.from(new Set(actions));
+}
+
 function sessionCreatedBefore(session, olderThanSec) {
   if (olderThanSec === null) {
     return true;
@@ -602,8 +624,49 @@ async function cleanupOperation(label, fn) {
   return { operation: label, ok: false, error: result.error };
 }
 
+async function executeCleanupAction(config, sessionId, action) {
+  if (action === 'revoke-automation-owner') {
+    return await cleanupOperation(action, async () => {
+      return await requestGateway(
+        config,
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-owner`,
+        { method: 'DELETE' },
+      );
+    });
+  }
+  if (action === 'disconnect-all') {
+    return await cleanupOperation(action, async () => {
+      return await requestGateway(
+        config,
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/connections/disconnect-all`,
+        { method: 'POST' },
+      );
+    });
+  }
+  if (action === 'stop') {
+    return await cleanupOperation(action, async () => {
+      return await requestGateway(
+        config,
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/stop`,
+        { method: 'POST' },
+      );
+    });
+  }
+  if (action === 'kill') {
+    return await cleanupOperation(action, async () => {
+      return await requestGateway(
+        config,
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/kill`,
+        { method: 'POST' },
+      );
+    });
+  }
+  throw new CliError('USAGE', `Unsupported cleanup action ${action}.`, EXIT_CODES.usage);
+}
+
 async function cleanupSessions(config, options) {
   const filters = cleanupFilters(options);
+  const actions = cleanupActions(options);
   const confirmed = optionEnabled(options, 'confirm') && !optionEnabled(options, 'dry-run');
   const hasBoundingFilter =
     Object.keys(filters.labels).length > 0 || filters.older_than_sec !== null;
@@ -622,8 +685,6 @@ async function cleanupSessions(config, options) {
       && sessionMatchesLabels(session, filters.labels)
       && sessionCreatedBefore(session, filters.older_than_sec);
   });
-  const actions = ['revoke-automation-owner', 'disconnect-all', 'kill'];
-
   if (!confirmed) {
     return {
       dry_run: true,
@@ -635,42 +696,31 @@ async function cleanupSessions(config, options) {
   }
 
   const results = [];
+  let failureCount = 0;
   for (const session of candidates) {
     const sessionId = session.id;
     const operations = [];
-    operations.push(await cleanupOperation('revoke-automation-owner', async () => {
-      return await requestGateway(
-        config,
-        `/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-owner`,
-        { method: 'DELETE' },
-      );
-    }));
-    operations.push(await cleanupOperation('disconnect-all', async () => {
-      return await requestGateway(
-        config,
-        `/api/v1/sessions/${encodeURIComponent(sessionId)}/connections/disconnect-all`,
-        { method: 'POST' },
-      );
-    }));
-    operations.push(await cleanupOperation('kill', async () => {
-      return await requestGateway(
-        config,
-        `/api/v1/sessions/${encodeURIComponent(sessionId)}/kill`,
-        { method: 'POST' },
-      );
-    }));
+    for (const action of actions) {
+      const operation = await executeCleanupAction(config, sessionId, action);
+      if (!operation.ok) {
+        failureCount += 1;
+      }
+      operations.push(operation);
+    }
     results.push({
       session: sessionSummary(session),
       operations,
     });
   }
 
-  return {
+  return commandResult({
     dry_run: false,
     filters,
+    planned_actions: actions,
     result_count: results.length,
+    failure_count: failureCount,
     results,
-  };
+  }, failureCount > 0 ? EXIT_CODES.api : EXIT_CODES.ok);
 }
 
 function addDoctorIssue(issues, code, severity, message, remediation) {
