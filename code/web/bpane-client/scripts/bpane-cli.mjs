@@ -42,6 +42,7 @@ function usageText() {
     '  bpane session cleanup [options]',
     '  bpane mcp doctor [session-id] [options]',
     '  bpane mcp preflight [session-id] [options]',
+    '  bpane mcp repair <session-id> [options]',
     '  bpane mcp health [options]',
     '  bpane mcp authorize <session-id> [options]',
     '  bpane mcp revoke <session-id> [options]',
@@ -915,6 +916,84 @@ async function runMcpDoctor(config, sessionId) {
   };
 }
 
+async function repairMcpDelegation(config, sessionId) {
+  const mcpConfig = await resolveMcpConfig(config, { control: true, client: true });
+  const actions = [];
+  let failureCount = 0;
+
+  const initial = await runMcpDoctor(config, sessionId);
+  const needsDelegate = initial.issues.some((issue) => {
+    return issue.code === 'MCP_DELEGATE_MISSING' || issue.code === 'MCP_DELEGATE_MISMATCH';
+  });
+  if (needsDelegate) {
+    const result = await captureRequest(async () => {
+      return await requestGateway(
+        config,
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-owner`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildDelegateBody(mcpConfig)),
+        },
+      );
+    });
+    if (!result.ok) {
+      failureCount += 1;
+    }
+    actions.push({
+      action: 'authorize',
+      attempted: true,
+      ok: result.ok,
+      response: result.ok ? result.body : undefined,
+      error: result.ok ? undefined : result.error,
+    });
+  } else {
+    actions.push({
+      action: 'authorize',
+      attempted: false,
+      ok: true,
+      reason: 'session already delegated to the configured MCP client',
+    });
+  }
+
+  const needsDefault = initial.issues.some((issue) => issue.code === 'MCP_DEFAULT_SESSION_MISMATCH');
+  if (needsDefault) {
+    const result = await captureRequest(async () => {
+      return await requestJson(config, mcpConfig.controlUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+    });
+    if (!result.ok) {
+      failureCount += 1;
+    }
+    actions.push({
+      action: 'set-default',
+      attempted: true,
+      ok: result.ok,
+      response: result.ok ? result.body : undefined,
+      error: result.ok ? undefined : result.error,
+    });
+  } else {
+    actions.push({
+      action: 'set-default',
+      attempted: false,
+      ok: true,
+      reason: 'MCP bridge default session already matches',
+    });
+  }
+
+  const diagnostics = await runMcpDoctor(config, sessionId);
+  return commandResult({
+    ok: failureCount === 0 && diagnostics.ok,
+    session_id: sessionId,
+    failure_count: failureCount,
+    actions,
+    diagnostics,
+  }, failureCount > 0 || !diagnostics.ok ? EXIT_CODES.api : EXIT_CODES.ok);
+}
+
 async function handleSessionCommand(config, positionals, options) {
   const action = positionals[1];
   if (action === 'create' && positionals.length === 2) {
@@ -990,6 +1069,10 @@ async function handleMcpCommand(config, positionals, options) {
       diagnostics,
       strict && !diagnostics.ok ? EXIT_CODES.api : EXIT_CODES.ok,
     );
+  }
+  if (action === 'repair') {
+    const sessionId = requiredSessionId(positionals, 'mcp repair');
+    return await repairMcpDelegation(config, sessionId);
   }
   if (action === 'health' && positionals.length === 2) {
     const mcpConfig = await resolveMcpConfig(config, { control: true });

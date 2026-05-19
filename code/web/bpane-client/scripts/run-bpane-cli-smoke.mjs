@@ -141,14 +141,9 @@ async function run() {
       throw new Error(`CLI MCP health returned ${health.status ?? 'no status'}.`);
     }
 
-    const authorized = runBpaneCli(['mcp', 'authorize', sessionId], cliEnv);
-    if (authorized.id !== sessionId) {
-      throw new Error('CLI MCP authorize did not return the delegated session.');
-    }
-
-    const selected = runBpaneCli(['mcp', 'set-default', sessionId], cliEnv);
-    if (selected.session?.id !== sessionId) {
-      throw new Error('CLI MCP set-default did not return the selected session.');
+    const repaired = runBpaneCli(['mcp', 'repair', sessionId], cliEnv);
+    if (repaired.ok !== true || repaired.actions?.some((action) => action.ok !== true)) {
+      throw new Error(`CLI MCP repair did not align delegation: ${JSON.stringify(repaired)}`);
     }
 
     const doctor = runBpaneCli(['mcp', 'doctor', sessionId], cliEnv);
