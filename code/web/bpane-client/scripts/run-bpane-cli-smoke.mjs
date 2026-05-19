@@ -54,6 +54,7 @@ async function run() {
       BPANE_CONFIG: configPath,
       BPANE_PROFILE: 'smoke',
     };
+    const runLabel = `bpane-cli-smoke-${Date.now()}`;
 
     const initialized = runBpaneCli([
       'profile',
@@ -87,7 +88,14 @@ async function run() {
       throw new Error('CLI profile show did not return the smoke profile.');
     }
 
-    const created = runBpaneCli(['session', 'create', '--label', 'suite=bpane-cli-smoke'], cliEnv);
+    const created = runBpaneCli([
+      'session',
+      'create',
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--label',
+      `run_id=${runLabel}`,
+    ], cliEnv);
     sessionId = created.id;
     if (!sessionId) {
       throw new Error('CLI session create did not return an id.');
@@ -96,6 +104,11 @@ async function run() {
     const listed = runBpaneCli(['session', 'list'], cliEnv);
     if (!Array.isArray(listed.sessions) || !listed.sessions.some((session) => session.id === sessionId)) {
       throw new Error(`CLI session list did not include ${sessionId}.`);
+    }
+
+    const filteredList = runBpaneCli(['session', 'list', '--label', `run_id=${runLabel}`, '--limit', '1'], cliEnv);
+    if (filteredList.returned_count !== 1 || filteredList.sessions?.[0]?.id !== sessionId) {
+      throw new Error('CLI filtered session list did not return the smoke session.');
     }
 
     const fetched = runBpaneCli(['session', 'get', sessionId], cliEnv);
@@ -163,12 +176,12 @@ async function run() {
       throw new Error('CLI session kill did not stop the session.');
     }
 
-    const cleanupDryRun = runBpaneCli(['session', 'cleanup', '--label', 'suite=bpane-cli-smoke', '--cleanup-action', 'kill'], cliEnv);
+    const cleanupDryRun = runBpaneCli(['session', 'cleanup', '--label', `run_id=${runLabel}`, '--cleanup-action', 'kill'], cliEnv);
     if (cleanupDryRun.dry_run !== true || cleanupDryRun.candidate_count < 1) {
       throw new Error('CLI session cleanup dry-run did not find the stopped smoke session.');
     }
 
-    const cleanupConfirmed = runBpaneCli(['session', 'cleanup', '--label', 'suite=bpane-cli-smoke', '--cleanup-action', 'kill', '--confirm'], cliEnv);
+    const cleanupConfirmed = runBpaneCli(['session', 'cleanup', '--label', `run_id=${runLabel}`, '--cleanup-action', 'kill', '--confirm'], cliEnv);
     if (cleanupConfirmed.dry_run !== false || cleanupConfirmed.result_count < 1 || cleanupConfirmed.failure_count !== 0) {
       throw new Error('CLI session cleanup confirm did not execute cleanup operations.');
     }

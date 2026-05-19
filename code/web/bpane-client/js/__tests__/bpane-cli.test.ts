@@ -288,6 +288,59 @@ describe('bpane operator CLI', () => {
     expect(calls[0].init.headers.Authorization).toBe('Bearer token-1');
   });
 
+  it('filters session list output when filter options are present', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({
+      sessions: [
+        {
+          id: 'session-1',
+          state: 'stopped',
+          labels: { suite: 'cli' },
+          created_at: '2026-05-18T10:00:00Z',
+        },
+        {
+          id: 'session-2',
+          state: 'stopped',
+          labels: { suite: 'cli' },
+          created_at: '2026-05-18T10:00:00Z',
+        },
+        {
+          id: 'session-3',
+          state: 'running',
+          labels: { suite: 'cli' },
+          created_at: '2026-05-18T10:00:00Z',
+        },
+        {
+          id: 'session-4',
+          state: 'stopped',
+          labels: { suite: 'other' },
+          created_at: '2026-05-18T10:00:00Z',
+        },
+      ],
+    }));
+
+    const code = await runBpaneCli(
+      ['session', 'list', '--state', 'stopped', '--label', 'suite=cli', '--limit', '1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toMatchObject({
+      filters: {
+        states: ['stopped'],
+        labels: { suite: 'cli' },
+        limit: 1,
+      },
+      total_count: 4,
+      matched_count: 2,
+      returned_count: 1,
+      sessions: [{ id: 'session-1' }],
+    });
+    expect(calls).toHaveLength(1);
+  });
+
   it('requires a bearer token for session commands', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ sessions: [] }));
@@ -562,6 +615,15 @@ describe('bpane operator CLI', () => {
           updated_at: '2026-05-18T10:00:00Z',
         },
         {
+          id: 'session-3',
+          state: 'stopped',
+          labels: { suite: 'cli' },
+          automation_delegate: { client_id: 'bridge-client' },
+          status: { connection_counts: { total_clients: 0 } },
+          created_at: '2026-05-18T10:00:00Z',
+          updated_at: '2026-05-18T10:00:00Z',
+        },
+        {
           id: 'session-2',
           state: 'running',
           labels: { suite: 'cli' },
@@ -571,7 +633,7 @@ describe('bpane operator CLI', () => {
     }));
 
     const code = await runBpaneCli(
-      ['session', 'cleanup', '--label', 'suite=cli'],
+      ['session', 'cleanup', '--label', 'suite=cli', '--limit', '1'],
       { BPANE_ACCESS_TOKEN: 'token-1' },
       io.io,
       fetchImpl,
@@ -582,6 +644,8 @@ describe('bpane operator CLI', () => {
       dry_run: true,
       planned_actions: ['revoke-automation-owner', 'disconnect-all', 'kill'],
       candidate_count: 1,
+      matched_count: 2,
+      total_count: 3,
       candidates: [{ id: 'session-1', state: 'stopped' }],
     });
     expect(calls).toHaveLength(1);
