@@ -233,6 +233,42 @@ describe('bpane operator CLI', () => {
     ]);
   });
 
+  it('fails MCP preflight when diagnostics find issues', async () => {
+    const io = createIo();
+    const { fetchImpl } = createFetch(
+      jsonResponse({
+        mcpBridge: {
+          controlUrl: 'http://mcp.example/control-session',
+          clientId: 'bridge-client',
+        },
+      }),
+      jsonResponse({ status: 'ok', managed_sessions: [] }),
+      jsonResponse({ session: null }),
+      jsonResponse({
+        id: 'session-1',
+        state: 'running',
+        automation_delegate: null,
+      }),
+      jsonResponse({ mcp_owner: false }),
+    );
+
+    const code = await runBpaneCli(
+      ['mcp', 'preflight', 'session-1', '--base-url', 'http://bpane.example'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.api);
+    const output = parseStdout(io);
+    expect(output.ok).toBe(false);
+    expect(output.issues.map((issue) => issue.code)).toEqual([
+      'MCP_DELEGATE_MISSING',
+      'MCP_DEFAULT_SESSION_MISMATCH',
+    ]);
+    expect(io.stderr()).toBe('');
+  });
+
   it('authorizes a session for the configured MCP bridge client', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'session-1' }));

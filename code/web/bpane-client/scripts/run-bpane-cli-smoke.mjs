@@ -109,6 +109,11 @@ async function run() {
       throw new Error(`CLI MCP doctor reported issues: ${JSON.stringify(doctor.issues)}`);
     }
 
+    const preflight = runBpaneCli(['mcp', 'preflight', sessionId], cliEnv);
+    if (preflight.ok !== true) {
+      throw new Error(`CLI MCP preflight reported issues: ${JSON.stringify(preflight.issues)}`);
+    }
+
     const cleared = runBpaneCli(['mcp', 'clear-default'], cliEnv);
     if (cleared.ok !== true) {
       throw new Error('CLI MCP clear-default did not return ok=true.');
