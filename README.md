@@ -14,7 +14,7 @@ Checkout on youtube: [https://www.youtube.com/watch?v=zhj2_B4vLMs](https://www.y
 
 ![BrowserPane example](example.png)
 
-The frozen v1 session-control contract now lives in [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
+The frozen v1 control-plane API contract now lives in [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
 
 ## Why BrowserPane
 
@@ -248,6 +248,11 @@ These endpoints are bearer-protected, owner-scoped, and stored in Postgres. The
 full contract is in the OpenAPI file; the route lists below call out the
 operator-facing surfaces that are most relevant for local development.
 
+The admin console also uses a bearer-protected realtime WebSocket for
+owner-scoped snapshot updates:
+
+- `GET /api/v1/admin/events`
+
 The same frozen API surface also includes session-scoped runtime routes:
 
 - `POST /api/v1/sessions/{id}/access-tokens`
@@ -479,6 +484,7 @@ Primary workflow routes:
 - `POST /api/v1/workflows/{id}/versions`
 - `GET /api/v1/workflows/{id}/versions/{version}`
 - `POST /api/v1/workflow-runs`
+- `GET /api/v1/workflow-runs`
 - `GET /api/v1/workflow-runs/{id}`
 - `POST /api/v1/workflow-runs/{id}/state`
 - `POST /api/v1/workflow-runs/{id}/cancel`
