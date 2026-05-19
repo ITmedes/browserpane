@@ -1,4 +1,8 @@
 // @ts-nocheck
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { EXIT_CODES, runBpaneCli } from '../../scripts/bpane-cli.mjs';
@@ -45,7 +49,114 @@ function parseStderr(io: ReturnType<typeof createIo>) {
   return JSON.parse(io.stderr());
 }
 
+async function withConfig(config: unknown, fn: (filePath: string) => Promise<void>) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-test-'));
+  const filePath = path.join(dir, 'config.json');
+  try {
+    await fs.writeFile(filePath, JSON.stringify(config), 'utf8');
+    await fn(filePath);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
 describe('bpane operator CLI', () => {
+  it('lists and shows local CLI profiles with redacted tokens', async () => {
+    await withConfig({
+      default_profile: 'local',
+      profiles: {
+        local: {
+          base_url: 'http://localhost:8080',
+          access_token: 'abcdefghijklmnop',
+          mcp_control_url: 'http://localhost:8931/control-session',
+          mcp_client_id: 'bpane-mcp-bridge',
+        },
+        remote: {
+          baseUrl: 'https://bpane.example',
+        },
+      },
+    }, async (filePath) => {
+      const listIo = createIo();
+      const listCode = await runBpaneCli(['profile', 'list', '--config', filePath], {}, listIo.io, async () => {
+        throw new Error('profile list must not fetch');
+      });
+
+      expect(listCode).toBe(EXIT_CODES.ok);
+      expect(parseStdout(listIo)).toMatchObject({
+        config_path: filePath,
+        config_exists: true,
+        active_profile: 'local',
+        profiles: ['local', 'remote'],
+      });
+
+      const showIo = createIo();
+      const showCode = await runBpaneCli(['profile', 'show', 'local', '--config', filePath], {}, showIo.io, async () => {
+        throw new Error('profile show must not fetch');
+      });
+
+      expect(showCode).toBe(EXIT_CODES.ok);
+      expect(parseStdout(showIo)).toMatchObject({
+        profile: 'local',
+        values: {
+          base_url: 'http://localhost:8080',
+          access_token: 'abcd...mnop',
+          mcp_control_url: 'http://localhost:8931/control-session',
+          mcp_client_id: 'bpane-mcp-bridge',
+        },
+      });
+    });
+  });
+
+  it('loads gateway and MCP settings from the selected profile', async () => {
+    await withConfig({
+      profiles: {
+        local: {
+          baseUrl: 'http://profile.example',
+          accessToken: 'profile-token',
+        },
+      },
+    }, async (filePath) => {
+      const io = createIo();
+      const { calls, fetchImpl } = createFetch(jsonResponse({ sessions: [] }));
+
+      const code = await runBpaneCli(
+        ['session', 'list', '--config', filePath, '--profile', 'local'],
+        {},
+        io.io,
+        fetchImpl,
+      );
+
+      expect(code).toBe(EXIT_CODES.ok);
+      expect(calls[0].url).toBe('http://profile.example/api/v1/sessions');
+      expect(calls[0].init.headers.Authorization).toBe('Bearer profile-token');
+    });
+  });
+
+  it('lets flags and environment variables override profile values', async () => {
+    await withConfig({
+      profiles: {
+        local: {
+          baseUrl: 'http://profile.example',
+          accessToken: 'profile-token',
+        },
+      },
+    }, async (filePath) => {
+      const io = createIo();
+      const { calls, fetchImpl } = createFetch(jsonResponse({ sessions: [] }));
+
+      const code = await runBpaneCli(
+        ['session', 'list', '--config', filePath, '--profile', 'local', '--base-url', 'http://flag.example'],
+        { BPANE_ACCESS_TOKEN: 'env-token' },
+        io.io,
+        fetchImpl,
+      );
+
+      expect(code).toBe(EXIT_CODES.ok);
+      expect(calls[0].url).toBe('http://flag.example/api/v1/sessions');
+      expect(calls[0].init.headers.Authorization).toBe('Bearer env-token');
+    });
+  });
+
   it('lists sessions through the owner-scoped API', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ sessions: [{ id: 'session-1' }] }));

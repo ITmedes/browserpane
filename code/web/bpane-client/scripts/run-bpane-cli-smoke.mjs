@@ -1,4 +1,6 @@
 import process from 'node:process';
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -32,6 +34,7 @@ async function run() {
   const page = await context.newPage();
   let accessToken = '';
   let sessionId = '';
+  let configDir = '';
 
   try {
     log(`Opening ${options.pageUrl}`);
@@ -43,15 +46,36 @@ async function run() {
     }
 
     const bridge = await loadMcpBridgeConfig(options);
+    configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-smoke-'));
+    const configPath = path.join(configDir, 'config.json');
+    await fs.writeFile(configPath, JSON.stringify({
+      default_profile: 'smoke',
+      profiles: {
+        smoke: {
+          base_url: apiOrigin(options),
+          access_token: accessToken,
+          mcp_control_url: bridge.controlUrl,
+          mcp_client_id: bridge.clientId,
+          mcp_issuer: bridge.issuer ?? '',
+          mcp_display_name: bridge.displayName ?? '',
+        },
+      },
+    }), 'utf8');
+
     const cliEnv = {
       ...process.env,
-      BPANE_BASE_URL: apiOrigin(options),
-      BPANE_ACCESS_TOKEN: accessToken,
-      BPANE_MCP_CONTROL_URL: bridge.controlUrl,
-      BPANE_MCP_CLIENT_ID: bridge.clientId,
-      BPANE_MCP_ISSUER: bridge.issuer ?? '',
-      BPANE_MCP_DISPLAY_NAME: bridge.displayName ?? '',
+      BPANE_CONFIG: configPath,
+      BPANE_PROFILE: 'smoke',
     };
+
+    const profiles = runBpaneCli(['profile', 'list'], cliEnv);
+    if (!profiles.profiles?.includes('smoke')) {
+      throw new Error('CLI profile list did not include the smoke profile.');
+    }
+    const profile = runBpaneCli(['profile', 'show'], cliEnv);
+    if (profile.profile !== 'smoke' || profile.values?.base_url !== apiOrigin(options)) {
+      throw new Error('CLI profile show did not return the smoke profile.');
+    }
 
     const created = runBpaneCli(['session', 'create', '--label', 'suite=bpane-cli-smoke'], cliEnv);
     sessionId = created.id;
@@ -154,6 +178,9 @@ async function run() {
       }).catch(() => {});
     }
     await cleanupAdminSmoke(page, options, log);
+    if (configDir) {
+      await fs.rm(configDir, { recursive: true, force: true }).catch(() => {});
+    }
     await context.close();
     await browser.close();
   }
