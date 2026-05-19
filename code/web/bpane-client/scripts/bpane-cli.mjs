@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
@@ -24,6 +27,8 @@ class CliError extends Error {
 function usageText() {
   return [
     'Usage:',
+    '  bpane profile list [options]',
+    '  bpane profile show [profile-name] [options]',
     '  bpane session create [options]',
     '  bpane session list [options]',
     '  bpane session get <session-id> [options]',
@@ -43,6 +48,8 @@ function usageText() {
     '  bpane mcp clear-default [options]',
     '',
     'Options:',
+    '  --config <path>          CLI config path. Env: BPANE_CONFIG. Default: ~/.config/bpane/config.json.',
+    '  --profile <name>         CLI profile name. Env: BPANE_PROFILE. Defaults to config default_profile or default.',
     '  --base-url <url>          Gateway/web origin. Env: BPANE_BASE_URL or BPANE_API_URL. Default: http://localhost:8080.',
     '  --access-token <token>    Bearer token. Env: BPANE_ACCESS_TOKEN.',
     '  --token <token>           Alias for --access-token.',
@@ -155,6 +162,93 @@ function parseKeyValueOptions(options, name) {
     parsed[key] = value;
   }
   return parsed;
+}
+
+function expandHome(filePath) {
+  if (filePath === '~') {
+    return os.homedir();
+  }
+  if (filePath.startsWith('~/')) {
+    return path.join(os.homedir(), filePath.slice(2));
+  }
+  return filePath;
+}
+
+function defaultConfigPath() {
+  return path.join(os.homedir(), '.config', 'bpane', 'config.json');
+}
+
+function configPath(options, env) {
+  return expandHome(getOption(options, 'config') ?? env.BPANE_CONFIG ?? defaultConfigPath());
+}
+
+async function readCliConfig(options, env) {
+  const filePath = configPath(options, env);
+  try {
+    const raw = await fs.readFile(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new CliError('USAGE', `CLI config ${filePath} must contain a JSON object.`, EXIT_CODES.usage);
+    }
+    return {
+      path: filePath,
+      exists: true,
+      config: parsed,
+    };
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return {
+        path: filePath,
+        exists: false,
+        config: {},
+      };
+    }
+    if (error instanceof CliError) {
+      throw error;
+    }
+    if (error instanceof SyntaxError) {
+      throw new CliError('USAGE', `CLI config ${filePath} contains invalid JSON: ${error.message}`, EXIT_CODES.usage);
+    }
+    throw new CliError(
+      'USAGE',
+      `Failed to read CLI config ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+      EXIT_CODES.usage,
+    );
+  }
+}
+
+function configProfiles(cliConfig) {
+  const profiles = cliConfig.config.profiles ?? {};
+  if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) {
+    throw new CliError('USAGE', `CLI config ${cliConfig.path} field profiles must be an object.`, EXIT_CODES.usage);
+  }
+  return profiles;
+}
+
+function resolveProfileName(options, env, cliConfig) {
+  return getOption(options, 'profile')
+    ?? env.BPANE_PROFILE
+    ?? cliConfig.config.default_profile
+    ?? cliConfig.config.defaultProfile
+    ?? 'default';
+}
+
+function profileValue(profile, camelName, snakeName = null) {
+  if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+    return null;
+  }
+  return profile[camelName] ?? (snakeName ? profile[snakeName] : undefined) ?? null;
+}
+
+function redactToken(value) {
+  if (!value) {
+    return '';
+  }
+  const token = String(value);
+  if (token.length <= 8) {
+    return '********';
+  }
+  return `${token.slice(0, 4)}...${token.slice(-4)}`;
 }
 
 function normalizeBaseUrl(value) {
@@ -797,35 +891,97 @@ async function handleMcpCommand(config, positionals, options) {
   throw new CliError('USAGE', `Unknown MCP command: ${action ?? ''}`.trim(), EXIT_CODES.usage);
 }
 
-function buildConfig(options, env, fetchImpl) {
+async function handleProfileCommand(options, env, positionals) {
+  const action = positionals[1];
+  const cliConfig = await readCliConfig(options, env);
+  const profiles = configProfiles(cliConfig);
+  if (action === 'list' && positionals.length === 2) {
+    const activeProfile = resolveProfileName(options, env, cliConfig);
+    return {
+      config_path: cliConfig.path,
+      config_exists: cliConfig.exists,
+      active_profile: activeProfile,
+      profiles: Object.keys(profiles).sort(),
+    };
+  }
+  if (action === 'show' && positionals.length <= 3) {
+    const profileName = positionals[2] ?? resolveProfileName(options, env, cliConfig);
+    const profile = selectedProfile(cliConfig, profileName) ?? {};
+    return {
+      config_path: cliConfig.path,
+      config_exists: cliConfig.exists,
+      profile: profileName,
+      values: {
+        base_url: profileValue(profile, 'baseUrl', 'base_url') ?? null,
+        access_token: redactToken(profileValue(profile, 'accessToken', 'access_token')),
+        mcp_control_url: profileValue(profile, 'mcpControlUrl', 'mcp_control_url') ?? null,
+        mcp_client_id: profileValue(profile, 'mcpClientId', 'mcp_client_id') ?? null,
+        mcp_issuer: profileValue(profile, 'mcpIssuer', 'mcp_issuer') ?? null,
+        mcp_display_name: profileValue(profile, 'mcpDisplayName', 'mcp_display_name') ?? null,
+      },
+    };
+  }
+  throw new CliError('USAGE', `Unknown profile command: ${action ?? ''}`.trim(), EXIT_CODES.usage);
+}
+
+function selectedProfile(cliConfig, profileName) {
+  const profiles = configProfiles(cliConfig);
+  const profile = profiles[profileName] ?? null;
+  const hasProfiles = Object.keys(profiles).length > 0;
+  if (profile) {
+    return profile;
+  }
+  if (cliConfig.exists && hasProfiles) {
+    throw new CliError(
+      'USAGE',
+      `CLI profile ${profileName} was not found in ${cliConfig.path}.`,
+      EXIT_CODES.usage,
+    );
+  }
+  return cliConfig.exists && !hasProfiles ? cliConfig.config : null;
+}
+
+async function buildConfig(options, env, fetchImpl) {
+  const cliConfig = await readCliConfig(options, env);
+  const profileName = resolveProfileName(options, env, cliConfig);
+  const profile = selectedProfile(cliConfig, profileName);
   return {
+    profileName,
+    cliConfigPath: cliConfig.path,
+    cliConfigExists: cliConfig.exists,
     baseUrl: normalizeBaseUrl(
       getOption(options, 'base-url')
       ?? getOption(options, 'api-url')
       ?? env.BPANE_BASE_URL
       ?? env.BPANE_API_URL
+      ?? profileValue(profile, 'baseUrl', 'base_url')
       ?? 'http://localhost:8080',
     ),
     accessToken:
       getOption(options, 'access-token')
       ?? getOption(options, 'token')
       ?? env.BPANE_ACCESS_TOKEN
+      ?? profileValue(profile, 'accessToken', 'access_token')
       ?? '',
     mcpControlUrl:
       getOption(options, 'mcp-control-url')
       ?? env.BPANE_MCP_CONTROL_URL
+      ?? profileValue(profile, 'mcpControlUrl', 'mcp_control_url')
       ?? null,
     mcpClientId:
       getOption(options, 'mcp-client-id')
       ?? env.BPANE_MCP_CLIENT_ID
+      ?? profileValue(profile, 'mcpClientId', 'mcp_client_id')
       ?? null,
     mcpIssuer:
       getOption(options, 'mcp-issuer')
       ?? env.BPANE_MCP_ISSUER
+      ?? profileValue(profile, 'mcpIssuer', 'mcp_issuer')
       ?? null,
     mcpDisplayName:
       getOption(options, 'mcp-display-name')
       ?? env.BPANE_MCP_DISPLAY_NAME
+      ?? profileValue(profile, 'mcpDisplayName', 'mcp_display_name')
       ?? null,
     fetchImpl,
   };
@@ -852,12 +1008,15 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
       throw new CliError('UNEXPECTED', 'No fetch implementation is available.', EXIT_CODES.unexpected);
     }
 
-    const config = buildConfig(options, env, fetchImpl);
     const scope = positionals[0];
     let result;
-    if (scope === 'session') {
+    if (scope === 'profile') {
+      result = await handleProfileCommand(options, env, positionals);
+    } else if (scope === 'session') {
+      const config = await buildConfig(options, env, fetchImpl);
       result = await handleSessionCommand(config, positionals, options);
     } else if (scope === 'mcp') {
+      const config = await buildConfig(options, env, fetchImpl);
       result = await handleMcpCommand(config, positionals, options);
     } else {
       throw new CliError('USAGE', `Unknown command scope: ${scope}`, EXIT_CODES.usage);
