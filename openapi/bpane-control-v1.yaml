@@ -1,18 +1,21 @@
 openapi: 3.0.3
 info:
-  title: BrowserPane Session Control API
+  title: BrowserPane Control Plane API
   version: 1.0.0
   description: >
-    Frozen v1 session-control contract for BrowserPane. This document covers the
-    canonical owner-scoped `/api/v1/sessions` surface. Legacy global compatibility
-    routes such as `/api/session/status` and `/api/session/mcp-owner` are intentionally
-    excluded from this freeze and remain transitional.
+    Frozen v1 owner-scoped BrowserPane control-plane contract. This document
+    covers the canonical `/api/v1` surfaces for sessions, automation tasks,
+    recordings, workflows, reusable files, credentials, approved extensions, and
+    admin realtime snapshots. Legacy global compatibility routes such as
+    `/api/session/status` and `/api/session/mcp-owner` are intentionally excluded
+    from this freeze and remain transitional.
 servers:
   - url: http://localhost:8932
     description: Direct local gateway HTTP API
   - url: http://localhost:8080
     description: Same-origin local web proxy
 tags:
+  - name: Admin Events
   - name: Sessions
   - name: Session Runtime
   - name: Session Recordings
@@ -26,6 +29,27 @@ tags:
 security:
   - bearerAuth: []
 paths:
+  /api/v1/admin/events:
+    get:
+      tags: [Admin Events]
+      summary: Open the admin realtime snapshot WebSocket
+      operationId: openAdminEvents
+      description: >
+        Upgrades to a WebSocket that emits owner-scoped JSON snapshot events for
+        sessions, workflow runs, session files, recordings, and MCP delegation
+        whenever the corresponding snapshot changes.
+      parameters:
+        - name: access_token
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Browser WebSocket fallback token. Prefer Authorization bearer headers where available.
+      responses:
+        '101':
+          description: WebSocket upgraded; text messages contain admin snapshot events or admin.error payloads.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /api/v1/sessions:
     get:
       tags: [Sessions]
@@ -390,6 +414,21 @@ paths:
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflow-runs:
+    get:
+      tags: [Workflows]
+      summary: List workflow runs visible to the authenticated owner
+      operationId: listWorkflowRuns
+      responses:
+        '200':
+          description: Owner-scoped workflow run list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRunListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
     post:
       tags: [Workflows]
       summary: Invoke a workflow definition version
@@ -3733,6 +3772,14 @@ components:
         updated_at:
           type: string
           format: date-time
+    WorkflowRunListResponse:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowRunResource'
     WorkflowRunEventResource:
       type: object
       required:
