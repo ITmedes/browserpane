@@ -776,6 +776,21 @@ function managedHealthEntry(healthBody, sessionId) {
   return entries.find((entry) => entry?.session_id === sessionId) ?? null;
 }
 
+function repairBlockingIssues(diagnostics) {
+  const blockingCodes = new Set(['AUTH_REQUIRED', 'SESSION_NOT_VISIBLE']);
+  return diagnostics.issues.filter((issue) => blockingCodes.has(issue.code));
+}
+
+function blockedRepairAction(action) {
+  return {
+    action,
+    attempted: false,
+    ok: false,
+    blocked: true,
+    reason: 'MCP repair requires the session to be visible to the current owner token before mutating delegation.',
+  };
+}
+
 async function runMcpDoctor(config, sessionId) {
   const mcpConfig = await resolveMcpConfig(config, { control: true, client: true });
   const issues = [];
@@ -922,6 +937,22 @@ async function repairMcpDelegation(config, sessionId) {
   let failureCount = 0;
 
   const initial = await runMcpDoctor(config, sessionId);
+  const blockingIssues = repairBlockingIssues(initial);
+  if (blockingIssues.length > 0) {
+    return commandResult({
+      ok: false,
+      session_id: sessionId,
+      blocked: true,
+      blocking_issues: blockingIssues,
+      failure_count: 0,
+      actions: [
+        blockedRepairAction('authorize'),
+        blockedRepairAction('set-default'),
+      ],
+      diagnostics: initial,
+    }, EXIT_CODES.api);
+  }
+
   const needsDelegate = initial.issues.some((issue) => {
     return issue.code === 'MCP_DELEGATE_MISSING' || issue.code === 'MCP_DELEGATE_MISMATCH';
   });
