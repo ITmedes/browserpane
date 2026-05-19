@@ -386,6 +386,13 @@ as a dry-run first, or pass `--dry-run` to force preview mode. Add `--confirm`
 with at least one bounding `--label` or `--older-than-sec` filter for
 destructive cleanup.
 
+The operator CLI integration smoke is
+`cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless`. It logs in
+through the admin app, creates a session, initializes a CLI profile, exercises
+session access/status/disconnect/stop/kill/cleanup, and validates standalone MCP
+health, authorize, set-default, doctor, preflight, repair, revoke, and
+clear-default flows.
+
 Current limitation:
 
 - the public session resource model is now versioned and persistent
@@ -523,7 +530,11 @@ npm run workflow:cli -- workflow run resume <run-id> --comment "approved"
 
 The CLI is intentionally thin. It wraps the existing owner-scoped v1 workflow routes rather than introducing a second control-plane contract.
 
-### Build And Test Without Running The Full Stack
+### Build, Unit Tests, And Local Smokes
+
+Build and unit checks do not require the compose stack. Smoke commands that
+start with `npm run smoke:*` expect the local compose stack and local auth flow
+to be available unless the script documents a narrower setup.
 
 Rust:
 
