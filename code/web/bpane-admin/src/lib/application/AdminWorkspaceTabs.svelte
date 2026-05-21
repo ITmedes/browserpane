@@ -11,7 +11,13 @@
     Video,
   } from 'lucide-svelte';
   import type { ControlClient } from '../api/control-client';
-  import type { CreateSessionCommand, SessionResource, SessionTemplateResource } from '../api/control-types';
+  import type {
+    BrowserContextResource,
+    CreateBrowserContextCommand,
+    CreateSessionCommand,
+    SessionResource,
+    SessionTemplateResource,
+  } from '../api/control-types';
   import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
   import AdminMessage from '../presentation/AdminMessage.svelte';
@@ -42,8 +48,11 @@
     readonly workflowClient: WorkflowClient;
     readonly selectedSession: SessionResource | null;
     readonly sessionTemplates?: readonly SessionTemplateResource[];
+    readonly browserContexts?: readonly BrowserContextResource[];
     readonly templatesLoading?: boolean;
+    readonly browserContextsLoading?: boolean;
     readonly templateError?: string | null;
+    readonly browserContextError?: string | null;
     readonly mcpBridge: McpBridgeConfig | null;
     readonly liveConnection: LiveBrowserSessionConnection | null;
     readonly browserConnected: boolean;
@@ -57,6 +66,7 @@
     readonly mcpDelegationRefreshVersion: number;
     readonly onRefreshSessions: (showFeedback?: boolean) => Promise<void>;
     readonly onCreateSession: (command?: CreateSessionCommand) => void;
+    readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onJoinSelectedSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
     readonly onRefreshSelectedSession: () => Promise<void>;
@@ -151,11 +161,15 @@
         <SessionListPanel
           viewModel={props.sessionListViewModel}
           sessionTemplates={props.sessionTemplates ?? []}
+          browserContexts={props.browserContexts ?? []}
           templatesLoading={props.templatesLoading ?? false}
+          browserContextsLoading={props.browserContextsLoading ?? false}
           templateError={props.templateError ?? null}
+          browserContextError={props.browserContextError ?? null}
           connected={props.browserConnected}
           onRefresh={() => void props.onRefreshSessions(true)}
           onCreateSession={props.onCreateSession}
+          onCreateBrowserContext={props.onCreateBrowserContext}
           onJoinSession={props.onJoinSelectedSession}
           onDisconnectSession={props.onDisconnectEmbeddedBrowser}
           onSelectSessionId={props.onSelectSessionId}

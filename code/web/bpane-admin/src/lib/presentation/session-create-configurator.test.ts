@@ -1,10 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
+  browserContextOptionLabel,
   defaultSessionCreateFormState,
   parseSessionCreateLabels,
+  sessionBrowserContextSummary,
   sessionTemplateDefaultsSummary,
+  validateBrowserContextCreateForm,
   validateSessionCreateForm,
 } from './session-create-configurator';
+
+const BROWSER_CONTEXT = {
+  id: '019df7be-6222-7b00-8c86-9e1f3f8d4a72',
+  name: 'Support profile',
+  description: null,
+  labels: { team: 'support' },
+  persistence_mode: 'reusable',
+  state: 'ready',
+  created_at: '2026-05-04T18:30:00Z',
+  updated_at: '2026-05-04T18:30:00Z',
+  last_used_at: null,
+  deleted_at: null,
+} as const;
 
 describe('session create configurator', () => {
   it('builds the backend-default collaborative command', () => {
@@ -81,6 +97,117 @@ describe('session create configurator', () => {
     });
     expect(validation.preview).toContain('"template_id"');
     expect(validation.preview).not.toContain('"owner_mode"');
+  });
+
+  it('adds reusable browser context bindings to the create-session payload', () => {
+    const validation = validateSessionCreateForm({
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      browserContextMode: 'reusable',
+      browserContextId: BROWSER_CONTEXT.id,
+      browserContexts: [BROWSER_CONTEXT],
+    });
+
+    expect(validation.errors).toEqual([]);
+    expect(validation.command).toEqual({
+      owner_mode: 'collaborative',
+      browser_context: {
+        mode: 'reusable',
+        context_id: BROWSER_CONTEXT.id,
+      },
+    });
+    expect(validation.preview).toContain('"browser_context"');
+  });
+
+  it('adds ephemeral browser context requests without a catalog id', () => {
+    const validation = validateSessionCreateForm({
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      browserContextMode: 'ephemeral',
+      browserContextId: '',
+    });
+
+    expect(validation.errors).toEqual([]);
+    expect(validation.command).toEqual({
+      owner_mode: 'collaborative',
+      browser_context: { mode: 'ephemeral' },
+    });
+  });
+
+  it('rejects invalid reusable browser context selections', () => {
+    const deletedContext = {
+      ...BROWSER_CONTEXT,
+      state: 'deleted',
+      deleted_at: '2026-05-04T18:40:00Z',
+    } as const;
+
+    const missing = validateSessionCreateForm({
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      browserContextMode: 'reusable',
+      browserContextId: '',
+      browserContexts: [BROWSER_CONTEXT],
+    });
+    const deleted = validateSessionCreateForm({
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      browserContextMode: 'reusable',
+      browserContextId: deletedContext.id,
+      browserContexts: [deletedContext],
+    });
+    const invalidMode = validateSessionCreateForm({
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      browserContextMode: 'fresh',
+      browserContextId: BROWSER_CONTEXT.id,
+    });
+
+    expect(missing.command).toBeNull();
+    expect(missing.errors).toContain('Reusable browser context requires a selected context.');
+    expect(deleted.command).toBeNull();
+    expect(deleted.errors).toContain('Selected reusable browser context must be ready.');
+    expect(invalidMode.command).toBeNull();
+    expect(invalidMode.errors).toContain('Browser context id can only be set for reusable mode.');
+  });
+
+  it('validates browser context quick-create requests', () => {
+    const valid = validateBrowserContextCreateForm({
+      name: 'Support profile',
+      labels: 'team=support, suite=admin',
+    });
+    const invalid = validateBrowserContextCreateForm({
+      name: '',
+      labels: 'bad-label',
+    });
+
+    expect(valid.command).toEqual({
+      name: 'Support profile',
+      labels: { team: 'support', suite: 'admin' },
+      persistence_mode: 'reusable',
+    });
+    expect(invalid.command).toBeNull();
+    expect(invalid.errors).toEqual([
+      'Browser context name is required.',
+      'Label "bad-label" must use key=value.',
+    ]);
+  });
+
+  it('summarizes browser context catalog choices for the UI', () => {
+    expect(browserContextOptionLabel(BROWSER_CONTEXT)).toBe('Support profile (019df7be...4a72)');
+    expect(sessionBrowserContextSummary('reusable', BROWSER_CONTEXT)).toBe(
+      'state=ready | persistence=reusable | never used | labels=team=support',
+    );
+    expect(sessionBrowserContextSummary('fresh', null)).toContain('fresh persisted browser profile');
   });
 
   it('keeps explicit owner-mode overrides when a template is selected', () => {

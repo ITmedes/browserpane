@@ -10,6 +10,7 @@ import {
 const SESSION: SessionResource = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
   state: 'active',
+  browser_context: { mode: 'fresh', context_id: null },
   owner_mode: 'shared',
   connect: {
     gateway_url: 'https://localhost:4433',

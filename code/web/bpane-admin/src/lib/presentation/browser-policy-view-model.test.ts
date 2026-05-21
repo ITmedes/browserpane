@@ -49,6 +49,7 @@ function sessionResource(input: {
   return {
     id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
     state: 'active',
+    browser_context: { mode: 'fresh', context_id: null },
     owner_mode: 'shared',
     automation_delegate: null,
     connect: {

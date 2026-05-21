@@ -231,7 +231,7 @@ The default local auth flow is OIDC-based:
 - click `Login`
 - authenticate against the local Keycloak realm
 - use the demo account `demo / demo-demo`
-- return to the admin console and either select an existing session or create a new one, optionally from a session template
+- return to the admin console and either select an existing session or create a new one, optionally from a session template and reusable browser context
 - the admin console joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
 - the live session panel and session inspector show the applied template, and the inspector can filter sessions by template, lifecycle state, and runtime state
 - sessions created from the admin console use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
@@ -306,6 +306,10 @@ contexts and bind new sessions with `browser_context.mode=reusable` plus a
 `context_id`. In this first control-plane slice the session records the
 selected context and rejects missing or deleted contexts; the follow-up runtime
 slice materializes reusable contexts as shared profile storage.
+The admin create-session configurator can create reusable context catalog
+entries, select a ready context for a new session, preview the resulting
+`browser_context` payload, and show the bound context in live session rows and
+the session inspector detail view.
 
 The admin console also uses a bearer-protected realtime WebSocket for
 owner-scoped snapshot updates:

@@ -215,6 +215,7 @@ function sessionResource(overrides: Partial<SessionResource> = {}): SessionResou
   return {
     id: 'session-a',
     state: 'active',
+    browser_context: { mode: 'fresh', context_id: null },
     owner_mode: 'collaborative',
     idle_timeout_sec: null,
     labels: {},
