@@ -481,6 +481,7 @@ async fn docker_runtime_rejects_parallel_writer_for_reusable_browser_context() {
                 description: None,
                 labels: HashMap::new(),
                 persistence_mode: BrowserContextPersistenceMode::Reusable,
+                retention_sec: None,
             },
         )
         .await

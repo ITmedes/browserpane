@@ -47,6 +47,10 @@ export class ControlSessionMapper {
     const description = optionalString(object.description, 'browser context description');
     const lastUsedAt = optionalString(object.last_used_at, 'browser context last_used_at');
     const deletedAt = optionalString(object.deleted_at, 'browser context deleted_at');
+    const retentionExpiresAt = optionalString(
+      object.retention_expires_at,
+      'browser context retention_expires_at',
+    );
     const usage = toBrowserContextUsage(object.usage);
     return {
       id: expectString(object.id, 'browser context id'),
@@ -58,6 +62,8 @@ export class ControlSessionMapper {
         'browser context persistence_mode',
         BROWSER_CONTEXT_PERSISTENCE_MODES,
       ),
+      retention_sec: optionalNumber(object.retention_sec, 'browser context retention_sec') ?? null,
+      retention_expires_at: retentionExpiresAt ?? null,
       state: expectEnum(object.state, 'browser context state', BROWSER_CONTEXT_STATES),
       usage: usage ?? null,
       created_at: expectString(object.created_at, 'browser context created_at'),

@@ -160,9 +160,17 @@ async function run() {
       'Operator CLI smoke context',
       '--label',
       'suite=bpane-cli-smoke',
+      '--retention-sec',
+      '604800',
     ], cliEnv);
     contextId = browserContext.id;
-    if (!contextId || browserContext.persistence_mode !== 'reusable' || browserContext.state !== 'ready') {
+    if (
+      !contextId
+      || browserContext.persistence_mode !== 'reusable'
+      || browserContext.retention_sec !== 604800
+      || !browserContext.retention_expires_at
+      || browserContext.state !== 'ready'
+    ) {
       throw new Error(`CLI browser-context create returned an invalid context: ${JSON.stringify(browserContext)}`);
     }
 

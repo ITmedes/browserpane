@@ -50,6 +50,7 @@ async fn create_browser_context(
                 description: request.description,
                 labels: request.labels,
                 persistence_mode: request.persistence_mode,
+                retention_sec: request.retention_sec,
             },
         )
         .await

@@ -19,6 +19,7 @@ export type BrowserContextCatalogRowViewModel = {
   readonly sessionSummary: string;
   readonly activeRuntimeSummary: string;
   readonly profileStorageSummary: string;
+  readonly retentionSummary: string;
   readonly canDelete: boolean;
   readonly deleteHint: string;
 };
@@ -144,6 +145,7 @@ function toRow(context: BrowserContextResource, usage: ContextUsage): BrowserCon
       + (activeSessionCount > 0 ? `, ${activeSessionCount} active runtime` : ''),
     activeRuntimeSummary: activeRuntimeSummary(activeSessionCount, activeSessionId),
     profileStorageSummary: formatBytes(usage.profileStorageBytes),
+    retentionSummary: retentionSummary(context),
     canDelete,
     deleteHint: deleteHint(context, sessionCount, activeSessionCount),
   };
@@ -181,6 +183,7 @@ function rowMatches(row: BrowserContextCatalogRowViewModel, normalized: string):
     row.sessionSummary,
     row.activeRuntimeSummary,
     row.profileStorageSummary,
+    row.retentionSummary,
   ].some((value) => value.toLowerCase().includes(normalized));
 }
 
@@ -194,6 +197,16 @@ function labelSummary(labels: Readonly<Record<string, string>>): string {
 
 function formatOptionalTimestamp(value: string | null | undefined, fallback: string): string {
   return value ? formatSessionFileTimestamp(value) : fallback;
+}
+
+function retentionSummary(context: BrowserContextResource): string {
+  const retentionSec = context.retention_sec ?? null;
+  if (!retentionSec) {
+    return 'manual retention';
+  }
+  const duration = formatDuration(retentionSec);
+  const expiresAt = formatOptionalTimestamp(context.retention_expires_at, 'expiry unknown');
+  return `${duration}, expires ${expiresAt}`;
 }
 
 function apiExample(contextId: string): string {
@@ -241,6 +254,21 @@ function formatBytes(value: number | null): string {
   }
   const precision = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
   return `${scaled.toFixed(precision)} ${unit}`;
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return 'manual retention';
+  }
+  if (seconds % 86400 === 0) {
+    const days = seconds / 86400;
+    return `${days} day${days === 1 ? '' : 's'}`;
+  }
+  if (seconds % 3600 === 0) {
+    const hours = seconds / 3600;
+    return `${hours} hour${hours === 1 ? '' : 's'}`;
+  }
+  return `${seconds} seconds`;
 }
 
 function shortId(value: string): string {

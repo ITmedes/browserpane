@@ -16,7 +16,8 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
                     json!({
                         "name": "support-profile",
                         "description": "Support engineer profile",
-                        "labels": { "team": "support" }
+                        "labels": { "team": "support" },
+                        "retention_sec": 86400
                     })
                     .to_string(),
                 ))
@@ -29,6 +30,8 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     let context_id = context["id"].as_str().unwrap().to_string();
     assert_eq!(context["name"], "support-profile");
     assert_eq!(context["persistence_mode"], "reusable");
+    assert_eq!(context["retention_sec"], 86400);
+    assert!(!context["retention_expires_at"].is_null());
     assert_eq!(context["state"], "ready");
     assert_eq!(context["usage"]["visible_session_count"], 0);
     assert_eq!(context["usage"]["active_runtime_session_count"], 0);
@@ -180,6 +183,7 @@ async fn rejects_invalid_browser_context_requests_and_bindings() {
         json!({ "name": "bad-description", "description": "" }),
         json!({ "name": "bad-label", "labels": { "": "value" } }),
         json!({ "name": "bad-label-value", "labels": { "team": "" } }),
+        json!({ "name": "bad-retention", "retention_sec": 0 }),
     ] {
         let response = app
             .clone()

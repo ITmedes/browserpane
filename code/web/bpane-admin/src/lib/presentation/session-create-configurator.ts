@@ -69,6 +69,7 @@ type MutableCreateSessionCommand = {
 export type BrowserContextCreateFormState = {
   readonly name: string;
   readonly labels: string;
+  readonly retentionDays?: string;
 };
 
 export type BrowserContextCreateValidation = {
@@ -162,12 +163,14 @@ export function validateBrowserContextCreateForm(
     errors.push('Browser context name is required.');
   }
   const labels = parseSessionCreateLabels(state.labels, errors);
+  const retentionSec = parseRetentionDays(state.retentionDays ?? '', errors);
   return {
     command: errors.length === 0
       ? {
           name,
           labels,
           persistence_mode: 'reusable',
+          ...(retentionSec !== undefined ? { retention_sec: retentionSec } : {}),
         }
       : null,
     errors,
@@ -282,7 +285,44 @@ export function sessionBrowserContextSummary(
   if (labels.length > 0) {
     facts.push(`labels=${labels.map(([key, value]) => `${key}=${value}`).join(',')}`);
   }
+  if (context.retention_sec) {
+    facts.push(`retention=${formatDuration(context.retention_sec)}`);
+  }
   return facts.join(' | ');
+}
+
+function parseRetentionDays(value: string, errors: string[]): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    errors.push('Retention days must be a positive whole number.');
+    return undefined;
+  }
+  const seconds = parsed * 86400;
+  if (!Number.isSafeInteger(seconds)) {
+    errors.push('Retention days is too large to send safely.');
+    return undefined;
+  }
+  if (seconds > 4_294_967_295) {
+    errors.push('Retention days exceeds the API limit.');
+    return undefined;
+  }
+  return seconds;
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds % 86400 === 0) {
+    const days = seconds / 86400;
+    return `${days}d`;
+  }
+  if (seconds % 3600 === 0) {
+    const hours = seconds / 3600;
+    return `${hours}h`;
+  }
+  return `${seconds}s`;
 }
 
 function shortId(value: string): string {

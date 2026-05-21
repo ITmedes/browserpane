@@ -457,6 +457,8 @@ describe('bpane operator CLI', () => {
         'Support profile',
         '--label',
         'team=support',
+        '--retention-sec',
+        '604800',
       ],
       { BPANE_ACCESS_TOKEN: 'token-1' },
       createContextIo.io,
@@ -470,6 +472,7 @@ describe('bpane operator CLI', () => {
       name: 'support-profile',
       description: 'Support profile',
       labels: { team: 'support' },
+      retention_sec: 604800,
     });
 
     const listIo = createIo();
@@ -520,6 +523,16 @@ describe('bpane operator CLI', () => {
     );
     expect(missingNameCode).toBe(EXIT_CODES.usage);
     expect(parseStderr(missingNameIo).code).toBe('USAGE');
+
+    const invalidRetentionIo = createIo();
+    const invalidRetentionCode = await runBpaneCli(
+      ['browser-context', 'create', 'support-profile', '--retention-sec', '0'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      invalidRetentionIo.io,
+      fetchImpl,
+    );
+    expect(invalidRetentionCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(invalidRetentionIo).error).toContain('--retention-sec');
 
     const missingContextIo = createIo();
     const missingContextCode = await runBpaneCli(

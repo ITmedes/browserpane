@@ -312,8 +312,11 @@ rejected until the active writer stops or releases its runtime.
 Browser context resources include a `usage` summary with the current visible
 session reference count and the active runtime writer session id, when one
 exists. Docker-backed runtimes also include approximate profile storage bytes
-when Docker volume-size inspection is available. API clients and the admin UI
-use this summary to make the same lifecycle and cleanup decisions.
+when Docker volume-size inspection is available. Contexts can also carry an
+optional `retention_sec` window; the API returns `retention_expires_at` from the
+last-used timestamp, or creation time if the context has never been used. API
+clients and the admin UI use these fields to make the same lifecycle and
+cleanup decisions.
 Deleting a reusable context refuses active runtime writers and, for
 docker-backed runtimes, removes the context-scoped Chromium profile volume when
 no active writer exists. The admin create-session configurator can create
@@ -473,7 +476,7 @@ Common session-template operations:
 Common browser-context operations:
 
 ```bash
-./scripts/bpane browser-context create support-profile --label team=support
+./scripts/bpane browser-context create support-profile --label team=support --retention-sec 604800
 ./scripts/bpane browser-context list
 ./scripts/bpane browser-context get <context-id>
 ./scripts/bpane browser-context delete <context-id>

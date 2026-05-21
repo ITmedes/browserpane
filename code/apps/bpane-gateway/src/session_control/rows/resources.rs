@@ -38,6 +38,15 @@ pub(in crate::session_control) fn row_to_stored_browser_context(
         description: row.get("description"),
         labels,
         persistence_mode,
+        retention_sec: row
+            .get::<_, Option<i64>>("retention_sec")
+            .map(u32::try_from)
+            .transpose()
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "browser context retention_sec column is out of range: {error}"
+                ))
+            })?,
         state,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),

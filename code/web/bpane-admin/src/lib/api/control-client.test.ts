@@ -51,6 +51,8 @@ const BROWSER_CONTEXT = {
   description: 'Reusable profile for support triage',
   labels: { team: 'support' },
   persistence_mode: 'reusable',
+  retention_sec: 86400,
+  retention_expires_at: '2026-05-05T18:30:00Z',
   state: 'ready',
   usage: {
     visible_session_count: 1,
@@ -117,6 +119,7 @@ describe('ControlClient', () => {
     const created = await client.createBrowserContext({
       name: 'Support profile',
       labels: { team: 'support' },
+      retention_sec: 86400,
     });
     await client.getBrowserContext('context/with space');
     await client.deleteBrowserContext(BROWSER_CONTEXT.id);
@@ -125,6 +128,8 @@ describe('ControlClient', () => {
       id: BROWSER_CONTEXT.id,
       name: 'Support profile',
       persistence_mode: 'reusable',
+      retention_sec: 86400,
+      retention_expires_at: '2026-05-05T18:30:00Z',
       state: 'ready',
       usage: {
         visible_session_count: 1,
@@ -141,6 +146,7 @@ describe('ControlClient', () => {
         body: JSON.stringify({
           name: 'Support profile',
           labels: { team: 'support' },
+          retention_sec: 86400,
         }),
       }),
     );

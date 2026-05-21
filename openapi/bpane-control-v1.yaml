@@ -4695,6 +4695,11 @@ components:
           allOf:
             - $ref: '#/components/schemas/BrowserContextPersistenceMode'
           default: reusable
+        retention_sec:
+          type: integer
+          format: int32
+          minimum: 1
+          nullable: true
     BrowserContextResource:
       type: object
       required:
@@ -4703,6 +4708,8 @@ components:
         - description
         - labels
         - persistence_mode
+        - retention_sec
+        - retention_expires_at
         - state
         - usage
         - created_at
@@ -4724,6 +4731,15 @@ components:
             type: string
         persistence_mode:
           $ref: '#/components/schemas/BrowserContextPersistenceMode'
+        retention_sec:
+          type: integer
+          format: int32
+          minimum: 1
+          nullable: true
+        retention_expires_at:
+          type: string
+          format: date-time
+          nullable: true
         state:
           $ref: '#/components/schemas/BrowserContextState'
         usage:
