@@ -1,5 +1,12 @@
 import type {
+  BrowserContextListResponse,
+  BrowserContextPersistenceMode,
+  BrowserContextResource,
+  BrowserContextState,
+  BrowserContextUsageResource,
   SessionAutomationDelegate,
+  SessionBrowserContextMode,
+  SessionBrowserContextResource,
   SessionConnectionCounts,
   SessionConnectInfo,
   SessionAccessTokenResponse,
@@ -24,6 +31,52 @@ import {
 } from './control-wire';
 
 export class ControlSessionMapper {
+  static toBrowserContextList(payload: unknown): BrowserContextListResponse {
+    const object = expectRecord(payload, 'browser context list response');
+    const contexts = object.contexts;
+    if (!Array.isArray(contexts)) {
+      throw new Error('browser context list response must contain a contexts array');
+    }
+    return {
+      contexts: contexts.map((context) => this.toBrowserContextResource(context)),
+    };
+  }
+
+  static toBrowserContextResource(payload: unknown): BrowserContextResource {
+    const object = expectRecord(payload, 'browser context resource');
+    const description = optionalString(object.description, 'browser context description');
+    const lastUsedAt = optionalString(object.last_used_at, 'browser context last_used_at');
+    const deletedAt = optionalString(object.deleted_at, 'browser context deleted_at');
+    const retentionExpiresAt = optionalString(
+      object.retention_expires_at,
+      'browser context retention_expires_at',
+    );
+    const usage = toBrowserContextUsage(object.usage);
+    return {
+      id: expectString(object.id, 'browser context id'),
+      name: expectString(object.name, 'browser context name'),
+      description: description ?? null,
+      labels: expectStringRecord(object.labels ?? {}, 'browser context labels'),
+      persistence_mode: expectEnum(
+        object.persistence_mode,
+        'browser context persistence_mode',
+        BROWSER_CONTEXT_PERSISTENCE_MODES,
+      ),
+      retention_sec: optionalNumber(object.retention_sec, 'browser context retention_sec') ?? null,
+      retention_expires_at: retentionExpiresAt ?? null,
+      max_profile_storage_bytes: optionalNumber(
+        object.max_profile_storage_bytes,
+        'browser context max_profile_storage_bytes',
+      ) ?? null,
+      state: expectEnum(object.state, 'browser context state', BROWSER_CONTEXT_STATES),
+      usage: usage ?? null,
+      created_at: expectString(object.created_at, 'browser context created_at'),
+      updated_at: expectString(object.updated_at, 'browser context updated_at'),
+      last_used_at: lastUsedAt ?? null,
+      deleted_at: deletedAt ?? null,
+    };
+  }
+
   static toSessionList(payload: unknown): SessionListResponse {
     const object = expectRecord(payload, 'session list response');
     const sessions = object.sessions;
@@ -59,6 +112,7 @@ export class ControlSessionMapper {
       id: expectString(object.id, 'session resource id'),
       state: expectString(object.state, 'session resource state'),
       template_id: templateId ?? null,
+      browser_context: toSessionBrowserContextResource(object.browser_context),
       owner_mode: expectString(object.owner_mode, 'session resource owner_mode'),
       viewport: toOptionalViewport(object.viewport, 'session resource viewport') ?? null,
       idle_timeout_sec: optionalNumber(object.idle_timeout_sec, 'session resource idle_timeout_sec') ?? null,
@@ -102,6 +156,22 @@ export class ControlSessionMapper {
   }
 }
 
+const BROWSER_CONTEXT_STATES = ['ready', 'deleted'] satisfies readonly BrowserContextState[];
+const BROWSER_CONTEXT_PERSISTENCE_MODES = ['reusable', 'ephemeral'] satisfies readonly BrowserContextPersistenceMode[];
+const SESSION_BROWSER_CONTEXT_MODES = ['fresh', 'ephemeral', 'reusable'] satisfies readonly SessionBrowserContextMode[];
+
+function expectEnum<T extends string>(
+  value: unknown,
+  label: string,
+  allowed: readonly T[],
+): T {
+  const stringValue = expectString(value, label);
+  if (!allowed.includes(stringValue as T)) {
+    throw new Error(`${label} must be one of ${allowed.join(', ')}`);
+  }
+  return stringValue as T;
+}
+
 function optionalNumber(value: unknown, label: string): number | null | undefined {
   if (value === undefined || value === null) {
     return value;
@@ -114,6 +184,37 @@ function optionalRecord(value: unknown, label: string): Readonly<Record<string, 
     return value;
   }
   return expectRecord(value, label);
+}
+
+function toBrowserContextUsage(value: unknown): BrowserContextUsageResource | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const object = expectRecord(value, 'browser context usage');
+  const activeRuntimeSessionId = optionalString(
+    object.active_runtime_session_id,
+    'browser context usage active_runtime_session_id',
+  );
+  const profileStorageBytes = optionalNumber(
+    object.profile_storage_bytes,
+    'browser context usage profile_storage_bytes',
+  );
+  return {
+    visible_session_count: expectNumber(
+      object.visible_session_count,
+      'browser context usage visible_session_count',
+    ),
+    active_runtime_session_count: expectNumber(
+      object.active_runtime_session_count,
+      'browser context usage active_runtime_session_count',
+    ),
+    active_runtime_session_id: activeRuntimeSessionId ?? null,
+    profile_storage_bytes: profileStorageBytes ?? null,
+    profile_storage_limit_exceeded: expectBoolean(
+      object.profile_storage_limit_exceeded ?? false,
+      'browser context usage profile_storage_limit_exceeded',
+    ),
+  };
 }
 
 function toOptionalViewport(value: unknown, label: string): SessionViewport | null | undefined {
@@ -155,6 +256,25 @@ function toConnectInfo(value: unknown): SessionConnectInfo {
     auth_type: expectString(object.auth_type, 'session connect auth_type'),
     ...(ticketPath !== undefined ? { ticket_path: ticketPath } : {}),
     compatibility_mode: expectString(object.compatibility_mode, 'session connect compatibility_mode'),
+  };
+}
+
+function toSessionBrowserContextResource(value: unknown): SessionBrowserContextResource {
+  if (value === undefined || value === null) {
+    return { mode: 'fresh', context_id: null };
+  }
+  const object = expectRecord(value, 'session resource browser_context');
+  const contextId = optionalString(
+    object.context_id,
+    'session resource browser_context context_id',
+  );
+  return {
+    mode: expectEnum(
+      object.mode,
+      'session resource browser_context mode',
+      SESSION_BROWSER_CONTEXT_MODES,
+    ),
+    context_id: contextId ?? null,
   };
 }
 

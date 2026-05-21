@@ -2,6 +2,7 @@
   import {
     Activity,
     ClipboardList,
+    Database,
     FileArchive,
     FolderOpen,
     Gauge,
@@ -11,7 +12,15 @@
     Video,
   } from 'lucide-svelte';
   import type { ControlClient } from '../api/control-client';
-  import type { CreateSessionCommand, SessionResource, SessionTemplateResource } from '../api/control-types';
+  import type {
+    BrowserContextResource,
+    CloneBrowserContextCommand,
+    CreateBrowserContextCommand,
+    CreateSessionCommand,
+    ImportBrowserContextCommand,
+    SessionResource,
+    SessionTemplateResource,
+  } from '../api/control-types';
   import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
   import AdminMessage from '../presentation/AdminMessage.svelte';
@@ -27,6 +36,7 @@
   import type { SessionListPanelViewModel } from '../presentation/session-view-model';
   import type { BrowserSessionConnectPreferences, LiveBrowserSessionConnection } from '../session/browser-session-types';
   import BrowserPolicySurface from './BrowserPolicySurface.svelte';
+  import BrowserContextCatalogPanel from '../presentation/BrowserContextCatalogPanel.svelte';
   import DisplayControlsSurface from './DisplayControlsSurface.svelte';
   import LiveSessionActionsSurface from './LiveSessionActionsSurface.svelte';
   import LogsSurface from './LogsSurface.svelte';
@@ -41,9 +51,16 @@
     readonly controlClient: ControlClient;
     readonly workflowClient: WorkflowClient;
     readonly selectedSession: SessionResource | null;
+    readonly sessions?: readonly SessionResource[];
     readonly sessionTemplates?: readonly SessionTemplateResource[];
+    readonly browserContexts?: readonly BrowserContextResource[];
     readonly templatesLoading?: boolean;
+    readonly browserContextsLoading?: boolean;
+    readonly cloningContextId?: string | null;
+    readonly exportingContextId?: string | null;
+    readonly importingBrowserContext?: boolean;
     readonly templateError?: string | null;
+    readonly browserContextError?: string | null;
     readonly mcpBridge: McpBridgeConfig | null;
     readonly liveConnection: LiveBrowserSessionConnection | null;
     readonly browserConnected: boolean;
@@ -56,7 +73,13 @@
     readonly recordingsRefreshVersion: number;
     readonly mcpDelegationRefreshVersion: number;
     readonly onRefreshSessions: (showFeedback?: boolean) => Promise<void>;
+    readonly onRefreshBrowserContexts: (showFeedback?: boolean) => Promise<void>;
     readonly onCreateSession: (command?: CreateSessionCommand) => void;
+    readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
+    readonly onCloneBrowserContext?: (contextId: string, command: CloneBrowserContextCommand) => Promise<BrowserContextResource | void>;
+    readonly onExportBrowserContext?: (contextId: string) => Promise<void>;
+    readonly onImportBrowserContext?: (command: ImportBrowserContextCommand) => Promise<BrowserContextResource | void>;
+    readonly onDeleteBrowserContext?: (contextId: string) => Promise<void>;
     readonly onJoinSelectedSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
     readonly onRefreshSelectedSession: () => Promise<void>;
@@ -88,6 +111,7 @@
     recording: Video,
     metrics: Gauge,
     logs: ScrollText,
+    contexts: Database,
   } satisfies Record<AdminFeaturePanelId, typeof Activity>;
 </script>
 
@@ -151,11 +175,15 @@
         <SessionListPanel
           viewModel={props.sessionListViewModel}
           sessionTemplates={props.sessionTemplates ?? []}
+          browserContexts={props.browserContexts ?? []}
           templatesLoading={props.templatesLoading ?? false}
+          browserContextsLoading={props.browserContextsLoading ?? false}
           templateError={props.templateError ?? null}
+          browserContextError={props.browserContextError ?? null}
           connected={props.browserConnected}
           onRefresh={() => void props.onRefreshSessions(true)}
           onCreateSession={props.onCreateSession}
+          onCreateBrowserContext={props.onCreateBrowserContext}
           onJoinSession={props.onJoinSelectedSession}
           onDisconnectSession={props.onDisconnectEmbeddedBrowser}
           onSelectSessionId={props.onSelectSessionId}
@@ -167,6 +195,21 @@
           refreshVersion={props.mcpDelegationRefreshVersion}
           onRefreshSessions={() => props.onRefreshSessions(false)}
           onRefreshSelectedSession={props.onRefreshSelectedSession}
+        />
+      {:else if activePanel.id === 'contexts'}
+        <BrowserContextCatalogPanel
+          contexts={props.browserContexts ?? []}
+          sessions={props.sessions ?? []}
+          loading={props.browserContextsLoading ?? false}
+          error={props.browserContextError ?? null}
+          cloningContextId={props.cloningContextId ?? null}
+          exportingContextId={props.exportingContextId ?? null}
+          importingContext={props.importingBrowserContext ?? false}
+          onRefresh={() => void props.onRefreshBrowserContexts(true)}
+          onCloneContext={(contextId, command) => props.onCloneBrowserContext?.(contextId, command)}
+          onExportContext={(contextId) => props.onExportBrowserContext?.(contextId)}
+          onImportContext={(command) => props.onImportBrowserContext?.(command)}
+          onDeleteContext={(contextId) => void props.onDeleteBrowserContext?.(contextId)}
         />
       {:else if activePanel.id === 'lifecycle'}
         <SessionLifecycleSurface

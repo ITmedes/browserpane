@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -85,6 +86,10 @@ pub enum RuntimeManagerError {
     RuntimeStartupCapacityReached {
         max_starting_runtimes: usize,
     },
+    BrowserContextInUse {
+        browser_context_id: Uuid,
+        active_session_id: Uuid,
+    },
     InvalidConfiguration(String),
     StartupFailed(String),
     PersistenceFailed(String),
@@ -116,6 +121,13 @@ impl fmt::Display for RuntimeManagerError {
                 f,
                 "runtime startup capacity reached: {} runtime workers are already starting",
                 max_starting_runtimes
+            ),
+            Self::BrowserContextInUse {
+                browser_context_id,
+                active_session_id,
+            } => write!(
+                f,
+                "browser context {browser_context_id} is already used by active session {active_session_id}"
             ),
             Self::InvalidConfiguration(message) => write!(f, "{message}"),
             Self::StartupFailed(message) => write!(f, "{message}"),
@@ -278,6 +290,17 @@ impl SessionRuntimeManager {
         }
     }
 
+    pub async fn active_browser_context_session_id(&self, context_id: Uuid) -> Option<Uuid> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(manager) => {
+                manager.active_browser_context_session_id(context_id).await
+            }
+            RuntimeBackend::Docker(manager) => {
+                manager.active_browser_context_session_id(context_id).await
+            }
+        }
+    }
+
     pub async fn resolve(
         &self,
         session_id: Uuid,
@@ -292,6 +315,84 @@ impl SessionRuntimeManager {
         match &self.backend {
             RuntimeBackend::StaticSingle(manager) => manager.release(session_id).await,
             RuntimeBackend::Docker(manager) => manager.release(session_id).await,
+        }
+    }
+
+    pub async fn delete_browser_context_data(
+        &self,
+        context_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => Ok(()),
+            RuntimeBackend::Docker(manager) => {
+                manager.delete_browser_context_data(context_id).await
+            }
+        }
+    }
+
+    pub async fn clone_browser_context_data(
+        &self,
+        source_context_id: Uuid,
+        target_context_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => Ok(()),
+            RuntimeBackend::Docker(manager) => {
+                manager
+                    .clone_browser_context_data(source_context_id, target_context_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn export_browser_context_profile_archive(
+        &self,
+        context_id: Uuid,
+    ) -> Result<Option<Vec<u8>>, RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => Ok(None),
+            RuntimeBackend::Docker(manager) => {
+                manager
+                    .export_browser_context_profile_archive(context_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn import_browser_context_profile_archive(
+        &self,
+        context_id: Uuid,
+        profile_archive: Option<&[u8]>,
+    ) -> Result<(), RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => {
+                if profile_archive.is_some() {
+                    return Err(RuntimeManagerError::InvalidConfiguration(
+                        "current runtime backend does not support browser context profile imports"
+                            .to_string(),
+                    ));
+                }
+                Ok(())
+            }
+            RuntimeBackend::Docker(manager) => {
+                manager
+                    .import_browser_context_profile_archive(context_id, profile_archive)
+                    .await
+            }
+        }
+    }
+
+    pub async fn browser_context_profile_storage_bytes(
+        &self,
+        context_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, u64>, RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => Ok(HashMap::new()),
+            RuntimeBackend::Docker(manager) => {
+                manager
+                    .browser_context_profile_storage_bytes(context_ids)
+                    .await
+            }
         }
     }
 
@@ -315,6 +416,8 @@ struct RuntimeLease {
     session_id: Uuid,
     agent_socket_path: String,
     container_name: Option<String>,
+    browser_context_id: Option<Uuid>,
+    discard_session_data_on_release: bool,
     idle_generation: u64,
 }
 

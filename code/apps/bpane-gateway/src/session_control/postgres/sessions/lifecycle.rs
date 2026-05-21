@@ -26,6 +26,7 @@ impl SessionRepository<'_> {
         let labels_value = json_labels(&request.labels);
         let extensions_value = json_applied_extensions(&request.extensions)?;
         let recording_value = json_recording_policy(&request.recording)?;
+        let browser_context = request.browser_context.clone().unwrap_or_default();
         let session_id = Uuid::now_v7();
         let insert_query = format!(
             r#"
@@ -36,6 +37,8 @@ impl SessionRepository<'_> {
                 owner_display_name,
                 state,
                 template_id,
+                browser_context_mode,
+                browser_context_id,
                 owner_mode,
                 viewport_width,
                 viewport_height,
@@ -49,8 +52,8 @@ impl SessionRepository<'_> {
                 updated_at
             )
             VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb,
-                $13::jsonb, $14::jsonb, $15, $16, $16
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                $13::jsonb, $14::jsonb, $15::jsonb, $16::jsonb, $17, $18, $18
             )
             RETURNING
                 {SESSION_COLUMNS}
@@ -66,6 +69,8 @@ impl SessionRepository<'_> {
                     &principal.display_name,
                     &SessionLifecycleState::Ready.as_str(),
                     &request.template_id,
+                    &browser_context.mode.as_str(),
+                    &browser_context.context_id,
                     &owner_mode.as_str(),
                     &(viewport.width as i32),
                     &(viewport.height as i32),

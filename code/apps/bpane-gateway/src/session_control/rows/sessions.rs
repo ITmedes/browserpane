@@ -11,6 +11,10 @@ pub(in crate::session_control) fn row_to_stored_session(
         .get::<_, String>("owner_mode")
         .parse::<SessionOwnerMode>()
         .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let browser_context_mode = row
+        .get::<_, String>("browser_context_mode")
+        .parse::<SessionBrowserContextMode>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
     let labels_value: Value = row.get("labels");
     let labels = labels_value
         .as_object()
@@ -46,6 +50,10 @@ pub(in crate::session_control) fn row_to_stored_session(
         id: row.get("id"),
         state,
         template_id: row.get("template_id"),
+        browser_context: SessionBrowserContextResource {
+            mode: browser_context_mode,
+            context_id: row.get("browser_context_id"),
+        },
         owner_mode,
         viewport: SessionViewport {
             width: width as u16,

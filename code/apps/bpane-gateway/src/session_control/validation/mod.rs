@@ -14,10 +14,10 @@ pub(super) use recordings::{
     validate_fail_recording_request, validate_persist_completed_recording_request,
 };
 pub(super) use resources::{
-    validate_credential_binding_request, validate_extension_definition_request,
-    validate_extension_version_request, validate_file_workspace_file_request,
-    validate_file_workspace_request, validate_session_file_binding_request,
-    validate_session_file_request,
+    validate_browser_context_request, validate_credential_binding_request,
+    validate_extension_definition_request, validate_extension_version_request,
+    validate_file_workspace_file_request, validate_file_workspace_request,
+    validate_session_file_binding_request, validate_session_file_request,
 };
 pub(super) use sessions::{
     validate_automation_delegate_request, validate_create_request,

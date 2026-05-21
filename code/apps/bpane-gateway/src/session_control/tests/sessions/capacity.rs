@@ -10,6 +10,7 @@ async fn in_memory_store_limits_legacy_runtime_to_one_active_session() {
             &alpha,
             CreateSessionRequest {
                 template_id: None,
+                browser_context: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,
@@ -29,6 +30,7 @@ async fn in_memory_store_limits_legacy_runtime_to_one_active_session() {
             &alpha,
             CreateSessionRequest {
                 template_id: None,
+                browser_context: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,
@@ -68,6 +70,7 @@ async fn in_memory_store_respects_runtime_pool_capacity() {
                 &alpha,
                 CreateSessionRequest {
                     template_id: None,
+                    browser_context: None,
                     owner_mode: None,
                     viewport: None,
                     idle_timeout_sec: None,
@@ -88,6 +91,7 @@ async fn in_memory_store_respects_runtime_pool_capacity() {
             &alpha,
             CreateSessionRequest {
                 template_id: None,
+                browser_context: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,
@@ -126,6 +130,7 @@ async fn reconnect_prep_respects_runtime_pool_capacity() {
             &owner,
             CreateSessionRequest {
                 template_id: None,
+                browser_context: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,
@@ -153,6 +158,7 @@ async fn reconnect_prep_respects_runtime_pool_capacity() {
             &owner,
             CreateSessionRequest {
                 template_id: None,
+                browser_context: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,

@@ -3,7 +3,13 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import type { ControlClient } from '../api/control-client';
-  import type { CreateSessionCommand, SessionResource, SessionTemplateResource } from '../api/control-types';
+  import type {
+    BrowserContextResource,
+    CreateBrowserContextCommand,
+    CreateSessionCommand,
+    SessionResource,
+    SessionTemplateResource,
+  } from '../api/control-types';
   import AdminMessage from '../presentation/AdminMessage.svelte';
   import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import SessionCreateConfigurator from '../presentation/SessionCreateConfigurator.svelte';
@@ -16,10 +22,13 @@
   let { controlClient }: AdminSessionListRouteProps = $props();
   let sessions = $state<readonly SessionResource[]>([]);
   let sessionTemplates = $state<readonly SessionTemplateResource[]>([]);
+  let browserContexts = $state<readonly BrowserContextResource[]>([]);
   let loading = $state(false);
   let templatesLoading = $state(false);
+  let browserContextsLoading = $state(false);
   let error = $state<string | null>(null);
   let templateError = $state<string | null>(null);
+  let browserContextError = $state<string | null>(null);
   let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let search = $state('');
   let templateFilter = $state('');
@@ -29,6 +38,7 @@
   const viewModel = $derived(SessionViewModelBuilder.list({
     sessions,
     sessionTemplates,
+    browserContexts,
     selectedSessionId: null,
     authenticated: true,
     loading,
@@ -38,6 +48,7 @@
 
   onMount(() => {
     void loadSessionTemplates();
+    void loadBrowserContexts();
     void loadSessions(false);
   });
 
@@ -50,6 +61,18 @@
       templateError = errorMessage(loadError);
     } finally {
       templatesLoading = false;
+    }
+  }
+
+  async function loadBrowserContexts(): Promise<void> {
+    browserContextsLoading = true;
+    browserContextError = null;
+    try {
+      browserContexts = (await controlClient.listBrowserContexts()).contexts;
+    } catch (loadError) {
+      browserContextError = errorMessage(loadError);
+    } finally {
+      browserContextsLoading = false;
     }
   }
 
@@ -81,11 +104,40 @@
     try {
       const created = await controlClient.createSession(command);
       sessions = [created, ...sessions.filter((session) => session.id !== created.id)];
+      void loadBrowserContexts();
       await goto(detailHref(created.id));
     } catch (createError) {
       error = errorMessage(createError);
     } finally {
       loading = false;
+    }
+  }
+
+  async function createBrowserContext(command: CreateBrowserContextCommand): Promise<BrowserContextResource> {
+    browserContextsLoading = true;
+    browserContextError = null;
+    actionFeedback = null;
+    try {
+      const created = await controlClient.createBrowserContext(command);
+      browserContexts = [created, ...browserContexts.filter((context) => context.id !== created.id)];
+      actionFeedback = {
+        variant: 'success',
+        title: 'Browser context saved',
+        message: `Saved reusable browser context ${created.name}.`,
+        testId: 'session-inspector-context-message',
+      };
+      return created;
+    } catch (createError) {
+      browserContextError = errorMessage(createError);
+      actionFeedback = {
+        variant: 'error',
+        title: 'Browser context save failed',
+        message: browserContextError,
+        testId: 'session-inspector-context-message',
+      };
+      throw createError;
+    } finally {
+      browserContextsLoading = false;
     }
   }
 
@@ -108,6 +160,7 @@
       session.runtime,
       session.presence,
       session.template,
+      session.browserContext,
       session.mcpDelegation,
       session.labels,
     ].some((value) => value.toLowerCase().includes(normalized)));
@@ -135,6 +188,7 @@
       </div>
       <div class="admin-actions">
         <a class="admin-button-ghost" href={`${base}/`}>Live workspace</a>
+        <a class="admin-button-ghost" href={`${base}/browser-contexts`}>Browser contexts</a>
         <a class="admin-button-ghost" href={`${base}/files/workspaces`}>File workspaces</a>
         <button
           class="admin-button-primary"
@@ -223,14 +277,18 @@
 
   <SessionCreateConfigurator
     {sessionTemplates}
+    {browserContexts}
     {templatesLoading}
+    {browserContextsLoading}
     {templateError}
+    {browserContextError}
     loading={loading}
     submitTestId="session-inspector-new"
     submitLabel="Create and inspect"
     variant="panel"
     payloadInitiallyOpen={true}
     onCreateSession={(command) => void createSession(command)}
+    onCreateBrowserContext={createBrowserContext}
   />
 
   {#if actionFeedback}
@@ -272,7 +330,7 @@
           <span class="grid min-w-0 gap-1">
             <strong class="truncate font-mono text-sm" title={session.id}>{session.id}</strong>
             <span class="truncate text-xs text-admin-ink/58">
-              <span data-testid="session-inspector-row-template">{session.template}</span> | {session.mcpDelegation} | {session.labels} | updated {session.updatedAt}
+              <span data-testid="session-inspector-row-template">{session.template}</span> | <span data-testid="session-inspector-row-browser-context">{session.browserContext}</span> | {session.mcpDelegation} | {session.labels} | updated {session.updatedAt}
             </span>
           </span>
           <span class="grid justify-items-end gap-1 text-xs text-[#c1d0e8]">

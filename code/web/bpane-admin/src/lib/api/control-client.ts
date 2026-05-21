@@ -10,6 +10,11 @@ import {
   type FetchLike,
 } from './authenticated-api';
 import type {
+  BrowserContextListResponse,
+  BrowserContextResource,
+  CloneBrowserContextCommand,
+  CreateBrowserContextCommand,
+  ImportBrowserContextCommand,
   CreateSessionCommand,
   CreateFileWorkspaceCommand,
   CreateSessionFileBindingCommand,
@@ -71,6 +76,80 @@ export class ControlClient {
   async listSessionTemplates(): Promise<SessionTemplateListResponse> {
     const payload = await this.#request('GET', '/api/v1/session-templates');
     return ControlSessionMapper.toSessionTemplateList(payload);
+  }
+
+  async listBrowserContexts(): Promise<BrowserContextListResponse> {
+    const payload = await this.#request('GET', '/api/v1/browser-contexts');
+    return ControlSessionMapper.toBrowserContextList(payload);
+  }
+
+  async createBrowserContext(command: CreateBrowserContextCommand): Promise<BrowserContextResource> {
+    const payload = await this.#request('POST', '/api/v1/browser-contexts', {
+      ...command,
+      labels: command.labels ?? {},
+    });
+    return ControlSessionMapper.toBrowserContextResource(payload);
+  }
+
+  async getBrowserContext(contextId: string): Promise<BrowserContextResource> {
+    const payload = await this.#request('GET', `/api/v1/browser-contexts/${encodeURIComponent(contextId)}`);
+    return ControlSessionMapper.toBrowserContextResource(payload);
+  }
+
+  async cloneBrowserContext(
+    contextId: string,
+    command: CloneBrowserContextCommand,
+  ): Promise<BrowserContextResource> {
+    const payload = await this.#request('POST', `/api/v1/browser-contexts/${encodeURIComponent(contextId)}/clone`, {
+      ...command,
+      labels: command.labels ?? undefined,
+    });
+    return ControlSessionMapper.toBrowserContextResource(payload);
+  }
+
+  async exportBrowserContext(contextId: string): Promise<Blob> {
+    const response = await this.#send(
+      'GET',
+      `/api/v1/browser-contexts/${encodeURIComponent(contextId)}/export`,
+      undefined,
+      'application/zip',
+    );
+    return await response.blob();
+  }
+
+  async importBrowserContext(command: ImportBrowserContextCommand): Promise<BrowserContextResource> {
+    const headers: Record<string, string> = {
+      'x-bpane-browser-context-name': command.name,
+    };
+    if (command.description !== undefined && command.description !== null) {
+      headers['x-bpane-browser-context-description'] = command.description;
+    }
+    if (command.labels !== undefined && command.labels !== null) {
+      headers['x-bpane-browser-context-labels'] = JSON.stringify(command.labels);
+    }
+    if (command.retention_sec !== undefined && command.retention_sec !== null) {
+      headers['x-bpane-browser-context-retention-sec'] = String(command.retention_sec);
+    }
+    if (command.max_profile_storage_bytes !== undefined && command.max_profile_storage_bytes !== null) {
+      headers['x-bpane-browser-context-max-profile-storage-bytes'] = String(command.max_profile_storage_bytes);
+    }
+    const response = await this.#send(
+      'POST',
+      '/api/v1/browser-contexts/import',
+      command.archive,
+      'application/json',
+      {
+        bodyMode: 'raw',
+        contentType: 'application/zip',
+        headers,
+      },
+    );
+    return ControlSessionMapper.toBrowserContextResource(await response.json());
+  }
+
+  async deleteBrowserContext(contextId: string): Promise<BrowserContextResource> {
+    const payload = await this.#request('DELETE', `/api/v1/browser-contexts/${encodeURIComponent(contextId)}`);
+    return ControlSessionMapper.toBrowserContextResource(payload);
   }
 
   async createSession(command: CreateSessionCommand = {}): Promise<SessionResource> {

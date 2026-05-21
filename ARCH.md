@@ -265,6 +265,13 @@ service.
   - `GET /api/v1/sessions` — list owner-scoped sessions, with catalog filters for template id, lifecycle/runtime state, labels, integration context, limit, and offset
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
   - `DELETE /api/v1/sessions/{id}` — safe-stop one owner-scoped session resource
+  - `POST /api/v1/browser-contexts` — create an owner-scoped browser context catalog entry
+  - `GET /api/v1/browser-contexts` — list owner-scoped browser contexts with visible-session, active-runtime, optional profile-storage, storage-limit, and retention-expiry summary
+  - `GET /api/v1/browser-contexts/{id}` — fetch one browser context with visible-session, active-runtime, optional profile-storage, storage-limit, and retention-expiry summary
+  - `POST /api/v1/browser-contexts/{id}/clone` — clone an inactive reusable context into a new owner-scoped reusable context; docker-backed runtimes copy profile volume data when present
+  - `GET /api/v1/browser-contexts/{id}/export` — download an inactive reusable context as a zip archive with manifest and optional docker-backed profile payload
+  - `POST /api/v1/browser-contexts/import` — import a BrowserPane export archive into a new owner-scoped reusable context; docker-backed runtimes restore `profile.tar.gz` when present
+  - `DELETE /api/v1/browser-contexts/{id}` — delete one browser context; docker-backed runtimes remove the context profile volume and reject active writers
   - `POST /api/v1/session-templates` — create a reusable owner-scoped session template
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
   - `GET /api/v1/session-templates/{id}` — fetch one session template
@@ -297,6 +304,14 @@ service.
   - starts/stops passive recorder workers for `recording.mode=always`
   - persists per-segment metadata, linkage, termination reasons, and artifact refs
   - enforces retention and playback/export visibility through the control plane
+- **Browser context lifecycle** (`browser_contexts/retention.rs`, `runtime_manager.rs`, `session_control.rs`):
+  - reusable profile metadata carries optional storage limits, retention windows, and derived expiry timestamps
+  - rejects new reusable sessions from a context once inspected docker profile storage exceeds the configured per-context limit
+  - clones inactive reusable contexts into new owner-scoped reusable contexts and copies docker-backed Chromium profile volume data when present
+  - exports inactive reusable contexts as zip archives containing manifest metadata plus `profile.tar.gz` when docker profile data exists
+  - imports BrowserPane export archives into new reusable contexts after validating the manifest and archive entries; imports never overwrite existing context ids
+  - scans expired ready contexts on startup and then on a configurable interval
+  - removes docker-backed context profile volumes through the runtime manager and skips active writers for a later pass
 - **Workflow lifecycle** (`workflow_lifecycle.rs`, `workflow_observability.rs`, `workflow_retention.rs`):
   - resolves git-backed workflow versions to immutable snapshots
   - launches gateway-managed workflow workers with run-scoped automation access
@@ -450,7 +465,9 @@ The default dev stack no longer uses a shared token file.
 - the admin console discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
-- after login, the admin console lists owner-scoped `/api/v1/sessions`, lets the user join an existing session or start a new one, and then uses the selected session resource's connect metadata
+- after login, the admin console lists owner-scoped `/api/v1/sessions`, session templates, and browser contexts; it lets the user join an existing session, start a new one with optional template and reusable-context bindings, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
+- docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
+- browser-context retention cleanup is metadata-driven per context and removes expired reusable profile data only when the runtime manager confirms there is no active writer
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
 - admin-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - switching the selected session disconnects the embedded browser from the previous live session before selecting the new one

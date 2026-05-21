@@ -231,7 +231,7 @@ The default local auth flow is OIDC-based:
 - click `Login`
 - authenticate against the local Keycloak realm
 - use the demo account `demo / demo-demo`
-- return to the admin console and either select an existing session or create a new one, optionally from a session template
+- return to the admin console and either select an existing session or create a new one, optionally from a session template and reusable browser context
 - the admin console joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
 - the live session panel and session inspector show the applied template, and the inspector can filter sessions by template, lifecycle state, and runtime state
 - sessions created from the admin console use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
@@ -278,6 +278,13 @@ Canonical contract:
 - `GET /api/v1/sessions`
 - `GET /api/v1/sessions/{id}`
 - `DELETE /api/v1/sessions/{id}`
+- `POST /api/v1/browser-contexts`
+- `GET /api/v1/browser-contexts`
+- `GET /api/v1/browser-contexts/{id}`
+- `POST /api/v1/browser-contexts/{id}/clone`
+- `GET /api/v1/browser-contexts/{id}/export`
+- `POST /api/v1/browser-contexts/import`
+- `DELETE /api/v1/browser-contexts/{id}`
 - `POST /api/v1/session-templates`
 - `GET /api/v1/session-templates`
 - `GET /api/v1/session-templates/{id}`
@@ -297,6 +304,50 @@ explicit override, and the API payload preview shows the exact fields that will
 be sent.
 `GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
+Browser context resources let callers name owner-scoped Chromium profile
+contexts and bind new sessions with `browser_context.mode=reusable` plus a
+`context_id`. Docker-backed runtimes materialize reusable contexts as a
+context-scoped Chromium profile volume mounted at the normal profile path,
+while uploads, downloads, and session-file mounts remain tied to the concrete
+session. Only one active runtime writer may use a reusable context at a time;
+additional sessions with the same context can be created but runtime access is
+rejected until the active writer stops or releases its runtime.
+Browser context resources include a `usage` summary with the current visible
+session reference count and the active runtime writer session id, when one
+exists. Docker-backed runtimes also include approximate profile storage bytes
+when Docker volume-size inspection is available. Contexts can carry an optional
+`max_profile_storage_bytes` limit; once the inspected profile size exceeds that
+limit, the API reports `usage.profile_storage_limit_exceeded=true` and rejects
+new reusable sessions from that context until the operator deletes or replaces
+the context. Contexts can also carry an optional `retention_sec` window; the API
+returns `retention_expires_at` from the last-used timestamp, or creation time if
+the context has never been used. The gateway scans for expired ready contexts on
+startup and then every `--browser-context-retention-cleanup-interval-secs`
+seconds, unless that interval is set to `0`; docker-backed cleanup removes the
+context profile volume and skips active runtime writers for a later pass. API
+clients and the admin UI use these fields to make the same lifecycle and cleanup
+decisions.
+Inactive reusable contexts can be cloned with
+`POST /api/v1/browser-contexts/{id}/clone`; docker-backed runtimes copy the
+source Chromium profile volume into a new context-scoped profile volume when the
+source volume exists, while static runtimes treat clone as metadata-only.
+Inactive reusable contexts can also be exported with
+`GET /api/v1/browser-contexts/{id}/export`; the response is a zip archive with
+`manifest.json` and, for docker-backed contexts with profile data,
+`profile.tar.gz`.
+BrowserPane export archives can be imported as new reusable contexts with
+`POST /api/v1/browser-contexts/import` using `application/zip` plus
+`x-bpane-browser-context-name`. Omitted metadata defaults to the archive
+manifest, and imports never overwrite an existing context.
+Deleting a reusable context refuses active runtime writers and, for
+docker-backed runtimes, removes the context-scoped Chromium profile volume when
+no active writer exists. The admin create-session configurator can create
+reusable context catalog entries, select a ready context for a new session,
+preview the resulting `browser_context` payload, and show the bound context in
+live session rows and the session inspector detail view. The admin operations
+overlay and `/admin/browser-contexts` route also expose a reusable-context
+catalog with session references, guarded clone/export/import/delete, and copyable API
+examples.
 
 The admin console also uses a bearer-protected realtime WebSocket for
 owner-scoped snapshot updates:
@@ -419,6 +470,7 @@ Common session operations:
 ./scripts/bpane session list --state stopped --label suite=smoke --limit 5
 ./scripts/bpane session list --template-id <template-id> --label team=support
 ./scripts/bpane session create --label purpose=manual-test
+./scripts/bpane session create --browser-context-id <context-id> --label purpose=context-test
 ./scripts/bpane session get <session-id>
 ./scripts/bpane session status <session-id>
 ./scripts/bpane session access-token <session-id>
@@ -442,6 +494,19 @@ Common session-template operations:
 ./scripts/bpane session-template get <template-id>
 ./scripts/bpane session-template update <template-id> --name customer-debug-session --default-label purpose=debug
 ./scripts/bpane session create --template-id <template-id> --label case=INC-1234
+```
+
+Common browser-context operations:
+
+```bash
+./scripts/bpane browser-context create support-profile --label team=support --retention-sec 604800 --max-profile-storage-bytes 536870912
+./scripts/bpane browser-context clone <context-id> support-profile-sandbox --label copy=sandbox
+./scripts/bpane browser-context export <context-id> --output support-profile.zip
+./scripts/bpane browser-context import --input support-profile.zip --name support-profile-restored --label restored=true
+./scripts/bpane browser-context list
+./scripts/bpane browser-context get <context-id>
+./scripts/bpane browser-context delete <context-id>
+cd code/web/bpane-client && npm run smoke:admin-browser-contexts -- --headless
 ```
 
 MCP delegation and recovery operations:

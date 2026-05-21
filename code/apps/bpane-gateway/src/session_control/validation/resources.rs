@@ -2,6 +2,62 @@ use std::path::{Component, Path};
 
 use super::*;
 
+pub(in crate::session_control) fn validate_browser_context_request(
+    request: &PersistBrowserContextRequest,
+) -> Result<(), SessionStoreError> {
+    if request.id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "browser context id must not be nil when provided".to_string(),
+        ));
+    }
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "browser context name must not be empty".to_string(),
+        ));
+    }
+    if let Some(description) = &request.description {
+        if description.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "browser context description must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    for (key, value) in &request.labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "browser context label keys must not be empty".to_string(),
+            ));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "browser context label values must not be empty".to_string(),
+            ));
+        }
+    }
+    if let Some(retention_sec) = request.retention_sec {
+        if retention_sec == 0 {
+            return Err(SessionStoreError::InvalidRequest(
+                "browser context retention_sec must be greater than zero when provided".to_string(),
+            ));
+        }
+    }
+    if let Some(max_profile_storage_bytes) = request.max_profile_storage_bytes {
+        if max_profile_storage_bytes == 0 {
+            return Err(SessionStoreError::InvalidRequest(
+                "browser context max_profile_storage_bytes must be greater than zero when provided"
+                    .to_string(),
+            ));
+        }
+        if max_profile_storage_bytes > i64::MAX as u64 {
+            return Err(SessionStoreError::InvalidRequest(
+                "browser context max_profile_storage_bytes exceeds the storage backend limit"
+                    .to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub(in crate::session_control) fn validate_credential_binding_request(
     request: &PersistCredentialBindingRequest,
 ) -> Result<(), SessionStoreError> {

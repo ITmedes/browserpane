@@ -14,6 +14,7 @@ use crate::session_hub::BrowserClientRole;
 fn empty_request() -> CreateSessionRequest {
     CreateSessionRequest {
         template_id: None,
+        browser_context: None,
         owner_mode: None,
         viewport: None,
         idle_timeout_sec: None,

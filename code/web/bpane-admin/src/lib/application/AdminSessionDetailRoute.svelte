@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { ControlApiError, type ControlClient } from '../api/control-client';
   import type {
+    BrowserContextResource,
     SessionFileBindingResource,
     SessionFileResource,
     SessionResource,
@@ -24,6 +25,7 @@
   let { controlClient, sessionId }: AdminSessionDetailRouteProps = $props();
   let session = $state<SessionResource | null>(null);
   let sessionTemplates = $state<readonly SessionTemplateResource[]>([]);
+  let browserContexts = $state<readonly BrowserContextResource[]>([]);
   let status = $state<SessionStatus | null>(null);
   let files = $state<readonly SessionFileResource[]>([]);
   let bindings = $state<readonly SessionFileBindingResource[]>([]);
@@ -41,6 +43,7 @@
   const viewModel = $derived(SessionViewModelBuilder.detail({
     session,
     sessionTemplates,
+    browserContexts,
     status,
     connected,
     loading,
@@ -64,8 +67,11 @@
       ]);
       session = nextSession;
       status = nextStatus;
-      const templateLoadError = await loadSessionTemplates();
-      await loadRelatedResources(templateLoadError ? [templateLoadError] : []);
+      const [templateLoadError, browserContextLoadError] = await Promise.all([
+        loadSessionTemplates(),
+        loadBrowserContexts(),
+      ]);
+      await loadRelatedResources([templateLoadError, browserContextLoadError].filter((message): message is string => Boolean(message)));
       lastRefreshedAt = new Date().toISOString();
       if (showFeedback) {
         actionFeedback = lifecycleFeedback(
@@ -81,6 +87,16 @@
       actionFeedback = null;
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadBrowserContexts(): Promise<string | null> {
+    try {
+      browserContexts = (await controlClient.listBrowserContexts()).contexts;
+      return null;
+    } catch (browserContextLoadError) {
+      browserContexts = [];
+      return errorMessage(browserContextLoadError, 'Browser context catalog summary failed');
     }
   }
 
@@ -261,6 +277,7 @@
       </div>
       <div class="admin-actions">
         <a class="admin-button-ghost" href={`${base}/sessions`}>Sessions</a>
+        <a class="admin-button-ghost" href={`${base}/browser-contexts`}>Browser contexts</a>
         <a class="admin-button-ghost" href={`${base}/files/workspaces`}>File workspaces</a>
         <a class="admin-button-ghost" href={`${base}/`}>Live workspace</a>
         <button

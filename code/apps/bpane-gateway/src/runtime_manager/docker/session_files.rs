@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::process::Stdio;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use uuid::Uuid;
@@ -47,6 +48,47 @@ chmod 0770 \
   "$BPANE_SESSION_FILE_MOUNTS_DIR"
 "#;
 
+const CLONE_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
+set -eu
+mkdir -p /bpane-target
+find /bpane-target -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+cp -a /bpane-source/. /bpane-target/
+chown -R bpane:bpane /bpane-target
+chmod 0770 /bpane-target
+"#;
+
+const EXPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
+set -eu
+tar -C /bpane-profile -czf - .
+"#;
+
+const IMPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
+set -eu
+archive="/tmp/bpane-browser-context-profile.tar.gz"
+cat > "$archive"
+tar -tzf "$archive" | while IFS= read -r path; do
+  case "$path" in
+    ""|/*|../*|*/../*|..|*/..)
+      echo "profile archive contains unsafe path: $path" >&2
+      exit 2
+      ;;
+  esac
+done
+mkdir -p /bpane-target
+find /bpane-target -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+tar -xzf "$archive" -C /bpane-target
+chown -R bpane:bpane /bpane-target
+chmod 0770 /bpane-target
+"#;
+
+#[derive(Deserialize)]
+struct DockerVolumeUsageEntry {
+    #[serde(rename = "Name")]
+    name: String,
+    #[serde(rename = "Size")]
+    size: String,
+}
+
 #[derive(Serialize)]
 struct SessionFileBindingsManifest {
     format_version: u32,
@@ -84,15 +126,16 @@ struct SessionFileBindingsManifestEntry {
 impl DockerRuntimeManager {
     pub(super) async fn initialize_session_data_volume(
         &self,
-        session_id: Uuid,
+        lease: &RuntimeLease,
     ) -> Result<(), RuntimeManagerError> {
         let output = Command::new(&self.config.docker_bin)
-            .args(self.docker_initialize_session_data_args(session_id))
+            .args(self.docker_initialize_session_data_args(lease))
             .output()
             .await
             .map_err(|error| {
                 RuntimeManagerError::StartupFailed(format!(
-                    "failed to initialize docker session data volume for {session_id}: {error}"
+                    "failed to initialize docker session data volume for {}: {error}",
+                    lease.session_id
                 ))
             })?;
         if output.status.success() {
@@ -100,16 +143,17 @@ impl DockerRuntimeManager {
         }
 
         Err(RuntimeManagerError::StartupFailed(format!(
-            "failed to initialize docker session data volume for {session_id}: {}",
+            "failed to initialize docker session data volume for {}: {}",
+            lease.session_id,
             String::from_utf8_lossy(&output.stderr).trim()
         )))
     }
 
     pub(in crate::runtime_manager) fn docker_initialize_session_data_args(
         &self,
-        session_id: Uuid,
+        lease: &RuntimeLease,
     ) -> Vec<String> {
-        vec![
+        let mut args = vec![
             "run".to_string(),
             "--rm".to_string(),
             "--network".to_string(),
@@ -117,9 +161,19 @@ impl DockerRuntimeManager {
             "-v".to_string(),
             format!(
                 "{}:{}",
-                self.session_data_volume_for_session(session_id),
+                self.session_data_volume_for_session(lease.session_id),
                 self.session_data_root()
             ),
+        ];
+        if let Some(profile_volume) = self.profile_volume_for_lease(lease) {
+            args.push("-v".to_string());
+            args.push(format!(
+                "{}:{}",
+                profile_volume,
+                self.profile_dir_for_session()
+            ));
+        }
+        args.extend([
             "-e".to_string(),
             format!("BPANE_SESSION_DATA_DIR={}", self.session_data_root()),
             "-e".to_string(),
@@ -140,7 +194,310 @@ impl DockerRuntimeManager {
             self.config.image.clone(),
             "-ec".to_string(),
             INITIALIZE_SESSION_DATA_SCRIPT.to_string(),
-        ]
+        ]);
+        args
+    }
+
+    pub(super) async fn remove_session_data_volume(
+        &self,
+        session_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        let volume = self.session_data_volume_for_session(session_id);
+        self.remove_docker_volume(&volume, "session data").await
+    }
+
+    pub(super) async fn remove_browser_context_profile_volume(
+        &self,
+        context_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        let volume = self.browser_context_profile_volume_for_context(context_id);
+        self.remove_docker_volume(&volume, "browser context profile")
+            .await
+    }
+
+    pub(super) async fn clone_browser_context_profile_volume(
+        &self,
+        source_context_id: Uuid,
+        target_context_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        let source_volume = self.browser_context_profile_volume_for_context(source_context_id);
+        let target_volume = self.browser_context_profile_volume_for_context(target_context_id);
+        if !self
+            .docker_volume_exists(&source_volume, "browser context profile")
+            .await?
+        {
+            return Ok(());
+        }
+        self.remove_browser_context_profile_volume(target_context_id)
+            .await?;
+
+        let output = Command::new(&self.config.docker_bin)
+            .arg("run")
+            .arg("--rm")
+            .arg("-v")
+            .arg(format!("{source_volume}:/bpane-source:ro"))
+            .arg("-v")
+            .arg(format!("{target_volume}:/bpane-target"))
+            .arg("--user")
+            .arg("0:0")
+            .arg("--entrypoint")
+            .arg("/bin/sh")
+            .arg(&self.config.image)
+            .arg("-ec")
+            .arg(CLONE_BROWSER_CONTEXT_PROFILE_SCRIPT)
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to clone docker browser context profile volume {source_volume} to {target_volume}: {error}"
+                ))
+            })?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to clone docker browser context profile volume {source_volume} to {target_volume}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+
+    pub(super) async fn export_browser_context_profile_volume_archive(
+        &self,
+        context_id: Uuid,
+    ) -> Result<Option<Vec<u8>>, RuntimeManagerError> {
+        let volume = self.browser_context_profile_volume_for_context(context_id);
+        if !self
+            .docker_volume_exists(&volume, "browser context profile")
+            .await?
+        {
+            return Ok(None);
+        }
+
+        let output = Command::new(&self.config.docker_bin)
+            .arg("run")
+            .arg("--rm")
+            .arg("-v")
+            .arg(format!("{volume}:/bpane-profile:ro"))
+            .arg("--user")
+            .arg("0:0")
+            .arg("--entrypoint")
+            .arg("/bin/sh")
+            .arg(&self.config.image)
+            .arg("-ec")
+            .arg(EXPORT_BROWSER_CONTEXT_PROFILE_SCRIPT)
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to export docker browser context profile volume {volume}: {error}"
+                ))
+            })?;
+        if output.status.success() {
+            return Ok(Some(output.stdout));
+        }
+
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to export docker browser context profile volume {volume}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+
+    pub(super) async fn import_browser_context_profile_volume_archive(
+        &self,
+        context_id: Uuid,
+        profile_archive: Option<&[u8]>,
+    ) -> Result<(), RuntimeManagerError> {
+        self.remove_browser_context_profile_volume(context_id)
+            .await?;
+        let Some(profile_archive) = profile_archive else {
+            return Ok(());
+        };
+        if profile_archive.is_empty() {
+            return Err(RuntimeManagerError::StartupFailed(
+                "browser context profile archive must not be empty".to_string(),
+            ));
+        }
+
+        let volume = self.browser_context_profile_volume_for_context(context_id);
+        let mut child = Command::new(&self.config.docker_bin)
+            .arg("run")
+            .arg("--rm")
+            .arg("-i")
+            .arg("--network")
+            .arg("none")
+            .arg("-v")
+            .arg(format!("{volume}:/bpane-target"))
+            .arg("--user")
+            .arg("0:0")
+            .arg("--entrypoint")
+            .arg("/bin/sh")
+            .arg(&self.config.image)
+            .arg("-ec")
+            .arg(IMPORT_BROWSER_CONTEXT_PROFILE_SCRIPT)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to start docker browser context profile import for {volume}: {error}"
+                ))
+            })?;
+        let Some(mut stdin) = child.stdin.take() else {
+            let _ = child.kill().await;
+            return Err(RuntimeManagerError::StartupFailed(format!(
+                "docker browser context profile import for {volume} did not expose stdin"
+            )));
+        };
+        if let Err(error) = stdin.write_all(profile_archive).await {
+            let _ = child.kill().await;
+            let _ = self.remove_browser_context_profile_volume(context_id).await;
+            return Err(RuntimeManagerError::StartupFailed(format!(
+                "failed to stream browser context profile archive into {volume}: {error}"
+            )));
+        }
+        drop(stdin);
+
+        let output = child.wait_with_output().await.map_err(|error| {
+            RuntimeManagerError::StartupFailed(format!(
+                "failed to wait for docker browser context profile import for {volume}: {error}"
+            ))
+        })?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let _ = self.remove_browser_context_profile_volume(context_id).await;
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to import docker browser context profile volume {volume}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+
+    pub(in crate::runtime_manager) async fn browser_context_profile_storage_bytes(
+        &self,
+        context_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, u64>, RuntimeManagerError> {
+        if context_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let volume_by_name = context_ids
+            .iter()
+            .copied()
+            .map(|context_id| {
+                (
+                    self.browser_context_profile_volume_for_context(context_id),
+                    context_id,
+                )
+            })
+            .collect::<HashMap<_, _>>();
+
+        let output = Command::new(&self.config.docker_bin)
+            .arg("system")
+            .arg("df")
+            .arg("-v")
+            .arg("--format")
+            .arg("{{json .Volumes}}")
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to inspect docker browser context profile volume usage: {error}"
+                ))
+            })?;
+        if !output.status.success() {
+            return Err(RuntimeManagerError::StartupFailed(format!(
+                "failed to inspect docker browser context profile volume usage: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+
+        let entries = serde_json::from_slice::<Vec<DockerVolumeUsageEntry>>(&output.stdout)
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to parse docker browser context profile volume usage: {error}"
+                ))
+            })?;
+        let mut storage_by_context = HashMap::new();
+        for entry in entries {
+            let Some(context_id) = volume_by_name.get(&entry.name).copied() else {
+                continue;
+            };
+            let Some(bytes) = parse_docker_size_bytes(&entry.size) else {
+                continue;
+            };
+            storage_by_context.insert(context_id, bytes);
+        }
+        for context_id in context_ids {
+            storage_by_context.entry(*context_id).or_insert(0);
+        }
+        Ok(storage_by_context)
+    }
+
+    async fn remove_docker_volume(
+        &self,
+        volume: &str,
+        label: &str,
+    ) -> Result<(), RuntimeManagerError> {
+        let output = Command::new(&self.config.docker_bin)
+            .arg("volume")
+            .arg("rm")
+            .arg(volume)
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to remove docker {label} volume {volume}: {error}"
+                ))
+            })?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr_lower = stderr.to_ascii_lowercase();
+        if stderr_lower.contains("no such volume") || stderr_lower.contains("not found") {
+            return Ok(());
+        }
+
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to remove docker {label} volume {volume}: {}",
+            stderr.trim()
+        )))
+    }
+
+    async fn docker_volume_exists(
+        &self,
+        volume: &str,
+        label: &str,
+    ) -> Result<bool, RuntimeManagerError> {
+        let output = Command::new(&self.config.docker_bin)
+            .arg("volume")
+            .arg("inspect")
+            .arg(volume)
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to inspect docker {label} volume {volume}: {error}"
+                ))
+            })?;
+        if output.status.success() {
+            return Ok(true);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr_lower = stderr.to_ascii_lowercase();
+        if stderr_lower.contains("no such volume") || stderr_lower.contains("not found") {
+            return Ok(false);
+        }
+
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to inspect docker {label} volume {volume}: {}",
+            stderr.trim()
+        )))
     }
 
     pub(super) async fn materialize_session_file_bindings(
@@ -400,6 +757,36 @@ impl DockerRuntimeManager {
             .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?;
         Ok(())
     }
+}
+
+pub(in crate::runtime_manager) fn parse_docker_size_bytes(value: &str) -> Option<u64> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("n/a") {
+        return None;
+    }
+    let split_at = trimmed
+        .char_indices()
+        .find(|(_, character)| !(character.is_ascii_digit() || *character == '.'))
+        .map(|(index, _)| index)
+        .unwrap_or(trimmed.len());
+    let number = trimmed[..split_at].trim().parse::<f64>().ok()?;
+    if !number.is_finite() || number < 0.0 {
+        return None;
+    }
+    let unit = trimmed[split_at..].trim().to_ascii_lowercase();
+    let multiplier = match unit.as_str() {
+        "" | "b" => 1.0,
+        "kb" => 1_000.0,
+        "mb" => 1_000_000.0,
+        "gb" => 1_000_000_000.0,
+        "tb" => 1_000_000_000_000.0,
+        "kib" => 1_024.0,
+        "mib" => 1_048_576.0,
+        "gib" => 1_073_741_824.0,
+        "tib" => 1_099_511_627_776.0,
+        _ => return None,
+    };
+    Some((number * multiplier).round() as u64)
 }
 
 fn materialization_file_mode(mode: SessionFileBindingMode) -> &'static str {

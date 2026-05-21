@@ -132,6 +132,7 @@ function session(overrides: { readonly state?: string; readonly totalClients?: n
   return {
     id: SESSION_ID,
     state: overrides.state ?? 'active',
+    browser_context: { mode: 'fresh', context_id: null },
     owner_mode: 'shared',
     idle_timeout_sec: 1800,
     labels: {},

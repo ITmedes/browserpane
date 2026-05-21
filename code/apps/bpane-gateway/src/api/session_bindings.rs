@@ -242,6 +242,23 @@ pub(super) async fn create_owned_session(
         .recording_lifecycle
         .validate_mode(request.recording.mode)
         .map_err(map_recording_lifecycle_error)?;
+    let reusable_context = validate_session_browser_context(state, principal, &request).await?;
+    if let Some(context) = reusable_context {
+        enforce_browser_context_storage_limit(state, &context).await?;
+        state
+            .session_store
+            .mark_browser_context_used_for_owner(principal, context.id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("browser context {} not found", context.id),
+                    }),
+                )
+            })?;
+    }
     let stored = state
         .session_store
         .create_session(principal, request, owner_mode)
@@ -271,6 +288,94 @@ pub(super) async fn create_owned_session(
     );
 
     Ok(stored)
+}
+
+async fn validate_session_browser_context(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    request: &CreateSessionRequest,
+) -> Result<Option<StoredBrowserContext>, (StatusCode, Json<ErrorResponse>)> {
+    let Some(browser_context) = &request.browser_context else {
+        return Ok(None);
+    };
+    if browser_context.mode != SessionBrowserContextMode::Reusable {
+        return Ok(None);
+    }
+    let Some(context_id) = browser_context.context_id else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "browser_context.context_id is required for reusable mode".to_string(),
+            }),
+        ));
+    };
+    let context = state
+        .session_store
+        .get_browser_context_for_owner(principal, context_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("browser context {context_id} not found"),
+                }),
+            )
+        })?;
+    if context.state != BrowserContextState::Ready {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!("browser context {context_id} is not ready"),
+            }),
+        ));
+    }
+    if context.persistence_mode != BrowserContextPersistenceMode::Reusable {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!("browser context {context_id} is not reusable"),
+            }),
+        ));
+    }
+    Ok(Some(context))
+}
+
+async fn enforce_browser_context_storage_limit(
+    state: &ApiState,
+    context: &StoredBrowserContext,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let Some(limit) = context.max_profile_storage_bytes else {
+        return Ok(());
+    };
+    let storage_by_context = state
+        .session_manager
+        .browser_context_profile_storage_bytes(&[context.id])
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: format!(
+                        "could not inspect browser context {} storage for quota enforcement: {error}",
+                        context.id
+                    ),
+                }),
+            )
+        })?;
+    let storage_bytes = storage_by_context.get(&context.id).copied().unwrap_or(0);
+    if storage_bytes > limit {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "browser context {} profile storage {} bytes exceeds configured limit {} bytes",
+                    context.id, storage_bytes, limit
+                ),
+            }),
+        ));
+    }
+    Ok(())
 }
 
 pub(super) async fn resolve_task_session_binding(

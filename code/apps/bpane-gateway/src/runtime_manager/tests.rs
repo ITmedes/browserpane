@@ -6,8 +6,14 @@ use chrono::Utc;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use super::docker::DockerLeaseState;
 use super::*;
-use crate::session_control::SessionOwner;
+use crate::auth::AuthenticatedPrincipal;
+use crate::session_control::{
+    BrowserContextPersistenceMode, CreateSessionRequest, PersistBrowserContextRequest,
+    SessionBrowserContextMode, SessionBrowserContextRequest, SessionOwner, SessionOwnerMode,
+    SessionStore,
+};
 use crate::session_files::{
     SessionFileBindingMode, SessionFileBindingState, StoredSessionFileBinding,
 };
@@ -30,6 +36,25 @@ fn docker_config() -> DockerRuntimeConfig {
         max_starting_runtimes: 1,
         seccomp_unconfined: true,
         env_file: None,
+    }
+}
+
+fn docker_profile(max_runtime_sessions: usize) -> RuntimeProfile {
+    RuntimeProfile {
+        runtime_binding: "docker_runtime_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    }
+}
+
+fn test_principal(subject: &str) -> AuthenticatedPrincipal {
+    AuthenticatedPrincipal {
+        subject: subject.to_string(),
+        issuer: "https://issuer.example".to_string(),
+        display_name: Some(subject.to_string()),
+        client_id: None,
     }
 }
 
@@ -212,6 +237,18 @@ fn docker_runtime_names_and_sockets_are_session_scoped() {
 }
 
 #[test]
+fn docker_runtime_parses_volume_size_units() {
+    assert_eq!(docker::parse_docker_size_bytes("176B"), Some(176));
+    assert_eq!(docker::parse_docker_size_bytes("4.62MB"), Some(4_620_000));
+    assert_eq!(
+        docker::parse_docker_size_bytes("1.5GiB"),
+        Some(1_610_612_736)
+    );
+    assert_eq!(docker::parse_docker_size_bytes("N/A"), None);
+    assert_eq!(docker::parse_docker_size_bytes("unknown"), None);
+}
+
+#[test]
 fn docker_runtime_launch_separates_socket_and_session_data_mounts() {
     let manager = DockerRuntimeManager::new(
         docker_config(),
@@ -229,6 +266,8 @@ fn docker_runtime_launch_separates_socket_and_session_data_mounts() {
         session_id,
         agent_socket_path: manager.socket_path_for_session(session_id),
         container_name: Some(manager.container_name_for_session(session_id)),
+        browser_context_id: None,
+        discard_session_data_on_release: false,
         idle_generation: 0,
     };
 
@@ -251,6 +290,55 @@ fn docker_runtime_launch_separates_socket_and_session_data_mounts() {
     assert!(args.contains(&"BPANE_SESSION_FILE_MOUNTS_DIR=/run/bpane/session/mounts".to_string()));
     assert!(args.contains(
         &"BPANE_SESSION_FILE_BINDINGS_MANIFEST=/run/bpane/session/session-file-bindings.json"
+            .to_string()
+    ));
+}
+
+#[test]
+fn docker_runtime_mounts_reusable_browser_context_profile_volume() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    let lease = RuntimeLease {
+        session_id,
+        agent_socket_path: manager.socket_path_for_session(session_id),
+        container_name: Some(manager.container_name_for_session(session_id)),
+        browser_context_id: Some(context_id),
+        discard_session_data_on_release: false,
+        idle_generation: 0,
+    };
+
+    let run_args = manager.docker_run_args(&lease, &[]).unwrap();
+    let init_args = manager.docker_initialize_session_data_args(&lease);
+    let context_profile_mount =
+        "deploy_bpane-session-data-browser-context-019db438c74a7ef2810c792e298faf22:/run/bpane/session/chromium"
+            .to_string();
+
+    assert_eq!(
+        manager.browser_context_profile_volume_for_context(context_id),
+        "deploy_bpane-session-data-browser-context-019db438c74a7ef2810c792e298faf22"
+    );
+    assert!(run_args.contains(
+        &"deploy_bpane-session-data-019db438c74a7ef2810c792e298faf11:/run/bpane/session"
+            .to_string()
+    ));
+    assert!(run_args.contains(&context_profile_mount));
+    assert!(run_args.contains(&"BPANE_PROFILE_DIR=/run/bpane/session/chromium".to_string()));
+    assert!(run_args.contains(&"BPANE_UPLOAD_DIR=/run/bpane/session/uploads".to_string()));
+    assert!(run_args.contains(&"BPANE_DOWNLOAD_DIR=/run/bpane/session/downloads".to_string()));
+    assert!(
+        run_args.contains(&"BPANE_SESSION_FILE_MOUNTS_DIR=/run/bpane/session/mounts".to_string())
+    );
+
+    assert!(init_args.contains(&context_profile_mount));
+    let materialize_args = manager.docker_materialize_file_args(
+        session_id,
+        "/run/bpane/session/mounts/inputs/input.csv",
+        "0444",
+    );
+    assert!(!materialize_args.contains(&context_profile_mount));
+    assert!(materialize_args.contains(
+        &"deploy_bpane-session-data-019db438c74a7ef2810c792e298faf11:/run/bpane/session"
             .to_string()
     ));
 }
@@ -351,7 +439,16 @@ fn docker_runtime_initializes_session_data_volume_as_root() {
     .unwrap();
     let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
 
-    let args = manager.docker_initialize_session_data_args(session_id);
+    let lease = RuntimeLease {
+        session_id,
+        agent_socket_path: manager.socket_path_for_session(session_id),
+        container_name: Some(manager.container_name_for_session(session_id)),
+        browser_context_id: None,
+        discard_session_data_on_release: false,
+        idle_generation: 0,
+    };
+
+    let args = manager.docker_initialize_session_data_args(&lease);
 
     assert!(args.contains(&"--network".to_string()));
     assert!(args.contains(&"none".to_string()));
@@ -368,4 +465,228 @@ fn docker_runtime_initializes_session_data_volume_as_root() {
     assert!(args.contains(&"0:0".to_string()));
     assert!(args.contains(&"--entrypoint".to_string()));
     assert!(args.contains(&"/bin/sh".to_string()));
+}
+
+#[tokio::test]
+async fn docker_runtime_rejects_parallel_writer_for_reusable_browser_context() {
+    let manager = Arc::new(DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap());
+    let store = SessionStore::in_memory_with_config(docker_profile(2));
+    manager.attach_session_store(store.clone()).await;
+    let principal = test_principal("owner");
+    let context = store
+        .create_browser_context(
+            &principal,
+            PersistBrowserContextRequest {
+                id: None,
+                name: "authenticated".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                persistence_mode: BrowserContextPersistenceMode::Reusable,
+                retention_sec: None,
+                max_profile_storage_bytes: None,
+            },
+        )
+        .await
+        .unwrap();
+    let create_request = || CreateSessionRequest {
+        browser_context: Some(SessionBrowserContextRequest {
+            mode: SessionBrowserContextMode::Reusable,
+            context_id: Some(context.id),
+        }),
+        ..Default::default()
+    };
+    let session_a = store
+        .create_session(
+            &principal,
+            create_request(),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    let session_b = store
+        .create_session(
+            &principal,
+            create_request(),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    manager.leases.lock().await.insert(
+        session_a.id,
+        DockerLeaseState::Ready(RuntimeLease {
+            session_id: session_a.id,
+            agent_socket_path: manager.socket_path_for_session(session_a.id),
+            container_name: Some(manager.container_name_for_session(session_a.id)),
+            browser_context_id: Some(context.id),
+            discard_session_data_on_release: false,
+            idle_generation: 0,
+        }),
+    );
+
+    let error = manager.resolve(session_b.id).await.unwrap_err();
+
+    assert_eq!(
+        error,
+        RuntimeManagerError::BrowserContextInUse {
+            browser_context_id: context.id,
+            active_session_id: session_a.id,
+        }
+    );
+}
+
+#[tokio::test]
+async fn docker_runtime_rejects_context_data_delete_while_context_is_active() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    manager.leases.lock().await.insert(
+        session_id,
+        DockerLeaseState::Ready(RuntimeLease {
+            session_id,
+            agent_socket_path: manager.socket_path_for_session(session_id),
+            container_name: Some(manager.container_name_for_session(session_id)),
+            browser_context_id: Some(context_id),
+            discard_session_data_on_release: false,
+            idle_generation: 0,
+        }),
+    );
+
+    let error = manager
+        .delete_browser_context_data(context_id)
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RuntimeManagerError::BrowserContextInUse {
+            browser_context_id: context_id,
+            active_session_id: session_id,
+        }
+    );
+}
+
+#[tokio::test]
+async fn docker_runtime_rejects_context_data_clone_while_source_is_active() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let source_context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    let target_context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf33").unwrap();
+    manager.leases.lock().await.insert(
+        session_id,
+        DockerLeaseState::Ready(RuntimeLease {
+            session_id,
+            agent_socket_path: manager.socket_path_for_session(session_id),
+            container_name: Some(manager.container_name_for_session(session_id)),
+            browser_context_id: Some(source_context_id),
+            discard_session_data_on_release: false,
+            idle_generation: 0,
+        }),
+    );
+
+    let error = manager
+        .clone_browser_context_data(source_context_id, target_context_id)
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RuntimeManagerError::BrowserContextInUse {
+            browser_context_id: source_context_id,
+            active_session_id: session_id,
+        }
+    );
+}
+
+#[tokio::test]
+async fn docker_runtime_rejects_context_export_while_context_is_active() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    manager.leases.lock().await.insert(
+        session_id,
+        DockerLeaseState::Ready(RuntimeLease {
+            session_id,
+            agent_socket_path: manager.socket_path_for_session(session_id),
+            container_name: Some(manager.container_name_for_session(session_id)),
+            browser_context_id: Some(context_id),
+            discard_session_data_on_release: false,
+            idle_generation: 0,
+        }),
+    );
+
+    let error = manager
+        .export_browser_context_profile_archive(context_id)
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RuntimeManagerError::BrowserContextInUse {
+            browser_context_id: context_id,
+            active_session_id: session_id,
+        }
+    );
+}
+
+#[tokio::test]
+async fn docker_runtime_rejects_context_import_while_context_is_active() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    manager.leases.lock().await.insert(
+        session_id,
+        DockerLeaseState::Ready(RuntimeLease {
+            session_id,
+            agent_socket_path: manager.socket_path_for_session(session_id),
+            container_name: Some(manager.container_name_for_session(session_id)),
+            browser_context_id: Some(context_id),
+            discard_session_data_on_release: false,
+            idle_generation: 0,
+        }),
+    );
+
+    let error = manager
+        .import_browser_context_profile_archive(context_id, Some(b"profile"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RuntimeManagerError::BrowserContextInUse {
+            browser_context_id: context_id,
+            active_session_id: session_id,
+        }
+    );
+}
+
+#[tokio::test]
+async fn docker_runtime_reports_active_browser_context_writer() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    manager.leases.lock().await.insert(
+        session_id,
+        DockerLeaseState::Starting {
+            lease: RuntimeLease {
+                session_id,
+                agent_socket_path: manager.socket_path_for_session(session_id),
+                container_name: Some(manager.container_name_for_session(session_id)),
+                browser_context_id: Some(context_id),
+                discard_session_data_on_release: false,
+                idle_generation: 0,
+            },
+            notify: Arc::new(tokio::sync::Notify::new()),
+        },
+    );
+
+    assert_eq!(
+        manager.active_browser_context_session_id(context_id).await,
+        Some(session_id)
+    );
+    assert_eq!(
+        manager
+            .active_browser_context_session_id(Uuid::now_v7())
+            .await,
+        None
+    );
 }

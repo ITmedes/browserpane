@@ -33,6 +33,7 @@ function session(id: string): SessionResource {
   return {
     id,
     state: 'active',
+    browser_context: { mode: 'fresh', context_id: null },
     owner_mode: 'shared',
     connect: {
       gateway_url: 'https://localhost:4433',

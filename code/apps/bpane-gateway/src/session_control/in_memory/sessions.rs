@@ -37,10 +37,15 @@ impl InMemorySessionStore {
         }
 
         let now = Utc::now();
+        let browser_context = request.browser_context.unwrap_or_default();
         let session = StoredSession {
             id: Uuid::now_v7(),
             state: SessionLifecycleState::Ready,
             template_id: request.template_id,
+            browser_context: SessionBrowserContextResource {
+                mode: browser_context.mode,
+                context_id: browser_context.context_id,
+            },
             owner_mode,
             viewport: request.viewport.unwrap_or_default(),
             owner: SessionOwner {

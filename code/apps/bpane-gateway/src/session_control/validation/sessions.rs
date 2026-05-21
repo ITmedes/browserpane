@@ -26,6 +26,25 @@ pub(in crate::session_control) fn validate_create_request(
             ));
         }
     }
+    if let Some(browser_context) = &request.browser_context {
+        match browser_context.mode {
+            SessionBrowserContextMode::Fresh | SessionBrowserContextMode::Ephemeral => {
+                if browser_context.context_id.is_some() {
+                    return Err(SessionStoreError::InvalidRequest(format!(
+                        "browser_context.context_id must not be set for {} mode",
+                        browser_context.mode.as_str()
+                    )));
+                }
+            }
+            SessionBrowserContextMode::Reusable => {
+                if browser_context.context_id.is_none() {
+                    return Err(SessionStoreError::InvalidRequest(
+                        "browser_context.context_id is required for reusable mode".to_string(),
+                    ));
+                }
+            }
+        }
+    }
     if let Some(retention_sec) = request.recording.retention_sec {
         if retention_sec == 0 {
             return Err(SessionStoreError::InvalidRequest(

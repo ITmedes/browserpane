@@ -7,6 +7,10 @@ const SESSION: SessionResource = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
   state: 'active',
   template_id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
+  browser_context: {
+    mode: 'reusable',
+    context_id: '019df7be-6222-7b00-8c86-9e1f3f8d4a72',
+  },
   owner_mode: 'shared',
   idle_timeout_sec: 1800,
   labels: { case: '1234', purpose: 'import-repro' },
@@ -41,6 +45,19 @@ const SESSION: SessionResource = {
   created_at: '2026-05-04T19:00:00Z',
   updated_at: '2026-05-04T19:01:00Z',
 };
+
+const BROWSER_CONTEXT = {
+  id: '019df7be-6222-7b00-8c86-9e1f3f8d4a72',
+  name: 'Support profile',
+  description: null,
+  labels: { team: 'support' },
+  persistence_mode: 'reusable',
+  state: 'ready',
+  created_at: '2026-05-04T18:30:00Z',
+  updated_at: '2026-05-04T18:30:00Z',
+  last_used_at: null,
+  deleted_at: null,
+} as const;
 
 const TEMPLATE = {
   id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
@@ -123,6 +140,7 @@ describe('SessionViewModelBuilder', () => {
     const viewModel = SessionViewModelBuilder.list({
       sessions: [SESSION],
       sessionTemplates: [TEMPLATE],
+      browserContexts: [BROWSER_CONTEXT],
       selectedSessionId: SESSION.id,
       authenticated: true,
       loading: false,
@@ -138,6 +156,8 @@ describe('SessionViewModelBuilder', () => {
       clients: 1,
       template: 'Support triage (019df5c8...21c0)',
       templateId: TEMPLATE.id,
+      browserContext: 'Support profile (019df7be...4a72)',
+      browserContextId: BROWSER_CONTEXT.id,
       mcpDelegation: 'MCP not delegated',
       labels: 'case=1234, purpose=import-repro',
     });
@@ -152,6 +172,7 @@ describe('SessionViewModelBuilder', () => {
   it('disables destructive lifecycle actions while connected', () => {
     const viewModel = SessionViewModelBuilder.detail({
       session: SESSION,
+      browserContexts: [BROWSER_CONTEXT],
       connected: true,
       loading: false,
       error: null,
@@ -166,6 +187,7 @@ describe('SessionViewModelBuilder', () => {
     const viewModel = SessionViewModelBuilder.detail({
       session: SESSION,
       sessionTemplates: [TEMPLATE],
+      browserContexts: [BROWSER_CONTEXT],
       status: STATUS,
       connected: false,
       loading: false,
@@ -181,6 +203,11 @@ describe('SessionViewModelBuilder', () => {
       label: 'template',
       value: 'Support triage (019df5c8...21c0)',
       testId: 'session-template',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'browser context',
+      value: 'Support profile (019df7be...4a72)',
+      testId: 'session-browser-context',
     });
     expect(viewModel.facts).toContainEqual({
       label: 'labels',
@@ -271,6 +298,7 @@ describe('SessionViewModelBuilder', () => {
 
     const viewModel = SessionViewModelBuilder.list({
       sessions: [stoppedSession],
+      browserContexts: [BROWSER_CONTEXT],
       selectedSessionId: stoppedSession.id,
       authenticated: true,
       loading: false,
