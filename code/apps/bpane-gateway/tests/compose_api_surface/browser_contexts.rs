@@ -15,7 +15,8 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
                 "name": context_name,
                 "description": "Compose e2e browser context",
                 "labels": label_map("browser-contexts"),
-                "retention_sec": 86400
+                "retention_sec": 86400,
+                "max_profile_storage_bytes": 10737418240_u64
             }),
         )
         .await?;
@@ -23,6 +24,7 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     if context["persistence_mode"] != json!("reusable")
         || context["retention_sec"] != json!(86400)
         || context["retention_expires_at"].is_null()
+        || context["max_profile_storage_bytes"] != json!(10737418240_u64)
         || context["state"] != json!("ready")
         || !context["last_used_at"].is_null()
     {
@@ -269,6 +271,11 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
             "browser context profile storage bytes did not increase after browser use: {storage_context}"
         ));
     }
+    if storage_context["usage"]["profile_storage_limit_exceeded"] != json!(false) {
+        return Err(anyhow!(
+            "browser context profile storage limit should not be exceeded: {storage_context}"
+        ));
+    }
     let restored_deleted_session = harness
         .delete_json(&format!("/api/v1/sessions/{restored_session_id}"))
         .await?;
@@ -306,6 +313,125 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         ));
     }
 
+    verify_browser_context_storage_quota(harness).await?;
+
+    Ok(())
+}
+
+async fn verify_browser_context_storage_quota(harness: &ComposeHarness) -> Result<()> {
+    let context_name = harness.unique_name("compose-browser-context-quota");
+    let context = harness
+        .post_json(
+            "/api/v1/browser-contexts",
+            json!({
+                "name": context_name,
+                "description": "Compose e2e browser context with a tiny storage limit",
+                "labels": label_map("browser-context-quota"),
+                "max_profile_storage_bytes": 1_u64
+            }),
+        )
+        .await?;
+    let context_id = json_id(&context, "id")?;
+    if context["max_profile_storage_bytes"] != json!(1_u64) {
+        return Err(anyhow!(
+            "browser context quota create returned unexpected data: {context}"
+        ));
+    }
+
+    let session = harness
+        .post_json(
+            "/api/v1/sessions",
+            json!({
+                "browser_context": {
+                    "mode": "reusable",
+                    "context_id": context_id
+                },
+                "labels": {
+                    "suite": "browser-context-quota"
+                }
+            }),
+        )
+        .await?;
+    let session_id = json_id(&session, "id")?;
+    let runtime_access = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/automation-access"),
+            json!({}),
+        )
+        .await?;
+    let cdp_endpoint = automation_cdp_endpoint(&runtime_access)?;
+    let probe_key = format!("bpane_quota_{context_id}");
+    let probe_value = format!("quota-state-{session_id}");
+    let cookie_name = "bpane_quota_probe";
+    let cookie_value = format!("quota-cookie-{session_id}");
+    run_profile_state_probe(
+        harness,
+        cdp_endpoint,
+        "set",
+        &probe_key,
+        &probe_value,
+        cookie_name,
+        &cookie_value,
+    )
+    .await?;
+
+    let stopped = harness
+        .delete_json(&format!("/api/v1/sessions/{session_id}"))
+        .await?;
+    if stopped["state"] != json!("stopped") {
+        return Err(anyhow!(
+            "browser-context quota session cleanup did not stop"
+        ));
+    }
+
+    let over_limit_context = harness
+        .get_json(&format!("/api/v1/browser-contexts/{context_id}"))
+        .await?;
+    if over_limit_context["usage"]["profile_storage_limit_exceeded"] != json!(true) {
+        return Err(anyhow!(
+            "browser context quota did not report an exceeded profile limit: {over_limit_context}"
+        ));
+    }
+
+    let rejected = harness
+        .post_json_outcome(
+            "/api/v1/sessions",
+            json!({
+                "browser_context": {
+                    "mode": "reusable",
+                    "context_id": context_id
+                },
+                "labels": {
+                    "suite": "browser-context-quota-rejected"
+                }
+            }),
+        )
+        .await?;
+    if rejected.status != StatusCode::CONFLICT {
+        return Err(anyhow!(
+            "over-limit browser context session create returned {} instead of 409: {}",
+            rejected.status,
+            rejected.body
+        ));
+    }
+    let rejected_error = rejected.body["error"].as_str().unwrap_or_default();
+    if !rejected_error.contains("profile storage")
+        || !rejected_error.contains("exceeds configured limit")
+    {
+        return Err(anyhow!(
+            "over-limit browser context returned unexpected error: {}",
+            rejected.body
+        ));
+    }
+
+    let deleted = harness
+        .delete_json(&format!("/api/v1/browser-contexts/{context_id}"))
+        .await?;
+    if deleted["state"] != json!("deleted") {
+        return Err(anyhow!(
+            "browser-context quota cleanup did not delete context: {deleted}"
+        ));
+    }
     Ok(())
 }
 

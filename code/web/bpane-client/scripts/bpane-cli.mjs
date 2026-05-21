@@ -40,6 +40,7 @@ const KNOWN_OPTIONS = new Set([
   'mcp-control-url',
   'mcp-display-name',
   'mcp-issuer',
+  'max-profile-storage-bytes',
   'name',
   'older-than-sec',
   'offset',
@@ -127,6 +128,7 @@ function usageText() {
     '  --description <text>      Session template description for create/update.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
     '  --retention-sec <sec>     Browser context retention window in seconds.',
+    '  --max-profile-storage-bytes <bytes> Browser context profile storage limit in bytes.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
@@ -780,6 +782,10 @@ function buildBrowserContextRequest(options, fallbackName = null) {
   const retentionSec = parseIntegerOption(options, 'retention-sec');
   if (retentionSec !== null) {
     body.retention_sec = retentionSec;
+  }
+  const maxProfileStorageBytes = parseIntegerOption(options, 'max-profile-storage-bytes');
+  if (maxProfileStorageBytes !== null) {
+    body.max_profile_storage_bytes = maxProfileStorageBytes;
   }
   return body;
 }

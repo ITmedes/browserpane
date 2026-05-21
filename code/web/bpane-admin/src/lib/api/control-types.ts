@@ -33,6 +33,7 @@ export type BrowserContextResource = {
   readonly persistence_mode: BrowserContextPersistenceMode;
   readonly retention_sec?: number | null;
   readonly retention_expires_at?: string | null;
+  readonly max_profile_storage_bytes?: number | null;
   readonly state: BrowserContextState;
   readonly usage?: BrowserContextUsageResource | null;
   readonly created_at: string;
@@ -46,6 +47,7 @@ export type BrowserContextUsageResource = {
   readonly active_runtime_session_count: number;
   readonly active_runtime_session_id?: string | null;
   readonly profile_storage_bytes?: number | null;
+  readonly profile_storage_limit_exceeded: boolean;
 };
 
 export type BrowserContextListResponse = {
@@ -58,6 +60,7 @@ export type CreateBrowserContextCommand = {
   readonly labels?: Readonly<Record<string, string>>;
   readonly persistence_mode?: BrowserContextPersistenceMode;
   readonly retention_sec?: number | null;
+  readonly max_profile_storage_bytes?: number | null;
 };
 
 export type SessionConnectInfo = {

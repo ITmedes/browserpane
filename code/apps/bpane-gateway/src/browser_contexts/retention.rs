@@ -149,6 +149,7 @@ mod tests {
                     labels: HashMap::new(),
                     persistence_mode: BrowserContextPersistenceMode::Reusable,
                     retention_sec,
+                    max_profile_storage_bytes: None,
                 },
             )
             .await

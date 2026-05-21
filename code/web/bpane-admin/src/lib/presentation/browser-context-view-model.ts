@@ -19,6 +19,7 @@ export type BrowserContextCatalogRowViewModel = {
   readonly sessionSummary: string;
   readonly activeRuntimeSummary: string;
   readonly profileStorageSummary: string;
+  readonly profileStorageLimitSummary: string;
   readonly retentionSummary: string;
   readonly canDelete: boolean;
   readonly deleteHint: string;
@@ -68,6 +69,7 @@ type ContextUsage = {
   readonly activeSessionCount: number;
   readonly activeSessionId: string | null;
   readonly profileStorageBytes: number | null;
+  readonly profileStorageLimitExceeded: boolean;
 };
 
 function contextUsage(sessions: readonly SessionResource[]): ReadonlyMap<string, ContextUsage> {
@@ -99,6 +101,7 @@ function contextUsageForContext(context: BrowserContextResource, sessionUsage: C
         activeSessionCount: context.usage.active_runtime_session_count,
         activeSessionId: context.usage.active_runtime_session_id ?? null,
         profileStorageBytes: context.usage.profile_storage_bytes ?? null,
+        profileStorageLimitExceeded: context.usage.profile_storage_limit_exceeded,
       }
     : emptyUsage();
   if (!sessionUsage) {
@@ -109,6 +112,7 @@ function contextUsageForContext(context: BrowserContextResource, sessionUsage: C
     activeSessionCount: Math.max(apiUsage.activeSessionCount, sessionUsage.activeSessionCount),
     activeSessionId: apiUsage.activeSessionId ?? sessionUsage.activeSessionId,
     profileStorageBytes: apiUsage.profileStorageBytes,
+    profileStorageLimitExceeded: apiUsage.profileStorageLimitExceeded,
   };
 }
 
@@ -118,6 +122,7 @@ function emptyUsage(): ContextUsage {
     activeSessionCount: 0,
     activeSessionId: null,
     profileStorageBytes: null,
+    profileStorageLimitExceeded: false,
   };
 }
 
@@ -145,6 +150,7 @@ function toRow(context: BrowserContextResource, usage: ContextUsage): BrowserCon
       + (activeSessionCount > 0 ? `, ${activeSessionCount} active runtime` : ''),
     activeRuntimeSummary: activeRuntimeSummary(activeSessionCount, activeSessionId),
     profileStorageSummary: formatBytes(usage.profileStorageBytes),
+    profileStorageLimitSummary: profileStorageLimitSummary(context, usage),
     retentionSummary: retentionSummary(context),
     canDelete,
     deleteHint: deleteHint(context, sessionCount, activeSessionCount),
@@ -183,6 +189,7 @@ function rowMatches(row: BrowserContextCatalogRowViewModel, normalized: string):
     row.sessionSummary,
     row.activeRuntimeSummary,
     row.profileStorageSummary,
+    row.profileStorageLimitSummary,
     row.retentionSummary,
   ].some((value) => value.toLowerCase().includes(normalized));
 }
@@ -207,6 +214,24 @@ function retentionSummary(context: BrowserContextResource): string {
   const duration = formatDuration(retentionSec);
   const expiresAt = formatOptionalTimestamp(context.retention_expires_at, 'expiry unknown');
   return `${duration}, expires ${expiresAt}`;
+}
+
+function profileStorageLimitSummary(
+  context: BrowserContextResource,
+  usage: ContextUsage,
+): string {
+  const limit = context.max_profile_storage_bytes ?? null;
+  if (!limit) {
+    return 'no storage limit';
+  }
+  const prefix = `${formatBytes(limit)} limit`;
+  if (usage.profileStorageBytes === null) {
+    return `${prefix}, current usage unknown`;
+  }
+  if (usage.profileStorageLimitExceeded) {
+    return `${prefix}, exceeded by ${formatBytes(usage.profileStorageBytes - limit)}`;
+  }
+  return `${prefix}, ${formatBytes(Math.max(0, limit - usage.profileStorageBytes))} remaining`;
 }
 
 function apiExample(contextId: string): string {

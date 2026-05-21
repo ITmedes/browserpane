@@ -51,6 +51,7 @@ async fn create_browser_context(
                 labels: request.labels,
                 persistence_mode: request.persistence_mode,
                 retention_sec: request.retention_sec,
+                max_profile_storage_bytes: request.max_profile_storage_bytes,
             },
         )
         .await
@@ -171,9 +172,16 @@ async fn browser_context_resource_with_usage(
 
 fn browser_context_resource_with_usage_value(
     context: StoredBrowserContext,
-    usage: BrowserContextUsageResource,
+    mut usage: BrowserContextUsageResource,
 ) -> BrowserContextResource {
     let mut resource = context.to_resource();
+    usage.profile_storage_limit_exceeded = match (
+        resource.max_profile_storage_bytes,
+        usage.profile_storage_bytes,
+    ) {
+        (Some(limit), Some(bytes)) => bytes > limit,
+        _ => false,
+    };
     resource.usage = usage;
     resource
 }

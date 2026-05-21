@@ -64,6 +64,10 @@ export class ControlSessionMapper {
       ),
       retention_sec: optionalNumber(object.retention_sec, 'browser context retention_sec') ?? null,
       retention_expires_at: retentionExpiresAt ?? null,
+      max_profile_storage_bytes: optionalNumber(
+        object.max_profile_storage_bytes,
+        'browser context max_profile_storage_bytes',
+      ) ?? null,
       state: expectEnum(object.state, 'browser context state', BROWSER_CONTEXT_STATES),
       usage: usage ?? null,
       created_at: expectString(object.created_at, 'browser context created_at'),
@@ -206,6 +210,10 @@ function toBrowserContextUsage(value: unknown): BrowserContextUsageResource | nu
     ),
     active_runtime_session_id: activeRuntimeSessionId ?? null,
     profile_storage_bytes: profileStorageBytes ?? null,
+    profile_storage_limit_exceeded: expectBoolean(
+      object.profile_storage_limit_exceeded ?? false,
+      'browser context usage profile_storage_limit_exceeded',
+    ),
   };
 }
 

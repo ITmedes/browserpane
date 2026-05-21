@@ -309,6 +309,8 @@ pub(super) struct CreateBrowserContextRequest {
     pub(super) persistence_mode: BrowserContextPersistenceMode,
     #[serde(default)]
     pub(super) retention_sec: Option<u32>,
+    #[serde(default)]
+    pub(super) max_profile_storage_bytes: Option<u64>,
 }
 
 fn default_browser_context_persistence_mode() -> BrowserContextPersistenceMode {
