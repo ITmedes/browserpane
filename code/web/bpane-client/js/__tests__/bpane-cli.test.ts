@@ -24,7 +24,18 @@ function jsonResponse(body: unknown, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers({ 'content-type': 'application/json' }),
     text: async () => body === null || body === undefined ? '' : JSON.stringify(body),
+  };
+}
+
+function binaryResponse(body: Buffer | string, contentType = 'application/octet-stream', status = 200) {
+  const bytes = Buffer.isBuffer(body) ? body : Buffer.from(body);
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers({ 'content-type': contentType }),
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
   };
 }
 
@@ -395,6 +406,8 @@ describe('bpane operator CLI', () => {
         'suite=cli',
         '--template-id',
         'desktop',
+        '--browser-context-id',
+        '0198dff7-457e-7000-8000-000000000015',
         '--owner-mode',
         'collaborative',
         '--width',
@@ -423,6 +436,10 @@ describe('bpane operator CLI', () => {
     expect(calls[0].init.method).toBe('POST');
     expect(JSON.parse(calls[0].init.body)).toEqual({
       template_id: 'desktop',
+      browser_context: {
+        mode: 'reusable',
+        context_id: '0198dff7-457e-7000-8000-000000000015',
+      },
       owner_mode: 'collaborative',
       viewport: { width: 1440, height: 900 },
       idle_timeout_sec: 120,
@@ -431,6 +448,260 @@ describe('bpane operator CLI', () => {
       extension_ids: ['018f1a5b-0784-71bf-ae46-0c973f00aa11'],
       recording: { mode: 'manual', format: 'webm', retention_sec: 3600 },
     });
+  });
+
+  it('manages browser contexts through the CLI', async () => {
+    const createContextIo = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ id: 'context-1' }, 201),
+      jsonResponse({ id: 'context-2', name: 'support-profile-copy' }, 201),
+      jsonResponse({ contexts: [{ id: 'context-1' }] }),
+      jsonResponse({ id: 'context-1' }),
+      binaryResponse('PKbrowser-context-export', 'application/zip'),
+      jsonResponse({ id: 'context-3', name: 'support-profile-import' }, 201),
+      jsonResponse({ id: 'context-1', state: 'deleted' }),
+    );
+
+    const createCode = await runBpaneCli(
+      [
+        'browser-context',
+        'create',
+        'support-profile',
+        '--description',
+        'Support profile',
+        '--label',
+        'team=support',
+        '--retention-sec',
+        '604800',
+        '--max-profile-storage-bytes',
+        '67108864',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      createContextIo.io,
+      fetchImpl,
+    );
+    expect(createCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(createContextIo)).toEqual({ id: 'context-1' });
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/browser-contexts');
+    expect(calls[0].init.method).toBe('POST');
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      name: 'support-profile',
+      description: 'Support profile',
+      labels: { team: 'support' },
+      retention_sec: 604800,
+      max_profile_storage_bytes: 67108864,
+    });
+
+    const cloneIo = createIo();
+    const cloneCode = await runBpaneCli(
+      [
+        'browser-context',
+        'clone',
+        'context-1',
+        'support-profile-copy',
+        '--label',
+        'copy=sandbox',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      cloneIo.io,
+      fetchImpl,
+    );
+    expect(cloneCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(cloneIo)).toEqual({ id: 'context-2', name: 'support-profile-copy' });
+    expect(calls[1].url).toBe('http://localhost:8080/api/v1/browser-contexts/context-1/clone');
+    expect(calls[1].init.method).toBe('POST');
+    expect(JSON.parse(calls[1].init.body)).toEqual({
+      name: 'support-profile-copy',
+      labels: { copy: 'sandbox' },
+    });
+
+    const listIo = createIo();
+    const listCode = await runBpaneCli(
+      ['browser-context', 'list'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      listIo.io,
+      fetchImpl,
+    );
+    expect(listCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(listIo)).toEqual({ contexts: [{ id: 'context-1' }] });
+
+    const getIo = createIo();
+    const getCode = await runBpaneCli(
+      ['browser-context', 'get', 'context/with space'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      getIo.io,
+      fetchImpl,
+    );
+    expect(getCode).toBe(EXIT_CODES.ok);
+
+    const exportDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-export-test-'));
+    const exportPath = path.join(exportDir, 'context.zip');
+    const exportIo = createIo();
+    const exportCode = await runBpaneCli(
+      ['browser-context', 'export', 'context-1', '--output', exportPath],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      exportIo.io,
+      fetchImpl,
+    );
+    expect(exportCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(exportIo)).toMatchObject({
+      context_id: 'context-1',
+      output_path: exportPath,
+      byte_count: 24,
+      content_type: 'application/zip',
+    });
+    expect(await fs.readFile(exportPath, 'utf8')).toBe('PKbrowser-context-export');
+
+    const importIo = createIo();
+    const importCode = await runBpaneCli(
+      [
+        'browser-context',
+        'import',
+        '--input',
+        exportPath,
+        '--name',
+        'support-profile-import',
+        '--label',
+        'imported=true',
+        '--retention-sec',
+        '43200',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      importIo.io,
+      fetchImpl,
+    );
+    expect(importCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(importIo)).toEqual({ id: 'context-3', name: 'support-profile-import' });
+    await fs.rm(exportDir, { recursive: true, force: true });
+
+    const deleteIo = createIo();
+    const deleteCode = await runBpaneCli(
+      ['browser-context', 'delete', 'context-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      deleteIo.io,
+      fetchImpl,
+    );
+    expect(deleteCode).toBe(EXIT_CODES.ok);
+
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://localhost:8080/api/v1/browser-contexts', 'POST'],
+      ['http://localhost:8080/api/v1/browser-contexts/context-1/clone', 'POST'],
+      ['http://localhost:8080/api/v1/browser-contexts', undefined],
+      ['http://localhost:8080/api/v1/browser-contexts/context%2Fwith%20space', undefined],
+      ['http://localhost:8080/api/v1/browser-contexts/context-1/export', 'GET'],
+      ['http://localhost:8080/api/v1/browser-contexts/import', 'POST'],
+      ['http://localhost:8080/api/v1/browser-contexts/context-1', 'DELETE'],
+    ]);
+    expect(calls[5].init.headers).toMatchObject({
+      'Content-Type': 'application/zip',
+      'x-bpane-browser-context-name': 'support-profile-import',
+      'x-bpane-browser-context-labels': JSON.stringify({ imported: 'true' }),
+      'x-bpane-browser-context-retention-sec': '43200',
+    });
+  });
+
+  it('validates browser context CLI input before fetching', async () => {
+    const missingNameIo = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
+
+    const missingNameCode = await runBpaneCli(
+      ['browser-context', 'create'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingNameIo.io,
+      fetchImpl,
+    );
+    expect(missingNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingNameIo).code).toBe('USAGE');
+
+    const invalidRetentionIo = createIo();
+    const invalidRetentionCode = await runBpaneCli(
+      ['browser-context', 'create', 'support-profile', '--retention-sec', '0'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      invalidRetentionIo.io,
+      fetchImpl,
+    );
+    expect(invalidRetentionCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(invalidRetentionIo).error).toContain('--retention-sec');
+
+    const invalidStorageLimitIo = createIo();
+    const invalidStorageLimitCode = await runBpaneCli(
+      ['browser-context', 'create', 'support-profile', '--max-profile-storage-bytes', '0'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      invalidStorageLimitIo.io,
+      fetchImpl,
+    );
+    expect(invalidStorageLimitCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(invalidStorageLimitIo).error).toContain('--max-profile-storage-bytes');
+
+    const missingExportOutputIo = createIo();
+    const missingExportOutputCode = await runBpaneCli(
+      ['browser-context', 'export', 'context-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingExportOutputIo.io,
+      fetchImpl,
+    );
+    expect(missingExportOutputCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingExportOutputIo).error).toContain('--output');
+
+    const missingImportInputIo = createIo();
+    const missingImportInputCode = await runBpaneCli(
+      ['browser-context', 'import', '--name', 'support-profile-import'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingImportInputIo.io,
+      fetchImpl,
+    );
+    expect(missingImportInputCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingImportInputIo).error).toContain('--input');
+
+    const missingImportNameIo = createIo();
+    const missingImportNameCode = await runBpaneCli(
+      ['browser-context', 'import', '--input', '/tmp/context.zip'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingImportNameIo.io,
+      fetchImpl,
+    );
+    expect(missingImportNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingImportNameIo).error).toContain('--name');
+
+    const missingCloneNameIo = createIo();
+    const missingCloneNameCode = await runBpaneCli(
+      ['browser-context', 'clone', 'context-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingCloneNameIo.io,
+      fetchImpl,
+    );
+    expect(missingCloneNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingCloneNameIo).error).toContain('Browser context clone requires');
+
+    const missingContextIo = createIo();
+    const missingContextCode = await runBpaneCli(
+      ['session', 'create', '--browser-context-mode', 'reusable'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingContextIo.io,
+      fetchImpl,
+    );
+    expect(missingContextCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingContextIo).error).toContain('--browser-context-id is required');
+
+    const incompatibleContextIo = createIo();
+    const incompatibleContextCode = await runBpaneCli(
+      [
+        'session',
+        'create',
+        '--browser-context-mode',
+        'fresh',
+        '--browser-context-id',
+        'context-1',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      incompatibleContextIo.io,
+      fetchImpl,
+    );
+    expect(incompatibleContextCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(incompatibleContextIo).error).toContain(
+      '--browser-context-id can only be used',
+    );
+    expect(calls).toHaveLength(0);
   });
 
   it('creates session templates with structured defaults', async () => {

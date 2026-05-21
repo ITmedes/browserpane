@@ -8,7 +8,15 @@
     AdminWorkflowRunSnapshot,
   } from '../api/admin-event-snapshots';
   import type { ControlClient } from '../api/control-client';
-  import type { CreateSessionCommand, SessionResource, SessionTemplateResource } from '../api/control-types';
+  import type {
+    BrowserContextResource,
+    CloneBrowserContextCommand,
+    CreateBrowserContextCommand,
+    CreateSessionCommand,
+    ImportBrowserContextCommand,
+    SessionResource,
+    SessionTemplateResource,
+  } from '../api/control-types';
   import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
   import BrowserEmbedPanel from '../presentation/BrowserEmbedPanel.svelte';
@@ -35,6 +43,7 @@
   import { subscribeAdminSessionEvents } from './admin-session-event-sync';
   import { AdminWorkflowSessionFollower } from './admin-workflow-follow';
   import BrowserWorkspaceOverlayLayout from './BrowserWorkspaceOverlayLayout.svelte';
+  import { saveBlob } from './recording-downloads';
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient; readonly adminEventClient: AdminEventClient; readonly workflowClient: WorkflowClient;
     readonly mcpBridge: McpBridgeConfig | null;
@@ -46,11 +55,17 @@
   let liveConnection = $state<LiveBrowserSessionConnection | null>(null);
   let sessions = $state<readonly SessionResource[]>([]);
   let sessionTemplates = $state<readonly SessionTemplateResource[]>([]);
+  let browserContexts = $state<readonly BrowserContextResource[]>([]);
   let selectedSession = $state<SessionResource | null>(null);
   let sessionsLoading = $state(false);
   let sessionsError = $state<string | null>(null);
   let templatesLoading = $state(false);
+  let browserContextsLoading = $state(false);
+  let cloningBrowserContextId = $state<string | null>(null);
+  let exportingBrowserContextId = $state<string | null>(null);
+  let importingBrowserContext = $state(false);
   let templateError = $state<string | null>(null);
+  let browserContextError = $state<string | null>(null);
   let globalMessage = $state<AdminMessageFeedback | null>(null);
   let pendingSelectedSessionId = $state<string | null>(null);
   let browserConnecting = $state(false);
@@ -82,10 +97,11 @@
   }));
   const workspaceViewModel = $derived(AdminWorkspaceViewModelBuilder.build({
     browserStatus, selectedSessionId: selectedSession?.id ?? null,
-    sessionCount: sessions.length, fileCount: sessionFileCount, connected: browserConnected,
+    sessionCount: sessions.length, browserContextCount: browserContexts.length,
+    fileCount: sessionFileCount, connected: browserConnected,
   }));
   const sessionListViewModel = $derived(SessionViewModelBuilder.list({
-    sessions, sessionTemplates, selectedSessionId: selectedSession?.id ?? null,
+    sessions, sessionTemplates, browserContexts, selectedSessionId: selectedSession?.id ?? null,
     authenticated: true, loading: sessionsLoading, error: sessionsError,
   }));
   $effect(() => {
@@ -117,6 +133,7 @@
     });
     void loadSessions();
     void loadSessionTemplates();
+    void loadBrowserContexts();
     return () => { subscription.close(); disconnectBrowser(false); };
   });
   async function loadSessionTemplates(showFeedback = false): Promise<void> {
@@ -136,6 +153,25 @@
       showGlobalMessage('warning', 'Template catalog unavailable', templateError);
     } finally {
       templatesLoading = false;
+    }
+  }
+  async function loadBrowserContexts(showFeedback = false): Promise<void> {
+    browserContextsLoading = true;
+    browserContextError = null;
+    try {
+      browserContexts = (await controlClient.listBrowserContexts()).contexts;
+      if (showFeedback) {
+        showGlobalMessage(
+          'success',
+          'Browser contexts refreshed',
+          `${browserContexts.length} context${browserContexts.length === 1 ? '' : 's'} refreshed.`,
+        );
+      }
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('warning', 'Browser context catalog unavailable', browserContextError);
+    } finally {
+      browserContextsLoading = false;
     }
   }
   async function loadSessions(showFeedback = false): Promise<void> {
@@ -165,12 +201,93 @@
       upsertSession(created);
       setSessionList((await controlClient.listSessions()).sessions, 'local');
       showGlobalMessage('success', 'Session created', `Created session ${shortAdminId(created.id)}.`);
+      void loadBrowserContexts(false);
       requestBrowserConnect();
     } catch (error) {
       sessionsError = errorMessage(error);
       showGlobalMessage('error', 'Session create failed', sessionsError);
     } finally {
       sessionsLoading = false;
+    }
+  }
+  async function createBrowserContext(command: CreateBrowserContextCommand): Promise<BrowserContextResource> {
+    browserContextsLoading = true;
+    browserContextError = null;
+    try {
+      const created = await controlClient.createBrowserContext(command);
+      browserContexts = [created, ...browserContexts.filter((context) => context.id !== created.id)];
+      showGlobalMessage('success', 'Browser context saved', `Saved reusable context ${shortAdminId(created.id)}.`);
+      return created;
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('error', 'Browser context save failed', browserContextError);
+      throw error;
+    } finally {
+      browserContextsLoading = false;
+    }
+  }
+  async function cloneBrowserContext(contextId: string, command: CloneBrowserContextCommand): Promise<BrowserContextResource> {
+    cloningBrowserContextId = contextId;
+    browserContextError = null;
+    try {
+      const cloned = await controlClient.cloneBrowserContext(contextId, command);
+      browserContexts = [cloned, ...browserContexts.filter((context) => context.id !== cloned.id)];
+      showGlobalMessage('success', 'Browser context cloned', `Cloned context ${shortAdminId(contextId)} to ${shortAdminId(cloned.id)}.`);
+      return cloned;
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('error', 'Browser context clone failed', browserContextError);
+      throw error;
+    } finally {
+      cloningBrowserContextId = null;
+    }
+  }
+  async function exportBrowserContext(contextId: string): Promise<void> {
+    exportingBrowserContextId = contextId;
+    browserContextError = null;
+    try {
+      const context = browserContexts.find((candidate) => candidate.id === contextId);
+      const blob = await controlClient.exportBrowserContext(contextId);
+      saveBlob(blob, `browserpane-browser-context-${context?.name ?? contextId}.zip`);
+      showGlobalMessage('success', 'Browser context export started', `Exported context ${shortAdminId(contextId)}.`);
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('error', 'Browser context export failed', browserContextError);
+      throw error;
+    } finally {
+      exportingBrowserContextId = null;
+    }
+  }
+  async function importBrowserContext(command: ImportBrowserContextCommand): Promise<BrowserContextResource> {
+    importingBrowserContext = true;
+    browserContextError = null;
+    try {
+      const imported = await controlClient.importBrowserContext(command);
+      browserContexts = [imported, ...browserContexts.filter((context) => context.id !== imported.id)];
+      showGlobalMessage('success', 'Browser context imported', `Imported context ${shortAdminId(imported.id)}.`);
+      return imported;
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('error', 'Browser context import failed', browserContextError);
+      throw error;
+    } finally {
+      importingBrowserContext = false;
+    }
+  }
+  async function deleteBrowserContext(contextId: string): Promise<void> {
+    browserContextsLoading = true;
+    browserContextError = null;
+    try {
+      const deleted = await controlClient.deleteBrowserContext(contextId);
+      browserContexts = browserContexts.map((context) => context.id === deleted.id ? deleted : context);
+      showGlobalMessage('success', 'Browser context deleted', `Deleted context ${shortAdminId(deleted.id)}.`);
+      void loadSessions(false);
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('error', 'Browser context delete failed', browserContextError);
+      throw error;
+    } finally {
+      browserContextsLoading = false;
     }
   }
   async function refreshSelectedSession(options: { readonly showGlobalError?: boolean } = {}): Promise<void> {
@@ -366,9 +483,19 @@
     {#snippet admin()}
     <AdminWorkspaceTabs
       {controlClient} {workflowClient} {selectedSession} {sessionTemplates} {templatesLoading} {templateError} {mcpBridge} {liveConnection}
+      {sessions} {browserContexts} {browserContextsLoading} {browserContextError}
+      cloningContextId={cloningBrowserContextId}
+      exportingContextId={exportingBrowserContextId}
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries} {globalMessage}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}
+      onCreateBrowserContext={createBrowserContext}
+      onCloneBrowserContext={cloneBrowserContext}
+      onExportBrowserContext={exportBrowserContext}
+      onImportBrowserContext={importBrowserContext}
+      {importingBrowserContext}
+      onRefreshBrowserContexts={loadBrowserContexts}
+      onDeleteBrowserContext={deleteBrowserContext}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
       onReleaseSessionRuntime={() => runLifecycle('release')}
       onStopSession={() => runLifecycle('stop')} onKillSession={() => runLifecycle('kill')} onDisconnectEmbeddedBrowser={() => disconnectBrowser(false)}

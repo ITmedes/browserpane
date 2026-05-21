@@ -14,6 +14,8 @@ const SESSION_COLUMNS: &str = r#"
     automation_owner_display_name,
     state,
     template_id,
+    browser_context_mode,
+    browser_context_id,
     owner_mode,
     viewport_width,
     viewport_height,

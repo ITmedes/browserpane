@@ -5,6 +5,7 @@ use crate::runtime_manager::{
 };
 use crate::session_control::SessionStore;
 use crate::workspaces::WorkspaceFileStore;
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -63,12 +64,63 @@ impl SessionManager {
             .await
     }
 
+    pub async fn active_browser_context_session_id(&self, context_id: Uuid) -> Option<Uuid> {
+        self.inner
+            .active_browser_context_session_id(context_id)
+            .await
+    }
+
     pub async fn resolve(&self, session_id: Uuid) -> Result<SessionRuntime, SessionManagerError> {
         self.inner.resolve(session_id).await
     }
 
     pub async fn release(&self, session_id: Uuid) {
         self.inner.release(session_id).await;
+    }
+
+    pub async fn delete_browser_context_data(
+        &self,
+        context_id: Uuid,
+    ) -> Result<(), SessionManagerError> {
+        self.inner.delete_browser_context_data(context_id).await
+    }
+
+    pub async fn clone_browser_context_data(
+        &self,
+        source_context_id: Uuid,
+        target_context_id: Uuid,
+    ) -> Result<(), SessionManagerError> {
+        self.inner
+            .clone_browser_context_data(source_context_id, target_context_id)
+            .await
+    }
+
+    pub async fn export_browser_context_profile_archive(
+        &self,
+        context_id: Uuid,
+    ) -> Result<Option<Vec<u8>>, SessionManagerError> {
+        self.inner
+            .export_browser_context_profile_archive(context_id)
+            .await
+    }
+
+    pub async fn import_browser_context_profile_archive(
+        &self,
+        context_id: Uuid,
+        profile_archive: Option<&[u8]>,
+    ) -> Result<(), SessionManagerError> {
+        self.inner
+            .import_browser_context_profile_archive(context_id, profile_archive)
+            .await
+    }
+
+    pub async fn browser_context_profile_storage_bytes(
+        &self,
+        context_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, u64>, SessionManagerError> {
+        self.inner
+            .browser_context_profile_storage_bytes(context_ids)
+            .await
     }
 
     pub async fn mark_session_active(&self, session_id: Uuid) {

@@ -68,6 +68,7 @@ function createSession(id: string): SessionResource {
   return {
     id,
     state: 'active',
+    browser_context: { mode: 'fresh', context_id: null },
     owner_mode: 'collaborative',
     connect: { gateway_url: 'https://gateway.example', transport_path: '/transport', auth_type: 'ticket', compatibility_mode: 'direct' },
     runtime: { binding: 'docker', compatibility_mode: 'direct' },

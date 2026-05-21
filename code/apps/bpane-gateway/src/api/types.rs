@@ -21,9 +21,9 @@ use crate::recording::{
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
-    CreateSessionRequest, SessionConnectInfo, SessionLifecycleState, SessionOwnerMode,
-    SessionRecordingFormat, SessionRecordingMode, SessionResource, SessionStatusSummary,
-    SessionStore, SessionTemplateDefaults,
+    BrowserContextPersistenceMode, CreateSessionRequest, SessionConnectInfo, SessionLifecycleState,
+    SessionOwnerMode, SessionRecordingFormat, SessionRecordingMode, SessionResource,
+    SessionStatusSummary, SessionStore, SessionTemplateDefaults,
 };
 use crate::session_files::SessionFileBindingMode;
 use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
@@ -85,6 +85,13 @@ pub(super) struct ApiState {
 }
 
 pub(super) const AUTOMATION_ACCESS_TOKEN_HEADER: &str = "x-bpane-automation-access-token";
+pub(super) const BROWSER_CONTEXT_DESCRIPTION_HEADER: &str = "x-bpane-browser-context-description";
+pub(super) const BROWSER_CONTEXT_LABELS_HEADER: &str = "x-bpane-browser-context-labels";
+pub(super) const BROWSER_CONTEXT_MAX_PROFILE_STORAGE_BYTES_HEADER: &str =
+    "x-bpane-browser-context-max-profile-storage-bytes";
+pub(super) const BROWSER_CONTEXT_NAME_HEADER: &str = "x-bpane-browser-context-name";
+pub(super) const BROWSER_CONTEXT_RETENTION_SEC_HEADER: &str =
+    "x-bpane-browser-context-retention-sec";
 pub(super) const FILE_WORKSPACE_FILE_NAME_HEADER: &str = "x-bpane-file-name";
 pub(super) const FILE_WORKSPACE_FILE_PROVENANCE_HEADER: &str = "x-bpane-file-provenance";
 pub(super) const WORKFLOW_RUN_WORKSPACE_ID_HEADER: &str = "x-bpane-workflow-workspace-id";
@@ -296,6 +303,38 @@ pub(super) struct UpsertSessionTemplateRequest {
     pub(super) labels: HashMap<String, String>,
     #[serde(default)]
     pub(super) defaults: SessionTemplateDefaults,
+}
+
+#[derive(Deserialize)]
+pub(super) struct CreateBrowserContextRequest {
+    pub(super) name: String,
+    #[serde(default)]
+    pub(super) description: Option<String>,
+    #[serde(default)]
+    pub(super) labels: HashMap<String, String>,
+    #[serde(default = "default_browser_context_persistence_mode")]
+    pub(super) persistence_mode: BrowserContextPersistenceMode,
+    #[serde(default)]
+    pub(super) retention_sec: Option<u32>,
+    #[serde(default)]
+    pub(super) max_profile_storage_bytes: Option<u64>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct CloneBrowserContextRequest {
+    pub(super) name: String,
+    #[serde(default)]
+    pub(super) description: Option<String>,
+    #[serde(default)]
+    pub(super) labels: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub(super) retention_sec: Option<u32>,
+    #[serde(default)]
+    pub(super) max_profile_storage_bytes: Option<u64>,
+}
+
+fn default_browser_context_persistence_mode() -> BrowserContextPersistenceMode {
+    BrowserContextPersistenceMode::Reusable
 }
 
 #[derive(Deserialize)]

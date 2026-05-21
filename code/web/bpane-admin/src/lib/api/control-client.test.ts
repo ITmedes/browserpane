@@ -5,6 +5,10 @@ const SESSION = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
   state: 'active',
   template_id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
+  browser_context: {
+    mode: 'reusable',
+    context_id: '019df7be-6222-7b00-8c86-9e1f3f8d4a72',
+  },
   owner_mode: 'shared',
   integration_context: { ticket: 'INC-1234' },
   connect: {
@@ -41,6 +45,29 @@ const SESSION = {
   stopped_at: null,
 };
 
+const BROWSER_CONTEXT = {
+  id: '019df7be-6222-7b00-8c86-9e1f3f8d4a72',
+  name: 'Support profile',
+  description: 'Reusable profile for support triage',
+  labels: { team: 'support' },
+  persistence_mode: 'reusable',
+  retention_sec: 86400,
+  retention_expires_at: '2026-05-05T18:30:00Z',
+  max_profile_storage_bytes: 1048576,
+  state: 'ready',
+  usage: {
+    visible_session_count: 1,
+    active_runtime_session_count: 1,
+    active_runtime_session_id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
+    profile_storage_bytes: 1250000,
+    profile_storage_limit_exceeded: true,
+  },
+  created_at: '2026-05-04T18:30:00Z',
+  updated_at: '2026-05-04T18:30:00Z',
+  last_used_at: null,
+  deleted_at: null,
+};
+
 const TEMPLATE = {
   id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
   name: 'Support triage',
@@ -70,6 +97,7 @@ describe('ControlClient', () => {
 
     expect(response.sessions).toHaveLength(1);
     expect(response.sessions[0]?.id).toBe(SESSION.id);
+    expect(response.sessions[0]?.browser_context).toEqual(SESSION.browser_context);
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('https://browserpane.example/api/v1/sessions'),
       expect.objectContaining({
@@ -79,6 +107,129 @@ describe('ControlClient', () => {
           authorization: 'Bearer owner-token',
         }),
       }),
+    );
+  });
+
+  it('manages browser context catalog resources with bearer auth', async () => {
+    const fetchImpl = jsonFetch(BROWSER_CONTEXT);
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const created = await client.createBrowserContext({
+      name: 'Support profile',
+      labels: { team: 'support' },
+      retention_sec: 86400,
+      max_profile_storage_bytes: 1048576,
+    });
+    await client.cloneBrowserContext(BROWSER_CONTEXT.id, {
+      name: 'Support profile sandbox',
+      labels: { copy: 'sandbox' },
+    });
+    await client.getBrowserContext('context/with space');
+    const exported = await client.exportBrowserContext(BROWSER_CONTEXT.id);
+    await client.importBrowserContext({
+      name: 'Support profile imported',
+      archive: new Blob(['PKbrowser-context-export'], { type: 'application/zip' }),
+      labels: { imported: 'true' },
+      retention_sec: 43200,
+    });
+    await client.deleteBrowserContext(BROWSER_CONTEXT.id);
+    expect(await exported.text()).toBe(JSON.stringify(BROWSER_CONTEXT));
+
+    expect(created).toMatchObject({
+      id: BROWSER_CONTEXT.id,
+      name: 'Support profile',
+      persistence_mode: 'reusable',
+      retention_sec: 86400,
+      retention_expires_at: '2026-05-05T18:30:00Z',
+      max_profile_storage_bytes: 1048576,
+      state: 'ready',
+      usage: {
+        visible_session_count: 1,
+        active_runtime_session_count: 1,
+        active_runtime_session_id: SESSION.id,
+        profile_storage_bytes: 1250000,
+        profile_storage_limit_exceeded: true,
+      },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      new URL('http://localhost:8932/api/v1/browser-contexts'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Support profile',
+          labels: { team: 'support' },
+          retention_sec: 86400,
+          max_profile_storage_bytes: 1048576,
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      new URL(`http://localhost:8932/api/v1/browser-contexts/${BROWSER_CONTEXT.id}/clone`),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Support profile sandbox',
+          labels: { copy: 'sandbox' },
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      new URL('http://localhost:8932/api/v1/browser-contexts/context%2Fwith%20space'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      4,
+      new URL(`http://localhost:8932/api/v1/browser-contexts/${BROWSER_CONTEXT.id}/export`),
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ accept: 'application/zip' }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      5,
+      new URL('http://localhost:8932/api/v1/browser-contexts/import'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          accept: 'application/json',
+          'content-type': 'application/zip',
+          'x-bpane-browser-context-name': 'Support profile imported',
+          'x-bpane-browser-context-labels': JSON.stringify({ imported: 'true' }),
+          'x-bpane-browser-context-retention-sec': '43200',
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      6,
+      new URL(`http://localhost:8932/api/v1/browser-contexts/${BROWSER_CONTEXT.id}`),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('lists browser contexts with bearer auth', async () => {
+    const fetchImpl = jsonFetch({ contexts: [BROWSER_CONTEXT] });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const response = await client.listBrowserContexts();
+
+    expect(response.contexts[0]).toMatchObject({
+      id: BROWSER_CONTEXT.id,
+      name: 'Support profile',
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/browser-contexts'),
+      expect.objectContaining({ method: 'GET' }),
     );
   });
 
@@ -144,6 +295,10 @@ describe('ControlClient', () => {
 
     await client.createSession({
       template_id: TEMPLATE.id,
+      browser_context: {
+        mode: 'reusable',
+        context_id: BROWSER_CONTEXT.id,
+      },
       idle_timeout_sec: 300,
       labels: { source: 'admin-smoke' },
     });
@@ -154,6 +309,10 @@ describe('ControlClient', () => {
         method: 'POST',
         body: JSON.stringify({
           template_id: TEMPLATE.id,
+          browser_context: {
+            mode: 'reusable',
+            context_id: BROWSER_CONTEXT.id,
+          },
           idle_timeout_sec: 300,
           labels: { source: 'admin-smoke' },
         }),

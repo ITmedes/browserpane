@@ -19,6 +19,7 @@
     "smoke:browser-policy": "node scripts/run-browser-policy-smoke.mjs",
     "smoke:bpane-cli": "node scripts/run-bpane-cli-smoke.mjs",
     "smoke:admin-session": "node scripts/run-admin-session-smoke.mjs",
+    "smoke:admin-browser-contexts": "node scripts/run-admin-browser-contexts-smoke.mjs",
     "smoke:admin-session-configurator": "node scripts/run-admin-session-configurator-smoke.mjs",
     "smoke:admin-realtime": "node scripts/run-admin-realtime-smoke.mjs",
     "smoke:admin-event-reconnect": "node scripts/run-admin-event-reconnect-smoke.mjs",

@@ -5,6 +5,7 @@ use serde_json::json;
 fn rejects_non_object_integration_context() {
     let error = validate_create_request(&CreateSessionRequest {
         template_id: None,
+        browser_context: None,
         owner_mode: None,
         viewport: None,
         idle_timeout_sec: None,
@@ -23,6 +24,7 @@ fn rejects_non_object_integration_context() {
 fn rejects_zero_recording_retention() {
     let error = validate_create_request(&CreateSessionRequest {
         template_id: None,
+        browser_context: None,
         owner_mode: None,
         viewport: None,
         idle_timeout_sec: None,
