@@ -290,7 +290,7 @@ describe('bpane operator CLI', () => {
     expect(calls[0].init.headers.Authorization).toBe('Bearer token-1');
   });
 
-  it('filters session list output when filter options are present', async () => {
+  it('sends session list filters to the catalog API', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({
       sessions: [
@@ -322,25 +322,38 @@ describe('bpane operator CLI', () => {
     }));
 
     const code = await runBpaneCli(
-      ['session', 'list', '--state', 'stopped', '--label', 'suite=cli', '--limit', '1'],
+      [
+        'session',
+        'list',
+        '--state',
+        'stopped',
+        '--runtime-state',
+        'running',
+        '--label',
+        'suite=cli',
+        '--integration',
+        'ticket=INC-1',
+        '--template-id',
+        'template-1',
+        '--limit',
+        '1',
+      ],
       { BPANE_ACCESS_TOKEN: 'token-1' },
       io.io,
       fetchImpl,
     );
 
     expect(code).toBe(EXIT_CODES.ok);
-    expect(parseStdout(io)).toMatchObject({
-      filters: {
-        states: ['stopped'],
-        labels: { suite: 'cli' },
-        limit: 1,
-      },
-      total_count: 4,
-      matched_count: 2,
-      returned_count: 1,
-      sessions: [{ id: 'session-1' }],
-    });
+    expect(parseStdout(io).sessions).toHaveLength(4);
     expect(calls).toHaveLength(1);
+    const url = new URL(calls[0].url);
+    expect(`${url.origin}${url.pathname}`).toBe('http://localhost:8080/api/v1/sessions');
+    expect(url.searchParams.get('state')).toBe('stopped');
+    expect(url.searchParams.get('runtime_state')).toBe('running');
+    expect(url.searchParams.get('label.suite')).toBe('cli');
+    expect(url.searchParams.get('integration.ticket')).toBe('INC-1');
+    expect(url.searchParams.get('template_id')).toBe('template-1');
+    expect(url.searchParams.get('limit')).toBe('1');
   });
 
   it('requires a bearer token for session commands', async () => {
@@ -417,6 +430,116 @@ describe('bpane operator CLI', () => {
       integration_context: { ticket: 'abc' },
       extension_ids: ['018f1a5b-0784-71bf-ae46-0c973f00aa11'],
       recording: { mode: 'manual', format: 'webm', retention_sec: 3600 },
+    });
+  });
+
+  it('creates session templates with structured defaults', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'template-1' }, 201));
+
+    const code = await runBpaneCli(
+      [
+        'session-template',
+        'create',
+        'customer-debug-session',
+        '--description',
+        'Support debug session',
+        '--label',
+        'team=support',
+        '--default-label',
+        'purpose=debug',
+        '--owner-mode',
+        'collaborative',
+        '--width',
+        '1440',
+        '--height',
+        '900',
+        '--idle-timeout-sec',
+        '1800',
+        '--integration-json',
+        '{"source":"template"}',
+        '--recording-mode',
+        'manual',
+        '--recording-retention-sec',
+        '86400',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toEqual({ id: 'template-1' });
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/session-templates');
+    expect(calls[0].init.method).toBe('POST');
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      name: 'customer-debug-session',
+      description: 'Support debug session',
+      labels: { team: 'support' },
+      defaults: {
+        owner_mode: 'collaborative',
+        viewport: { width: 1440, height: 900 },
+        idle_timeout_sec: 1800,
+        labels: { purpose: 'debug' },
+        integration_context: { source: 'template' },
+        recording: { mode: 'manual', format: 'webm', retention_sec: 86400 },
+      },
+    });
+  });
+
+  it('lists, fetches, and updates session templates', async () => {
+    const listIo = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ templates: [{ id: 'template-1' }] }),
+      jsonResponse({ id: 'template-1' }),
+      jsonResponse({ id: 'template-1', version: 2 }),
+    );
+
+    const listCode = await runBpaneCli(
+      ['session-template', 'list'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      listIo.io,
+      fetchImpl,
+    );
+    expect(listCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(listIo)).toEqual({ templates: [{ id: 'template-1' }] });
+
+    const getIo = createIo();
+    const getCode = await runBpaneCli(
+      ['session-template', 'get', 'template/with space'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      getIo.io,
+      fetchImpl,
+    );
+    expect(getCode).toBe(EXIT_CODES.ok);
+
+    const updateIo = createIo();
+    const updateCode = await runBpaneCli(
+      [
+        'session-template',
+        'update',
+        'template-1',
+        '--name',
+        'customer-debug-session',
+        '--default-label',
+        'purpose=debug',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      updateIo.io,
+      fetchImpl,
+    );
+    expect(updateCode).toBe(EXIT_CODES.ok);
+
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://localhost:8080/api/v1/session-templates', undefined],
+      ['http://localhost:8080/api/v1/session-templates/template%2Fwith%20space', undefined],
+      ['http://localhost:8080/api/v1/session-templates/template-1', 'PUT'],
+    ]);
+    expect(JSON.parse(calls[2].init.body)).toEqual({
+      name: 'customer-debug-session',
+      defaults: {
+        labels: { purpose: 'debug' },
+      },
     });
   });
 

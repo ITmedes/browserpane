@@ -1,6 +1,72 @@
 use super::*;
 
 impl SessionStore {
+    pub async fn create_session_template(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistSessionTemplateRequest,
+    ) -> Result<StoredSessionTemplate, SessionStoreError> {
+        validate_session_template_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_session_template(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_session_template(principal, request).await
+            }
+        }
+    }
+
+    pub async fn list_session_templates_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredSessionTemplate>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_session_templates_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_session_templates_for_owner(principal).await
+            }
+        }
+    }
+
+    pub async fn get_session_template_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSessionTemplate>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_session_template_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_session_template_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn update_session_template_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistSessionTemplateRequest,
+    ) -> Result<Option<StoredSessionTemplate>, SessionStoreError> {
+        validate_session_template_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .update_session_template_for_owner(principal, id, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .update_session_template_for_owner(principal, id, request)
+                    .await
+            }
+        }
+    }
+
     pub async fn create_file_workspace(
         &self,
         principal: &AuthenticatedPrincipal,

@@ -22,6 +22,8 @@ const KNOWN_OPTIONS = new Set([
   'cleanup-action',
   'config',
   'confirm',
+  'default-label',
+  'description',
   'dry-run',
   'extension-id',
   'fail-on-issues',
@@ -29,19 +31,23 @@ const KNOWN_OPTIONS = new Set([
   'help',
   'idle-timeout-sec',
   'integration-json',
+  'integration',
   'label',
   'limit',
   'mcp-client-id',
   'mcp-control-url',
   'mcp-display-name',
   'mcp-issuer',
+  'name',
   'older-than-sec',
+  'offset',
   'owner-mode',
   'profile',
   'recording-mode',
   'recording-retention-sec',
   'save-token',
   'set-default',
+  'runtime-state',
   'state',
   'template-id',
   'token',
@@ -74,6 +80,10 @@ function usageText() {
     '  bpane session stop <session-id> [options]',
     '  bpane session kill <session-id> [options]',
     '  bpane session cleanup [options]',
+    '  bpane session-template create [template-name] [options]',
+    '  bpane session-template list [options]',
+    '  bpane session-template get <template-id> [options]',
+    '  bpane session-template update <template-id> [options]',
     '  bpane mcp doctor [session-id] [options]',
     '  bpane mcp preflight [session-id] [options]',
     '  bpane mcp repair <session-id> [options]',
@@ -98,7 +108,13 @@ function usageText() {
     '  --mcp-display-name <name> MCP delegate display name. Env: BPANE_MCP_DISPLAY_NAME.',
     '  --body-json <json>        Raw JSON request body for session create.',
     '  --label <key=value>       Repeatable session label filter or create label.',
+    '  --default-label <key=value> Repeatable template default session label.',
+    '  --integration <key=value> Repeatable session integration-context filter.',
     '  --state <state>           Repeatable cleanup state filter. Default: stopped.',
+    '  --runtime-state <state>   Repeatable session runtime-state filter.',
+    '  --template-id <id>        Session template id for create/list filters.',
+    '  --name <name>             Session template name for create/update.',
+    '  --description <text>      Session template description for create/update.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
@@ -198,6 +214,18 @@ function parseIntegerOption(options, name) {
   const value = Number.parseInt(raw, 10);
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new CliError('USAGE', `--${name} must be a positive integer.`, EXIT_CODES.usage);
+  }
+  return value;
+}
+
+function parseNonNegativeIntegerOption(options, name) {
+  const raw = getOption(options, name);
+  if (raw === null || raw === '') {
+    return null;
+  }
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new CliError('USAGE', `--${name} must be a non-negative integer.`, EXIT_CODES.usage);
   }
   return value;
 }
@@ -379,6 +407,14 @@ function requiredSessionId(positionals, commandLabel) {
     throw new CliError('USAGE', `Usage: bpane ${commandLabel} <session-id>`, EXIT_CODES.usage);
   }
   return sessionId;
+}
+
+function requiredTemplateId(positionals, commandLabel) {
+  const templateId = positionals[2];
+  if (!templateId || positionals.length > 3) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <template-id>`, EXIT_CODES.usage);
+  }
+  return templateId;
 }
 
 function requireAccessToken(config) {
@@ -604,6 +640,73 @@ function buildCreateSessionRequest(options) {
   return body;
 }
 
+function buildSessionTemplateDefaults(options) {
+  const defaults = {};
+  const ownerMode = getOption(options, 'owner-mode');
+  if (ownerMode) {
+    defaults.owner_mode = ownerMode;
+  }
+  const width = parseIntegerOption(options, 'width');
+  const height = parseIntegerOption(options, 'height');
+  if ((width === null) !== (height === null)) {
+    throw new CliError('USAGE', 'Use --width and --height together.', EXIT_CODES.usage);
+  }
+  if (width !== null && height !== null) {
+    defaults.viewport = { width, height };
+  }
+  const idleTimeoutSec = parseIntegerOption(options, 'idle-timeout-sec');
+  if (idleTimeoutSec !== null) {
+    defaults.idle_timeout_sec = idleTimeoutSec;
+  }
+  const labels = parseKeyValueOptions(options, 'default-label');
+  if (Object.keys(labels).length) {
+    defaults.labels = labels;
+  }
+  const integrationContext = parseJsonOption(options, 'integration-json');
+  if (integrationContext !== null) {
+    defaults.integration_context = integrationContext;
+  }
+  const recordingMode = getOption(options, 'recording-mode');
+  const recordingRetentionSec = parseIntegerOption(options, 'recording-retention-sec');
+  if (recordingMode || recordingRetentionSec !== null) {
+    defaults.recording = {
+      mode: recordingMode ?? 'disabled',
+      format: 'webm',
+      retention_sec: recordingRetentionSec,
+    };
+  }
+  return defaults;
+}
+
+function buildSessionTemplateRequest(options, fallbackName = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? fallbackName;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Session template create/update requires --name or a positional template name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const body = {
+    name,
+    defaults: buildSessionTemplateDefaults(options),
+  };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  }
+  const labels = parseKeyValueOptions(options, 'label');
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+  return body;
+}
+
 function sessionStateFilters(options, defaultStates = []) {
   const states = getOptions(options, 'state')
     .flatMap((value) => value.split(','))
@@ -612,15 +715,28 @@ function sessionStateFilters(options, defaultStates = []) {
   return states.length ? states : defaultStates;
 }
 
+function sessionRuntimeStateFilters(options) {
+  return getOptions(options, 'runtime-state')
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 function sessionFilters(options, defaultStates = []) {
   const olderThanSec = parseIntegerOption(options, 'older-than-sec');
   const limit = parseIntegerOption(options, 'limit');
+  const offset = parseNonNegativeIntegerOption(options, 'offset');
   const labels = parseKeyValueOptions(options, 'label');
+  const integrationContext = parseKeyValueOptions(options, 'integration');
   return {
+    template_id: getOption(options, 'template-id'),
     states: sessionStateFilters(options, defaultStates),
+    runtime_states: sessionRuntimeStateFilters(options),
     labels,
+    integration_context: integrationContext,
     older_than_sec: olderThanSec,
     limit,
+    offset,
   };
 }
 
@@ -629,10 +745,14 @@ function cleanupFilters(options) {
 }
 
 function filtersAreActive(filters) {
-  return filters.states.length > 0
+  return filters.template_id !== null
+    || filters.states.length > 0
+    || filters.runtime_states.length > 0
     || Object.keys(filters.labels).length > 0
+    || Object.keys(filters.integration_context).length > 0
     || filters.older_than_sec !== null
-    || filters.limit !== null;
+    || filters.limit !== null
+    || filters.offset !== null;
 }
 
 function cleanupActions(options) {
@@ -669,14 +789,52 @@ function sessionMatchesLabels(session, labels) {
   return Object.entries(labels).every(([key, value]) => sessionLabels[key] === value);
 }
 
+function sessionMatchesIntegrationContext(session, integrationContext) {
+  const context = session.integration_context ?? {};
+  return Object.entries(integrationContext).every(([key, value]) => context[key] === value);
+}
+
 function filterSessions(sessions, filters) {
   const matched = sessions.filter((session) => {
-    return (!filters.states.length || filters.states.includes(session.state))
+    return (filters.template_id === null || session.template_id === filters.template_id)
+      && (!filters.states.length || filters.states.includes(session.state))
+      && (!filters.runtime_states.length || filters.runtime_states.includes(session.status?.runtime_state))
       && sessionMatchesLabels(session, filters.labels)
+      && sessionMatchesIntegrationContext(session, filters.integration_context)
       && sessionCreatedBefore(session, filters.older_than_sec);
   });
-  const limited = filters.limit === null ? matched : matched.slice(0, filters.limit);
+  const offset = filters.offset ?? 0;
+  const limited = filters.limit === null
+    ? matched.slice(offset)
+    : matched.slice(offset, offset + filters.limit);
   return { matched, limited };
+}
+
+function buildSessionListPath(filters, { includeLimit = true } = {}) {
+  const params = new URLSearchParams();
+  if (filters.template_id) {
+    params.set('template_id', filters.template_id);
+  }
+  if (filters.states.length) {
+    params.set('state', filters.states.join(','));
+  }
+  if (filters.runtime_states.length) {
+    params.set('runtime_state', filters.runtime_states.join(','));
+  }
+  for (const [key, value] of Object.entries(filters.labels)) {
+    params.append(`label.${key}`, value);
+  }
+  for (const [key, value] of Object.entries(filters.integration_context)) {
+    params.append(`integration.${key}`, value);
+  }
+  if (includeLimit && filters.limit !== null) {
+    params.set('limit', String(filters.limit));
+  }
+  if (includeLimit && filters.offset !== null) {
+    params.set('offset', String(filters.offset));
+  }
+  const query = params.toString();
+  return query ? `/api/v1/sessions?${query}` : '/api/v1/sessions';
 }
 
 function sessionSummary(session) {
@@ -1085,8 +1243,15 @@ async function handleSessionCommand(config, positionals, options) {
     });
   }
   if (action === 'list' && positionals.length === 2) {
-    const listed = await requestGateway(config, '/api/v1/sessions');
-    return filteredSessionList(listed, sessionFilters(options));
+    const filters = sessionFilters(options);
+    const listed = await requestGateway(
+      config,
+      buildSessionListPath(filters, { includeLimit: filters.older_than_sec === null }),
+    );
+    if (filters.older_than_sec !== null) {
+      return filteredSessionList(listed, filters);
+    }
+    return listed;
   }
   if (action === 'get') {
     const sessionId = requiredSessionId(positionals, 'session get');
@@ -1139,6 +1304,37 @@ async function handleSessionCommand(config, positionals, options) {
     return await cleanupSessions(config, options);
   }
   throw new CliError('USAGE', `Unknown session command: ${action ?? ''}`.trim(), EXIT_CODES.usage);
+}
+
+async function handleSessionTemplateCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length <= 3) {
+    return await requestGateway(config, '/api/v1/session-templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildSessionTemplateRequest(options, positionals[2] ?? null)),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/session-templates');
+  }
+  if (action === 'get') {
+    const templateId = requiredTemplateId(positionals, 'session-template get');
+    return await requestGateway(config, `/api/v1/session-templates/${encodeURIComponent(templateId)}`);
+  }
+  if (action === 'update') {
+    const templateId = requiredTemplateId(positionals, 'session-template update');
+    return await requestGateway(config, `/api/v1/session-templates/${encodeURIComponent(templateId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildSessionTemplateRequest(options)),
+    });
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown session-template command: ${action ?? ''}`.trim(),
+    EXIT_CODES.usage,
+  );
 }
 
 async function handleMcpCommand(config, positionals, options) {
@@ -1358,6 +1554,9 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     } else if (scope === 'session') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleSessionCommand(config, positionals, options);
+    } else if (scope === 'session-template') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleSessionTemplateCommand(config, positionals, options);
     } else if (scope === 'mcp') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleMcpCommand(config, positionals, options);
