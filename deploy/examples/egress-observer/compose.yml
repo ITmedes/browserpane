@@ -1,0 +1,16 @@
+services:
+  egress-proxy:
+    build:
+      context: .
+    container_name: bpane-egress-observer
+    ports:
+      - "${BPANE_EGRESS_OBSERVER_PORT:-3128}:3128"
+    networks:
+      bpane-internal:
+        aliases:
+          - bpane-egress-observer
+
+networks:
+  bpane-internal:
+    external: true
+    name: "${BPANE_EGRESS_OBSERVER_NETWORK:-deploy_bpane-internal}"

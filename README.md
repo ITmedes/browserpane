@@ -315,6 +315,12 @@ bypass rules, custom CA references, state, labels, and sanitized effective
 status; session resources and `/status` include the inherited network identity
 and effective egress summary without embedding proxy credentials or raw CA
 material.
+Egress-side communication tracking belongs at the configured proxy or secure
+web gateway. BrowserPane emits safe correlation metadata instead: docker-backed
+runtime containers carry `browserpane.session_id` and egress-profile labels,
+and the gateway logs a sanitized runtime startup event that joins the session,
+runtime container, and egress profile. A runnable local Squid access-log example
+is available in `deploy/examples/egress-observer`.
 Browser context resources let callers name owner-scoped Chromium profile
 contexts and bind new sessions with `browser_context.mode=reusable` plus a
 `context_id`. Docker-backed runtimes materialize reusable contexts as a
@@ -527,6 +533,20 @@ Common egress-profile operations:
   --custom-ca-name "EU support CA"
 ./scripts/bpane egress-profile list
 ./scripts/bpane egress-profile get <egress-profile-id>
+```
+
+To observe egress traffic locally without changing the BrowserPane gateway,
+start the normal compose stack first, then start the example forward proxy and
+point an egress profile at it:
+
+```bash
+docker compose -f deploy/examples/egress-observer/compose.yml up --build
+./scripts/bpane egress-profile create local-egress-observer \
+  --proxy-url http://bpane-egress-observer:3128 \
+  --bypass-rule localhost \
+  --bypass-rule 127.0.0.1
+docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-proxy
+deploy/examples/egress-observer/correlate-session-ip.sh
 ```
 
 Common browser-context operations:
