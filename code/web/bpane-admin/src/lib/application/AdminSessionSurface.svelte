@@ -8,7 +8,7 @@
     AdminWorkflowRunSnapshot,
   } from '../api/admin-event-snapshots';
   import type { ControlClient } from '../api/control-client';
-  import type { CreateSessionCommand, SessionResource } from '../api/control-types';
+  import type { CreateSessionCommand, SessionResource, SessionTemplateResource } from '../api/control-types';
   import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
   import BrowserEmbedPanel from '../presentation/BrowserEmbedPanel.svelte';
@@ -45,9 +45,12 @@
   let browserConnector = $derived(new BrowserSessionConnector({ controlClient }));
   let liveConnection = $state<LiveBrowserSessionConnection | null>(null);
   let sessions = $state<readonly SessionResource[]>([]);
+  let sessionTemplates = $state<readonly SessionTemplateResource[]>([]);
   let selectedSession = $state<SessionResource | null>(null);
   let sessionsLoading = $state(false);
   let sessionsError = $state<string | null>(null);
+  let templatesLoading = $state(false);
+  let templateError = $state<string | null>(null);
   let globalMessage = $state<AdminMessageFeedback | null>(null);
   let pendingSelectedSessionId = $state<string | null>(null);
   let browserConnecting = $state(false);
@@ -82,7 +85,7 @@
     sessionCount: sessions.length, fileCount: sessionFileCount, connected: browserConnected,
   }));
   const sessionListViewModel = $derived(SessionViewModelBuilder.list({
-    sessions, selectedSessionId: selectedSession?.id ?? null,
+    sessions, sessionTemplates, selectedSessionId: selectedSession?.id ?? null,
     authenticated: true, loading: sessionsLoading, error: sessionsError,
   }));
   $effect(() => {
@@ -113,8 +116,28 @@
       },
     });
     void loadSessions();
+    void loadSessionTemplates();
     return () => { subscription.close(); disconnectBrowser(false); };
   });
+  async function loadSessionTemplates(showFeedback = false): Promise<void> {
+    templatesLoading = true;
+    templateError = null;
+    try {
+      sessionTemplates = (await controlClient.listSessionTemplates()).templates;
+      if (showFeedback) {
+        showGlobalMessage(
+          'success',
+          'Template catalog refreshed',
+          `${sessionTemplates.length} template${sessionTemplates.length === 1 ? '' : 's'} refreshed.`,
+        );
+      }
+    } catch (error) {
+      templateError = errorMessage(error);
+      showGlobalMessage('warning', 'Template catalog unavailable', templateError);
+    } finally {
+      templatesLoading = false;
+    }
+  }
   async function loadSessions(showFeedback = false): Promise<void> {
     sessionsLoading = true;
     sessionsError = null;
@@ -342,7 +365,7 @@
   <BrowserWorkspaceOverlayLayout {adminOpen} {onAdminOpenChange}>
     {#snippet admin()}
     <AdminWorkspaceTabs
-      {controlClient} {workflowClient} {selectedSession} {mcpBridge} {liveConnection}
+      {controlClient} {workflowClient} {selectedSession} {sessionTemplates} {templatesLoading} {templateError} {mcpBridge} {liveConnection}
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries} {globalMessage}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}

@@ -231,8 +231,9 @@ The default local auth flow is OIDC-based:
 - click `Login`
 - authenticate against the local Keycloak realm
 - use the demo account `demo / demo-demo`
-- return to the admin console and either select an existing session or click `Start New Session`
+- return to the admin console and either select an existing session or create a new one, optionally from a session template
 - the admin console joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
+- the live session panel and session inspector show the applied template, and the inspector can filter sessions by template, lifecycle state, and runtime state
 - sessions created from the admin console use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
 - reconnecting a stopped session now restarts the same session resource instead of creating a new one
 - switching the selected session disconnects the embedded browser from the previous live session before selecting the new one

@@ -4,7 +4,9 @@ import { ControlClient, type FetchLike } from './control-client';
 const SESSION = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
   state: 'active',
+  template_id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
   owner_mode: 'shared',
+  integration_context: { ticket: 'INC-1234' },
   connect: {
     gateway_url: 'https://localhost:4433',
     transport_path: '/session',
@@ -39,6 +41,22 @@ const SESSION = {
   stopped_at: null,
 };
 
+const TEMPLATE = {
+  id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
+  name: 'Support triage',
+  description: 'Default support case browser session',
+  labels: { team: 'support' },
+  defaults: {
+    owner_mode: 'collaborative',
+    idle_timeout_sec: 1800,
+    labels: { team: 'support' },
+    integration_context: { source: 'template' },
+  },
+  version: 1,
+  created_at: '2026-05-04T18:00:00Z',
+  updated_at: '2026-05-04T18:00:00Z',
+};
+
 describe('ControlClient', () => {
   it('lists owner-visible sessions with bearer auth', async () => {
     const fetchImpl = jsonFetch({ sessions: [SESSION] });
@@ -64,6 +82,58 @@ describe('ControlClient', () => {
     );
   });
 
+  it('lists session templates with bearer auth', async () => {
+    const fetchImpl = jsonFetch({ templates: [TEMPLATE] });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const response = await client.listSessionTemplates();
+
+    expect(response.templates[0]).toMatchObject({
+      id: TEMPLATE.id,
+      name: 'Support triage',
+      defaults: expect.objectContaining({
+        idle_timeout_sec: 1800,
+      }),
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/session-templates'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('passes catalog filters to the session list endpoint', async () => {
+    const fetchImpl = jsonFetch({ sessions: [SESSION] });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    await client.listSessions({
+      templateId: TEMPLATE.id,
+      states: ['active'],
+      runtimeStates: ['running'],
+      labels: { team: 'support' },
+      integrationContext: { ticket: 'INC-1234' },
+      limit: 25,
+      offset: 50,
+    });
+
+    const url = fetchImpl.mock.calls[0]?.[0] as URL;
+    expect(url.pathname).toBe('/api/v1/sessions');
+    expect(url.searchParams.get('template_id')).toBe(TEMPLATE.id);
+    expect(url.searchParams.get('state')).toBe('active');
+    expect(url.searchParams.get('runtime_state')).toBe('running');
+    expect(url.searchParams.get('label.team')).toBe('support');
+    expect(url.searchParams.get('integration.ticket')).toBe('INC-1234');
+    expect(url.searchParams.get('limit')).toBe('25');
+    expect(url.searchParams.get('offset')).toBe('50');
+  });
+
   it('creates sessions through the frozen v1 endpoint', async () => {
     const fetchImpl = jsonFetch(SESSION);
     const client = new ControlClient({
@@ -72,13 +142,21 @@ describe('ControlClient', () => {
       fetchImpl,
     });
 
-    await client.createSession({ idle_timeout_sec: 300, labels: { source: 'admin-smoke' } });
+    await client.createSession({
+      template_id: TEMPLATE.id,
+      idle_timeout_sec: 300,
+      labels: { source: 'admin-smoke' },
+    });
 
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('http://localhost:8932/api/v1/sessions'),
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ idle_timeout_sec: 300, labels: { source: 'admin-smoke' } }),
+        body: JSON.stringify({
+          template_id: TEMPLATE.id,
+          idle_timeout_sec: 300,
+          labels: { source: 'admin-smoke' },
+        }),
         headers: expect.objectContaining({
           'content-type': 'application/json',
         }),

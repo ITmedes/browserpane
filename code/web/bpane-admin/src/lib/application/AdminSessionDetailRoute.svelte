@@ -6,6 +6,7 @@
     SessionFileBindingResource,
     SessionFileResource,
     SessionResource,
+    SessionTemplateResource,
   } from '../api/control-types';
   import type { SessionRecordingPlaybackResource, SessionRecordingResource } from '../api/recording-types';
   import type { SessionStatus } from '../api/session-status-types';
@@ -22,6 +23,7 @@
 
   let { controlClient, sessionId }: AdminSessionDetailRouteProps = $props();
   let session = $state<SessionResource | null>(null);
+  let sessionTemplates = $state<readonly SessionTemplateResource[]>([]);
   let status = $state<SessionStatus | null>(null);
   let files = $state<readonly SessionFileResource[]>([]);
   let bindings = $state<readonly SessionFileBindingResource[]>([]);
@@ -38,6 +40,7 @@
 
   const viewModel = $derived(SessionViewModelBuilder.detail({
     session,
+    sessionTemplates,
     status,
     connected,
     loading,
@@ -61,7 +64,8 @@
       ]);
       session = nextSession;
       status = nextStatus;
-      await loadRelatedResources();
+      const templateLoadError = await loadSessionTemplates();
+      await loadRelatedResources(templateLoadError ? [templateLoadError] : []);
       lastRefreshedAt = new Date().toISOString();
       if (showFeedback) {
         actionFeedback = lifecycleFeedback(
@@ -80,14 +84,14 @@
     }
   }
 
-  async function loadRelatedResources(): Promise<void> {
+  async function loadRelatedResources(initialErrors: readonly string[] = []): Promise<void> {
     const [fileResult, bindingResult, recordingResult, playbackResult] = await Promise.allSettled([
       controlClient.listSessionFiles(sessionId),
       controlClient.listSessionFileBindings(sessionId),
       controlClient.listSessionRecordings(sessionId),
       controlClient.getSessionRecordingPlayback(sessionId),
     ]);
-    const errors: string[] = [];
+    const errors: string[] = [...initialErrors];
     if (fileResult.status === 'fulfilled') {
       files = fileResult.value.files;
     } else {
@@ -113,6 +117,16 @@
       errors.push(errorMessage(playbackResult.reason, 'Recording playback summary failed'));
     }
     relatedError = errors.length > 0 ? errors.join(' | ') : null;
+  }
+
+  async function loadSessionTemplates(): Promise<string | null> {
+    try {
+      sessionTemplates = (await controlClient.listSessionTemplates()).templates;
+      return null;
+    } catch (templateLoadError) {
+      sessionTemplates = [];
+      return errorMessage(templateLoadError, 'Template catalog summary failed');
+    }
   }
 
   async function stopSession(): Promise<void> {

@@ -22,8 +22,10 @@ import type {
   SessionFileBindingResource,
   SessionFileListResponse,
   SessionFileResource,
+  SessionListFilters,
   SessionListResponse,
   SessionResource,
+  SessionTemplateListResponse,
   SetAutomationDelegateCommand,
   UploadFileWorkspaceFileCommand,
 } from './control-types';
@@ -61,9 +63,14 @@ export class ControlClient {
     this.#fetchImpl = options.fetchImpl ?? fetch;
   }
 
-  async listSessions(): Promise<SessionListResponse> {
-    const payload = await this.#request('GET', '/api/v1/sessions');
+  async listSessions(filters: SessionListFilters = {}): Promise<SessionListResponse> {
+    const payload = await this.#request('GET', buildSessionListPath(filters));
     return ControlSessionMapper.toSessionList(payload);
+  }
+
+  async listSessionTemplates(): Promise<SessionTemplateListResponse> {
+    const payload = await this.#request('GET', '/api/v1/session-templates');
+    return ControlSessionMapper.toSessionTemplateList(payload);
   }
 
   async createSession(command: CreateSessionCommand = {}): Promise<SessionResource> {
@@ -345,5 +352,39 @@ export class ControlClient {
       contentType: options.contentType,
       headers: options.headers,
     });
+  }
+}
+
+function buildSessionListPath(filters: SessionListFilters): string {
+  const params = new URLSearchParams();
+  if (filters.templateId) {
+    params.set('template_id', filters.templateId);
+  }
+  appendCsvFilter(params, 'state', filters.states);
+  appendCsvFilter(params, 'runtime_state', filters.runtimeStates);
+  for (const [key, value] of Object.entries(filters.labels ?? {})) {
+    params.append(`label.${key}`, value);
+  }
+  for (const [key, value] of Object.entries(filters.integrationContext ?? {})) {
+    params.append(`integration.${key}`, value);
+  }
+  if (filters.limit !== undefined && filters.limit !== null) {
+    params.set('limit', String(filters.limit));
+  }
+  if (filters.offset !== undefined && filters.offset !== null) {
+    params.set('offset', String(filters.offset));
+  }
+  const query = params.toString();
+  return query ? `/api/v1/sessions?${query}` : '/api/v1/sessions';
+}
+
+function appendCsvFilter(
+  params: URLSearchParams,
+  key: string,
+  values: readonly string[] | undefined,
+): void {
+  const filtered = values?.map((value) => value.trim()).filter(Boolean) ?? [];
+  if (filtered.length > 0) {
+    params.set(key, filtered.join(','));
   }
 }
