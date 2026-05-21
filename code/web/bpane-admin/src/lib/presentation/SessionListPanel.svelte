@@ -38,7 +38,7 @@
   }
 </script>
 
-<div class="grid gap-3" aria-label="Owner-scoped sessions">
+<div class="grid min-w-0 gap-3" aria-label="Owner-scoped sessions">
   <section class="grid gap-3 rounded-[16px] border border-admin-leaf/25 bg-admin-leaf/10 p-3" aria-label="Selected session">
     <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
       <div class="min-w-0">

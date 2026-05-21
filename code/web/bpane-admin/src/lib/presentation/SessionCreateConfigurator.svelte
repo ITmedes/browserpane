@@ -54,8 +54,11 @@
   const selectedTemplate = $derived(sessionTemplates.find((template) => template.id === templateId) ?? null);
   const selectedTemplateSummary = $derived(sessionTemplateDefaultsSummary(selectedTemplate));
   const rootClass = $derived(variant === 'panel'
-    ? 'admin-panel mt-0 grid gap-4'
-    : 'grid gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3');
+    ? 'admin-panel mt-0 grid min-w-0 gap-4'
+    : 'grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3');
+  const fieldGridClass = $derived(variant === 'panel'
+    ? 'grid min-w-0 gap-3 xl:grid-cols-[minmax(220px,1.2fr)_minmax(180px,1fr)_minmax(180px,1fr)]'
+    : 'grid min-w-0 gap-3');
   const payloadOpen = $derived(controlledPayloadOpen ?? payloadOpenInternal);
 
   $effect(() => {
@@ -116,11 +119,11 @@
       submit();
     }}
   >
-    <div class="grid gap-3 xl:grid-cols-[minmax(220px,1.2fr)_minmax(180px,1fr)_minmax(180px,1fr)]">
-      <label class="grid gap-1 text-sm font-bold text-admin-ink/72">
+    <div class={fieldGridClass}>
+      <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
         Template
         <select
-          class="min-h-11 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+          class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
           data-testid="session-create-template"
           bind:value={templateId}
           disabled={loading || disabled || templatesLoading}
@@ -132,10 +135,10 @@
         </select>
       </label>
 
-      <label class="grid gap-1 text-sm font-bold text-admin-ink/72">
+      <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
         Owner mode
         <select
-          class="min-h-11 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+          class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
           data-testid="session-create-owner-mode"
           bind:value={ownerMode}
           disabled={loading || disabled}
@@ -148,10 +151,10 @@
         </select>
       </label>
 
-      <label class="grid gap-1 text-sm font-bold text-admin-ink/72">
+      <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
         Idle timeout
         <input
-          class="min-h-11 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+          class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
           data-testid="session-create-idle-timeout"
           inputmode="numeric"
           placeholder="Backend default"
@@ -194,10 +197,10 @@
       </section>
     {/if}
 
-    <label class="grid gap-1 text-sm font-bold text-admin-ink/72">
+    <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
       Labels
       <textarea
-        class="min-h-20 resize-y rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-admin-ink outline-none focus:border-admin-leaf/45"
+        class="min-h-20 min-w-0 resize-y rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-admin-ink outline-none focus:border-admin-leaf/45"
         data-testid="session-create-labels"
         placeholder="case=1234, purpose=import-repro"
         rows={variant === 'panel' ? 3 : 2}
