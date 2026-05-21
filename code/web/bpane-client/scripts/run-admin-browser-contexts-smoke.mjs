@@ -116,7 +116,7 @@ async function verifyLiveCatalog(page, options, browserContext, sessionId) {
   await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await row.click();
   const detailName = await page.getByTestId('browser-context-detail-name').textContent();
-  const references = await poll(
+  await poll(
     'live browser context reference count',
     async () => await page.getByTestId('browser-context-detail-references').textContent(),
     (value) => value?.includes('1 visible session') === true,
