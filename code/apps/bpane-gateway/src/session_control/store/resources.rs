@@ -166,6 +166,51 @@ impl SessionStore {
         }
     }
 
+    pub async fn create_egress_profile(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistEgressProfileRequest,
+    ) -> Result<StoredEgressProfile, SessionStoreError> {
+        validate_egress_profile_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_egress_profile(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_egress_profile(principal, request).await
+            }
+        }
+    }
+
+    pub async fn list_egress_profiles_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredEgressProfile>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_egress_profiles_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_egress_profiles_for_owner(principal).await
+            }
+        }
+    }
+
+    pub async fn get_egress_profile_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredEgressProfile>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_egress_profile_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_egress_profile_for_owner(principal, id).await
+            }
+        }
+    }
+
     pub async fn create_file_workspace(
         &self,
         principal: &AuthenticatedPrincipal,

@@ -179,6 +179,8 @@ fn merge_template_defaults(
 
     request.integration_context =
         merge_integration_context(defaults.integration_context, request.integration_context);
+    request.network_identity =
+        merge_network_identity(defaults.network_identity, request.network_identity);
 
     if request.recording == SessionRecordingPolicy::default() {
         if let Some(recording) = defaults.recording {
@@ -187,6 +189,33 @@ fn merge_template_defaults(
     }
 
     request
+}
+
+fn merge_network_identity(
+    defaults: Option<SessionNetworkIdentity>,
+    override_value: Option<SessionNetworkIdentity>,
+) -> Option<SessionNetworkIdentity> {
+    match (defaults, override_value) {
+        (Some(mut defaults), Some(override_value)) => {
+            defaults.locale = override_value.locale.or(defaults.locale);
+            if !override_value.languages.is_empty() {
+                defaults.languages = override_value.languages;
+            }
+            defaults.timezone = override_value.timezone.or(defaults.timezone);
+            defaults.geolocation = override_value.geolocation.or(defaults.geolocation);
+            defaults.user_agent = override_value.user_agent.or(defaults.user_agent);
+            defaults.browser_identity = override_value
+                .browser_identity
+                .or(defaults.browser_identity);
+            defaults.egress_profile_id = override_value
+                .egress_profile_id
+                .or(defaults.egress_profile_id);
+            Some(defaults)
+        }
+        (_, Some(value)) => Some(value),
+        (Some(value), None) => Some(value),
+        (None, None) => None,
+    }
 }
 
 fn merge_integration_context(
@@ -243,6 +272,7 @@ pub(super) async fn create_owned_session(
         .validate_mode(request.recording.mode)
         .map_err(map_recording_lifecycle_error)?;
     let reusable_context = validate_session_browser_context(state, principal, &request).await?;
+    validate_session_egress_profile(state, principal, &request).await?;
     if let Some(context) = reusable_context {
         enforce_browser_context_storage_limit(state, &context).await?;
         state
@@ -288,6 +318,42 @@ pub(super) async fn create_owned_session(
     );
 
     Ok(stored)
+}
+
+async fn validate_session_egress_profile(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    request: &CreateSessionRequest,
+) -> Result<Option<StoredEgressProfile>, (StatusCode, Json<ErrorResponse>)> {
+    let Some(profile_id) = request
+        .network_identity
+        .as_ref()
+        .and_then(|identity| identity.egress_profile_id)
+    else {
+        return Ok(None);
+    };
+    let profile = state
+        .session_store
+        .get_egress_profile_for_owner(principal, profile_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("egress profile {profile_id} not found"),
+                }),
+            )
+        })?;
+    if profile.state == EgressProfileState::Disabled {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!("egress profile {profile_id} is disabled"),
+            }),
+        ));
+    }
+    Ok(Some(profile))
 }
 
 async fn validate_session_browser_context(

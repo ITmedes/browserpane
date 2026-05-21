@@ -46,6 +46,7 @@ impl InMemorySessionStore {
                 mode: browser_context.mode,
                 context_id: browser_context.context_id,
             },
+            network_identity: request.network_identity.unwrap_or_default(),
             owner_mode,
             viewport: request.viewport.unwrap_or_default(),
             owner: SessionOwner {

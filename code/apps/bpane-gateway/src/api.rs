@@ -38,14 +38,16 @@ use crate::session_access::SessionAutomationAccessTokenClaims;
 use crate::session_control::{
     BrowserContextListResponse, BrowserContextPersistenceMode, BrowserContextResource,
     BrowserContextState, CompleteSessionRecordingRequest, CreateSessionRequest,
+    EgressProfileListResponse, EgressProfileResource, EgressProfileState,
     FailSessionRecordingRequest, PersistBrowserContextRequest,
-    PersistCompletedSessionRecordingRequest, PersistSessionFileBindingRequest,
-    PersistSessionTemplateRequest, SessionBrowserContextMode, SessionLifecycleState,
-    SessionListResponse, SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse,
-    SessionRecordingMode, SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
+    PersistCompletedSessionRecordingRequest, PersistEgressProfileRequest,
+    PersistSessionFileBindingRequest, PersistSessionTemplateRequest, SessionBrowserContextMode,
+    SessionEffectiveEgress, SessionLifecycleState, SessionListResponse, SessionNetworkIdentity,
+    SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
+    SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
     SessionRecordingTerminationReason, SessionResource, SessionStore, SessionTemplateDefaults,
     SessionTemplateListResponse, SessionTemplateResource, SetAutomationDelegateRequest,
-    StoredBrowserContext, StoredSession, StoredSessionRecording,
+    StoredBrowserContext, StoredEgressProfile, StoredSession, StoredSessionRecording,
 };
 use crate::session_files::{
     SessionFileBindingListResponse, SessionFileBindingResource, SessionFileListResponse,
@@ -86,6 +88,7 @@ mod authz;
 mod automation_tasks;
 mod browser_contexts;
 mod credential_bindings;
+mod egress_profiles;
 mod errors;
 mod extensions;
 mod file_workspaces;

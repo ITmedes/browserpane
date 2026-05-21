@@ -181,6 +181,174 @@ impl From<SessionRuntimeAccess> for SessionRuntimeInfo {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum EgressProfileState {
+    Ready,
+    Disabled,
+}
+
+impl EgressProfileState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Disabled => "disabled",
+        }
+    }
+}
+
+impl FromStr for EgressProfileState {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "ready" => Ok(Self::Ready),
+            "disabled" => Ok(Self::Disabled),
+            _ => Err("unknown egress profile state"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionGeolocation {
+    pub latitude: f64,
+    pub longitude: f64,
+    #[serde(default)]
+    pub accuracy_meters: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SessionNetworkIdentity {
+    #[serde(default)]
+    pub locale: Option<String>,
+    #[serde(default)]
+    pub languages: Vec<String>,
+    #[serde(default)]
+    pub timezone: Option<String>,
+    #[serde(default)]
+    pub geolocation: Option<SessionGeolocation>,
+    #[serde(default)]
+    pub user_agent: Option<String>,
+    #[serde(default)]
+    pub browser_identity: Option<String>,
+    #[serde(default)]
+    pub egress_profile_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EgressProxyConfig {
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EgressCustomCaConfig {
+    pub certificate_ref: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EgressProfileEffectiveStatus {
+    pub proxy_configured: bool,
+    pub bypass_rule_count: u32,
+    pub custom_ca_configured: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct SessionEffectiveEgress {
+    pub profile_id: Option<Uuid>,
+    pub profile_name: Option<String>,
+    pub profile_state: Option<EgressProfileState>,
+    pub proxy_configured: bool,
+    pub bypass_rule_count: u32,
+    pub custom_ca_configured: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct PersistEgressProfileRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub proxy: Option<EgressProxyConfig>,
+    pub bypass_rules: Vec<String>,
+    pub custom_ca: Option<EgressCustomCaConfig>,
+    pub state: EgressProfileState,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredEgressProfile {
+    pub id: Uuid,
+    pub owner_subject: String,
+    pub owner_issuer: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub proxy: Option<EgressProxyConfig>,
+    pub bypass_rules: Vec<String>,
+    pub custom_ca: Option<EgressCustomCaConfig>,
+    pub state: EgressProfileState,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EgressProfileResource {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub proxy: Option<EgressProxyConfig>,
+    pub bypass_rules: Vec<String>,
+    pub custom_ca: Option<EgressCustomCaConfig>,
+    pub state: EgressProfileState,
+    pub effective: EgressProfileEffectiveStatus,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EgressProfileListResponse {
+    pub profiles: Vec<EgressProfileResource>,
+}
+
+impl StoredEgressProfile {
+    pub fn effective_status(&self) -> EgressProfileEffectiveStatus {
+        EgressProfileEffectiveStatus {
+            proxy_configured: self.proxy.is_some(),
+            bypass_rule_count: self.bypass_rules.len() as u32,
+            custom_ca_configured: self.custom_ca.is_some(),
+        }
+    }
+
+    pub fn to_resource(&self) -> EgressProfileResource {
+        EgressProfileResource {
+            id: self.id,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            labels: self.labels.clone(),
+            proxy: self.proxy.clone(),
+            bypass_rules: self.bypass_rules.clone(),
+            custom_ca: self.custom_ca.clone(),
+            state: self.state,
+            effective: self.effective_status(),
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+
+    pub fn to_session_effective_egress(&self) -> SessionEffectiveEgress {
+        let effective = self.effective_status();
+        SessionEffectiveEgress {
+            profile_id: Some(self.id),
+            profile_name: Some(self.name.clone()),
+            profile_state: Some(self.state),
+            proxy_configured: effective.proxy_configured,
+            bypass_rule_count: effective.bypass_rule_count,
+            custom_ca_configured: effective.custom_ca_configured,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum BrowserContextState {
     Ready,
     Deleted,
@@ -434,6 +602,8 @@ pub struct SessionResource {
     pub state: SessionLifecycleState,
     pub template_id: Option<String>,
     pub browser_context: SessionBrowserContextResource,
+    pub network_identity: SessionNetworkIdentity,
+    pub effective_egress: SessionEffectiveEgress,
     pub owner_mode: SessionOwnerMode,
     pub viewport: SessionViewport,
     pub capabilities: SessionCapabilities,
@@ -459,6 +629,8 @@ pub struct CreateSessionRequest {
     pub template_id: Option<String>,
     #[serde(default)]
     pub browser_context: Option<SessionBrowserContextRequest>,
+    #[serde(default)]
+    pub network_identity: Option<SessionNetworkIdentity>,
     #[serde(default)]
     pub owner_mode: Option<SessionOwnerMode>,
     #[serde(default)]
@@ -489,6 +661,8 @@ pub struct SessionTemplateDefaults {
     pub labels: HashMap<String, String>,
     #[serde(default)]
     pub integration_context: Option<Value>,
+    #[serde(default)]
+    pub network_identity: Option<SessionNetworkIdentity>,
     #[serde(default)]
     pub recording: Option<crate::session_control::SessionRecordingPolicy>,
 }
@@ -567,6 +741,7 @@ pub struct StoredSession {
     pub state: SessionLifecycleState,
     pub template_id: Option<String>,
     pub browser_context: SessionBrowserContextResource,
+    pub network_identity: SessionNetworkIdentity,
     pub owner_mode: SessionOwnerMode,
     pub viewport: SessionViewport,
     pub owner: SessionOwner,
@@ -589,12 +764,15 @@ impl StoredSession {
         runtime: SessionRuntimeInfo,
         status: SessionStatusSummary,
         state_override: Option<SessionLifecycleState>,
+        effective_egress: SessionEffectiveEgress,
     ) -> SessionResource {
         SessionResource {
             id: self.id,
             state: state_override.unwrap_or(self.state),
             template_id: self.template_id.clone(),
             browser_context: self.browser_context.clone(),
+            network_identity: self.network_identity.clone(),
+            effective_egress,
             owner_mode: self.owner_mode,
             viewport: self.viewport.clone(),
             capabilities: SessionCapabilities::default(),

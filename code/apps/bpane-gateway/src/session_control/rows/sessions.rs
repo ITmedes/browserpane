@@ -40,6 +40,14 @@ pub(in crate::session_control) fn row_to_stored_session(
         .map_err(|error| {
             SessionStoreError::Backend(format!("failed to decode session extensions: {error}"))
         })?;
+    let network_identity = serde_json::from_value::<SessionNetworkIdentity>(
+        row.get("network_identity"),
+    )
+    .map_err(|error| {
+        SessionStoreError::Backend(format!(
+            "failed to decode session network identity: {error}"
+        ))
+    })?;
 
     let width = row.get::<_, i32>("viewport_width");
     let height = row.get::<_, i32>("viewport_height");
@@ -54,6 +62,7 @@ pub(in crate::session_control) fn row_to_stored_session(
             mode: browser_context_mode,
             context_id: row.get("browser_context_id"),
         },
+        network_identity,
         owner_mode,
         viewport: SessionViewport {
             width: width as u16,

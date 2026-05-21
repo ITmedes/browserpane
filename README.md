@@ -82,7 +82,7 @@ Current support and scope:
 - Shared sessions: collaborative by default, intended for small curated groups rather than broadcast-scale delivery.
 - Owner/viewer mode: optional exclusive-owner mode is supported in the gateway; restricted viewers are read-only.
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
-- Control plane: owner-scoped v1 APIs now cover sessions, session templates, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
+- Control plane: owner-scoped v1 APIs now cover sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 
@@ -289,13 +289,16 @@ Canonical contract:
 - `GET /api/v1/session-templates`
 - `GET /api/v1/session-templates/{id}`
 - `PUT /api/v1/session-templates/{id}`
+- `POST /api/v1/egress-profiles`
+- `GET /api/v1/egress-profiles`
+- `GET /api/v1/egress-profiles/{id}`
 
 These endpoints are bearer-protected, owner-scoped, and stored in Postgres. The
 full contract is in the OpenAPI file; the route lists below call out the
 operator-facing surfaces that are most relevant for local development.
 
 Session templates store reusable defaults for session creation, including owner
-mode, viewport, idle timeout, labels, integration context, and recording policy.
+mode, viewport, idle timeout, labels, integration context, network identity, and recording policy.
 Creating a session with a UUID `template_id` merges those defaults before the
 session is persisted; explicit caller fields win over template defaults.
 The admin create-session configurator follows the same rule: selecting a
@@ -304,6 +307,14 @@ explicit override, and the API payload preview shows the exact fields that will
 be sent.
 `GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
+Network identity metadata lets callers declare locale, language preferences,
+timezone, geolocation, browser identity, user-agent override, and an
+`egress_profile_id` on either a session template or an explicit session create
+payload. Egress profiles are owner-scoped resources with safe proxy metadata,
+bypass rules, custom CA references, state, labels, and sanitized effective
+status; session resources and `/status` include the inherited network identity
+and effective egress summary without embedding proxy credentials or raw CA
+material.
 Browser context resources let callers name owner-scoped Chromium profile
 contexts and bind new sessions with `browser_context.mode=reusable` plus a
 `context_id`. Docker-backed runtimes materialize reusable contexts as a

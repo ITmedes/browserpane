@@ -1,0 +1,299 @@
+use super::*;
+
+#[tokio::test]
+async fn manages_egress_profiles_and_session_network_identity() {
+    let (app, token) = test_router_with_docker_pool().await;
+
+    let unauthorized = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/egress-profiles")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+    let disabled_profile_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "disabled-egress",
+                        "state": "disabled"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(disabled_profile_response.status(), StatusCode::CREATED);
+    let disabled_profile = response_json(disabled_profile_response).await;
+    let disabled_profile_id = disabled_profile["id"].as_str().unwrap().to_string();
+
+    let disabled_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "network_identity": {
+                            "egress_profile_id": disabled_profile_id
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(disabled_session_response.status(), StatusCode::CONFLICT);
+
+    let invalid_profile_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "bad-proxy",
+                        "proxy": { "url": "https://user:pass@proxy.example:8443" }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_profile_response.status(), StatusCode::BAD_REQUEST);
+
+    let missing_profile_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "network_identity": {
+                            "egress_profile_id": Uuid::now_v7()
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_profile_response.status(), StatusCode::NOT_FOUND);
+
+    let invalid_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "network_identity": {
+                            "locale": "bad locale",
+                            "geolocation": {
+                                "latitude": 91.0,
+                                "longitude": 13.4
+                            }
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_session_response.status(), StatusCode::BAD_REQUEST);
+
+    let create_profile_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "eu-support-egress",
+                        "description": "Support EU egress",
+                        "labels": { "region": "eu" },
+                        "proxy": { "url": "https://proxy.example:8443" },
+                        "bypass_rules": ["localhost", "*.internal.example"],
+                        "custom_ca": {
+                            "certificate_ref": "vault://pki/browserpane/eu-support",
+                            "display_name": "EU support CA"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_profile_response.status(), StatusCode::CREATED);
+    let profile = response_json(create_profile_response).await;
+    let profile_id = profile["id"].as_str().unwrap().to_string();
+    assert_eq!(profile["name"], "eu-support-egress");
+    assert_eq!(profile["state"], "ready");
+    assert_eq!(profile["effective"]["proxy_configured"], true);
+    assert_eq!(profile["effective"]["bypass_rule_count"], 2);
+    assert_eq!(profile["effective"]["custom_ca_configured"], true);
+
+    let get_profile_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/egress-profiles/{profile_id}"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get_profile_response.status(), StatusCode::OK);
+    let fetched_profile = response_json(get_profile_response).await;
+    assert_eq!(fetched_profile["id"], profile_id);
+
+    let create_template_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/session-templates")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "customer-eu-debug",
+                        "defaults": {
+                            "network_identity": {
+                                "locale": "de-DE",
+                                "languages": ["de-DE", "en-US"],
+                                "timezone": "Europe/Berlin",
+                                "geolocation": {
+                                    "latitude": 52.52,
+                                    "longitude": 13.405,
+                                    "accuracy_meters": 100.0
+                                },
+                                "browser_identity": "desktop-chromium-stable",
+                                "egress_profile_id": profile_id
+                            },
+                            "labels": { "region": "eu" }
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_template_response.status(), StatusCode::CREATED);
+    let template = response_json(create_template_response).await;
+    let template_id = template["id"].as_str().unwrap().to_string();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "template_id": template_id,
+                        "network_identity": {
+                            "timezone": "UTC",
+                            "user_agent": "BrowserPaneTest/1.0"
+                        },
+                        "labels": { "case": "INC-1234" }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let session = response_json(create_session_response).await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+    assert_eq!(session["network_identity"]["locale"], "de-DE");
+    assert_eq!(session["network_identity"]["languages"][0], "de-DE");
+    assert_eq!(session["network_identity"]["timezone"], "UTC");
+    assert_eq!(
+        session["network_identity"]["user_agent"],
+        "BrowserPaneTest/1.0"
+    );
+    assert_eq!(
+        session["network_identity"]["browser_identity"],
+        "desktop-chromium-stable"
+    );
+    assert_eq!(session["network_identity"]["egress_profile_id"], profile_id);
+    assert_eq!(session["effective_egress"]["profile_id"], profile_id);
+    assert_eq!(
+        session["effective_egress"]["profile_name"],
+        "eu-support-egress"
+    );
+    assert_eq!(session["effective_egress"]["bypass_rule_count"], 2);
+    assert_eq!(session["labels"]["region"], "eu");
+    assert_eq!(session["labels"]["case"], "INC-1234");
+
+    let status_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/status"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(status_response.status(), StatusCode::OK);
+    let status = response_json(status_response).await;
+    assert_eq!(status["network_identity"]["timezone"], "UTC");
+    assert_eq!(
+        status["effective_egress"]["profile_name"],
+        "eu-support-egress"
+    );
+
+    let list_response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list = response_json(list_response).await;
+    assert_eq!(list["profiles"].as_array().unwrap().len(), 2);
+}

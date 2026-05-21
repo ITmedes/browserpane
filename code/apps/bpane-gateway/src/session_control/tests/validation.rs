@@ -6,6 +6,7 @@ fn rejects_non_object_integration_context() {
     let error = validate_create_request(&CreateSessionRequest {
         template_id: None,
         browser_context: None,
+        network_identity: None,
         owner_mode: None,
         viewport: None,
         idle_timeout_sec: None,
@@ -25,6 +26,7 @@ fn rejects_zero_recording_retention() {
     let error = validate_create_request(&CreateSessionRequest {
         template_id: None,
         browser_context: None,
+        network_identity: None,
         owner_mode: None,
         viewport: None,
         idle_timeout_sec: None,
@@ -116,6 +118,7 @@ fn accepts_valid_session_template_defaults() {
             idle_timeout_sec: Some(1800),
             labels: HashMap::from([("purpose".to_string(), "debug".to_string())]),
             integration_context: Some(json!({ "source": "template" })),
+            network_identity: None,
             recording: Some(SessionRecordingPolicy {
                 mode: SessionRecordingMode::Manual,
                 format: SessionRecordingFormat::Webm,
@@ -124,6 +127,115 @@ fn accepts_valid_session_template_defaults() {
         },
     })
     .expect("valid session template defaults should pass validation");
+}
+
+#[test]
+fn validates_network_identity_and_egress_profile_shapes() {
+    validate_create_request(&CreateSessionRequest {
+        network_identity: Some(SessionNetworkIdentity {
+            locale: Some("de-DE".to_string()),
+            languages: vec!["de-DE".to_string(), "en-US".to_string()],
+            timezone: Some("Europe/Berlin".to_string()),
+            geolocation: Some(SessionGeolocation {
+                latitude: 52.52,
+                longitude: 13.405,
+                accuracy_meters: Some(100.0),
+            }),
+            user_agent: Some("BrowserPaneTest/1.0".to_string()),
+            browser_identity: Some("desktop-chromium-stable".to_string()),
+            egress_profile_id: Some(Uuid::now_v7()),
+        }),
+        ..CreateSessionRequest::default()
+    })
+    .expect("valid network identity should pass validation");
+
+    for identity in [
+        SessionNetworkIdentity {
+            locale: Some("bad locale".to_string()),
+            ..SessionNetworkIdentity::default()
+        },
+        SessionNetworkIdentity {
+            timezone: Some("bad timezone".to_string()),
+            ..SessionNetworkIdentity::default()
+        },
+        SessionNetworkIdentity {
+            geolocation: Some(SessionGeolocation {
+                latitude: 91.0,
+                longitude: 13.405,
+                accuracy_meters: None,
+            }),
+            ..SessionNetworkIdentity::default()
+        },
+        SessionNetworkIdentity {
+            user_agent: Some("bad\nagent".to_string()),
+            ..SessionNetworkIdentity::default()
+        },
+        SessionNetworkIdentity {
+            egress_profile_id: Some(Uuid::nil()),
+            ..SessionNetworkIdentity::default()
+        },
+    ] {
+        let error = validate_create_request(&CreateSessionRequest {
+            network_identity: Some(identity),
+            ..CreateSessionRequest::default()
+        })
+        .unwrap_err();
+        assert!(matches!(error, SessionStoreError::InvalidRequest(_)));
+    }
+
+    validate_egress_profile_request(&PersistEgressProfileRequest {
+        name: "eu-support-egress".to_string(),
+        description: Some("EU support egress".to_string()),
+        labels: HashMap::from([("region".to_string(), "eu".to_string())]),
+        proxy: Some(EgressProxyConfig {
+            url: "https://proxy.example:8443".to_string(),
+        }),
+        bypass_rules: vec!["localhost".to_string()],
+        custom_ca: Some(EgressCustomCaConfig {
+            certificate_ref: "vault://pki/browserpane/eu-support".to_string(),
+            display_name: Some("EU support CA".to_string()),
+        }),
+        state: EgressProfileState::Ready,
+    })
+    .expect("valid egress profile should pass validation");
+
+    for request in [
+        PersistEgressProfileRequest {
+            name: "".to_string(),
+            description: None,
+            labels: HashMap::new(),
+            proxy: None,
+            bypass_rules: Vec::new(),
+            custom_ca: None,
+            state: EgressProfileState::Ready,
+        },
+        PersistEgressProfileRequest {
+            name: "bad-proxy".to_string(),
+            description: None,
+            labels: HashMap::new(),
+            proxy: Some(EgressProxyConfig {
+                url: "https://user:pass@proxy.example:8443".to_string(),
+            }),
+            bypass_rules: Vec::new(),
+            custom_ca: None,
+            state: EgressProfileState::Ready,
+        },
+        PersistEgressProfileRequest {
+            name: "bad-ca".to_string(),
+            description: None,
+            labels: HashMap::new(),
+            proxy: None,
+            bypass_rules: Vec::new(),
+            custom_ca: Some(EgressCustomCaConfig {
+                certificate_ref: "".to_string(),
+                display_name: None,
+            }),
+            state: EgressProfileState::Ready,
+        },
+    ] {
+        let error = validate_egress_profile_request(&request).unwrap_err();
+        assert!(matches!(error, SessionStoreError::InvalidRequest(_)));
+    }
 }
 
 #[test]

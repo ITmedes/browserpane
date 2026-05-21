@@ -328,6 +328,67 @@ pub(in crate::session_control) fn row_to_stored_session_template(
     })
 }
 
+pub(in crate::session_control) fn row_to_stored_egress_profile(
+    row: &Row,
+) -> Result<StoredEgressProfile, SessionStoreError> {
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("egress profile labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("egress profile label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let proxy = row
+        .get::<_, Option<Value>>("proxy")
+        .map(serde_json::from_value::<EgressProxyConfig>)
+        .transpose()
+        .map_err(|error| {
+            SessionStoreError::Backend(format!("failed to decode egress profile proxy: {error}"))
+        })?;
+    let bypass_rules = super::encoding::row_to_json_string_array(
+        row.get("bypass_rules"),
+        "egress profile bypass_rules",
+    )?;
+    let custom_ca = row
+        .get::<_, Option<Value>>("custom_ca")
+        .map(serde_json::from_value::<EgressCustomCaConfig>)
+        .transpose()
+        .map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "failed to decode egress profile custom_ca: {error}"
+            ))
+        })?;
+    let state = row
+        .get::<_, String>("state")
+        .parse::<EgressProfileState>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+
+    Ok(StoredEgressProfile {
+        id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        description: row.get("description"),
+        labels,
+        proxy,
+        bypass_rules,
+        custom_ca,
+        state,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
 pub(in crate::session_control) fn row_to_stored_file_workspace_file(
     row: &Row,
 ) -> Result<StoredFileWorkspaceFile, SessionStoreError> {
