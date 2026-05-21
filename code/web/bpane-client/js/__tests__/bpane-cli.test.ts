@@ -889,6 +889,26 @@ describe('bpane operator CLI', () => {
     );
     expect(missingCaRefCode).toBe(EXIT_CODES.usage);
     expect(parseStderr(missingCaRefIo).error).toContain('--custom-ca-ref');
+
+    const missingSinkIo = createIo();
+    const missingSinkCode = await runBpaneCli(
+      [
+        'egress-profile',
+        'create',
+        'eu-support-egress',
+        '--proxy-url',
+        'https://proxy.example:8443',
+        '--custom-ca-ref',
+        'file:///workspace/dev/egress-ca.pem',
+        '--traffic-observation-mode',
+        'tls_intercept',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingSinkIo.io,
+      fetchImpl,
+    );
+    expect(missingSinkCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingSinkIo).error).toContain('--sensitive-log-sink-ref');
     expect(calls).toHaveLength(0);
   });
 
@@ -972,9 +992,15 @@ describe('bpane operator CLI', () => {
         '--bypass-rule',
         '*.internal.example',
         '--custom-ca-ref',
-        'vault://pki/browserpane/eu-support',
+        'file:///workspace/dev/egress-ca.pem',
         '--custom-ca-name',
         'EU support CA',
+        '--traffic-observation-mode',
+        'tls_intercept',
+        '--sensitive-log-sink-ref',
+        'siem://browserpane/eu-support',
+        '--sensitive-log-sink-name',
+        'EU support SIEM',
       ],
       { BPANE_ACCESS_TOKEN: 'token-1' },
       createProfileIo.io,
@@ -991,8 +1017,13 @@ describe('bpane operator CLI', () => {
       proxy: { url: 'https://proxy.example:8443' },
       bypass_rules: ['localhost', '*.internal.example'],
       custom_ca: {
-        certificate_ref: 'vault://pki/browserpane/eu-support',
+        certificate_ref: 'file:///workspace/dev/egress-ca.pem',
         display_name: 'EU support CA',
+      },
+      traffic_observation: {
+        mode: 'tls_intercept',
+        sensitive_log_sink_ref: 'siem://browserpane/eu-support',
+        sensitive_log_sink_display_name: 'EU support SIEM',
       },
     });
 

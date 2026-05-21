@@ -9,6 +9,14 @@ The example uses Squid as a plain forward proxy. HTTPS traffic is not
 man-in-the-middle inspected, so proxy logs normally contain `CONNECT host:443`
 for TLS traffic rather than request paths or response bodies.
 
+For full HTTPS inspection, use a proxy that is explicitly configured for TLS
+interception, publish an approved interception CA bundle to the gateway as a
+`file://` or absolute-path `custom_ca.certificate_ref`, and create the egress
+profile with `traffic_observation.mode=tls_intercept` plus a
+`sensitive_log_sink_ref`. BrowserPane then installs that CA into the docker
+runtime's Chromium trust store and keeps decrypted-log routing explicit in the
+control-plane metadata.
+
 ## Start The Observer Proxy
 
 Start the normal BrowserPane stack first, then start this observer on the same
@@ -70,9 +78,12 @@ Docker-backed BrowserPane runtime containers carry these labels:
 
 - `browserpane.session_id`
 - `browserpane.egress_profile_id`
+- `browserpane.egress_observation_mode`
 - `browserpane.egress_proxy_configured`
 - `browserpane.egress_bypass_rule_count`
 - `browserpane.egress_custom_ca_configured`
+- `browserpane.egress_tls_interception_enabled`
+- `browserpane.egress_sensitive_log_sink_configured`
 
 The gateway also emits a startup audit log named
 `starting docker runtime with egress observer correlation` with the session id,

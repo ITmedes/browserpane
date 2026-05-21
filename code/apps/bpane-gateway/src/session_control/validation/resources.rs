@@ -183,6 +183,61 @@ pub(in crate::session_control) fn validate_egress_profile_request(
             }
         }
     }
+    validate_egress_traffic_observation(request)?;
+    Ok(())
+}
+
+fn validate_egress_traffic_observation(
+    request: &PersistEgressProfileRequest,
+) -> Result<(), SessionStoreError> {
+    let observation = &request.traffic_observation;
+    if let Some(sink_ref) = &observation.sensitive_log_sink_ref {
+        if sink_ref.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile traffic_observation.sensitive_log_sink_ref must not be empty when provided".to_string(),
+            ));
+        }
+        if sink_ref.contains(['\r', '\n']) {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile traffic_observation.sensitive_log_sink_ref must be a single line"
+                    .to_string(),
+            ));
+        }
+        if reference_contains_inline_credentials(sink_ref) {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile traffic_observation.sensitive_log_sink_ref must not contain inline credentials".to_string(),
+            ));
+        }
+    }
+    if let Some(display_name) = &observation.sensitive_log_sink_display_name {
+        if display_name.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile traffic_observation.sensitive_log_sink_display_name must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    if observation.mode == EgressTrafficObservationMode::TlsIntercept {
+        if request.proxy.is_none() {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile traffic_observation.mode=tls_intercept requires proxy".to_string(),
+            ));
+        }
+        if request.custom_ca.is_none() {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile traffic_observation.mode=tls_intercept requires custom_ca"
+                    .to_string(),
+            ));
+        }
+        if observation
+            .sensitive_log_sink_ref
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile traffic_observation.mode=tls_intercept requires sensitive_log_sink_ref".to_string(),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -218,6 +273,13 @@ fn validate_egress_proxy(proxy: &EgressProxyConfig) -> Result<(), SessionStoreEr
         ));
     }
     Ok(())
+}
+
+fn reference_contains_inline_credentials(value: &str) -> bool {
+    value
+        .split_once("://")
+        .and_then(|(_, rest)| rest.split(['/', '?', '#']).next())
+        .is_some_and(|authority| authority.contains('@'))
 }
 
 pub(in crate::session_control) fn validate_extension_definition_request(

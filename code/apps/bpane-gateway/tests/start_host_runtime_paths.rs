@@ -61,6 +61,30 @@ fn docker_runtime_path_validation_rejects_escaping_profile_dir() {
     );
 }
 
+#[test]
+fn docker_runtime_path_validation_rejects_escaping_trusted_ca_bundle() {
+    let temp = TempDir::new().expect("create temp dir");
+    let root = temp.path().join("session-data");
+    let output = validation_command()
+        .env("BPANE_SESSION_DATA_DIR", &root)
+        .env("BPANE_PROFILE_DIR", root.join("chromium"))
+        .env("BPANE_UPLOAD_DIR", root.join("uploads"))
+        .env("BPANE_DOWNLOAD_DIR", root.join("downloads"))
+        .env(
+            "BPANE_CHROMIUM_TRUSTED_CA_BUNDLE",
+            temp.path().join("outside/egress-ca.pem"),
+        )
+        .output()
+        .expect("run validation");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("escapes BPANE_SESSION_DATA_DIR"),
+        "stderr should explain containment failure: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn docker_runtime_path_validation_rejects_symlink_escape() {

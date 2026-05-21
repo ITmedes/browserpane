@@ -10,6 +10,8 @@ import type {
   EgressProfileResource,
   EgressProfileState,
   EgressProxyConfig,
+  EgressTrafficObservationConfig,
+  EgressTrafficObservationMode,
   SessionAutomationDelegate,
   SessionBrowserContextMode,
   SessionBrowserContextResource,
@@ -62,6 +64,7 @@ export class ControlSessionMapper {
       proxy: toEgressProxyConfig(object.proxy) ?? null,
       bypass_rules: toStringArray(object.bypass_rules ?? [], 'egress profile bypass_rules'),
       custom_ca: toEgressCustomCaConfig(object.custom_ca) ?? null,
+      traffic_observation: toEgressTrafficObservationConfig(object.traffic_observation),
       state: expectEnum(object.state, 'egress profile state', EGRESS_PROFILE_STATES),
       effective: toEgressEffectiveStatus(object.effective),
       created_at: expectString(object.created_at, 'egress profile created_at'),
@@ -208,6 +211,7 @@ const BROWSER_CONTEXT_STATES = ['ready', 'deleted'] satisfies readonly BrowserCo
 const BROWSER_CONTEXT_PERSISTENCE_MODES = ['reusable', 'ephemeral'] satisfies readonly BrowserContextPersistenceMode[];
 const SESSION_BROWSER_CONTEXT_MODES = ['fresh', 'ephemeral', 'reusable'] satisfies readonly SessionBrowserContextMode[];
 const EGRESS_PROFILE_STATES = ['ready', 'disabled'] satisfies readonly EgressProfileState[];
+const EGRESS_TRAFFIC_OBSERVATION_MODES = ['metadata_only', 'tls_intercept'] satisfies readonly EgressTrafficObservationMode[];
 
 function expectEnum<T extends string>(
   value: unknown,
@@ -267,6 +271,31 @@ function toEgressCustomCaConfig(value: unknown): EgressCustomCaConfig | null | u
   };
 }
 
+function toEgressTrafficObservationConfig(value: unknown): EgressTrafficObservationConfig {
+  const object = value === undefined || value === null
+    ? {}
+    : expectRecord(value, 'egress profile traffic_observation');
+  const sinkRef = optionalString(
+    object.sensitive_log_sink_ref,
+    'egress profile traffic_observation sensitive_log_sink_ref',
+  );
+  const sinkName = optionalString(
+    object.sensitive_log_sink_display_name,
+    'egress profile traffic_observation sensitive_log_sink_display_name',
+  );
+  return {
+    mode: object.mode === undefined || object.mode === null
+      ? 'metadata_only'
+      : expectEnum(
+        object.mode,
+        'egress profile traffic_observation mode',
+        EGRESS_TRAFFIC_OBSERVATION_MODES,
+      ),
+    sensitive_log_sink_ref: sinkRef ?? null,
+    sensitive_log_sink_display_name: sinkName ?? null,
+  };
+}
+
 function toEgressEffectiveStatus(value: unknown): EgressProfileEffectiveStatus {
   const object = value === undefined || value === null
     ? {}
@@ -283,6 +312,21 @@ function toEgressEffectiveStatus(value: unknown): EgressProfileEffectiveStatus {
     custom_ca_configured: expectBoolean(
       object.custom_ca_configured ?? false,
       'egress profile effective custom_ca_configured',
+    ),
+    observation_mode: object.observation_mode === undefined || object.observation_mode === null
+      ? 'metadata_only'
+      : expectEnum(
+        object.observation_mode,
+        'egress profile effective observation_mode',
+        EGRESS_TRAFFIC_OBSERVATION_MODES,
+      ),
+    tls_interception_enabled: expectBoolean(
+      object.tls_interception_enabled ?? false,
+      'egress profile effective tls_interception_enabled',
+    ),
+    sensitive_log_sink_configured: expectBoolean(
+      object.sensitive_log_sink_configured ?? false,
+      'egress profile effective sensitive_log_sink_configured',
     ),
   };
 }
@@ -356,6 +400,21 @@ function toSessionEffectiveEgress(value: unknown): SessionEffectiveEgress {
     custom_ca_configured: expectBoolean(
       object.custom_ca_configured ?? false,
       'session effective_egress custom_ca_configured',
+    ),
+    observation_mode: object.observation_mode === undefined || object.observation_mode === null
+      ? 'metadata_only'
+      : expectEnum(
+        object.observation_mode,
+        'session effective_egress observation_mode',
+        EGRESS_TRAFFIC_OBSERVATION_MODES,
+      ),
+    tls_interception_enabled: expectBoolean(
+      object.tls_interception_enabled ?? false,
+      'session effective_egress tls_interception_enabled',
+    ),
+    sensitive_log_sink_configured: expectBoolean(
+      object.sensitive_log_sink_configured ?? false,
+      'session effective_egress sensitive_log_sink_configured',
     ),
   };
 }

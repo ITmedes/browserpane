@@ -13,15 +13,20 @@ pub(in crate::runtime_manager) struct DockerNetworkIdentityLaunchOptions {
     pub(in crate::runtime_manager) env: Vec<(String, String)>,
     pub(in crate::runtime_manager) labels: Vec<(String, String)>,
     pub(in crate::runtime_manager) egress_observer: Option<DockerEgressObserverLaunchSummary>,
+    pub(in crate::runtime_manager) egress_custom_ca_ref: Option<String>,
+    pub(in crate::runtime_manager) egress_custom_ca_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::runtime_manager) struct DockerEgressObserverLaunchSummary {
     pub(in crate::runtime_manager) profile_id: Uuid,
     pub(in crate::runtime_manager) profile_name: String,
+    pub(in crate::runtime_manager) observation_mode: EgressTrafficObservationMode,
     pub(in crate::runtime_manager) proxy_configured: bool,
     pub(in crate::runtime_manager) bypass_rule_count: usize,
     pub(in crate::runtime_manager) custom_ca_configured: bool,
+    pub(in crate::runtime_manager) tls_interception_enabled: bool,
+    pub(in crate::runtime_manager) sensitive_log_sink_configured: bool,
 }
 
 impl DockerRuntimeManager {
@@ -135,10 +140,13 @@ impl DockerRuntimeManager {
     pub(in crate::runtime_manager) fn network_identity_launch_options(
         session: &StoredSession,
         egress_profile: Option<&StoredEgressProfile>,
+        trusted_ca_bundle_path: &str,
     ) -> DockerNetworkIdentityLaunchOptions {
         let mut env = Vec::new();
         let mut labels = Vec::new();
         let mut egress_observer = None;
+        let mut egress_custom_ca_ref = None;
+        let mut egress_custom_ca_path = None;
         let identity = &session.network_identity;
 
         if let Some(locale) = identity.locale.as_deref().filter(|value| !value.is_empty()) {
@@ -200,12 +208,23 @@ impl DockerRuntimeManager {
             );
         }
         if let Some(profile) = egress_profile {
+            let effective = profile.effective_status();
             push_env(&mut env, "BPANE_EGRESS_PROFILE_ID", profile.id.to_string());
             push_env(&mut env, "BPANE_EGRESS_PROFILE_NAME", profile.name.clone());
+            push_env(
+                &mut env,
+                "BPANE_EGRESS_OBSERVATION_MODE",
+                profile.traffic_observation.mode.as_str().to_string(),
+            );
             push_label(
                 &mut labels,
                 "browserpane.egress_profile_id",
                 profile.id.to_string(),
+            );
+            push_label(
+                &mut labels,
+                "browserpane.egress_observation_mode",
+                profile.traffic_observation.mode.as_str().to_string(),
             );
             push_label(
                 &mut labels,
@@ -222,12 +241,25 @@ impl DockerRuntimeManager {
                 "browserpane.egress_custom_ca_configured",
                 profile.custom_ca.is_some().to_string(),
             );
+            push_label(
+                &mut labels,
+                "browserpane.egress_tls_interception_enabled",
+                effective.tls_interception_enabled.to_string(),
+            );
+            push_label(
+                &mut labels,
+                "browserpane.egress_sensitive_log_sink_configured",
+                effective.sensitive_log_sink_configured.to_string(),
+            );
             egress_observer = Some(DockerEgressObserverLaunchSummary {
                 profile_id: profile.id,
                 profile_name: profile.name.clone(),
+                observation_mode: profile.traffic_observation.mode,
                 proxy_configured: profile.proxy.is_some(),
                 bypass_rule_count: profile.bypass_rules.len(),
                 custom_ca_configured: profile.custom_ca.is_some(),
+                tls_interception_enabled: effective.tls_interception_enabled,
+                sensitive_log_sink_configured: effective.sensitive_log_sink_configured,
             });
             if let Some(proxy) = &profile.proxy {
                 push_env(&mut env, "BPANE_CHROMIUM_PROXY_SERVER", proxy.url.clone());
@@ -245,6 +277,23 @@ impl DockerRuntimeManager {
                     "BPANE_CUSTOM_CA_REF",
                     custom_ca.certificate_ref.clone(),
                 );
+                if profile.traffic_observation.mode == EgressTrafficObservationMode::TlsIntercept {
+                    push_env(
+                        &mut env,
+                        "BPANE_CHROMIUM_TRUSTED_CA_BUNDLE",
+                        trusted_ca_bundle_path.to_string(),
+                    );
+                    push_env(
+                        &mut env,
+                        "BPANE_CHROMIUM_TRUSTED_CA_NAME",
+                        custom_ca
+                            .display_name
+                            .clone()
+                            .unwrap_or_else(|| "BrowserPane Egress Interception CA".to_string()),
+                    );
+                    egress_custom_ca_ref = Some(custom_ca.certificate_ref.clone());
+                    egress_custom_ca_path = Some(trusted_ca_bundle_path.to_string());
+                }
             }
         }
 
@@ -252,6 +301,8 @@ impl DockerRuntimeManager {
             env,
             labels,
             egress_observer,
+            egress_custom_ca_ref,
+            egress_custom_ca_path,
         }
     }
 
@@ -300,7 +351,12 @@ impl DockerRuntimeManager {
         Ok(Self::network_identity_launch_options(
             &session,
             egress_profile.as_ref(),
+            &self.egress_custom_ca_bundle_path_for_session(),
         ))
+    }
+
+    pub(in crate::runtime_manager) fn egress_custom_ca_bundle_path_for_session(&self) -> String {
+        format!("{}/egress/custom-ca.pem", self.session_data_root())
     }
 
     pub(super) async fn start_container(
@@ -321,6 +377,8 @@ impl DockerRuntimeManager {
             .await?;
         log_egress_observer_launch(lease, container_name, &launch_options);
         self.initialize_session_data_volume(lease).await?;
+        self.materialize_egress_custom_ca_bundle(lease.session_id, &launch_options)
+            .await?;
         self.materialize_session_file_bindings(lease.session_id)
             .await?;
 
@@ -342,6 +400,29 @@ impl DockerRuntimeManager {
         }
 
         self.wait_for_socket(&lease.agent_socket_path, container_name)
+            .await
+    }
+
+    async fn materialize_egress_custom_ca_bundle(
+        &self,
+        session_id: Uuid,
+        launch_options: &DockerNetworkIdentityLaunchOptions,
+    ) -> Result<(), RuntimeManagerError> {
+        let Some(certificate_ref) = launch_options.egress_custom_ca_ref.as_deref() else {
+            return Ok(());
+        };
+        let Some(target_path) = launch_options.egress_custom_ca_path.as_deref() else {
+            return Err(RuntimeManagerError::StartupFailed(
+                "egress TLS inspection requested a custom CA but no runtime CA target path was configured".to_string(),
+            ));
+        };
+        let bytes = read_egress_custom_ca_bundle(certificate_ref).await?;
+        if bytes.is_empty() {
+            return Err(RuntimeManagerError::StartupFailed(format!(
+                "egress custom CA bundle {certificate_ref} is empty"
+            )));
+        }
+        self.write_session_data_file(session_id, target_path, "0444", &bytes)
             .await
     }
 
@@ -494,12 +575,44 @@ fn log_egress_observer_launch(
             container_name = container_name,
             egress_profile_id = %summary.profile_id,
             egress_profile_name = %summary.profile_name,
+            egress_observation_mode = summary.observation_mode.as_str(),
             egress_proxy_configured = summary.proxy_configured,
             egress_bypass_rule_count = summary.bypass_rule_count,
             egress_custom_ca_configured = summary.custom_ca_configured,
+            egress_tls_interception_enabled = summary.tls_interception_enabled,
+            egress_sensitive_log_sink_configured = summary.sensitive_log_sink_configured,
             "starting docker runtime with egress observer correlation",
         );
     }
+}
+
+async fn read_egress_custom_ca_bundle(
+    certificate_ref: &str,
+) -> Result<Vec<u8>, RuntimeManagerError> {
+    let path = local_certificate_ref_path(certificate_ref)?;
+    tokio::fs::read(&path).await.map_err(|error| {
+        RuntimeManagerError::StartupFailed(format!(
+            "failed to read egress custom CA bundle {certificate_ref} from {}: {error}",
+            path.display()
+        ))
+    })
+}
+
+fn local_certificate_ref_path(
+    certificate_ref: &str,
+) -> Result<std::path::PathBuf, RuntimeManagerError> {
+    let value = certificate_ref.trim();
+    let path = if let Some(file_path) = value.strip_prefix("file://") {
+        Path::new(file_path)
+    } else {
+        Path::new(value)
+    };
+    if !path.is_absolute() {
+        return Err(RuntimeManagerError::StartupFailed(
+            "egress TLS inspection custom_ca.certificate_ref must be an absolute path or file:// path until an external CA provider is configured".to_string(),
+        ));
+    }
+    Ok(path.to_path_buf())
 }
 
 fn posix_locale(locale: &str) -> String {

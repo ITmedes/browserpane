@@ -17,7 +17,8 @@ use uuid::Uuid;
 use super::*;
 use crate::auth::AuthenticatedPrincipal;
 use crate::session_control::{
-    EgressProfileState, SessionBrowserContextMode, StoredEgressProfile, StoredSession,
+    EgressProfileState, EgressTrafficObservationMode, SessionBrowserContextMode,
+    StoredEgressProfile, StoredSession,
 };
 use crate::workspaces::WorkspaceFileStore;
 

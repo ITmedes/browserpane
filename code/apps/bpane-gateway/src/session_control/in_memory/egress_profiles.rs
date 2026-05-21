@@ -29,6 +29,7 @@ impl InMemorySessionStore {
             proxy: request.proxy,
             bypass_rules: request.bypass_rules,
             custom_ca: request.custom_ca,
+            traffic_observation: request.traffic_observation,
             state: request.state,
             created_at: now,
             updated_at: now,

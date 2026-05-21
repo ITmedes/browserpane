@@ -5020,6 +5020,11 @@ components:
       enum:
         - ready
         - disabled
+    EgressTrafficObservationMode:
+      type: string
+      enum:
+        - metadata_only
+        - tls_intercept
     SessionGeolocation:
       type: object
       additionalProperties: false
@@ -5092,9 +5097,31 @@ components:
         display_name:
           type: string
           nullable: true
+    EgressTrafficObservationConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        mode:
+          allOf:
+            - $ref: '#/components/schemas/EgressTrafficObservationMode'
+          default: metadata_only
+          description: "`metadata_only` logs destinations at the configured proxy. `tls_intercept` requires proxy, custom_ca, and sensitive_log_sink_ref."
+        sensitive_log_sink_ref:
+          type: string
+          nullable: true
+          description: Opaque reference to an approved SIEM/log sink for sensitive TLS-intercepted traffic logs.
+        sensitive_log_sink_display_name:
+          type: string
+          nullable: true
     EgressProfileEffectiveStatus:
       type: object
-      required: [proxy_configured, bypass_rule_count, custom_ca_configured]
+      required:
+        - proxy_configured
+        - bypass_rule_count
+        - custom_ca_configured
+        - observation_mode
+        - tls_interception_enabled
+        - sensitive_log_sink_configured
       properties:
         proxy_configured:
           type: boolean
@@ -5102,6 +5129,12 @@ components:
           type: integer
           minimum: 0
         custom_ca_configured:
+          type: boolean
+        observation_mode:
+          $ref: '#/components/schemas/EgressTrafficObservationMode'
+        tls_interception_enabled:
+          type: boolean
+        sensitive_log_sink_configured:
           type: boolean
     SessionEffectiveEgress:
       type: object
@@ -5112,6 +5145,9 @@ components:
         - proxy_configured
         - bypass_rule_count
         - custom_ca_configured
+        - observation_mode
+        - tls_interception_enabled
+        - sensitive_log_sink_configured
       properties:
         profile_id:
           type: string
@@ -5130,6 +5166,12 @@ components:
           type: integer
           minimum: 0
         custom_ca_configured:
+          type: boolean
+        observation_mode:
+          $ref: '#/components/schemas/EgressTrafficObservationMode'
+        tls_interception_enabled:
+          type: boolean
+        sensitive_log_sink_configured:
           type: boolean
     CreateEgressProfileRequest:
       type: object
@@ -5157,6 +5199,11 @@ components:
           allOf:
             - $ref: '#/components/schemas/EgressCustomCaConfig'
           nullable: true
+        traffic_observation:
+          allOf:
+            - $ref: '#/components/schemas/EgressTrafficObservationConfig'
+          default:
+            mode: metadata_only
         state:
           allOf:
             - $ref: '#/components/schemas/EgressProfileState'
@@ -5171,6 +5218,7 @@ components:
         - proxy
         - bypass_rules
         - custom_ca
+        - traffic_observation
         - state
         - effective
         - created_at
@@ -5200,6 +5248,8 @@ components:
           allOf:
             - $ref: '#/components/schemas/EgressCustomCaConfig'
           nullable: true
+        traffic_observation:
+          $ref: '#/components/schemas/EgressTrafficObservationConfig'
         state:
           $ref: '#/components/schemas/EgressProfileState'
         effective:

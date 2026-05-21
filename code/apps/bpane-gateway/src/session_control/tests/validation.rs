@@ -195,6 +195,11 @@ fn validates_network_identity_and_egress_profile_shapes() {
             certificate_ref: "vault://pki/browserpane/eu-support".to_string(),
             display_name: Some("EU support CA".to_string()),
         }),
+        traffic_observation: EgressTrafficObservationConfig {
+            mode: EgressTrafficObservationMode::TlsIntercept,
+            sensitive_log_sink_ref: Some("siem://browserpane/eu-support".to_string()),
+            sensitive_log_sink_display_name: Some("EU support SIEM".to_string()),
+        },
         state: EgressProfileState::Ready,
     })
     .expect("valid egress profile should pass validation");
@@ -207,6 +212,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
             proxy: None,
             bypass_rules: Vec::new(),
             custom_ca: None,
+            traffic_observation: EgressTrafficObservationConfig::default(),
             state: EgressProfileState::Ready,
         },
         PersistEgressProfileRequest {
@@ -218,6 +224,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
             }),
             bypass_rules: Vec::new(),
             custom_ca: None,
+            traffic_observation: EgressTrafficObservationConfig::default(),
             state: EgressProfileState::Ready,
         },
         PersistEgressProfileRequest {
@@ -230,6 +237,26 @@ fn validates_network_identity_and_egress_profile_shapes() {
                 certificate_ref: "".to_string(),
                 display_name: None,
             }),
+            traffic_observation: EgressTrafficObservationConfig::default(),
+            state: EgressProfileState::Ready,
+        },
+        PersistEgressProfileRequest {
+            name: "tls-without-sink".to_string(),
+            description: None,
+            labels: HashMap::new(),
+            proxy: Some(EgressProxyConfig {
+                url: "https://proxy.example:8443".to_string(),
+            }),
+            bypass_rules: Vec::new(),
+            custom_ca: Some(EgressCustomCaConfig {
+                certificate_ref: "file:///workspace/dev/egress-ca.pem".to_string(),
+                display_name: None,
+            }),
+            traffic_observation: EgressTrafficObservationConfig {
+                mode: EgressTrafficObservationMode::TlsIntercept,
+                sensitive_log_sink_ref: None,
+                sensitive_log_sink_display_name: None,
+            },
             state: EgressProfileState::Ready,
         },
     ] {

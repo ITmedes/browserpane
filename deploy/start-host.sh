@@ -102,6 +102,9 @@ if [ -n "${BPANE_SESSION_DATA_DIR:-}" ]; then
   validate_session_data_path "BPANE_PROFILE_DIR" "$PROFILE_DIR" "$BPANE_SESSION_DATA_DIR"
   validate_session_data_path "BPANE_UPLOAD_DIR" "$BPANE_UPLOAD_DIR" "$BPANE_SESSION_DATA_DIR"
   validate_session_data_path "BPANE_DOWNLOAD_DIR" "$BPANE_DOWNLOAD_DIR" "$BPANE_SESSION_DATA_DIR"
+  if [ -n "${BPANE_CHROMIUM_TRUSTED_CA_BUNDLE:-}" ]; then
+    validate_session_data_path "BPANE_CHROMIUM_TRUSTED_CA_BUNDLE" "$BPANE_CHROMIUM_TRUSTED_CA_BUNDLE" "$BPANE_SESSION_DATA_DIR"
+  fi
   export BPANE_SESSION_DATA_DIR
 fi
 export BPANE_SESSION_ID BPANE_PROFILE_ROOT PROFILE_DIR BPANE_UPLOAD_DIR BPANE_DOWNLOAD_DIR
@@ -273,6 +276,33 @@ preferences_path.write_text(json.dumps(data, separators=(",", ":")))
 PY
 }
 
+install_chromium_trusted_ca_bundle() {
+  local ca_bundle="${BPANE_CHROMIUM_TRUSTED_CA_BUNDLE:-}"
+  if [ -z "$ca_bundle" ]; then
+    return 0
+  fi
+  if [ ! -r "$ca_bundle" ]; then
+    echo "Configured egress inspection CA bundle is not readable: $ca_bundle" >&2
+    exit 64
+  fi
+  if ! command -v certutil >/dev/null 2>&1; then
+    echo "Configured egress inspection CA bundle requires certutil from libnss3-tools" >&2
+    exit 64
+  fi
+
+  local cert_name="${BPANE_CHROMIUM_TRUSTED_CA_NAME:-BrowserPane Egress Interception CA}"
+  local db_dir
+  for db_dir in "${HOME}/.pki/nssdb" "$PROFILE_DIR"; do
+    mkdir -p "$db_dir"
+    if [ ! -f "${db_dir}/cert9.db" ]; then
+      certutil -N --empty-password -d "sql:${db_dir}" >/dev/null 2>&1 || true
+    fi
+    certutil -D -d "sql:${db_dir}" -n "$cert_name" >/dev/null 2>&1 || true
+    certutil -A -d "sql:${db_dir}" -n "$cert_name" -t "C,," -i "$ca_bundle"
+  done
+  echo "Browser egress inspection CA installed: name=${cert_name} bundle=${ca_bundle}" >&2
+}
+
 # Chromium runtime flags tuned to keep rendering deterministic and reduce
 # background activity/noise similar to our previous Firefox profile.
 # Keep background networking enabled so policy-installed extensions can fetch.
@@ -358,6 +388,7 @@ if [ -n "${BPANE_CHROMIUM_EXTRA_FLAGS:-}" ]; then
   CHROMIUM_FLAGS+=("${EXTRA_CHROMIUM_FLAGS[@]}")
 fi
 
+install_chromium_trusted_ca_bundle
 write_chromium_preferences "$PROFILE_DIR"
 
 CHROMIUM_PIPE_PID=""

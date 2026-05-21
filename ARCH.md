@@ -276,10 +276,10 @@ service.
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
   - `GET /api/v1/session-templates/{id}` — fetch one session template
   - `PUT /api/v1/session-templates/{id}` — replace a session template and increment its version
-  - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, bypass, and custom CA metadata
+  - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, bypass, custom CA, and traffic-observation metadata
   - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
-  - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs
+  - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
   - `POST /api/v1/sessions/{id}/release` — release the live runtime while preserving the session resource and profile

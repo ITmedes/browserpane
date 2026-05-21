@@ -38,11 +38,19 @@ const EGRESS_PROFILE = {
     certificate_ref: 'vault://pki/browserpane/eu-support',
     display_name: 'EU support CA',
   },
+  traffic_observation: {
+    mode: 'tls_intercept',
+    sensitive_log_sink_ref: 'siem://browserpane/eu-support',
+    sensitive_log_sink_display_name: 'EU support SIEM',
+  },
   state: 'ready',
   effective: {
     proxy_configured: true,
     bypass_rule_count: 2,
     custom_ca_configured: true,
+    observation_mode: 'tls_intercept',
+    tls_interception_enabled: true,
+    sensitive_log_sink_configured: true,
   },
   created_at: '2026-05-04T18:45:00Z',
   updated_at: '2026-05-04T18:45:00Z',
@@ -336,6 +344,6 @@ describe('session create configurator', () => {
       browser_identity: null,
       egress_profile_id: EGRESS_PROFILE.id,
     }, [EGRESS_PROFILE])).toBe('locale=de-DE | languages=de-DE | timezone=Europe/Berlin | egress=EU support egress');
-    expect(egressProfileOptionLabel(EGRESS_PROFILE)).toBe('EU support egress (ready, proxy, custom CA, 2 bypass)');
+    expect(egressProfileOptionLabel(EGRESS_PROFILE)).toBe('EU support egress (ready, proxy, TLS inspect, log sink, custom CA, 2 bypass)');
   });
 });

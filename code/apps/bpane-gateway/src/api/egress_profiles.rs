@@ -82,6 +82,7 @@ fn persist_egress_profile_request(
         proxy: request.proxy,
         bypass_rules: request.bypass_rules,
         custom_ca: request.custom_ca,
+        traffic_observation: request.traffic_observation,
         state: request.state,
     }
 }

@@ -27,6 +27,8 @@ export type SessionNetworkIdentity = {
 
 export type EgressProfileState = 'ready' | 'disabled';
 
+export type EgressTrafficObservationMode = 'metadata_only' | 'tls_intercept';
+
 export type EgressProxyConfig = {
   readonly url: string;
 };
@@ -36,10 +38,19 @@ export type EgressCustomCaConfig = {
   readonly display_name?: string | null;
 };
 
+export type EgressTrafficObservationConfig = {
+  readonly mode: EgressTrafficObservationMode;
+  readonly sensitive_log_sink_ref?: string | null;
+  readonly sensitive_log_sink_display_name?: string | null;
+};
+
 export type EgressProfileEffectiveStatus = {
   readonly proxy_configured: boolean;
   readonly bypass_rule_count: number;
   readonly custom_ca_configured: boolean;
+  readonly observation_mode: EgressTrafficObservationMode;
+  readonly tls_interception_enabled: boolean;
+  readonly sensitive_log_sink_configured: boolean;
 };
 
 export type SessionEffectiveEgress = {
@@ -49,6 +60,9 @@ export type SessionEffectiveEgress = {
   readonly proxy_configured: boolean;
   readonly bypass_rule_count: number;
   readonly custom_ca_configured: boolean;
+  readonly observation_mode: EgressTrafficObservationMode;
+  readonly tls_interception_enabled: boolean;
+  readonly sensitive_log_sink_configured: boolean;
 };
 
 export type EgressProfileResource = {
@@ -59,6 +73,7 @@ export type EgressProfileResource = {
   readonly proxy?: EgressProxyConfig | null;
   readonly bypass_rules: readonly string[];
   readonly custom_ca?: EgressCustomCaConfig | null;
+  readonly traffic_observation: EgressTrafficObservationConfig;
   readonly state: EgressProfileState;
   readonly effective: EgressProfileEffectiveStatus;
   readonly created_at: string;
@@ -76,6 +91,7 @@ export type CreateEgressProfileCommand = {
   readonly proxy?: EgressProxyConfig | null;
   readonly bypass_rules?: readonly string[];
   readonly custom_ca?: EgressCustomCaConfig | null;
+  readonly traffic_observation?: EgressTrafficObservationConfig;
   readonly state?: EgressProfileState;
 };
 

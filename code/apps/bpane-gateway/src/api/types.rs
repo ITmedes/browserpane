@@ -22,9 +22,10 @@ use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig, EgressProfileState,
-    EgressProxyConfig, SessionConnectInfo, SessionEffectiveEgress, SessionLifecycleState,
-    SessionNetworkIdentity, SessionOwnerMode, SessionRecordingFormat, SessionRecordingMode,
-    SessionResource, SessionStatusSummary, SessionStore, SessionTemplateDefaults,
+    EgressProxyConfig, EgressTrafficObservationConfig, SessionConnectInfo, SessionEffectiveEgress,
+    SessionLifecycleState, SessionNetworkIdentity, SessionOwnerMode, SessionRecordingFormat,
+    SessionRecordingMode, SessionResource, SessionStatusSummary, SessionStore,
+    SessionTemplateDefaults,
 };
 use crate::session_files::SessionFileBindingMode;
 use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
@@ -321,6 +322,8 @@ pub(super) struct CreateEgressProfileRequest {
     pub(super) bypass_rules: Vec<String>,
     #[serde(default)]
     pub(super) custom_ca: Option<EgressCustomCaConfig>,
+    #[serde(default)]
+    pub(super) traffic_observation: EgressTrafficObservationConfig,
     #[serde(default = "default_egress_profile_state")]
     pub(super) state: EgressProfileState,
 }
