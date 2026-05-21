@@ -458,6 +458,7 @@ describe('bpane operator CLI', () => {
       jsonResponse({ contexts: [{ id: 'context-1' }] }),
       jsonResponse({ id: 'context-1' }),
       binaryResponse('PKbrowser-context-export', 'application/zip'),
+      jsonResponse({ id: 'context-3', name: 'support-profile-import' }, 201),
       jsonResponse({ id: 'context-1', state: 'deleted' }),
     );
 
@@ -550,6 +551,27 @@ describe('bpane operator CLI', () => {
       content_type: 'application/zip',
     });
     expect(await fs.readFile(exportPath, 'utf8')).toBe('PKbrowser-context-export');
+
+    const importIo = createIo();
+    const importCode = await runBpaneCli(
+      [
+        'browser-context',
+        'import',
+        '--input',
+        exportPath,
+        '--name',
+        'support-profile-import',
+        '--label',
+        'imported=true',
+        '--retention-sec',
+        '43200',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      importIo.io,
+      fetchImpl,
+    );
+    expect(importCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(importIo)).toEqual({ id: 'context-3', name: 'support-profile-import' });
     await fs.rm(exportDir, { recursive: true, force: true });
 
     const deleteIo = createIo();
@@ -567,8 +589,15 @@ describe('bpane operator CLI', () => {
       ['http://localhost:8080/api/v1/browser-contexts', undefined],
       ['http://localhost:8080/api/v1/browser-contexts/context%2Fwith%20space', undefined],
       ['http://localhost:8080/api/v1/browser-contexts/context-1/export', 'GET'],
+      ['http://localhost:8080/api/v1/browser-contexts/import', 'POST'],
       ['http://localhost:8080/api/v1/browser-contexts/context-1', 'DELETE'],
     ]);
+    expect(calls[5].init.headers).toMatchObject({
+      'Content-Type': 'application/zip',
+      'x-bpane-browser-context-name': 'support-profile-import',
+      'x-bpane-browser-context-labels': JSON.stringify({ imported: 'true' }),
+      'x-bpane-browser-context-retention-sec': '43200',
+    });
   });
 
   it('validates browser context CLI input before fetching', async () => {
@@ -613,6 +642,26 @@ describe('bpane operator CLI', () => {
     );
     expect(missingExportOutputCode).toBe(EXIT_CODES.usage);
     expect(parseStderr(missingExportOutputIo).error).toContain('--output');
+
+    const missingImportInputIo = createIo();
+    const missingImportInputCode = await runBpaneCli(
+      ['browser-context', 'import', '--name', 'support-profile-import'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingImportInputIo.io,
+      fetchImpl,
+    );
+    expect(missingImportInputCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingImportInputIo).error).toContain('--input');
+
+    const missingImportNameIo = createIo();
+    const missingImportNameCode = await runBpaneCli(
+      ['browser-context', 'import', '--input', '/tmp/context.zip'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingImportNameIo.io,
+      fetchImpl,
+    );
+    expect(missingImportNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingImportNameIo).error).toContain('--name');
 
     const missingCloneNameIo = createIo();
     const missingCloneNameCode = await runBpaneCli(

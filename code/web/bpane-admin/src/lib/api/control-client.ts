@@ -14,6 +14,7 @@ import type {
   BrowserContextResource,
   CloneBrowserContextCommand,
   CreateBrowserContextCommand,
+  ImportBrowserContextCommand,
   CreateSessionCommand,
   CreateFileWorkspaceCommand,
   CreateSessionFileBindingCommand,
@@ -114,6 +115,36 @@ export class ControlClient {
       'application/zip',
     );
     return await response.blob();
+  }
+
+  async importBrowserContext(command: ImportBrowserContextCommand): Promise<BrowserContextResource> {
+    const headers: Record<string, string> = {
+      'x-bpane-browser-context-name': command.name,
+    };
+    if (command.description !== undefined && command.description !== null) {
+      headers['x-bpane-browser-context-description'] = command.description;
+    }
+    if (command.labels !== undefined && command.labels !== null) {
+      headers['x-bpane-browser-context-labels'] = JSON.stringify(command.labels);
+    }
+    if (command.retention_sec !== undefined && command.retention_sec !== null) {
+      headers['x-bpane-browser-context-retention-sec'] = String(command.retention_sec);
+    }
+    if (command.max_profile_storage_bytes !== undefined && command.max_profile_storage_bytes !== null) {
+      headers['x-bpane-browser-context-max-profile-storage-bytes'] = String(command.max_profile_storage_bytes);
+    }
+    const response = await this.#send(
+      'POST',
+      '/api/v1/browser-contexts/import',
+      command.archive,
+      'application/json',
+      {
+        bodyMode: 'raw',
+        contentType: 'application/zip',
+        headers,
+      },
+    );
+    return ControlSessionMapper.toBrowserContextResource(await response.json());
   }
 
   async deleteBrowserContext(contextId: string): Promise<BrowserContextResource> {

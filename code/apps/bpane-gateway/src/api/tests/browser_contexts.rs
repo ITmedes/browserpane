@@ -98,7 +98,7 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
         "application/zip"
     );
     let export_bytes = response_bytes(export_response).await;
-    let cursor = Cursor::new(export_bytes);
+    let cursor = Cursor::new(export_bytes.clone());
     let mut archive = ZipArchive::new(cursor).unwrap();
     let mut manifest_file = archive.by_name("manifest.json").unwrap();
     let mut manifest_bytes = Vec::new();
@@ -110,6 +110,37 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert_eq!(manifest["source_context"]["id"], context_id);
     assert!(manifest["profile_archive_path"].is_null());
     assert!(archive.by_name("profile.tar.gz").is_err());
+
+    let import_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/browser-contexts/import")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/zip")
+                .header("x-bpane-browser-context-name", "support-profile-import")
+                .header(
+                    "x-bpane-browser-context-labels",
+                    json!({ "imported": "true" }).to_string(),
+                )
+                .header("x-bpane-browser-context-retention-sec", "43200")
+                .body(Body::from(export_bytes.clone()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(import_response.status(), StatusCode::CREATED);
+    let imported_context = response_json(import_response).await;
+    let imported_context_id = imported_context["id"].as_str().unwrap().to_string();
+    assert_ne!(imported_context_id, context_id);
+    assert_eq!(imported_context["name"], "support-profile-import");
+    assert_eq!(imported_context["description"], "Support engineer profile");
+    assert_eq!(imported_context["labels"]["imported"], "true");
+    assert_eq!(imported_context["persistence_mode"], "reusable");
+    assert_eq!(imported_context["retention_sec"], 43200);
+    assert_eq!(imported_context["max_profile_storage_bytes"], 1048576);
+    assert_eq!(imported_context["usage"]["visible_session_count"], 0);
 
     let clone_response = app
         .clone()
@@ -185,7 +216,7 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert_eq!(list_response.status(), StatusCode::OK);
     let list = response_json(list_response).await;
     let contexts = list["contexts"].as_array().unwrap();
-    assert_eq!(contexts.len(), 2);
+    assert_eq!(contexts.len(), 3);
     let source_context = contexts
         .iter()
         .find(|context| context["id"] == context_id)
@@ -335,6 +366,22 @@ async fn rejects_invalid_browser_context_requests_and_bindings() {
         .await
         .unwrap();
     assert_eq!(missing_clone.status(), StatusCode::NOT_FOUND);
+
+    let invalid_import = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/browser-contexts/import")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/zip")
+                .header("x-bpane-browser-context-name", "bad-import")
+                .body(Body::from("not a zip archive"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_import.status(), StatusCode::BAD_REQUEST);
 
     for body in [
         json!({ "browser_context": { "mode": "reusable" } }),

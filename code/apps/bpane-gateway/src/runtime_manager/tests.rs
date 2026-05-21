@@ -629,6 +629,37 @@ async fn docker_runtime_rejects_context_export_while_context_is_active() {
 }
 
 #[tokio::test]
+async fn docker_runtime_rejects_context_import_while_context_is_active() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    manager.leases.lock().await.insert(
+        session_id,
+        DockerLeaseState::Ready(RuntimeLease {
+            session_id,
+            agent_socket_path: manager.socket_path_for_session(session_id),
+            container_name: Some(manager.container_name_for_session(session_id)),
+            browser_context_id: Some(context_id),
+            discard_session_data_on_release: false,
+            idle_generation: 0,
+        }),
+    );
+
+    let error = manager
+        .import_browser_context_profile_archive(context_id, Some(b"profile"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RuntimeManagerError::BrowserContextInUse {
+            browser_context_id: context_id,
+            active_session_id: session_id,
+        }
+    );
+}
+
+#[tokio::test]
 async fn docker_runtime_reports_active_browser_context_writer() {
     let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
     let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();

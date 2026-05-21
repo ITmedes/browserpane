@@ -2,7 +2,12 @@
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import type { ControlClient } from '../api/control-client';
-  import type { BrowserContextResource, CloneBrowserContextCommand, SessionResource } from '../api/control-types';
+  import type {
+    BrowserContextResource,
+    CloneBrowserContextCommand,
+    ImportBrowserContextCommand,
+    SessionResource,
+  } from '../api/control-types';
   import AdminMessage from '../presentation/AdminMessage.svelte';
   import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import BrowserContextCatalogPanel from '../presentation/BrowserContextCatalogPanel.svelte';
@@ -18,6 +23,7 @@
   let loading = $state(false);
   let cloningContextId = $state<string | null>(null);
   let exportingContextId = $state<string | null>(null);
+  let importingContext = $state(false);
   let deletingContextId = $state<string | null>(null);
   let error = $state<string | null>(null);
   let actionFeedback = $state<AdminMessageFeedback | null>(null);
@@ -136,6 +142,33 @@
     }
   }
 
+  async function importBrowserContext(command: ImportBrowserContextCommand): Promise<BrowserContextResource> {
+    importingContext = true;
+    error = null;
+    actionFeedback = null;
+    try {
+      const imported = await controlClient.importBrowserContext(command);
+      contexts = [imported, ...contexts.filter((context) => context.id !== imported.id)];
+      actionFeedback = {
+        variant: 'success',
+        title: 'Browser context imported',
+        message: `Imported browser context ${imported.name}.`,
+        testId: 'browser-context-route-message',
+      };
+      return imported;
+    } catch (importError) {
+      actionFeedback = {
+        variant: 'error',
+        title: 'Browser context import failed',
+        message: errorMessage(importError),
+        testId: 'browser-context-route-message',
+      };
+      throw importError;
+    } finally {
+      importingContext = false;
+    }
+  }
+
   function formatDate(value: string | null): string {
     return value ? new Date(value).toLocaleString() : 'not refreshed';
   }
@@ -191,9 +224,11 @@
       {cloningContextId}
       {exportingContextId}
       {deletingContextId}
+      importingContext={importingContext}
       onRefresh={() => void refreshCatalog()}
       onCloneContext={(contextId, command) => cloneBrowserContext(contextId, command)}
       onExportContext={(contextId) => exportBrowserContext(contextId)}
+      onImportContext={(command) => importBrowserContext(command)}
       onDeleteContext={(contextId) => void deleteBrowserContext(contextId)}
     />
   </section>

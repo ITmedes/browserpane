@@ -130,6 +130,12 @@ describe('ControlClient', () => {
     });
     await client.getBrowserContext('context/with space');
     const exported = await client.exportBrowserContext(BROWSER_CONTEXT.id);
+    await client.importBrowserContext({
+      name: 'Support profile imported',
+      archive: new Blob(['PKbrowser-context-export'], { type: 'application/zip' }),
+      labels: { imported: 'true' },
+      retention_sec: 43200,
+    });
     await client.deleteBrowserContext(BROWSER_CONTEXT.id);
     expect(await exported.text()).toBe(JSON.stringify(BROWSER_CONTEXT));
 
@@ -188,6 +194,20 @@ describe('ControlClient', () => {
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       5,
+      new URL('http://localhost:8932/api/v1/browser-contexts/import'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          accept: 'application/json',
+          'content-type': 'application/zip',
+          'x-bpane-browser-context-name': 'Support profile imported',
+          'x-bpane-browser-context-labels': JSON.stringify({ imported: 'true' }),
+          'x-bpane-browser-context-retention-sec': '43200',
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      6,
       new URL(`http://localhost:8932/api/v1/browser-contexts/${BROWSER_CONTEXT.id}`),
       expect.objectContaining({ method: 'DELETE' }),
     );

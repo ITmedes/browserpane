@@ -13,6 +13,7 @@
     CloneBrowserContextCommand,
     CreateBrowserContextCommand,
     CreateSessionCommand,
+    ImportBrowserContextCommand,
     SessionResource,
     SessionTemplateResource,
   } from '../api/control-types';
@@ -62,6 +63,7 @@
   let browserContextsLoading = $state(false);
   let cloningBrowserContextId = $state<string | null>(null);
   let exportingBrowserContextId = $state<string | null>(null);
+  let importingBrowserContext = $state(false);
   let templateError = $state<string | null>(null);
   let browserContextError = $state<string | null>(null);
   let globalMessage = $state<AdminMessageFeedback | null>(null);
@@ -254,6 +256,22 @@
       throw error;
     } finally {
       exportingBrowserContextId = null;
+    }
+  }
+  async function importBrowserContext(command: ImportBrowserContextCommand): Promise<BrowserContextResource> {
+    importingBrowserContext = true;
+    browserContextError = null;
+    try {
+      const imported = await controlClient.importBrowserContext(command);
+      browserContexts = [imported, ...browserContexts.filter((context) => context.id !== imported.id)];
+      showGlobalMessage('success', 'Browser context imported', `Imported context ${shortAdminId(imported.id)}.`);
+      return imported;
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('error', 'Browser context import failed', browserContextError);
+      throw error;
+    } finally {
+      importingBrowserContext = false;
     }
   }
   async function deleteBrowserContext(contextId: string): Promise<void> {
@@ -474,6 +492,8 @@
       onCreateBrowserContext={createBrowserContext}
       onCloneBrowserContext={cloneBrowserContext}
       onExportBrowserContext={exportBrowserContext}
+      onImportBrowserContext={importBrowserContext}
+      {importingBrowserContext}
       onRefreshBrowserContexts={loadBrowserContexts}
       onDeleteBrowserContext={deleteBrowserContext}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}

@@ -303,6 +303,88 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .await?;
     verify_browser_context_export_archive(&export_bytes, &context_id, true)?;
 
+    let imported_context_name = harness.unique_name("compose-browser-context-import");
+    let imported_context = harness
+        .post_bytes(
+            "/api/v1/browser-contexts/import",
+            export_bytes.clone(),
+            "application/zip",
+            &[
+                (
+                    "x-bpane-browser-context-name",
+                    imported_context_name.as_str(),
+                ),
+                (
+                    "x-bpane-browser-context-labels",
+                    r#"{"suite":"browser-contexts-import"}"#,
+                ),
+            ],
+        )
+        .await?;
+    let imported_context_id = json_id(&imported_context, "id")?;
+    if imported_context_id == context_id
+        || imported_context["persistence_mode"] != json!("reusable")
+        || imported_context["labels"]["suite"] != json!("browser-contexts-import")
+    {
+        return Err(anyhow!(
+            "browser context import returned unexpected data: {imported_context}"
+        ));
+    }
+
+    let imported_session = harness
+        .post_json(
+            "/api/v1/sessions",
+            json!({
+                "browser_context": {
+                    "mode": "reusable",
+                    "context_id": imported_context_id
+                },
+                "labels": {
+                    "suite": "browser-contexts-import"
+                }
+            }),
+        )
+        .await?;
+    let imported_session_id = json_id(&imported_session, "id")?;
+    let imported_runtime_access = harness
+        .post_json(
+            &format!("/api/v1/sessions/{imported_session_id}/automation-access"),
+            json!({}),
+        )
+        .await?;
+    let imported_cdp_endpoint = automation_cdp_endpoint(&imported_runtime_access)?;
+    let imported_probe = run_profile_state_probe(
+        harness,
+        imported_cdp_endpoint,
+        "get",
+        &profile_key,
+        &profile_value,
+        cookie_name,
+        &cookie_value,
+    )
+    .await?;
+    if imported_probe["localStorageValue"] != json!(profile_value) {
+        return Err(anyhow!(
+            "imported browser context did not restore profile-backed state: {imported_probe}"
+        ));
+    }
+    let imported_deleted_session = harness
+        .delete_json(&format!("/api/v1/sessions/{imported_session_id}"))
+        .await?;
+    if imported_deleted_session["state"] != json!("stopped") {
+        return Err(anyhow!(
+            "browser-context import session cleanup did not stop"
+        ));
+    }
+    let deleted_imported_context = harness
+        .delete_json(&format!("/api/v1/browser-contexts/{imported_context_id}"))
+        .await?;
+    if deleted_imported_context["state"] != json!("deleted") {
+        return Err(anyhow!(
+            "browser-context import cleanup did not delete context: {deleted_imported_context}"
+        ));
+    }
+
     let cloned_context = harness
         .post_json(
             &format!("/api/v1/browser-contexts/{context_id}/clone"),

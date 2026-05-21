@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
 import {
@@ -28,6 +31,7 @@ async function run() {
   let referencedContext = null;
   let deletableContext = null;
   let clonedContextId = '';
+  let importedContextId = '';
   let sessionId = '';
 
   try {
@@ -40,7 +44,9 @@ async function run() {
     sessionId = session.id;
 
     await verifyLiveCatalog(page, options, referencedContext, sessionId);
-    clonedContextId = await verifyRouteCatalog(page, options, accessToken, referencedContext, deletableContext);
+    const routeResult = await verifyRouteCatalog(page, options, accessToken, referencedContext, deletableContext);
+    clonedContextId = routeResult.clonedContextId;
+    importedContextId = routeResult.importedContextId;
 
     const deleted = await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts/${deletableContext.id}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -53,6 +59,7 @@ async function run() {
       referencedContextId: referencedContext.id,
       deletedContextId: deletableContext.id,
       clonedContextId,
+      importedContextId,
       sessionId,
     }, null, 2));
   } finally {
@@ -76,6 +83,14 @@ async function run() {
         headers: { Authorization: `Bearer ${accessToken}` },
       }).catch((error) => {
         log(`Browser context cleanup for clone ${clonedContextId} failed: ${error.message}`);
+      });
+    }
+    if (accessToken && importedContextId) {
+      await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts/${importedContextId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch((error) => {
+        log(`Browser context cleanup for import ${importedContextId} failed: ${error.message}`);
       });
     }
     await context.close();
@@ -130,6 +145,8 @@ async function verifyLiveCatalog(page, options, browserContext, sessionId) {
 }
 
 async function verifyRouteCatalog(page, options, accessToken, referencedContext, deletableContext) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-admin-context-import-'));
+  try {
   await page.goto(adminRouteUrl(options, 'browser-contexts'), { waitUntil: 'domcontentloaded' });
   await page.getByTestId('browser-context-route').waitFor({
     state: 'visible',
@@ -161,10 +178,29 @@ async function verifyRouteCatalog(page, options, accessToken, referencedContext,
   if (!download.suggestedFilename().endsWith('.zip')) {
     throw new Error(`Expected browser context export zip download, got ${download.suggestedFilename()}`);
   }
+  const exportPath = path.join(tempDir, download.suggestedFilename());
+  await download.saveAs(exportPath);
   await page.getByTestId('browser-context-export-message').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,
   });
+
+  const importName = `${deletableContext.name} import`;
+  await page.getByTestId('browser-context-import-name').fill(importName);
+  await page.getByTestId('browser-context-import-input').setInputFiles(exportPath);
+  await page.getByTestId('browser-context-import').click();
+  await page.getByTestId('browser-context-import-message').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  let listed = await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const imported = listed.contexts?.find((context) => context.name === importName);
+  if (!imported?.id || imported.id === deletableContext.id) {
+    throw new Error(`Expected browser context import ${importName}, got ${JSON.stringify(listed)}`);
+  }
+
   const cloneName = `${deletableContext.name} clone`;
   await page.getByTestId('browser-context-clone-name').fill(cloneName);
   await page.getByTestId('browser-context-clone').click();
@@ -172,7 +208,7 @@ async function verifyRouteCatalog(page, options, accessToken, referencedContext,
     state: 'visible',
     timeout: options.connectTimeoutMs,
   });
-  const listed = await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts`, {
+  listed = await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const cloned = listed.contexts?.find((context) => context.name === cloneName);
@@ -202,7 +238,10 @@ async function verifyRouteCatalog(page, options, accessToken, referencedContext,
     options.connectTimeoutMs,
     100,
   );
-  return cloned.id;
+  return { clonedContextId: cloned.id, importedContextId: imported.id };
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 async function createBrowserContext(accessToken, options, name) {

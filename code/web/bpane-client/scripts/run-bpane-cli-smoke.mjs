@@ -36,6 +36,7 @@ async function run() {
   let sessionId = '';
   let contextId = '';
   let clonedContextId = '';
+  let importedContextId = '';
   let configDir = '';
 
   try {
@@ -204,6 +205,29 @@ async function run() {
       || exportBytes[1] !== 0x4b
     ) {
       throw new Error(`CLI browser-context export did not write a zip archive: ${JSON.stringify(exportedContext)}`);
+    }
+
+    const importedContext = runBpaneCli([
+      'browser-context',
+      'import',
+      '--input',
+      exportPath,
+      '--name',
+      `support-profile-import-${runLabel}`,
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--label',
+      'imported=true',
+    ], cliEnv);
+    importedContextId = importedContext.id;
+    if (
+      !importedContextId
+      || importedContextId === contextId
+      || importedContext.name !== `support-profile-import-${runLabel}`
+      || importedContext.labels?.imported !== 'true'
+      || importedContext.persistence_mode !== 'reusable'
+    ) {
+      throw new Error(`CLI browser-context import returned an invalid context: ${JSON.stringify(importedContext)}`);
     }
 
     const clonedContext = runBpaneCli([
@@ -394,6 +418,11 @@ async function run() {
       throw new Error(`CLI browser-context delete did not soft-delete the cloned context: ${JSON.stringify(deletedCloneContext)}`);
     }
     clonedContextId = '';
+    const deletedImportedContext = runBpaneCli(['browser-context', 'delete', importedContextId], cliEnv);
+    if (deletedImportedContext.id !== importedContextId || deletedImportedContext.state !== 'deleted') {
+      throw new Error(`CLI browser-context delete did not soft-delete the imported context: ${JSON.stringify(deletedImportedContext)}`);
+    }
+    importedContextId = '';
     const deletedContext = runBpaneCli(['browser-context', 'delete', contextId], cliEnv);
     if (deletedContext.id !== contextId || deletedContext.state !== 'deleted') {
       throw new Error(`CLI browser-context delete did not soft-delete the context: ${JSON.stringify(deletedContext)}`);
@@ -407,6 +436,12 @@ async function run() {
         method: 'DELETE',
         headers: { authorization: `Bearer ${accessToken}` },
       }).catch(() => undefined);
+    }
+    if (importedContextId && accessToken) {
+      await fetch(`${apiOrigin(options)}/api/v1/browser-contexts/${importedContextId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch(() => {});
     }
     if (contextId && accessToken) {
       await fetch(`${apiOrigin(options)}/api/v1/browser-contexts/${contextId}`, {

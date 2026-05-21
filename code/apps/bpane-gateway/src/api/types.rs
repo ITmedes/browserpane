@@ -85,6 +85,13 @@ pub(super) struct ApiState {
 }
 
 pub(super) const AUTOMATION_ACCESS_TOKEN_HEADER: &str = "x-bpane-automation-access-token";
+pub(super) const BROWSER_CONTEXT_DESCRIPTION_HEADER: &str = "x-bpane-browser-context-description";
+pub(super) const BROWSER_CONTEXT_LABELS_HEADER: &str = "x-bpane-browser-context-labels";
+pub(super) const BROWSER_CONTEXT_MAX_PROFILE_STORAGE_BYTES_HEADER: &str =
+    "x-bpane-browser-context-max-profile-storage-bytes";
+pub(super) const BROWSER_CONTEXT_NAME_HEADER: &str = "x-bpane-browser-context-name";
+pub(super) const BROWSER_CONTEXT_RETENTION_SEC_HEADER: &str =
+    "x-bpane-browser-context-retention-sec";
 pub(super) const FILE_WORKSPACE_FILE_NAME_HEADER: &str = "x-bpane-file-name";
 pub(super) const FILE_WORKSPACE_FILE_PROVENANCE_HEADER: &str = "x-bpane-file-provenance";
 pub(super) const WORKFLOW_RUN_WORKSPACE_ID_HEADER: &str = "x-bpane-workflow-workspace-id";

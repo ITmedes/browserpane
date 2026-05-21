@@ -24,6 +24,7 @@ describe('BrowserContextViewModelBuilder', () => {
     expect(viewModel.selectedContext?.exportHint).toContain('active sessions');
     expect(viewModel.apiExample).toContain(`/api/v1/browser-contexts/${CONTEXT.id}`);
     expect(viewModel.apiExample).toContain(`/api/v1/browser-contexts/${CONTEXT.id}/export`);
+    expect(viewModel.apiExample).toContain('/api/v1/browser-contexts/import');
     expect(viewModel.apiExample).toContain(`/api/v1/browser-contexts/${CONTEXT.id}/clone`);
     expect(viewModel.apiExample).toContain('"mode": "reusable"');
     expect(viewModel.secretWarning).toContain('credential bindings');
