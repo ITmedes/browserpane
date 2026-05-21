@@ -917,6 +917,22 @@ describe('bpane operator CLI', () => {
     const { calls, fetchImpl } = createFetch(
       jsonResponse({ templates: [{ id: 'template-1' }] }),
       jsonResponse({ id: 'template-1' }),
+      jsonResponse({
+        id: 'template-1',
+        name: 'customer-debug-session',
+        description: 'Existing template',
+        labels: { team: 'support' },
+        defaults: {
+          idle_timeout_sec: 1800,
+          labels: { team: 'support' },
+          network_identity: {
+            locale: 'de-DE',
+            timezone: 'Europe/Berlin',
+            egress_profile_id: 'egress-1',
+          },
+          recording: { mode: 'manual', format: 'webm', retention_sec: 86400 },
+        },
+      }),
       jsonResponse({ id: 'template-1', version: 2 }),
     );
 
@@ -958,12 +974,22 @@ describe('bpane operator CLI', () => {
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([
       ['http://localhost:8080/api/v1/session-templates', undefined],
       ['http://localhost:8080/api/v1/session-templates/template%2Fwith%20space', undefined],
+      ['http://localhost:8080/api/v1/session-templates/template-1', undefined],
       ['http://localhost:8080/api/v1/session-templates/template-1', 'PUT'],
     ]);
-    expect(JSON.parse(calls[2].init.body)).toEqual({
+    expect(JSON.parse(calls[3].init.body)).toEqual({
       name: 'customer-debug-session',
+      description: 'Existing template',
+      labels: { team: 'support' },
       defaults: {
-        labels: { purpose: 'debug' },
+        idle_timeout_sec: 1800,
+        labels: { team: 'support', purpose: 'debug' },
+        network_identity: {
+          locale: 'de-DE',
+          timezone: 'Europe/Berlin',
+          egress_profile_id: 'egress-1',
+        },
+        recording: { mode: 'manual', format: 'webm', retention_sec: 86400 },
       },
     });
   });

@@ -886,6 +886,68 @@ function buildSessionTemplateDefaults(options) {
   return defaults;
 }
 
+function isObjectRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergeOptionalObjectDefaults(existingValue, overrideValue) {
+  if (isObjectRecord(existingValue) && isObjectRecord(overrideValue)) {
+    return { ...existingValue, ...overrideValue };
+  }
+  return overrideValue ?? existingValue;
+}
+
+function mergeSessionTemplateNetworkIdentity(existingValue, overrideValue) {
+  if (!isObjectRecord(existingValue)) {
+    return overrideValue;
+  }
+  if (!isObjectRecord(overrideValue)) {
+    return existingValue;
+  }
+  return {
+    ...existingValue,
+    ...overrideValue,
+  };
+}
+
+function mergeSessionTemplateDefaults(existingDefaults, overrideDefaults) {
+  const existing = isObjectRecord(existingDefaults) ? existingDefaults : {};
+  const overrides = isObjectRecord(overrideDefaults) ? overrideDefaults : {};
+  const merged = { ...existing };
+
+  for (const key of ['owner_mode', 'viewport', 'idle_timeout_sec', 'recording']) {
+    if (Object.prototype.hasOwnProperty.call(overrides, key)) {
+      merged[key] = overrides[key];
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'labels')) {
+    merged.labels = {
+      ...(isObjectRecord(existing.labels) ? existing.labels : {}),
+      ...(isObjectRecord(overrides.labels) ? overrides.labels : {}),
+    };
+  } else if (isObjectRecord(existing.labels)) {
+    merged.labels = existing.labels;
+  }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'integration_context')) {
+    merged.integration_context = mergeOptionalObjectDefaults(
+      existing.integration_context,
+      overrides.integration_context,
+    );
+  } else if (Object.prototype.hasOwnProperty.call(existing, 'integration_context')) {
+    merged.integration_context = existing.integration_context;
+  }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'network_identity')) {
+    merged.network_identity = mergeSessionTemplateNetworkIdentity(
+      existing.network_identity,
+      overrides.network_identity,
+    );
+  } else if (Object.prototype.hasOwnProperty.call(existing, 'network_identity')) {
+    merged.network_identity = existing.network_identity;
+  }
+
+  return merged;
+}
+
 function buildSessionTemplateRequest(options, fallbackName = null) {
   const rawBody = parseJsonOption(options, 'body-json');
   if (rawBody !== null) {
@@ -911,6 +973,40 @@ function buildSessionTemplateRequest(options, fallbackName = null) {
   const labels = parseKeyValueOptions(options, 'label');
   if (Object.keys(labels).length) {
     body.labels = labels;
+  }
+  return body;
+}
+
+function buildSessionTemplateUpdateRequest(existingTemplate, options) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? existingTemplate?.name;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Session template update requires --name when the existing template response has no name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const body = {
+    name,
+    labels: {
+      ...(isObjectRecord(existingTemplate?.labels) ? existingTemplate.labels : {}),
+      ...parseKeyValueOptions(options, 'label'),
+    },
+    defaults: mergeSessionTemplateDefaults(
+      existingTemplate?.defaults ?? {},
+      buildSessionTemplateDefaults(options),
+    ),
+  };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  } else if (existingTemplate?.description != null) {
+    body.description = existingTemplate.description;
   }
   return body;
 }
@@ -1654,10 +1750,14 @@ async function handleSessionTemplateCommand(config, positionals, options) {
   }
   if (action === 'update') {
     const templateId = requiredTemplateId(positionals, 'session-template update');
+    const existingTemplate = await requestGateway(
+      config,
+      `/api/v1/session-templates/${encodeURIComponent(templateId)}`,
+    );
     return await requestGateway(config, `/api/v1/session-templates/${encodeURIComponent(templateId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildSessionTemplateRequest(options)),
+      body: JSON.stringify(buildSessionTemplateUpdateRequest(existingTemplate, options)),
     });
   }
   throw new CliError(
