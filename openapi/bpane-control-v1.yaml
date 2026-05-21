@@ -203,7 +203,8 @@ paths:
           $ref: '#/components/responses/BackendUnavailable'
     delete:
       tags: [Browser Contexts]
-      summary: Soft-delete one owner-scoped browser context
+      summary: Delete one owner-scoped browser context
+      description: Refuses active runtime writers; docker-backed runtimes also remove the context-scoped Chromium profile volume when present.
       operationId: deleteBrowserContext
       responses:
         '200':
@@ -214,6 +215,8 @@ paths:
                 $ref: '#/components/schemas/BrowserContextResource'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '404':
           $ref: '#/components/responses/NotFound'
         '503':

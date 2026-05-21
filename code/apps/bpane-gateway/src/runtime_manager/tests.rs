@@ -518,3 +518,34 @@ async fn docker_runtime_rejects_parallel_writer_for_reusable_browser_context() {
         }
     );
 }
+
+#[tokio::test]
+async fn docker_runtime_rejects_context_data_delete_while_context_is_active() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    manager.leases.lock().await.insert(
+        session_id,
+        DockerLeaseState::Ready(RuntimeLease {
+            session_id,
+            agent_socket_path: manager.socket_path_for_session(session_id),
+            container_name: Some(manager.container_name_for_session(session_id)),
+            browser_context_id: Some(context_id),
+            discard_session_data_on_release: false,
+            idle_generation: 0,
+        }),
+    );
+
+    let error = manager
+        .delete_browser_context_data(context_id)
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RuntimeManagerError::BrowserContextInUse {
+            browser_context_id: context_id,
+            active_session_id: session_id,
+        }
+    );
+}

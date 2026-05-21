@@ -191,9 +191,14 @@
       <h3 class="m-0 text-base font-bold text-admin-ink">Session configuration</h3>
     </div>
     {#if showFileWorkspaceLink}
-      <a class="admin-button-ghost min-h-9 px-3 text-sm" href={`${base}/files/workspaces`}>
-        File workspaces
-      </a>
+      <div class="flex flex-wrap gap-2">
+        <a class="admin-button-ghost min-h-9 px-3 text-sm" href={`${base}/browser-contexts`}>
+          Context catalog
+        </a>
+        <a class="admin-button-ghost min-h-9 px-3 text-sm" href={`${base}/files/workspaces`}>
+          File workspaces
+        </a>
+      </div>
     {/if}
   </div>
 

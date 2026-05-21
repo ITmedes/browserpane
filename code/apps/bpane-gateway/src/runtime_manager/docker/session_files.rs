@@ -161,15 +161,32 @@ impl DockerRuntimeManager {
         session_id: Uuid,
     ) -> Result<(), RuntimeManagerError> {
         let volume = self.session_data_volume_for_session(session_id);
+        self.remove_docker_volume(&volume, "session data").await
+    }
+
+    pub(super) async fn remove_browser_context_profile_volume(
+        &self,
+        context_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        let volume = self.browser_context_profile_volume_for_context(context_id);
+        self.remove_docker_volume(&volume, "browser context profile")
+            .await
+    }
+
+    async fn remove_docker_volume(
+        &self,
+        volume: &str,
+        label: &str,
+    ) -> Result<(), RuntimeManagerError> {
         let output = Command::new(&self.config.docker_bin)
             .arg("volume")
             .arg("rm")
-            .arg(&volume)
+            .arg(volume)
             .output()
             .await
             .map_err(|error| {
                 RuntimeManagerError::StartupFailed(format!(
-                    "failed to remove docker session data volume {volume}: {error}"
+                    "failed to remove docker {label} volume {volume}: {error}"
                 ))
             })?;
         if output.status.success() {
@@ -177,12 +194,13 @@ impl DockerRuntimeManager {
         }
 
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.contains("No such volume") || stderr.contains("not found") {
+        let stderr_lower = stderr.to_ascii_lowercase();
+        if stderr_lower.contains("no such volume") || stderr_lower.contains("not found") {
             return Ok(());
         }
 
         Err(RuntimeManagerError::StartupFailed(format!(
-            "failed to remove docker session data volume {volume}: {}",
+            "failed to remove docker {label} volume {volume}: {}",
             stderr.trim()
         )))
     }

@@ -91,7 +91,8 @@
   }));
   const workspaceViewModel = $derived(AdminWorkspaceViewModelBuilder.build({
     browserStatus, selectedSessionId: selectedSession?.id ?? null,
-    sessionCount: sessions.length, fileCount: sessionFileCount, connected: browserConnected,
+    sessionCount: sessions.length, browserContextCount: browserContexts.length,
+    fileCount: sessionFileCount, connected: browserConnected,
   }));
   const sessionListViewModel = $derived(SessionViewModelBuilder.list({
     sessions, sessionTemplates, browserContexts, selectedSessionId: selectedSession?.id ?? null,
@@ -214,6 +215,22 @@
     } catch (error) {
       browserContextError = errorMessage(error);
       showGlobalMessage('error', 'Browser context save failed', browserContextError);
+      throw error;
+    } finally {
+      browserContextsLoading = false;
+    }
+  }
+  async function deleteBrowserContext(contextId: string): Promise<void> {
+    browserContextsLoading = true;
+    browserContextError = null;
+    try {
+      const deleted = await controlClient.deleteBrowserContext(contextId);
+      browserContexts = browserContexts.map((context) => context.id === deleted.id ? deleted : context);
+      showGlobalMessage('success', 'Browser context deleted', `Deleted context ${shortAdminId(deleted.id)}.`);
+      void loadSessions(false);
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('error', 'Browser context delete failed', browserContextError);
       throw error;
     } finally {
       browserContextsLoading = false;
@@ -412,11 +429,13 @@
     {#snippet admin()}
     <AdminWorkspaceTabs
       {controlClient} {workflowClient} {selectedSession} {sessionTemplates} {templatesLoading} {templateError} {mcpBridge} {liveConnection}
-      {browserContexts} {browserContextsLoading} {browserContextError}
+      {sessions} {browserContexts} {browserContextsLoading} {browserContextError}
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries} {globalMessage}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}
       onCreateBrowserContext={createBrowserContext}
+      onRefreshBrowserContexts={loadBrowserContexts}
+      onDeleteBrowserContext={deleteBrowserContext}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
       onReleaseSessionRuntime={() => runLifecycle('release')}
       onStopSession={() => runLifecycle('stop')} onKillSession={() => runLifecycle('kill')} onDisconnectEmbeddedBrowser={() => disconnectBrowser(false)}

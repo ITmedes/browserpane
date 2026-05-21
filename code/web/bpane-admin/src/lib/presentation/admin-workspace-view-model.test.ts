@@ -7,6 +7,7 @@ describe('AdminWorkspaceViewModelBuilder', () => {
       browserStatus: 'Connected',
       selectedSessionId: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
       sessionCount: 2,
+      browserContextCount: 1,
       fileCount: 1,
       connected: true,
     });
@@ -14,6 +15,7 @@ describe('AdminWorkspaceViewModelBuilder', () => {
     expect(viewModel.browser.connectionLabel).toBe('connected');
     expect(viewModel.panels.map((panel) => panel.id)).toEqual([
       'sessions',
+      'contexts',
       'lifecycle',
       'display',
       'files',
@@ -30,12 +32,14 @@ describe('AdminWorkspaceViewModelBuilder', () => {
       browserStatus: 'Disconnected',
       selectedSessionId: null,
       sessionCount: 0,
+      browserContextCount: 0,
       fileCount: 0,
       connected: false,
     });
 
     expect(viewModel.panels.filter((panel) => panel.implemented).map((panel) => panel.id)).toEqual([
       'sessions',
+      'contexts',
       'lifecycle',
       'display',
       'files',
