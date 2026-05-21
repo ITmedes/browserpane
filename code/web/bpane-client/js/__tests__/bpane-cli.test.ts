@@ -487,6 +487,54 @@ describe('bpane operator CLI', () => {
     });
   });
 
+  it('validates session-template CLI input before fetching', async () => {
+    const missingNameIo = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
+
+    const missingNameCode = await runBpaneCli(
+      ['session-template', 'create'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingNameIo.io,
+      fetchImpl,
+    );
+    expect(missingNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingNameIo).code).toBe('USAGE');
+    expect(calls).toHaveLength(0);
+
+    const viewportIo = createIo();
+    const viewportCode = await runBpaneCli(
+      ['session-template', 'create', 'template', '--width', '1440'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      viewportIo.io,
+      fetchImpl,
+    );
+    expect(viewportCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(viewportIo).error).toContain('Use --width and --height together');
+    expect(calls).toHaveLength(0);
+
+    const labelIo = createIo();
+    const labelCode = await runBpaneCli(
+      ['session-template', 'create', 'template', '--default-label', 'bad'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      labelIo.io,
+      fetchImpl,
+    );
+    expect(labelCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(labelIo).error).toContain('--default-label must use key=value syntax');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('requires bearer tokens for session-template commands', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ templates: [] }));
+
+    const code = await runBpaneCli(['session-template', 'list'], {}, io.io, fetchImpl);
+
+    expect(code).toBe(EXIT_CODES.auth);
+    expect(calls).toHaveLength(0);
+    expect(parseStderr(io).code).toBe('AUTH_REQUIRED');
+  });
+
   it('lists, fetches, and updates session templates', async () => {
     const listIo = createIo();
     const { calls, fetchImpl } = createFetch(
