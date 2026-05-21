@@ -305,6 +305,12 @@ pub struct StoredBrowserContext {
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct BrowserContextRetentionCandidate {
+    pub context: StoredBrowserContext,
+    pub expires_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct BrowserContextResource {
     pub id: Uuid,
@@ -634,7 +640,7 @@ impl StoredBrowserContext {
         }
     }
 
-    fn retention_expires_at(&self) -> Option<DateTime<Utc>> {
+    pub fn retention_expires_at(&self) -> Option<DateTime<Utc>> {
         self.retention_sec.map(|retention_sec| {
             let base = self.last_used_at.unwrap_or(self.created_at);
             base + ChronoDuration::seconds(i64::from(retention_sec))

@@ -18,6 +18,7 @@ use crate::workflow::{WorkflowObservability, WorkflowSourceResolver};
 use crate::workflow_lifecycle::WorkflowLifecycleManager;
 
 mod auth;
+mod browser_contexts;
 mod recording;
 mod runtime;
 mod session_files;
@@ -25,6 +26,7 @@ mod workflow;
 
 #[cfg(test)]
 pub(in crate::app) use self::auth::load_or_generate_shared_secret;
+pub(in crate::app) use self::browser_contexts::start_browser_context_retention;
 #[cfg(test)]
 pub(in crate::app) use self::recording::build_recording_worker_config;
 #[cfg(test)]

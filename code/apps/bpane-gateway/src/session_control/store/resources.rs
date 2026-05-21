@@ -80,6 +80,20 @@ impl SessionStore {
         }
     }
 
+    pub async fn list_browser_context_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<BrowserContextRetentionCandidate>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_browser_context_retention_candidates(now).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_browser_context_retention_candidates(now).await
+            }
+        }
+    }
+
     pub async fn create_session_template(
         &self,
         principal: &AuthenticatedPrincipal,

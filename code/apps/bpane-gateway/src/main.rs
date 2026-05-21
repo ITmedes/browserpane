@@ -2,6 +2,7 @@ mod api;
 mod app;
 mod auth;
 mod automation_tasks;
+mod browser_contexts;
 mod config;
 mod credentials;
 mod extensions;

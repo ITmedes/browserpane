@@ -73,6 +73,15 @@ impl PostgresSessionStore {
             .delete_browser_context_for_owner(principal, id)
             .await
     }
+
+    pub(in crate::session_control) async fn list_browser_context_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<BrowserContextRetentionCandidate>, SessionStoreError> {
+        self.browser_context_repository()
+            .list_browser_context_retention_candidates(now)
+            .await
+    }
 }
 
 impl BrowserContextRepository<'_> {
@@ -248,5 +257,49 @@ impl BrowserContextRepository<'_> {
                 SessionStoreError::Backend(format!("failed to delete browser context: {error}"))
             })?;
         row.as_ref().map(row_to_stored_browser_context).transpose()
+    }
+
+    pub(in crate::session_control) async fn list_browser_context_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<BrowserContextRetentionCandidate>, SessionStoreError> {
+        let query = format!(
+            r#"
+            SELECT
+                {BROWSER_CONTEXT_COLUMNS}
+            FROM control_browser_contexts
+            WHERE state = 'ready'
+              AND retention_sec IS NOT NULL
+              AND COALESCE(last_used_at, created_at) + (retention_sec * INTERVAL '1 second') <= $1
+            ORDER BY COALESCE(last_used_at, created_at) + (retention_sec * INTERVAL '1 second') ASC
+            "#
+        );
+        let rows = self
+            .store
+            .db
+            .client()
+            .await?
+            .query(&query, &[&now])
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list browser context retention candidates: {error}"
+                ))
+            })?;
+        rows.iter()
+            .map(|row| {
+                let context = row_to_stored_browser_context(row)?;
+                let expires_at = context.retention_expires_at().ok_or_else(|| {
+                    SessionStoreError::Backend(
+                        "browser context retention candidate is missing retention expiry"
+                            .to_string(),
+                    )
+                })?;
+                Ok(BrowserContextRetentionCandidate {
+                    context,
+                    expires_at,
+                })
+            })
+            .collect()
     }
 }
