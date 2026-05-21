@@ -61,6 +61,60 @@ pub(in crate::session_control) fn validate_create_request(
     Ok(())
 }
 
+pub(in crate::session_control) fn validate_session_template_request(
+    request: &PersistSessionTemplateRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "session template name must not be empty".to_string(),
+        ));
+    }
+    if let Some(description) = &request.description {
+        if description.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "session template description must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    validate_label_map(&request.labels, "session template labels")?;
+    validate_template_defaults(&request.defaults)?;
+    Ok(())
+}
+
+fn validate_template_defaults(defaults: &SessionTemplateDefaults) -> Result<(), SessionStoreError> {
+    let request = CreateSessionRequest {
+        owner_mode: defaults.owner_mode,
+        viewport: defaults.viewport.clone(),
+        idle_timeout_sec: defaults.idle_timeout_sec,
+        labels: defaults.labels.clone(),
+        integration_context: defaults.integration_context.clone(),
+        recording: defaults.recording.clone().unwrap_or_default(),
+        ..CreateSessionRequest::default()
+    };
+    validate_create_request(&request)?;
+    validate_label_map(&defaults.labels, "session template default labels")?;
+    Ok(())
+}
+
+fn validate_label_map(
+    labels: &std::collections::HashMap<String, String>,
+    context: &str,
+) -> Result<(), SessionStoreError> {
+    for (key, value) in labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(format!(
+                "{context} must not contain empty keys"
+            )));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(format!(
+                "{context} must not contain empty values"
+            )));
+        }
+    }
+    Ok(())
+}
+
 pub(in crate::session_control) fn validate_automation_delegate_request(
     request: &SetAutomationDelegateRequest,
 ) -> Result<(), SessionStoreError> {

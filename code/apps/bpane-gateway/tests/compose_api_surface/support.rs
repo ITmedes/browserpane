@@ -310,6 +310,10 @@ impl ComposeHarness {
             .await
     }
 
+    pub async fn put_json(&self, path: &str, body: Value) -> Result<Value> {
+        self.send_json(Method::PUT, path, Some(body), None).await
+    }
+
     pub async fn post_json_outcome_without_bearer(
         &self,
         path: &str,

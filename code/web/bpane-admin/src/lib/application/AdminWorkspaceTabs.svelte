@@ -11,7 +11,7 @@
     Video,
   } from 'lucide-svelte';
   import type { ControlClient } from '../api/control-client';
-  import type { CreateSessionCommand, SessionResource } from '../api/control-types';
+  import type { CreateSessionCommand, SessionResource, SessionTemplateResource } from '../api/control-types';
   import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
   import AdminMessage from '../presentation/AdminMessage.svelte';
@@ -41,6 +41,9 @@
     readonly controlClient: ControlClient;
     readonly workflowClient: WorkflowClient;
     readonly selectedSession: SessionResource | null;
+    readonly sessionTemplates?: readonly SessionTemplateResource[];
+    readonly templatesLoading?: boolean;
+    readonly templateError?: string | null;
     readonly mcpBridge: McpBridgeConfig | null;
     readonly liveConnection: LiveBrowserSessionConnection | null;
     readonly browserConnected: boolean;
@@ -147,6 +150,9 @@
         {#if activePanel.id === 'sessions'}
         <SessionListPanel
           viewModel={props.sessionListViewModel}
+          sessionTemplates={props.sessionTemplates ?? []}
+          templatesLoading={props.templatesLoading ?? false}
+          templateError={props.templateError ?? null}
           connected={props.browserConnected}
           onRefresh={() => void props.onRefreshSessions(true)}
           onCreateSession={props.onCreateSession}

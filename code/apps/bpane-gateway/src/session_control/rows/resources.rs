@@ -218,6 +218,53 @@ pub(in crate::session_control) fn row_to_stored_file_workspace(
     })
 }
 
+pub(in crate::session_control) fn row_to_stored_session_template(
+    row: &Row,
+) -> Result<StoredSessionTemplate, SessionStoreError> {
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("session template labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("session template label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let defaults = serde_json::from_value::<SessionTemplateDefaults>(row.get("defaults")).map_err(
+        |error| {
+            SessionStoreError::Backend(format!(
+                "failed to decode session template defaults: {error}"
+            ))
+        },
+    )?;
+    let version = u32::try_from(row.get::<_, i32>("version")).map_err(|error| {
+        SessionStoreError::Backend(format!(
+            "session template version must be non-negative and fit u32: {error}"
+        ))
+    })?;
+
+    Ok(StoredSessionTemplate {
+        id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        description: row.get("description"),
+        labels,
+        defaults,
+        version,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
 pub(in crate::session_control) fn row_to_stored_file_workspace_file(
     row: &Row,
 ) -> Result<StoredFileWorkspaceFile, SessionStoreError> {

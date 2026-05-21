@@ -4,6 +4,11 @@ export type SessionRuntimeInfo = {
   readonly cdp_endpoint?: string | null;
 };
 
+export type SessionViewport = {
+  readonly width: number;
+  readonly height: number;
+};
+
 export type SessionConnectInfo = {
   readonly gateway_url: string;
   readonly transport_path: string;
@@ -48,9 +53,12 @@ export type SessionStatusSummary = {
 export type SessionResource = {
   readonly id: string;
   readonly state: string;
+  readonly template_id?: string | null;
   readonly owner_mode: string;
+  readonly viewport?: SessionViewport | null;
   readonly idle_timeout_sec?: number | null;
   readonly labels?: Readonly<Record<string, string>>;
+  readonly integration_context?: Readonly<Record<string, unknown>> | null;
   readonly automation_delegate?: SessionAutomationDelegate | null;
   readonly connect: SessionConnectInfo;
   readonly runtime: SessionRuntimeInfo;
@@ -65,10 +73,46 @@ export type SessionListResponse = {
   readonly sessions: readonly SessionResource[];
 };
 
+export type SessionListFilters = {
+  readonly templateId?: string | null;
+  readonly states?: readonly string[];
+  readonly runtimeStates?: readonly string[];
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly integrationContext?: Readonly<Record<string, string>>;
+  readonly limit?: number | null;
+  readonly offset?: number | null;
+};
+
+export type SessionTemplateDefaults = {
+  readonly owner_mode?: string | null;
+  readonly viewport?: SessionViewport | null;
+  readonly idle_timeout_sec?: number | null;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly integration_context?: Readonly<Record<string, unknown>> | null;
+  readonly recording?: Readonly<Record<string, unknown>> | null;
+};
+
+export type SessionTemplateResource = {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly labels: Readonly<Record<string, string>>;
+  readonly defaults: SessionTemplateDefaults;
+  readonly version: number;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type SessionTemplateListResponse = {
+  readonly templates: readonly SessionTemplateResource[];
+};
+
 export type CreateSessionCommand = {
+  readonly template_id?: string | null;
   readonly owner_mode?: string;
   readonly idle_timeout_sec?: number;
   readonly labels?: Readonly<Record<string, string>>;
+  readonly integration_context?: Readonly<Record<string, unknown>> | null;
 };
 
 export type SetAutomationDelegateCommand = {

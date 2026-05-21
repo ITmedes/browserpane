@@ -3,8 +3,8 @@ mod suite;
 
 use suite::{
     automation_access_boundaries, credentials_extensions, ownership_boundaries,
-    recording_artifacts, session_churn, session_compatibility, sessions_recordings, support,
-    workflow_run_controls, workflows_events, workspaces_automation,
+    recording_artifacts, session_churn, session_compatibility, session_templates,
+    sessions_recordings, support, workflow_run_controls, workflows_events, workspaces_automation,
 };
 
 #[tokio::test]
@@ -14,6 +14,15 @@ async fn compose_sessions_and_recordings_api_surface() -> anyhow::Result<()> {
     let harness = support::ComposeHarness::connect().await?;
     harness.cleanup_active_sessions().await?;
     sessions_recordings::run(&harness).await
+}
+
+#[tokio::test]
+#[ignore = "requires running local compose stack"]
+async fn compose_session_templates_catalog_api_surface() -> anyhow::Result<()> {
+    let _guard = support::suite_lock().lock().await;
+    let harness = support::ComposeHarness::connect().await?;
+    harness.cleanup_active_sessions().await?;
+    session_templates::run(&harness).await
 }
 
 #[tokio::test]

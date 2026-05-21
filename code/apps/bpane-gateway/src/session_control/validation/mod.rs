@@ -19,7 +19,10 @@ pub(super) use resources::{
     validate_file_workspace_request, validate_session_file_binding_request,
     validate_session_file_request,
 };
-pub(super) use sessions::{validate_automation_delegate_request, validate_create_request};
+pub(super) use sessions::{
+    validate_automation_delegate_request, validate_create_request,
+    validate_session_template_request,
+};
 pub(super) use workflows::{
     validate_workflow_definition_request, validate_workflow_definition_version_request,
     validate_workflow_run_event_request, validate_workflow_run_log_request,

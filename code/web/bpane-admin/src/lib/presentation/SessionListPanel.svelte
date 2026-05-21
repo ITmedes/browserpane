@@ -1,6 +1,6 @@
 <script lang="ts">
   import { base } from '$app/paths';
-  import type { CreateSessionCommand } from '../api/control-types';
+  import type { CreateSessionCommand, SessionTemplateResource } from '../api/control-types';
   import AdminMessage from './AdminMessage.svelte';
   import SessionCreateConfigurator from './SessionCreateConfigurator.svelte';
   import SessionTable from './SessionTable.svelte';
@@ -8,6 +8,9 @@
 
   type SessionListPanelProps = {
     readonly viewModel: SessionListPanelViewModel;
+    readonly sessionTemplates?: readonly SessionTemplateResource[];
+    readonly templatesLoading?: boolean;
+    readonly templateError?: string | null;
     readonly connected: boolean;
     readonly onRefresh: () => void;
     readonly onCreateSession: (command: CreateSessionCommand) => void;
@@ -18,6 +21,9 @@
 
   let {
     viewModel,
+    sessionTemplates = [],
+    templatesLoading = false,
+    templateError = null,
     connected,
     onRefresh,
     onCreateSession,
@@ -32,7 +38,7 @@
   }
 </script>
 
-<div class="grid gap-3" aria-label="Owner-scoped sessions">
+<div class="grid min-w-0 gap-3" aria-label="Owner-scoped sessions">
   <section class="grid gap-3 rounded-[16px] border border-admin-leaf/25 bg-admin-leaf/10 p-3" aria-label="Selected session">
     <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
       <div class="min-w-0">
@@ -47,8 +53,9 @@
     </div>
 
     {#if viewModel.selectedSession}
-      <div class="grid min-w-0 grid-cols-2 gap-2 text-xs text-admin-ink/70 sm:grid-cols-4">
+      <div class="grid min-w-0 grid-cols-2 gap-2 text-xs text-admin-ink/70 sm:grid-cols-5">
         {@render Fact('State', viewModel.selectedSession.lifecycle, 'session-selected-state')}
+        {@render Fact('Template', viewModel.selectedSession.template, 'session-selected-template')}
         {@render Fact('Runtime', viewModel.selectedSession.runtime, 'session-selected-runtime')}
         {@render Fact('Clients', String(viewModel.selectedSession.clients), 'session-selected-clients')}
         {@render Fact('MCP', viewModel.selectedSession.mcpDelegation, 'session-selected-mcp')}
@@ -90,6 +97,9 @@
   </section>
 
   <SessionCreateConfigurator
+    {sessionTemplates}
+    {templatesLoading}
+    {templateError}
     loading={viewModel.loading}
     disabled={!viewModel.authenticated}
     submitTestId="session-new"

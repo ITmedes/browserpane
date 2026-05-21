@@ -37,7 +37,7 @@
           {/if}
         </span>
         <span class="min-w-0 truncate text-xs text-admin-ink/52">
-          {session.mcpDelegation} | {session.labels} | updated {session.updatedAt}
+          <span data-testid="session-row-template">{session.template}</span> | {session.mcpDelegation} | {session.labels} | updated {session.updatedAt}
         </span>
       </span>
       <span class="grid justify-items-end gap-1 text-xs text-[#c1d0e8]">

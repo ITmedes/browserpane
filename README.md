@@ -82,7 +82,7 @@ Current support and scope:
 - Shared sessions: collaborative by default, intended for small curated groups rather than broadcast-scale delivery.
 - Owner/viewer mode: optional exclusive-owner mode is supported in the gateway; restricted viewers are read-only.
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
-- Control plane: owner-scoped v1 APIs now cover sessions, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
+- Control plane: owner-scoped v1 APIs now cover sessions, session templates, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 
@@ -121,7 +121,7 @@ bpane-gateway also talks to:
 | Project | Responsibility |
 | --- | --- |
 | `code/apps/bpane-host` | Linux host agent. Captures the desktop surface, classifies tiles, drives ROI H.264 video, emits audio, injects input, and handles clipboard, file transfer, resize, and camera ingress plumbing. |
-| `code/apps/bpane-gateway` | WebTransport entry point, shared-session coordinator, runtime lifecycle boundary, and owner-scoped control-plane API for sessions, automation tasks, recordings, workflows, files, credentials, and extensions. |
+| `code/apps/bpane-gateway` | WebTransport entry point, shared-session coordinator, runtime lifecycle boundary, and owner-scoped control-plane API for sessions, session templates, automation tasks, recordings, workflows, files, credentials, and extensions. |
 | `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
 | `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes compatibility Streamable HTTP on `/mcp`, session-scoped Streamable HTTP on `/sessions/{id}/mcp`, compatibility SSE on `/sse`, session-scoped SSE on `/sessions/{id}/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
@@ -231,8 +231,9 @@ The default local auth flow is OIDC-based:
 - click `Login`
 - authenticate against the local Keycloak realm
 - use the demo account `demo / demo-demo`
-- return to the admin console and either select an existing session or click `Start New Session`
+- return to the admin console and either select an existing session or create a new one, optionally from a session template
 - the admin console joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
+- the live session panel and session inspector show the applied template, and the inspector can filter sessions by template, lifecycle state, and runtime state
 - sessions created from the admin console use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
 - reconnecting a stopped session now restarts the same session resource instead of creating a new one
 - switching the selected session disconnects the embedded browser from the previous live session before selecting the new one
@@ -277,10 +278,25 @@ Canonical contract:
 - `GET /api/v1/sessions`
 - `GET /api/v1/sessions/{id}`
 - `DELETE /api/v1/sessions/{id}`
+- `POST /api/v1/session-templates`
+- `GET /api/v1/session-templates`
+- `GET /api/v1/session-templates/{id}`
+- `PUT /api/v1/session-templates/{id}`
 
 These endpoints are bearer-protected, owner-scoped, and stored in Postgres. The
 full contract is in the OpenAPI file; the route lists below call out the
 operator-facing surfaces that are most relevant for local development.
+
+Session templates store reusable defaults for session creation, including owner
+mode, viewport, idle timeout, labels, integration context, and recording policy.
+Creating a session with a UUID `template_id` merges those defaults before the
+session is persisted; explicit caller fields win over template defaults.
+The admin create-session configurator follows the same rule: selecting a
+template leaves owner mode and idle timeout unset unless the operator chooses an
+explicit override, and the API payload preview shows the exact fields that will
+be sent.
+`GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
+`runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
 
 The admin console also uses a bearer-protected realtime WebSocket for
 owner-scoped snapshot updates:
@@ -401,6 +417,7 @@ Common session operations:
 ```bash
 ./scripts/bpane session list
 ./scripts/bpane session list --state stopped --label suite=smoke --limit 5
+./scripts/bpane session list --template-id <template-id> --label team=support
 ./scripts/bpane session create --label purpose=manual-test
 ./scripts/bpane session get <session-id>
 ./scripts/bpane session status <session-id>
@@ -409,6 +426,22 @@ Common session operations:
 ./scripts/bpane session disconnect-all <session-id>
 ./scripts/bpane session stop <session-id>
 ./scripts/bpane session kill <session-id>
+```
+
+Common session-template operations:
+
+```bash
+./scripts/bpane session-template create customer-debug-session \
+  --description "Support debug sessions" \
+  --label team=support \
+  --default-label purpose=debug \
+  --owner-mode collaborative \
+  --idle-timeout-sec 1800 \
+  --recording-mode manual
+./scripts/bpane session-template list
+./scripts/bpane session-template get <template-id>
+./scripts/bpane session-template update <template-id> --name customer-debug-session --default-label purpose=debug
+./scripts/bpane session create --template-id <template-id> --label case=INC-1234
 ```
 
 MCP delegation and recovery operations:

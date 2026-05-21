@@ -4,9 +4,9 @@ info:
   version: 1.0.0
   description: >
     Frozen v1 owner-scoped BrowserPane control-plane contract. This document
-    covers the canonical `/api/v1` surfaces for sessions, automation tasks,
-    recordings, workflows, reusable files, credentials, approved extensions, and
-    admin realtime snapshots. Legacy global compatibility routes such as
+    covers the canonical `/api/v1` surfaces for sessions, session templates,
+    automation tasks, recordings, workflows, reusable files, credentials,
+    approved extensions, and admin realtime snapshots. Legacy global compatibility routes such as
     `/api/session/status` and `/api/session/mcp-owner` are intentionally excluded
     from this freeze and remain transitional.
 servers:
@@ -17,6 +17,7 @@ servers:
 tags:
   - name: Admin Events
   - name: Sessions
+  - name: Session Templates
   - name: Session Runtime
   - name: Session Recordings
   - name: Session Files
@@ -55,6 +56,51 @@ paths:
       tags: [Sessions]
       summary: List sessions visible to the authenticated owner or delegated automation principal
       operationId: listSessions
+      parameters:
+        - name: template_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Return only sessions created with the given template id.
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated lifecycle states to include.
+        - name: runtime_state
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated derived runtime states to include.
+        - name: label.<key>
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Dynamic label equality filter, for example `label.team=support`.
+        - name: integration.<key>
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Dynamic top-level integration-context string equality filter.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Maximum number of returned sessions after filtering.
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Number of matching sessions to skip after filtering.
       responses:
         '200':
           description: Owner-scoped session list
@@ -87,6 +133,94 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/session-templates:
+    get:
+      tags: [Session Templates]
+      summary: List owner-scoped session templates
+      operationId: listSessionTemplates
+      responses:
+        '200':
+          description: Owner-scoped session template list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTemplateListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Session Templates]
+      summary: Create an owner-scoped session template
+      operationId: createSessionTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertSessionTemplateRequest'
+      responses:
+        '201':
+          description: Session template created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTemplateResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/session-templates/{template_id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionTemplateId'
+    get:
+      tags: [Session Templates]
+      summary: Fetch one owner-scoped session template
+      operationId: getSessionTemplate
+      responses:
+        '200':
+          description: Session template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTemplateResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    put:
+      tags: [Session Templates]
+      summary: Replace one owner-scoped session template and increment its version
+      operationId: updateSessionTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertSessionTemplateRequest'
+      responses:
+        '200':
+          description: Updated session template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTemplateResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
         '503':
@@ -2114,6 +2248,13 @@ components:
   parameters:
     SessionId:
       name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionTemplateId:
+      name: template_id
       in: path
       required: true
       schema:
@@ -4517,6 +4658,89 @@ components:
             format: uuid
         recording:
           $ref: '#/components/schemas/SessionRecordingPolicy'
+    SessionTemplateDefaults:
+      type: object
+      additionalProperties: false
+      properties:
+        owner_mode:
+          $ref: '#/components/schemas/SessionOwnerMode'
+        viewport:
+          $ref: '#/components/schemas/SessionViewport'
+        idle_timeout_sec:
+          type: integer
+          minimum: 1
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        integration_context:
+          type: object
+          nullable: true
+          additionalProperties: true
+        recording:
+          allOf:
+            - $ref: '#/components/schemas/SessionRecordingPolicy'
+          nullable: true
+    UpsertSessionTemplateRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        defaults:
+          $ref: '#/components/schemas/SessionTemplateDefaults'
+    SessionTemplateResource:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - labels
+        - defaults
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        defaults:
+          $ref: '#/components/schemas/SessionTemplateDefaults'
+        version:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SessionTemplateListResponse:
+      type: object
+      required: [templates]
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionTemplateResource'
     SessionListResponse:
       type: object
       required: [sessions]
