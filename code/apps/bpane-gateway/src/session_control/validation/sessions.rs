@@ -45,6 +45,9 @@ pub(in crate::session_control) fn validate_create_request(
             }
         }
     }
+    if let Some(network_identity) = &request.network_identity {
+        validate_network_identity(network_identity)?;
+    }
     if let Some(retention_sec) = request.recording.retention_sec {
         if retention_sec == 0 {
             return Err(SessionStoreError::InvalidRequest(
@@ -107,11 +110,103 @@ fn validate_template_defaults(defaults: &SessionTemplateDefaults) -> Result<(), 
         idle_timeout_sec: defaults.idle_timeout_sec,
         labels: defaults.labels.clone(),
         integration_context: defaults.integration_context.clone(),
+        network_identity: defaults.network_identity.clone(),
         recording: defaults.recording.clone().unwrap_or_default(),
         ..CreateSessionRequest::default()
     };
     validate_create_request(&request)?;
     validate_label_map(&defaults.labels, "session template default labels")?;
+    Ok(())
+}
+
+fn validate_network_identity(identity: &SessionNetworkIdentity) -> Result<(), SessionStoreError> {
+    if let Some(locale) = &identity.locale {
+        validate_locale_tag(locale, "network_identity.locale")?;
+    }
+    for language in &identity.languages {
+        validate_locale_tag(language, "network_identity.languages")?;
+    }
+    if let Some(timezone) = &identity.timezone {
+        validate_timezone(timezone)?;
+    }
+    if let Some(geolocation) = &identity.geolocation {
+        if !(-90.0..=90.0).contains(&geolocation.latitude) {
+            return Err(SessionStoreError::InvalidRequest(
+                "network_identity.geolocation.latitude must be between -90 and 90".to_string(),
+            ));
+        }
+        if !(-180.0..=180.0).contains(&geolocation.longitude) {
+            return Err(SessionStoreError::InvalidRequest(
+                "network_identity.geolocation.longitude must be between -180 and 180".to_string(),
+            ));
+        }
+        if let Some(accuracy) = geolocation.accuracy_meters {
+            if accuracy <= 0.0 {
+                return Err(SessionStoreError::InvalidRequest(
+                    "network_identity.geolocation.accuracy_meters must be greater than zero"
+                        .to_string(),
+                ));
+            }
+        }
+    }
+    if let Some(user_agent) = &identity.user_agent {
+        if user_agent.trim().is_empty() || user_agent.contains('\r') || user_agent.contains('\n') {
+            return Err(SessionStoreError::InvalidRequest(
+                "network_identity.user_agent must be non-empty and single-line when provided"
+                    .to_string(),
+            ));
+        }
+    }
+    if let Some(browser_identity) = &identity.browser_identity {
+        if browser_identity.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "network_identity.browser_identity must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    if identity.egress_profile_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "network_identity.egress_profile_id must not be nil".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_locale_tag(value: &str, field: &str) -> Result<(), SessionStoreError> {
+    if value.trim().is_empty() || value.len() > 64 {
+        return Err(SessionStoreError::InvalidRequest(format!(
+            "{field} must be non-empty and at most 64 characters"
+        )));
+    }
+    let valid = value
+        .split('-')
+        .all(|part| !part.is_empty() && part.chars().all(|ch| ch.is_ascii_alphanumeric()));
+    if !valid {
+        return Err(SessionStoreError::InvalidRequest(format!(
+            "{field} must be a BCP-47-like tag with alphanumeric subtags"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_timezone(value: &str) -> Result<(), SessionStoreError> {
+    if value == "UTC" {
+        return Ok(());
+    }
+    if value.trim().is_empty()
+        || value.len() > 128
+        || value.starts_with('/')
+        || value.ends_with('/')
+        || value.contains("..")
+        || !value.contains('/')
+        || !value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '_' | '-' | '+'))
+    {
+        return Err(SessionStoreError::InvalidRequest(
+            "network_identity.timezone must be UTC or an IANA-style timezone".to_string(),
+        ));
+    }
     Ok(())
 }
 

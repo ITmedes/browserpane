@@ -131,6 +131,95 @@ pub(in crate::session_control) fn validate_credential_binding_request(
     Ok(())
 }
 
+pub(in crate::session_control) fn validate_egress_profile_request(
+    request: &PersistEgressProfileRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "egress profile name must not be empty".to_string(),
+        ));
+    }
+    if let Some(description) = &request.description {
+        if description.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile description must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    for (key, value) in &request.labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile label keys must not be empty".to_string(),
+            ));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile label values must not be empty".to_string(),
+            ));
+        }
+    }
+    if let Some(proxy) = &request.proxy {
+        validate_egress_proxy(proxy)?;
+    }
+    for bypass_rule in &request.bypass_rules {
+        if bypass_rule.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile bypass_rules must not contain empty values".to_string(),
+            ));
+        }
+    }
+    if let Some(custom_ca) = &request.custom_ca {
+        if custom_ca.certificate_ref.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "egress profile custom_ca.certificate_ref must not be empty".to_string(),
+            ));
+        }
+        if let Some(display_name) = &custom_ca.display_name {
+            if display_name.trim().is_empty() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "egress profile custom_ca.display_name must not be empty when provided"
+                        .to_string(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_egress_proxy(proxy: &EgressProxyConfig) -> Result<(), SessionStoreError> {
+    let url = proxy.url.trim();
+    if url.is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "egress profile proxy.url must not be empty".to_string(),
+        ));
+    }
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err(SessionStoreError::InvalidRequest(
+            "egress profile proxy.url must start with http:// or https://".to_string(),
+        ));
+    }
+    let Some(authority_and_path) = url.split_once("://").map(|(_, rest)| rest) else {
+        return Err(SessionStoreError::InvalidRequest(
+            "egress profile proxy.url must include an authority".to_string(),
+        ));
+    };
+    let authority = authority_and_path
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
+    if authority.is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "egress profile proxy.url must include an authority".to_string(),
+        ));
+    }
+    if authority.contains('@') {
+        return Err(SessionStoreError::InvalidRequest(
+            "egress profile proxy.url must not contain inline credentials".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 pub(in crate::session_control) fn validate_extension_definition_request(
     request: &PersistExtensionDefinitionRequest,
 ) -> Result<(), SessionStoreError> {

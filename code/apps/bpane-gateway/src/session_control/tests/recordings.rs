@@ -11,6 +11,7 @@ async fn in_memory_store_creates_and_stops_recording_metadata() {
             CreateSessionRequest {
                 template_id: None,
                 browser_context: None,
+                network_identity: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,
@@ -126,6 +127,7 @@ async fn in_memory_store_lists_and_clears_expired_recording_artifacts() {
             CreateSessionRequest {
                 template_id: None,
                 browser_context: None,
+                network_identity: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,

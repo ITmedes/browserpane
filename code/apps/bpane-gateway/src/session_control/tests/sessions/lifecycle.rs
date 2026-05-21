@@ -10,6 +10,7 @@ async fn in_memory_store_stops_unused_ready_sessions_and_idle_sessions() {
             CreateSessionRequest {
                 template_id: None,
                 browser_context: None,
+                network_identity: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: Some(300),
@@ -37,6 +38,7 @@ async fn in_memory_store_stops_unused_ready_sessions_and_idle_sessions() {
             CreateSessionRequest {
                 template_id: None,
                 browser_context: None,
+                network_identity: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,
@@ -94,6 +96,7 @@ async fn in_memory_store_can_prepare_a_stopped_session_for_reconnect() {
             CreateSessionRequest {
                 template_id: None,
                 browser_context: None,
+                network_identity: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: Some(300),
@@ -135,6 +138,7 @@ async fn in_memory_store_can_prepare_a_released_session_for_reconnect() {
             CreateSessionRequest {
                 template_id: None,
                 browser_context: None,
+                network_identity: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: Some(300),
@@ -177,6 +181,7 @@ async fn in_memory_store_can_restore_runtime_candidate_to_ready_after_runtime_lo
             CreateSessionRequest {
                 template_id: None,
                 browser_context: None,
+                network_identity: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,

@@ -4,8 +4,8 @@
 
 BrowserPane is a browser-native remote browser and workflow platform. It renders
 a Linux desktop inside a browser `<div>` using WebTransport, WebCodecs, and
-WebGL 2 while exposing owner-scoped control-plane APIs for sessions,
-recordings, workflows, files, credentials, and approved extensions. The
+WebGL 2 while exposing owner-scoped control-plane APIs for sessions, egress
+profiles, recordings, workflows, files, credentials, and approved extensions. The
 container size drives the remote resolution pixel-for-pixel.
 
 The canonical frozen v1 session-control contract is [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
@@ -276,6 +276,9 @@ service.
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
   - `GET /api/v1/session-templates/{id}` — fetch one session template
   - `PUT /api/v1/session-templates/{id}` — replace a session template and increment its version
+  - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, bypass, and custom CA metadata
+  - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
+  - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
   - `POST /api/v1/sessions/{id}/release` — release the live runtime while preserving the session resource and profile
