@@ -1,6 +1,7 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use reqwest::StatusCode;
-use serde_json::json;
+use serde_json::{json, Value};
+use tokio::process::Command;
 use uuid::Uuid;
 
 use super::support::{json_array, json_id, label_map, ComposeHarness};
@@ -146,12 +147,33 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         )
         .await?;
     let competing_session_id = json_id(&competing_session, "id")?;
-    let _first_runtime_access = harness
+    let profile_key = format!("bpane_context_{context_id}");
+    let profile_value = format!("profile-state-{session_id}");
+    let cookie_name = "bpane_context_probe";
+    let cookie_value = format!("cookie-state-{session_id}");
+    let first_runtime_access = harness
         .post_json(
             &format!("/api/v1/sessions/{session_id}/automation-access"),
             json!({}),
         )
         .await?;
+    let first_cdp_endpoint = automation_cdp_endpoint(&first_runtime_access)?;
+    let write_probe = run_profile_state_probe(
+        harness,
+        first_cdp_endpoint,
+        "set",
+        &profile_key,
+        &profile_value,
+        cookie_name,
+        &cookie_value,
+    )
+    .await?;
+    if write_probe["localStorageValue"] != json!(profile_value) {
+        return Err(anyhow!(
+            "reusable browser context CDP write probe returned unexpected state: {write_probe}"
+        ));
+    }
+
     let competing_runtime_access = harness
         .post_json_outcome(
             &format!("/api/v1/sessions/{competing_session_id}/automation-access"),
@@ -192,6 +214,52 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         ));
     }
 
+    let restored_session = harness
+        .post_json(
+            "/api/v1/sessions",
+            json!({
+                "browser_context": {
+                    "mode": "reusable",
+                    "context_id": context_id
+                },
+                "labels": {
+                    "suite": "browser-contexts-restored"
+                }
+            }),
+        )
+        .await?;
+    let restored_session_id = json_id(&restored_session, "id")?;
+    let restored_runtime_access = harness
+        .post_json(
+            &format!("/api/v1/sessions/{restored_session_id}/automation-access"),
+            json!({}),
+        )
+        .await?;
+    let restored_cdp_endpoint = automation_cdp_endpoint(&restored_runtime_access)?;
+    let read_probe = run_profile_state_probe(
+        harness,
+        restored_cdp_endpoint,
+        "get",
+        &profile_key,
+        &profile_value,
+        cookie_name,
+        &cookie_value,
+    )
+    .await?;
+    if read_probe["localStorageValue"] != json!(profile_value) {
+        return Err(anyhow!(
+            "reusable browser context did not restore profile-backed state: {read_probe}"
+        ));
+    }
+    let restored_deleted_session = harness
+        .delete_json(&format!("/api/v1/sessions/{restored_session_id}"))
+        .await?;
+    if restored_deleted_session["state"] != json!("stopped") {
+        return Err(anyhow!(
+            "browser-context restored session cleanup did not stop"
+        ));
+    }
+
     let deleted_context = harness
         .delete_json(&format!("/api/v1/browser-contexts/{context_id}"))
         .await?;
@@ -221,4 +289,69 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn automation_cdp_endpoint(access: &Value) -> Result<&str> {
+    access["automation"]["endpoint_url"]
+        .as_str()
+        .ok_or_else(|| anyhow!("automation access response did not include endpoint_url: {access}"))
+}
+
+async fn run_profile_state_probe(
+    harness: &ComposeHarness,
+    cdp_endpoint: &str,
+    action: &str,
+    key: &str,
+    value: &str,
+    cookie_name: &str,
+    cookie_value: &str,
+) -> Result<Value> {
+    let docker_network =
+        std::env::var("BPANE_DOCKER_NETWORK").unwrap_or_else(|_| "deploy_bpane-internal".into());
+    let repo_mount = format!("{}:/workspace:ro", harness.repo_root().display());
+    let output = Command::new("docker")
+        .args([
+            "run",
+            "--rm",
+            "--network",
+            docker_network.as_str(),
+            "-v",
+            repo_mount.as_str(),
+            "-w",
+            "/workspace/code/web/bpane-client",
+            "node:22-slim",
+            "node",
+            "scripts/cdp-profile-state-probe.mjs",
+            "--cdp-endpoint",
+            cdp_endpoint,
+            "--action",
+            action,
+            "--key",
+            key,
+            "--value",
+            value,
+            "--cookie-name",
+            cookie_name,
+            "--cookie-value",
+            cookie_value,
+        ])
+        .output()
+        .await
+        .context("failed to run CDP profile state probe container")?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        return Err(anyhow!(
+            "CDP profile state probe failed with status {} stdout={} stderr={}",
+            output.status,
+            stdout.trim(),
+            stderr.trim()
+        ));
+    }
+    serde_json::from_str(stdout.trim()).with_context(|| {
+        format!(
+            "failed to parse CDP profile state probe output as JSON: {}",
+            stdout.trim()
+        )
+    })
 }
