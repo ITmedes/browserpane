@@ -42,14 +42,19 @@ export class BrowserSessionConnector {
 
     const sdk = await this.#sdkProvider.load();
     const gatewayUrl = `${access.connect.gateway_url}${access.connect.transport_path}`;
-    const handle = await sdk.BpaneSession.connect({
-      container,
-      gatewayUrl,
-      connectTicket: access.token,
-      clientRole: 'interactive',
-      certHashUrl: this.#certHashUrl,
-      ...preferences,
-    });
+    let handle: Awaited<ReturnType<BrowserSessionSdk['BpaneSession']['connect']>>;
+    try {
+      handle = await sdk.BpaneSession.connect({
+        container,
+        gatewayUrl,
+        connectTicket: access.token,
+        clientRole: 'interactive',
+        certHashUrl: this.#certHashUrl,
+        ...preferences,
+      });
+    } catch (error) {
+      throw browserSessionConnectError(error, gatewayUrl);
+    }
 
     return {
       sessionId: session.id,
@@ -62,4 +67,25 @@ export class BrowserSessionConnector {
 function resetSessionContainer(container: HTMLElement): void {
   container.replaceChildren();
   container.removeAttribute('style');
+}
+
+function browserSessionConnectError(error: unknown, gatewayUrl: string): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!isOpeningHandshakeFailure(message)) {
+    return error instanceof Error ? error : new Error(message);
+  }
+
+  const enriched = new Error([
+    'WebTransport opening handshake failed before the browser stream opened.',
+    `Gateway: ${gatewayUrl}.`,
+    'Check that the gateway QUIC/WebTransport endpoint is reachable and trusted.',
+    'For local compose, start Chromium with --origin-to-force-quic-on=localhost:4433',
+    'and trust the dev SPKI from /cert-fingerprint, then reload the admin app.',
+  ].join(' '));
+  (enriched as Error & { cause?: unknown }).cause = error;
+  return enriched;
+}
+
+function isOpeningHandshakeFailure(message: string): boolean {
+  return /\bopening handshake failed\b/i.test(message);
 }

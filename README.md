@@ -255,6 +255,15 @@ http://localhost:8080/cert-hash
 
 `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` and `dev/certs/cert-hash.txt` from the same `cert.pem` for CLI and WebTransport certificate-hash use. The admin app and browser client request these local certificate metadata endpoints without browser cache reuse so certificate rotations can be picked up after reload.
 
+If a manually launched local Chromium reports `Opening handshake failed` when joining a session, start it with the local QUIC origin and SPKI trust flags:
+
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --origin-to-force-quic-on=localhost:4433 \
+  --ignore-certificate-errors-spki-list="$(cat dev/certs/cert-fingerprint.txt)" \
+  http://localhost:8080/admin/
+```
+
 ### Remote / Self-Hosted Testing
 
 The checked-in compose stack is a local development and regression environment,
