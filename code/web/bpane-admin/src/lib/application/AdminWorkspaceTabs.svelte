@@ -2,6 +2,7 @@
   import {
     Activity,
     ClipboardList,
+    Database,
     FileArchive,
     FolderOpen,
     Gauge,
@@ -33,6 +34,7 @@
   import type { SessionListPanelViewModel } from '../presentation/session-view-model';
   import type { BrowserSessionConnectPreferences, LiveBrowserSessionConnection } from '../session/browser-session-types';
   import BrowserPolicySurface from './BrowserPolicySurface.svelte';
+  import BrowserContextCatalogPanel from '../presentation/BrowserContextCatalogPanel.svelte';
   import DisplayControlsSurface from './DisplayControlsSurface.svelte';
   import LiveSessionActionsSurface from './LiveSessionActionsSurface.svelte';
   import LogsSurface from './LogsSurface.svelte';
@@ -47,6 +49,7 @@
     readonly controlClient: ControlClient;
     readonly workflowClient: WorkflowClient;
     readonly selectedSession: SessionResource | null;
+    readonly sessions?: readonly SessionResource[];
     readonly sessionTemplates?: readonly SessionTemplateResource[];
     readonly browserContexts?: readonly BrowserContextResource[];
     readonly templatesLoading?: boolean;
@@ -65,8 +68,10 @@
     readonly recordingsRefreshVersion: number;
     readonly mcpDelegationRefreshVersion: number;
     readonly onRefreshSessions: (showFeedback?: boolean) => Promise<void>;
+    readonly onRefreshBrowserContexts: (showFeedback?: boolean) => Promise<void>;
     readonly onCreateSession: (command?: CreateSessionCommand) => void;
     readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
+    readonly onDeleteBrowserContext?: (contextId: string) => Promise<void>;
     readonly onJoinSelectedSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
     readonly onRefreshSelectedSession: () => Promise<void>;
@@ -98,6 +103,7 @@
     recording: Video,
     metrics: Gauge,
     logs: ScrollText,
+    contexts: Database,
   } satisfies Record<AdminFeaturePanelId, typeof Activity>;
 </script>
 
@@ -181,6 +187,15 @@
           refreshVersion={props.mcpDelegationRefreshVersion}
           onRefreshSessions={() => props.onRefreshSessions(false)}
           onRefreshSelectedSession={props.onRefreshSelectedSession}
+        />
+      {:else if activePanel.id === 'contexts'}
+        <BrowserContextCatalogPanel
+          contexts={props.browserContexts ?? []}
+          sessions={props.sessions ?? []}
+          loading={props.browserContextsLoading ?? false}
+          error={props.browserContextError ?? null}
+          onRefresh={() => void props.onRefreshBrowserContexts(true)}
+          onDeleteContext={(contextId) => void props.onDeleteBrowserContext?.(contextId)}
         />
       {:else if activePanel.id === 'lifecycle'}
         <SessionLifecycleSurface

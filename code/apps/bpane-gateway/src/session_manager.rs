@@ -71,6 +71,13 @@ impl SessionManager {
         self.inner.release(session_id).await;
     }
 
+    pub async fn delete_browser_context_data(
+        &self,
+        context_id: Uuid,
+    ) -> Result<(), SessionManagerError> {
+        self.inner.delete_browser_context_data(context_id).await
+    }
+
     pub async fn mark_session_active(&self, session_id: Uuid) {
         self.inner.mark_session_active(session_id).await;
     }

@@ -347,6 +347,24 @@ impl DockerRuntimeManager {
             }
         }
     }
+
+    pub(super) async fn delete_browser_context_data(
+        &self,
+        context_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        let active_session_id = {
+            let leases = self.leases.lock().await;
+            active_browser_context_session_id(&leases, context_id)
+        };
+        if let Some(active_session_id) = active_session_id {
+            return Err(RuntimeManagerError::BrowserContextInUse {
+                browser_context_id: context_id,
+                active_session_id,
+            });
+        }
+
+        self.remove_browser_context_profile_volume(context_id).await
+    }
 }
 
 impl DockerLeaseState {

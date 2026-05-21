@@ -306,6 +306,18 @@ impl SessionRuntimeManager {
         }
     }
 
+    pub async fn delete_browser_context_data(
+        &self,
+        context_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => Ok(()),
+            RuntimeBackend::Docker(manager) => {
+                manager.delete_browser_context_data(context_id).await
+            }
+        }
+    }
+
     pub async fn mark_session_active(&self, session_id: Uuid) {
         match &self.backend {
             RuntimeBackend::StaticSingle(manager) => manager.mark_session_active(session_id).await,

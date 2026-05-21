@@ -309,10 +309,14 @@ while uploads, downloads, and session-file mounts remain tied to the concrete
 session. Only one active runtime writer may use a reusable context at a time;
 additional sessions with the same context can be created but runtime access is
 rejected until the active writer stops or releases its runtime.
-The admin create-session configurator can create reusable context catalog
-entries, select a ready context for a new session, preview the resulting
-`browser_context` payload, and show the bound context in live session rows and
-the session inspector detail view.
+Deleting a reusable context refuses active runtime writers and, for
+docker-backed runtimes, removes the context-scoped Chromium profile volume when
+no active writer exists. The admin create-session configurator can create
+reusable context catalog entries, select a ready context for a new session,
+preview the resulting `browser_context` payload, and show the bound context in
+live session rows and the session inspector detail view. The admin operations
+overlay and `/admin/browser-contexts` route also expose a reusable-context
+catalog with session references, guarded delete, and copyable API examples.
 
 The admin console also uses a bearer-protected realtime WebSocket for
 owner-scoped snapshot updates:
@@ -468,6 +472,7 @@ Common browser-context operations:
 ./scripts/bpane browser-context list
 ./scripts/bpane browser-context get <context-id>
 ./scripts/bpane browser-context delete <context-id>
+cd code/web/bpane-client && npm run smoke:admin-browser-contexts -- --headless
 ```
 
 MCP delegation and recovery operations:

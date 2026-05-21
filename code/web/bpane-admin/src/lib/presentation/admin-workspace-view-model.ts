@@ -1,5 +1,6 @@
 export type AdminFeaturePanelId =
   | 'sessions'
+  | 'contexts'
   | 'lifecycle'
   | 'display'
   | 'files'
@@ -36,6 +37,7 @@ export class AdminWorkspaceViewModelBuilder {
     readonly browserStatus: string;
     readonly selectedSessionId: string | null;
     readonly sessionCount: number;
+    readonly browserContextCount: number;
     readonly fileCount: number;
     readonly connected: boolean;
   }): AdminWorkspaceViewModel {
@@ -52,6 +54,11 @@ export class AdminWorkspaceViewModelBuilder {
           'Disconnect',
           'MCP authorization',
         ], ['visible sessions', 'selected session']),
+        panel('contexts', 'Contexts', 'Reusable browser profile lifecycle', 'Inspect reusable Chromium state before attaching it to sessions.', `${input.browserContextCount} contexts`, true, [
+          'Inspect profile catalog',
+          'Copy API examples',
+          'Delete unused context',
+        ], ['ready contexts', 'session references']),
         panel('lifecycle', 'Lifecycle', 'Runtime state, stop blockers, live clients', 'Inspect lifecycle safety before mutating a runtime.', input.connected ? 'busy' : 'ready', true, [
           'Refresh status',
           'Stop selected',

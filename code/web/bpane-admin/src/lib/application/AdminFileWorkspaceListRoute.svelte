@@ -142,6 +142,7 @@
       <div class="admin-actions">
         <a class="admin-button-ghost" href={`${base}/`}>Live workspace</a>
         <a class="admin-button-ghost" href={`${base}/sessions`}>Sessions</a>
+        <a class="admin-button-ghost" href={`${base}/browser-contexts`}>Browser contexts</a>
         <a class="admin-button-ghost" href={`${base}/workflows`}>Workflow catalog</a>
         <button
           class="admin-button-primary"

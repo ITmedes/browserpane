@@ -88,6 +88,33 @@ async fn delete_browser_context(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let existing = state
+        .session_store
+        .get_browser_context_for_owner(&principal, context_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("browser context {context_id} not found"),
+                }),
+            )
+        })?;
+    if existing.state != BrowserContextState::Deleted {
+        state
+            .session_manager
+            .delete_browser_context_data(context_id)
+            .await
+            .map_err(|error| {
+                (
+                    StatusCode::CONFLICT,
+                    Json(ErrorResponse {
+                        error: error.to_string(),
+                    }),
+                )
+            })?;
+    }
     let context = state
         .session_store
         .delete_browser_context_for_owner(&principal, context_id)
