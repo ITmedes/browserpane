@@ -66,6 +66,7 @@ async function verifyCompactPayloadToggle(page, options, template) {
   await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
   await openAdminTab(page, 'sessions');
   await selectSessionTemplate(page, template, options);
+  await assertNoHorizontalOverflow(page, 'session-create-configurator', 'live session create configurator');
   const templateSummary = await page.getByTestId('session-create-template-summary').textContent();
   if (!templateSummary?.includes(template.name) || !templateSummary.includes('team=support')) {
     throw new Error(`Expected live configurator template summary for ${template.name}, got ${templateSummary}`);
@@ -102,6 +103,16 @@ async function verifyClientValidation(page) {
   const errorText = await page.getByTestId('session-create-error').textContent();
   if (!errorText?.includes('Idle timeout') || !errorText.includes('duplicated')) {
     throw new Error(`Expected validation errors for idle timeout and duplicate labels, got ${errorText}`);
+  }
+}
+
+async function assertNoHorizontalOverflow(page, testId, label) {
+  const size = await page.getByTestId(testId).evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  if (size.scrollWidth > size.clientWidth + 1) {
+    throw new Error(`${label} overflows horizontally: ${JSON.stringify(size)}`);
   }
 }
 
