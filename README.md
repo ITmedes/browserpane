@@ -303,9 +303,12 @@ be sent.
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
 Browser context resources let callers name owner-scoped Chromium profile
 contexts and bind new sessions with `browser_context.mode=reusable` plus a
-`context_id`. In this first control-plane slice the session records the
-selected context and rejects missing or deleted contexts; the follow-up runtime
-slice materializes reusable contexts as shared profile storage.
+`context_id`. Docker-backed runtimes materialize reusable contexts as a
+context-scoped Chromium profile volume mounted at the normal profile path,
+while uploads, downloads, and session-file mounts remain tied to the concrete
+session. Only one active runtime writer may use a reusable context at a time;
+additional sessions with the same context can be created but runtime access is
+rejected until the active writer stops or releases its runtime.
 The admin create-session configurator can create reusable context catalog
 entries, select a ready context for a new session, preview the resulting
 `browser_context` payload, and show the bound context in live session rows and

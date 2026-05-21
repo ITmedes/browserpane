@@ -7,7 +7,10 @@ use uuid::Uuid;
 use super::*;
 
 enum ResolveAction {
-    Return(ResolvedSessionRuntime),
+    Return {
+        runtime: ResolvedSessionRuntime,
+        browser_context_id: Option<Uuid>,
+    },
     Wait(OwnedNotified),
     Start {
         lease: RuntimeLease,
@@ -20,21 +23,35 @@ impl DockerRuntimeManager {
         self: &Arc<Self>,
         session_id: Uuid,
     ) -> Result<ResolvedSessionRuntime, RuntimeManagerError> {
+        let scope = self.runtime_data_scope_for_session(session_id).await?;
         loop {
             let action = {
                 let mut leases = self.leases.lock().await;
                 match leases.get_mut(&session_id) {
                     Some(DockerLeaseState::Ready(lease)) => {
                         bump_idle_generation(lease);
-                        ResolveAction::Return(ResolvedSessionRuntime {
-                            session_id,
-                            agent_socket_path: lease.agent_socket_path.clone(),
-                        })
+                        ResolveAction::Return {
+                            runtime: ResolvedSessionRuntime {
+                                session_id,
+                                agent_socket_path: lease.agent_socket_path.clone(),
+                            },
+                            browser_context_id: lease.browser_context_id,
+                        }
                     }
                     Some(DockerLeaseState::Starting { notify, .. }) => {
                         ResolveAction::Wait(notify.clone().notified_owned())
                     }
                     None => {
+                        if let Some(browser_context_id) = scope.browser_context_id {
+                            if let Some(active_session_id) =
+                                active_browser_context_session_id(&leases, browser_context_id)
+                            {
+                                return Err(RuntimeManagerError::BrowserContextInUse {
+                                    browser_context_id,
+                                    active_session_id,
+                                });
+                            }
+                        }
                         if leases.len() >= self.profile.max_runtime_sessions {
                             return Err(RuntimeManagerError::RuntimeCapacityReached {
                                 max_active_runtimes: self.profile.max_runtime_sessions,
@@ -54,6 +71,8 @@ impl DockerRuntimeManager {
                             session_id,
                             agent_socket_path: self.socket_path_for_session(session_id),
                             container_name: Some(self.container_name_for_session(session_id)),
+                            browser_context_id: scope.browser_context_id,
+                            discard_session_data_on_release: scope.discard_session_data_on_release,
                             idle_generation: 0,
                         };
                         let notify = Arc::new(Notify::new());
@@ -70,7 +89,16 @@ impl DockerRuntimeManager {
             };
 
             match action {
-                ResolveAction::Return(runtime) => return Ok(runtime),
+                ResolveAction::Return {
+                    runtime,
+                    browser_context_id,
+                } => {
+                    if let Some(context_id) = browser_context_id {
+                        self.mark_browser_context_used_for_session(session_id, context_id)
+                            .await;
+                    }
+                    return Ok(runtime);
+                }
                 ResolveAction::Wait(waiter) => waiter.await,
                 ResolveAction::Start { lease, notify } => {
                     if let Err(error) = self
@@ -109,16 +137,19 @@ impl DockerRuntimeManager {
                                     }
                                     notify.notify_waiters();
                                     drop(leases);
-                                    if let Some(container_name) = &lease.container_name {
-                                        let _ = self.stop_container(container_name).await;
-                                    }
-                                    let _ = remove_socket_path(&lease.agent_socket_path).await;
+                                    self.cleanup_runtime_resources(&lease).await;
                                     let _ = self.clear_assignment(session_id).await;
                                     return Err(error);
                                 }
                                 let mut leases = self.leases.lock().await;
                                 leases.insert(session_id, DockerLeaseState::Ready(lease.clone()));
                                 notify.notify_waiters();
+                                if let Some(context_id) = lease.browser_context_id {
+                                    self.mark_browser_context_used_for_session(
+                                        session_id, context_id,
+                                    )
+                                    .await;
+                                }
                                 return Ok(ResolvedSessionRuntime {
                                     session_id,
                                     agent_socket_path: lease.agent_socket_path.clone(),
@@ -136,19 +167,15 @@ impl DockerRuntimeManager {
                             let _ = self.clear_assignment(session_id).await;
                             notify.notify_waiters();
                             drop(leases);
-                            if let Some(container_name) = &lease.container_name {
-                                let _ = self.stop_container(container_name).await;
-                            }
-                            let _ = remove_socket_path(&lease.agent_socket_path).await;
+                            self.cleanup_runtime_resources(&lease).await;
                             return Err(error);
                         }
                     };
                     notify.notify_waiters();
                     drop(leases);
-                    if let Some(container_name) = stop_container {
-                        let _ = self.stop_container(&container_name).await;
+                    if stop_container.is_some() {
+                        self.cleanup_runtime_resources(&lease).await;
                     }
-                    let _ = remove_socket_path(&lease.agent_socket_path).await;
                 }
             }
         }
@@ -164,10 +191,8 @@ impl DockerRuntimeManager {
             if let DockerLeaseState::Starting { notify, .. } = &state {
                 notify.notify_waiters();
             }
-            if let Some(container_name) = state.lease().container_name.as_deref() {
-                let _ = self.stop_container(container_name).await;
-            }
-            let _ = remove_socket_path(&state.lease().agent_socket_path).await;
+            let lease = state.lease().clone();
+            self.cleanup_runtime_resources(&lease).await;
             let _ = self.clear_assignment(session_id).await;
         }
     }
@@ -180,17 +205,13 @@ impl DockerRuntimeManager {
     }
 
     pub(in crate::runtime_manager) async fn mark_session_idle(self: &Arc<Self>, session_id: Uuid) {
-        let (idle_generation, container_name, socket_path) = {
+        let (idle_generation, lease_snapshot) = {
             let mut leases = self.leases.lock().await;
             let Some(DockerLeaseState::Ready(lease)) = leases.get_mut(&session_id) else {
                 return;
             };
             bump_idle_generation(lease);
-            (
-                lease.idle_generation,
-                lease.container_name.clone().unwrap_or_default(),
-                lease.agent_socket_path.clone(),
-            )
+            (lease.idle_generation, lease.clone())
         };
 
         let manager = Arc::clone(self);
@@ -208,10 +229,19 @@ impl DockerRuntimeManager {
                 true
             };
             if should_stop {
-                let _ = manager.stop_container(&container_name).await;
-                let _ = remove_socket_path(&socket_path).await;
+                manager.cleanup_runtime_resources(&lease_snapshot).await;
                 let _ = manager.clear_assignment(session_id).await;
             }
         });
+    }
+
+    async fn cleanup_runtime_resources(&self, lease: &RuntimeLease) {
+        if let Some(container_name) = lease.container_name.as_deref() {
+            let _ = self.stop_container(container_name).await;
+        }
+        let _ = remove_socket_path(&lease.agent_socket_path).await;
+        if lease.discard_session_data_on_release {
+            let _ = self.remove_session_data_volume(lease.session_id).await;
+        }
     }
 }

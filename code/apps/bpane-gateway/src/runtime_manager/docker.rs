@@ -8,9 +8,12 @@ use std::sync::Arc;
 
 use tokio::fs;
 use tokio::sync::{Mutex, Notify};
+use tracing::warn;
 use uuid::Uuid;
 
 use super::*;
+use crate::auth::AuthenticatedPrincipal;
+use crate::session_control::{SessionBrowserContextMode, StoredSession};
 use crate::workspaces::WorkspaceFileStore;
 
 pub(super) struct DockerRuntimeManager {
@@ -27,6 +30,12 @@ pub(super) enum DockerLeaseState {
         notify: Arc<Notify>,
     },
     Ready(RuntimeLease),
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) struct RuntimeSessionDataScope {
+    pub(super) browser_context_id: Option<Uuid>,
+    pub(super) discard_session_data_on_release: bool,
 }
 
 impl DockerRuntimeManager {
@@ -155,6 +164,20 @@ impl DockerRuntimeManager {
         )
     }
 
+    pub(super) fn browser_context_profile_volume_for_context(&self, context_id: Uuid) -> String {
+        format!(
+            "{}-browser-context-{}",
+            self.config.session_data_volume_prefix.trim_end_matches('-'),
+            context_id.as_simple()
+        )
+    }
+
+    pub(super) fn profile_volume_for_lease(&self, lease: &RuntimeLease) -> Option<String> {
+        lease
+            .browser_context_id
+            .map(|context_id| self.browser_context_profile_volume_for_context(context_id))
+    }
+
     pub(super) fn socket_volume_mount_root(&self) -> String {
         let socket_root = self.config.socket_root.trim_end_matches('/');
         std::path::Path::new(socket_root)
@@ -224,6 +247,106 @@ impl DockerRuntimeManager {
             None => None,
         }
     }
+
+    pub(super) async fn runtime_data_scope_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<RuntimeSessionDataScope, RuntimeManagerError> {
+        let Some(store) = self.session_store().await else {
+            return Ok(RuntimeSessionDataScope::default());
+        };
+        let session = store
+            .get_session_by_id(session_id)
+            .await
+            .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?
+            .ok_or_else(|| {
+                RuntimeManagerError::PersistenceFailed(format!(
+                    "session {session_id} not found while resolving docker runtime data scope"
+                ))
+            })?;
+        Self::runtime_data_scope_from_session(&session)
+    }
+
+    pub(super) fn runtime_data_scope_from_session(
+        session: &StoredSession,
+    ) -> Result<RuntimeSessionDataScope, RuntimeManagerError> {
+        match session.browser_context.mode {
+            SessionBrowserContextMode::Fresh => Ok(RuntimeSessionDataScope::default()),
+            SessionBrowserContextMode::Ephemeral => Ok(RuntimeSessionDataScope {
+                browser_context_id: None,
+                discard_session_data_on_release: true,
+            }),
+            SessionBrowserContextMode::Reusable => {
+                let Some(context_id) = session.browser_context.context_id else {
+                    return Err(RuntimeManagerError::PersistenceFailed(format!(
+                        "session {} uses reusable browser context mode without a context id",
+                        session.id
+                    )));
+                };
+                Ok(RuntimeSessionDataScope {
+                    browser_context_id: Some(context_id),
+                    discard_session_data_on_release: false,
+                })
+            }
+        }
+    }
+
+    pub(super) async fn mark_browser_context_used_for_session(
+        &self,
+        session_id: Uuid,
+        context_id: Uuid,
+    ) {
+        let Some(store) = self.session_store().await else {
+            return;
+        };
+        let session = match store.get_session_by_id(session_id).await {
+            Ok(Some(session)) => session,
+            Ok(None) => {
+                warn!(
+                    session_id = %session_id,
+                    browser_context_id = %context_id,
+                    "could not mark browser context used because session was not found",
+                );
+                return;
+            }
+            Err(error) => {
+                warn!(
+                    session_id = %session_id,
+                    browser_context_id = %context_id,
+                    error = %error,
+                    "could not load session while marking browser context used",
+                );
+                return;
+            }
+        };
+        let principal = AuthenticatedPrincipal {
+            subject: session.owner.subject,
+            issuer: session.owner.issuer,
+            display_name: session.owner.display_name,
+            client_id: None,
+        };
+        match store
+            .mark_browser_context_used_for_owner(&principal, context_id)
+            .await
+        {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                warn!(
+                    session_id = %session_id,
+                    browser_context_id = %context_id,
+                    "could not mark browser context used because it was not found",
+                );
+            }
+            Err(error) => {
+                warn!(
+                    session_id = %session_id,
+                    browser_context_id = %context_id,
+                    error = %error,
+                    "could not mark browser context used",
+                );
+            }
+        }
+    }
 }
 
 impl DockerLeaseState {
@@ -233,6 +356,15 @@ impl DockerLeaseState {
             Self::Ready(lease) => lease,
         }
     }
+}
+
+fn active_browser_context_session_id(
+    leases: &HashMap<Uuid, DockerLeaseState>,
+    context_id: Uuid,
+) -> Option<Uuid> {
+    leases.iter().find_map(|(session_id, state)| {
+        (state.lease().browser_context_id == Some(context_id)).then_some(*session_id)
+    })
 }
 
 fn sorted_active_session_ids(leases: &HashMap<Uuid, DockerLeaseState>) -> Vec<Uuid> {

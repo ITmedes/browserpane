@@ -70,6 +70,8 @@ impl StaticSingleRuntimeManager {
                     session_id,
                     agent_socket_path: self.agent_socket_path.clone(),
                     container_name: None,
+                    browser_context_id: None,
+                    discard_session_data_on_release: false,
                     idle_generation: 0,
                 });
                 Ok(ResolvedSessionRuntime {

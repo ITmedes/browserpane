@@ -84,15 +84,16 @@ struct SessionFileBindingsManifestEntry {
 impl DockerRuntimeManager {
     pub(super) async fn initialize_session_data_volume(
         &self,
-        session_id: Uuid,
+        lease: &RuntimeLease,
     ) -> Result<(), RuntimeManagerError> {
         let output = Command::new(&self.config.docker_bin)
-            .args(self.docker_initialize_session_data_args(session_id))
+            .args(self.docker_initialize_session_data_args(lease))
             .output()
             .await
             .map_err(|error| {
                 RuntimeManagerError::StartupFailed(format!(
-                    "failed to initialize docker session data volume for {session_id}: {error}"
+                    "failed to initialize docker session data volume for {}: {error}",
+                    lease.session_id
                 ))
             })?;
         if output.status.success() {
@@ -100,16 +101,17 @@ impl DockerRuntimeManager {
         }
 
         Err(RuntimeManagerError::StartupFailed(format!(
-            "failed to initialize docker session data volume for {session_id}: {}",
+            "failed to initialize docker session data volume for {}: {}",
+            lease.session_id,
             String::from_utf8_lossy(&output.stderr).trim()
         )))
     }
 
     pub(in crate::runtime_manager) fn docker_initialize_session_data_args(
         &self,
-        session_id: Uuid,
+        lease: &RuntimeLease,
     ) -> Vec<String> {
-        vec![
+        let mut args = vec![
             "run".to_string(),
             "--rm".to_string(),
             "--network".to_string(),
@@ -117,9 +119,19 @@ impl DockerRuntimeManager {
             "-v".to_string(),
             format!(
                 "{}:{}",
-                self.session_data_volume_for_session(session_id),
+                self.session_data_volume_for_session(lease.session_id),
                 self.session_data_root()
             ),
+        ];
+        if let Some(profile_volume) = self.profile_volume_for_lease(lease) {
+            args.push("-v".to_string());
+            args.push(format!(
+                "{}:{}",
+                profile_volume,
+                self.profile_dir_for_session()
+            ));
+        }
+        args.extend([
             "-e".to_string(),
             format!("BPANE_SESSION_DATA_DIR={}", self.session_data_root()),
             "-e".to_string(),
@@ -140,7 +152,39 @@ impl DockerRuntimeManager {
             self.config.image.clone(),
             "-ec".to_string(),
             INITIALIZE_SESSION_DATA_SCRIPT.to_string(),
-        ]
+        ]);
+        args
+    }
+
+    pub(super) async fn remove_session_data_volume(
+        &self,
+        session_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        let volume = self.session_data_volume_for_session(session_id);
+        let output = Command::new(&self.config.docker_bin)
+            .arg("volume")
+            .arg("rm")
+            .arg(&volume)
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to remove docker session data volume {volume}: {error}"
+                ))
+            })?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("No such volume") || stderr.contains("not found") {
+            return Ok(());
+        }
+
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to remove docker session data volume {volume}: {}",
+            stderr.trim()
+        )))
     }
 
     pub(super) async fn materialize_session_file_bindings(
