@@ -1,6 +1,11 @@
 <script lang="ts">
   import { base } from '$app/paths';
-  import type { CreateSessionCommand, SessionTemplateResource } from '../api/control-types';
+  import type {
+    BrowserContextResource,
+    CreateBrowserContextCommand,
+    CreateSessionCommand,
+    SessionTemplateResource,
+  } from '../api/control-types';
   import AdminMessage from './AdminMessage.svelte';
   import SessionCreateConfigurator from './SessionCreateConfigurator.svelte';
   import SessionTable from './SessionTable.svelte';
@@ -9,11 +14,15 @@
   type SessionListPanelProps = {
     readonly viewModel: SessionListPanelViewModel;
     readonly sessionTemplates?: readonly SessionTemplateResource[];
+    readonly browserContexts?: readonly BrowserContextResource[];
     readonly templatesLoading?: boolean;
+    readonly browserContextsLoading?: boolean;
     readonly templateError?: string | null;
+    readonly browserContextError?: string | null;
     readonly connected: boolean;
     readonly onRefresh: () => void;
     readonly onCreateSession: (command: CreateSessionCommand) => void;
+    readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onJoinSession: () => void;
     readonly onDisconnectSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
@@ -22,11 +31,15 @@
   let {
     viewModel,
     sessionTemplates = [],
+    browserContexts = [],
     templatesLoading = false,
+    browserContextsLoading = false,
     templateError = null,
+    browserContextError = null,
     connected,
     onRefresh,
     onCreateSession,
+    onCreateBrowserContext,
     onJoinSession,
     onDisconnectSession,
     onSelectSessionId,
@@ -53,9 +66,10 @@
     </div>
 
     {#if viewModel.selectedSession}
-      <div class="grid min-w-0 grid-cols-2 gap-2 text-xs text-admin-ink/70 sm:grid-cols-5">
+      <div class="grid min-w-0 grid-cols-2 gap-2 text-xs text-admin-ink/70 sm:grid-cols-3">
         {@render Fact('State', viewModel.selectedSession.lifecycle, 'session-selected-state')}
         {@render Fact('Template', viewModel.selectedSession.template, 'session-selected-template')}
+        {@render Fact('Context', viewModel.selectedSession.browserContext, 'session-selected-browser-context')}
         {@render Fact('Runtime', viewModel.selectedSession.runtime, 'session-selected-runtime')}
         {@render Fact('Clients', String(viewModel.selectedSession.clients), 'session-selected-clients')}
         {@render Fact('MCP', viewModel.selectedSession.mcpDelegation, 'session-selected-mcp')}
@@ -98,8 +112,11 @@
 
   <SessionCreateConfigurator
     {sessionTemplates}
+    {browserContexts}
     {templatesLoading}
+    {browserContextsLoading}
     {templateError}
+    {browserContextError}
     loading={viewModel.loading}
     disabled={!viewModel.authenticated}
     submitTestId="session-new"
@@ -107,6 +124,7 @@
     payloadOpen={createPayloadOpen}
     onPayloadOpenChange={(open) => { createPayloadOpen = open; }}
     {onCreateSession}
+    {onCreateBrowserContext}
   />
 
   <section class="grid gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Session switcher">

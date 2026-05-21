@@ -58,6 +58,10 @@ async function verifySessionDetail(page, options, sessionId) {
     state: 'visible',
     timeout: options.connectTimeoutMs,
   });
+  await page.getByTestId('session-browser-context').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
   await page.getByTestId('session-inspector-files-count').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,
@@ -69,6 +73,10 @@ async function verifySessionDetail(page, options, sessionId) {
   const title = await page.getByTestId('session-inspector-title').textContent();
   if (!title?.includes(sessionId)) {
     throw new Error(`Expected session detail title to include ${sessionId}, got ${title}`);
+  }
+  const browserContext = await page.getByTestId('session-browser-context').textContent();
+  if (!browserContext?.includes('Fresh profile')) {
+    throw new Error(`Expected default session detail browser context to be Fresh profile, got ${browserContext}`);
   }
   const disconnectAllDisabled = await page.getByTestId('session-disconnect-all').isDisabled();
   if (!disconnectAllDisabled) {

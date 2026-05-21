@@ -125,6 +125,7 @@ function sessionResource(id: string, delegated = false): SessionResource {
   return {
     id,
     state: 'active',
+    browser_context: { mode: 'fresh', context_id: null },
     owner_mode: 'shared',
     automation_delegate: delegated ? {
       client_id: BRIDGE.clientId,

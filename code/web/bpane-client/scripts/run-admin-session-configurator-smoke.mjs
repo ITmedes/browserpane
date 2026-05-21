@@ -29,6 +29,7 @@ async function run() {
   const page = await context.newPage();
   let sessionId = '';
   let template = null;
+  let browserContext = null;
 
   try {
     log(`Opening ${options.pageUrl}`);
@@ -36,7 +37,7 @@ async function run() {
     await cleanupAdminBeforeRun(page, options, log);
     template = await createSessionTemplate(page, options);
 
-    await verifyCompactPayloadToggle(page, options, template);
+    browserContext = await verifyCompactPayloadToggle(page, options, template);
 
     await page.goto(adminRouteUrl(options, 'sessions'), { waitUntil: 'domcontentloaded' });
     await page.getByTestId('session-create-configurator').waitFor({
@@ -45,18 +46,19 @@ async function run() {
     });
 
     await verifyClientValidation(page);
-    await configureTemplatedSession(page, options, template);
-    await verifyPayloadPreview(page, template);
+    await configureTemplatedSession(page, options, template, browserContext);
+    await verifyPayloadPreview(page, template, browserContext);
     await page.getByTestId('session-inspector-new').click();
     sessionId = await waitForSessionDetailUrl(page, options);
 
     const session = await fetchSession(page, options, sessionId);
-    verifyCreatedSession(session, sessionId, template);
-    await verifyDetailUi(page, options, sessionId, template);
-    await verifyInspectorTemplateFilter(page, options, sessionId, template);
+    verifyCreatedSession(session, sessionId, template, browserContext);
+    await verifyDetailUi(page, options, sessionId, template, browserContext);
+    await verifyInspectorTemplateFilter(page, options, sessionId, template, browserContext);
     await emitSummary(page, options, session, template, log);
   } finally {
     await cleanupCreatedSession(page, options, sessionId, log);
+    await cleanupCreatedBrowserContext(page, options, browserContext?.id ?? '', log);
     await context.close();
     await browser.close();
   }
@@ -65,7 +67,9 @@ async function run() {
 async function verifyCompactPayloadToggle(page, options, template) {
   await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
   await openAdminTab(page, 'sessions');
+  const browserContext = await createBrowserContextThroughUi(page, options);
   await selectSessionTemplate(page, template, options);
+  await selectBrowserContext(page, browserContext, options);
   await assertNoHorizontalOverflow(page, 'session-create-configurator', 'live session create configurator');
   const templateSummary = await page.getByTestId('session-create-template-summary').textContent();
   if (!templateSummary?.includes(template.name) || !templateSummary.includes('team=support')) {
@@ -82,6 +86,9 @@ async function verifyCompactPayloadToggle(page, options, template) {
   if (preview.template_id !== template.id) {
     throw new Error(`Expected live configurator preview to include template_id ${template.id}, got ${previewText}`);
   }
+  if (preview.browser_context?.mode !== 'reusable' || preview.browser_context?.context_id !== browserContext.id) {
+    throw new Error(`Expected live configurator preview to include reusable browser context ${browserContext.id}, got ${previewText}`);
+  }
   if (Object.hasOwn(preview, 'owner_mode')) {
     throw new Error(`Expected template default owner mode to remain unoverridden, got ${previewText}`);
   }
@@ -91,9 +98,34 @@ async function verifyCompactPayloadToggle(page, options, template) {
     throw new Error('Expected compact API payload preview to stay expanded after opening.');
   }
   await toggle.click();
+  return browserContext;
 }
 
-async function verifyClientValidation(page) {
+async function verifyClientValidation(page, options) {
+  await page.getByTestId('session-create-browser-context-mode').selectOption('reusable');
+  const missingContextDisabled = await page.getByTestId('session-inspector-new').isDisabled();
+  if (!missingContextDisabled) {
+    throw new Error('Expected configured session create to be disabled when reusable context mode has no selected context.');
+  }
+  const missingContextError = await page.getByTestId('session-create-error').textContent();
+  if (!missingContextError?.includes('Reusable browser context')) {
+    throw new Error(`Expected reusable context validation error, got ${missingContextError}`);
+  }
+  await page.getByTestId('session-create-browser-context-mode').selectOption('fresh');
+
+  await page.getByTestId('session-create-context-name').fill('Invalid context');
+  await page.getByTestId('session-create-context-labels').fill('malformed-label');
+  const contextCreateDisabled = await page.getByTestId('session-create-context-create').isDisabled();
+  if (!contextCreateDisabled) {
+    throw new Error('Expected browser context quick-create to be disabled for malformed labels.');
+  }
+  const contextCreateError = await page.getByTestId('session-create-context-create-error').textContent();
+  if (!contextCreateError?.includes('key=value')) {
+    throw new Error(`Expected browser context quick-create validation error, got ${contextCreateError}`);
+  }
+  await page.getByTestId('session-create-context-name').fill('');
+  await page.getByTestId('session-create-context-labels').fill('');
+
   await page.getByTestId('session-create-idle-timeout').fill('0');
   await page.getByTestId('session-create-labels').fill('case=1234\ncase=5678');
   const disabled = await page.getByTestId('session-inspector-new').isDisabled();
@@ -104,6 +136,8 @@ async function verifyClientValidation(page) {
   if (!errorText?.includes('Idle timeout') || !errorText.includes('duplicated')) {
     throw new Error(`Expected validation errors for idle timeout and duplicate labels, got ${errorText}`);
   }
+  await page.getByTestId('session-create-idle-timeout').fill('');
+  await page.getByTestId('session-create-labels').fill('');
 }
 
 async function assertNoHorizontalOverflow(page, testId, label) {
@@ -116,15 +150,16 @@ async function assertNoHorizontalOverflow(page, testId, label) {
   }
 }
 
-async function configureTemplatedSession(page, options, template) {
+async function configureTemplatedSession(page, options, template, browserContext) {
   await selectSessionTemplate(page, template, options);
+  await selectBrowserContext(page, browserContext, options);
   await page.getByTestId('session-create-owner-mode').selectOption('collaborative');
   await page.getByTestId('session-create-owner-mode').selectOption('');
   await page.getByTestId('session-create-idle-timeout').fill('');
   await page.getByTestId('session-create-labels').fill('case=1234\npurpose=import-repro');
 }
 
-async function verifyPayloadPreview(page, template) {
+async function verifyPayloadPreview(page, template, browserContext) {
   const previewText = await page.getByTestId('session-create-preview').textContent();
   const preview = JSON.parse(previewText ?? '{}');
   const expectedLabels = { case: '1234', purpose: 'import-repro' };
@@ -132,13 +167,15 @@ async function verifyPayloadPreview(page, template) {
     preview.template_id !== template.id
     || Object.hasOwn(preview, 'owner_mode')
     || Object.hasOwn(preview, 'idle_timeout_sec')
+    || preview.browser_context?.mode !== 'reusable'
+    || preview.browser_context?.context_id !== browserContext.id
     || JSON.stringify(preview.labels) !== JSON.stringify(expectedLabels)
   ) {
     throw new Error(`Unexpected session create payload preview: ${previewText}`);
   }
 }
 
-async function verifyDetailUi(page, options, sessionId, template) {
+async function verifyDetailUi(page, options, sessionId, template, browserContext) {
   await page.getByTestId('session-inspector-detail').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,
@@ -151,22 +188,24 @@ async function verifyDetailUi(page, options, sessionId, template) {
   const ownerMode = await page.getByTestId('session-owner-mode').textContent();
   const idleTimeout = await page.getByTestId('session-idle-timeout').textContent();
   const detailTemplate = await page.getByTestId('session-template').textContent();
+  const detailBrowserContext = await page.getByTestId('session-browser-context').textContent();
   const labels = await page.getByTestId('session-labels').textContent();
   const integration = await page.getByTestId('session-integration-context').textContent();
   if (
     ownerMode !== 'collaborative'
     || idleTimeout !== '1200'
     || !detailTemplate?.includes(template.name)
+    || !detailBrowserContext?.includes(browserContext.name)
     || !labels?.includes('purpose=import-repro')
     || !labels.includes('team=support')
     || !integration?.includes('source=admin-smoke-template')
   ) {
-    throw new Error(`Unexpected configured session detail facts: ${ownerMode} / ${idleTimeout} / ${detailTemplate} / ${labels} / ${integration}`);
+    throw new Error(`Unexpected configured session detail facts: ${ownerMode} / ${idleTimeout} / ${detailTemplate} / ${detailBrowserContext} / ${labels} / ${integration}`);
   }
   await page.getByTestId('session-file-bindings').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
 }
 
-async function verifyInspectorTemplateFilter(page, options, sessionId, template) {
+async function verifyInspectorTemplateFilter(page, options, sessionId, template, browserContext) {
   await page.goto(adminRouteUrl(options, 'sessions'), { waitUntil: 'domcontentloaded' });
   await page.getByTestId('session-inspector-list').waitFor({
     state: 'visible',
@@ -176,8 +215,12 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template)
   const row = page.locator(`[data-testid="session-inspector-row"][data-session-id="${sessionId}"]`);
   await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   const rowTemplate = await row.getByTestId('session-inspector-row-template').textContent();
+  const rowBrowserContext = await row.getByTestId('session-inspector-row-browser-context').textContent();
   if (!rowTemplate?.includes(template.name)) {
     throw new Error(`Expected inspector row template ${template.name}, got ${rowTemplate}`);
+  }
+  if (!rowBrowserContext?.includes(browserContext.name)) {
+    throw new Error(`Expected inspector row browser context ${browserContext.name}, got ${rowBrowserContext}`);
   }
   const count = await page.getByTestId('session-inspector-count').textContent();
   if (!count?.includes('visible sessions')) {
@@ -190,12 +233,16 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template)
   await liveRow.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await liveRow.click();
   const selectedTemplate = await page.getByTestId('session-selected-template').textContent();
+  const selectedBrowserContext = await page.getByTestId('session-selected-browser-context').textContent();
   if (!selectedTemplate?.includes(template.name)) {
     throw new Error(`Expected live selected session template ${template.name}, got ${selectedTemplate}`);
   }
+  if (!selectedBrowserContext?.includes(browserContext.name)) {
+    throw new Error(`Expected live selected session browser context ${browserContext.name}, got ${selectedBrowserContext}`);
+  }
 }
 
-function verifyCreatedSession(session, sessionId, template) {
+function verifyCreatedSession(session, sessionId, template, browserContext) {
   if (session.id !== sessionId) {
     throw new Error(`Expected API session ${sessionId}, got ${session.id}`);
   }
@@ -204,6 +251,9 @@ function verifyCreatedSession(session, sessionId, template) {
   }
   if (session.owner_mode !== 'collaborative') {
     throw new Error(`Expected collaborative owner mode, got ${session.owner_mode}`);
+  }
+  if (session.browser_context?.mode !== 'reusable' || session.browser_context?.context_id !== browserContext.id) {
+    throw new Error(`Expected reusable browser context ${browserContext.id}, got ${JSON.stringify(session.browser_context)}`);
   }
   if (session.idle_timeout_sec !== 1200) {
     throw new Error(`Expected template idle timeout 1200, got ${session.idle_timeout_sec}`);
@@ -244,6 +294,46 @@ async function selectSessionTemplate(page, template, options) {
   await selectOptionWhenAvailable(page, selector, template.id, options);
 }
 
+async function selectBrowserContext(page, browserContext, options) {
+  await page.getByTestId('session-create-browser-context-mode').selectOption('reusable');
+  await selectOptionWhenAvailable(
+    page,
+    page.getByTestId('session-create-browser-context-id'),
+    browserContext.id,
+    options,
+  );
+}
+
+async function createBrowserContextThroughUi(page, options) {
+  const name = `Admin smoke context ${Date.now()}`;
+  await page.getByTestId('session-create-context-name').fill(name);
+  await page.getByTestId('session-create-context-labels').fill('suite=admin-session-configurator-smoke');
+  await page.getByTestId('session-create-context-create').click();
+  await poll(
+    'browser context quick-create selection',
+    async () => ({
+      mode: await page.getByTestId('session-create-browser-context-mode').inputValue(),
+      contextId: await page.getByTestId('session-create-browser-context-id').inputValue().catch(() => ''),
+    }),
+    (value) => value.mode === 'reusable' && Boolean(value.contextId),
+    options.connectTimeoutMs,
+    100,
+  );
+  const created = await fetchBrowserContextByName(page, options, name);
+  if (!created) {
+    throw new Error(`Browser context quick-create did not create ${name}.`);
+  }
+  return created;
+}
+
+async function fetchBrowserContextByName(page, options, name) {
+  const accessToken = await getAdminAccessToken(page);
+  const response = await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return response.contexts?.find((context) => context.name === name) ?? null;
+}
+
 async function selectOptionWhenAvailable(page, selector, value, options) {
   await selector.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await poll(
@@ -273,6 +363,23 @@ async function cleanupCreatedSession(page, options, sessionId, log) {
     return;
   }
   await deleteSession(accessToken, options, sessionId);
+}
+
+async function cleanupCreatedBrowserContext(page, options, contextId, log) {
+  if (!contextId) {
+    return;
+  }
+  const accessToken = await getAdminAccessToken(page).catch(() => '');
+  if (!accessToken) {
+    log(`Skipped cleanup for browser context ${contextId}; no admin access token is available.`);
+    return;
+  }
+  await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts/${contextId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  }).catch((error) => {
+    log(`Browser context cleanup for ${contextId} failed: ${error.message}`);
+  });
 }
 
 async function waitForSessionDetailUrl(page, options) {

@@ -1,4 +1,5 @@
 import type {
+  BrowserContextResource,
   SessionResource,
   SessionStopEligibility,
   SessionTemplateResource,
@@ -15,6 +16,8 @@ export type SessionListItemViewModel = {
   readonly updatedAt: string;
   readonly template: string;
   readonly templateId: string | null;
+  readonly browserContext: string;
+  readonly browserContextId: string | null;
   readonly mcpDelegation: string;
   readonly labels: string;
 };
@@ -66,6 +69,7 @@ export class SessionViewModelBuilder {
   static list(input: {
     readonly sessions: readonly SessionResource[];
     readonly sessionTemplates?: readonly SessionTemplateResource[];
+    readonly browserContexts?: readonly BrowserContextResource[];
     readonly selectedSessionId: string | null;
     readonly authenticated: boolean;
     readonly loading: boolean;
@@ -73,9 +77,10 @@ export class SessionViewModelBuilder {
   }): SessionListPanelViewModel {
     const selectedSession = input.sessions.find((session) => session.id === input.selectedSessionId) ?? null;
     const templateLookup = templateLookupFrom(input.sessionTemplates ?? []);
+    const browserContextLookup = browserContextLookupFrom(input.browserContexts ?? []);
     return {
-      sessions: input.sessions.map((session) => toListItem(session, templateLookup)),
-      selectedSession: selectedSession ? toSelectedSession(selectedSession, templateLookup) : null,
+      sessions: input.sessions.map((session) => toListItem(session, templateLookup, browserContextLookup)),
+      selectedSession: selectedSession ? toSelectedSession(selectedSession, templateLookup, browserContextLookup) : null,
       selectedSessionId: input.selectedSessionId,
       authenticated: input.authenticated,
       loading: input.loading,
@@ -86,6 +91,7 @@ export class SessionViewModelBuilder {
   static detail(input: {
     readonly session: SessionResource | null;
     readonly sessionTemplates?: readonly SessionTemplateResource[];
+    readonly browserContexts?: readonly BrowserContextResource[];
     readonly status?: SessionStatus | null;
     readonly connected: boolean;
     readonly loading: boolean;
@@ -110,6 +116,7 @@ export class SessionViewModelBuilder {
     }
     const status = input.status ?? null;
     const templateLookup = templateLookupFrom(input.sessionTemplates ?? []);
+    const browserContextLookup = browserContextLookupFrom(input.browserContexts ?? []);
     const stopEligibility = status?.stop_eligibility ?? session.status.stop_eligibility;
     const connectionCount = status?.connection_counts.total_clients
       ?? session.status.connection_counts.total_clients;
@@ -122,6 +129,11 @@ export class SessionViewModelBuilder {
           label: 'template',
           value: templateLabel(session, templateLookup),
           testId: 'session-template',
+        },
+        {
+          label: 'browser context',
+          value: browserContextLabel(session, browserContextLookup),
+          testId: 'session-browser-context',
         },
         { label: 'owner', value: session.owner_mode, testId: 'session-owner-mode' },
         { label: 'idle override', value: session.idle_timeout_sec?.toString() ?? 'default', testId: 'session-idle-timeout' },
@@ -165,6 +177,7 @@ export class SessionViewModelBuilder {
 function toListItem(
   session: SessionResource,
   templates: ReadonlyMap<string, SessionTemplateResource>,
+  browserContexts: ReadonlyMap<string, BrowserContextResource>,
 ): SessionListItemViewModel {
   return {
     id: session.id,
@@ -176,6 +189,8 @@ function toListItem(
     updatedAt: session.updated_at,
     template: templateLabel(session, templates),
     templateId: session.template_id ?? null,
+    browserContext: browserContextLabel(session, browserContexts),
+    browserContextId: session.browser_context?.context_id ?? null,
     mcpDelegation: mcpDelegationLabel(session),
     labels: labelSummary(session.labels ?? {}),
   };
@@ -184,9 +199,10 @@ function toListItem(
 function toSelectedSession(
   session: SessionResource,
   templates: ReadonlyMap<string, SessionTemplateResource>,
+  browserContexts: ReadonlyMap<string, BrowserContextResource>,
 ): SelectedSessionViewModel {
   return {
-    ...toListItem(session, templates),
+    ...toListItem(session, templates, browserContexts),
     ownerMode: session.owner_mode,
     runtimeBinding: session.runtime.binding,
     canJoin: canConnectSession(session.state),
@@ -269,6 +285,12 @@ function templateLookupFrom(
   return new Map(templates.map((template) => [template.id, template]));
 }
 
+function browserContextLookupFrom(
+  browserContexts: readonly BrowserContextResource[],
+): ReadonlyMap<string, BrowserContextResource> {
+  return new Map(browserContexts.map((context) => [context.id, context]));
+}
+
 function templateLabel(
   session: SessionResource,
   templates: ReadonlyMap<string, SessionTemplateResource>,
@@ -279,6 +301,29 @@ function templateLabel(
   }
   const template = templates.get(templateId);
   return template ? `${template.name} (${shortId(template.id)})` : `Template ${shortId(templateId)}`;
+}
+
+function browserContextLabel(
+  session: SessionResource,
+  contexts: ReadonlyMap<string, BrowserContextResource>,
+): string {
+  const browserContext = session.browser_context ?? { mode: 'fresh', context_id: null };
+  if (browserContext.mode === 'fresh') {
+    return 'Fresh profile';
+  }
+  if (browserContext.mode === 'ephemeral') {
+    return 'Ephemeral profile';
+  }
+  const contextId = browserContext.context_id;
+  if (!contextId) {
+    return 'Reusable context without id';
+  }
+  const context = contexts.get(contextId);
+  if (!context) {
+    return `Context ${shortId(contextId)}`;
+  }
+  const stateSuffix = context.state === 'ready' ? '' : `, ${context.state}`;
+  return `${context.name} (${shortId(context.id)}${stateSuffix})`;
 }
 
 function shortId(value: string): string {

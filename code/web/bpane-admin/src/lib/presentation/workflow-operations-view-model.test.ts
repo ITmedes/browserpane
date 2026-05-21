@@ -176,6 +176,7 @@ describe('WorkflowOperationsViewModelBuilder', () => {
 const SESSION: SessionResource = {
   id: 'session-1',
   state: 'active',
+  browser_context: { mode: 'fresh', context_id: null },
   owner_mode: 'shared',
   connect: {
     gateway_url: 'https://localhost:4433',

@@ -8,7 +8,13 @@
     AdminWorkflowRunSnapshot,
   } from '../api/admin-event-snapshots';
   import type { ControlClient } from '../api/control-client';
-  import type { CreateSessionCommand, SessionResource, SessionTemplateResource } from '../api/control-types';
+  import type {
+    BrowserContextResource,
+    CreateBrowserContextCommand,
+    CreateSessionCommand,
+    SessionResource,
+    SessionTemplateResource,
+  } from '../api/control-types';
   import type { WorkflowClient } from '../api/workflow-client';
   import type { McpBridgeConfig } from '../auth/auth-config';
   import BrowserEmbedPanel from '../presentation/BrowserEmbedPanel.svelte';
@@ -46,11 +52,14 @@
   let liveConnection = $state<LiveBrowserSessionConnection | null>(null);
   let sessions = $state<readonly SessionResource[]>([]);
   let sessionTemplates = $state<readonly SessionTemplateResource[]>([]);
+  let browserContexts = $state<readonly BrowserContextResource[]>([]);
   let selectedSession = $state<SessionResource | null>(null);
   let sessionsLoading = $state(false);
   let sessionsError = $state<string | null>(null);
   let templatesLoading = $state(false);
+  let browserContextsLoading = $state(false);
   let templateError = $state<string | null>(null);
+  let browserContextError = $state<string | null>(null);
   let globalMessage = $state<AdminMessageFeedback | null>(null);
   let pendingSelectedSessionId = $state<string | null>(null);
   let browserConnecting = $state(false);
@@ -85,7 +94,7 @@
     sessionCount: sessions.length, fileCount: sessionFileCount, connected: browserConnected,
   }));
   const sessionListViewModel = $derived(SessionViewModelBuilder.list({
-    sessions, sessionTemplates, selectedSessionId: selectedSession?.id ?? null,
+    sessions, sessionTemplates, browserContexts, selectedSessionId: selectedSession?.id ?? null,
     authenticated: true, loading: sessionsLoading, error: sessionsError,
   }));
   $effect(() => {
@@ -117,6 +126,7 @@
     });
     void loadSessions();
     void loadSessionTemplates();
+    void loadBrowserContexts();
     return () => { subscription.close(); disconnectBrowser(false); };
   });
   async function loadSessionTemplates(showFeedback = false): Promise<void> {
@@ -136,6 +146,25 @@
       showGlobalMessage('warning', 'Template catalog unavailable', templateError);
     } finally {
       templatesLoading = false;
+    }
+  }
+  async function loadBrowserContexts(showFeedback = false): Promise<void> {
+    browserContextsLoading = true;
+    browserContextError = null;
+    try {
+      browserContexts = (await controlClient.listBrowserContexts()).contexts;
+      if (showFeedback) {
+        showGlobalMessage(
+          'success',
+          'Browser contexts refreshed',
+          `${browserContexts.length} context${browserContexts.length === 1 ? '' : 's'} refreshed.`,
+        );
+      }
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('warning', 'Browser context catalog unavailable', browserContextError);
+    } finally {
+      browserContextsLoading = false;
     }
   }
   async function loadSessions(showFeedback = false): Promise<void> {
@@ -165,12 +194,29 @@
       upsertSession(created);
       setSessionList((await controlClient.listSessions()).sessions, 'local');
       showGlobalMessage('success', 'Session created', `Created session ${shortAdminId(created.id)}.`);
+      void loadBrowserContexts(false);
       requestBrowserConnect();
     } catch (error) {
       sessionsError = errorMessage(error);
       showGlobalMessage('error', 'Session create failed', sessionsError);
     } finally {
       sessionsLoading = false;
+    }
+  }
+  async function createBrowserContext(command: CreateBrowserContextCommand): Promise<BrowserContextResource> {
+    browserContextsLoading = true;
+    browserContextError = null;
+    try {
+      const created = await controlClient.createBrowserContext(command);
+      browserContexts = [created, ...browserContexts.filter((context) => context.id !== created.id)];
+      showGlobalMessage('success', 'Browser context saved', `Saved reusable context ${shortAdminId(created.id)}.`);
+      return created;
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('error', 'Browser context save failed', browserContextError);
+      throw error;
+    } finally {
+      browserContextsLoading = false;
     }
   }
   async function refreshSelectedSession(options: { readonly showGlobalError?: boolean } = {}): Promise<void> {
@@ -366,9 +412,11 @@
     {#snippet admin()}
     <AdminWorkspaceTabs
       {controlClient} {workflowClient} {selectedSession} {sessionTemplates} {templatesLoading} {templateError} {mcpBridge} {liveConnection}
+      {browserContexts} {browserContextsLoading} {browserContextError}
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries} {globalMessage}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}
+      onCreateBrowserContext={createBrowserContext}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
       onReleaseSessionRuntime={() => runLifecycle('release')}
       onStopSession={() => runLifecycle('stop')} onKillSession={() => runLifecycle('kill')} onDisconnectEmbeddedBrowser={() => disconnectBrowser(false)}

@@ -9,6 +9,46 @@ export type SessionViewport = {
   readonly height: number;
 };
 
+export type BrowserContextState = 'ready' | 'deleted';
+
+export type BrowserContextPersistenceMode = 'reusable' | 'ephemeral';
+
+export type SessionBrowserContextMode = 'fresh' | 'ephemeral' | 'reusable';
+
+export type SessionBrowserContextResource = {
+  readonly mode: SessionBrowserContextMode;
+  readonly context_id?: string | null;
+};
+
+export type SessionBrowserContextCommand = {
+  readonly mode: SessionBrowserContextMode;
+  readonly context_id?: string | null;
+};
+
+export type BrowserContextResource = {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly labels: Readonly<Record<string, string>>;
+  readonly persistence_mode: BrowserContextPersistenceMode;
+  readonly state: BrowserContextState;
+  readonly created_at: string;
+  readonly updated_at: string;
+  readonly last_used_at?: string | null;
+  readonly deleted_at?: string | null;
+};
+
+export type BrowserContextListResponse = {
+  readonly contexts: readonly BrowserContextResource[];
+};
+
+export type CreateBrowserContextCommand = {
+  readonly name: string;
+  readonly description?: string | null;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly persistence_mode?: BrowserContextPersistenceMode;
+};
+
 export type SessionConnectInfo = {
   readonly gateway_url: string;
   readonly transport_path: string;
@@ -54,6 +94,7 @@ export type SessionResource = {
   readonly id: string;
   readonly state: string;
   readonly template_id?: string | null;
+  readonly browser_context: SessionBrowserContextResource;
   readonly owner_mode: string;
   readonly viewport?: SessionViewport | null;
   readonly idle_timeout_sec?: number | null;
@@ -109,6 +150,7 @@ export type SessionTemplateListResponse = {
 
 export type CreateSessionCommand = {
   readonly template_id?: string | null;
+  readonly browser_context?: SessionBrowserContextCommand;
   readonly owner_mode?: string;
   readonly idle_timeout_sec?: number;
   readonly labels?: Readonly<Record<string, string>>;

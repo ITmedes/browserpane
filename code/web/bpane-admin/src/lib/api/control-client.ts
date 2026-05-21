@@ -10,6 +10,9 @@ import {
   type FetchLike,
 } from './authenticated-api';
 import type {
+  BrowserContextListResponse,
+  BrowserContextResource,
+  CreateBrowserContextCommand,
   CreateSessionCommand,
   CreateFileWorkspaceCommand,
   CreateSessionFileBindingCommand,
@@ -71,6 +74,29 @@ export class ControlClient {
   async listSessionTemplates(): Promise<SessionTemplateListResponse> {
     const payload = await this.#request('GET', '/api/v1/session-templates');
     return ControlSessionMapper.toSessionTemplateList(payload);
+  }
+
+  async listBrowserContexts(): Promise<BrowserContextListResponse> {
+    const payload = await this.#request('GET', '/api/v1/browser-contexts');
+    return ControlSessionMapper.toBrowserContextList(payload);
+  }
+
+  async createBrowserContext(command: CreateBrowserContextCommand): Promise<BrowserContextResource> {
+    const payload = await this.#request('POST', '/api/v1/browser-contexts', {
+      ...command,
+      labels: command.labels ?? {},
+    });
+    return ControlSessionMapper.toBrowserContextResource(payload);
+  }
+
+  async getBrowserContext(contextId: string): Promise<BrowserContextResource> {
+    const payload = await this.#request('GET', `/api/v1/browser-contexts/${encodeURIComponent(contextId)}`);
+    return ControlSessionMapper.toBrowserContextResource(payload);
+  }
+
+  async deleteBrowserContext(contextId: string): Promise<BrowserContextResource> {
+    const payload = await this.#request('DELETE', `/api/v1/browser-contexts/${encodeURIComponent(contextId)}`);
+    return ControlSessionMapper.toBrowserContextResource(payload);
   }
 
   async createSession(command: CreateSessionCommand = {}): Promise<SessionResource> {
