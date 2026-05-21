@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use axum::body::Bytes;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::header::{CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
@@ -38,10 +38,12 @@ use crate::session_access::SessionAutomationAccessTokenClaims;
 use crate::session_control::{
     CompleteSessionRecordingRequest, CreateSessionRequest, FailSessionRecordingRequest,
     PersistCompletedSessionRecordingRequest, PersistSessionFileBindingRequest,
-    SessionLifecycleState, SessionListResponse, SessionOwnerMode, SessionRecordingFormat,
-    SessionRecordingListResponse, SessionRecordingMode, SessionRecordingPolicy,
-    SessionRecordingResource, SessionRecordingState, SessionRecordingTerminationReason,
-    SessionResource, SetAutomationDelegateRequest, StoredSession, StoredSessionRecording,
+    PersistSessionTemplateRequest, SessionLifecycleState, SessionListResponse, SessionOwnerMode,
+    SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
+    SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
+    SessionRecordingTerminationReason, SessionResource, SessionTemplateDefaults,
+    SessionTemplateListResponse, SessionTemplateResource, SetAutomationDelegateRequest,
+    StoredSession, StoredSessionRecording,
 };
 use crate::session_files::{
     SessionFileBindingListResponse, SessionFileBindingResource, SessionFileListResponse,
@@ -91,6 +93,7 @@ mod router;
 mod runtime_access;
 mod session_bindings;
 mod session_files;
+mod session_templates;
 mod sessions;
 mod types;
 mod workflow_definitions;

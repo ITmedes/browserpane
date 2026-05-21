@@ -23,7 +23,7 @@ use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectT
 use crate::session_control::{
     CreateSessionRequest, SessionConnectInfo, SessionLifecycleState, SessionOwnerMode,
     SessionRecordingFormat, SessionRecordingMode, SessionResource, SessionStatusSummary,
-    SessionStore,
+    SessionStore, SessionTemplateDefaults,
 };
 use crate::session_files::SessionFileBindingMode;
 use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
@@ -285,6 +285,17 @@ pub(super) struct CreateFileWorkspaceRequest {
     pub(super) description: Option<String>,
     #[serde(default)]
     pub(super) labels: HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpsertSessionTemplateRequest {
+    pub(super) name: String,
+    #[serde(default)]
+    pub(super) description: Option<String>,
+    #[serde(default)]
+    pub(super) labels: HashMap<String, String>,
+    #[serde(default)]
+    pub(super) defaults: SessionTemplateDefaults,
 }
 
 #[derive(Deserialize)]

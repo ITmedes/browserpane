@@ -8,6 +8,7 @@ mod file_workspaces;
 mod recordings;
 mod runtime_assignments;
 mod session_files;
+mod session_templates;
 mod sessions;
 mod workflow_definitions;
 mod workflow_events;
