@@ -3,6 +3,9 @@ mod recovery;
 mod resolve;
 mod session_files;
 
+#[cfg(test)]
+pub(in crate::runtime_manager) use session_files::parse_docker_size_bytes;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

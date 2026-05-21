@@ -5,6 +5,7 @@ use crate::runtime_manager::{
 };
 use crate::session_control::SessionStore;
 use crate::workspaces::WorkspaceFileStore;
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -82,6 +83,15 @@ impl SessionManager {
         context_id: Uuid,
     ) -> Result<(), SessionManagerError> {
         self.inner.delete_browser_context_data(context_id).await
+    }
+
+    pub async fn browser_context_profile_storage_bytes(
+        &self,
+        context_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, u64>, SessionManagerError> {
+        self.inner
+            .browser_context_profile_storage_bytes(context_ids)
+            .await
     }
 
     pub async fn mark_session_active(&self, session_id: Uuid) {

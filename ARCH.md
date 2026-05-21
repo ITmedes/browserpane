@@ -266,8 +266,8 @@ service.
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
   - `DELETE /api/v1/sessions/{id}` — safe-stop one owner-scoped session resource
   - `POST /api/v1/browser-contexts` — create an owner-scoped browser context catalog entry
-  - `GET /api/v1/browser-contexts` — list owner-scoped browser contexts with visible-session and active-runtime usage summary
-  - `GET /api/v1/browser-contexts/{id}` — fetch one browser context with visible-session and active-runtime usage summary
+  - `GET /api/v1/browser-contexts` — list owner-scoped browser contexts with visible-session, active-runtime, and optional profile-storage usage summary
+  - `GET /api/v1/browser-contexts/{id}` — fetch one browser context with visible-session, active-runtime, and optional profile-storage usage summary
   - `DELETE /api/v1/browser-contexts/{id}` — delete one browser context; docker-backed runtimes remove the context profile volume and reject active writers
   - `POST /api/v1/session-templates` — create a reusable owner-scoped session template
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
@@ -454,7 +454,7 @@ The default dev stack no longer uses a shared token file.
 - the admin console discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
-- after login, the admin console lists owner-scoped `/api/v1/sessions`, session templates, and browser contexts; it lets the user join an existing session, start a new one with optional template and reusable-context bindings, inspect API-backed reusable context references and active writer state in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
+- after login, the admin console lists owner-scoped `/api/v1/sessions`, session templates, and browser contexts; it lets the user join an existing session, start a new one with optional template and reusable-context bindings, inspect API-backed reusable context references, active writer state, and profile storage usage in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
 - docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
 - admin-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window

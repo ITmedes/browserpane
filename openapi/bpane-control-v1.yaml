@@ -4748,6 +4748,7 @@ components:
         - visible_session_count
         - active_runtime_session_count
         - active_runtime_session_id
+        - profile_storage_bytes
       properties:
         visible_session_count:
           type: integer
@@ -4761,6 +4762,11 @@ components:
         active_runtime_session_id:
           type: string
           format: uuid
+          nullable: true
+        profile_storage_bytes:
+          type: integer
+          format: int64
+          minimum: 0
           nullable: true
     BrowserContextListResponse:
       type: object

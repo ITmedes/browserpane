@@ -185,6 +185,10 @@ function toBrowserContextUsage(value: unknown): BrowserContextUsageResource | nu
     object.active_runtime_session_id,
     'browser context usage active_runtime_session_id',
   );
+  const profileStorageBytes = optionalNumber(
+    object.profile_storage_bytes,
+    'browser context usage profile_storage_bytes',
+  );
   return {
     visible_session_count: expectNumber(
       object.visible_session_count,
@@ -195,6 +199,7 @@ function toBrowserContextUsage(value: unknown): BrowserContextUsageResource | nu
       'browser context usage active_runtime_session_count',
     ),
     active_runtime_session_id: activeRuntimeSessionId ?? null,
+    profile_storage_bytes: profileStorageBytes ?? null,
   };
 }
 

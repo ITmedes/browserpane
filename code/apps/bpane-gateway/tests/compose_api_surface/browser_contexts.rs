@@ -251,6 +251,21 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
             "reusable browser context did not restore profile-backed state: {read_probe}"
         ));
     }
+    let storage_context = harness
+        .get_json(&format!("/api/v1/browser-contexts/{context_id}"))
+        .await?;
+    let storage_bytes = storage_context["usage"]["profile_storage_bytes"]
+        .as_u64()
+        .ok_or_else(|| {
+            anyhow!(
+                "browser context did not report docker profile storage bytes: {storage_context}"
+            )
+        })?;
+    if storage_bytes == 0 {
+        return Err(anyhow!(
+            "browser context profile storage bytes did not increase after browser use: {storage_context}"
+        ));
+    }
     let restored_deleted_session = harness
         .delete_json(&format!("/api/v1/sessions/{restored_session_id}"))
         .await?;

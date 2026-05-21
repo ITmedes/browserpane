@@ -187,6 +187,17 @@ async fn browser_context_usage_by_id(
     }
     let requested_context_ids = context_ids.iter().copied().collect::<HashSet<_>>();
     let mut usage_by_context = HashMap::new();
+    let storage_by_context = state
+        .session_manager
+        .browser_context_profile_storage_bytes(context_ids)
+        .await
+        .unwrap_or_else(|error| {
+            warn!(
+                error = %error,
+                "could not inspect browser context profile storage usage",
+            );
+            HashMap::new()
+        });
     let sessions = state
         .session_store
         .list_sessions_for_owner(principal)
@@ -219,6 +230,13 @@ async fn browser_context_usage_by_id(
             .or_insert_with(BrowserContextUsageResource::default);
         usage.active_runtime_session_count = 1;
         usage.active_runtime_session_id = Some(active_session_id);
+    }
+
+    for (context_id, storage_bytes) in storage_by_context {
+        let usage = usage_by_context
+            .entry(context_id)
+            .or_insert_with(BrowserContextUsageResource::default);
+        usage.profile_storage_bytes = Some(storage_bytes);
     }
 
     Ok(usage_by_context)

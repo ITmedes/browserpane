@@ -18,6 +18,7 @@ export type BrowserContextCatalogRowViewModel = {
   readonly activeSessionId: string | null;
   readonly sessionSummary: string;
   readonly activeRuntimeSummary: string;
+  readonly profileStorageSummary: string;
   readonly canDelete: boolean;
   readonly deleteHint: string;
 };
@@ -65,10 +66,11 @@ type ContextUsage = {
   readonly sessionCount: number;
   readonly activeSessionCount: number;
   readonly activeSessionId: string | null;
+  readonly profileStorageBytes: number | null;
 };
 
 function contextUsage(sessions: readonly SessionResource[]): ReadonlyMap<string, ContextUsage> {
-  const usage = new Map<string, { sessionCount: number; activeSessionCount: number; activeSessionId: string | null }>();
+  const usage = new Map<string, ContextUsage>();
   for (const session of sessions) {
     const contextId = session.browser_context?.mode === 'reusable'
       ? session.browser_context.context_id
@@ -76,13 +78,15 @@ function contextUsage(sessions: readonly SessionResource[]): ReadonlyMap<string,
     if (!contextId) {
       continue;
     }
-    const current = usage.get(contextId) ?? { sessionCount: 0, activeSessionCount: 0, activeSessionId: null };
-    current.sessionCount += 1;
-    if (session.status.runtime_state === 'running' || session.status.presence_state === 'connected') {
-      current.activeSessionCount += 1;
-      current.activeSessionId ??= session.id;
-    }
-    usage.set(contextId, current);
+    const current = usage.get(contextId) ?? emptyUsage();
+    const active = session.status.runtime_state === 'running' || session.status.presence_state === 'connected';
+    const next = {
+      ...current,
+      sessionCount: current.sessionCount + 1,
+      activeSessionCount: current.activeSessionCount + (active ? 1 : 0),
+      activeSessionId: current.activeSessionId ?? (active ? session.id : null),
+    };
+    usage.set(contextId, next);
   }
   return usage;
 }
@@ -93,6 +97,7 @@ function contextUsageForContext(context: BrowserContextResource, sessionUsage: C
         sessionCount: context.usage.visible_session_count,
         activeSessionCount: context.usage.active_runtime_session_count,
         activeSessionId: context.usage.active_runtime_session_id ?? null,
+        profileStorageBytes: context.usage.profile_storage_bytes ?? null,
       }
     : emptyUsage();
   if (!sessionUsage) {
@@ -102,11 +107,17 @@ function contextUsageForContext(context: BrowserContextResource, sessionUsage: C
     sessionCount: Math.max(apiUsage.sessionCount, sessionUsage.sessionCount),
     activeSessionCount: Math.max(apiUsage.activeSessionCount, sessionUsage.activeSessionCount),
     activeSessionId: apiUsage.activeSessionId ?? sessionUsage.activeSessionId,
+    profileStorageBytes: apiUsage.profileStorageBytes,
   };
 }
 
 function emptyUsage(): ContextUsage {
-  return { sessionCount: 0, activeSessionCount: 0, activeSessionId: null };
+  return {
+    sessionCount: 0,
+    activeSessionCount: 0,
+    activeSessionId: null,
+    profileStorageBytes: null,
+  };
 }
 
 function toRow(context: BrowserContextResource, usage: ContextUsage): BrowserContextCatalogRowViewModel {
@@ -132,6 +143,7 @@ function toRow(context: BrowserContextResource, usage: ContextUsage): BrowserCon
     sessionSummary: `${sessionCount} visible session${sessionCount === 1 ? '' : 's'}`
       + (activeSessionCount > 0 ? `, ${activeSessionCount} active runtime` : ''),
     activeRuntimeSummary: activeRuntimeSummary(activeSessionCount, activeSessionId),
+    profileStorageSummary: formatBytes(usage.profileStorageBytes),
     canDelete,
     deleteHint: deleteHint(context, sessionCount, activeSessionCount),
   };
@@ -168,6 +180,7 @@ function rowMatches(row: BrowserContextCatalogRowViewModel, normalized: string):
     row.state,
     row.sessionSummary,
     row.activeRuntimeSummary,
+    row.profileStorageSummary,
   ].some((value) => value.toLowerCase().includes(normalized));
 }
 
@@ -207,6 +220,27 @@ function activeRuntimeSummary(activeSessionCount: number, activeSessionId: strin
     return `${activeSessionCount} active runtime writer${activeSessionCount === 1 ? '' : 's'}`;
   }
   return 'none';
+}
+
+function formatBytes(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return 'unknown';
+  }
+  if (value < 1000) {
+    return `${value} B`;
+  }
+  const units = ['kB', 'MB', 'GB', 'TB'];
+  let scaled = value;
+  let unit = 'B';
+  for (const nextUnit of units) {
+    scaled /= 1000;
+    unit = nextUnit;
+    if (scaled < 1000) {
+      break;
+    }
+  }
+  const precision = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  return `${scaled.toFixed(precision)} ${unit}`;
 }
 
 function shortId(value: string): string {
