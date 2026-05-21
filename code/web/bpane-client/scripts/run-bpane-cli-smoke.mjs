@@ -35,6 +35,7 @@ async function run() {
   let accessToken = '';
   let sessionId = '';
   let contextId = '';
+  let clonedContextId = '';
   let configDir = '';
 
   try {
@@ -185,6 +186,29 @@ async function run() {
     const fetchedContext = runBpaneCli(['browser-context', 'get', contextId], cliEnv);
     if (fetchedContext.id !== contextId || fetchedContext.labels?.suite !== 'bpane-cli-smoke') {
       throw new Error(`CLI browser-context get returned unexpected context data: ${JSON.stringify(fetchedContext)}`);
+    }
+
+    const clonedContext = runBpaneCli([
+      'browser-context',
+      'clone',
+      contextId,
+      `support-profile-copy-${runLabel}`,
+      '--description',
+      'Operator CLI smoke context clone',
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--label',
+      'copy=sandbox',
+    ], cliEnv);
+    clonedContextId = clonedContext.id;
+    if (
+      !clonedContextId
+      || clonedContextId === contextId
+      || clonedContext.name !== `support-profile-copy-${runLabel}`
+      || clonedContext.labels?.copy !== 'sandbox'
+      || clonedContext.persistence_mode !== 'reusable'
+    ) {
+      throw new Error(`CLI browser-context clone returned an invalid context: ${JSON.stringify(clonedContext)}`);
     }
 
     const created = runBpaneCli([
@@ -347,6 +371,11 @@ async function run() {
       throw new Error(`CLI session cleanup confirm did not execute cleanup operations: ${JSON.stringify(cleanupConfirmed)}`);
     }
     sessionId = '';
+    const deletedCloneContext = runBpaneCli(['browser-context', 'delete', clonedContextId], cliEnv);
+    if (deletedCloneContext.id !== clonedContextId || deletedCloneContext.state !== 'deleted') {
+      throw new Error(`CLI browser-context delete did not soft-delete the cloned context: ${JSON.stringify(deletedCloneContext)}`);
+    }
+    clonedContextId = '';
     const deletedContext = runBpaneCli(['browser-context', 'delete', contextId], cliEnv);
     if (deletedContext.id !== contextId || deletedContext.state !== 'deleted') {
       throw new Error(`CLI browser-context delete did not soft-delete the context: ${JSON.stringify(deletedContext)}`);
@@ -355,6 +384,12 @@ async function run() {
 
     log('Operator CLI smoke passed.');
   } finally {
+    if (clonedContextId && accessToken) {
+      await fetch(`${apiOrigin(options)}/api/v1/browser-contexts/${clonedContextId}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${accessToken}` },
+      }).catch(() => undefined);
+    }
     if (contextId && accessToken) {
       await fetch(`${apiOrigin(options)}/api/v1/browser-contexts/${contextId}`, {
         method: 'DELETE',

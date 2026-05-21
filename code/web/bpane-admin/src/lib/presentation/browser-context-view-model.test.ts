@@ -18,7 +18,10 @@ describe('BrowserContextViewModelBuilder', () => {
     expect(viewModel.selectedContext?.retentionSummary).toBe('manual retention');
     expect(viewModel.selectedContext?.canDelete).toBe(false);
     expect(viewModel.selectedContext?.deleteHint).toContain('active sessions');
+    expect(viewModel.selectedContext?.canClone).toBe(false);
+    expect(viewModel.selectedContext?.cloneHint).toContain('active sessions');
     expect(viewModel.apiExample).toContain(`/api/v1/browser-contexts/${CONTEXT.id}`);
+    expect(viewModel.apiExample).toContain(`/api/v1/browser-contexts/${CONTEXT.id}/clone`);
     expect(viewModel.apiExample).toContain('"mode": "reusable"');
     expect(viewModel.secretWarning).toContain('credential bindings');
   });
@@ -32,6 +35,8 @@ describe('BrowserContextViewModelBuilder', () => {
 
     expect(viewModel.selectedContext?.canDelete).toBe(true);
     expect(viewModel.selectedContext?.deleteHint).toContain('Chromium profile data');
+    expect(viewModel.selectedContext?.canClone).toBe(true);
+    expect(viewModel.selectedContext?.cloneHint).toContain('copied metadata');
   });
 
   it('uses API usage when the session list is unavailable', () => {

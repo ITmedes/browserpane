@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Clipboard, Database, RefreshCw, Trash2 } from 'lucide-svelte';
-  import type { BrowserContextResource, SessionResource } from '../api/control-types';
+  import { Clipboard, Copy, Database, RefreshCw, Trash2 } from 'lucide-svelte';
+  import type { BrowserContextResource, CloneBrowserContextCommand, SessionResource } from '../api/control-types';
   import AdminMessage from './AdminMessage.svelte';
   import {
     BrowserContextViewModelBuilder,
@@ -12,9 +12,11 @@
     readonly sessions?: readonly SessionResource[];
     readonly loading?: boolean;
     readonly error?: string | null;
+    readonly cloningContextId?: string | null;
     readonly deletingContextId?: string | null;
     readonly selectedContextId?: string | null;
     readonly onRefresh: () => void;
+    readonly onCloneContext?: (contextId: string, command: CloneBrowserContextCommand) => Promise<BrowserContextResource | void> | BrowserContextResource | void;
     readonly onDeleteContext: (contextId: string) => void;
     readonly onSelectContextId?: (contextId: string) => void;
   };
@@ -24,9 +26,11 @@
     sessions = [],
     loading = false,
     error = null,
+    cloningContextId = null,
     deletingContextId = null,
     selectedContextId = undefined,
     onRefresh,
+    onCloneContext,
     onDeleteContext,
     onSelectContextId,
   }: BrowserContextCatalogPanelProps = $props();
@@ -34,6 +38,9 @@
   let search = $state('');
   let internalSelectedContextId = $state<string | null>(null);
   let copyStatus = $state<string | null>(null);
+  let cloneName = $state('');
+  let cloneStatus = $state<string | null>(null);
+  let cloneNameSeedContextId = $state<string | null>(null);
   const effectiveSelectedContextId = $derived(selectedContextId === undefined ? internalSelectedContextId : selectedContextId);
   const viewModel = $derived(BrowserContextViewModelBuilder.catalog({
     contexts,
@@ -54,10 +61,21 @@
     }
   });
 
+  $effect(() => {
+    const context = viewModel.selectedContext;
+    if (!context || cloneNameSeedContextId === context.id) {
+      return;
+    }
+    cloneNameSeedContextId = context.id;
+    cloneName = `${context.name}-copy`;
+    cloneStatus = null;
+  });
+
   function selectContext(contextId: string): void {
     internalSelectedContextId = contextId;
     onSelectContextId?.(contextId);
     copyStatus = null;
+    cloneStatus = null;
   }
 
   async function copyApiExample(): Promise<void> {
@@ -78,6 +96,21 @@
       return;
     }
     onDeleteContext(context.id);
+  }
+
+  async function cloneSelectedContext(): Promise<void> {
+    const context = viewModel.selectedContext;
+    const name = cloneName.trim();
+    if (!context?.canClone || !name || cloningContextId === context.id || loading || !onCloneContext) {
+      return;
+    }
+    cloneStatus = null;
+    try {
+      const cloned = await onCloneContext(context.id, { name });
+      cloneStatus = cloned?.id ? `Cloned context ${cloned.name}.` : 'Clone request submitted.';
+    } catch {
+      cloneStatus = 'Clone failed.';
+    }
   }
 
   function stateClass(row: BrowserContextCatalogRowViewModel): string {
@@ -210,6 +243,44 @@
             testId="browser-context-delete-hint"
             compact={true}
           />
+
+          <section class="grid min-w-0 gap-2 rounded-xl border border-admin-ink/10 bg-admin-field/68 p-3" aria-label="Clone browser context">
+            <div class="flex min-w-0 flex-wrap items-end gap-2">
+              <label class="grid min-w-[min(100%,220px)] flex-1 gap-1 text-sm font-bold text-admin-ink/72">
+                Clone name
+                <input
+                  class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-panel/78 px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+                  data-testid="browser-context-clone-name"
+                  bind:value={cloneName}
+                  disabled={!context.canClone || loading || cloningContextId === context.id || !onCloneContext}
+                />
+              </label>
+              <button
+                class="admin-button-ghost inline-flex items-center gap-2"
+                type="button"
+                data-testid="browser-context-clone"
+                disabled={!context.canClone || !cloneName.trim() || loading || cloningContextId === context.id || !onCloneContext}
+                onclick={() => void cloneSelectedContext()}
+              >
+                {#if cloningContextId === context.id}
+                  <RefreshCw class="animate-spin" size={15} aria-hidden="true" />
+                  Cloning
+                {:else}
+                  <Copy size={15} aria-hidden="true" />
+                  Clone
+                {/if}
+              </button>
+            </div>
+            <AdminMessage
+              variant={context.canClone ? 'info' : 'warning'}
+              message={context.cloneHint}
+              testId="browser-context-clone-hint"
+              compact={true}
+            />
+            {#if cloneStatus}
+              <AdminMessage variant="success" message={cloneStatus} testId="browser-context-clone-message" compact={true} />
+            {/if}
+          </section>
 
           <div class="flex flex-wrap gap-2">
             <button

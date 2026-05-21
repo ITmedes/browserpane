@@ -12,6 +12,10 @@ pub(super) fn browser_context_routes() -> Router<Arc<ApiState>> {
             post(create_browser_context).get(list_browser_contexts),
         )
         .route(
+            "/api/v1/browser-contexts/{context_id}/clone",
+            post(clone_browser_context),
+        )
+        .route(
             "/api/v1/browser-contexts/{context_id}",
             get(get_browser_context).delete(delete_browser_context),
         )
@@ -46,6 +50,7 @@ async fn create_browser_context(
         .create_browser_context(
             &principal,
             PersistBrowserContextRequest {
+                id: None,
                 name: request.name,
                 description: request.description,
                 labels: request.labels,
@@ -57,6 +62,116 @@ async fn create_browser_context(
         .await
         .map_err(map_session_store_error)?;
     Ok((StatusCode::CREATED, Json(context.to_resource())))
+}
+
+async fn clone_browser_context(
+    headers: HeaderMap,
+    Path(context_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<CloneBrowserContextRequest>,
+) -> Result<(StatusCode, Json<BrowserContextResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let source = state
+        .session_store
+        .get_browser_context_for_owner(&principal, context_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("browser context {context_id} not found"),
+                }),
+            )
+        })?;
+    if source.state != BrowserContextState::Ready {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!("browser context {context_id} is deleted and cannot be cloned"),
+            }),
+        ));
+    }
+    if source.persistence_mode != BrowserContextPersistenceMode::Reusable {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!("browser context {context_id} is not reusable and cannot be cloned"),
+            }),
+        ));
+    }
+    if let Some(active_session_id) = state
+        .session_manager
+        .active_browser_context_session_id(context_id)
+        .await
+    {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "browser context {context_id} is already used by active session {active_session_id}"
+                ),
+            }),
+        ));
+    }
+
+    let target_context_id = Uuid::now_v7();
+    let target_request = PersistBrowserContextRequest {
+        id: Some(target_context_id),
+        name: request.name,
+        description: request.description.or_else(|| source.description.clone()),
+        labels: request.labels.unwrap_or_else(|| source.labels.clone()),
+        persistence_mode: BrowserContextPersistenceMode::Reusable,
+        retention_sec: request.retention_sec.or(source.retention_sec),
+        max_profile_storage_bytes: request
+            .max_profile_storage_bytes
+            .or(source.max_profile_storage_bytes),
+    };
+    SessionStore::validate_browser_context_request(&target_request)
+        .map_err(map_session_store_error)?;
+
+    state
+        .session_manager
+        .clone_browser_context_data(source.id, target_context_id)
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: error.to_string(),
+                }),
+            )
+        })?;
+
+    let context = match state
+        .session_store
+        .create_browser_context(&principal, target_request)
+        .await
+    {
+        Ok(context) => context,
+        Err(error) => {
+            if let Err(cleanup_error) = state
+                .session_manager
+                .delete_browser_context_data(target_context_id)
+                .await
+            {
+                warn!(
+                    source_browser_context_id = %source.id,
+                    target_browser_context_id = %target_context_id,
+                    error = %cleanup_error,
+                    "failed to clean up cloned browser context data after metadata persistence failure",
+                );
+            }
+            return Err(map_session_store_error(error));
+        }
+    };
+
+    Ok((
+        StatusCode::CREATED,
+        Json(browser_context_resource_with_usage(&state, &principal, context).await?),
+    ))
 }
 
 async fn get_browser_context(

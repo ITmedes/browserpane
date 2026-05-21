@@ -373,6 +373,31 @@ impl DockerRuntimeManager {
 
         self.remove_browser_context_profile_volume(context_id).await
     }
+
+    pub(super) async fn clone_browser_context_data(
+        &self,
+        source_context_id: Uuid,
+        target_context_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        let active_context = {
+            let leases = self.leases.lock().await;
+            active_browser_context_session_id(&leases, source_context_id)
+                .map(|session_id| (source_context_id, session_id))
+                .or_else(|| {
+                    active_browser_context_session_id(&leases, target_context_id)
+                        .map(|session_id| (target_context_id, session_id))
+                })
+        };
+        if let Some((active_context_id, active_session_id)) = active_context {
+            return Err(RuntimeManagerError::BrowserContextInUse {
+                browser_context_id: active_context_id,
+                active_session_id,
+            });
+        }
+
+        self.clone_browser_context_profile_volume(source_context_id, target_context_id)
+            .await
+    }
 }
 
 impl DockerLeaseState {

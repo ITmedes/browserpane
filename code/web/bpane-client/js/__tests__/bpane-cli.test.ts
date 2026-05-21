@@ -443,6 +443,7 @@ describe('bpane operator CLI', () => {
     const createContextIo = createIo();
     const { calls, fetchImpl } = createFetch(
       jsonResponse({ id: 'context-1' }, 201),
+      jsonResponse({ id: 'context-2', name: 'support-profile-copy' }, 201),
       jsonResponse({ contexts: [{ id: 'context-1' }] }),
       jsonResponse({ id: 'context-1' }),
       jsonResponse({ id: 'context-1', state: 'deleted' }),
@@ -478,6 +479,29 @@ describe('bpane operator CLI', () => {
       max_profile_storage_bytes: 67108864,
     });
 
+    const cloneIo = createIo();
+    const cloneCode = await runBpaneCli(
+      [
+        'browser-context',
+        'clone',
+        'context-1',
+        'support-profile-copy',
+        '--label',
+        'copy=sandbox',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      cloneIo.io,
+      fetchImpl,
+    );
+    expect(cloneCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(cloneIo)).toEqual({ id: 'context-2', name: 'support-profile-copy' });
+    expect(calls[1].url).toBe('http://localhost:8080/api/v1/browser-contexts/context-1/clone');
+    expect(calls[1].init.method).toBe('POST');
+    expect(JSON.parse(calls[1].init.body)).toEqual({
+      name: 'support-profile-copy',
+      labels: { copy: 'sandbox' },
+    });
+
     const listIo = createIo();
     const listCode = await runBpaneCli(
       ['browser-context', 'list'],
@@ -508,6 +532,7 @@ describe('bpane operator CLI', () => {
 
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([
       ['http://localhost:8080/api/v1/browser-contexts', 'POST'],
+      ['http://localhost:8080/api/v1/browser-contexts/context-1/clone', 'POST'],
       ['http://localhost:8080/api/v1/browser-contexts', undefined],
       ['http://localhost:8080/api/v1/browser-contexts/context%2Fwith%20space', undefined],
       ['http://localhost:8080/api/v1/browser-contexts/context-1', 'DELETE'],
@@ -546,6 +571,16 @@ describe('bpane operator CLI', () => {
     );
     expect(invalidStorageLimitCode).toBe(EXIT_CODES.usage);
     expect(parseStderr(invalidStorageLimitIo).error).toContain('--max-profile-storage-bytes');
+
+    const missingCloneNameIo = createIo();
+    const missingCloneNameCode = await runBpaneCli(
+      ['browser-context', 'clone', 'context-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingCloneNameIo.io,
+      fetchImpl,
+    );
+    expect(missingCloneNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingCloneNameIo).error).toContain('Browser context clone requires');
 
     const missingContextIo = createIo();
     const missingContextCode = await runBpaneCli(

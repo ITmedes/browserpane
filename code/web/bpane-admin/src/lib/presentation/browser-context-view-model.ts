@@ -23,6 +23,8 @@ export type BrowserContextCatalogRowViewModel = {
   readonly retentionSummary: string;
   readonly canDelete: boolean;
   readonly deleteHint: string;
+  readonly canClone: boolean;
+  readonly cloneHint: string;
 };
 
 export type BrowserContextCatalogViewModel = {
@@ -131,6 +133,9 @@ function toRow(context: BrowserContextResource, usage: ContextUsage): BrowserCon
   const sessionCount = usage.sessionCount;
   const activeSessionId = usage.activeSessionId;
   const canDelete = context.state === 'ready' && sessionCount === 0 && activeSessionCount === 0;
+  const canClone = context.state === 'ready'
+    && context.persistence_mode === 'reusable'
+    && activeSessionCount === 0;
   return {
     id: context.id,
     shortId: shortId(context.id),
@@ -154,7 +159,22 @@ function toRow(context: BrowserContextResource, usage: ContextUsage): BrowserCon
     retentionSummary: retentionSummary(context),
     canDelete,
     deleteHint: deleteHint(context, sessionCount, activeSessionCount),
+    canClone,
+    cloneHint: cloneHint(context, activeSessionCount),
   };
+}
+
+function cloneHint(context: BrowserContextResource, activeSessionCount: number): string {
+  if (context.state === 'deleted') {
+    return 'Deleted contexts cannot be cloned.';
+  }
+  if (context.persistence_mode !== 'reusable') {
+    return 'Only reusable browser contexts can be cloned.';
+  }
+  if (activeSessionCount > 0) {
+    return 'Stop active sessions before cloning this context.';
+  }
+  return 'Creates a new reusable context with copied metadata and profile data when present.';
 }
 
 function deleteHint(
@@ -237,6 +257,12 @@ function profileStorageLimitSummary(
 function apiExample(contextId: string): string {
   return [
     `GET /api/v1/browser-contexts/${contextId}`,
+    [
+      `POST /api/v1/browser-contexts/${contextId}/clone`,
+      JSON.stringify({
+        name: 'support-profile-sandbox',
+      }, null, 2),
+    ].join('\n'),
     `DELETE /api/v1/browser-contexts/${contextId}`,
     [
       'POST /api/v1/sessions',

@@ -281,6 +281,7 @@ pub struct SessionBrowserContextResource {
 
 #[derive(Debug, Clone)]
 pub struct PersistBrowserContextRequest {
+    pub id: Option<Uuid>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,

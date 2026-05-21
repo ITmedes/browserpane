@@ -48,6 +48,15 @@ chmod 0770 \
   "$BPANE_SESSION_FILE_MOUNTS_DIR"
 "#;
 
+const CLONE_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
+set -eu
+mkdir -p /bpane-target
+find /bpane-target -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+cp -a /bpane-source/. /bpane-target/
+chown -R bpane:bpane /bpane-target
+chmod 0770 /bpane-target
+"#;
+
 #[derive(Deserialize)]
 struct DockerVolumeUsageEntry {
     #[serde(rename = "Name")]
@@ -182,6 +191,53 @@ impl DockerRuntimeManager {
             .await
     }
 
+    pub(super) async fn clone_browser_context_profile_volume(
+        &self,
+        source_context_id: Uuid,
+        target_context_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        let source_volume = self.browser_context_profile_volume_for_context(source_context_id);
+        let target_volume = self.browser_context_profile_volume_for_context(target_context_id);
+        if !self
+            .docker_volume_exists(&source_volume, "browser context profile")
+            .await?
+        {
+            return Ok(());
+        }
+        self.remove_browser_context_profile_volume(target_context_id)
+            .await?;
+
+        let output = Command::new(&self.config.docker_bin)
+            .arg("run")
+            .arg("--rm")
+            .arg("-v")
+            .arg(format!("{source_volume}:/bpane-source:ro"))
+            .arg("-v")
+            .arg(format!("{target_volume}:/bpane-target"))
+            .arg("--user")
+            .arg("0:0")
+            .arg("--entrypoint")
+            .arg("/bin/sh")
+            .arg(&self.config.image)
+            .arg("-ec")
+            .arg(CLONE_BROWSER_CONTEXT_PROFILE_SCRIPT)
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to clone docker browser context profile volume {source_volume} to {target_volume}: {error}"
+                ))
+            })?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to clone docker browser context profile volume {source_volume} to {target_volume}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+
     pub(in crate::runtime_manager) async fn browser_context_profile_storage_bytes(
         &self,
         context_ids: &[Uuid],
@@ -271,6 +327,38 @@ impl DockerRuntimeManager {
 
         Err(RuntimeManagerError::StartupFailed(format!(
             "failed to remove docker {label} volume {volume}: {}",
+            stderr.trim()
+        )))
+    }
+
+    async fn docker_volume_exists(
+        &self,
+        volume: &str,
+        label: &str,
+    ) -> Result<bool, RuntimeManagerError> {
+        let output = Command::new(&self.config.docker_bin)
+            .arg("volume")
+            .arg("inspect")
+            .arg(volume)
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to inspect docker {label} volume {volume}: {error}"
+                ))
+            })?;
+        if output.status.success() {
+            return Ok(true);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr_lower = stderr.to_ascii_lowercase();
+        if stderr_lower.contains("no such volume") || stderr_lower.contains("not found") {
+            return Ok(false);
+        }
+
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to inspect docker {label} volume {volume}: {}",
             stderr.trim()
         )))
     }

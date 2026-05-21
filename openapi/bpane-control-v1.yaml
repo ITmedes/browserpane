@@ -221,6 +221,37 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/browser-contexts/{context_id}/clone:
+    parameters:
+      - $ref: '#/components/parameters/BrowserContextId'
+    post:
+      tags: [Browser Contexts]
+      summary: Clone one owner-scoped reusable browser context
+      description: Copies owner-local metadata and docker-backed Chromium profile data into a new reusable context; refuses deleted, ephemeral, missing, or active-writer source contexts.
+      operationId: cloneBrowserContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloneBrowserContextRequest'
+      responses:
+        '201':
+          description: Cloned browser context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrowserContextResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/session-templates:
     get:
       tags: [Session Templates]
@@ -4695,6 +4726,30 @@ components:
           allOf:
             - $ref: '#/components/schemas/BrowserContextPersistenceMode'
           default: reusable
+        retention_sec:
+          type: integer
+          format: int32
+          minimum: 1
+          nullable: true
+        max_profile_storage_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+    CloneBrowserContextRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
         retention_sec:
           type: integer
           format: int32

@@ -12,6 +12,7 @@ import {
 import type {
   BrowserContextListResponse,
   BrowserContextResource,
+  CloneBrowserContextCommand,
   CreateBrowserContextCommand,
   CreateSessionCommand,
   CreateFileWorkspaceCommand,
@@ -91,6 +92,17 @@ export class ControlClient {
 
   async getBrowserContext(contextId: string): Promise<BrowserContextResource> {
     const payload = await this.#request('GET', `/api/v1/browser-contexts/${encodeURIComponent(contextId)}`);
+    return ControlSessionMapper.toBrowserContextResource(payload);
+  }
+
+  async cloneBrowserContext(
+    contextId: string,
+    command: CloneBrowserContextCommand,
+  ): Promise<BrowserContextResource> {
+    const payload = await this.#request('POST', `/api/v1/browser-contexts/${encodeURIComponent(contextId)}/clone`, {
+      ...command,
+      labels: command.labels ?? undefined,
+    });
     return ControlSessionMapper.toBrowserContextResource(payload);
   }
 

@@ -477,6 +477,7 @@ async fn docker_runtime_rejects_parallel_writer_for_reusable_browser_context() {
         .create_browser_context(
             &principal,
             PersistBrowserContextRequest {
+                id: None,
                 name: "authenticated".to_string(),
                 description: None,
                 labels: HashMap::new(),
@@ -559,6 +560,38 @@ async fn docker_runtime_rejects_context_data_delete_while_context_is_active() {
         error,
         RuntimeManagerError::BrowserContextInUse {
             browser_context_id: context_id,
+            active_session_id: session_id,
+        }
+    );
+}
+
+#[tokio::test]
+async fn docker_runtime_rejects_context_data_clone_while_source_is_active() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let source_context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    let target_context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf33").unwrap();
+    manager.leases.lock().await.insert(
+        session_id,
+        DockerLeaseState::Ready(RuntimeLease {
+            session_id,
+            agent_socket_path: manager.socket_path_for_session(session_id),
+            container_name: Some(manager.container_name_for_session(session_id)),
+            browser_context_id: Some(source_context_id),
+            discard_session_data_on_release: false,
+            idle_generation: 0,
+        }),
+    );
+
+    let error = manager
+        .clone_browser_context_data(source_context_id, target_context_id)
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RuntimeManagerError::BrowserContextInUse {
+            browser_context_id: source_context_id,
             active_session_id: session_id,
         }
     );

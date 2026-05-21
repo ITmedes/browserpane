@@ -131,7 +131,7 @@ impl BrowserContextRepository<'_> {
             .query_one(
                 &query,
                 &[
-                    &Uuid::now_v7(),
+                    &request.id.unwrap_or_else(Uuid::now_v7),
                     &principal.subject,
                     &principal.issuer,
                     &request.name,

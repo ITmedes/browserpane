@@ -124,6 +124,10 @@ describe('ControlClient', () => {
       retention_sec: 86400,
       max_profile_storage_bytes: 1048576,
     });
+    await client.cloneBrowserContext(BROWSER_CONTEXT.id, {
+      name: 'Support profile sandbox',
+      labels: { copy: 'sandbox' },
+    });
     await client.getBrowserContext('context/with space');
     await client.deleteBrowserContext(BROWSER_CONTEXT.id);
 
@@ -158,11 +162,22 @@ describe('ControlClient', () => {
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
+      new URL(`http://localhost:8932/api/v1/browser-contexts/${BROWSER_CONTEXT.id}/clone`),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Support profile sandbox',
+          labels: { copy: 'sandbox' },
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
       new URL('http://localhost:8932/api/v1/browser-contexts/context%2Fwith%20space'),
       expect.objectContaining({ method: 'GET' }),
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
-      3,
+      4,
       new URL(`http://localhost:8932/api/v1/browser-contexts/${BROWSER_CONTEXT.id}`),
       expect.objectContaining({ method: 'DELETE' }),
     );

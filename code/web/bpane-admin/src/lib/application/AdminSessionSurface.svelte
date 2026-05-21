@@ -10,6 +10,7 @@
   import type { ControlClient } from '../api/control-client';
   import type {
     BrowserContextResource,
+    CloneBrowserContextCommand,
     CreateBrowserContextCommand,
     CreateSessionCommand,
     SessionResource,
@@ -58,6 +59,7 @@
   let sessionsError = $state<string | null>(null);
   let templatesLoading = $state(false);
   let browserContextsLoading = $state(false);
+  let cloningBrowserContextId = $state<string | null>(null);
   let templateError = $state<string | null>(null);
   let browserContextError = $state<string | null>(null);
   let globalMessage = $state<AdminMessageFeedback | null>(null);
@@ -218,6 +220,22 @@
       throw error;
     } finally {
       browserContextsLoading = false;
+    }
+  }
+  async function cloneBrowserContext(contextId: string, command: CloneBrowserContextCommand): Promise<BrowserContextResource> {
+    cloningBrowserContextId = contextId;
+    browserContextError = null;
+    try {
+      const cloned = await controlClient.cloneBrowserContext(contextId, command);
+      browserContexts = [cloned, ...browserContexts.filter((context) => context.id !== cloned.id)];
+      showGlobalMessage('success', 'Browser context cloned', `Cloned context ${shortAdminId(contextId)} to ${shortAdminId(cloned.id)}.`);
+      return cloned;
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('error', 'Browser context clone failed', browserContextError);
+      throw error;
+    } finally {
+      cloningBrowserContextId = null;
     }
   }
   async function deleteBrowserContext(contextId: string): Promise<void> {
@@ -430,10 +448,12 @@
     <AdminWorkspaceTabs
       {controlClient} {workflowClient} {selectedSession} {sessionTemplates} {templatesLoading} {templateError} {mcpBridge} {liveConnection}
       {sessions} {browserContexts} {browserContextsLoading} {browserContextError}
+      cloningContextId={cloningBrowserContextId}
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries} {globalMessage}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}
       onCreateBrowserContext={createBrowserContext}
+      onCloneBrowserContext={cloneBrowserContext}
       onRefreshBrowserContexts={loadBrowserContexts}
       onDeleteBrowserContext={deleteBrowserContext}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}

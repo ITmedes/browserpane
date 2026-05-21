@@ -19,7 +19,7 @@ impl InMemorySessionStore {
             )));
         }
         let context = StoredBrowserContext {
-            id: Uuid::now_v7(),
+            id: request.id.unwrap_or_else(Uuid::now_v7),
             owner_subject: principal.subject.clone(),
             owner_issuer: principal.issuer.clone(),
             name: request.name,

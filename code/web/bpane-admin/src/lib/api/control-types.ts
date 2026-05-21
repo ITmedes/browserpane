@@ -63,6 +63,14 @@ export type CreateBrowserContextCommand = {
   readonly max_profile_storage_bytes?: number | null;
 };
 
+export type CloneBrowserContextCommand = {
+  readonly name: string;
+  readonly description?: string | null;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly retention_sec?: number | null;
+  readonly max_profile_storage_bytes?: number | null;
+};
+
 export type SessionConnectInfo = {
   readonly gateway_url: string;
   readonly transport_path: string;

@@ -144,6 +144,7 @@ mod tests {
             .create_browser_context(
                 &owner(),
                 PersistBrowserContextRequest {
+                    id: None,
                     name: format!("context-{}", uuid::Uuid::now_v7()),
                     description: None,
                     labels: HashMap::new(),

@@ -2,7 +2,7 @@
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
   import type { ControlClient } from '../api/control-client';
-  import type { BrowserContextResource, SessionResource } from '../api/control-types';
+  import type { BrowserContextResource, CloneBrowserContextCommand, SessionResource } from '../api/control-types';
   import AdminMessage from '../presentation/AdminMessage.svelte';
   import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import BrowserContextCatalogPanel from '../presentation/BrowserContextCatalogPanel.svelte';
@@ -15,6 +15,7 @@
   let contexts = $state<readonly BrowserContextResource[]>([]);
   let sessions = $state<readonly SessionResource[]>([]);
   let loading = $state(false);
+  let cloningContextId = $state<string | null>(null);
   let deletingContextId = $state<string | null>(null);
   let error = $state<string | null>(null);
   let actionFeedback = $state<AdminMessageFeedback | null>(null);
@@ -76,6 +77,36 @@
     }
   }
 
+  async function cloneBrowserContext(
+    contextId: string,
+    command: CloneBrowserContextCommand,
+  ): Promise<BrowserContextResource> {
+    cloningContextId = contextId;
+    error = null;
+    actionFeedback = null;
+    try {
+      const cloned = await controlClient.cloneBrowserContext(contextId, command);
+      contexts = [cloned, ...contexts.filter((context) => context.id !== cloned.id)];
+      actionFeedback = {
+        variant: 'success',
+        title: 'Browser context cloned',
+        message: `Cloned browser context ${cloned.name}.`,
+        testId: 'browser-context-route-message',
+      };
+      return cloned;
+    } catch (cloneError) {
+      actionFeedback = {
+        variant: 'error',
+        title: 'Browser context clone failed',
+        message: errorMessage(cloneError),
+        testId: 'browser-context-route-message',
+      };
+      throw cloneError;
+    } finally {
+      cloningContextId = null;
+    }
+  }
+
   function formatDate(value: string | null): string {
     return value ? new Date(value).toLocaleString() : 'not refreshed';
   }
@@ -128,8 +159,10 @@
       {sessions}
       {loading}
       {error}
+      {cloningContextId}
       {deletingContextId}
       onRefresh={() => void refreshCatalog()}
+      onCloneContext={(contextId, command) => cloneBrowserContext(contextId, command)}
       onDeleteContext={(contextId) => void deleteBrowserContext(contextId)}
     />
   </section>
