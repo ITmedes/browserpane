@@ -90,6 +90,7 @@ function usageText() {
     '  bpane session-template get <template-id> [options]',
     '  bpane session-template update <template-id> [options]',
     '  bpane browser-context create [context-name] [options]',
+    '  bpane browser-context clone <source-context-id> <target-context-name> [options]',
     '  bpane browser-context list [options]',
     '  bpane browser-context get <context-id> [options]',
     '  bpane browser-context delete <context-id> [options]',
@@ -752,7 +753,7 @@ function buildSessionTemplateRequest(options, fallbackName = null) {
   return body;
 }
 
-function buildBrowserContextRequest(options, fallbackName = null) {
+function buildBrowserContextRequest(options, fallbackName = null, commandLabel = 'create') {
   const rawBody = parseJsonOption(options, 'body-json');
   if (rawBody !== null) {
     return rawBody;
@@ -762,7 +763,7 @@ function buildBrowserContextRequest(options, fallbackName = null) {
   if (!name) {
     throw new CliError(
       'USAGE',
-      'Browser context create requires --name or a positional context name.',
+      `Browser context ${commandLabel} requires --name or a positional context name.`,
       EXIT_CODES.usage,
     );
   }
@@ -1431,6 +1432,18 @@ async function handleBrowserContextCommand(config, positionals, options) {
   }
   if (action === 'list' && positionals.length === 2) {
     return await requestGateway(config, '/api/v1/browser-contexts');
+  }
+  if (action === 'clone' && positionals.length <= 4) {
+    const contextId = positionals[2];
+    if (!contextId) {
+      throw new CliError('USAGE', 'browser-context clone requires a context id.', EXIT_CODES.usage);
+    }
+    const targetName = positionals[3] ?? null;
+    return await requestGateway(config, `/api/v1/browser-contexts/${encodeURIComponent(contextId)}/clone`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildBrowserContextRequest(options, targetName, 'clone')),
+    });
   }
   if (action === 'get') {
     const contextId = requiredBrowserContextId(positionals, 'browser-context get');

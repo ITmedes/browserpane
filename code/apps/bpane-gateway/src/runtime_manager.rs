@@ -330,6 +330,21 @@ impl SessionRuntimeManager {
         }
     }
 
+    pub async fn clone_browser_context_data(
+        &self,
+        source_context_id: Uuid,
+        target_context_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => Ok(()),
+            RuntimeBackend::Docker(manager) => {
+                manager
+                    .clone_browser_context_data(source_context_id, target_context_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn browser_context_profile_storage_bytes(
         &self,
         context_ids: &[Uuid],

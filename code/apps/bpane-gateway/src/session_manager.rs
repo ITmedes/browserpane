@@ -85,6 +85,16 @@ impl SessionManager {
         self.inner.delete_browser_context_data(context_id).await
     }
 
+    pub async fn clone_browser_context_data(
+        &self,
+        source_context_id: Uuid,
+        target_context_id: Uuid,
+    ) -> Result<(), SessionManagerError> {
+        self.inner
+            .clone_browser_context_data(source_context_id, target_context_id)
+            .await
+    }
+
     pub async fn browser_context_profile_storage_bytes(
         &self,
         context_ids: &[Uuid],

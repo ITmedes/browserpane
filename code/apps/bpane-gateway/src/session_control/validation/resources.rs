@@ -5,6 +5,11 @@ use super::*;
 pub(in crate::session_control) fn validate_browser_context_request(
     request: &PersistBrowserContextRequest,
 ) -> Result<(), SessionStoreError> {
+    if request.id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "browser context id must not be nil when provided".to_string(),
+        ));
+    }
     if request.name.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "browser context name must not be empty".to_string(),

@@ -285,6 +285,83 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         ));
     }
 
+    let cloned_context = harness
+        .post_json(
+            &format!("/api/v1/browser-contexts/{context_id}/clone"),
+            json!({
+                "name": harness.unique_name("compose-browser-context-clone"),
+                "description": "Compose e2e browser context clone",
+                "labels": label_map("browser-context-clone"),
+                "retention_sec": 43200,
+                "max_profile_storage_bytes": 10737418240_u64
+            }),
+        )
+        .await?;
+    let cloned_context_id = json_id(&cloned_context, "id")?;
+    if cloned_context_id == context_id
+        || cloned_context["persistence_mode"] != json!("reusable")
+        || cloned_context["retention_sec"] != json!(43200)
+        || cloned_context["max_profile_storage_bytes"] != json!(10737418240_u64)
+    {
+        return Err(anyhow!(
+            "browser context clone returned unexpected data: {cloned_context}"
+        ));
+    }
+
+    let cloned_session = harness
+        .post_json(
+            "/api/v1/sessions",
+            json!({
+                "browser_context": {
+                    "mode": "reusable",
+                    "context_id": cloned_context_id
+                },
+                "labels": {
+                    "suite": "browser-contexts-clone"
+                }
+            }),
+        )
+        .await?;
+    let cloned_session_id = json_id(&cloned_session, "id")?;
+    let cloned_runtime_access = harness
+        .post_json(
+            &format!("/api/v1/sessions/{cloned_session_id}/automation-access"),
+            json!({}),
+        )
+        .await?;
+    let cloned_cdp_endpoint = automation_cdp_endpoint(&cloned_runtime_access)?;
+    let clone_probe = run_profile_state_probe(
+        harness,
+        cloned_cdp_endpoint,
+        "get",
+        &profile_key,
+        &profile_value,
+        cookie_name,
+        &cookie_value,
+    )
+    .await?;
+    if clone_probe["localStorageValue"] != json!(profile_value) {
+        return Err(anyhow!(
+            "cloned browser context did not copy profile-backed state: {clone_probe}"
+        ));
+    }
+    let cloned_deleted_session = harness
+        .delete_json(&format!("/api/v1/sessions/{cloned_session_id}"))
+        .await?;
+    if cloned_deleted_session["state"] != json!("stopped") {
+        return Err(anyhow!(
+            "browser-context clone session cleanup did not stop"
+        ));
+    }
+    let deleted_cloned_context = harness
+        .delete_json(&format!("/api/v1/browser-contexts/{cloned_context_id}"))
+        .await?;
+    if deleted_cloned_context["state"] != json!("deleted") {
+        return Err(anyhow!(
+            "browser-context clone cleanup did not delete context: {deleted_cloned_context}"
+        ));
+    }
+
     let deleted_context = harness
         .delete_json(&format!("/api/v1/browser-contexts/{context_id}"))
         .await?;

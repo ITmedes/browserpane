@@ -313,6 +313,19 @@ pub(super) struct CreateBrowserContextRequest {
     pub(super) max_profile_storage_bytes: Option<u64>,
 }
 
+#[derive(Deserialize)]
+pub(super) struct CloneBrowserContextRequest {
+    pub(super) name: String,
+    #[serde(default)]
+    pub(super) description: Option<String>,
+    #[serde(default)]
+    pub(super) labels: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub(super) retention_sec: Option<u32>,
+    #[serde(default)]
+    pub(super) max_profile_storage_bytes: Option<u64>,
+}
+
 fn default_browser_context_persistence_mode() -> BrowserContextPersistenceMode {
     BrowserContextPersistenceMode::Reusable
 }

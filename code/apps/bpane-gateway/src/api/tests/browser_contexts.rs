@@ -74,6 +74,40 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert_eq!(fetched["usage"]["visible_session_count"], 0);
     assert!(fetched["usage"]["profile_storage_bytes"].is_null());
 
+    let clone_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/browser-contexts/{context_id}/clone"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "support-profile-sandbox",
+                        "description": "Sandbox copy",
+                        "labels": { "team": "support", "copy": "sandbox" },
+                        "retention_sec": 43200,
+                        "max_profile_storage_bytes": 2097152
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(clone_response.status(), StatusCode::CREATED);
+    let cloned_context = response_json(clone_response).await;
+    let cloned_context_id = cloned_context["id"].as_str().unwrap().to_string();
+    assert_ne!(cloned_context_id, context_id);
+    assert_eq!(cloned_context["name"], "support-profile-sandbox");
+    assert_eq!(cloned_context["description"], "Sandbox copy");
+    assert_eq!(cloned_context["labels"]["copy"], "sandbox");
+    assert_eq!(cloned_context["persistence_mode"], "reusable");
+    assert_eq!(cloned_context["retention_sec"], 43200);
+    assert_eq!(cloned_context["max_profile_storage_bytes"], 2097152);
+    assert_eq!(cloned_context["usage"]["visible_session_count"], 0);
+
     let session_response = app
         .clone()
         .oneshot(
@@ -113,16 +147,17 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
         .unwrap();
     assert_eq!(list_response.status(), StatusCode::OK);
     let list = response_json(list_response).await;
-    assert_eq!(list["contexts"].as_array().unwrap().len(), 1);
-    assert_eq!(list["contexts"][0]["id"], context_id);
-    assert_eq!(list["contexts"][0]["usage"]["visible_session_count"], 1);
-    assert_eq!(
-        list["contexts"][0]["usage"]["active_runtime_session_count"],
-        0
-    );
-    assert!(list["contexts"][0]["usage"]["active_runtime_session_id"].is_null());
-    assert!(list["contexts"][0]["usage"]["profile_storage_bytes"].is_null());
-    assert!(!list["contexts"][0]["last_used_at"].is_null());
+    let contexts = list["contexts"].as_array().unwrap();
+    assert_eq!(contexts.len(), 2);
+    let source_context = contexts
+        .iter()
+        .find(|context| context["id"] == context_id)
+        .unwrap();
+    assert_eq!(source_context["usage"]["visible_session_count"], 1);
+    assert_eq!(source_context["usage"]["active_runtime_session_count"], 0);
+    assert!(source_context["usage"]["active_runtime_session_id"].is_null());
+    assert!(source_context["usage"]["profile_storage_bytes"].is_null());
+    assert!(!source_context["last_used_at"].is_null());
 
     let delete_response = app
         .clone()
@@ -141,6 +176,21 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert_eq!(deleted["state"], "deleted");
     assert_eq!(deleted["usage"]["visible_session_count"], 1);
     assert!(!deleted["deleted_at"].is_null());
+
+    let deleted_clone_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/browser-contexts/{context_id}/clone"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "name": "deleted-copy" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(deleted_clone_response.status(), StatusCode::CONFLICT);
 
     let deleted_context_session = app
         .oneshot(
@@ -218,6 +268,23 @@ async fn rejects_invalid_browser_context_requests_and_bindings() {
         .await
         .unwrap();
     assert_eq!(missing_get.status(), StatusCode::NOT_FOUND);
+
+    let missing_clone = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/browser-contexts/{missing_context_id}/clone"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "name": "copy" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_clone.status(), StatusCode::NOT_FOUND);
 
     for body in [
         json!({ "browser_context": { "mode": "reusable" } }),

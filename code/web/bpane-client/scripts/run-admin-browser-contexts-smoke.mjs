@@ -27,6 +27,7 @@ async function run() {
   const page = await context.newPage();
   let referencedContext = null;
   let deletableContext = null;
+  let clonedContextId = '';
   let sessionId = '';
 
   try {
@@ -39,7 +40,7 @@ async function run() {
     sessionId = session.id;
 
     await verifyLiveCatalog(page, options, referencedContext, sessionId);
-    await verifyRouteCatalog(page, options, referencedContext, deletableContext);
+    clonedContextId = await verifyRouteCatalog(page, options, accessToken, referencedContext, deletableContext);
 
     const deleted = await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts/${deletableContext.id}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -51,6 +52,7 @@ async function run() {
     console.log(JSON.stringify({
       referencedContextId: referencedContext.id,
       deletedContextId: deletableContext.id,
+      clonedContextId,
       sessionId,
     }, null, 2));
   } finally {
@@ -66,6 +68,14 @@ async function run() {
         headers: { Authorization: `Bearer ${accessToken}` },
       }).catch((error) => {
         log(`Browser context cleanup for ${referencedContext.id} failed: ${error.message}`);
+      });
+    }
+    if (accessToken && clonedContextId) {
+      await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts/${clonedContextId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch((error) => {
+        log(`Browser context cleanup for clone ${clonedContextId} failed: ${error.message}`);
       });
     }
     await context.close();
@@ -119,7 +129,7 @@ async function verifyLiveCatalog(page, options, browserContext, sessionId) {
   }
 }
 
-async function verifyRouteCatalog(page, options, referencedContext, deletableContext) {
+async function verifyRouteCatalog(page, options, accessToken, referencedContext, deletableContext) {
   await page.goto(adminRouteUrl(options, 'browser-contexts'), { waitUntil: 'domcontentloaded' });
   await page.getByTestId('browser-context-route').waitFor({
     state: 'visible',
@@ -138,6 +148,28 @@ async function verifyRouteCatalog(page, options, referencedContext, deletableCon
   const deletableRow = page.locator(`[data-testid="browser-context-row"][data-context-id="${deletableContext.id}"]`);
   await deletableRow.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await deletableRow.click();
+  const cloneName = `${deletableContext.name} clone`;
+  await page.getByTestId('browser-context-clone-name').fill(cloneName);
+  await page.getByTestId('browser-context-clone').click();
+  await page.getByTestId('browser-context-clone-message').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  const listed = await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const cloned = listed.contexts?.find((context) => context.name === cloneName);
+  if (!cloned?.id || cloned.id === deletableContext.id) {
+    throw new Error(`Expected browser context clone ${cloneName}, got ${JSON.stringify(listed)}`);
+  }
+  await page.getByTestId('browser-context-search').fill(cloneName);
+  await page.locator(`[data-testid="browser-context-row"][data-context-id="${cloned.id}"]`).waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await page.getByTestId('browser-context-search').fill(deletableContext.name);
+  await deletableRow.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await deletableRow.click();
   await poll(
     'browser context delete enabled',
     async () => await page.getByTestId('browser-context-delete').isEnabled(),
@@ -153,6 +185,7 @@ async function verifyRouteCatalog(page, options, referencedContext, deletableCon
     options.connectTimeoutMs,
     100,
   );
+  return cloned.id;
 }
 
 async function createBrowserContext(accessToken, options, name) {

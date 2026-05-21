@@ -43,7 +43,7 @@ use crate::session_control::{
     PersistSessionTemplateRequest, SessionBrowserContextMode, SessionLifecycleState,
     SessionListResponse, SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse,
     SessionRecordingMode, SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
-    SessionRecordingTerminationReason, SessionResource, SessionTemplateDefaults,
+    SessionRecordingTerminationReason, SessionResource, SessionStore, SessionTemplateDefaults,
     SessionTemplateListResponse, SessionTemplateResource, SetAutomationDelegateRequest,
     StoredBrowserContext, StoredSession, StoredSessionRecording,
 };

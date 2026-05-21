@@ -1,6 +1,12 @@
 use super::*;
 
 impl SessionStore {
+    pub fn validate_browser_context_request(
+        request: &PersistBrowserContextRequest,
+    ) -> Result<(), SessionStoreError> {
+        validate_browser_context_request(request)
+    }
+
     pub async fn create_browser_context(
         &self,
         principal: &AuthenticatedPrincipal,

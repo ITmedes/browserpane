@@ -324,6 +324,10 @@ seconds, unless that interval is set to `0`; docker-backed cleanup removes the
 context profile volume and skips active runtime writers for a later pass. API
 clients and the admin UI use these fields to make the same lifecycle and cleanup
 decisions.
+Inactive reusable contexts can be cloned with
+`POST /api/v1/browser-contexts/{id}/clone`; docker-backed runtimes copy the
+source Chromium profile volume into a new context-scoped profile volume when the
+source volume exists, while static runtimes treat clone as metadata-only.
 Deleting a reusable context refuses active runtime writers and, for
 docker-backed runtimes, removes the context-scoped Chromium profile volume when
 no active writer exists. The admin create-session configurator can create
@@ -331,7 +335,8 @@ reusable context catalog entries, select a ready context for a new session,
 preview the resulting `browser_context` payload, and show the bound context in
 live session rows and the session inspector detail view. The admin operations
 overlay and `/admin/browser-contexts` route also expose a reusable-context
-catalog with session references, guarded delete, and copyable API examples.
+catalog with session references, guarded clone/delete, and copyable API
+examples.
 
 The admin console also uses a bearer-protected realtime WebSocket for
 owner-scoped snapshot updates:
@@ -484,6 +489,7 @@ Common browser-context operations:
 
 ```bash
 ./scripts/bpane browser-context create support-profile --label team=support --retention-sec 604800 --max-profile-storage-bytes 536870912
+./scripts/bpane browser-context clone <context-id> support-profile-sandbox --label copy=sandbox
 ./scripts/bpane browser-context list
 ./scripts/bpane browser-context get <context-id>
 ./scripts/bpane browser-context delete <context-id>
