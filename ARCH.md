@@ -265,6 +265,10 @@ service.
   - `GET /api/v1/sessions` — list owner-scoped sessions, with catalog filters for template id, lifecycle/runtime state, labels, integration context, limit, and offset
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
   - `DELETE /api/v1/sessions/{id}` — safe-stop one owner-scoped session resource
+  - `POST /api/v1/browser-contexts` — create an owner-scoped browser context catalog entry
+  - `GET /api/v1/browser-contexts` — list owner-scoped browser contexts
+  - `GET /api/v1/browser-contexts/{id}` — fetch one browser context
+  - `DELETE /api/v1/browser-contexts/{id}` — soft-delete one browser context
   - `POST /api/v1/session-templates` — create a reusable owner-scoped session template
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
   - `GET /api/v1/session-templates/{id}` — fetch one session template

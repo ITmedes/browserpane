@@ -34,6 +34,7 @@ async function run() {
   const page = await context.newPage();
   let accessToken = '';
   let sessionId = '';
+  let contextId = '';
   let configDir = '';
 
   try {
@@ -151,11 +152,37 @@ async function run() {
       throw new Error(`CLI session-template update did not increment the template version: ${JSON.stringify(updatedTemplate)}`);
     }
 
+    const browserContext = runBpaneCli([
+      'browser-context',
+      'create',
+      `support-profile-${runLabel}`,
+      '--description',
+      'Operator CLI smoke context',
+      '--label',
+      'suite=bpane-cli-smoke',
+    ], cliEnv);
+    contextId = browserContext.id;
+    if (!contextId || browserContext.persistence_mode !== 'reusable' || browserContext.state !== 'ready') {
+      throw new Error(`CLI browser-context create returned an invalid context: ${JSON.stringify(browserContext)}`);
+    }
+
+    const listedContexts = runBpaneCli(['browser-context', 'list'], cliEnv);
+    if (!Array.isArray(listedContexts.contexts) || !listedContexts.contexts.some((item) => item.id === contextId)) {
+      throw new Error(`CLI browser-context list did not include ${contextId}.`);
+    }
+
+    const fetchedContext = runBpaneCli(['browser-context', 'get', contextId], cliEnv);
+    if (fetchedContext.id !== contextId || fetchedContext.labels?.suite !== 'bpane-cli-smoke') {
+      throw new Error(`CLI browser-context get returned unexpected context data: ${JSON.stringify(fetchedContext)}`);
+    }
+
     const created = runBpaneCli([
       'session',
       'create',
       '--template-id',
       templateId,
+      '--browser-context-id',
+      contextId,
       '--label',
       'suite=bpane-cli-smoke',
       '--label',
@@ -169,6 +196,8 @@ async function run() {
     }
     if (
       created.template_id !== templateId
+      || created.browser_context?.mode !== 'reusable'
+      || created.browser_context?.context_id !== contextId
       || created.labels?.team !== 'support'
       || created.labels?.tier !== 'gold'
       || created.labels?.run_id !== runLabel
@@ -307,9 +336,20 @@ async function run() {
       throw new Error(`CLI session cleanup confirm did not execute cleanup operations: ${JSON.stringify(cleanupConfirmed)}`);
     }
     sessionId = '';
+    const deletedContext = runBpaneCli(['browser-context', 'delete', contextId], cliEnv);
+    if (deletedContext.id !== contextId || deletedContext.state !== 'deleted') {
+      throw new Error(`CLI browser-context delete did not soft-delete the context: ${JSON.stringify(deletedContext)}`);
+    }
+    contextId = '';
 
     log('Operator CLI smoke passed.');
   } finally {
+    if (contextId && accessToken) {
+      await fetch(`${apiOrigin(options)}/api/v1/browser-contexts/${contextId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch(() => {});
+    }
     if (sessionId && accessToken) {
       await clearMcpBridge(options).catch(() => {});
       await fetch(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/automation-owner`, {

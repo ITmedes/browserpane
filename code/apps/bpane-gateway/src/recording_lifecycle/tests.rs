@@ -53,6 +53,7 @@ async fn create_session_with_mode(
             &test_principal(),
             CreateSessionRequest {
                 template_id: None,
+                browser_context: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,

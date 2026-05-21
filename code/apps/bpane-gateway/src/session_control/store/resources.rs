@@ -1,6 +1,85 @@
 use super::*;
 
 impl SessionStore {
+    pub async fn create_browser_context(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistBrowserContextRequest,
+    ) -> Result<StoredBrowserContext, SessionStoreError> {
+        validate_browser_context_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_browser_context(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_browser_context(principal, request).await
+            }
+        }
+    }
+
+    pub async fn list_browser_contexts_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredBrowserContext>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_browser_contexts_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_browser_contexts_for_owner(principal).await
+            }
+        }
+    }
+
+    pub async fn get_browser_context_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredBrowserContext>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_browser_context_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_browser_context_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn mark_browser_context_used_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredBrowserContext>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .mark_browser_context_used_for_owner(principal, id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .mark_browser_context_used_for_owner(principal, id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn delete_browser_context_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredBrowserContext>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.delete_browser_context_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.delete_browser_context_for_owner(principal, id).await
+            }
+        }
+    }
+
     pub async fn create_session_template(
         &self,
         principal: &AuthenticatedPrincipal,

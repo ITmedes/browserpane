@@ -1,6 +1,7 @@
 use super::*;
 
 pub(in crate::session_control) struct InMemoryStoreState {
+    pub(in crate::session_control) browser_contexts: Mutex<Vec<StoredBrowserContext>>,
     pub(in crate::session_control) sessions: Mutex<Vec<StoredSession>>,
     pub(in crate::session_control) session_templates: Mutex<Vec<StoredSessionTemplate>>,
     pub(in crate::session_control) automation_tasks: Mutex<Vec<StoredAutomationTask>>,
@@ -37,6 +38,7 @@ pub(in crate::session_control) struct InMemoryStoreState {
 impl InMemoryStoreState {
     pub(super) fn new() -> Self {
         Self {
+            browser_contexts: Mutex::new(Vec::new()),
             sessions: Mutex::new(Vec::new()),
             session_templates: Mutex::new(Vec::new()),
             automation_tasks: Mutex::new(Vec::new()),

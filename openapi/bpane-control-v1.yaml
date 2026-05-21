@@ -5,7 +5,7 @@ info:
   description: >
     Frozen v1 owner-scoped BrowserPane control-plane contract. This document
     covers the canonical `/api/v1` surfaces for sessions, session templates,
-    automation tasks, recordings, workflows, reusable files, credentials,
+    browser contexts, automation tasks, recordings, workflows, reusable files, credentials,
     approved extensions, and admin realtime snapshots. Legacy global compatibility routes such as
     `/api/session/status` and `/api/session/mcp-owner` are intentionally excluded
     from this freeze and remain transitional.
@@ -18,6 +18,7 @@ tags:
   - name: Admin Events
   - name: Sessions
   - name: Session Templates
+  - name: Browser Contexts
   - name: Session Runtime
   - name: Session Recordings
   - name: Session Files
@@ -133,8 +134,88 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/browser-contexts:
+    get:
+      tags: [Browser Contexts]
+      summary: List owner-scoped browser contexts
+      operationId: listBrowserContexts
+      responses:
+        '200':
+          description: Owner-scoped browser context list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrowserContextListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Browser Contexts]
+      summary: Create an owner-scoped browser context catalog entry
+      operationId: createBrowserContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBrowserContextRequest'
+      responses:
+        '201':
+          description: Browser context created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrowserContextResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/browser-contexts/{context_id}:
+    parameters:
+      - $ref: '#/components/parameters/BrowserContextId'
+    get:
+      tags: [Browser Contexts]
+      summary: Fetch one owner-scoped browser context
+      operationId: getBrowserContext
+      responses:
+        '200':
+          description: Browser context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrowserContextResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    delete:
+      tags: [Browser Contexts]
+      summary: Soft-delete one owner-scoped browser context
+      operationId: deleteBrowserContext
+      responses:
+        '200':
+          description: Deleted browser context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrowserContextResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/session-templates:
@@ -2255,6 +2336,13 @@ components:
         format: uuid
     SessionTemplateId:
       name: template_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BrowserContextId:
+      name: context_id
       in: path
       required: true
       schema:
@@ -4546,12 +4634,123 @@ components:
           $ref: '#/components/schemas/SessionStopEligibility'
         idle:
           $ref: '#/components/schemas/SessionIdleStatus'
+    BrowserContextState:
+      type: string
+      enum:
+        - ready
+        - deleted
+    BrowserContextPersistenceMode:
+      type: string
+      enum:
+        - reusable
+        - ephemeral
+    SessionBrowserContextMode:
+      type: string
+      enum:
+        - fresh
+        - ephemeral
+        - reusable
+    SessionBrowserContextRequest:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode:
+          $ref: '#/components/schemas/SessionBrowserContextMode'
+        context_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required when mode is `reusable`; omitted for `fresh` and `ephemeral`.
+    SessionBrowserContextResource:
+      type: object
+      required:
+        - mode
+        - context_id
+      properties:
+        mode:
+          $ref: '#/components/schemas/SessionBrowserContextMode'
+        context_id:
+          type: string
+          format: uuid
+          nullable: true
+    CreateBrowserContextRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        persistence_mode:
+          allOf:
+            - $ref: '#/components/schemas/BrowserContextPersistenceMode'
+          default: reusable
+    BrowserContextResource:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - labels
+        - persistence_mode
+        - state
+        - created_at
+        - updated_at
+        - last_used_at
+        - deleted_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        persistence_mode:
+          $ref: '#/components/schemas/BrowserContextPersistenceMode'
+        state:
+          $ref: '#/components/schemas/BrowserContextState'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+    BrowserContextListResponse:
+      type: object
+      required: [contexts]
+      properties:
+        contexts:
+          type: array
+          items:
+            $ref: '#/components/schemas/BrowserContextResource'
     SessionResource:
       type: object
       required:
         - id
         - state
         - template_id
+        - browser_context
         - owner_mode
         - viewport
         - capabilities
@@ -4578,6 +4777,8 @@ components:
         template_id:
           type: string
           nullable: true
+        browser_context:
+          $ref: '#/components/schemas/SessionBrowserContextResource'
         owner_mode:
           $ref: '#/components/schemas/SessionOwnerMode'
         viewport:
@@ -4635,6 +4836,8 @@ components:
         template_id:
           type: string
           nullable: true
+        browser_context:
+          $ref: '#/components/schemas/SessionBrowserContextRequest'
         owner_mode:
           $ref: '#/components/schemas/SessionOwnerMode'
         viewport:

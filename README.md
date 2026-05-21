@@ -278,6 +278,10 @@ Canonical contract:
 - `GET /api/v1/sessions`
 - `GET /api/v1/sessions/{id}`
 - `DELETE /api/v1/sessions/{id}`
+- `POST /api/v1/browser-contexts`
+- `GET /api/v1/browser-contexts`
+- `GET /api/v1/browser-contexts/{id}`
+- `DELETE /api/v1/browser-contexts/{id}`
 - `POST /api/v1/session-templates`
 - `GET /api/v1/session-templates`
 - `GET /api/v1/session-templates/{id}`
@@ -297,6 +301,11 @@ explicit override, and the API payload preview shows the exact fields that will
 be sent.
 `GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
+Browser context resources let callers name owner-scoped Chromium profile
+contexts and bind new sessions with `browser_context.mode=reusable` plus a
+`context_id`. In this first control-plane slice the session records the
+selected context and rejects missing or deleted contexts; the follow-up runtime
+slice materializes reusable contexts as shared profile storage.
 
 The admin console also uses a bearer-protected realtime WebSocket for
 owner-scoped snapshot updates:
@@ -419,6 +428,7 @@ Common session operations:
 ./scripts/bpane session list --state stopped --label suite=smoke --limit 5
 ./scripts/bpane session list --template-id <template-id> --label team=support
 ./scripts/bpane session create --label purpose=manual-test
+./scripts/bpane session create --browser-context-id <context-id> --label purpose=context-test
 ./scripts/bpane session get <session-id>
 ./scripts/bpane session status <session-id>
 ./scripts/bpane session access-token <session-id>
@@ -442,6 +452,15 @@ Common session-template operations:
 ./scripts/bpane session-template get <template-id>
 ./scripts/bpane session-template update <template-id> --name customer-debug-session --default-label purpose=debug
 ./scripts/bpane session create --template-id <template-id> --label case=INC-1234
+```
+
+Common browser-context operations:
+
+```bash
+./scripts/bpane browser-context create support-profile --label team=support
+./scripts/bpane browser-context list
+./scripts/bpane browser-context get <context-id>
+./scripts/bpane browser-context delete <context-id>
 ```
 
 MCP delegation and recovery operations:

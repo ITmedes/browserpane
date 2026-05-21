@@ -10,6 +10,7 @@ async fn in_memory_store_tracks_automation_task_lifecycle_logs_and_events() {
             &owner,
             CreateSessionRequest {
                 template_id: None,
+                browser_context: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,

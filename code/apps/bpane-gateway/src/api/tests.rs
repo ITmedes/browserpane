@@ -43,6 +43,7 @@ mod support;
 pub(crate) use support::*;
 
 mod automation_tasks;
+mod browser_contexts;
 mod credential_bindings;
 mod extensions;
 mod file_workspaces;
