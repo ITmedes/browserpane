@@ -188,6 +188,24 @@ async function run() {
       throw new Error(`CLI browser-context get returned unexpected context data: ${JSON.stringify(fetchedContext)}`);
     }
 
+    const exportPath = path.join(configDir, 'browser-context-export.zip');
+    const exportedContext = runBpaneCli([
+      'browser-context',
+      'export',
+      contextId,
+      '--output',
+      exportPath,
+    ], cliEnv);
+    const exportBytes = await fs.readFile(exportPath);
+    if (
+      exportedContext.context_id !== contextId
+      || exportedContext.byte_count < 64
+      || exportBytes[0] !== 0x50
+      || exportBytes[1] !== 0x4b
+    ) {
+      throw new Error(`CLI browser-context export did not write a zip archive: ${JSON.stringify(exportedContext)}`);
+    }
+
     const clonedContext = runBpaneCli([
       'browser-context',
       'clone',

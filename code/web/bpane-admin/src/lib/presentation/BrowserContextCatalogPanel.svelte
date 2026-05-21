@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Clipboard, Copy, Database, RefreshCw, Trash2 } from 'lucide-svelte';
+  import { Clipboard, Copy, Database, Download, RefreshCw, Trash2 } from 'lucide-svelte';
   import type { BrowserContextResource, CloneBrowserContextCommand, SessionResource } from '../api/control-types';
   import AdminMessage from './AdminMessage.svelte';
   import {
@@ -13,10 +13,12 @@
     readonly loading?: boolean;
     readonly error?: string | null;
     readonly cloningContextId?: string | null;
+    readonly exportingContextId?: string | null;
     readonly deletingContextId?: string | null;
     readonly selectedContextId?: string | null;
     readonly onRefresh: () => void;
     readonly onCloneContext?: (contextId: string, command: CloneBrowserContextCommand) => Promise<BrowserContextResource | void> | BrowserContextResource | void;
+    readonly onExportContext?: (contextId: string) => Promise<void> | void;
     readonly onDeleteContext: (contextId: string) => void;
     readonly onSelectContextId?: (contextId: string) => void;
   };
@@ -27,10 +29,12 @@
     loading = false,
     error = null,
     cloningContextId = null,
+    exportingContextId = null,
     deletingContextId = null,
     selectedContextId = undefined,
     onRefresh,
     onCloneContext,
+    onExportContext,
     onDeleteContext,
     onSelectContextId,
   }: BrowserContextCatalogPanelProps = $props();
@@ -40,6 +44,7 @@
   let copyStatus = $state<string | null>(null);
   let cloneName = $state('');
   let cloneStatus = $state<string | null>(null);
+  let exportStatus = $state<string | null>(null);
   let cloneNameSeedContextId = $state<string | null>(null);
   const effectiveSelectedContextId = $derived(selectedContextId === undefined ? internalSelectedContextId : selectedContextId);
   const viewModel = $derived(BrowserContextViewModelBuilder.catalog({
@@ -69,6 +74,7 @@
     cloneNameSeedContextId = context.id;
     cloneName = `${context.name}-copy`;
     cloneStatus = null;
+    exportStatus = null;
   });
 
   function selectContext(contextId: string): void {
@@ -76,6 +82,7 @@
     onSelectContextId?.(contextId);
     copyStatus = null;
     cloneStatus = null;
+    exportStatus = null;
   }
 
   async function copyApiExample(): Promise<void> {
@@ -110,6 +117,20 @@
       cloneStatus = cloned?.id ? `Cloned context ${cloned.name}.` : 'Clone request submitted.';
     } catch {
       cloneStatus = 'Clone failed.';
+    }
+  }
+
+  async function exportSelectedContext(): Promise<void> {
+    const context = viewModel.selectedContext;
+    if (!context?.canExport || exportingContextId === context.id || loading || !onExportContext) {
+      return;
+    }
+    exportStatus = null;
+    try {
+      await onExportContext(context.id);
+      exportStatus = 'Export download started.';
+    } catch {
+      exportStatus = 'Export failed.';
     }
   }
 
@@ -293,6 +314,21 @@
               Copy API example
             </button>
             <button
+              class="admin-button-ghost inline-flex items-center gap-2"
+              type="button"
+              data-testid="browser-context-export"
+              disabled={!context.canExport || exportingContextId === context.id || loading || !onExportContext}
+              onclick={() => void exportSelectedContext()}
+            >
+              {#if exportingContextId === context.id}
+                <RefreshCw class="animate-spin" size={15} aria-hidden="true" />
+                Exporting
+              {:else}
+                <Download size={15} aria-hidden="true" />
+                Export
+              {/if}
+            </button>
+            <button
               class="admin-button-ghost inline-flex items-center gap-2 border-admin-danger/30 text-admin-danger"
               type="button"
               data-testid="browser-context-delete"
@@ -311,6 +347,15 @@
 
           {#if copyStatus}
             <AdminMessage variant="success" message={copyStatus} testId="browser-context-copy-message" compact={true} />
+          {/if}
+          <AdminMessage
+            variant={context.canExport ? 'info' : 'warning'}
+            message={context.exportHint}
+            testId="browser-context-export-hint"
+            compact={true}
+          />
+          {#if exportStatus}
+            <AdminMessage variant={exportStatus === 'Export failed.' ? 'error' : 'success'} message={exportStatus} testId="browser-context-export-message" compact={true} />
           {/if}
 
           <section class="rounded-xl border border-admin-ink/10 bg-admin-field/68 p-3" aria-label="Browser context API examples">

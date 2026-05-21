@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet};
+use std::io::{Cursor, Write};
 
 use axum::routing::{get, post};
+use serde::Serialize;
+use zip::write::SimpleFileOptions;
 
 use super::*;
 use crate::session_control::{BrowserContextUsageResource, StoredBrowserContext};
@@ -14,6 +17,10 @@ pub(super) fn browser_context_routes() -> Router<Arc<ApiState>> {
         .route(
             "/api/v1/browser-contexts/{context_id}/clone",
             post(clone_browser_context),
+        )
+        .route(
+            "/api/v1/browser-contexts/{context_id}/export",
+            get(export_browser_context),
         )
         .route(
             "/api/v1/browser-contexts/{context_id}",
@@ -174,6 +181,123 @@ async fn clone_browser_context(
     ))
 }
 
+async fn export_browser_context(
+    headers: HeaderMap,
+    Path(context_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let context = state
+        .session_store
+        .get_browser_context_for_owner(&principal, context_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("browser context {context_id} not found"),
+                }),
+            )
+        })?;
+    if context.state != BrowserContextState::Ready {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!("browser context {context_id} is deleted and cannot be exported"),
+            }),
+        ));
+    }
+    if context.persistence_mode != BrowserContextPersistenceMode::Reusable {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "browser context {context_id} is not reusable and cannot be exported"
+                ),
+            }),
+        ));
+    }
+    if let Some(active_session_id) = state
+        .session_manager
+        .active_browser_context_session_id(context_id)
+        .await
+    {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "browser context {context_id} is already used by active session {active_session_id}"
+                ),
+            }),
+        ));
+    }
+
+    let resource = browser_context_resource_with_usage(&state, &principal, context.clone()).await?;
+    let profile_archive = state
+        .session_manager
+        .export_browser_context_profile_archive(context.id)
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: error.to_string(),
+                }),
+            )
+        })?;
+    let manifest = BrowserContextExportManifest {
+        format_version: 1,
+        archive_type: "browser_context_export".to_string(),
+        exported_at: Utc::now(),
+        source_context: resource,
+        profile_archive_path: profile_archive
+            .as_ref()
+            .map(|_| "profile.tar.gz".to_string()),
+    };
+    let bytes = build_browser_context_export_archive(&manifest, profile_archive.as_deref())
+        .map_err(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("failed to build browser context export archive: {error}"),
+                }),
+            )
+        })?;
+    let filename = format!("browserpane-browser-context-{context_id}.zip");
+    let mut response = Response::new(axum::body::Body::from(bytes.clone()));
+    response
+        .headers_mut()
+        .insert(CONTENT_TYPE, HeaderValue::from_static("application/zip"));
+    response.headers_mut().insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&bytes.len().to_string()).map_err(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("failed to encode content length header: {error}"),
+                }),
+            )
+        })?,
+    );
+    response.headers_mut().insert(
+        CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename=\"{filename}\"")).map_err(
+            |error| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: format!("failed to encode content disposition header: {error}"),
+                    }),
+                )
+            },
+        )?,
+    );
+    Ok(response)
+}
+
 async fn get_browser_context(
     headers: HeaderMap,
     Path(context_id): Path<Uuid>,
@@ -299,6 +423,40 @@ fn browser_context_resource_with_usage_value(
     };
     resource.usage = usage;
     resource
+}
+
+#[derive(Serialize)]
+struct BrowserContextExportManifest {
+    format_version: u32,
+    archive_type: String,
+    exported_at: chrono::DateTime<Utc>,
+    source_context: BrowserContextResource,
+    profile_archive_path: Option<String>,
+}
+
+fn build_browser_context_export_archive(
+    manifest: &BrowserContextExportManifest,
+    profile_archive: Option<&[u8]>,
+) -> Result<Vec<u8>, String> {
+    let manifest_json = serde_json::to_vec_pretty(manifest).map_err(|error| error.to_string())?;
+    let cursor = Cursor::new(Vec::new());
+    let mut zip = zip::ZipWriter::new(cursor);
+    let file_options =
+        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+    zip.start_file("manifest.json", file_options)
+        .map_err(|error| error.to_string())?;
+    zip.write_all(&manifest_json)
+        .map_err(|error| error.to_string())?;
+    if let Some(profile_archive) = profile_archive {
+        zip.start_file("profile.tar.gz", file_options)
+            .map_err(|error| error.to_string())?;
+        zip.write_all(profile_archive)
+            .map_err(|error| error.to_string())?;
+    }
+
+    let cursor = zip.finish().map_err(|error| error.to_string())?;
+    Ok(cursor.into_inner())
 }
 
 async fn browser_context_usage_by_id(

@@ -44,6 +44,7 @@ const KNOWN_OPTIONS = new Set([
   'name',
   'older-than-sec',
   'offset',
+  'output',
   'owner-mode',
   'profile',
   'persistence-mode',
@@ -91,6 +92,7 @@ function usageText() {
     '  bpane session-template update <template-id> [options]',
     '  bpane browser-context create [context-name] [options]',
     '  bpane browser-context clone <source-context-id> <target-context-name> [options]',
+    '  bpane browser-context export <context-id> --output <path> [options]',
     '  bpane browser-context list [options]',
     '  bpane browser-context get <context-id> [options]',
     '  bpane browser-context delete <context-id> [options]',
@@ -130,6 +132,7 @@ function usageText() {
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
     '  --retention-sec <sec>     Browser context retention window in seconds.',
     '  --max-profile-storage-bytes <bytes> Browser context profile storage limit in bytes.',
+    '  --output <path>           File path for binary export/download commands.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
@@ -539,6 +542,38 @@ async function requestGateway(config, path, init = {}) {
     ...init,
     headers,
   });
+}
+
+async function requestGatewayBinary(config, path, init = {}) {
+  const headers = jsonHeaders(config, init.headers);
+  let response;
+  const url = joinUrl(config.baseUrl, path);
+  try {
+    response = await config.fetchImpl(url, {
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    throw new CliError(
+      'REQUEST_FAILED',
+      error instanceof Error ? error.message : String(error),
+      EXIT_CODES.api,
+      { url },
+    );
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!response.ok) {
+    throw new CliError(
+      'HTTP_ERROR',
+      `HTTP ${response.status}${buffer.length ? ` ${buffer.toString('utf8')}` : ''}`,
+      EXIT_CODES.api,
+      { status: response.status, body: buffer.toString('utf8') },
+    );
+  }
+  return {
+    bytes: buffer,
+    contentType: response.headers?.get?.('content-type') ?? null,
+  };
 }
 
 async function captureRequest(fn) {
@@ -1444,6 +1479,29 @@ async function handleBrowserContextCommand(config, positionals, options) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildBrowserContextRequest(options, targetName, 'clone')),
     });
+  }
+  if (action === 'export' && positionals.length === 3) {
+    const contextId = requiredBrowserContextId(positionals, 'browser-context export');
+    const outputPath = getOption(options, 'output');
+    if (!outputPath) {
+      throw new CliError('USAGE', 'browser-context export requires --output <path>.', EXIT_CODES.usage);
+    }
+    const { bytes, contentType } = await requestGatewayBinary(
+      config,
+      `/api/v1/browser-contexts/${encodeURIComponent(contextId)}/export`,
+      {
+        method: 'GET',
+        headers: { Accept: 'application/zip' },
+      },
+    );
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.writeFile(outputPath, bytes);
+    return {
+      context_id: contextId,
+      output_path: outputPath,
+      byte_count: bytes.length,
+      content_type: contentType,
+    };
   }
   if (action === 'get') {
     const contextId = requiredBrowserContextId(positionals, 'browser-context get');

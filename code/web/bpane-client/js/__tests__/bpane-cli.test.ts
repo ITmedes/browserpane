@@ -24,7 +24,18 @@ function jsonResponse(body: unknown, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers({ 'content-type': 'application/json' }),
     text: async () => body === null || body === undefined ? '' : JSON.stringify(body),
+  };
+}
+
+function binaryResponse(body: Buffer | string, contentType = 'application/octet-stream', status = 200) {
+  const bytes = Buffer.isBuffer(body) ? body : Buffer.from(body);
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers({ 'content-type': contentType }),
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
   };
 }
 
@@ -446,6 +457,7 @@ describe('bpane operator CLI', () => {
       jsonResponse({ id: 'context-2', name: 'support-profile-copy' }, 201),
       jsonResponse({ contexts: [{ id: 'context-1' }] }),
       jsonResponse({ id: 'context-1' }),
+      binaryResponse('PKbrowser-context-export', 'application/zip'),
       jsonResponse({ id: 'context-1', state: 'deleted' }),
     );
 
@@ -521,6 +533,25 @@ describe('bpane operator CLI', () => {
     );
     expect(getCode).toBe(EXIT_CODES.ok);
 
+    const exportDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-export-test-'));
+    const exportPath = path.join(exportDir, 'context.zip');
+    const exportIo = createIo();
+    const exportCode = await runBpaneCli(
+      ['browser-context', 'export', 'context-1', '--output', exportPath],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      exportIo.io,
+      fetchImpl,
+    );
+    expect(exportCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(exportIo)).toMatchObject({
+      context_id: 'context-1',
+      output_path: exportPath,
+      byte_count: 24,
+      content_type: 'application/zip',
+    });
+    expect(await fs.readFile(exportPath, 'utf8')).toBe('PKbrowser-context-export');
+    await fs.rm(exportDir, { recursive: true, force: true });
+
     const deleteIo = createIo();
     const deleteCode = await runBpaneCli(
       ['browser-context', 'delete', 'context-1'],
@@ -535,6 +566,7 @@ describe('bpane operator CLI', () => {
       ['http://localhost:8080/api/v1/browser-contexts/context-1/clone', 'POST'],
       ['http://localhost:8080/api/v1/browser-contexts', undefined],
       ['http://localhost:8080/api/v1/browser-contexts/context%2Fwith%20space', undefined],
+      ['http://localhost:8080/api/v1/browser-contexts/context-1/export', 'GET'],
       ['http://localhost:8080/api/v1/browser-contexts/context-1', 'DELETE'],
     ]);
   });
@@ -571,6 +603,16 @@ describe('bpane operator CLI', () => {
     );
     expect(invalidStorageLimitCode).toBe(EXIT_CODES.usage);
     expect(parseStderr(invalidStorageLimitIo).error).toContain('--max-profile-storage-bytes');
+
+    const missingExportOutputIo = createIo();
+    const missingExportOutputCode = await runBpaneCli(
+      ['browser-context', 'export', 'context-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingExportOutputIo.io,
+      fetchImpl,
+    );
+    expect(missingExportOutputCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingExportOutputIo).error).toContain('--output');
 
     const missingCloneNameIo = createIo();
     const missingCloneNameCode = await runBpaneCli(

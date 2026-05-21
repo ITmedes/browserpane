@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use super::*;
 
 #[tokio::test]
@@ -73,6 +75,41 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert_eq!(fetched["id"], context_id);
     assert_eq!(fetched["usage"]["visible_session_count"], 0);
     assert!(fetched["usage"]["profile_storage_bytes"].is_null());
+
+    let export_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/browser-contexts/{context_id}/export"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(export_response.status(), StatusCode::OK);
+    assert_eq!(
+        export_response
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "application/zip"
+    );
+    let export_bytes = response_bytes(export_response).await;
+    let cursor = Cursor::new(export_bytes);
+    let mut archive = ZipArchive::new(cursor).unwrap();
+    let mut manifest_file = archive.by_name("manifest.json").unwrap();
+    let mut manifest_bytes = Vec::new();
+    manifest_file.read_to_end(&mut manifest_bytes).unwrap();
+    drop(manifest_file);
+    let manifest: Value = serde_json::from_slice(&manifest_bytes).unwrap();
+    assert_eq!(manifest["format_version"], 1);
+    assert_eq!(manifest["archive_type"], "browser_context_export");
+    assert_eq!(manifest["source_context"]["id"], context_id);
+    assert!(manifest["profile_archive_path"].is_null());
+    assert!(archive.by_name("profile.tar.gz").is_err());
 
     let clone_response = app
         .clone()
@@ -191,6 +228,19 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
         .await
         .unwrap();
     assert_eq!(deleted_clone_response.status(), StatusCode::CONFLICT);
+
+    let deleted_export_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/browser-contexts/{context_id}/export"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(deleted_export_response.status(), StatusCode::CONFLICT);
 
     let deleted_context_session = app
         .oneshot(

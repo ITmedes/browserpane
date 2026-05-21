@@ -57,6 +57,11 @@ chown -R bpane:bpane /bpane-target
 chmod 0770 /bpane-target
 "#;
 
+const EXPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
+set -eu
+tar -C /bpane-profile -czf - .
+"#;
+
 #[derive(Deserialize)]
 struct DockerVolumeUsageEntry {
     #[serde(rename = "Name")]
@@ -234,6 +239,47 @@ impl DockerRuntimeManager {
 
         Err(RuntimeManagerError::StartupFailed(format!(
             "failed to clone docker browser context profile volume {source_volume} to {target_volume}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+
+    pub(super) async fn export_browser_context_profile_volume_archive(
+        &self,
+        context_id: Uuid,
+    ) -> Result<Option<Vec<u8>>, RuntimeManagerError> {
+        let volume = self.browser_context_profile_volume_for_context(context_id);
+        if !self
+            .docker_volume_exists(&volume, "browser context profile")
+            .await?
+        {
+            return Ok(None);
+        }
+
+        let output = Command::new(&self.config.docker_bin)
+            .arg("run")
+            .arg("--rm")
+            .arg("-v")
+            .arg(format!("{volume}:/bpane-profile:ro"))
+            .arg("--user")
+            .arg("0:0")
+            .arg("--entrypoint")
+            .arg("/bin/sh")
+            .arg(&self.config.image)
+            .arg("-ec")
+            .arg(EXPORT_BROWSER_CONTEXT_PROFILE_SCRIPT)
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to export docker browser context profile volume {volume}: {error}"
+                ))
+            })?;
+        if output.status.success() {
+            return Ok(Some(output.stdout));
+        }
+
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to export docker browser context profile volume {volume}: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         )))
     }
