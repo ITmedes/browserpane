@@ -234,13 +234,14 @@ rm -f \
 
 write_chromium_preferences() {
   local profile_dir="$1"
-  PROFILE_DIR="$profile_dir" BPANE_DOWNLOAD_DIR="$BPANE_DOWNLOAD_DIR" python3 - <<'PY'
+  PROFILE_DIR="$profile_dir" BPANE_DOWNLOAD_DIR="$BPANE_DOWNLOAD_DIR" BPANE_CHROMIUM_ACCEPT_LANG="${BPANE_CHROMIUM_ACCEPT_LANG:-}" python3 - <<'PY'
 import json
 import os
 from pathlib import Path
 
 profile_dir = Path(os.environ["PROFILE_DIR"])
 download_dir = os.environ["BPANE_DOWNLOAD_DIR"]
+accept_languages = os.environ.get("BPANE_CHROMIUM_ACCEPT_LANG", "").strip()
 preferences_path = profile_dir / "Default" / "Preferences"
 preferences_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -264,6 +265,9 @@ profile = data.setdefault("profile", {})
 default_content = profile.setdefault("default_content_setting_values", {})
 default_content["media_stream_camera"] = 1
 default_content["media_stream_mic"] = 1
+if accept_languages:
+    intl = data.setdefault("intl", {})
+    intl["accept_languages"] = accept_languages
 
 preferences_path.write_text(json.dumps(data, separators=(",", ":")))
 PY
@@ -326,6 +330,26 @@ if [ "${BPANE_CHROMIUM_DEBUG_ENABLE:-1}" != "0" ]; then
     "--remote-debugging-address=${BPANE_CHROMIUM_DEBUG_ADDRESS:-0.0.0.0}"
     "--remote-debugging-port=${BPANE_CHROMIUM_DEBUG_PORT:-9222}"
   )
+fi
+
+if [ -n "${BPANE_CHROMIUM_LANG:-}" ]; then
+  CHROMIUM_FLAGS+=("--lang=${BPANE_CHROMIUM_LANG}")
+fi
+
+if [ -n "${BPANE_CHROMIUM_ACCEPT_LANG:-}" ]; then
+  CHROMIUM_FLAGS+=("--accept-lang=${BPANE_CHROMIUM_ACCEPT_LANG}")
+fi
+
+if [ -n "${BPANE_CHROMIUM_USER_AGENT:-}" ]; then
+  CHROMIUM_FLAGS+=("--user-agent=${BPANE_CHROMIUM_USER_AGENT}")
+fi
+
+if [ -n "${BPANE_CHROMIUM_PROXY_SERVER:-}" ]; then
+  CHROMIUM_FLAGS+=("--proxy-server=${BPANE_CHROMIUM_PROXY_SERVER}")
+fi
+
+if [ -n "${BPANE_CHROMIUM_PROXY_BYPASS_LIST:-}" ]; then
+  CHROMIUM_FLAGS+=("--proxy-bypass-list=${BPANE_CHROMIUM_PROXY_BYPASS_LIST}")
 fi
 
 if [ -n "${BPANE_CHROMIUM_EXTRA_FLAGS:-}" ]; then
