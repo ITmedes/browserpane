@@ -14,12 +14,15 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
             json!({
                 "name": context_name,
                 "description": "Compose e2e browser context",
-                "labels": label_map("browser-contexts")
+                "labels": label_map("browser-contexts"),
+                "retention_sec": 86400
             }),
         )
         .await?;
     let context_id = json_id(&context, "id")?;
     if context["persistence_mode"] != json!("reusable")
+        || context["retention_sec"] != json!(86400)
+        || context["retention_expires_at"].is_null()
         || context["state"] != json!("ready")
         || !context["last_used_at"].is_null()
     {

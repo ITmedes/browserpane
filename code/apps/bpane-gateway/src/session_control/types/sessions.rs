@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -285,6 +285,7 @@ pub struct PersistBrowserContextRequest {
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
     pub persistence_mode: BrowserContextPersistenceMode,
+    pub retention_sec: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -296,6 +297,7 @@ pub struct StoredBrowserContext {
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
     pub persistence_mode: BrowserContextPersistenceMode,
+    pub retention_sec: Option<u32>,
     pub state: BrowserContextState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -310,6 +312,8 @@ pub struct BrowserContextResource {
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
     pub persistence_mode: BrowserContextPersistenceMode,
+    pub retention_sec: Option<u32>,
+    pub retention_expires_at: Option<DateTime<Utc>>,
     pub state: BrowserContextState,
     pub usage: BrowserContextUsageResource,
     pub created_at: DateTime<Utc>,
@@ -619,6 +623,8 @@ impl StoredBrowserContext {
             description: self.description.clone(),
             labels: self.labels.clone(),
             persistence_mode: self.persistence_mode,
+            retention_sec: self.retention_sec,
+            retention_expires_at: self.retention_expires_at(),
             state: self.state,
             usage: BrowserContextUsageResource::default(),
             created_at: self.created_at,
@@ -626,5 +632,12 @@ impl StoredBrowserContext {
             last_used_at: self.last_used_at,
             deleted_at: self.deleted_at,
         }
+    }
+
+    fn retention_expires_at(&self) -> Option<DateTime<Utc>> {
+        self.retention_sec.map(|retention_sec| {
+            let base = self.last_used_at.unwrap_or(self.created_at);
+            base + ChronoDuration::seconds(i64::from(retention_sec))
+        })
     }
 }

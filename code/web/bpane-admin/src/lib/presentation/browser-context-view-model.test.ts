@@ -14,6 +14,7 @@ describe('BrowserContextViewModelBuilder', () => {
     expect(viewModel.selectedContext?.name).toBe('Support profile');
     expect(viewModel.selectedContext?.sessionSummary).toBe('1 visible session, 1 active runtime');
     expect(viewModel.selectedContext?.profileStorageSummary).toBe('unknown');
+    expect(viewModel.selectedContext?.retentionSummary).toBe('manual retention');
     expect(viewModel.selectedContext?.canDelete).toBe(false);
     expect(viewModel.selectedContext?.deleteHint).toContain('active sessions');
     expect(viewModel.apiExample).toContain(`/api/v1/browser-contexts/${CONTEXT.id}`);
@@ -42,6 +43,8 @@ describe('BrowserContextViewModelBuilder', () => {
           active_runtime_session_id: SESSION.id,
           profile_storage_bytes: 1250000,
         },
+        retention_sec: 172800,
+        retention_expires_at: '2026-05-06T18:45:00Z',
       }],
       selectedContextId: CONTEXT.id,
     });
@@ -49,6 +52,7 @@ describe('BrowserContextViewModelBuilder', () => {
     expect(viewModel.selectedContext?.sessionSummary).toBe('2 visible sessions, 1 active runtime');
     expect(viewModel.selectedContext?.activeRuntimeSummary).toContain('019df4d2');
     expect(viewModel.selectedContext?.profileStorageSummary).toBe('1.25 MB');
+    expect(viewModel.selectedContext?.retentionSummary).toContain('2 days');
     expect(viewModel.selectedContext?.canDelete).toBe(false);
   });
 
@@ -71,6 +75,8 @@ const CONTEXT: BrowserContextResource = {
   description: 'Reusable support auth state',
   labels: { team: 'support' },
   persistence_mode: 'reusable',
+  retention_sec: null,
+  retention_expires_at: null,
   state: 'ready',
   created_at: '2026-05-04T18:30:00Z',
   updated_at: '2026-05-04T18:40:00Z',

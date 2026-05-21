@@ -31,6 +31,8 @@ export type BrowserContextResource = {
   readonly description?: string | null;
   readonly labels: Readonly<Record<string, string>>;
   readonly persistence_mode: BrowserContextPersistenceMode;
+  readonly retention_sec?: number | null;
+  readonly retention_expires_at?: string | null;
   readonly state: BrowserContextState;
   readonly usage?: BrowserContextUsageResource | null;
   readonly created_at: string;
@@ -55,6 +57,7 @@ export type CreateBrowserContextCommand = {
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly persistence_mode?: BrowserContextPersistenceMode;
+  readonly retention_sec?: number | null;
 };
 
 export type SessionConnectInfo = {

@@ -196,6 +196,7 @@
             {@render Fact('References', context.sessionSummary, 'browser-context-detail-references')}
             {@render Fact('Active writer', context.activeRuntimeSummary, 'browser-context-detail-active-writer')}
             {@render Fact('Profile storage', context.profileStorageSummary, 'browser-context-detail-storage')}
+            {@render Fact('Retention', context.retentionSummary, 'browser-context-detail-retention')}
             {@render Fact('Last used', context.lastUsedAt, 'browser-context-detail-last-used')}
             {@render Fact('Updated', context.updatedAt, 'browser-context-detail-updated')}
             {@render Fact('Created', context.createdAt, 'browser-context-detail-created')}

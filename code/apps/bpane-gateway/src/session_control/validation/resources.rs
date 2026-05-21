@@ -29,6 +29,13 @@ pub(in crate::session_control) fn validate_browser_context_request(
             ));
         }
     }
+    if let Some(retention_sec) = request.retention_sec {
+        if retention_sec == 0 {
+            return Err(SessionStoreError::InvalidRequest(
+                "browser context retention_sec must be greater than zero when provided".to_string(),
+            ));
+        }
+    }
     Ok(())
 }
 

@@ -48,6 +48,7 @@ const KNOWN_OPTIONS = new Set([
   'persistence-mode',
   'recording-mode',
   'recording-retention-sec',
+  'retention-sec',
   'save-token',
   'set-default',
   'runtime-state',
@@ -125,6 +126,7 @@ function usageText() {
     '  --name <name>             Session template name for create/update.',
     '  --description <text>      Session template description for create/update.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
+    '  --retention-sec <sec>     Browser context retention window in seconds.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
@@ -774,6 +776,10 @@ function buildBrowserContextRequest(options, fallbackName = null) {
   const persistenceMode = getOption(options, 'persistence-mode');
   if (persistenceMode) {
     body.persistence_mode = persistenceMode;
+  }
+  const retentionSec = parseIntegerOption(options, 'retention-sec');
+  if (retentionSec !== null) {
+    body.retention_sec = retentionSec;
   }
   return body;
 }

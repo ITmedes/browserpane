@@ -307,6 +307,8 @@ pub(super) struct CreateBrowserContextRequest {
     pub(super) labels: HashMap<String, String>,
     #[serde(default = "default_browser_context_persistence_mode")]
     pub(super) persistence_mode: BrowserContextPersistenceMode,
+    #[serde(default)]
+    pub(super) retention_sec: Option<u32>,
 }
 
 fn default_browser_context_persistence_mode() -> BrowserContextPersistenceMode {

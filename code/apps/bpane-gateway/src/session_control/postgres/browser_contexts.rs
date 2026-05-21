@@ -8,6 +8,7 @@ const BROWSER_CONTEXT_COLUMNS: &str = r#"
     description,
     labels,
     persistence_mode,
+    retention_sec,
     state,
     created_at,
     updated_at,
@@ -91,15 +92,17 @@ impl BrowserContextRepository<'_> {
                 description,
                 labels,
                 persistence_mode,
+                retention_sec,
                 state,
                 created_at,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, 'ready', $8, $8)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, 'ready', $9, $9)
             RETURNING
                 {BROWSER_CONTEXT_COLUMNS}
             "#
         );
+        let retention_sec = request.retention_sec.map(i64::from);
         let row = self
             .store
             .db
@@ -115,6 +118,7 @@ impl BrowserContextRepository<'_> {
                     &request.description,
                     &json_labels(&request.labels),
                     &request.persistence_mode.as_str(),
+                    &retention_sec,
                     &now,
                 ],
             )

@@ -68,6 +68,7 @@
   let browserContextId = $state(defaults.browserContextId ?? '');
   let browserContextName = $state('');
   let browserContextLabels = $state('');
+  let browserContextRetentionDays = $state('');
   let browserContextCreateError = $state<string | null>(null);
   let browserContextCreateTouched = $state(false);
   let creatingBrowserContext = $state(false);
@@ -79,8 +80,13 @@
   const browserContextCreateValidation = $derived(validateBrowserContextCreateForm({
     name: browserContextName,
     labels: browserContextLabels,
+    retentionDays: browserContextRetentionDays,
   }));
-  const browserContextCreateActive = $derived(Boolean(browserContextName.trim() || browserContextLabels.trim()));
+  const browserContextCreateActive = $derived(Boolean(
+    browserContextName.trim()
+    || browserContextLabels.trim()
+    || browserContextRetentionDays.trim(),
+  ));
   const validation = $derived(validateSessionCreateForm({
     templateId,
     ownerMode,
@@ -169,6 +175,7 @@
       const created = await onCreateBrowserContext(browserContextCreateValidation.command);
       browserContextName = '';
       browserContextLabels = '';
+      browserContextRetentionDays = '';
       browserContextCreateTouched = false;
       if (created?.id) {
         browserContextMode = 'reusable';
@@ -326,7 +333,7 @@
 
       {#if onCreateBrowserContext}
         <div class="grid min-w-0 gap-2 rounded-xl border border-admin-ink/10 bg-admin-panel/52 p-3">
-          <div class="grid min-w-0 gap-2 md:grid-cols-[minmax(160px,0.7fr)_minmax(180px,1fr)_auto] md:items-end">
+          <div class="grid min-w-0 gap-2 md:grid-cols-[minmax(160px,0.7fr)_minmax(180px,1fr)_minmax(130px,0.45fr)_auto] md:items-end">
             <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
               New context
               <input
@@ -347,6 +354,19 @@
                 placeholder="team=support, suite=smoke"
                 type="text"
                 bind:value={browserContextLabels}
+                oninput={() => { browserContextCreateTouched = true; }}
+                disabled={loading || disabled || creatingBrowserContext}
+              />
+            </label>
+            <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+              Retention days
+              <input
+                class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+                data-testid="session-create-context-retention-days"
+                inputmode="numeric"
+                placeholder="Manual"
+                type="text"
+                bind:value={browserContextRetentionDays}
                 oninput={() => { browserContextCreateTouched = true; }}
                 disabled={loading || disabled || creatingBrowserContext}
               />

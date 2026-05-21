@@ -26,6 +26,7 @@ impl InMemorySessionStore {
             description: request.description,
             labels: request.labels,
             persistence_mode: request.persistence_mode,
+            retention_sec: request.retention_sec,
             state: BrowserContextState::Ready,
             created_at: now,
             updated_at: now,

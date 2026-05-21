@@ -98,6 +98,7 @@ async function verifyLiveCatalog(page, options, browserContext, sessionId) {
     options.connectTimeoutMs,
     100,
   );
+  const retention = await page.getByTestId('browser-context-detail-retention').textContent();
   const apiExample = await page.getByTestId('browser-context-api-example').textContent();
   const deleteDisabled = await page.getByTestId('browser-context-delete').isDisabled();
   if (!detailName?.includes(browserContext.name)) {
@@ -105,6 +106,9 @@ async function verifyLiveCatalog(page, options, browserContext, sessionId) {
   }
   if (!apiExample?.includes(browserContext.id) || !apiExample.includes('POST /api/v1/sessions')) {
     throw new Error(`Expected live catalog API example for ${browserContext.id}, got ${apiExample}`);
+  }
+  if (!retention?.includes('7 days')) {
+    throw new Error(`Expected live catalog retention summary for ${browserContext.id}, got ${retention}`);
   }
   if (!deleteDisabled) {
     throw new Error('Expected delete to be disabled while a visible session references the context.');
@@ -158,6 +162,7 @@ async function createBrowserContext(accessToken, options, name) {
       name,
       description: 'Admin browser context catalog smoke',
       labels: { suite: 'admin-browser-contexts-smoke' },
+      retention_sec: 604800,
     }),
   });
 }
