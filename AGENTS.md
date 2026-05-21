@@ -109,6 +109,8 @@ Current product shape:
   - Local compose defaults to `docker_pool` for browser-session workers, with a shared socket-only runtime volume and per-session browser data volumes; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
+- `deploy/examples/egress-observer`
+  - Local egress observation fixtures. `compose.yml` runs a metadata-only Squid forward proxy. `compose.tls.yml` runs a mitmproxy TLS-intercept proxy using local CA material prepared by `prepare-mitmproxy-ca.sh`.
 
 ## Protocol and media facts
 
