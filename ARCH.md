@@ -279,6 +279,7 @@ service.
   - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, bypass, and custom CA metadata
   - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
+  - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
   - `POST /api/v1/sessions/{id}/release` — release the live runtime while preserving the session resource and profile
@@ -541,6 +542,8 @@ The supported local operator CLI lives in
   session create/list/get/status with network-identity options, access-ticket
   and automation-access minting, connection disconnect, stop, kill, and bounded
   cleanup.
+- `deploy/examples/egress-observer` provides a local Squid forward-proxy
+  example for access-log observation and session/container IP correlation.
 - MCP commands cover health, authorize, revoke, set-default, clear-default,
   doctor, preflight, and repair.
 - `mcp repair` applies missing automation delegation and bridge default-session

@@ -398,6 +398,42 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
             .map(String::as_str),
         Some("localhost;*.internal.example")
     );
+    let labels = launch_options
+        .labels
+        .iter()
+        .cloned()
+        .collect::<HashMap<_, _>>();
+    assert_eq!(
+        labels
+            .get("browserpane.egress_profile_id")
+            .map(String::as_str),
+        Some("019db438-c74a-7ef2-810c-792e298faf12")
+    );
+    assert_eq!(
+        labels
+            .get("browserpane.egress_proxy_configured")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        labels
+            .get("browserpane.egress_bypass_rule_count")
+            .map(String::as_str),
+        Some("2")
+    );
+    assert_eq!(
+        labels
+            .get("browserpane.egress_custom_ca_configured")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        launch_options
+            .egress_observer
+            .as_ref()
+            .map(|summary| (&summary.profile_id, summary.proxy_configured)),
+        Some((&profile_id, true))
+    );
     let geolocation: Value =
         serde_json::from_str(env.get("BPANE_SESSION_GEOLOCATION").unwrap()).unwrap();
     assert_eq!(geolocation["latitude"], json!(52.52));
@@ -408,6 +444,9 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         .unwrap();
     assert!(args.contains(&"BPANE_CHROMIUM_USER_AGENT=BrowserPane Test/1.0".to_string()));
     assert!(args.contains(&"BPANE_CHROMIUM_PROXY_SERVER=https://proxy.example:8443".to_string()));
+    assert!(args.contains(
+        &"browserpane.egress_profile_id=019db438-c74a-7ef2-810c-792e298faf12".to_string()
+    ));
 }
 
 #[test]

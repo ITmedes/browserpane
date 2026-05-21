@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use tokio::process::Command;
 use tokio::time::{sleep, Instant};
+use tracing::info;
 use uuid::Uuid;
 
 use super::*;
@@ -10,6 +11,17 @@ use super::*;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(in crate::runtime_manager) struct DockerNetworkIdentityLaunchOptions {
     pub(in crate::runtime_manager) env: Vec<(String, String)>,
+    pub(in crate::runtime_manager) labels: Vec<(String, String)>,
+    pub(in crate::runtime_manager) egress_observer: Option<DockerEgressObserverLaunchSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::runtime_manager) struct DockerEgressObserverLaunchSummary {
+    pub(in crate::runtime_manager) profile_id: Uuid,
+    pub(in crate::runtime_manager) profile_name: String,
+    pub(in crate::runtime_manager) proxy_configured: bool,
+    pub(in crate::runtime_manager) bypass_rule_count: usize,
+    pub(in crate::runtime_manager) custom_ca_configured: bool,
 }
 
 impl DockerRuntimeManager {
@@ -102,6 +114,10 @@ impl DockerRuntimeManager {
             args.push("-e".to_string());
             args.push(format!("{key}={value}"));
         }
+        for (key, value) in &launch_options.labels {
+            args.push("--label".to_string());
+            args.push(format!("{key}={value}"));
+        }
 
         if self.config.seccomp_unconfined {
             args.push("--security-opt".to_string());
@@ -121,6 +137,8 @@ impl DockerRuntimeManager {
         egress_profile: Option<&StoredEgressProfile>,
     ) -> DockerNetworkIdentityLaunchOptions {
         let mut env = Vec::new();
+        let mut labels = Vec::new();
+        let mut egress_observer = None;
         let identity = &session.network_identity;
 
         if let Some(locale) = identity.locale.as_deref().filter(|value| !value.is_empty()) {
@@ -184,6 +202,33 @@ impl DockerRuntimeManager {
         if let Some(profile) = egress_profile {
             push_env(&mut env, "BPANE_EGRESS_PROFILE_ID", profile.id.to_string());
             push_env(&mut env, "BPANE_EGRESS_PROFILE_NAME", profile.name.clone());
+            push_label(
+                &mut labels,
+                "browserpane.egress_profile_id",
+                profile.id.to_string(),
+            );
+            push_label(
+                &mut labels,
+                "browserpane.egress_proxy_configured",
+                profile.proxy.is_some().to_string(),
+            );
+            push_label(
+                &mut labels,
+                "browserpane.egress_bypass_rule_count",
+                profile.bypass_rules.len().to_string(),
+            );
+            push_label(
+                &mut labels,
+                "browserpane.egress_custom_ca_configured",
+                profile.custom_ca.is_some().to_string(),
+            );
+            egress_observer = Some(DockerEgressObserverLaunchSummary {
+                profile_id: profile.id,
+                profile_name: profile.name.clone(),
+                proxy_configured: profile.proxy.is_some(),
+                bypass_rule_count: profile.bypass_rules.len(),
+                custom_ca_configured: profile.custom_ca.is_some(),
+            });
             if let Some(proxy) = &profile.proxy {
                 push_env(&mut env, "BPANE_CHROMIUM_PROXY_SERVER", proxy.url.clone());
             }
@@ -203,7 +248,11 @@ impl DockerRuntimeManager {
             }
         }
 
-        DockerNetworkIdentityLaunchOptions { env }
+        DockerNetworkIdentityLaunchOptions {
+            env,
+            labels,
+            egress_observer,
+        }
     }
 
     async fn session_network_identity_launch_options(
@@ -270,6 +319,7 @@ impl DockerRuntimeManager {
         let launch_options = self
             .session_network_identity_launch_options(lease.session_id)
             .await?;
+        log_egress_observer_launch(lease, container_name, &launch_options);
         self.initialize_session_data_volume(lease).await?;
         self.materialize_session_file_bindings(lease.session_id)
             .await?;
@@ -424,6 +474,31 @@ impl DockerRuntimeManager {
 fn push_env(env: &mut Vec<(String, String)>, key: &str, value: String) {
     if !value.is_empty() {
         env.push((key.to_string(), value));
+    }
+}
+
+fn push_label(labels: &mut Vec<(String, String)>, key: &str, value: String) {
+    if !value.is_empty() {
+        labels.push((key.to_string(), value));
+    }
+}
+
+fn log_egress_observer_launch(
+    lease: &RuntimeLease,
+    container_name: &str,
+    launch_options: &DockerNetworkIdentityLaunchOptions,
+) {
+    if let Some(summary) = &launch_options.egress_observer {
+        info!(
+            session_id = %lease.session_id,
+            container_name = container_name,
+            egress_profile_id = %summary.profile_id,
+            egress_profile_name = %summary.profile_name,
+            egress_proxy_configured = summary.proxy_configured,
+            egress_bypass_rule_count = summary.bypass_rule_count,
+            egress_custom_ca_configured = summary.custom_ca_configured,
+            "starting docker runtime with egress observer correlation",
+        );
     }
 }
 
