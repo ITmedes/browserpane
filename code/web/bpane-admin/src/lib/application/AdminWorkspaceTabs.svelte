@@ -17,6 +17,7 @@
     CloneBrowserContextCommand,
     CreateBrowserContextCommand,
     CreateSessionCommand,
+    ImportBrowserContextCommand,
     SessionResource,
     SessionTemplateResource,
   } from '../api/control-types';
@@ -57,6 +58,7 @@
     readonly browserContextsLoading?: boolean;
     readonly cloningContextId?: string | null;
     readonly exportingContextId?: string | null;
+    readonly importingBrowserContext?: boolean;
     readonly templateError?: string | null;
     readonly browserContextError?: string | null;
     readonly mcpBridge: McpBridgeConfig | null;
@@ -76,6 +78,7 @@
     readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onCloneBrowserContext?: (contextId: string, command: CloneBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onExportBrowserContext?: (contextId: string) => Promise<void>;
+    readonly onImportBrowserContext?: (command: ImportBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onDeleteBrowserContext?: (contextId: string) => Promise<void>;
     readonly onJoinSelectedSession: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
@@ -201,9 +204,11 @@
           error={props.browserContextError ?? null}
           cloningContextId={props.cloningContextId ?? null}
           exportingContextId={props.exportingContextId ?? null}
+          importingContext={props.importingBrowserContext ?? false}
           onRefresh={() => void props.onRefreshBrowserContexts(true)}
           onCloneContext={(contextId, command) => props.onCloneBrowserContext?.(contextId, command)}
           onExportContext={(contextId) => props.onExportBrowserContext?.(contextId)}
+          onImportContext={(command) => props.onImportBrowserContext?.(command)}
           onDeleteContext={(contextId) => void props.onDeleteBrowserContext?.(contextId)}
         />
       {:else if activePanel.id === 'lifecycle'}

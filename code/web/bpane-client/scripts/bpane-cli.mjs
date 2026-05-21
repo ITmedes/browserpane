@@ -32,6 +32,7 @@ const KNOWN_OPTIONS = new Set([
   'height',
   'help',
   'idle-timeout-sec',
+  'input',
   'integration-json',
   'integration',
   'label',
@@ -93,6 +94,7 @@ function usageText() {
     '  bpane browser-context create [context-name] [options]',
     '  bpane browser-context clone <source-context-id> <target-context-name> [options]',
     '  bpane browser-context export <context-id> --output <path> [options]',
+    '  bpane browser-context import --input <zip> --name <target-context-name> [options]',
     '  bpane browser-context list [options]',
     '  bpane browser-context get <context-id> [options]',
     '  bpane browser-context delete <context-id> [options]',
@@ -131,8 +133,9 @@ function usageText() {
     '  --description <text>      Session template description for create/update.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
     '  --retention-sec <sec>     Browser context retention window in seconds.',
-    '  --max-profile-storage-bytes <bytes> Browser context profile storage limit in bytes.',
-    '  --output <path>           File path for binary export/download commands.',
+  '  --max-profile-storage-bytes <bytes> Browser context profile storage limit in bytes.',
+  '  --input <path>            File path for binary import/upload commands.',
+  '  --output <path>           File path for binary export/download commands.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
@@ -1502,6 +1505,43 @@ async function handleBrowserContextCommand(config, positionals, options) {
       byte_count: bytes.length,
       content_type: contentType,
     };
+  }
+  if (action === 'import' && positionals.length === 2) {
+    const inputPath = getOption(options, 'input');
+    if (!inputPath) {
+      throw new CliError('USAGE', 'browser-context import requires --input <path>.', EXIT_CODES.usage);
+    }
+    const name = getOption(options, 'name');
+    if (!name) {
+      throw new CliError('USAGE', 'browser-context import requires --name <target-context-name>.', EXIT_CODES.usage);
+    }
+    const archive = await fs.readFile(inputPath);
+    const headers = {
+      Accept: 'application/json',
+      'Content-Type': 'application/zip',
+      'x-bpane-browser-context-name': name,
+    };
+    const description = getOption(options, 'description');
+    if (description !== null) {
+      headers['x-bpane-browser-context-description'] = description;
+    }
+    const labels = parseKeyValueOptions(options, 'label');
+    if (Object.keys(labels).length) {
+      headers['x-bpane-browser-context-labels'] = JSON.stringify(labels);
+    }
+    const retentionSec = parseIntegerOption(options, 'retention-sec');
+    if (retentionSec !== null) {
+      headers['x-bpane-browser-context-retention-sec'] = String(retentionSec);
+    }
+    const maxProfileStorageBytes = parseIntegerOption(options, 'max-profile-storage-bytes');
+    if (maxProfileStorageBytes !== null) {
+      headers['x-bpane-browser-context-max-profile-storage-bytes'] = String(maxProfileStorageBytes);
+    }
+    return await requestGateway(config, '/api/v1/browser-contexts/import', {
+      method: 'POST',
+      headers,
+      body: archive,
+    });
   }
   if (action === 'get') {
     const contextId = requiredBrowserContextId(positionals, 'browser-context get');

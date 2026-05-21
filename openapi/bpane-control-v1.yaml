@@ -181,6 +181,65 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/browser-contexts/import:
+    post:
+      tags: [Browser Contexts]
+      summary: Import a BrowserPane browser context export archive
+      description: Creates a new owner-scoped reusable context from an export zip. The import never overwrites an existing context; target metadata is provided by headers and omitted metadata defaults to the archive manifest.
+      operationId: importBrowserContext
+      parameters:
+        - name: x-bpane-browser-context-name
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: x-bpane-browser-context-description
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: x-bpane-browser-context-labels
+          in: header
+          required: false
+          description: JSON object whose values are strings.
+          schema:
+            type: string
+        - name: x-bpane-browser-context-retention-sec
+          in: header
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+        - name: x-bpane-browser-context-max-profile-storage-bytes
+          in: header
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/zip:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '201':
+          description: Imported browser context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrowserContextResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/browser-contexts/{context_id}:
     parameters:
       - $ref: '#/components/parameters/BrowserContextId'

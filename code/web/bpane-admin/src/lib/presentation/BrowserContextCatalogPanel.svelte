@@ -1,6 +1,11 @@
 <script lang="ts">
-  import { Clipboard, Copy, Database, Download, RefreshCw, Trash2 } from 'lucide-svelte';
-  import type { BrowserContextResource, CloneBrowserContextCommand, SessionResource } from '../api/control-types';
+  import { Clipboard, Copy, Database, Download, FileUp, RefreshCw, Trash2 } from 'lucide-svelte';
+  import type {
+    BrowserContextResource,
+    CloneBrowserContextCommand,
+    ImportBrowserContextCommand,
+    SessionResource,
+  } from '../api/control-types';
   import AdminMessage from './AdminMessage.svelte';
   import {
     BrowserContextViewModelBuilder,
@@ -14,11 +19,13 @@
     readonly error?: string | null;
     readonly cloningContextId?: string | null;
     readonly exportingContextId?: string | null;
+    readonly importingContext?: boolean;
     readonly deletingContextId?: string | null;
     readonly selectedContextId?: string | null;
     readonly onRefresh: () => void;
     readonly onCloneContext?: (contextId: string, command: CloneBrowserContextCommand) => Promise<BrowserContextResource | void> | BrowserContextResource | void;
     readonly onExportContext?: (contextId: string) => Promise<void> | void;
+    readonly onImportContext?: (command: ImportBrowserContextCommand) => Promise<BrowserContextResource | void> | BrowserContextResource | void;
     readonly onDeleteContext: (contextId: string) => void;
     readonly onSelectContextId?: (contextId: string) => void;
   };
@@ -30,11 +37,13 @@
     error = null,
     cloningContextId = null,
     exportingContextId = null,
+    importingContext = false,
     deletingContextId = null,
     selectedContextId = undefined,
     onRefresh,
     onCloneContext,
     onExportContext,
+    onImportContext,
     onDeleteContext,
     onSelectContextId,
   }: BrowserContextCatalogPanelProps = $props();
@@ -44,6 +53,10 @@
   let copyStatus = $state<string | null>(null);
   let cloneName = $state('');
   let cloneStatus = $state<string | null>(null);
+  let importName = $state('');
+  let importArchive = $state<File | null>(null);
+  let importStatus = $state<string | null>(null);
+  let importInput: HTMLInputElement | null = null;
   let exportStatus = $state<string | null>(null);
   let cloneNameSeedContextId = $state<string | null>(null);
   const effectiveSelectedContextId = $derived(selectedContextId === undefined ? internalSelectedContextId : selectedContextId);
@@ -134,6 +147,34 @@
     }
   }
 
+  function selectImportArchive(event: Event): void {
+    const input = event.currentTarget instanceof HTMLInputElement ? event.currentTarget : null;
+    importArchive = input?.files?.[0] ?? null;
+    importStatus = null;
+    if (importArchive && !importName.trim()) {
+      importName = importArchive.name.replace(/\.zip$/i, '');
+    }
+  }
+
+  async function importBrowserContext(): Promise<void> {
+    const name = importName.trim();
+    if (!name || !importArchive || importingContext || loading || !onImportContext) {
+      return;
+    }
+    importStatus = null;
+    try {
+      const imported = await onImportContext({ name, archive: importArchive });
+      importStatus = imported?.id ? `Imported context ${imported.name}.` : 'Import submitted.';
+      importArchive = null;
+      importName = '';
+      if (importInput) {
+        importInput.value = '';
+      }
+    } catch {
+      importStatus = 'Import failed.';
+    }
+  }
+
   function stateClass(row: BrowserContextCatalogRowViewModel): string {
     return row.state === 'ready'
       ? 'border-admin-leaf/30 bg-admin-leaf/12 text-admin-leaf'
@@ -174,6 +215,57 @@
         {viewModel.rows.length} of {viewModel.totalCount} visible contexts | {viewModel.readyCount} ready | {viewModel.deletedCount} deleted
       </p>
     </div>
+
+    <section class="grid min-w-0 gap-2 rounded-xl border border-admin-ink/10 bg-admin-field/62 p-3" aria-label="Import browser context archive">
+      <div class="grid min-w-0 gap-2 lg:grid-cols-[minmax(160px,1fr)_minmax(180px,1.1fr)_auto] lg:items-end">
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Import name
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-panel/78 px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="browser-context-import-name"
+            placeholder="Restored context name"
+            bind:value={importName}
+            disabled={loading || importingContext || !onImportContext}
+          />
+        </label>
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Archive
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-panel/78 px-3 py-2 text-admin-ink outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-admin-leaf/18 file:px-3 file:py-1 file:text-admin-leaf"
+            data-testid="browser-context-import-input"
+            type="file"
+            accept="application/zip,.zip"
+            bind:this={importInput}
+            disabled={loading || importingContext || !onImportContext}
+            onchange={selectImportArchive}
+          />
+        </label>
+        <button
+          class="admin-button-primary inline-flex items-center gap-2"
+          type="button"
+          data-testid="browser-context-import"
+          disabled={!importName.trim() || !importArchive || loading || importingContext || !onImportContext}
+          onclick={() => void importBrowserContext()}
+        >
+          {#if importingContext}
+            <RefreshCw class="animate-spin" size={15} aria-hidden="true" />
+            Importing
+          {:else}
+            <FileUp size={15} aria-hidden="true" />
+            Import
+          {/if}
+        </button>
+      </div>
+      <AdminMessage
+        variant="info"
+        message="Imports a BrowserPane export archive as a new reusable context without overwriting existing contexts."
+        testId="browser-context-import-hint"
+        compact={true}
+      />
+      {#if importStatus}
+        <AdminMessage variant={importStatus === 'Import failed.' ? 'error' : 'success'} message={importStatus} testId="browser-context-import-message" compact={true} />
+      {/if}
+    </section>
 
     <AdminMessage
       variant="warning"

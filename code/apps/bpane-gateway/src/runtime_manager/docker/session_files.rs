@@ -62,6 +62,25 @@ set -eu
 tar -C /bpane-profile -czf - .
 "#;
 
+const IMPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
+set -eu
+archive="/tmp/bpane-browser-context-profile.tar.gz"
+cat > "$archive"
+tar -tzf "$archive" | while IFS= read -r path; do
+  case "$path" in
+    ""|/*|../*|*/../*|..|*/..)
+      echo "profile archive contains unsafe path: $path" >&2
+      exit 2
+      ;;
+  esac
+done
+mkdir -p /bpane-target
+find /bpane-target -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+tar -xzf "$archive" -C /bpane-target
+chown -R bpane:bpane /bpane-target
+chmod 0770 /bpane-target
+"#;
+
 #[derive(Deserialize)]
 struct DockerVolumeUsageEntry {
     #[serde(rename = "Name")]
@@ -280,6 +299,78 @@ impl DockerRuntimeManager {
 
         Err(RuntimeManagerError::StartupFailed(format!(
             "failed to export docker browser context profile volume {volume}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+
+    pub(super) async fn import_browser_context_profile_volume_archive(
+        &self,
+        context_id: Uuid,
+        profile_archive: Option<&[u8]>,
+    ) -> Result<(), RuntimeManagerError> {
+        self.remove_browser_context_profile_volume(context_id)
+            .await?;
+        let Some(profile_archive) = profile_archive else {
+            return Ok(());
+        };
+        if profile_archive.is_empty() {
+            return Err(RuntimeManagerError::StartupFailed(
+                "browser context profile archive must not be empty".to_string(),
+            ));
+        }
+
+        let volume = self.browser_context_profile_volume_for_context(context_id);
+        let mut child = Command::new(&self.config.docker_bin)
+            .arg("run")
+            .arg("--rm")
+            .arg("-i")
+            .arg("--network")
+            .arg("none")
+            .arg("-v")
+            .arg(format!("{volume}:/bpane-target"))
+            .arg("--user")
+            .arg("0:0")
+            .arg("--entrypoint")
+            .arg("/bin/sh")
+            .arg(&self.config.image)
+            .arg("-ec")
+            .arg(IMPORT_BROWSER_CONTEXT_PROFILE_SCRIPT)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to start docker browser context profile import for {volume}: {error}"
+                ))
+            })?;
+        let Some(mut stdin) = child.stdin.take() else {
+            let _ = child.kill().await;
+            return Err(RuntimeManagerError::StartupFailed(format!(
+                "docker browser context profile import for {volume} did not expose stdin"
+            )));
+        };
+        if let Err(error) = stdin.write_all(profile_archive).await {
+            let _ = child.kill().await;
+            let _ = self.remove_browser_context_profile_volume(context_id).await;
+            return Err(RuntimeManagerError::StartupFailed(format!(
+                "failed to stream browser context profile archive into {volume}: {error}"
+            )));
+        }
+        drop(stdin);
+
+        let output = child.wait_with_output().await.map_err(|error| {
+            RuntimeManagerError::StartupFailed(format!(
+                "failed to wait for docker browser context profile import for {volume}: {error}"
+            ))
+        })?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let _ = self.remove_browser_context_profile_volume(context_id).await;
+        Err(RuntimeManagerError::StartupFailed(format!(
+            "failed to import docker browser context profile volume {volume}: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         )))
     }

@@ -104,6 +104,16 @@ impl SessionManager {
             .await
     }
 
+    pub async fn import_browser_context_profile_archive(
+        &self,
+        context_id: Uuid,
+        profile_archive: Option<&[u8]>,
+    ) -> Result<(), SessionManagerError> {
+        self.inner
+            .import_browser_context_profile_archive(context_id, profile_archive)
+            .await
+    }
+
     pub async fn browser_context_profile_storage_bytes(
         &self,
         context_ids: &[Uuid],

@@ -276,6 +276,10 @@ function apiExample(contextId: string): string {
     `GET /api/v1/browser-contexts/${contextId}`,
     `GET /api/v1/browser-contexts/${contextId}/export`,
     [
+      'POST /api/v1/browser-contexts/import',
+      'Headers: x-bpane-browser-context-name, content-type: application/zip',
+    ].join('\n'),
+    [
       `POST /api/v1/browser-contexts/${contextId}/clone`,
       JSON.stringify({
         name: 'support-profile-sandbox',

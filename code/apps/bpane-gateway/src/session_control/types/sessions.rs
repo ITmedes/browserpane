@@ -314,7 +314,7 @@ pub struct BrowserContextRetentionCandidate {
     pub expires_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BrowserContextResource {
     pub id: Uuid,
     pub name: String,
@@ -332,7 +332,7 @@ pub struct BrowserContextResource {
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BrowserContextUsageResource {
     pub visible_session_count: u32,
     pub active_runtime_session_count: u32,
