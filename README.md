@@ -579,6 +579,27 @@ docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-pro
 deploy/examples/egress-observer/correlate-session-ip.sh
 ```
 
+For local HTTPS interception, run the mitmproxy-backed observer instead of the
+plain Squid observer:
+
+```bash
+docker compose -f deploy/examples/egress-observer/compose.yml down
+deploy/examples/egress-observer/prepare-mitmproxy-ca.sh
+docker compose -f deploy/examples/egress-observer/compose.tls.yml up
+./scripts/bpane egress-profile create local-tls-observer \
+  --proxy-url http://bpane-egress-observer:3128 \
+  --custom-ca-ref file:///workspace/dev/egress-ca.pem \
+  --custom-ca-name "BrowserPane Local Egress Test CA" \
+  --traffic-observation-mode tls_intercept \
+  --sensitive-log-sink-ref siem://browserpane/local-egress \
+  --sensitive-log-sink-name "Local Egress SIEM"
+```
+
+Sessions using that profile should show certificates issued by the local egress
+CA in the remote Chromium certificate viewer. The TLS observer logs decrypted
+request metadata and should only be used for local development or an approved
+sensitive-log sink.
+
 Common browser-context operations:
 
 ```bash

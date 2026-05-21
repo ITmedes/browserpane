@@ -9,13 +9,13 @@ The example uses Squid as a plain forward proxy. HTTPS traffic is not
 man-in-the-middle inspected, so proxy logs normally contain `CONNECT host:443`
 for TLS traffic rather than request paths or response bodies.
 
-For full HTTPS inspection, use a proxy that is explicitly configured for TLS
-interception, publish an approved interception CA bundle to the gateway as a
-`file://` or absolute-path `custom_ca.certificate_ref`, and create the egress
-profile with `traffic_observation.mode=tls_intercept` plus a
-`sensitive_log_sink_ref`. BrowserPane then installs that CA into the docker
-runtime's Chromium trust store and keeps decrypted-log routing explicit in the
-control-plane metadata.
+For local full HTTPS inspection, use the mitmproxy-based TLS observer in
+`compose.tls.yml`. It uses the same `bpane-egress-observer:3128` network alias,
+but mints per-site certificates from the local egress CA keypair. BrowserPane
+then installs the CA certificate into the docker runtime's Chromium trust store.
+The egress profile must be created with `traffic_observation.mode=tls_intercept`
+plus a `sensitive_log_sink_ref` so decrypted-log routing remains explicit in
+the control-plane metadata.
 
 ## Start The Observer Proxy
 
@@ -35,6 +35,29 @@ BPANE_EGRESS_OBSERVER_NETWORK=<compose-project>_bpane-internal \
   docker compose -f deploy/examples/egress-observer/compose.yml up --build
 ```
 
+## Start The TLS-Intercept Observer
+
+Stop the plain observer first if it is running, then prepare mitmproxy's local
+CA material from the same CA certificate that BrowserPane will install into the
+runtime:
+
+```bash
+docker compose -f deploy/examples/egress-observer/compose.yml down
+deploy/examples/egress-observer/prepare-mitmproxy-ca.sh
+docker compose -f deploy/examples/egress-observer/compose.tls.yml up
+```
+
+If your main compose project uses a non-default network name, pass it exactly as
+with the plain observer:
+
+```bash
+BPANE_EGRESS_OBSERVER_NETWORK=<compose-project>_bpane-internal \
+  docker compose -f deploy/examples/egress-observer/compose.tls.yml up
+```
+
+The TLS observer logs decrypted HTTP request lines and response status codes.
+Use it only for local development or an approved sensitive-log sink.
+
 ## Create An Egress Profile
 
 Point an owner-scoped BrowserPane egress profile at the observer. The proxy name
@@ -51,6 +74,22 @@ share the same network.
   --bypass-rule "*.local"
 ```
 
+For the TLS-intercept observer, include the CA and sensitive-log metadata:
+
+```bash
+./scripts/bpane egress-profile create local-tls-observer \
+  --description "Local mitmproxy TLS observer" \
+  --label observer=local-mitmproxy \
+  --proxy-url http://bpane-egress-observer:3128 \
+  --bypass-rule localhost \
+  --bypass-rule 127.0.0.1 \
+  --custom-ca-ref file:///workspace/dev/egress-ca.pem \
+  --custom-ca-name "BrowserPane Local Egress Test CA" \
+  --traffic-observation-mode tls_intercept \
+  --sensitive-log-sink-ref siem://browserpane/local-egress \
+  --sensitive-log-sink-name "Local Egress SIEM"
+```
+
 Create or start a session with the returned profile id:
 
 ```bash
@@ -65,6 +104,12 @@ Squid writes access logs to container stdout:
 
 ```bash
 docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-proxy
+```
+
+The TLS observer writes mitmproxy flow logs to container stdout:
+
+```bash
+docker compose -f deploy/examples/egress-observer/compose.tls.yml logs -f egress-proxy
 ```
 
 Use the BrowserPane runtime labels to correlate a proxy client IP back to the

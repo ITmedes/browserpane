@@ -1,0 +1,31 @@
+services:
+  egress-proxy:
+    image: "${BPANE_EGRESS_MITMPROXY_IMAGE:-mitmproxy/mitmproxy:11.0.2}"
+    container_name: bpane-egress-observer
+    command:
+      - mitmdump
+      - --mode
+      - regular
+      - --listen-host
+      - 0.0.0.0
+      - --listen-port
+      - "3128"
+      - --set
+      - confdir=/mitmproxy
+      - --set
+      - flow_detail=1
+      - --set
+      - showhost=true
+    ports:
+      - "${BPANE_EGRESS_OBSERVER_PORT:-3128}:3128"
+    volumes:
+      - ../../../dev/egress-mitmproxy:/mitmproxy
+    networks:
+      bpane-internal:
+        aliases:
+          - bpane-egress-observer
+
+networks:
+  bpane-internal:
+    external: true
+    name: "${BPANE_EGRESS_OBSERVER_NETWORK:-deploy_bpane-internal}"
