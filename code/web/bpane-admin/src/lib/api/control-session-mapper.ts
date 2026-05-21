@@ -9,6 +9,10 @@ import type {
   SessionStatusSummary,
   SessionStopBlocker,
   SessionStopEligibility,
+  SessionTemplateDefaults,
+  SessionTemplateListResponse,
+  SessionTemplateResource,
+  SessionViewport,
 } from './control-types';
 import {
   expectBoolean,
@@ -31,8 +35,20 @@ export class ControlSessionMapper {
     };
   }
 
+  static toSessionTemplateList(payload: unknown): SessionTemplateListResponse {
+    const object = expectRecord(payload, 'session template list response');
+    const templates = object.templates;
+    if (!Array.isArray(templates)) {
+      throw new Error('session template list response must contain a templates array');
+    }
+    return {
+      templates: templates.map((template) => this.toSessionTemplateResource(template)),
+    };
+  }
+
   static toSessionResource(payload: unknown): SessionResource {
     const object = expectRecord(payload, 'session resource');
+    const templateId = optionalString(object.template_id, 'session resource template_id');
     const stoppedAt = optionalString(object.stopped_at, 'session resource stopped_at');
     const runtimeReleasedAt = optionalString(
       object.runtime_released_at,
@@ -42,9 +58,12 @@ export class ControlSessionMapper {
     return {
       id: expectString(object.id, 'session resource id'),
       state: expectString(object.state, 'session resource state'),
+      template_id: templateId ?? null,
       owner_mode: expectString(object.owner_mode, 'session resource owner_mode'),
+      viewport: toOptionalViewport(object.viewport, 'session resource viewport') ?? null,
       idle_timeout_sec: optionalNumber(object.idle_timeout_sec, 'session resource idle_timeout_sec') ?? null,
       labels: expectStringRecord(object.labels ?? {}, 'session resource labels'),
+      integration_context: optionalRecord(object.integration_context, 'session resource integration_context') ?? null,
       ...(automationDelegate !== undefined ? { automation_delegate: automationDelegate } : {}),
       connect: toConnectInfo(object.connect),
       runtime: toRuntimeInfo(object.runtime),
@@ -53,6 +72,21 @@ export class ControlSessionMapper {
       updated_at: expectString(object.updated_at, 'session resource updated_at'),
       ...(runtimeReleasedAt !== undefined ? { runtime_released_at: runtimeReleasedAt } : {}),
       ...(stoppedAt !== undefined ? { stopped_at: stoppedAt } : {}),
+    };
+  }
+
+  static toSessionTemplateResource(payload: unknown): SessionTemplateResource {
+    const object = expectRecord(payload, 'session template resource');
+    const description = optionalString(object.description, 'session template description');
+    return {
+      id: expectString(object.id, 'session template id'),
+      name: expectString(object.name, 'session template name'),
+      description: description ?? null,
+      labels: expectStringRecord(object.labels ?? {}, 'session template labels'),
+      defaults: toSessionTemplateDefaults(object.defaults ?? {}),
+      version: expectNumber(object.version, 'session template version'),
+      created_at: expectString(object.created_at, 'session template created_at'),
+      updated_at: expectString(object.updated_at, 'session template updated_at'),
     };
   }
 
@@ -73,6 +107,43 @@ function optionalNumber(value: unknown, label: string): number | null | undefine
     return value;
   }
   return expectNumber(value, label);
+}
+
+function optionalRecord(value: unknown, label: string): Readonly<Record<string, unknown>> | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return expectRecord(value, label);
+}
+
+function toOptionalViewport(value: unknown, label: string): SessionViewport | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const object = expectRecord(value, label);
+  return {
+    width: expectNumber(object.width, `${label} width`),
+    height: expectNumber(object.height, `${label} height`),
+  };
+}
+
+function toSessionTemplateDefaults(value: unknown): SessionTemplateDefaults {
+  const object = expectRecord(value, 'session template defaults');
+  const ownerMode = optionalString(object.owner_mode, 'session template defaults owner_mode');
+  return {
+    ...(ownerMode !== undefined ? { owner_mode: ownerMode } : {}),
+    viewport: toOptionalViewport(object.viewport, 'session template defaults viewport') ?? null,
+    idle_timeout_sec: optionalNumber(
+      object.idle_timeout_sec,
+      'session template defaults idle_timeout_sec',
+    ) ?? null,
+    labels: expectStringRecord(object.labels ?? {}, 'session template defaults labels'),
+    integration_context: optionalRecord(
+      object.integration_context,
+      'session template defaults integration_context',
+    ) ?? null,
+    recording: optionalRecord(object.recording, 'session template defaults recording') ?? null,
+  };
 }
 
 function toConnectInfo(value: unknown): SessionConnectInfo {

@@ -1,4 +1,4 @@
-import type { CreateSessionCommand } from '../api/control-types';
+import type { CreateSessionCommand, SessionTemplateResource } from '../api/control-types';
 
 export const SESSION_CREATE_OWNER_MODES = [
   {
@@ -18,6 +18,7 @@ const OWNER_MODE_VALUES = new Set<string>(
 );
 
 export type SessionCreateFormState = {
+  readonly templateId: string;
   readonly ownerMode: string;
   readonly idleTimeoutSec: string;
   readonly labels: string;
@@ -30,6 +31,7 @@ export type SessionCreateValidation = {
 };
 
 type MutableCreateSessionCommand = {
+  template_id?: string;
   owner_mode?: string;
   idle_timeout_sec?: number;
   labels?: Readonly<Record<string, string>>;
@@ -37,6 +39,7 @@ type MutableCreateSessionCommand = {
 
 export function defaultSessionCreateFormState(): SessionCreateFormState {
   return {
+    templateId: '',
     ownerMode: DEFAULT_SESSION_CREATE_OWNER_MODE,
     idleTimeoutSec: '',
     labels: '',
@@ -48,6 +51,11 @@ export function validateSessionCreateForm(
 ): SessionCreateValidation {
   const errors: string[] = [];
   const command: MutableCreateSessionCommand = {};
+  const templateId = state.templateId.trim();
+  if (templateId) {
+    command.template_id = templateId;
+  }
+
   const ownerMode = state.ownerMode.trim() || DEFAULT_SESSION_CREATE_OWNER_MODE;
   if (OWNER_MODE_VALUES.has(ownerMode)) {
     command.owner_mode = ownerMode;
@@ -121,4 +129,36 @@ function parseIdleTimeoutSec(value: string, errors: string[]): number | undefine
     return undefined;
   }
   return parsed;
+}
+
+export function sessionTemplateDefaultsSummary(
+  template: SessionTemplateResource | null | undefined,
+): string {
+  if (!template) {
+    return 'No template defaults selected.';
+  }
+  const facts: string[] = [];
+  const defaults = template.defaults;
+  if (defaults.owner_mode) {
+    facts.push(`owner=${defaults.owner_mode}`);
+  }
+  if (defaults.idle_timeout_sec) {
+    facts.push(`idle=${defaults.idle_timeout_sec}s`);
+  }
+  if (defaults.viewport) {
+    facts.push(`viewport=${defaults.viewport.width}x${defaults.viewport.height}`);
+  }
+  const labels = Object.entries(defaults.labels ?? {});
+  if (labels.length > 0) {
+    facts.push(`labels=${labels.map(([key, value]) => `${key}=${value}`).join(',')}`);
+  }
+  const contextKeys = Object.keys(defaults.integration_context ?? {}).sort();
+  if (contextKeys.length > 0) {
+    facts.push(`integration=${contextKeys.join(',')}`);
+  }
+  if (defaults.recording) {
+    const mode = typeof defaults.recording.mode === 'string' ? defaults.recording.mode : 'configured';
+    facts.push(`recording=${mode}`);
+  }
+  return facts.length > 0 ? facts.join(' | ') : 'Template has no create-session defaults.';
 }

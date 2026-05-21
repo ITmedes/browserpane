@@ -6,9 +6,11 @@ import { SessionViewModelBuilder } from './session-view-model';
 const SESSION: SessionResource = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
   state: 'active',
+  template_id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
   owner_mode: 'shared',
   idle_timeout_sec: 1800,
   labels: { case: '1234', purpose: 'import-repro' },
+  integration_context: { ticket: 'INC-1234' },
   connect: {
     gateway_url: 'https://localhost:4433',
     transport_path: '/session',
@@ -38,6 +40,21 @@ const SESSION: SessionResource = {
   },
   created_at: '2026-05-04T19:00:00Z',
   updated_at: '2026-05-04T19:01:00Z',
+};
+
+const TEMPLATE = {
+  id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
+  name: 'Support triage',
+  description: null,
+  labels: { team: 'support' },
+  defaults: {
+    owner_mode: 'collaborative',
+    idle_timeout_sec: 1800,
+    labels: { team: 'support' },
+  },
+  version: 1,
+  created_at: '2026-05-04T18:00:00Z',
+  updated_at: '2026-05-04T18:00:00Z',
 };
 
 const STATUS: SessionStatus = {
@@ -105,6 +122,7 @@ describe('SessionViewModelBuilder', () => {
   it('maps sessions to compact list rows', () => {
     const viewModel = SessionViewModelBuilder.list({
       sessions: [SESSION],
+      sessionTemplates: [TEMPLATE],
       selectedSessionId: SESSION.id,
       authenticated: true,
       loading: false,
@@ -118,6 +136,8 @@ describe('SessionViewModelBuilder', () => {
       runtime: 'running',
       presence: 'connected',
       clients: 1,
+      template: 'Support triage (019df5c8...21c0)',
+      templateId: TEMPLATE.id,
       mcpDelegation: 'MCP not delegated',
       labels: 'case=1234, purpose=import-repro',
     });
@@ -145,6 +165,7 @@ describe('SessionViewModelBuilder', () => {
   it('adds full status facts and connection controls when status is loaded', () => {
     const viewModel = SessionViewModelBuilder.detail({
       session: SESSION,
+      sessionTemplates: [TEMPLATE],
       status: STATUS,
       connected: false,
       loading: false,
@@ -157,9 +178,19 @@ describe('SessionViewModelBuilder', () => {
       testId: 'session-mcp-owner',
     });
     expect(viewModel.facts).toContainEqual({
+      label: 'template',
+      value: 'Support triage (019df5c8...21c0)',
+      testId: 'session-template',
+    });
+    expect(viewModel.facts).toContainEqual({
       label: 'labels',
       value: 'case=1234, purpose=import-repro',
       testId: 'session-labels',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'integration',
+      value: 'ticket=INC-1234',
+      testId: 'session-integration-context',
     });
     expect(viewModel.connections).toEqual([{
       id: 7,
