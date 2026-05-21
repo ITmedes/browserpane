@@ -7,6 +7,7 @@
     BrowserContextResource,
     CreateBrowserContextCommand,
     CreateSessionCommand,
+    EgressProfileResource,
     SessionResource,
     SessionTemplateResource,
   } from '../api/control-types';
@@ -23,12 +24,15 @@
   let sessions = $state<readonly SessionResource[]>([]);
   let sessionTemplates = $state<readonly SessionTemplateResource[]>([]);
   let browserContexts = $state<readonly BrowserContextResource[]>([]);
+  let egressProfiles = $state<readonly EgressProfileResource[]>([]);
   let loading = $state(false);
   let templatesLoading = $state(false);
   let browserContextsLoading = $state(false);
+  let egressProfilesLoading = $state(false);
   let error = $state<string | null>(null);
   let templateError = $state<string | null>(null);
   let browserContextError = $state<string | null>(null);
+  let egressProfileError = $state<string | null>(null);
   let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let search = $state('');
   let templateFilter = $state('');
@@ -49,6 +53,7 @@
   onMount(() => {
     void loadSessionTemplates();
     void loadBrowserContexts();
+    void loadEgressProfiles();
     void loadSessions(false);
   });
 
@@ -73,6 +78,18 @@
       browserContextError = errorMessage(loadError);
     } finally {
       browserContextsLoading = false;
+    }
+  }
+
+  async function loadEgressProfiles(): Promise<void> {
+    egressProfilesLoading = true;
+    egressProfileError = null;
+    try {
+      egressProfiles = (await controlClient.listEgressProfiles()).profiles;
+    } catch (loadError) {
+      egressProfileError = errorMessage(loadError);
+    } finally {
+      egressProfilesLoading = false;
     }
   }
 
@@ -161,6 +178,8 @@
       session.presence,
       session.template,
       session.browserContext,
+      session.networkIdentity,
+      session.egress,
       session.mcpDelegation,
       session.labels,
     ].some((value) => value.toLowerCase().includes(normalized)));
@@ -278,10 +297,13 @@
   <SessionCreateConfigurator
     {sessionTemplates}
     {browserContexts}
+    {egressProfiles}
     {templatesLoading}
     {browserContextsLoading}
+    {egressProfilesLoading}
     {templateError}
     {browserContextError}
+    {egressProfileError}
     loading={loading}
     submitTestId="session-inspector-new"
     submitLabel="Create and inspect"
@@ -330,7 +352,7 @@
           <span class="grid min-w-0 gap-1">
             <strong class="truncate font-mono text-sm" title={session.id}>{session.id}</strong>
             <span class="truncate text-xs text-admin-ink/58">
-              <span data-testid="session-inspector-row-template">{session.template}</span> | <span data-testid="session-inspector-row-browser-context">{session.browserContext}</span> | {session.mcpDelegation} | {session.labels} | updated {session.updatedAt}
+              <span data-testid="session-inspector-row-template">{session.template}</span> | <span data-testid="session-inspector-row-browser-context">{session.browserContext}</span> | <span data-testid="session-inspector-row-network-identity">{session.networkIdentity}</span> | <span data-testid="session-inspector-row-egress">{session.egress}</span> | {session.mcpDelegation} | {session.labels} | updated {session.updatedAt}
             </span>
           </span>
           <span class="grid justify-items-end gap-1 text-xs text-[#c1d0e8]">

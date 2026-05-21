@@ -13,6 +13,7 @@
     CloneBrowserContextCommand,
     CreateBrowserContextCommand,
     CreateSessionCommand,
+    EgressProfileResource,
     ImportBrowserContextCommand,
     SessionResource,
     SessionTemplateResource,
@@ -56,16 +57,19 @@
   let sessions = $state<readonly SessionResource[]>([]);
   let sessionTemplates = $state<readonly SessionTemplateResource[]>([]);
   let browserContexts = $state<readonly BrowserContextResource[]>([]);
+  let egressProfiles = $state<readonly EgressProfileResource[]>([]);
   let selectedSession = $state<SessionResource | null>(null);
   let sessionsLoading = $state(false);
   let sessionsError = $state<string | null>(null);
   let templatesLoading = $state(false);
   let browserContextsLoading = $state(false);
+  let egressProfilesLoading = $state(false);
   let cloningBrowserContextId = $state<string | null>(null);
   let exportingBrowserContextId = $state<string | null>(null);
   let importingBrowserContext = $state(false);
   let templateError = $state<string | null>(null);
   let browserContextError = $state<string | null>(null);
+  let egressProfileError = $state<string | null>(null);
   let globalMessage = $state<AdminMessageFeedback | null>(null);
   let pendingSelectedSessionId = $state<string | null>(null);
   let browserConnecting = $state(false);
@@ -134,6 +138,7 @@
     void loadSessions();
     void loadSessionTemplates();
     void loadBrowserContexts();
+    void loadEgressProfiles();
     return () => { subscription.close(); disconnectBrowser(false); };
   });
   async function loadSessionTemplates(showFeedback = false): Promise<void> {
@@ -172,6 +177,25 @@
       showGlobalMessage('warning', 'Browser context catalog unavailable', browserContextError);
     } finally {
       browserContextsLoading = false;
+    }
+  }
+  async function loadEgressProfiles(showFeedback = false): Promise<void> {
+    egressProfilesLoading = true;
+    egressProfileError = null;
+    try {
+      egressProfiles = (await controlClient.listEgressProfiles()).profiles;
+      if (showFeedback) {
+        showGlobalMessage(
+          'success',
+          'Egress profiles refreshed',
+          `${egressProfiles.length} profile${egressProfiles.length === 1 ? '' : 's'} refreshed.`,
+        );
+      }
+    } catch (error) {
+      egressProfileError = errorMessage(error);
+      showGlobalMessage('warning', 'Egress profiles unavailable', egressProfileError);
+    } finally {
+      egressProfilesLoading = false;
     }
   }
   async function loadSessions(showFeedback = false): Promise<void> {
@@ -484,6 +508,7 @@
     <AdminWorkspaceTabs
       {controlClient} {workflowClient} {selectedSession} {sessionTemplates} {templatesLoading} {templateError} {mcpBridge} {liveConnection}
       {sessions} {browserContexts} {browserContextsLoading} {browserContextError}
+      {egressProfiles} {egressProfilesLoading} {egressProfileError}
       cloningContextId={cloningBrowserContextId}
       exportingContextId={exportingBrowserContextId}
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries} {globalMessage}

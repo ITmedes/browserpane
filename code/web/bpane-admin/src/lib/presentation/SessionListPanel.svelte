@@ -4,6 +4,7 @@
     BrowserContextResource,
     CreateBrowserContextCommand,
     CreateSessionCommand,
+    EgressProfileResource,
     SessionTemplateResource,
   } from '../api/control-types';
   import AdminMessage from './AdminMessage.svelte';
@@ -15,10 +16,13 @@
     readonly viewModel: SessionListPanelViewModel;
     readonly sessionTemplates?: readonly SessionTemplateResource[];
     readonly browserContexts?: readonly BrowserContextResource[];
+    readonly egressProfiles?: readonly EgressProfileResource[];
     readonly templatesLoading?: boolean;
     readonly browserContextsLoading?: boolean;
+    readonly egressProfilesLoading?: boolean;
     readonly templateError?: string | null;
     readonly browserContextError?: string | null;
+    readonly egressProfileError?: string | null;
     readonly connected: boolean;
     readonly onRefresh: () => void;
     readonly onCreateSession: (command: CreateSessionCommand) => void;
@@ -32,10 +36,13 @@
     viewModel,
     sessionTemplates = [],
     browserContexts = [],
+    egressProfiles = [],
     templatesLoading = false,
     browserContextsLoading = false,
+    egressProfilesLoading = false,
     templateError = null,
     browserContextError = null,
+    egressProfileError = null,
     connected,
     onRefresh,
     onCreateSession,
@@ -70,6 +77,8 @@
         {@render Fact('State', viewModel.selectedSession.lifecycle, 'session-selected-state')}
         {@render Fact('Template', viewModel.selectedSession.template, 'session-selected-template')}
         {@render Fact('Context', viewModel.selectedSession.browserContext, 'session-selected-browser-context')}
+        {@render Fact('Network', viewModel.selectedSession.networkIdentity, 'session-selected-network-identity')}
+        {@render Fact('Egress', viewModel.selectedSession.egress, 'session-selected-egress')}
         {@render Fact('Runtime', viewModel.selectedSession.runtime, 'session-selected-runtime')}
         {@render Fact('Clients', String(viewModel.selectedSession.clients), 'session-selected-clients')}
         {@render Fact('MCP', viewModel.selectedSession.mcpDelegation, 'session-selected-mcp')}
@@ -113,10 +122,13 @@
   <SessionCreateConfigurator
     {sessionTemplates}
     {browserContexts}
+    {egressProfiles}
     {templatesLoading}
     {browserContextsLoading}
+    {egressProfilesLoading}
     {templateError}
     {browserContextError}
+    {egressProfileError}
     loading={viewModel.loading}
     disabled={!viewModel.authenticated}
     submitTestId="session-new"

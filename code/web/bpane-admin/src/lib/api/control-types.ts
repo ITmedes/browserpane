@@ -9,6 +9,76 @@ export type SessionViewport = {
   readonly height: number;
 };
 
+export type SessionGeolocation = {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly accuracy_meters?: number | null;
+};
+
+export type SessionNetworkIdentity = {
+  readonly locale?: string | null;
+  readonly languages?: readonly string[];
+  readonly timezone?: string | null;
+  readonly geolocation?: SessionGeolocation | null;
+  readonly user_agent?: string | null;
+  readonly browser_identity?: string | null;
+  readonly egress_profile_id?: string | null;
+};
+
+export type EgressProfileState = 'ready' | 'disabled';
+
+export type EgressProxyConfig = {
+  readonly url: string;
+};
+
+export type EgressCustomCaConfig = {
+  readonly certificate_ref: string;
+  readonly display_name?: string | null;
+};
+
+export type EgressProfileEffectiveStatus = {
+  readonly proxy_configured: boolean;
+  readonly bypass_rule_count: number;
+  readonly custom_ca_configured: boolean;
+};
+
+export type SessionEffectiveEgress = {
+  readonly profile_id?: string | null;
+  readonly profile_name?: string | null;
+  readonly profile_state?: EgressProfileState | null;
+  readonly proxy_configured: boolean;
+  readonly bypass_rule_count: number;
+  readonly custom_ca_configured: boolean;
+};
+
+export type EgressProfileResource = {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly labels: Readonly<Record<string, string>>;
+  readonly proxy?: EgressProxyConfig | null;
+  readonly bypass_rules: readonly string[];
+  readonly custom_ca?: EgressCustomCaConfig | null;
+  readonly state: EgressProfileState;
+  readonly effective: EgressProfileEffectiveStatus;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type EgressProfileListResponse = {
+  readonly profiles: readonly EgressProfileResource[];
+};
+
+export type CreateEgressProfileCommand = {
+  readonly name: string;
+  readonly description?: string | null;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly proxy?: EgressProxyConfig | null;
+  readonly bypass_rules?: readonly string[];
+  readonly custom_ca?: EgressCustomCaConfig | null;
+  readonly state?: EgressProfileState;
+};
+
 export type BrowserContextState = 'ready' | 'deleted';
 
 export type BrowserContextPersistenceMode = 'reusable' | 'ephemeral';
@@ -126,6 +196,8 @@ export type SessionResource = {
   readonly state: string;
   readonly template_id?: string | null;
   readonly browser_context: SessionBrowserContextResource;
+  readonly network_identity?: SessionNetworkIdentity;
+  readonly effective_egress?: SessionEffectiveEgress;
   readonly owner_mode: string;
   readonly viewport?: SessionViewport | null;
   readonly idle_timeout_sec?: number | null;
@@ -161,6 +233,7 @@ export type SessionTemplateDefaults = {
   readonly idle_timeout_sec?: number | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly integration_context?: Readonly<Record<string, unknown>> | null;
+  readonly network_identity?: SessionNetworkIdentity | null;
   readonly recording?: Readonly<Record<string, unknown>> | null;
 };
 
@@ -182,6 +255,7 @@ export type SessionTemplateListResponse = {
 export type CreateSessionCommand = {
   readonly template_id?: string | null;
   readonly browser_context?: SessionBrowserContextCommand;
+  readonly network_identity?: SessionNetworkIdentity;
   readonly owner_mode?: string;
   readonly idle_timeout_sec?: number;
   readonly labels?: Readonly<Record<string, string>>;

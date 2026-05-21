@@ -4,6 +4,7 @@
     BrowserContextResource,
     CreateBrowserContextCommand,
     CreateSessionCommand,
+    EgressProfileResource,
     SessionTemplateResource,
   } from '../api/control-types';
   import {
@@ -12,6 +13,8 @@
     DEFAULT_SESSION_CREATE_OWNER_MODE,
     browserContextOptionLabel,
     defaultSessionCreateFormState,
+    egressProfileOptionLabel,
+    networkIdentitySummary,
     sessionBrowserContextSummary,
     sessionTemplateDefaultsSummary,
     validateBrowserContextCreateForm,
@@ -24,10 +27,13 @@
     readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly sessionTemplates?: readonly SessionTemplateResource[];
     readonly browserContexts?: readonly BrowserContextResource[];
+    readonly egressProfiles?: readonly EgressProfileResource[];
     readonly templatesLoading?: boolean;
     readonly browserContextsLoading?: boolean;
+    readonly egressProfilesLoading?: boolean;
     readonly templateError?: string | null;
     readonly browserContextError?: string | null;
+    readonly egressProfileError?: string | null;
     readonly loading?: boolean;
     readonly disabled?: boolean;
     readonly submitTestId?: string;
@@ -44,10 +50,13 @@
     onCreateBrowserContext,
     sessionTemplates = [],
     browserContexts = [],
+    egressProfiles = [],
     templatesLoading = false,
     browserContextsLoading = false,
+    egressProfilesLoading = false,
     templateError = null,
     browserContextError = null,
+    egressProfileError = null,
     loading = false,
     disabled = false,
     submitTestId = 'session-new',
@@ -64,6 +73,15 @@
   let ownerMode = $state(defaults.ownerMode);
   let idleTimeoutSec = $state(defaults.idleTimeoutSec);
   let labels = $state(defaults.labels);
+  let locale = $state(defaults.locale ?? '');
+  let languages = $state(defaults.languages ?? '');
+  let timezone = $state(defaults.timezone ?? '');
+  let geolocationLatitude = $state(defaults.geolocationLatitude ?? '');
+  let geolocationLongitude = $state(defaults.geolocationLongitude ?? '');
+  let geolocationAccuracyMeters = $state(defaults.geolocationAccuracyMeters ?? '');
+  let userAgent = $state(defaults.userAgent ?? '');
+  let browserIdentity = $state(defaults.browserIdentity ?? '');
+  let egressProfileId = $state(defaults.egressProfileId ?? '');
   let browserContextMode = $state(defaults.browserContextMode ?? 'fresh');
   let browserContextId = $state(defaults.browserContextId ?? '');
   let browserContextName = $state('');
@@ -96,15 +114,29 @@
     ownerMode,
     idleTimeoutSec,
     labels,
+    locale,
+    languages,
+    timezone,
+    geolocationLatitude,
+    geolocationLongitude,
+    geolocationAccuracyMeters,
+    userAgent,
+    browserIdentity,
+    egressProfileId,
     browserContextMode,
     browserContextId,
     browserContexts,
+    egressProfiles,
   }));
   const selectedTemplate = $derived(sessionTemplates.find((template) => template.id === templateId) ?? null);
   const selectedTemplateSummary = $derived(sessionTemplateDefaultsSummary(selectedTemplate));
   const selectedBrowserContextSummary = $derived(sessionBrowserContextSummary(
     browserContextMode,
     selectedBrowserContext,
+  ));
+  const selectedNetworkIdentitySummary = $derived(networkIdentitySummary(
+    validation.command?.network_identity ?? null,
+    egressProfiles,
   ));
   const rootClass = $derived(variant === 'panel'
     ? 'admin-panel mt-0 grid min-w-0 gap-4'
@@ -123,6 +155,17 @@
   $effect(() => {
     if (templateId && !sessionTemplates.some((template) => template.id === templateId)) {
       templateId = '';
+    }
+  });
+
+  $effect(() => {
+    if (
+      egressProfileId
+      && !egressProfilesLoading
+      && egressProfiles.length > 0
+      && !egressProfiles.some((profile) => profile.id === egressProfileId)
+    ) {
+      egressProfileId = '';
     }
   });
 
@@ -422,6 +465,151 @@
             />
           {/if}
         </div>
+      {/if}
+    </section>
+
+    <section
+      class="grid min-w-0 gap-3 rounded-xl border border-admin-ink/10 bg-admin-field/68 p-3 text-sm text-admin-ink/72"
+      aria-label="Network identity"
+      data-testid="session-create-network-identity-summary"
+    >
+      <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div class="min-w-0">
+          <strong class="text-admin-ink">Network identity</strong>
+          <p class="m-0 mt-1 text-xs leading-normal text-admin-ink/62 [overflow-wrap:anywhere]" data-testid="session-create-network-summary">
+            {selectedNetworkIdentitySummary}
+          </p>
+        </div>
+        <span class="rounded-lg bg-admin-leaf/12 px-2 py-1 text-xs font-bold text-admin-leaf">
+          Optional
+        </span>
+      </div>
+
+      <div class="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr))]">
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Locale
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="session-create-locale"
+            placeholder="de-DE"
+            type="text"
+            bind:value={locale}
+            disabled={loading || disabled}
+          />
+        </label>
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Languages
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="session-create-languages"
+            placeholder="de-DE, en-US"
+            type="text"
+            bind:value={languages}
+            disabled={loading || disabled}
+          />
+        </label>
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Timezone
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="session-create-timezone"
+            placeholder="Europe/Berlin"
+            type="text"
+            bind:value={timezone}
+            disabled={loading || disabled}
+          />
+        </label>
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Egress profile
+          <select
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="session-create-egress-profile"
+            bind:value={egressProfileId}
+            disabled={loading || disabled || egressProfilesLoading}
+          >
+            <option value="">No egress profile</option>
+            {#each egressProfiles as profile}
+              <option value={profile.id} disabled={profile.state === 'disabled'}>
+                {egressProfileOptionLabel(profile)}
+              </option>
+            {/each}
+          </select>
+        </label>
+      </div>
+
+      <div class="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))]">
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Latitude
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="session-create-geolocation-latitude"
+            inputmode="decimal"
+            placeholder="52.5200"
+            type="text"
+            bind:value={geolocationLatitude}
+            disabled={loading || disabled}
+          />
+        </label>
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Longitude
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="session-create-geolocation-longitude"
+            inputmode="decimal"
+            placeholder="13.4050"
+            type="text"
+            bind:value={geolocationLongitude}
+            disabled={loading || disabled}
+          />
+        </label>
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Accuracy meters
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="session-create-geolocation-accuracy"
+            inputmode="decimal"
+            placeholder="100"
+            type="text"
+            bind:value={geolocationAccuracyMeters}
+            disabled={loading || disabled}
+          />
+        </label>
+      </div>
+
+      <div class="grid min-w-0 gap-2 md:grid-cols-2">
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Browser identity
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="session-create-browser-identity"
+            placeholder="desktop-chromium-stable"
+            type="text"
+            bind:value={browserIdentity}
+            disabled={loading || disabled}
+          />
+        </label>
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          User agent
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="session-create-user-agent"
+            placeholder="Backend default"
+            type="text"
+            bind:value={userAgent}
+            disabled={loading || disabled}
+          />
+        </label>
+      </div>
+
+      {#if egressProfilesLoading}
+        <span class="text-xs font-bold text-[#c1d0e8]">Loading egress profiles...</span>
+      {:else if egressProfileError}
+        <AdminMessage
+          variant="warning"
+          title="Egress profiles unavailable"
+          message={egressProfileError}
+          compact={true}
+        />
       {/if}
     </section>
 

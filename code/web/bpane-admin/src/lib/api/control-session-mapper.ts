@@ -4,13 +4,22 @@ import type {
   BrowserContextResource,
   BrowserContextState,
   BrowserContextUsageResource,
+  EgressCustomCaConfig,
+  EgressProfileEffectiveStatus,
+  EgressProfileListResponse,
+  EgressProfileResource,
+  EgressProfileState,
+  EgressProxyConfig,
   SessionAutomationDelegate,
   SessionBrowserContextMode,
   SessionBrowserContextResource,
   SessionConnectionCounts,
   SessionConnectInfo,
+  SessionEffectiveEgress,
+  SessionGeolocation,
   SessionAccessTokenResponse,
   SessionListResponse,
+  SessionNetworkIdentity,
   SessionResource,
   SessionRuntimeInfo,
   SessionStatusSummary,
@@ -31,6 +40,43 @@ import {
 } from './control-wire';
 
 export class ControlSessionMapper {
+  static toEgressProfileList(payload: unknown): EgressProfileListResponse {
+    const object = expectRecord(payload, 'egress profile list response');
+    const profiles = object.profiles;
+    if (!Array.isArray(profiles)) {
+      throw new Error('egress profile list response must contain a profiles array');
+    }
+    return {
+      profiles: profiles.map((profile) => this.toEgressProfileResource(profile)),
+    };
+  }
+
+  static toEgressProfileResource(payload: unknown): EgressProfileResource {
+    const object = expectRecord(payload, 'egress profile resource');
+    const description = optionalString(object.description, 'egress profile description');
+    return {
+      id: expectString(object.id, 'egress profile id'),
+      name: expectString(object.name, 'egress profile name'),
+      description: description ?? null,
+      labels: expectStringRecord(object.labels ?? {}, 'egress profile labels'),
+      proxy: toEgressProxyConfig(object.proxy) ?? null,
+      bypass_rules: toStringArray(object.bypass_rules ?? [], 'egress profile bypass_rules'),
+      custom_ca: toEgressCustomCaConfig(object.custom_ca) ?? null,
+      state: expectEnum(object.state, 'egress profile state', EGRESS_PROFILE_STATES),
+      effective: toEgressEffectiveStatus(object.effective),
+      created_at: expectString(object.created_at, 'egress profile created_at'),
+      updated_at: expectString(object.updated_at, 'egress profile updated_at'),
+    };
+  }
+
+  static toSessionNetworkIdentity(payload: unknown): SessionNetworkIdentity {
+    return toSessionNetworkIdentity(payload);
+  }
+
+  static toSessionEffectiveEgress(payload: unknown): SessionEffectiveEgress {
+    return toSessionEffectiveEgress(payload);
+  }
+
   static toBrowserContextList(payload: unknown): BrowserContextListResponse {
     const object = expectRecord(payload, 'browser context list response');
     const contexts = object.contexts;
@@ -113,6 +159,8 @@ export class ControlSessionMapper {
       state: expectString(object.state, 'session resource state'),
       template_id: templateId ?? null,
       browser_context: toSessionBrowserContextResource(object.browser_context),
+      network_identity: toSessionNetworkIdentity(object.network_identity),
+      effective_egress: toSessionEffectiveEgress(object.effective_egress),
       owner_mode: expectString(object.owner_mode, 'session resource owner_mode'),
       viewport: toOptionalViewport(object.viewport, 'session resource viewport') ?? null,
       idle_timeout_sec: optionalNumber(object.idle_timeout_sec, 'session resource idle_timeout_sec') ?? null,
@@ -159,6 +207,7 @@ export class ControlSessionMapper {
 const BROWSER_CONTEXT_STATES = ['ready', 'deleted'] satisfies readonly BrowserContextState[];
 const BROWSER_CONTEXT_PERSISTENCE_MODES = ['reusable', 'ephemeral'] satisfies readonly BrowserContextPersistenceMode[];
 const SESSION_BROWSER_CONTEXT_MODES = ['fresh', 'ephemeral', 'reusable'] satisfies readonly SessionBrowserContextMode[];
+const EGRESS_PROFILE_STATES = ['ready', 'disabled'] satisfies readonly EgressProfileState[];
 
 function expectEnum<T extends string>(
   value: unknown,
@@ -184,6 +233,131 @@ function optionalRecord(value: unknown, label: string): Readonly<Record<string, 
     return value;
   }
   return expectRecord(value, label);
+}
+
+function toStringArray(value: unknown, label: string): readonly string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} must be an array`);
+  }
+  return value.map((entry, index) => expectString(entry, `${label}[${index}]`));
+}
+
+function toEgressProxyConfig(value: unknown): EgressProxyConfig | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const object = expectRecord(value, 'egress profile proxy');
+  return {
+    url: expectString(object.url, 'egress profile proxy url'),
+  };
+}
+
+function toEgressCustomCaConfig(value: unknown): EgressCustomCaConfig | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const object = expectRecord(value, 'egress profile custom_ca');
+  const displayName = optionalString(object.display_name, 'egress profile custom_ca display_name');
+  return {
+    certificate_ref: expectString(
+      object.certificate_ref,
+      'egress profile custom_ca certificate_ref',
+    ),
+    display_name: displayName ?? null,
+  };
+}
+
+function toEgressEffectiveStatus(value: unknown): EgressProfileEffectiveStatus {
+  const object = value === undefined || value === null
+    ? {}
+    : expectRecord(value, 'egress profile effective');
+  return {
+    proxy_configured: expectBoolean(
+      object.proxy_configured ?? false,
+      'egress profile effective proxy_configured',
+    ),
+    bypass_rule_count: expectNumber(
+      object.bypass_rule_count ?? 0,
+      'egress profile effective bypass_rule_count',
+    ),
+    custom_ca_configured: expectBoolean(
+      object.custom_ca_configured ?? false,
+      'egress profile effective custom_ca_configured',
+    ),
+  };
+}
+
+function toOptionalSessionNetworkIdentity(
+  value: unknown,
+  label: string,
+): SessionNetworkIdentity | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return toSessionNetworkIdentity(value, label);
+}
+
+function toSessionNetworkIdentity(
+  value: unknown,
+  label = 'session network_identity',
+): SessionNetworkIdentity {
+  const object = value === undefined || value === null ? {} : expectRecord(value, label);
+  const locale = optionalString(object.locale, `${label} locale`);
+  const timezone = optionalString(object.timezone, `${label} timezone`);
+  const userAgent = optionalString(object.user_agent, `${label} user_agent`);
+  const browserIdentity = optionalString(object.browser_identity, `${label} browser_identity`);
+  const egressProfileId = optionalString(object.egress_profile_id, `${label} egress_profile_id`);
+  return {
+    locale: locale ?? null,
+    languages: toStringArray(object.languages ?? [], `${label} languages`),
+    timezone: timezone ?? null,
+    geolocation: toSessionGeolocation(object.geolocation, `${label} geolocation`) ?? null,
+    user_agent: userAgent ?? null,
+    browser_identity: browserIdentity ?? null,
+    egress_profile_id: egressProfileId ?? null,
+  };
+}
+
+function toSessionGeolocation(
+  value: unknown,
+  label: string,
+): SessionGeolocation | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const object = expectRecord(value, label);
+  return {
+    latitude: expectNumber(object.latitude, `${label} latitude`),
+    longitude: expectNumber(object.longitude, `${label} longitude`),
+    accuracy_meters: optionalNumber(object.accuracy_meters, `${label} accuracy_meters`) ?? null,
+  };
+}
+
+function toSessionEffectiveEgress(value: unknown): SessionEffectiveEgress {
+  const object = value === undefined || value === null
+    ? {}
+    : expectRecord(value, 'session effective_egress');
+  const profileId = optionalString(object.profile_id, 'session effective_egress profile_id');
+  const profileName = optionalString(object.profile_name, 'session effective_egress profile_name');
+  return {
+    profile_id: profileId ?? null,
+    profile_name: profileName ?? null,
+    profile_state: object.profile_state === undefined || object.profile_state === null
+      ? null
+      : expectEnum(object.profile_state, 'session effective_egress profile_state', EGRESS_PROFILE_STATES),
+    proxy_configured: expectBoolean(
+      object.proxy_configured ?? false,
+      'session effective_egress proxy_configured',
+    ),
+    bypass_rule_count: expectNumber(
+      object.bypass_rule_count ?? 0,
+      'session effective_egress bypass_rule_count',
+    ),
+    custom_ca_configured: expectBoolean(
+      object.custom_ca_configured ?? false,
+      'session effective_egress custom_ca_configured',
+    ),
+  };
 }
 
 function toBrowserContextUsage(value: unknown): BrowserContextUsageResource | null | undefined {
@@ -244,6 +418,10 @@ function toSessionTemplateDefaults(value: unknown): SessionTemplateDefaults {
       'session template defaults integration_context',
     ) ?? null,
     recording: optionalRecord(object.recording, 'session template defaults recording') ?? null,
+    network_identity: toOptionalSessionNetworkIdentity(
+      object.network_identity,
+      'session template defaults network_identity',
+    ) ?? null,
   };
 }
 
