@@ -48,6 +48,23 @@ impl DockerRuntimeManager {
                 leases = self.leases.lock().await;
                 continue;
             }
+            let Some(session) = session.as_ref() else {
+                drop(leases);
+                self.cleanup_stale_assignment(&store, &assignment, recoverable)
+                    .await?;
+                leases = self.leases.lock().await;
+                continue;
+            };
+            let scope = Self::runtime_data_scope_from_session(session)?;
+            if let Some(browser_context_id) = scope.browser_context_id {
+                if active_browser_context_session_id(&leases, browser_context_id).is_some() {
+                    drop(leases);
+                    self.cleanup_stale_assignment(&store, &assignment, recoverable)
+                        .await?;
+                    leases = self.leases.lock().await;
+                    continue;
+                }
+            }
 
             let Some(container_name) = assignment.container_name.as_deref() else {
                 drop(leases);
@@ -85,6 +102,8 @@ impl DockerRuntimeManager {
                     session_id: assignment.session_id,
                     agent_socket_path: assignment.agent_socket_path.clone(),
                     container_name: Some(container_name.to_string()),
+                    browser_context_id: scope.browser_context_id,
+                    discard_session_data_on_release: scope.discard_session_data_on_release,
                     idle_generation: 0,
                 }),
             );

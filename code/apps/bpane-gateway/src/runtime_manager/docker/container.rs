@@ -38,6 +38,16 @@ impl DockerRuntimeManager {
                 self.session_data_volume_for_session(lease.session_id),
                 session_data_root
             ),
+        ];
+        if let Some(profile_volume) = self.profile_volume_for_lease(lease) {
+            args.push("-v".to_string());
+            args.push(format!(
+                "{}:{}",
+                profile_volume,
+                self.profile_dir_for_session()
+            ));
+        }
+        args.extend([
             "--shm-size".to_string(),
             self.config.shm_size.clone(),
             "--label".to_string(),
@@ -64,7 +74,7 @@ impl DockerRuntimeManager {
                 "BPANE_SESSION_FILE_BINDINGS_MANIFEST={}",
                 self.session_file_manifest_path()
             ),
-        ];
+        ]);
         if !extension_dirs.is_empty() {
             args.push("-e".to_string());
             args.push(format!("BPANE_EXTENSION_DIRS={}", extension_dirs.join(",")));
@@ -96,8 +106,7 @@ impl DockerRuntimeManager {
         let _ = self.stop_container(container_name).await;
         let _ = remove_socket_path(&lease.agent_socket_path).await;
         let extension_dirs = self.session_extension_dirs(lease.session_id).await?;
-        self.initialize_session_data_volume(lease.session_id)
-            .await?;
+        self.initialize_session_data_volume(lease).await?;
         self.materialize_session_file_bindings(lease.session_id)
             .await?;
 

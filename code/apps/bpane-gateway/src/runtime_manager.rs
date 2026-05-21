@@ -85,6 +85,10 @@ pub enum RuntimeManagerError {
     RuntimeStartupCapacityReached {
         max_starting_runtimes: usize,
     },
+    BrowserContextInUse {
+        browser_context_id: Uuid,
+        active_session_id: Uuid,
+    },
     InvalidConfiguration(String),
     StartupFailed(String),
     PersistenceFailed(String),
@@ -116,6 +120,13 @@ impl fmt::Display for RuntimeManagerError {
                 f,
                 "runtime startup capacity reached: {} runtime workers are already starting",
                 max_starting_runtimes
+            ),
+            Self::BrowserContextInUse {
+                browser_context_id,
+                active_session_id,
+            } => write!(
+                f,
+                "browser context {browser_context_id} is already used by active session {active_session_id}"
             ),
             Self::InvalidConfiguration(message) => write!(f, "{message}"),
             Self::StartupFailed(message) => write!(f, "{message}"),
@@ -315,6 +326,8 @@ struct RuntimeLease {
     session_id: Uuid,
     agent_socket_path: String,
     container_name: Option<String>,
+    browser_context_id: Option<Uuid>,
+    discard_session_data_on_release: bool,
     idle_generation: u64,
 }
 
