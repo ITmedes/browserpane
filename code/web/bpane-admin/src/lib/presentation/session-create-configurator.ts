@@ -56,8 +56,10 @@ export function validateSessionCreateForm(
     command.template_id = templateId;
   }
 
-  const ownerMode = state.ownerMode.trim() || DEFAULT_SESSION_CREATE_OWNER_MODE;
-  if (OWNER_MODE_VALUES.has(ownerMode)) {
+  const ownerMode = state.ownerMode.trim();
+  if (!ownerMode) {
+    // Empty means "let the selected template or backend default decide".
+  } else if (OWNER_MODE_VALUES.has(ownerMode)) {
     command.owner_mode = ownerMode;
   } else {
     errors.push(`Owner mode "${ownerMode}" is not supported.`);
