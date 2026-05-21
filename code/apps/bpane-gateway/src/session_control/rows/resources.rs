@@ -1,6 +1,51 @@
 use super::super::*;
 use super::encoding::row_to_json_string_array;
 
+pub(in crate::session_control) fn row_to_stored_browser_context(
+    row: &Row,
+) -> Result<StoredBrowserContext, SessionStoreError> {
+    let persistence_mode = row
+        .get::<_, String>("persistence_mode")
+        .parse::<BrowserContextPersistenceMode>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let state = row
+        .get::<_, String>("state")
+        .parse::<BrowserContextState>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("browser context labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("browser context label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+
+    Ok(StoredBrowserContext {
+        id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        description: row.get("description"),
+        labels,
+        persistence_mode,
+        state,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+        last_used_at: row.get("last_used_at"),
+        deleted_at: row.get("deleted_at"),
+    })
+}
+
 pub(in crate::session_control) fn row_to_stored_credential_binding(
     row: &Row,
 ) -> Result<StoredCredentialBinding, SessionStoreError> {

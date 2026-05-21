@@ -36,11 +36,13 @@ use crate::recording::{
 };
 use crate::session_access::SessionAutomationAccessTokenClaims;
 use crate::session_control::{
-    CompleteSessionRecordingRequest, CreateSessionRequest, FailSessionRecordingRequest,
+    BrowserContextListResponse, BrowserContextPersistenceMode, BrowserContextResource,
+    BrowserContextState, CompleteSessionRecordingRequest, CreateSessionRequest,
+    FailSessionRecordingRequest, PersistBrowserContextRequest,
     PersistCompletedSessionRecordingRequest, PersistSessionFileBindingRequest,
-    PersistSessionTemplateRequest, SessionLifecycleState, SessionListResponse, SessionOwnerMode,
-    SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
-    SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
+    PersistSessionTemplateRequest, SessionBrowserContextMode, SessionLifecycleState,
+    SessionListResponse, SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse,
+    SessionRecordingMode, SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
     SessionRecordingTerminationReason, SessionResource, SessionTemplateDefaults,
     SessionTemplateListResponse, SessionTemplateResource, SetAutomationDelegateRequest,
     StoredSession, StoredSessionRecording,
@@ -82,6 +84,7 @@ use crate::workspaces::{
 mod admin_events;
 mod authz;
 mod automation_tasks;
+mod browser_contexts;
 mod credential_bindings;
 mod errors;
 mod extensions;

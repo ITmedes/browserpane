@@ -1,6 +1,7 @@
 use super::*;
 
 mod automation_tasks;
+mod browser_contexts;
 mod credential_bindings;
 mod db;
 mod extensions;

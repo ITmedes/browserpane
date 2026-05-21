@@ -21,9 +21,9 @@ use crate::recording::{
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
-    CreateSessionRequest, SessionConnectInfo, SessionLifecycleState, SessionOwnerMode,
-    SessionRecordingFormat, SessionRecordingMode, SessionResource, SessionStatusSummary,
-    SessionStore, SessionTemplateDefaults,
+    BrowserContextPersistenceMode, CreateSessionRequest, SessionConnectInfo, SessionLifecycleState,
+    SessionOwnerMode, SessionRecordingFormat, SessionRecordingMode, SessionResource,
+    SessionStatusSummary, SessionStore, SessionTemplateDefaults,
 };
 use crate::session_files::SessionFileBindingMode;
 use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
@@ -296,6 +296,21 @@ pub(super) struct UpsertSessionTemplateRequest {
     pub(super) labels: HashMap<String, String>,
     #[serde(default)]
     pub(super) defaults: SessionTemplateDefaults,
+}
+
+#[derive(Deserialize)]
+pub(super) struct CreateBrowserContextRequest {
+    pub(super) name: String,
+    #[serde(default)]
+    pub(super) description: Option<String>,
+    #[serde(default)]
+    pub(super) labels: HashMap<String, String>,
+    #[serde(default = "default_browser_context_persistence_mode")]
+    pub(super) persistence_mode: BrowserContextPersistenceMode,
+}
+
+fn default_browser_context_persistence_mode() -> BrowserContextPersistenceMode {
+    BrowserContextPersistenceMode::Reusable
 }
 
 #[derive(Deserialize)]

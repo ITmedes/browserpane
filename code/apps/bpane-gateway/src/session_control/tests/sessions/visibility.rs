@@ -11,6 +11,7 @@ async fn in_memory_store_scopes_sessions_to_owner() {
             &alpha,
             CreateSessionRequest {
                 template_id: Some("default".to_string()),
+                browser_context: None,
                 owner_mode: None,
                 viewport: Some(SessionViewport {
                     width: 1920,

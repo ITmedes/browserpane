@@ -19,6 +19,8 @@ const KNOWN_OPTIONS = new Set([
   'api-url',
   'base-url',
   'body-json',
+  'browser-context-id',
+  'browser-context-mode',
   'cleanup-action',
   'config',
   'confirm',
@@ -43,6 +45,7 @@ const KNOWN_OPTIONS = new Set([
   'offset',
   'owner-mode',
   'profile',
+  'persistence-mode',
   'recording-mode',
   'recording-retention-sec',
   'save-token',
@@ -84,6 +87,10 @@ function usageText() {
     '  bpane session-template list [options]',
     '  bpane session-template get <template-id> [options]',
     '  bpane session-template update <template-id> [options]',
+    '  bpane browser-context create [context-name] [options]',
+    '  bpane browser-context list [options]',
+    '  bpane browser-context get <context-id> [options]',
+    '  bpane browser-context delete <context-id> [options]',
     '  bpane mcp doctor [session-id] [options]',
     '  bpane mcp preflight [session-id] [options]',
     '  bpane mcp repair <session-id> [options]',
@@ -113,8 +120,11 @@ function usageText() {
     '  --state <state>           Repeatable cleanup state filter. Default: stopped.',
     '  --runtime-state <state>   Repeatable session runtime-state filter.',
     '  --template-id <id>        Session template id for create/list filters.',
+    '  --browser-context-id <id> Browser context id for reusable session creation.',
+    '  --browser-context-mode <mode> Browser context mode: fresh, ephemeral, reusable.',
     '  --name <name>             Session template name for create/update.',
     '  --description <text>      Session template description for create/update.',
+    '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
@@ -417,6 +427,14 @@ function requiredTemplateId(positionals, commandLabel) {
   return templateId;
 }
 
+function requiredBrowserContextId(positionals, commandLabel) {
+  const contextId = positionals[2];
+  if (!contextId || positionals.length > 3) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <context-id>`, EXIT_CODES.usage);
+  }
+  return contextId;
+}
+
 function requireAccessToken(config) {
   if (!config.accessToken) {
     throw new CliError(
@@ -600,6 +618,29 @@ function buildCreateSessionRequest(options) {
   if (templateId) {
     body.template_id = templateId;
   }
+  const browserContextId = getOption(options, 'browser-context-id');
+  const browserContextMode = getOption(options, 'browser-context-mode');
+  if (browserContextId || browserContextMode) {
+    const mode = browserContextMode ?? 'reusable';
+    if (mode === 'reusable' && !browserContextId) {
+      throw new CliError(
+        'USAGE',
+        '--browser-context-id is required when --browser-context-mode is reusable.',
+        EXIT_CODES.usage,
+      );
+    }
+    if (mode !== 'reusable' && browserContextId) {
+      throw new CliError(
+        'USAGE',
+        '--browser-context-id can only be used with reusable browser contexts.',
+        EXIT_CODES.usage,
+      );
+    }
+    body.browser_context = { mode };
+    if (browserContextId) {
+      body.browser_context.context_id = browserContextId;
+    }
+  }
   const ownerMode = getOption(options, 'owner-mode');
   if (ownerMode) {
     body.owner_mode = ownerMode;
@@ -703,6 +744,36 @@ function buildSessionTemplateRequest(options, fallbackName = null) {
   const labels = parseKeyValueOptions(options, 'label');
   if (Object.keys(labels).length) {
     body.labels = labels;
+  }
+  return body;
+}
+
+function buildBrowserContextRequest(options, fallbackName = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? fallbackName;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Browser context create requires --name or a positional context name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const body = { name };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  }
+  const labels = parseKeyValueOptions(options, 'label');
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+  const persistenceMode = getOption(options, 'persistence-mode');
+  if (persistenceMode) {
+    body.persistence_mode = persistenceMode;
   }
   return body;
 }
@@ -1337,6 +1408,35 @@ async function handleSessionTemplateCommand(config, positionals, options) {
   );
 }
 
+async function handleBrowserContextCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length <= 3) {
+    return await requestGateway(config, '/api/v1/browser-contexts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildBrowserContextRequest(options, positionals[2] ?? null)),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/browser-contexts');
+  }
+  if (action === 'get') {
+    const contextId = requiredBrowserContextId(positionals, 'browser-context get');
+    return await requestGateway(config, `/api/v1/browser-contexts/${encodeURIComponent(contextId)}`);
+  }
+  if (action === 'delete') {
+    const contextId = requiredBrowserContextId(positionals, 'browser-context delete');
+    return await requestGateway(config, `/api/v1/browser-contexts/${encodeURIComponent(contextId)}`, {
+      method: 'DELETE',
+    });
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown browser-context command: ${action ?? ''}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
 async function handleMcpCommand(config, positionals, options) {
   const action = positionals[1];
   if ((action === 'doctor' || action === 'preflight') && positionals.length <= 3) {
@@ -1557,6 +1657,9 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     } else if (scope === 'session-template') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleSessionTemplateCommand(config, positionals, options);
+    } else if (scope === 'browser-context') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleBrowserContextCommand(config, positionals, options);
     } else if (scope === 'mcp') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleMcpCommand(config, positionals, options);

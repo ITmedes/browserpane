@@ -395,6 +395,8 @@ describe('bpane operator CLI', () => {
         'suite=cli',
         '--template-id',
         'desktop',
+        '--browser-context-id',
+        '0198dff7-457e-7000-8000-000000000015',
         '--owner-mode',
         'collaborative',
         '--width',
@@ -423,6 +425,10 @@ describe('bpane operator CLI', () => {
     expect(calls[0].init.method).toBe('POST');
     expect(JSON.parse(calls[0].init.body)).toEqual({
       template_id: 'desktop',
+      browser_context: {
+        mode: 'reusable',
+        context_id: '0198dff7-457e-7000-8000-000000000015',
+      },
       owner_mode: 'collaborative',
       viewport: { width: 1440, height: 900 },
       idle_timeout_sec: 120,
@@ -431,6 +437,119 @@ describe('bpane operator CLI', () => {
       extension_ids: ['018f1a5b-0784-71bf-ae46-0c973f00aa11'],
       recording: { mode: 'manual', format: 'webm', retention_sec: 3600 },
     });
+  });
+
+  it('manages browser contexts through the CLI', async () => {
+    const createContextIo = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ id: 'context-1' }, 201),
+      jsonResponse({ contexts: [{ id: 'context-1' }] }),
+      jsonResponse({ id: 'context-1' }),
+      jsonResponse({ id: 'context-1', state: 'deleted' }),
+    );
+
+    const createCode = await runBpaneCli(
+      [
+        'browser-context',
+        'create',
+        'support-profile',
+        '--description',
+        'Support profile',
+        '--label',
+        'team=support',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      createContextIo.io,
+      fetchImpl,
+    );
+    expect(createCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(createContextIo)).toEqual({ id: 'context-1' });
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/browser-contexts');
+    expect(calls[0].init.method).toBe('POST');
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      name: 'support-profile',
+      description: 'Support profile',
+      labels: { team: 'support' },
+    });
+
+    const listIo = createIo();
+    const listCode = await runBpaneCli(
+      ['browser-context', 'list'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      listIo.io,
+      fetchImpl,
+    );
+    expect(listCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(listIo)).toEqual({ contexts: [{ id: 'context-1' }] });
+
+    const getIo = createIo();
+    const getCode = await runBpaneCli(
+      ['browser-context', 'get', 'context/with space'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      getIo.io,
+      fetchImpl,
+    );
+    expect(getCode).toBe(EXIT_CODES.ok);
+
+    const deleteIo = createIo();
+    const deleteCode = await runBpaneCli(
+      ['browser-context', 'delete', 'context-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      deleteIo.io,
+      fetchImpl,
+    );
+    expect(deleteCode).toBe(EXIT_CODES.ok);
+
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://localhost:8080/api/v1/browser-contexts', 'POST'],
+      ['http://localhost:8080/api/v1/browser-contexts', undefined],
+      ['http://localhost:8080/api/v1/browser-contexts/context%2Fwith%20space', undefined],
+      ['http://localhost:8080/api/v1/browser-contexts/context-1', 'DELETE'],
+    ]);
+  });
+
+  it('validates browser context CLI input before fetching', async () => {
+    const missingNameIo = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
+
+    const missingNameCode = await runBpaneCli(
+      ['browser-context', 'create'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingNameIo.io,
+      fetchImpl,
+    );
+    expect(missingNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingNameIo).code).toBe('USAGE');
+
+    const missingContextIo = createIo();
+    const missingContextCode = await runBpaneCli(
+      ['session', 'create', '--browser-context-mode', 'reusable'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingContextIo.io,
+      fetchImpl,
+    );
+    expect(missingContextCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingContextIo).error).toContain('--browser-context-id is required');
+
+    const incompatibleContextIo = createIo();
+    const incompatibleContextCode = await runBpaneCli(
+      [
+        'session',
+        'create',
+        '--browser-context-mode',
+        'fresh',
+        '--browser-context-id',
+        'context-1',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      incompatibleContextIo.io,
+      fetchImpl,
+    );
+    expect(incompatibleContextCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(incompatibleContextIo).error).toContain(
+      '--browser-context-id can only be used',
+    );
+    expect(calls).toHaveLength(0);
   });
 
   it('creates session templates with structured defaults', async () => {

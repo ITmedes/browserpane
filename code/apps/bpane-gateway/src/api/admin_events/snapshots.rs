@@ -501,6 +501,10 @@ mod tests {
             id: Uuid::nil(),
             state: SessionLifecycleState::Ready,
             template_id: None,
+            browser_context: crate::session_control::SessionBrowserContextResource {
+                mode: crate::session_control::SessionBrowserContextMode::Fresh,
+                context_id: None,
+            },
             owner_mode: SessionOwnerMode::Collaborative,
             viewport: SessionViewport {
                 width: 1600,

@@ -179,6 +179,149 @@ impl From<SessionRuntimeAccess> for SessionRuntimeInfo {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserContextState {
+    Ready,
+    Deleted,
+}
+
+impl FromStr for BrowserContextState {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "ready" => Ok(Self::Ready),
+            "deleted" => Ok(Self::Deleted),
+            _ => Err("unknown browser context state"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserContextPersistenceMode {
+    Reusable,
+    Ephemeral,
+}
+
+impl BrowserContextPersistenceMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Reusable => "reusable",
+            Self::Ephemeral => "ephemeral",
+        }
+    }
+}
+
+impl FromStr for BrowserContextPersistenceMode {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "reusable" => Ok(Self::Reusable),
+            "ephemeral" => Ok(Self::Ephemeral),
+            _ => Err("unknown browser context persistence mode"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionBrowserContextMode {
+    Fresh,
+    Ephemeral,
+    Reusable,
+}
+
+impl SessionBrowserContextMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fresh => "fresh",
+            Self::Ephemeral => "ephemeral",
+            Self::Reusable => "reusable",
+        }
+    }
+}
+
+impl FromStr for SessionBrowserContextMode {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "fresh" => Ok(Self::Fresh),
+            "ephemeral" => Ok(Self::Ephemeral),
+            "reusable" => Ok(Self::Reusable),
+            _ => Err("unknown session browser context mode"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionBrowserContextRequest {
+    pub mode: SessionBrowserContextMode,
+    #[serde(default)]
+    pub context_id: Option<Uuid>,
+}
+
+impl Default for SessionBrowserContextRequest {
+    fn default() -> Self {
+        Self {
+            mode: SessionBrowserContextMode::Fresh,
+            context_id: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionBrowserContextResource {
+    pub mode: SessionBrowserContextMode,
+    pub context_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PersistBrowserContextRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub persistence_mode: BrowserContextPersistenceMode,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredBrowserContext {
+    pub id: Uuid,
+    pub owner_subject: String,
+    pub owner_issuer: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub persistence_mode: BrowserContextPersistenceMode,
+    pub state: BrowserContextState,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct BrowserContextResource {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub persistence_mode: BrowserContextPersistenceMode,
+    pub state: BrowserContextState,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BrowserContextListResponse {
+    pub contexts: Vec<BrowserContextResource>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionRuntimeState {
@@ -266,6 +409,7 @@ pub struct SessionResource {
     pub id: Uuid,
     pub state: SessionLifecycleState,
     pub template_id: Option<String>,
+    pub browser_context: SessionBrowserContextResource,
     pub owner_mode: SessionOwnerMode,
     pub viewport: SessionViewport,
     pub capabilities: SessionCapabilities,
@@ -289,6 +433,8 @@ pub struct SessionResource {
 pub struct CreateSessionRequest {
     #[serde(default)]
     pub template_id: Option<String>,
+    #[serde(default)]
+    pub browser_context: Option<SessionBrowserContextRequest>,
     #[serde(default)]
     pub owner_mode: Option<SessionOwnerMode>,
     #[serde(default)]
@@ -396,6 +542,7 @@ pub struct StoredSession {
     pub id: Uuid,
     pub state: SessionLifecycleState,
     pub template_id: Option<String>,
+    pub browser_context: SessionBrowserContextResource,
     pub owner_mode: SessionOwnerMode,
     pub viewport: SessionViewport,
     pub owner: SessionOwner,
@@ -423,6 +570,7 @@ impl StoredSession {
             id: self.id,
             state: state_override.unwrap_or(self.state),
             template_id: self.template_id.clone(),
+            browser_context: self.browser_context.clone(),
             owner_mode: self.owner_mode,
             viewport: self.viewport.clone(),
             capabilities: SessionCapabilities::default(),
@@ -450,6 +598,23 @@ impl StoredSession {
             updated_at: self.updated_at,
             runtime_released_at: self.runtime_released_at,
             stopped_at: self.stopped_at,
+        }
+    }
+}
+
+impl StoredBrowserContext {
+    pub fn to_resource(&self) -> BrowserContextResource {
+        BrowserContextResource {
+            id: self.id,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            labels: self.labels.clone(),
+            persistence_mode: self.persistence_mode,
+            state: self.state,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+            last_used_at: self.last_used_at,
+            deleted_at: self.deleted_at,
         }
     }
 }
