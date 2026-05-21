@@ -79,7 +79,7 @@ pub(super) async fn get_session(
 struct SessionCatalogFilters {
     template_id: Option<String>,
     states: Vec<SessionLifecycleState>,
-    runtime_states: Vec<String>,
+    runtime_states: Vec<crate::session_control::SessionRuntimeState>,
     labels: HashMap<String, String>,
     integration_context: HashMap<String, String>,
     limit: Option<usize>,
@@ -96,7 +96,7 @@ fn parse_session_catalog_filters(
         } else if key == "state" {
             filters.states = parse_session_states(&value)?;
         } else if key == "runtime_state" {
-            filters.runtime_states = parse_csv(&value);
+            filters.runtime_states = parse_session_runtime_states(&value)?;
         } else if key == "limit" {
             filters.limit = Some(parse_positive_usize("limit", &value)?);
         } else if key == "offset" {
@@ -131,6 +131,25 @@ fn parse_session_states(
             entry
                 .parse::<SessionLifecycleState>()
                 .map_err(|_| bad_request(&format!("unsupported session state filter: {entry}")))
+        })
+        .collect()
+}
+
+fn parse_session_runtime_states(
+    value: &str,
+) -> Result<Vec<crate::session_control::SessionRuntimeState>, (StatusCode, Json<ErrorResponse>)> {
+    parse_csv(value)
+        .into_iter()
+        .map(|entry| match entry.as_str() {
+            "not_started" => Ok(crate::session_control::SessionRuntimeState::NotStarted),
+            "starting" => Ok(crate::session_control::SessionRuntimeState::Starting),
+            "running" => Ok(crate::session_control::SessionRuntimeState::Running),
+            "released" => Ok(crate::session_control::SessionRuntimeState::Released),
+            "stopping" => Ok(crate::session_control::SessionRuntimeState::Stopping),
+            "stopped" => Ok(crate::session_control::SessionRuntimeState::Stopped),
+            _ => Err(bad_request(&format!(
+                "unsupported session runtime_state filter: {entry}"
+            ))),
         })
         .collect()
 }
@@ -212,17 +231,5 @@ fn session_resource_matches_catalog_filters(
     filters.runtime_states.is_empty()
         || filters
             .runtime_states
-            .iter()
-            .any(|state| state == session_runtime_state_name(resource.status.runtime_state))
-}
-
-fn session_runtime_state_name(state: crate::session_control::SessionRuntimeState) -> &'static str {
-    match state {
-        crate::session_control::SessionRuntimeState::NotStarted => "not_started",
-        crate::session_control::SessionRuntimeState::Starting => "starting",
-        crate::session_control::SessionRuntimeState::Running => "running",
-        crate::session_control::SessionRuntimeState::Released => "released",
-        crate::session_control::SessionRuntimeState::Stopping => "stopping",
-        crate::session_control::SessionRuntimeState::Stopped => "stopped",
-    }
+            .contains(&resource.status.runtime_state)
 }
