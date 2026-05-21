@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -325,6 +326,20 @@ impl SessionRuntimeManager {
             RuntimeBackend::StaticSingle(_) => Ok(()),
             RuntimeBackend::Docker(manager) => {
                 manager.delete_browser_context_data(context_id).await
+            }
+        }
+    }
+
+    pub async fn browser_context_profile_storage_bytes(
+        &self,
+        context_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, u64>, RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => Ok(HashMap::new()),
+            RuntimeBackend::Docker(manager) => {
+                manager
+                    .browser_context_profile_storage_bytes(context_ids)
+                    .await
             }
         }
     }

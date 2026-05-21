@@ -43,6 +43,7 @@ export type BrowserContextUsageResource = {
   readonly visible_session_count: number;
   readonly active_runtime_session_count: number;
   readonly active_runtime_session_id?: string | null;
+  readonly profile_storage_bytes?: number | null;
 };
 
 export type BrowserContextListResponse = {

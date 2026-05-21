@@ -56,6 +56,7 @@ const BROWSER_CONTEXT = {
     visible_session_count: 1,
     active_runtime_session_count: 1,
     active_runtime_session_id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
+    profile_storage_bytes: 1250000,
   },
   created_at: '2026-05-04T18:30:00Z',
   updated_at: '2026-05-04T18:30:00Z',
@@ -129,6 +130,7 @@ describe('ControlClient', () => {
         visible_session_count: 1,
         active_runtime_session_count: 1,
         active_runtime_session_id: SESSION.id,
+        profile_storage_bytes: 1250000,
       },
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(

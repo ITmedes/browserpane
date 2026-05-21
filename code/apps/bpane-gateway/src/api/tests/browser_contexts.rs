@@ -33,6 +33,7 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert_eq!(context["usage"]["visible_session_count"], 0);
     assert_eq!(context["usage"]["active_runtime_session_count"], 0);
     assert!(context["usage"]["active_runtime_session_id"].is_null());
+    assert!(context["usage"]["profile_storage_bytes"].is_null());
     assert!(context["last_used_at"].is_null());
 
     let duplicate_response = app
@@ -65,6 +66,7 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     let fetched = response_json(get_response).await;
     assert_eq!(fetched["id"], context_id);
     assert_eq!(fetched["usage"]["visible_session_count"], 0);
+    assert!(fetched["usage"]["profile_storage_bytes"].is_null());
 
     let session_response = app
         .clone()
@@ -113,6 +115,7 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
         0
     );
     assert!(list["contexts"][0]["usage"]["active_runtime_session_id"].is_null());
+    assert!(list["contexts"][0]["usage"]["profile_storage_bytes"].is_null());
     assert!(!list["contexts"][0]["last_used_at"].is_null());
 
     let delete_response = app

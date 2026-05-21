@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::process::Stdio;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use uuid::Uuid;
@@ -46,6 +47,14 @@ chmod 0770 \
   "$BPANE_DOWNLOAD_DIR" \
   "$BPANE_SESSION_FILE_MOUNTS_DIR"
 "#;
+
+#[derive(Deserialize)]
+struct DockerVolumeUsageEntry {
+    #[serde(rename = "Name")]
+    name: String,
+    #[serde(rename = "Size")]
+    size: String,
+}
 
 #[derive(Serialize)]
 struct SessionFileBindingsManifest {
@@ -171,6 +180,67 @@ impl DockerRuntimeManager {
         let volume = self.browser_context_profile_volume_for_context(context_id);
         self.remove_docker_volume(&volume, "browser context profile")
             .await
+    }
+
+    pub(in crate::runtime_manager) async fn browser_context_profile_storage_bytes(
+        &self,
+        context_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, u64>, RuntimeManagerError> {
+        if context_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let volume_by_name = context_ids
+            .iter()
+            .copied()
+            .map(|context_id| {
+                (
+                    self.browser_context_profile_volume_for_context(context_id),
+                    context_id,
+                )
+            })
+            .collect::<HashMap<_, _>>();
+
+        let output = Command::new(&self.config.docker_bin)
+            .arg("system")
+            .arg("df")
+            .arg("-v")
+            .arg("--format")
+            .arg("{{json .Volumes}}")
+            .output()
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to inspect docker browser context profile volume usage: {error}"
+                ))
+            })?;
+        if !output.status.success() {
+            return Err(RuntimeManagerError::StartupFailed(format!(
+                "failed to inspect docker browser context profile volume usage: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+
+        let entries = serde_json::from_slice::<Vec<DockerVolumeUsageEntry>>(&output.stdout)
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to parse docker browser context profile volume usage: {error}"
+                ))
+            })?;
+        let mut storage_by_context = HashMap::new();
+        for entry in entries {
+            let Some(context_id) = volume_by_name.get(&entry.name).copied() else {
+                continue;
+            };
+            let Some(bytes) = parse_docker_size_bytes(&entry.size) else {
+                continue;
+            };
+            storage_by_context.insert(context_id, bytes);
+        }
+        for context_id in context_ids {
+            storage_by_context.entry(*context_id).or_insert(0);
+        }
+        Ok(storage_by_context)
     }
 
     async fn remove_docker_volume(
@@ -462,6 +532,36 @@ impl DockerRuntimeManager {
             .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?;
         Ok(())
     }
+}
+
+pub(in crate::runtime_manager) fn parse_docker_size_bytes(value: &str) -> Option<u64> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("n/a") {
+        return None;
+    }
+    let split_at = trimmed
+        .char_indices()
+        .find(|(_, character)| !(character.is_ascii_digit() || *character == '.'))
+        .map(|(index, _)| index)
+        .unwrap_or(trimmed.len());
+    let number = trimmed[..split_at].trim().parse::<f64>().ok()?;
+    if !number.is_finite() || number < 0.0 {
+        return None;
+    }
+    let unit = trimmed[split_at..].trim().to_ascii_lowercase();
+    let multiplier = match unit.as_str() {
+        "" | "b" => 1.0,
+        "kb" => 1_000.0,
+        "mb" => 1_000_000.0,
+        "gb" => 1_000_000_000.0,
+        "tb" => 1_000_000_000_000.0,
+        "kib" => 1_024.0,
+        "mib" => 1_048_576.0,
+        "gib" => 1_073_741_824.0,
+        "tib" => 1_099_511_627_776.0,
+        _ => return None,
+    };
+    Some((number * multiplier).round() as u64)
 }
 
 fn materialization_file_mode(mode: SessionFileBindingMode) -> &'static str {

@@ -323,6 +323,7 @@ pub struct BrowserContextUsageResource {
     pub visible_session_count: u32,
     pub active_runtime_session_count: u32,
     pub active_runtime_session_id: Option<Uuid>,
+    pub profile_storage_bytes: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]

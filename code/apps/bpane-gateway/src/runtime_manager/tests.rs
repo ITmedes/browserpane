@@ -237,6 +237,18 @@ fn docker_runtime_names_and_sockets_are_session_scoped() {
 }
 
 #[test]
+fn docker_runtime_parses_volume_size_units() {
+    assert_eq!(docker::parse_docker_size_bytes("176B"), Some(176));
+    assert_eq!(docker::parse_docker_size_bytes("4.62MB"), Some(4_620_000));
+    assert_eq!(
+        docker::parse_docker_size_bytes("1.5GiB"),
+        Some(1_610_612_736)
+    );
+    assert_eq!(docker::parse_docker_size_bytes("N/A"), None);
+    assert_eq!(docker::parse_docker_size_bytes("unknown"), None);
+}
+
+#[test]
 fn docker_runtime_launch_separates_socket_and_session_data_mounts() {
     let manager = DockerRuntimeManager::new(
         docker_config(),
