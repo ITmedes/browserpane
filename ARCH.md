@@ -301,6 +301,10 @@ service.
   - starts/stops passive recorder workers for `recording.mode=always`
   - persists per-segment metadata, linkage, termination reasons, and artifact refs
   - enforces retention and playback/export visibility through the control plane
+- **Browser context lifecycle** (`browser_contexts/retention.rs`, `runtime_manager.rs`, `session_control.rs`):
+  - reusable profile metadata carries optional retention windows and derived expiry timestamps
+  - scans expired ready contexts on startup and then on a configurable interval
+  - removes docker-backed context profile volumes through the runtime manager and skips active writers for a later pass
 - **Workflow lifecycle** (`workflow_lifecycle.rs`, `workflow_observability.rs`, `workflow_retention.rs`):
   - resolves git-backed workflow versions to immutable snapshots
   - launches gateway-managed workflow workers with run-scoped automation access
@@ -456,6 +460,7 @@ The default dev stack no longer uses a shared token file.
 - the local demo user is `demo / demo-demo`
 - after login, the admin console lists owner-scoped `/api/v1/sessions`, session templates, and browser contexts; it lets the user join an existing session, start a new one with optional template and reusable-context bindings, inspect API-backed reusable context references, active writer state, profile storage usage, and retention expiry in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
 - docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
+- browser-context retention cleanup is metadata-driven per context and removes expired reusable profile data only when the runtime manager confirms there is no active writer
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
 - admin-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - switching the selected session disconnects the embedded browser from the previous live session before selecting the new one

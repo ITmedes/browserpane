@@ -314,9 +314,12 @@ session reference count and the active runtime writer session id, when one
 exists. Docker-backed runtimes also include approximate profile storage bytes
 when Docker volume-size inspection is available. Contexts can also carry an
 optional `retention_sec` window; the API returns `retention_expires_at` from the
-last-used timestamp, or creation time if the context has never been used. API
-clients and the admin UI use these fields to make the same lifecycle and
-cleanup decisions.
+last-used timestamp, or creation time if the context has never been used. The
+gateway scans for expired ready contexts on startup and then every
+`--browser-context-retention-cleanup-interval-secs` seconds, unless that
+interval is set to `0`; docker-backed cleanup removes the context profile volume
+and skips active runtime writers for a later pass. API clients and the admin UI
+use these fields to make the same lifecycle and cleanup decisions.
 Deleting a reusable context refuses active runtime writers and, for
 docker-backed runtimes, removes the context-scoped Chromium profile volume when
 no active writer exists. The admin create-session configurator can create

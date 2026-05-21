@@ -56,6 +56,7 @@ Current product shape:
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: versioned session-control store and Postgres integration, including session templates, browser contexts, workflows, credential bindings, file workspaces, and approved extension metadata.
+  - `browser_contexts/retention.rs`: background cleanup for ready reusable browser contexts whose per-context retention window expired; runtime-backed cleanup skips active writers and removes docker profile volumes through the session manager.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
   - `credential_provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2.
   - `workflow_source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.

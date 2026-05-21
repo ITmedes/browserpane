@@ -114,4 +114,26 @@ impl InMemorySessionStore {
         }
         Ok(Some(context.clone()))
     }
+
+    pub(in crate::session_control) async fn list_browser_context_retention_candidates(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<BrowserContextRetentionCandidate>, SessionStoreError> {
+        let mut candidates = self
+            .browser_contexts
+            .lock()
+            .await
+            .iter()
+            .filter(|context| context.state == BrowserContextState::Ready)
+            .filter_map(|context| {
+                let expires_at = context.retention_expires_at()?;
+                (expires_at <= now).then_some(BrowserContextRetentionCandidate {
+                    context: context.clone(),
+                    expires_at,
+                })
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(|left, right| left.expires_at.cmp(&right.expires_at));
+        Ok(candidates)
+    }
 }

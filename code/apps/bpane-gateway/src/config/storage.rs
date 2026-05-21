@@ -39,4 +39,12 @@ pub struct StorageConfig {
     /// Set to 0 to retain session files indefinitely.
     #[arg(long = "session-file-retention-secs", default_value_t = 604800)]
     pub session_file_retention_secs: u64,
+
+    /// How often the gateway scans for reusable browser contexts whose per-context retention has expired.
+    /// Set to 0 to disable browser context retention cleanup.
+    #[arg(
+        long = "browser-context-retention-cleanup-interval-secs",
+        default_value_t = 3600
+    )]
+    pub browser_context_retention_cleanup_interval_secs: u64,
 }
