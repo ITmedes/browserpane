@@ -70,6 +70,22 @@ describe('session create configurator', () => {
   it('includes the selected template id in the create-session payload', () => {
     const validation = validateSessionCreateForm({
       templateId: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
+      ownerMode: '',
+      idleTimeoutSec: '',
+      labels: '',
+    });
+
+    expect(validation.errors).toEqual([]);
+    expect(validation.command).toEqual({
+      template_id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
+    });
+    expect(validation.preview).toContain('"template_id"');
+    expect(validation.preview).not.toContain('"owner_mode"');
+  });
+
+  it('keeps explicit owner-mode overrides when a template is selected', () => {
+    const validation = validateSessionCreateForm({
+      templateId: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
       ownerMode: 'collaborative',
       idleTimeoutSec: '',
       labels: '',
@@ -80,7 +96,6 @@ describe('session create configurator', () => {
       template_id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
       owner_mode: 'collaborative',
     });
-    expect(validation.preview).toContain('"template_id"');
   });
 
   it('summarizes selected template defaults for the UI', () => {

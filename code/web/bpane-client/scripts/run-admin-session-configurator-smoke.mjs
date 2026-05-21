@@ -45,7 +45,7 @@ async function run() {
     });
 
     await verifyClientValidation(page);
-    await configureCollaborativeSession(page, options, template);
+    await configureTemplatedSession(page, options, template);
     await verifyPayloadPreview(page, template);
     await page.getByTestId('session-inspector-new').click();
     sessionId = await waitForSessionDetailUrl(page, options);
@@ -81,6 +81,9 @@ async function verifyCompactPayloadToggle(page, options, template) {
   if (preview.template_id !== template.id) {
     throw new Error(`Expected live configurator preview to include template_id ${template.id}, got ${previewText}`);
   }
+  if (Object.hasOwn(preview, 'owner_mode')) {
+    throw new Error(`Expected template default owner mode to remain unoverridden, got ${previewText}`);
+  }
   await page.waitForTimeout(1500);
   const stillVisible = await page.getByTestId('session-create-preview').isVisible().catch(() => false);
   if (!stillVisible) {
@@ -102,10 +105,11 @@ async function verifyClientValidation(page) {
   }
 }
 
-async function configureCollaborativeSession(page, options, template) {
+async function configureTemplatedSession(page, options, template) {
   await selectSessionTemplate(page, template, options);
   await page.getByTestId('session-create-owner-mode').selectOption('collaborative');
-  await page.getByTestId('session-create-idle-timeout').fill('1800');
+  await page.getByTestId('session-create-owner-mode').selectOption('');
+  await page.getByTestId('session-create-idle-timeout').fill('');
   await page.getByTestId('session-create-labels').fill('case=1234\npurpose=import-repro');
 }
 
@@ -115,8 +119,8 @@ async function verifyPayloadPreview(page, template) {
   const expectedLabels = { case: '1234', purpose: 'import-repro' };
   if (
     preview.template_id !== template.id
-    || preview.owner_mode !== 'collaborative'
-    || preview.idle_timeout_sec !== 1800
+    || Object.hasOwn(preview, 'owner_mode')
+    || Object.hasOwn(preview, 'idle_timeout_sec')
     || JSON.stringify(preview.labels) !== JSON.stringify(expectedLabels)
   ) {
     throw new Error(`Unexpected session create payload preview: ${previewText}`);
@@ -140,7 +144,7 @@ async function verifyDetailUi(page, options, sessionId, template) {
   const integration = await page.getByTestId('session-integration-context').textContent();
   if (
     ownerMode !== 'collaborative'
-    || idleTimeout !== '1800'
+    || idleTimeout !== '1200'
     || !detailTemplate?.includes(template.name)
     || !labels?.includes('purpose=import-repro')
     || !labels.includes('team=support')
@@ -190,8 +194,8 @@ function verifyCreatedSession(session, sessionId, template) {
   if (session.owner_mode !== 'collaborative') {
     throw new Error(`Expected collaborative owner mode, got ${session.owner_mode}`);
   }
-  if (session.idle_timeout_sec !== 1800) {
-    throw new Error(`Expected idle timeout 1800, got ${session.idle_timeout_sec}`);
+  if (session.idle_timeout_sec !== 1200) {
+    throw new Error(`Expected template idle timeout 1200, got ${session.idle_timeout_sec}`);
   }
   if (session.labels?.case !== '1234' || session.labels?.purpose !== 'import-repro' || session.labels?.team !== 'support') {
     throw new Error(`Expected configured labels, got ${JSON.stringify(session.labels)}`);

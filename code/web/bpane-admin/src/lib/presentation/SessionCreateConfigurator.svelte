@@ -3,6 +3,7 @@
   import type { CreateSessionCommand, SessionTemplateResource } from '../api/control-types';
   import {
     SESSION_CREATE_OWNER_MODES,
+    DEFAULT_SESSION_CREATE_OWNER_MODE,
     defaultSessionCreateFormState,
     sessionTemplateDefaultsSummary,
     validateSessionCreateForm,
@@ -47,6 +48,8 @@
   let idleTimeoutSec = $state(defaults.idleTimeoutSec);
   let labels = $state(defaults.labels);
   let payloadOpenInternal = $state(false);
+  let previousTemplateId = $state(defaults.templateId);
+  let ownerModeTouched = $state(false);
   const validation = $derived(validateSessionCreateForm({ templateId, ownerMode, idleTimeoutSec, labels }));
   const selectedTemplate = $derived(sessionTemplates.find((template) => template.id === templateId) ?? null);
   const selectedTemplateSummary = $derived(sessionTemplateDefaultsSummary(selectedTemplate));
@@ -65,6 +68,19 @@
     if (templateId && !sessionTemplates.some((template) => template.id === templateId)) {
       templateId = '';
     }
+  });
+
+  $effect(() => {
+    if (templateId === previousTemplateId) {
+      return;
+    }
+    if (templateId && !ownerModeTouched && ownerMode === DEFAULT_SESSION_CREATE_OWNER_MODE) {
+      ownerMode = '';
+    } else if (!templateId && !ownerMode) {
+      ownerMode = DEFAULT_SESSION_CREATE_OWNER_MODE;
+      ownerModeTouched = false;
+    }
+    previousTemplateId = templateId;
   });
 
   function submit(): void {
@@ -123,7 +139,9 @@
           data-testid="session-create-owner-mode"
           bind:value={ownerMode}
           disabled={loading || disabled}
+          onchange={() => { ownerModeTouched = true; }}
         >
+          <option value="">Template / backend default</option>
           {#each SESSION_CREATE_OWNER_MODES as mode}
             <option value={mode.value}>{mode.label}</option>
           {/each}

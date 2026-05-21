@@ -291,6 +291,10 @@ Session templates store reusable defaults for session creation, including owner
 mode, viewport, idle timeout, labels, integration context, and recording policy.
 Creating a session with a UUID `template_id` merges those defaults before the
 session is persisted; explicit caller fields win over template defaults.
+The admin create-session configurator follows the same rule: selecting a
+template leaves owner mode and idle timeout unset unless the operator chooses an
+explicit override, and the API payload preview shows the exact fields that will
+be sent.
 `GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
 
