@@ -10,9 +10,11 @@ use super::docker::DockerLeaseState;
 use super::*;
 use crate::auth::AuthenticatedPrincipal;
 use crate::session_control::{
-    BrowserContextPersistenceMode, CreateSessionRequest, PersistBrowserContextRequest,
-    SessionBrowserContextMode, SessionBrowserContextRequest, SessionOwner, SessionOwnerMode,
-    SessionStore,
+    BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig, EgressProfileState,
+    EgressProxyConfig, PersistBrowserContextRequest, SessionBrowserContextMode,
+    SessionBrowserContextRequest, SessionBrowserContextResource, SessionGeolocation,
+    SessionLifecycleState, SessionNetworkIdentity, SessionOwner, SessionOwnerMode,
+    SessionRecordingPolicy, SessionStore, SessionViewport, StoredEgressProfile, StoredSession,
 };
 use crate::session_files::{
     SessionFileBindingMode, SessionFileBindingState, StoredSessionFileBinding,
@@ -292,6 +294,120 @@ fn docker_runtime_launch_separates_socket_and_session_data_mounts() {
         &"BPANE_SESSION_FILE_BINDINGS_MANIFEST=/run/bpane/session/session-file-bindings.json"
             .to_string()
     ));
+}
+
+#[test]
+fn docker_runtime_maps_network_identity_to_launch_env() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let profile_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf12").unwrap();
+    let now = Utc::now();
+    let session = StoredSession {
+        id: session_id,
+        state: SessionLifecycleState::Ready,
+        template_id: None,
+        browser_context: SessionBrowserContextResource {
+            mode: SessionBrowserContextMode::Fresh,
+            context_id: None,
+        },
+        network_identity: SessionNetworkIdentity {
+            locale: Some("de-DE".to_string()),
+            languages: vec!["de-DE".to_string(), "en-US".to_string()],
+            timezone: Some("Europe/Berlin".to_string()),
+            geolocation: Some(SessionGeolocation {
+                latitude: 52.52,
+                longitude: 13.405,
+                accuracy_meters: Some(100.0),
+            }),
+            user_agent: Some("BrowserPane Test/1.0".to_string()),
+            browser_identity: Some("desktop-chromium-stable".to_string()),
+            egress_profile_id: Some(profile_id),
+        },
+        owner_mode: SessionOwnerMode::Collaborative,
+        viewport: SessionViewport::default(),
+        owner: SessionOwner {
+            subject: "owner".to_string(),
+            issuer: "https://issuer.example".to_string(),
+            display_name: None,
+        },
+        automation_delegate: None,
+        idle_timeout_sec: None,
+        labels: HashMap::new(),
+        integration_context: None,
+        extensions: Vec::new(),
+        recording: SessionRecordingPolicy::default(),
+        created_at: now,
+        updated_at: now,
+        runtime_released_at: None,
+        stopped_at: None,
+    };
+    let profile = StoredEgressProfile {
+        id: profile_id,
+        owner_subject: "owner".to_string(),
+        owner_issuer: "https://issuer.example".to_string(),
+        name: "eu-support-egress".to_string(),
+        description: None,
+        labels: HashMap::new(),
+        proxy: Some(EgressProxyConfig {
+            url: "https://proxy.example:8443".to_string(),
+        }),
+        bypass_rules: vec!["localhost".to_string(), "*.internal.example".to_string()],
+        custom_ca: Some(EgressCustomCaConfig {
+            certificate_ref: "vault://pki/browserpane/eu-support".to_string(),
+            display_name: Some("EU support CA".to_string()),
+        }),
+        state: EgressProfileState::Ready,
+        created_at: now,
+        updated_at: now,
+    };
+    let lease = RuntimeLease {
+        session_id,
+        agent_socket_path: manager.socket_path_for_session(session_id),
+        container_name: Some(manager.container_name_for_session(session_id)),
+        browser_context_id: None,
+        discard_session_data_on_release: false,
+        idle_generation: 0,
+    };
+
+    let launch_options =
+        DockerRuntimeManager::network_identity_launch_options(&session, Some(&profile));
+    let env = launch_options
+        .env
+        .iter()
+        .cloned()
+        .collect::<HashMap<_, _>>();
+
+    assert_eq!(env.get("LANG").map(String::as_str), Some("de_DE.UTF-8"));
+    assert_eq!(env.get("LC_ALL").map(String::as_str), Some("de_DE.UTF-8"));
+    assert_eq!(env.get("LANGUAGE").map(String::as_str), Some("de-DE:en-US"));
+    assert_eq!(env.get("TZ").map(String::as_str), Some("Europe/Berlin"));
+    assert_eq!(
+        env.get("BPANE_CHROMIUM_ACCEPT_LANG").map(String::as_str),
+        Some("de-DE,en-US")
+    );
+    assert_eq!(
+        env.get("BPANE_CHROMIUM_USER_AGENT").map(String::as_str),
+        Some("BrowserPane Test/1.0")
+    );
+    assert_eq!(
+        env.get("BPANE_CHROMIUM_PROXY_SERVER").map(String::as_str),
+        Some("https://proxy.example:8443")
+    );
+    assert_eq!(
+        env.get("BPANE_CHROMIUM_PROXY_BYPASS_LIST")
+            .map(String::as_str),
+        Some("localhost;*.internal.example")
+    );
+    let geolocation: Value =
+        serde_json::from_str(env.get("BPANE_SESSION_GEOLOCATION").unwrap()).unwrap();
+    assert_eq!(geolocation["latitude"], json!(52.52));
+    assert_eq!(geolocation["longitude"], json!(13.405));
+
+    let args = manager
+        .docker_run_args_with_launch_options(&lease, &[], &launch_options)
+        .unwrap();
+    assert!(args.contains(&"BPANE_CHROMIUM_USER_AGENT=BrowserPane Test/1.0".to_string()));
+    assert!(args.contains(&"BPANE_CHROMIUM_PROXY_SERVER=https://proxy.example:8443".to_string()));
 }
 
 #[test]

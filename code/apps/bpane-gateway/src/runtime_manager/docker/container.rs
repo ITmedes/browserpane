@@ -7,11 +7,30 @@ use uuid::Uuid;
 
 use super::*;
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(in crate::runtime_manager) struct DockerNetworkIdentityLaunchOptions {
+    pub(in crate::runtime_manager) env: Vec<(String, String)>,
+}
+
 impl DockerRuntimeManager {
+    #[cfg(test)]
     pub(in crate::runtime_manager) fn docker_run_args(
         &self,
         lease: &RuntimeLease,
         extension_dirs: &[String],
+    ) -> Result<Vec<String>, RuntimeManagerError> {
+        self.docker_run_args_with_launch_options(
+            lease,
+            extension_dirs,
+            &DockerNetworkIdentityLaunchOptions::default(),
+        )
+    }
+
+    pub(in crate::runtime_manager) fn docker_run_args_with_launch_options(
+        &self,
+        lease: &RuntimeLease,
+        extension_dirs: &[String],
+        launch_options: &DockerNetworkIdentityLaunchOptions,
     ) -> Result<Vec<String>, RuntimeManagerError> {
         let container_name = lease.container_name.as_deref().ok_or_else(|| {
             RuntimeManagerError::StartupFailed(
@@ -79,6 +98,10 @@ impl DockerRuntimeManager {
             args.push("-e".to_string());
             args.push(format!("BPANE_EXTENSION_DIRS={}", extension_dirs.join(",")));
         }
+        for (key, value) in &launch_options.env {
+            args.push("-e".to_string());
+            args.push(format!("{key}={value}"));
+        }
 
         if self.config.seccomp_unconfined {
             args.push("--security-opt".to_string());
@@ -91,6 +114,144 @@ impl DockerRuntimeManager {
 
         args.push(self.config.image.clone());
         Ok(args)
+    }
+
+    pub(in crate::runtime_manager) fn network_identity_launch_options(
+        session: &StoredSession,
+        egress_profile: Option<&StoredEgressProfile>,
+    ) -> DockerNetworkIdentityLaunchOptions {
+        let mut env = Vec::new();
+        let identity = &session.network_identity;
+
+        if let Some(locale) = identity.locale.as_deref().filter(|value| !value.is_empty()) {
+            let posix_locale = posix_locale(locale);
+            push_env(&mut env, "LANG", posix_locale.clone());
+            push_env(&mut env, "LC_ALL", posix_locale);
+            push_env(&mut env, "BPANE_CHROMIUM_LANG", locale.to_string());
+            if identity.languages.is_empty() {
+                push_env(&mut env, "BPANE_CHROMIUM_ACCEPT_LANG", locale.to_string());
+            }
+        }
+        if !identity.languages.is_empty() {
+            push_env(&mut env, "LANGUAGE", identity.languages.join(":"));
+            push_env(
+                &mut env,
+                "BPANE_CHROMIUM_ACCEPT_LANG",
+                identity.languages.join(","),
+            );
+        }
+        if let Some(timezone) = identity
+            .timezone
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            push_env(&mut env, "TZ", timezone.to_string());
+        }
+        if let Some(geolocation) = &identity.geolocation {
+            push_env(
+                &mut env,
+                "BPANE_SESSION_GEOLOCATION",
+                serde_json::json!({
+                    "latitude": geolocation.latitude,
+                    "longitude": geolocation.longitude,
+                    "accuracy_meters": geolocation.accuracy_meters,
+                })
+                .to_string(),
+            );
+        }
+        if let Some(user_agent) = identity
+            .user_agent
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            push_env(
+                &mut env,
+                "BPANE_CHROMIUM_USER_AGENT",
+                user_agent.to_string(),
+            );
+        }
+        if let Some(browser_identity) = identity
+            .browser_identity
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            push_env(
+                &mut env,
+                "BPANE_BROWSER_IDENTITY",
+                browser_identity.to_string(),
+            );
+        }
+        if let Some(profile) = egress_profile {
+            push_env(&mut env, "BPANE_EGRESS_PROFILE_ID", profile.id.to_string());
+            push_env(&mut env, "BPANE_EGRESS_PROFILE_NAME", profile.name.clone());
+            if let Some(proxy) = &profile.proxy {
+                push_env(&mut env, "BPANE_CHROMIUM_PROXY_SERVER", proxy.url.clone());
+            }
+            if !profile.bypass_rules.is_empty() {
+                push_env(
+                    &mut env,
+                    "BPANE_CHROMIUM_PROXY_BYPASS_LIST",
+                    profile.bypass_rules.join(";"),
+                );
+            }
+            if let Some(custom_ca) = &profile.custom_ca {
+                push_env(
+                    &mut env,
+                    "BPANE_CUSTOM_CA_REF",
+                    custom_ca.certificate_ref.clone(),
+                );
+            }
+        }
+
+        DockerNetworkIdentityLaunchOptions { env }
+    }
+
+    async fn session_network_identity_launch_options(
+        &self,
+        session_id: Uuid,
+    ) -> Result<DockerNetworkIdentityLaunchOptions, RuntimeManagerError> {
+        let Some(store) = self.session_store().await else {
+            return Ok(DockerNetworkIdentityLaunchOptions::default());
+        };
+        let session = store
+            .get_session_by_id(session_id)
+            .await
+            .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?
+            .ok_or_else(|| {
+                RuntimeManagerError::PersistenceFailed(format!(
+                    "session {session_id} not found while resolving network identity launch options"
+                ))
+            })?;
+        let egress_profile = if let Some(profile_id) = session.network_identity.egress_profile_id {
+            let principal = AuthenticatedPrincipal {
+                subject: session.owner.subject.clone(),
+                issuer: session.owner.issuer.clone(),
+                display_name: session.owner.display_name.clone(),
+                client_id: None,
+            };
+            let profile = store
+                .get_egress_profile_for_owner(&principal, profile_id)
+                .await
+                .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?
+                .ok_or_else(|| {
+                    RuntimeManagerError::PersistenceFailed(format!(
+                        "egress profile {profile_id} not found while starting session {session_id}"
+                    ))
+                })?;
+            if profile.state == EgressProfileState::Disabled {
+                return Err(RuntimeManagerError::StartupFailed(format!(
+                    "egress profile {profile_id} is disabled"
+                )));
+            }
+            Some(profile)
+        } else {
+            None
+        };
+
+        Ok(Self::network_identity_launch_options(
+            &session,
+            egress_profile.as_ref(),
+        ))
     }
 
     pub(super) async fn start_container(
@@ -106,12 +267,19 @@ impl DockerRuntimeManager {
         let _ = self.stop_container(container_name).await;
         let _ = remove_socket_path(&lease.agent_socket_path).await;
         let extension_dirs = self.session_extension_dirs(lease.session_id).await?;
+        let launch_options = self
+            .session_network_identity_launch_options(lease.session_id)
+            .await?;
         self.initialize_session_data_volume(lease).await?;
         self.materialize_session_file_bindings(lease.session_id)
             .await?;
 
         let mut command = Command::new(&self.config.docker_bin);
-        command.args(self.docker_run_args(lease, &extension_dirs)?);
+        command.args(self.docker_run_args_with_launch_options(
+            lease,
+            &extension_dirs,
+            &launch_options,
+        )?);
 
         let output = command.output().await.map_err(|error| {
             RuntimeManagerError::StartupFailed(format!("failed to run docker launcher: {error}"))
@@ -250,5 +418,20 @@ impl DockerRuntimeManager {
             "docker inspect failed for {container_name}: {}",
             stderr.trim()
         )))
+    }
+}
+
+fn push_env(env: &mut Vec<(String, String)>, key: &str, value: String) {
+    if !value.is_empty() {
+        env.push((key.to_string(), value));
+    }
+}
+
+fn posix_locale(locale: &str) -> String {
+    let normalized = locale.replace('-', "_");
+    if normalized.contains('.') {
+        normalized
+    } else {
+        format!("{normalized}.UTF-8")
     }
 }
