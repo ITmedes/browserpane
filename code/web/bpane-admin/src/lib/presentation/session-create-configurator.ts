@@ -2,8 +2,10 @@ import type {
   BrowserContextResource,
   CreateBrowserContextCommand,
   CreateSessionCommand,
+  EgressProfileResource,
   SessionBrowserContextCommand,
   SessionBrowserContextMode,
+  SessionNetworkIdentity,
   SessionTemplateResource,
 } from '../api/control-types';
 
@@ -47,9 +49,19 @@ export type SessionCreateFormState = {
   readonly ownerMode: string;
   readonly idleTimeoutSec: string;
   readonly labels: string;
+  readonly locale?: string;
+  readonly languages?: string;
+  readonly timezone?: string;
+  readonly geolocationLatitude?: string;
+  readonly geolocationLongitude?: string;
+  readonly geolocationAccuracyMeters?: string;
+  readonly userAgent?: string;
+  readonly browserIdentity?: string;
+  readonly egressProfileId?: string;
   readonly browserContextMode?: string;
   readonly browserContextId?: string;
   readonly browserContexts?: readonly BrowserContextResource[];
+  readonly egressProfiles?: readonly EgressProfileResource[];
 };
 
 export type SessionCreateValidation = {
@@ -61,6 +73,7 @@ export type SessionCreateValidation = {
 type MutableCreateSessionCommand = {
   template_id?: string;
   browser_context?: SessionBrowserContextCommand;
+  network_identity?: SessionNetworkIdentity;
   owner_mode?: string;
   idle_timeout_sec?: number;
   labels?: Readonly<Record<string, string>>;
@@ -84,6 +97,15 @@ export function defaultSessionCreateFormState(): SessionCreateFormState {
     ownerMode: DEFAULT_SESSION_CREATE_OWNER_MODE,
     idleTimeoutSec: '',
     labels: '',
+    locale: '',
+    languages: '',
+    timezone: '',
+    geolocationLatitude: '',
+    geolocationLongitude: '',
+    geolocationAccuracyMeters: '',
+    userAgent: '',
+    browserIdentity: '',
+    egressProfileId: '',
     browserContextMode: 'fresh',
     browserContextId: '',
   };
@@ -145,6 +167,10 @@ export function validateSessionCreateForm(
   if (Object.keys(labels).length > 0) {
     command.labels = labels;
   }
+  const networkIdentity = parseNetworkIdentity(state, errors);
+  if (networkIdentity) {
+    command.network_identity = networkIdentity;
+  }
 
   return {
     command: errors.length === 0 ? command : null,
@@ -153,6 +179,128 @@ export function validateSessionCreateForm(
       ? JSON.stringify(command, null, 2)
       : 'Fix validation errors to preview the API payload.',
   };
+}
+
+function parseNetworkIdentity(
+  state: SessionCreateFormState,
+  errors: string[],
+): SessionNetworkIdentity | undefined {
+  const identity: {
+    locale?: string;
+    languages?: string[];
+    timezone?: string;
+    geolocation?: { latitude: number; longitude: number; accuracy_meters?: number };
+    user_agent?: string;
+    browser_identity?: string;
+    egress_profile_id?: string;
+  } = {};
+  const locale = (state.locale ?? '').trim();
+  if (locale) {
+    identity.locale = locale;
+  }
+  const languages = parseList(state.languages ?? '', 'Language', errors);
+  if (languages.length > 0) {
+    identity.languages = languages;
+  }
+  const timezone = (state.timezone ?? '').trim();
+  if (timezone) {
+    identity.timezone = timezone;
+  }
+  const userAgent = (state.userAgent ?? '').trim();
+  if (userAgent) {
+    if (/[\r\n]/u.test(userAgent)) {
+      errors.push('User agent must be a single line.');
+    } else {
+      identity.user_agent = userAgent;
+    }
+  }
+  const browserIdentity = (state.browserIdentity ?? '').trim();
+  if (browserIdentity) {
+    identity.browser_identity = browserIdentity;
+  }
+  const egressProfileId = (state.egressProfileId ?? '').trim();
+  if (egressProfileId) {
+    const profile = state.egressProfiles?.find((entry) => entry.id === egressProfileId) ?? null;
+    if (state.egressProfiles && state.egressProfiles.length > 0 && !profile) {
+      errors.push('Selected egress profile is not available.');
+    } else if (profile?.state === 'disabled') {
+      errors.push('Selected egress profile is disabled.');
+    } else {
+      identity.egress_profile_id = egressProfileId;
+    }
+  }
+
+  const latitudeText = (state.geolocationLatitude ?? '').trim();
+  const longitudeText = (state.geolocationLongitude ?? '').trim();
+  const accuracyText = (state.geolocationAccuracyMeters ?? '').trim();
+  if (latitudeText || longitudeText || accuracyText) {
+    if (!latitudeText || !longitudeText) {
+      errors.push('Geolocation requires latitude and longitude together.');
+    } else {
+      const latitude = parseFiniteNumber(latitudeText, 'Latitude', errors);
+      const longitude = parseFiniteNumber(longitudeText, 'Longitude', errors);
+      const accuracy = accuracyText
+        ? parseFiniteNumber(accuracyText, 'Geolocation accuracy', errors)
+        : undefined;
+      if (latitude !== undefined && (latitude < -90 || latitude > 90)) {
+        errors.push('Latitude must be between -90 and 90.');
+      }
+      if (longitude !== undefined && (longitude < -180 || longitude > 180)) {
+        errors.push('Longitude must be between -180 and 180.');
+      }
+      if (accuracy !== undefined && accuracy <= 0) {
+        errors.push('Geolocation accuracy must be greater than zero.');
+      }
+      if (
+        latitude !== undefined
+        && longitude !== undefined
+        && latitude >= -90
+        && latitude <= 90
+        && longitude >= -180
+        && longitude <= 180
+        && (accuracy === undefined || accuracy > 0)
+      ) {
+        identity.geolocation = {
+          latitude,
+          longitude,
+          ...(accuracy !== undefined ? { accuracy_meters: accuracy } : {}),
+        };
+      }
+    }
+  }
+
+  return Object.keys(identity).length > 0 ? identity : undefined;
+}
+
+function parseList(value: string, label: string, errors: string[]): string[] {
+  const entries: string[] = [];
+  const seen = new Set<string>();
+  for (const rawPart of value.split(/[\n,]/u)) {
+    const part = rawPart.trim();
+    if (!part) {
+      continue;
+    }
+    if (seen.has(part)) {
+      errors.push(`${label} "${part}" is duplicated.`);
+      continue;
+    }
+    seen.add(part);
+    entries.push(part);
+  }
+  return entries;
+}
+
+function parseFiniteNumber(
+  value: string,
+  label: string,
+  errors: string[],
+): number | undefined {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    errors.push(`${label} must be a finite number.`);
+    return undefined;
+  }
+  return parsed;
 }
 
 export function validateBrowserContextCreateForm(
@@ -258,7 +406,53 @@ export function sessionTemplateDefaultsSummary(
     const mode = typeof defaults.recording.mode === 'string' ? defaults.recording.mode : 'configured';
     facts.push(`recording=${mode}`);
   }
+  const networkSummary = networkIdentitySummary(defaults.network_identity ?? null);
+  if (networkSummary !== 'default network identity') {
+    facts.push(networkSummary);
+  }
   return facts.length > 0 ? facts.join(' | ') : 'Template has no create-session defaults.';
+}
+
+export function networkIdentitySummary(
+  identity: SessionNetworkIdentity | null | undefined,
+  egressProfiles: readonly EgressProfileResource[] = [],
+): string {
+  if (!identity) {
+    return 'default network identity';
+  }
+  const facts: string[] = [];
+  if (identity.locale) {
+    facts.push(`locale=${identity.locale}`);
+  }
+  if (identity.languages && identity.languages.length > 0) {
+    facts.push(`languages=${identity.languages.join(',')}`);
+  }
+  if (identity.timezone) {
+    facts.push(`timezone=${identity.timezone}`);
+  }
+  if (identity.geolocation) {
+    facts.push(`geo=${identity.geolocation.latitude},${identity.geolocation.longitude}`);
+  }
+  if (identity.browser_identity) {
+    facts.push(`browser=${identity.browser_identity}`);
+  } else if (identity.user_agent) {
+    facts.push('user-agent=custom');
+  }
+  if (identity.egress_profile_id) {
+    const profile = egressProfiles.find((entry) => entry.id === identity.egress_profile_id);
+    facts.push(`egress=${profile ? profile.name : shortId(identity.egress_profile_id)}`);
+  }
+  return facts.length > 0 ? facts.join(' | ') : 'default network identity';
+}
+
+export function egressProfileOptionLabel(profile: EgressProfileResource): string {
+  const signals = [
+    profile.state,
+    profile.effective.proxy_configured ? 'proxy' : null,
+    profile.effective.custom_ca_configured ? 'custom CA' : null,
+    profile.effective.bypass_rule_count > 0 ? `${profile.effective.bypass_rule_count} bypass` : null,
+  ].filter(Boolean);
+  return `${profile.name} (${signals.join(', ')})`;
 }
 
 export function browserContextOptionLabel(context: BrowserContextResource): string {

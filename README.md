@@ -482,6 +482,13 @@ Common session operations:
 ./scripts/bpane session list --template-id <template-id> --label team=support
 ./scripts/bpane session create --label purpose=manual-test
 ./scripts/bpane session create --browser-context-id <context-id> --label purpose=context-test
+./scripts/bpane session create \
+  --locale de-DE \
+  --language de-DE \
+  --language en-US \
+  --timezone Europe/Berlin \
+  --egress-profile-id <egress-profile-id> \
+  --label purpose=regional-test
 ./scripts/bpane session get <session-id>
 ./scripts/bpane session status <session-id>
 ./scripts/bpane session access-token <session-id>
@@ -505,6 +512,21 @@ Common session-template operations:
 ./scripts/bpane session-template get <template-id>
 ./scripts/bpane session-template update <template-id> --name customer-debug-session --default-label purpose=debug
 ./scripts/bpane session create --template-id <template-id> --label case=INC-1234
+```
+
+Common egress-profile operations:
+
+```bash
+./scripts/bpane egress-profile create eu-support-egress \
+  --description "Approved support outbound path" \
+  --label region=eu \
+  --proxy-url https://proxy.example:8443 \
+  --bypass-rule localhost \
+  --bypass-rule "*.internal.example" \
+  --custom-ca-ref vault://pki/browserpane/eu-support \
+  --custom-ca-name "EU support CA"
+./scripts/bpane egress-profile list
+./scripts/bpane egress-profile get <egress-profile-id>
 ```
 
 Common browser-context operations:

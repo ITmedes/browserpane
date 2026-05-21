@@ -1,5 +1,7 @@
 import type {
   BrowserContextResource,
+  SessionEffectiveEgress,
+  SessionNetworkIdentity,
   SessionResource,
   SessionStopEligibility,
   SessionTemplateResource,
@@ -18,6 +20,8 @@ export type SessionListItemViewModel = {
   readonly templateId: string | null;
   readonly browserContext: string;
   readonly browserContextId: string | null;
+  readonly networkIdentity: string;
+  readonly egress: string;
   readonly mcpDelegation: string;
   readonly labels: string;
 };
@@ -137,6 +141,16 @@ export class SessionViewModelBuilder {
         },
         { label: 'owner', value: session.owner_mode, testId: 'session-owner-mode' },
         { label: 'idle override', value: session.idle_timeout_sec?.toString() ?? 'default', testId: 'session-idle-timeout' },
+        {
+          label: 'network identity',
+          value: networkIdentityLabel(session.network_identity),
+          testId: 'session-network-identity',
+        },
+        {
+          label: 'egress',
+          value: effectiveEgressLabel(session.effective_egress),
+          testId: 'session-effective-egress',
+        },
         { label: 'labels', value: labelSummary(session.labels ?? {}), testId: 'session-labels' },
         {
           label: 'integration',
@@ -191,6 +205,8 @@ function toListItem(
     templateId: session.template_id ?? null,
     browserContext: browserContextLabel(session, browserContexts),
     browserContextId: session.browser_context?.context_id ?? null,
+    networkIdentity: networkIdentityLabel(session.network_identity),
+    egress: effectiveEgressLabel(session.effective_egress),
     mcpDelegation: mcpDelegationLabel(session),
     labels: labelSummary(session.labels ?? {}),
   };
@@ -257,6 +273,48 @@ function labelSummary(labels: Readonly<Record<string, string>>): string {
     return 'No labels';
   }
   return entries.map(([key, value]) => `${key}=${value}`).join(', ');
+}
+
+function networkIdentityLabel(identity: SessionNetworkIdentity | null | undefined): string {
+  if (!identity) {
+    return 'Default network identity';
+  }
+  const facts: string[] = [];
+  if (identity.locale) {
+    facts.push(identity.locale);
+  }
+  if (identity.timezone) {
+    facts.push(identity.timezone);
+  }
+  if (identity.languages && identity.languages.length > 0) {
+    facts.push(identity.languages.join('/'));
+  }
+  if (identity.geolocation) {
+    facts.push(`geo ${identity.geolocation.latitude},${identity.geolocation.longitude}`);
+  }
+  if (identity.browser_identity) {
+    facts.push(identity.browser_identity);
+  } else if (identity.user_agent) {
+    facts.push('custom user agent');
+  }
+  return facts.length > 0 ? facts.join(' | ') : 'Default network identity';
+}
+
+function effectiveEgressLabel(egress: SessionEffectiveEgress | null | undefined): string {
+  if (!egress) {
+    return 'Default egress';
+  }
+  if (!egress.profile_id) {
+    return 'Default egress';
+  }
+  const facts = [
+    egress.profile_name ?? `Profile ${shortId(egress.profile_id)}`,
+    egress.profile_state ?? 'unknown',
+    egress.proxy_configured ? 'proxy' : null,
+    egress.custom_ca_configured ? 'custom CA' : null,
+    egress.bypass_rule_count > 0 ? `${egress.bypass_rule_count} bypass` : null,
+  ].filter(Boolean);
+  return facts.join(' | ');
 }
 
 function integrationContextSummary(context: Readonly<Record<string, unknown>> | null): string {

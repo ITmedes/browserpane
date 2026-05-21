@@ -416,6 +416,24 @@ describe('bpane operator CLI', () => {
         '900',
         '--idle-timeout-sec',
         '120',
+        '--locale',
+        'de-DE',
+        '--language',
+        'de-DE',
+        '--language',
+        'en-US',
+        '--timezone',
+        'Europe/Berlin',
+        '--geolocation-latitude',
+        '52.52',
+        '--geolocation-longitude',
+        '13.405',
+        '--geolocation-accuracy-meters',
+        '100',
+        '--browser-identity',
+        'desktop-chromium-stable',
+        '--egress-profile-id',
+        '0198dff7-457e-7000-8000-000000000099',
         '--integration-json',
         '{"ticket":"abc"}',
         '--extension-id',
@@ -443,6 +461,18 @@ describe('bpane operator CLI', () => {
       owner_mode: 'collaborative',
       viewport: { width: 1440, height: 900 },
       idle_timeout_sec: 120,
+      network_identity: {
+        locale: 'de-DE',
+        languages: ['de-DE', 'en-US'],
+        timezone: 'Europe/Berlin',
+        geolocation: {
+          latitude: 52.52,
+          longitude: 13.405,
+          accuracy_meters: 100,
+        },
+        browser_identity: 'desktop-chromium-stable',
+        egress_profile_id: '0198dff7-457e-7000-8000-000000000099',
+      },
       labels: { suite: 'cli' },
       integration_context: { ticket: 'abc' },
       extension_ids: ['018f1a5b-0784-71bf-ae46-0c973f00aa11'],
@@ -701,6 +731,23 @@ describe('bpane operator CLI', () => {
     expect(parseStderr(incompatibleContextIo).error).toContain(
       '--browser-context-id can only be used',
     );
+
+    const invalidGeolocationIo = createIo();
+    const invalidGeolocationCode = await runBpaneCli(
+      [
+        'session',
+        'create',
+        '--geolocation-latitude',
+        '52.52',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      invalidGeolocationIo.io,
+      fetchImpl,
+    );
+    expect(invalidGeolocationCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(invalidGeolocationIo).error).toContain(
+      'Use --geolocation-latitude and --geolocation-longitude together',
+    );
     expect(calls).toHaveLength(0);
   });
 
@@ -727,6 +774,14 @@ describe('bpane operator CLI', () => {
         '900',
         '--idle-timeout-sec',
         '1800',
+        '--locale',
+        'de-DE',
+        '--language',
+        'de-DE,en-US',
+        '--timezone',
+        'Europe/Berlin',
+        '--egress-profile-id',
+        'egress-1',
         '--integration-json',
         '{"source":"template"}',
         '--recording-mode',
@@ -751,6 +806,12 @@ describe('bpane operator CLI', () => {
         owner_mode: 'collaborative',
         viewport: { width: 1440, height: 900 },
         idle_timeout_sec: 1800,
+        network_identity: {
+          locale: 'de-DE',
+          languages: ['de-DE', 'en-US'],
+          timezone: 'Europe/Berlin',
+          egress_profile_id: 'egress-1',
+        },
         labels: { purpose: 'debug' },
         integration_context: { source: 'template' },
         recording: { mode: 'manual', format: 'webm', retention_sec: 86400 },
@@ -804,6 +865,31 @@ describe('bpane operator CLI', () => {
     expect(code).toBe(EXIT_CODES.auth);
     expect(calls).toHaveLength(0);
     expect(parseStderr(io).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('validates egress-profile CLI input before fetching', async () => {
+    const missingNameIo = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
+
+    const missingNameCode = await runBpaneCli(
+      ['egress-profile', 'create'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingNameIo.io,
+      fetchImpl,
+    );
+    expect(missingNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingNameIo).error).toContain('Egress profile create requires');
+
+    const missingCaRefIo = createIo();
+    const missingCaRefCode = await runBpaneCli(
+      ['egress-profile', 'create', 'eu-support-egress', '--custom-ca-name', 'EU support CA'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingCaRefIo.io,
+      fetchImpl,
+    );
+    expect(missingCaRefCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingCaRefIo).error).toContain('--custom-ca-ref');
+    expect(calls).toHaveLength(0);
   });
 
   it('lists, fetches, and updates session templates', async () => {
@@ -860,6 +946,75 @@ describe('bpane operator CLI', () => {
         labels: { purpose: 'debug' },
       },
     });
+  });
+
+  it('manages egress profiles through the CLI', async () => {
+    const createProfileIo = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ id: 'egress-1', name: 'eu-support-egress' }, 201),
+      jsonResponse({ profiles: [{ id: 'egress-1' }] }),
+      jsonResponse({ id: 'egress-1', name: 'eu-support-egress' }),
+    );
+
+    const createCode = await runBpaneCli(
+      [
+        'egress-profile',
+        'create',
+        'eu-support-egress',
+        '--description',
+        'EU support outbound path',
+        '--label',
+        'region=eu',
+        '--proxy-url',
+        'https://proxy.example:8443',
+        '--bypass-rule',
+        'localhost',
+        '--bypass-rule',
+        '*.internal.example',
+        '--custom-ca-ref',
+        'vault://pki/browserpane/eu-support',
+        '--custom-ca-name',
+        'EU support CA',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      createProfileIo.io,
+      fetchImpl,
+    );
+    expect(createCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(createProfileIo)).toEqual({ id: 'egress-1', name: 'eu-support-egress' });
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/egress-profiles');
+    expect(calls[0].init.method).toBe('POST');
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      name: 'eu-support-egress',
+      description: 'EU support outbound path',
+      labels: { region: 'eu' },
+      proxy: { url: 'https://proxy.example:8443' },
+      bypass_rules: ['localhost', '*.internal.example'],
+      custom_ca: {
+        certificate_ref: 'vault://pki/browserpane/eu-support',
+        display_name: 'EU support CA',
+      },
+    });
+
+    const listIo = createIo();
+    const listCode = await runBpaneCli(
+      ['egress-profile', 'list'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      listIo.io,
+      fetchImpl,
+    );
+    expect(listCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(listIo)).toEqual({ profiles: [{ id: 'egress-1' }] });
+
+    const getIo = createIo();
+    const getCode = await runBpaneCli(
+      ['egress-profile', 'get', 'egress/with space'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      getIo.io,
+      fetchImpl,
+    );
+    expect(getCode).toBe(EXIT_CODES.ok);
+    expect(calls[2].url).toBe('http://localhost:8080/api/v1/egress-profiles/egress%2Fwith%20space');
   });
 
   it('preserves equals signs in inline option values', async () => {

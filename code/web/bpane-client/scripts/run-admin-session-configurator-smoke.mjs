@@ -30,12 +30,14 @@ async function run() {
   let sessionId = '';
   let template = null;
   let browserContext = null;
+  let egressProfile = null;
 
   try {
     log(`Opening ${options.pageUrl}`);
     await ensureAdminLoggedIn(page, options);
     await cleanupAdminBeforeRun(page, options, log);
-    template = await createSessionTemplate(page, options);
+    egressProfile = await createEgressProfile(page, options);
+    template = await createSessionTemplate(page, options, egressProfile);
 
     browserContext = await verifyCompactPayloadToggle(page, options, template);
 
@@ -46,15 +48,15 @@ async function run() {
     });
 
     await verifyClientValidation(page);
-    await configureTemplatedSession(page, options, template, browserContext);
-    await verifyPayloadPreview(page, template, browserContext);
+    await configureTemplatedSession(page, options, template, browserContext, egressProfile);
+    await verifyPayloadPreview(page, template, browserContext, egressProfile);
     await page.getByTestId('session-inspector-new').click();
     sessionId = await waitForSessionDetailUrl(page, options);
 
     const session = await fetchSession(page, options, sessionId);
-    verifyCreatedSession(session, sessionId, template, browserContext);
-    await verifyDetailUi(page, options, sessionId, template, browserContext);
-    await verifyInspectorTemplateFilter(page, options, sessionId, template, browserContext);
+    verifyCreatedSession(session, sessionId, template, browserContext, egressProfile);
+    await verifyDetailUi(page, options, sessionId, template, browserContext, egressProfile);
+    await verifyInspectorTemplateFilter(page, options, sessionId, template, browserContext, egressProfile);
     await emitSummary(page, options, session, template, log);
   } finally {
     await cleanupCreatedSession(page, options, sessionId, log);
@@ -72,7 +74,7 @@ async function verifyCompactPayloadToggle(page, options, template) {
   await selectBrowserContext(page, browserContext, options);
   await assertNoHorizontalOverflow(page, 'session-create-configurator', 'live session create configurator');
   const templateSummary = await page.getByTestId('session-create-template-summary').textContent();
-  if (!templateSummary?.includes(template.name) || !templateSummary.includes('team=support')) {
+  if (!templateSummary?.includes(template.name) || !templateSummary.includes('team=support') || !templateSummary.includes('locale=de-DE')) {
     throw new Error(`Expected live configurator template summary for ${template.name}, got ${templateSummary}`);
   }
   const toggle = page.getByTestId('session-create-preview-toggle');
@@ -130,16 +132,20 @@ async function verifyClientValidation(page, options) {
 
   await page.getByTestId('session-create-idle-timeout').fill('0');
   await page.getByTestId('session-create-labels').fill('case=1234\ncase=5678');
+  await page.getByTestId('session-create-geolocation-latitude').fill('91');
+  await page.getByTestId('session-create-geolocation-longitude').fill('13.405');
   const disabled = await page.getByTestId('session-inspector-new').isDisabled();
   if (!disabled) {
     throw new Error('Expected configured session create to be disabled for invalid idle timeout and duplicate labels.');
   }
   const errorText = await page.getByTestId('session-create-error').textContent();
-  if (!errorText?.includes('Idle timeout') || !errorText.includes('duplicated')) {
+  if (!errorText?.includes('Idle timeout') || !errorText.includes('duplicated') || !errorText.includes('Latitude')) {
     throw new Error(`Expected validation errors for idle timeout and duplicate labels, got ${errorText}`);
   }
   await page.getByTestId('session-create-idle-timeout').fill('');
   await page.getByTestId('session-create-labels').fill('');
+  await page.getByTestId('session-create-geolocation-latitude').fill('');
+  await page.getByTestId('session-create-geolocation-longitude').fill('');
 }
 
 async function assertNoHorizontalOverflow(page, testId, label) {
@@ -152,16 +158,24 @@ async function assertNoHorizontalOverflow(page, testId, label) {
   }
 }
 
-async function configureTemplatedSession(page, options, template, browserContext) {
+async function configureTemplatedSession(page, options, template, browserContext, egressProfile) {
   await selectSessionTemplate(page, template, options);
   await selectBrowserContext(page, browserContext, options);
+  await page.getByTestId('session-create-locale').fill('de-DE');
+  await page.getByTestId('session-create-languages').fill('de-DE, en-US');
+  await page.getByTestId('session-create-timezone').fill('Europe/Berlin');
+  await page.getByTestId('session-create-geolocation-latitude').fill('52.52');
+  await page.getByTestId('session-create-geolocation-longitude').fill('13.405');
+  await page.getByTestId('session-create-geolocation-accuracy').fill('100');
+  await page.getByTestId('session-create-browser-identity').fill('desktop-chromium-stable');
+  await selectOptionWhenAvailable(page, page.getByTestId('session-create-egress-profile'), egressProfile.id, options);
   await page.getByTestId('session-create-owner-mode').selectOption('collaborative');
   await page.getByTestId('session-create-owner-mode').selectOption('');
   await page.getByTestId('session-create-idle-timeout').fill('');
   await page.getByTestId('session-create-labels').fill('case=1234\npurpose=import-repro');
 }
 
-async function verifyPayloadPreview(page, template, browserContext) {
+async function verifyPayloadPreview(page, template, browserContext, egressProfile) {
   const previewText = await page.getByTestId('session-create-preview').textContent();
   const preview = JSON.parse(previewText ?? '{}');
   const expectedLabels = { case: '1234', purpose: 'import-repro' };
@@ -171,13 +185,17 @@ async function verifyPayloadPreview(page, template, browserContext) {
     || Object.hasOwn(preview, 'idle_timeout_sec')
     || preview.browser_context?.mode !== 'reusable'
     || preview.browser_context?.context_id !== browserContext.id
+    || preview.network_identity?.locale !== 'de-DE'
+    || preview.network_identity?.timezone !== 'Europe/Berlin'
+    || preview.network_identity?.geolocation?.latitude !== 52.52
+    || preview.network_identity?.egress_profile_id !== egressProfile.id
     || JSON.stringify(preview.labels) !== JSON.stringify(expectedLabels)
   ) {
     throw new Error(`Unexpected session create payload preview: ${previewText}`);
   }
 }
 
-async function verifyDetailUi(page, options, sessionId, template, browserContext) {
+async function verifyDetailUi(page, options, sessionId, template, browserContext, egressProfile) {
   await page.getByTestId('session-inspector-detail').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,
@@ -199,21 +217,26 @@ async function verifyDetailUi(page, options, sessionId, template, browserContext
   );
   const labels = await page.getByTestId('session-labels').textContent();
   const integration = await page.getByTestId('session-integration-context').textContent();
+  const network = await page.getByTestId('session-network-identity').textContent();
+  const egress = await page.getByTestId('session-effective-egress').textContent();
   if (
     ownerMode !== 'collaborative'
     || idleTimeout !== '1200'
     || !detailTemplate?.includes(template.name)
     || !detailBrowserContext?.includes(browserContext.name)
+    || !network?.includes('de-DE')
+    || !network.includes('Europe/Berlin')
+    || !egress?.includes(egressProfile.name)
     || !labels?.includes('purpose=import-repro')
     || !labels.includes('team=support')
     || !integration?.includes('source=admin-smoke-template')
   ) {
-    throw new Error(`Unexpected configured session detail facts: ${ownerMode} / ${idleTimeout} / ${detailTemplate} / ${detailBrowserContext} / ${labels} / ${integration}`);
+    throw new Error(`Unexpected configured session detail facts: ${ownerMode} / ${idleTimeout} / ${detailTemplate} / ${detailBrowserContext} / ${network} / ${egress} / ${labels} / ${integration}`);
   }
   await page.getByTestId('session-file-bindings').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
 }
 
-async function verifyInspectorTemplateFilter(page, options, sessionId, template, browserContext) {
+async function verifyInspectorTemplateFilter(page, options, sessionId, template, browserContext, egressProfile) {
   await page.goto(adminRouteUrl(options, 'sessions'), { waitUntil: 'domcontentloaded' });
   await page.getByTestId('session-inspector-list').waitFor({
     state: 'visible',
@@ -230,11 +253,15 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template,
     options.connectTimeoutMs,
     100,
   );
+  const rowEgress = await row.getByTestId('session-inspector-row-egress').textContent();
   if (!rowTemplate?.includes(template.name)) {
     throw new Error(`Expected inspector row template ${template.name}, got ${rowTemplate}`);
   }
   if (!rowBrowserContext?.includes(browserContext.name)) {
     throw new Error(`Expected inspector row browser context ${browserContext.name}, got ${rowBrowserContext}`);
+  }
+  if (!rowEgress?.includes(egressProfile.name)) {
+    throw new Error(`Expected inspector row egress profile ${egressProfile.name}, got ${rowEgress}`);
   }
   const count = await page.getByTestId('session-inspector-count').textContent();
   if (!count?.includes('visible sessions')) {
@@ -254,15 +281,19 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template,
     options.connectTimeoutMs,
     100,
   );
+  const selectedEgress = await page.getByTestId('session-selected-egress').textContent();
   if (!selectedTemplate?.includes(template.name)) {
     throw new Error(`Expected live selected session template ${template.name}, got ${selectedTemplate}`);
   }
   if (!selectedBrowserContext?.includes(browserContext.name)) {
     throw new Error(`Expected live selected session browser context ${browserContext.name}, got ${selectedBrowserContext}`);
   }
+  if (!selectedEgress?.includes(egressProfile.name)) {
+    throw new Error(`Expected live selected session egress ${egressProfile.name}, got ${selectedEgress}`);
+  }
 }
 
-function verifyCreatedSession(session, sessionId, template, browserContext) {
+function verifyCreatedSession(session, sessionId, template, browserContext, egressProfile) {
   if (session.id !== sessionId) {
     throw new Error(`Expected API session ${sessionId}, got ${session.id}`);
   }
@@ -275,6 +306,14 @@ function verifyCreatedSession(session, sessionId, template, browserContext) {
   if (session.browser_context?.mode !== 'reusable' || session.browser_context?.context_id !== browserContext.id) {
     throw new Error(`Expected reusable browser context ${browserContext.id}, got ${JSON.stringify(session.browser_context)}`);
   }
+  if (
+    session.network_identity?.locale !== 'de-DE'
+    || session.network_identity?.timezone !== 'Europe/Berlin'
+    || session.network_identity?.egress_profile_id !== egressProfile.id
+    || session.effective_egress?.profile_id !== egressProfile.id
+  ) {
+    throw new Error(`Expected configured network identity and egress, got ${JSON.stringify(session.network_identity)} / ${JSON.stringify(session.effective_egress)}`);
+  }
   if (session.idle_timeout_sec !== 1200) {
     throw new Error(`Expected template idle timeout 1200, got ${session.idle_timeout_sec}`);
   }
@@ -286,7 +325,30 @@ function verifyCreatedSession(session, sessionId, template, browserContext) {
   }
 }
 
-async function createSessionTemplate(page, options) {
+async function createEgressProfile(page, options) {
+  const accessToken = await getAdminAccessToken(page);
+  const name = `Admin smoke egress ${Date.now()}`;
+  return await fetchJson(`${apiOrigin(options)}/api/v1/egress-profiles`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      description: 'Admin configurator smoke egress profile',
+      labels: { suite: 'admin-session-configurator-smoke' },
+      proxy: { url: 'https://proxy.example:8443' },
+      bypass_rules: ['localhost', '*.internal.example'],
+      custom_ca: {
+        certificate_ref: 'vault://pki/browserpane/eu-support',
+        display_name: 'EU support CA',
+      },
+    }),
+  });
+}
+
+async function createSessionTemplate(page, options, egressProfile) {
   const accessToken = await getAdminAccessToken(page);
   const name = `Admin smoke template ${Date.now()}`;
   return await fetchJson(`${apiOrigin(options)}/api/v1/session-templates`, {
@@ -304,6 +366,12 @@ async function createSessionTemplate(page, options) {
         idle_timeout_sec: 1200,
         labels: { team: 'support' },
         integration_context: { source: 'admin-smoke-template' },
+        network_identity: {
+          locale: 'de-DE',
+          languages: ['de-DE', 'en-US'],
+          timezone: 'Europe/Berlin',
+          egress_profile_id: egressProfile.id,
+        },
       },
     }),
   });
