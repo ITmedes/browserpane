@@ -309,6 +309,9 @@ while uploads, downloads, and session-file mounts remain tied to the concrete
 session. Only one active runtime writer may use a reusable context at a time;
 additional sessions with the same context can be created but runtime access is
 rejected until the active writer stops or releases its runtime.
+Browser context resources include a `usage` summary with the current visible
+session reference count and the active runtime writer session id, when one
+exists, so API clients and the admin UI make the same lifecycle decisions.
 Deleting a reusable context refuses active runtime writers and, for
 docker-backed runtimes, removes the context-scoped Chromium profile volume when
 no active writer exists. The admin create-session configurator can create

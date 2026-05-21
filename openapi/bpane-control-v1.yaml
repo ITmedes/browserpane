@@ -4704,6 +4704,7 @@ components:
         - labels
         - persistence_mode
         - state
+        - usage
         - created_at
         - updated_at
         - last_used_at
@@ -4725,6 +4726,8 @@ components:
           $ref: '#/components/schemas/BrowserContextPersistenceMode'
         state:
           $ref: '#/components/schemas/BrowserContextState'
+        usage:
+          $ref: '#/components/schemas/BrowserContextUsageResource'
         created_at:
           type: string
           format: date-time
@@ -4738,6 +4741,26 @@ components:
         deleted_at:
           type: string
           format: date-time
+          nullable: true
+    BrowserContextUsageResource:
+      type: object
+      required:
+        - visible_session_count
+        - active_runtime_session_count
+        - active_runtime_session_id
+      properties:
+        visible_session_count:
+          type: integer
+          format: int32
+          minimum: 0
+        active_runtime_session_count:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 1
+        active_runtime_session_id:
+          type: string
+          format: uuid
           nullable: true
     BrowserContextListResponse:
       type: object

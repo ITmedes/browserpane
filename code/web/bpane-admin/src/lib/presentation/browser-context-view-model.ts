@@ -15,7 +15,9 @@ export type BrowserContextCatalogRowViewModel = {
   readonly deletedAt: string;
   readonly sessionCount: number;
   readonly activeSessionCount: number;
+  readonly activeSessionId: string | null;
   readonly sessionSummary: string;
+  readonly activeRuntimeSummary: string;
   readonly canDelete: boolean;
   readonly deleteHint: string;
 };
@@ -39,9 +41,9 @@ export class BrowserContextViewModelBuilder {
     readonly search?: string;
   }): BrowserContextCatalogViewModel {
     const normalized = (input.search ?? '').trim().toLowerCase();
-    const usage = contextUsage(input.sessions ?? []);
+    const sessionUsage = contextUsage(input.sessions ?? []);
     const rows = input.contexts
-      .map((context) => toRow(context, usage.get(context.id) ?? emptyUsage()))
+      .map((context) => toRow(context, contextUsageForContext(context, sessionUsage.get(context.id))))
       .filter((row) => rowMatches(row, normalized));
     const selectedContext = rows.find((row) => row.id === input.selectedContextId) ?? rows[0] ?? null;
     return {
@@ -62,10 +64,11 @@ export class BrowserContextViewModelBuilder {
 type ContextUsage = {
   readonly sessionCount: number;
   readonly activeSessionCount: number;
+  readonly activeSessionId: string | null;
 };
 
 function contextUsage(sessions: readonly SessionResource[]): ReadonlyMap<string, ContextUsage> {
-  const usage = new Map<string, { sessionCount: number; activeSessionCount: number }>();
+  const usage = new Map<string, { sessionCount: number; activeSessionCount: number; activeSessionId: string | null }>();
   for (const session of sessions) {
     const contextId = session.browser_context?.mode === 'reusable'
       ? session.browser_context.context_id
@@ -73,23 +76,43 @@ function contextUsage(sessions: readonly SessionResource[]): ReadonlyMap<string,
     if (!contextId) {
       continue;
     }
-    const current = usage.get(contextId) ?? { sessionCount: 0, activeSessionCount: 0 };
+    const current = usage.get(contextId) ?? { sessionCount: 0, activeSessionCount: 0, activeSessionId: null };
     current.sessionCount += 1;
     if (session.status.runtime_state === 'running' || session.status.presence_state === 'connected') {
       current.activeSessionCount += 1;
+      current.activeSessionId ??= session.id;
     }
     usage.set(contextId, current);
   }
   return usage;
 }
 
+function contextUsageForContext(context: BrowserContextResource, sessionUsage: ContextUsage | undefined): ContextUsage {
+  const apiUsage = context.usage
+    ? {
+        sessionCount: context.usage.visible_session_count,
+        activeSessionCount: context.usage.active_runtime_session_count,
+        activeSessionId: context.usage.active_runtime_session_id ?? null,
+      }
+    : emptyUsage();
+  if (!sessionUsage) {
+    return apiUsage;
+  }
+  return {
+    sessionCount: Math.max(apiUsage.sessionCount, sessionUsage.sessionCount),
+    activeSessionCount: Math.max(apiUsage.activeSessionCount, sessionUsage.activeSessionCount),
+    activeSessionId: apiUsage.activeSessionId ?? sessionUsage.activeSessionId,
+  };
+}
+
 function emptyUsage(): ContextUsage {
-  return { sessionCount: 0, activeSessionCount: 0 };
+  return { sessionCount: 0, activeSessionCount: 0, activeSessionId: null };
 }
 
 function toRow(context: BrowserContextResource, usage: ContextUsage): BrowserContextCatalogRowViewModel {
   const activeSessionCount = usage.activeSessionCount;
   const sessionCount = usage.sessionCount;
+  const activeSessionId = usage.activeSessionId;
   const canDelete = context.state === 'ready' && sessionCount === 0 && activeSessionCount === 0;
   return {
     id: context.id,
@@ -105,8 +128,10 @@ function toRow(context: BrowserContextResource, usage: ContextUsage): BrowserCon
     deletedAt: formatOptionalTimestamp(context.deleted_at, 'not deleted'),
     sessionCount,
     activeSessionCount,
+    activeSessionId,
     sessionSummary: `${sessionCount} visible session${sessionCount === 1 ? '' : 's'}`
-      + (activeSessionCount > 0 ? `, ${activeSessionCount} active` : ''),
+      + (activeSessionCount > 0 ? `, ${activeSessionCount} active runtime` : ''),
+    activeRuntimeSummary: activeRuntimeSummary(activeSessionCount, activeSessionId),
     canDelete,
     deleteHint: deleteHint(context, sessionCount, activeSessionCount),
   };
@@ -142,6 +167,7 @@ function rowMatches(row: BrowserContextCatalogRowViewModel, normalized: string):
     row.persistence,
     row.state,
     row.sessionSummary,
+    row.activeRuntimeSummary,
   ].some((value) => value.toLowerCase().includes(normalized));
 }
 
@@ -171,6 +197,16 @@ function apiExample(contextId: string): string {
       }, null, 2),
     ].join('\n'),
   ].join('\n\n');
+}
+
+function activeRuntimeSummary(activeSessionCount: number, activeSessionId: string | null): string {
+  if (activeSessionId) {
+    return `session ${shortId(activeSessionId)}`;
+  }
+  if (activeSessionCount > 0) {
+    return `${activeSessionCount} active runtime writer${activeSessionCount === 1 ? '' : 's'}`;
+  }
+  return 'none';
 }
 
 function shortId(value: string): string {
