@@ -63,6 +63,12 @@ impl SessionManager {
             .await
     }
 
+    pub async fn active_browser_context_session_id(&self, context_id: Uuid) -> Option<Uuid> {
+        self.inner
+            .active_browser_context_session_id(context_id)
+            .await
+    }
+
     pub async fn resolve(&self, session_id: Uuid) -> Result<SessionRuntime, SessionManagerError> {
         self.inner.resolve(session_id).await
     }

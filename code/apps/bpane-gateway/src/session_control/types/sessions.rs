@@ -311,10 +311,18 @@ pub struct BrowserContextResource {
     pub labels: HashMap<String, String>,
     pub persistence_mode: BrowserContextPersistenceMode,
     pub state: BrowserContextState,
+    pub usage: BrowserContextUsageResource,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_used_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct BrowserContextUsageResource {
+    pub visible_session_count: u32,
+    pub active_runtime_session_count: u32,
+    pub active_runtime_session_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
@@ -611,6 +619,7 @@ impl StoredBrowserContext {
             labels: self.labels.clone(),
             persistence_mode: self.persistence_mode,
             state: self.state,
+            usage: BrowserContextUsageResource::default(),
             created_at: self.created_at,
             updated_at: self.updated_at,
             last_used_at: self.last_used_at,

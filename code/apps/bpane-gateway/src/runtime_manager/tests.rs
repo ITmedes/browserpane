@@ -549,3 +549,35 @@ async fn docker_runtime_rejects_context_data_delete_while_context_is_active() {
         }
     );
 }
+
+#[tokio::test]
+async fn docker_runtime_reports_active_browser_context_writer() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    manager.leases.lock().await.insert(
+        session_id,
+        DockerLeaseState::Starting {
+            lease: RuntimeLease {
+                session_id,
+                agent_socket_path: manager.socket_path_for_session(session_id),
+                container_name: Some(manager.container_name_for_session(session_id)),
+                browser_context_id: Some(context_id),
+                discard_session_data_on_release: false,
+                idle_generation: 0,
+            },
+            notify: Arc::new(tokio::sync::Notify::new()),
+        },
+    );
+
+    assert_eq!(
+        manager.active_browser_context_session_id(context_id).await,
+        Some(session_id)
+    );
+    assert_eq!(
+        manager
+            .active_browser_context_session_id(Uuid::now_v7())
+            .await,
+        None
+    );
+}

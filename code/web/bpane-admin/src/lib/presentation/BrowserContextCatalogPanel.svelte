@@ -194,6 +194,7 @@
           <div class="grid min-w-0 grid-cols-2 gap-2 text-xs text-admin-ink/70">
             {@render Fact('Persistence', context.persistence, 'browser-context-detail-persistence')}
             {@render Fact('References', context.sessionSummary, 'browser-context-detail-references')}
+            {@render Fact('Active writer', context.activeRuntimeSummary, 'browser-context-detail-active-writer')}
             {@render Fact('Last used', context.lastUsedAt, 'browser-context-detail-last-used')}
             {@render Fact('Updated', context.updatedAt, 'browser-context-detail-updated')}
             {@render Fact('Created', context.createdAt, 'browser-context-detail-created')}

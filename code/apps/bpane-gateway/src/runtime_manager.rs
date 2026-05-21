@@ -289,6 +289,17 @@ impl SessionRuntimeManager {
         }
     }
 
+    pub async fn active_browser_context_session_id(&self, context_id: Uuid) -> Option<Uuid> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(manager) => {
+                manager.active_browser_context_session_id(context_id).await
+            }
+            RuntimeBackend::Docker(manager) => {
+                manager.active_browser_context_session_id(context_id).await
+            }
+        }
+    }
+
     pub async fn resolve(
         &self,
         session_id: Uuid,

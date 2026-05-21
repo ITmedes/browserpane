@@ -1,6 +1,9 @@
+use std::collections::{HashMap, HashSet};
+
 use axum::routing::{get, post};
 
 use super::*;
+use crate::session_control::{BrowserContextUsageResource, StoredBrowserContext};
 
 pub(super) fn browser_context_routes() -> Router<Arc<ApiState>> {
     Router::new()
@@ -25,10 +28,8 @@ async fn list_browser_contexts(
         .session_store
         .list_browser_contexts_for_owner(&principal)
         .await
-        .map_err(map_session_store_error)?
-        .into_iter()
-        .map(|context| context.to_resource())
-        .collect();
+        .map_err(map_session_store_error)?;
+    let contexts = browser_context_resources_with_usage(&state, &principal, contexts).await?;
     Ok(Json(BrowserContextListResponse { contexts }))
 }
 
@@ -77,7 +78,9 @@ async fn get_browser_context(
                 }),
             )
         })?;
-    Ok(Json(context.to_resource()))
+    Ok(Json(
+        browser_context_resource_with_usage(&state, &principal, context).await?,
+    ))
 }
 
 async fn delete_browser_context(
@@ -128,5 +131,101 @@ async fn delete_browser_context(
                 }),
             )
         })?;
-    Ok(Json(context.to_resource()))
+    Ok(Json(
+        browser_context_resource_with_usage(&state, &principal, context).await?,
+    ))
+}
+
+async fn browser_context_resources_with_usage(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    contexts: Vec<StoredBrowserContext>,
+) -> Result<Vec<BrowserContextResource>, (StatusCode, Json<ErrorResponse>)> {
+    let context_ids = contexts
+        .iter()
+        .map(|context| context.id)
+        .collect::<Vec<_>>();
+    let usage_by_context = browser_context_usage_by_id(state, principal, &context_ids).await?;
+    Ok(contexts
+        .into_iter()
+        .map(|context| {
+            let usage = usage_by_context
+                .get(&context.id)
+                .cloned()
+                .unwrap_or_default();
+            browser_context_resource_with_usage_value(context, usage)
+        })
+        .collect())
+}
+
+async fn browser_context_resource_with_usage(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    context: StoredBrowserContext,
+) -> Result<BrowserContextResource, (StatusCode, Json<ErrorResponse>)> {
+    let mut usage_by_context = browser_context_usage_by_id(state, principal, &[context.id]).await?;
+    let usage = usage_by_context.remove(&context.id).unwrap_or_default();
+    Ok(browser_context_resource_with_usage_value(context, usage))
+}
+
+fn browser_context_resource_with_usage_value(
+    context: StoredBrowserContext,
+    usage: BrowserContextUsageResource,
+) -> BrowserContextResource {
+    let mut resource = context.to_resource();
+    resource.usage = usage;
+    resource
+}
+
+async fn browser_context_usage_by_id(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    context_ids: &[Uuid],
+) -> Result<HashMap<Uuid, BrowserContextUsageResource>, (StatusCode, Json<ErrorResponse>)> {
+    if context_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let requested_context_ids = context_ids.iter().copied().collect::<HashSet<_>>();
+    let mut usage_by_context = HashMap::new();
+    let sessions = state
+        .session_store
+        .list_sessions_for_owner(principal)
+        .await
+        .map_err(map_session_store_error)?;
+
+    for session in sessions {
+        let Some(context_id) = reusable_context_id(&session) else {
+            continue;
+        };
+        if !requested_context_ids.contains(&context_id) {
+            continue;
+        }
+        usage_by_context
+            .entry(context_id)
+            .or_insert_with(BrowserContextUsageResource::default)
+            .visible_session_count += 1;
+    }
+
+    for context_id in requested_context_ids {
+        let Some(active_session_id) = state
+            .session_manager
+            .active_browser_context_session_id(context_id)
+            .await
+        else {
+            continue;
+        };
+        let usage = usage_by_context
+            .entry(context_id)
+            .or_insert_with(BrowserContextUsageResource::default);
+        usage.active_runtime_session_count = 1;
+        usage.active_runtime_session_id = Some(active_session_id);
+    }
+
+    Ok(usage_by_context)
+}
+
+fn reusable_context_id(session: &StoredSession) -> Option<Uuid> {
+    (session.browser_context.mode == SessionBrowserContextMode::Reusable)
+        .then_some(session.browser_context.context_id)
+        .flatten()
 }

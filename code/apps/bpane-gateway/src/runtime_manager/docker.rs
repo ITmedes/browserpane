@@ -248,6 +248,11 @@ impl DockerRuntimeManager {
         }
     }
 
+    pub(super) async fn active_browser_context_session_id(&self, context_id: Uuid) -> Option<Uuid> {
+        let leases = self.leases.lock().await;
+        active_browser_context_session_id(&leases, context_id)
+    }
+
     pub(super) async fn runtime_data_scope_for_session(
         &self,
         session_id: Uuid,

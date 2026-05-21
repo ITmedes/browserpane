@@ -30,6 +30,9 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert_eq!(context["name"], "support-profile");
     assert_eq!(context["persistence_mode"], "reusable");
     assert_eq!(context["state"], "ready");
+    assert_eq!(context["usage"]["visible_session_count"], 0);
+    assert_eq!(context["usage"]["active_runtime_session_count"], 0);
+    assert!(context["usage"]["active_runtime_session_id"].is_null());
     assert!(context["last_used_at"].is_null());
 
     let duplicate_response = app
@@ -61,6 +64,7 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert_eq!(get_response.status(), StatusCode::OK);
     let fetched = response_json(get_response).await;
     assert_eq!(fetched["id"], context_id);
+    assert_eq!(fetched["usage"]["visible_session_count"], 0);
 
     let session_response = app
         .clone()
@@ -103,6 +107,12 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     let list = response_json(list_response).await;
     assert_eq!(list["contexts"].as_array().unwrap().len(), 1);
     assert_eq!(list["contexts"][0]["id"], context_id);
+    assert_eq!(list["contexts"][0]["usage"]["visible_session_count"], 1);
+    assert_eq!(
+        list["contexts"][0]["usage"]["active_runtime_session_count"],
+        0
+    );
+    assert!(list["contexts"][0]["usage"]["active_runtime_session_id"].is_null());
     assert!(!list["contexts"][0]["last_used_at"].is_null());
 
     let delete_response = app
@@ -120,6 +130,7 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert_eq!(delete_response.status(), StatusCode::OK);
     let deleted = response_json(delete_response).await;
     assert_eq!(deleted["state"], "deleted");
+    assert_eq!(deleted["usage"]["visible_session_count"], 1);
     assert!(!deleted["deleted_at"].is_null());
 
     let deleted_context_session = app

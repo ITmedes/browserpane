@@ -47,6 +47,14 @@ impl StaticSingleRuntimeManager {
             .map(|_| RuntimeAssignmentStatus::Ready)
     }
 
+    pub(super) async fn active_browser_context_session_id(&self, context_id: Uuid) -> Option<Uuid> {
+        let active = self.active.lock().await;
+        active
+            .as_ref()
+            .filter(|lease| lease.browser_context_id == Some(context_id))
+            .map(|lease| lease.session_id)
+    }
+
     pub(super) async fn resolve(
         self: &Arc<Self>,
         session_id: Uuid,

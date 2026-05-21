@@ -32,10 +32,17 @@ export type BrowserContextResource = {
   readonly labels: Readonly<Record<string, string>>;
   readonly persistence_mode: BrowserContextPersistenceMode;
   readonly state: BrowserContextState;
+  readonly usage?: BrowserContextUsageResource | null;
   readonly created_at: string;
   readonly updated_at: string;
   readonly last_used_at?: string | null;
   readonly deleted_at?: string | null;
+};
+
+export type BrowserContextUsageResource = {
+  readonly visible_session_count: number;
+  readonly active_runtime_session_count: number;
+  readonly active_runtime_session_id?: string | null;
 };
 
 export type BrowserContextListResponse = {

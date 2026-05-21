@@ -12,7 +12,7 @@ describe('BrowserContextViewModelBuilder', () => {
 
     expect(viewModel.readyCount).toBe(1);
     expect(viewModel.selectedContext?.name).toBe('Support profile');
-    expect(viewModel.selectedContext?.sessionSummary).toBe('1 visible session, 1 active');
+    expect(viewModel.selectedContext?.sessionSummary).toBe('1 visible session, 1 active runtime');
     expect(viewModel.selectedContext?.canDelete).toBe(false);
     expect(viewModel.selectedContext?.deleteHint).toContain('active sessions');
     expect(viewModel.apiExample).toContain(`/api/v1/browser-contexts/${CONTEXT.id}`);
@@ -29,6 +29,24 @@ describe('BrowserContextViewModelBuilder', () => {
 
     expect(viewModel.selectedContext?.canDelete).toBe(true);
     expect(viewModel.selectedContext?.deleteHint).toContain('Chromium profile data');
+  });
+
+  it('uses API usage when the session list is unavailable', () => {
+    const viewModel = BrowserContextViewModelBuilder.catalog({
+      contexts: [{
+        ...CONTEXT,
+        usage: {
+          visible_session_count: 2,
+          active_runtime_session_count: 1,
+          active_runtime_session_id: SESSION.id,
+        },
+      }],
+      selectedContextId: CONTEXT.id,
+    });
+
+    expect(viewModel.selectedContext?.sessionSummary).toBe('2 visible sessions, 1 active runtime');
+    expect(viewModel.selectedContext?.activeRuntimeSummary).toContain('019df4d2');
+    expect(viewModel.selectedContext?.canDelete).toBe(false);
   });
 
   it('filters context rows by name, label, and usage text', () => {

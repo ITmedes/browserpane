@@ -52,6 +52,11 @@ const BROWSER_CONTEXT = {
   labels: { team: 'support' },
   persistence_mode: 'reusable',
   state: 'ready',
+  usage: {
+    visible_session_count: 1,
+    active_runtime_session_count: 1,
+    active_runtime_session_id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
+  },
   created_at: '2026-05-04T18:30:00Z',
   updated_at: '2026-05-04T18:30:00Z',
   last_used_at: null,
@@ -120,6 +125,11 @@ describe('ControlClient', () => {
       name: 'Support profile',
       persistence_mode: 'reusable',
       state: 'ready',
+      usage: {
+        visible_session_count: 1,
+        active_runtime_session_count: 1,
+        active_runtime_session_id: SESSION.id,
+      },
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,

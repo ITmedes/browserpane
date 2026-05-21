@@ -3,6 +3,7 @@ import type {
   BrowserContextPersistenceMode,
   BrowserContextResource,
   BrowserContextState,
+  BrowserContextUsageResource,
   SessionAutomationDelegate,
   SessionBrowserContextMode,
   SessionBrowserContextResource,
@@ -46,6 +47,7 @@ export class ControlSessionMapper {
     const description = optionalString(object.description, 'browser context description');
     const lastUsedAt = optionalString(object.last_used_at, 'browser context last_used_at');
     const deletedAt = optionalString(object.deleted_at, 'browser context deleted_at');
+    const usage = toBrowserContextUsage(object.usage);
     return {
       id: expectString(object.id, 'browser context id'),
       name: expectString(object.name, 'browser context name'),
@@ -57,6 +59,7 @@ export class ControlSessionMapper {
         BROWSER_CONTEXT_PERSISTENCE_MODES,
       ),
       state: expectEnum(object.state, 'browser context state', BROWSER_CONTEXT_STATES),
+      usage: usage ?? null,
       created_at: expectString(object.created_at, 'browser context created_at'),
       updated_at: expectString(object.updated_at, 'browser context updated_at'),
       last_used_at: lastUsedAt ?? null,
@@ -171,6 +174,28 @@ function optionalRecord(value: unknown, label: string): Readonly<Record<string, 
     return value;
   }
   return expectRecord(value, label);
+}
+
+function toBrowserContextUsage(value: unknown): BrowserContextUsageResource | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const object = expectRecord(value, 'browser context usage');
+  const activeRuntimeSessionId = optionalString(
+    object.active_runtime_session_id,
+    'browser context usage active_runtime_session_id',
+  );
+  return {
+    visible_session_count: expectNumber(
+      object.visible_session_count,
+      'browser context usage visible_session_count',
+    ),
+    active_runtime_session_count: expectNumber(
+      object.active_runtime_session_count,
+      'browser context usage active_runtime_session_count',
+    ),
+    active_runtime_session_id: activeRuntimeSessionId ?? null,
+  };
 }
 
 function toOptionalViewport(value: unknown, label: string): SessionViewport | null | undefined {
