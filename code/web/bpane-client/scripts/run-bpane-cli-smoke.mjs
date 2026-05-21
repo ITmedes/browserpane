@@ -88,17 +88,94 @@ async function run() {
       throw new Error('CLI profile show did not return the smoke profile.');
     }
 
+    const template = runBpaneCli([
+      'session-template',
+      'create',
+      `customer-debug-${runLabel}`,
+      '--description',
+      'Operator CLI smoke template',
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--default-label',
+      'team=support',
+      '--default-label',
+      'purpose=debug',
+      '--owner-mode',
+      'collaborative',
+      '--idle-timeout-sec',
+      '1800',
+      '--integration-json',
+      JSON.stringify({ source: 'bpane-cli-smoke-template' }),
+      '--recording-mode',
+      'manual',
+      '--recording-retention-sec',
+      '86400',
+    ], cliEnv);
+    const templateId = template.id;
+    if (!templateId || template.version !== 1) {
+      throw new Error(`CLI session-template create returned an invalid template: ${JSON.stringify(template)}`);
+    }
+
+    const listedTemplates = runBpaneCli(['session-template', 'list'], cliEnv);
+    if (!Array.isArray(listedTemplates.templates) || !listedTemplates.templates.some((item) => item.id === templateId)) {
+      throw new Error(`CLI session-template list did not include ${templateId}.`);
+    }
+
+    const fetchedTemplate = runBpaneCli(['session-template', 'get', templateId], cliEnv);
+    if (fetchedTemplate.id !== templateId || fetchedTemplate.defaults?.labels?.team !== 'support') {
+      throw new Error(`CLI session-template get returned unexpected template data: ${JSON.stringify(fetchedTemplate)}`);
+    }
+
+    const updatedTemplate = runBpaneCli([
+      'session-template',
+      'update',
+      templateId,
+      '--name',
+      `customer-debug-${runLabel}`,
+      '--description',
+      'Operator CLI smoke template updated',
+      '--default-label',
+      'team=support',
+      '--default-label',
+      'purpose=debug',
+      '--default-label',
+      'tier=gold',
+      '--idle-timeout-sec',
+      '1800',
+      '--recording-mode',
+      'manual',
+      '--recording-retention-sec',
+      '86400',
+    ], cliEnv);
+    if (updatedTemplate.id !== templateId || updatedTemplate.version !== 2 || updatedTemplate.defaults?.labels?.tier !== 'gold') {
+      throw new Error(`CLI session-template update did not increment the template version: ${JSON.stringify(updatedTemplate)}`);
+    }
+
     const created = runBpaneCli([
       'session',
       'create',
+      '--template-id',
+      templateId,
       '--label',
       'suite=bpane-cli-smoke',
       '--label',
       `run_id=${runLabel}`,
+      '--integration-json',
+      JSON.stringify({ ticket: runLabel }),
     ], cliEnv);
     sessionId = created.id;
     if (!sessionId) {
       throw new Error('CLI session create did not return an id.');
+    }
+    if (
+      created.template_id !== templateId
+      || created.labels?.team !== 'support'
+      || created.labels?.tier !== 'gold'
+      || created.labels?.run_id !== runLabel
+      || created.integration_context?.ticket !== runLabel
+      || created.recording?.mode !== 'manual'
+    ) {
+      throw new Error(`CLI session create did not apply template defaults: ${JSON.stringify(created)}`);
     }
 
     const listed = runBpaneCli(['session', 'list'], cliEnv);
@@ -106,8 +183,21 @@ async function run() {
       throw new Error(`CLI session list did not include ${sessionId}.`);
     }
 
-    const filteredList = runBpaneCli(['session', 'list', '--label', `run_id=${runLabel}`, '--limit', '1'], cliEnv);
-    if (filteredList.returned_count !== 1 || filteredList.sessions?.[0]?.id !== sessionId) {
+    const filteredList = runBpaneCli([
+      'session',
+      'list',
+      '--template-id',
+      templateId,
+      '--label',
+      `run_id=${runLabel}`,
+      '--integration',
+      `ticket=${runLabel}`,
+      '--runtime-state',
+      'not_started',
+      '--limit',
+      '1',
+    ], cliEnv);
+    if (!Array.isArray(filteredList.sessions) || filteredList.sessions.length !== 1 || filteredList.sessions[0]?.id !== sessionId) {
       throw new Error('CLI filtered session list did not return the smoke session.');
     }
 

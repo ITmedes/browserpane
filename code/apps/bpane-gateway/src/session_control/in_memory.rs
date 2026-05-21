@@ -5,6 +5,7 @@ mod automation_tasks;
 mod recordings;
 mod runtime_assignments;
 mod session_files;
+mod session_templates;
 mod sessions;
 mod state;
 mod workflow_definitions;

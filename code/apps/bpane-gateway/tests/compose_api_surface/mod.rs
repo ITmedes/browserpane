@@ -4,6 +4,7 @@ pub mod ownership_boundaries;
 pub mod recording_artifacts;
 pub mod session_churn;
 pub mod session_compatibility;
+pub mod session_templates;
 pub mod sessions_recordings;
 pub mod support;
 pub mod workflow_run_controls;

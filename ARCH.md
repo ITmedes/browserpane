@@ -262,9 +262,13 @@ service.
 - **HTTP API** (`api.rs`, :8932):
   - canonical frozen v1 contract: `openapi/bpane-control-v1.yaml`
   - `POST /api/v1/sessions` — create a persistent session resource
-  - `GET /api/v1/sessions` — list owner-scoped sessions
+  - `GET /api/v1/sessions` — list owner-scoped sessions, with catalog filters for template id, lifecycle/runtime state, labels, integration context, limit, and offset
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
   - `DELETE /api/v1/sessions/{id}` — safe-stop one owner-scoped session resource
+  - `POST /api/v1/session-templates` — create a reusable owner-scoped session template
+  - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
+  - `GET /api/v1/session-templates/{id}` — fetch one session template
+  - `PUT /api/v1/session-templates/{id}` — replace a session template and increment its version
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
   - `POST /api/v1/sessions/{id}/release` — release the live runtime while preserving the session resource and profile

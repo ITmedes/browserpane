@@ -1,15 +1,20 @@
 <script lang="ts">
   import { base } from '$app/paths';
-  import type { CreateSessionCommand } from '../api/control-types';
+  import type { CreateSessionCommand, SessionTemplateResource } from '../api/control-types';
   import {
     SESSION_CREATE_OWNER_MODES,
+    DEFAULT_SESSION_CREATE_OWNER_MODE,
     defaultSessionCreateFormState,
+    sessionTemplateDefaultsSummary,
     validateSessionCreateForm,
   } from './session-create-configurator';
   import AdminMessage from './AdminMessage.svelte';
 
   type SessionCreateConfiguratorProps = {
     readonly onCreateSession: (command: CreateSessionCommand) => void;
+    readonly sessionTemplates?: readonly SessionTemplateResource[];
+    readonly templatesLoading?: boolean;
+    readonly templateError?: string | null;
     readonly loading?: boolean;
     readonly disabled?: boolean;
     readonly submitTestId?: string;
@@ -23,6 +28,9 @@
 
   let {
     onCreateSession,
+    sessionTemplates = [],
+    templatesLoading = false,
+    templateError = null,
     loading = false,
     disabled = false,
     submitTestId = 'session-new',
@@ -35,20 +43,47 @@
   }: SessionCreateConfiguratorProps = $props();
 
   const defaults = defaultSessionCreateFormState();
+  let templateId = $state(defaults.templateId);
   let ownerMode = $state(defaults.ownerMode);
   let idleTimeoutSec = $state(defaults.idleTimeoutSec);
   let labels = $state(defaults.labels);
   let payloadOpenInternal = $state(false);
-  const validation = $derived(validateSessionCreateForm({ ownerMode, idleTimeoutSec, labels }));
+  let previousTemplateId = $state(defaults.templateId);
+  let ownerModeTouched = $state(false);
+  const validation = $derived(validateSessionCreateForm({ templateId, ownerMode, idleTimeoutSec, labels }));
+  const selectedTemplate = $derived(sessionTemplates.find((template) => template.id === templateId) ?? null);
+  const selectedTemplateSummary = $derived(sessionTemplateDefaultsSummary(selectedTemplate));
   const rootClass = $derived(variant === 'panel'
-    ? 'admin-panel mt-0 grid gap-4'
-    : 'grid gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3');
+    ? 'admin-panel mt-0 grid min-w-0 gap-4'
+    : 'grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3');
+  const fieldGridClass = $derived(variant === 'panel'
+    ? 'grid min-w-0 gap-3 xl:grid-cols-[minmax(220px,1.2fr)_minmax(180px,1fr)_minmax(180px,1fr)]'
+    : 'grid min-w-0 gap-3');
   const payloadOpen = $derived(controlledPayloadOpen ?? payloadOpenInternal);
 
   $effect(() => {
     if (payloadInitiallyOpen) {
       payloadOpenInternal = true;
     }
+  });
+
+  $effect(() => {
+    if (templateId && !sessionTemplates.some((template) => template.id === templateId)) {
+      templateId = '';
+    }
+  });
+
+  $effect(() => {
+    if (templateId === previousTemplateId) {
+      return;
+    }
+    if (templateId && !ownerModeTouched && ownerMode === DEFAULT_SESSION_CREATE_OWNER_MODE) {
+      ownerMode = '';
+    } else if (!templateId && !ownerMode) {
+      ownerMode = DEFAULT_SESSION_CREATE_OWNER_MODE;
+      ownerModeTouched = false;
+    }
+    previousTemplateId = templateId;
   });
 
   function submit(): void {
@@ -84,25 +119,42 @@
       submit();
     }}
   >
-    <div class="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)]">
-      <label class="grid gap-1 text-sm font-bold text-admin-ink/72">
+    <div class={fieldGridClass}>
+      <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+        Template
+        <select
+          class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+          data-testid="session-create-template"
+          bind:value={templateId}
+          disabled={loading || disabled || templatesLoading}
+        >
+          <option value="">No template</option>
+          {#each sessionTemplates as template}
+            <option value={template.id}>{template.name}</option>
+          {/each}
+        </select>
+      </label>
+
+      <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
         Owner mode
         <select
-          class="min-h-11 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+          class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
           data-testid="session-create-owner-mode"
           bind:value={ownerMode}
           disabled={loading || disabled}
+          onchange={() => { ownerModeTouched = true; }}
         >
+          <option value="">Template / backend default</option>
           {#each SESSION_CREATE_OWNER_MODES as mode}
             <option value={mode.value}>{mode.label}</option>
           {/each}
         </select>
       </label>
 
-      <label class="grid gap-1 text-sm font-bold text-admin-ink/72">
+      <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
         Idle timeout
         <input
-          class="min-h-11 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+          class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
           data-testid="session-create-idle-timeout"
           inputmode="numeric"
           placeholder="Backend default"
@@ -113,10 +165,42 @@
       </label>
     </div>
 
-    <label class="grid gap-1 text-sm font-bold text-admin-ink/72">
+    {#if selectedTemplate || templateError || templatesLoading}
+      <section
+        class="rounded-xl border border-admin-ink/10 bg-admin-field/68 p-3 text-sm text-admin-ink/72"
+        aria-label="Selected session template"
+        data-testid="session-create-template-summary"
+      >
+        {#if templatesLoading}
+          <span class="font-bold text-[#c1d0e8]">Loading template catalog...</span>
+        {:else if templateError}
+          <AdminMessage
+            variant="warning"
+            title="Template catalog unavailable"
+            message={templateError}
+            compact={true}
+          />
+        {:else if selectedTemplate}
+          <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
+            <span class="min-w-0">
+              <strong class="block truncate text-admin-ink">{selectedTemplate.name}</strong>
+              <span class="block truncate text-xs text-admin-ink/58">{selectedTemplate.id}</span>
+            </span>
+            <span class="rounded-lg bg-admin-leaf/12 px-2 py-1 text-xs font-bold text-admin-leaf">
+              v{selectedTemplate.version}
+            </span>
+          </div>
+          <p class="m-0 mt-2 text-xs leading-normal text-admin-ink/62">
+            {selectedTemplateSummary}
+          </p>
+        {/if}
+      </section>
+    {/if}
+
+    <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
       Labels
       <textarea
-        class="min-h-20 resize-y rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-admin-ink outline-none focus:border-admin-leaf/45"
+        class="min-h-20 min-w-0 resize-y rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-admin-ink outline-none focus:border-admin-leaf/45"
         data-testid="session-create-labels"
         placeholder="case=1234, purpose=import-repro"
         rows={variant === 'panel' ? 3 : 2}

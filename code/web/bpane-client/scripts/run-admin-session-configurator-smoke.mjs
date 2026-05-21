@@ -15,6 +15,7 @@ import {
   fetchJson,
   launchChrome,
   parseSmokeArgs,
+  poll,
 } from './workflow-smoke-lib.mjs';
 
 async function run() {
@@ -27,13 +28,15 @@ async function run() {
   const context = await browser.newContext({ viewport: { width: 1440, height: 980 } });
   const page = await context.newPage();
   let sessionId = '';
+  let template = null;
 
   try {
     log(`Opening ${options.pageUrl}`);
     await ensureAdminLoggedIn(page, options);
     await cleanupAdminBeforeRun(page, options, log);
+    template = await createSessionTemplate(page, options);
 
-    await verifyCompactPayloadToggle(page, options);
+    await verifyCompactPayloadToggle(page, options, template);
 
     await page.goto(adminRouteUrl(options, 'sessions'), { waitUntil: 'domcontentloaded' });
     await page.getByTestId('session-create-configurator').waitFor({
@@ -42,15 +45,16 @@ async function run() {
     });
 
     await verifyClientValidation(page);
-    await configureCollaborativeSession(page);
-    await verifyPayloadPreview(page);
+    await configureTemplatedSession(page, options, template);
+    await verifyPayloadPreview(page, template);
     await page.getByTestId('session-inspector-new').click();
     sessionId = await waitForSessionDetailUrl(page, options);
 
     const session = await fetchSession(page, options, sessionId);
-    verifyCreatedSession(session, sessionId);
-    await verifyDetailUi(page, options, sessionId);
-    await emitSummary(page, options, session, log);
+    verifyCreatedSession(session, sessionId, template);
+    await verifyDetailUi(page, options, sessionId, template);
+    await verifyInspectorTemplateFilter(page, options, sessionId, template);
+    await emitSummary(page, options, session, template, log);
   } finally {
     await cleanupCreatedSession(page, options, sessionId, log);
     await context.close();
@@ -58,15 +62,29 @@ async function run() {
   }
 }
 
-async function verifyCompactPayloadToggle(page, options) {
+async function verifyCompactPayloadToggle(page, options, template) {
   await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
   await openAdminTab(page, 'sessions');
+  await selectSessionTemplate(page, template, options);
+  await assertNoHorizontalOverflow(page, 'session-create-configurator', 'live session create configurator');
+  const templateSummary = await page.getByTestId('session-create-template-summary').textContent();
+  if (!templateSummary?.includes(template.name) || !templateSummary.includes('team=support')) {
+    throw new Error(`Expected live configurator template summary for ${template.name}, got ${templateSummary}`);
+  }
   const toggle = page.getByTestId('session-create-preview-toggle');
   await toggle.click();
   await page.getByTestId('session-create-preview').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,
   });
+  const previewText = await page.getByTestId('session-create-preview').textContent();
+  const preview = JSON.parse(previewText ?? '{}');
+  if (preview.template_id !== template.id) {
+    throw new Error(`Expected live configurator preview to include template_id ${template.id}, got ${previewText}`);
+  }
+  if (Object.hasOwn(preview, 'owner_mode')) {
+    throw new Error(`Expected template default owner mode to remain unoverridden, got ${previewText}`);
+  }
   await page.waitForTimeout(1500);
   const stillVisible = await page.getByTestId('session-create-preview').isVisible().catch(() => false);
   if (!stillVisible) {
@@ -88,26 +106,39 @@ async function verifyClientValidation(page) {
   }
 }
 
-async function configureCollaborativeSession(page) {
+async function assertNoHorizontalOverflow(page, testId, label) {
+  const size = await page.getByTestId(testId).evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  if (size.scrollWidth > size.clientWidth + 1) {
+    throw new Error(`${label} overflows horizontally: ${JSON.stringify(size)}`);
+  }
+}
+
+async function configureTemplatedSession(page, options, template) {
+  await selectSessionTemplate(page, template, options);
   await page.getByTestId('session-create-owner-mode').selectOption('collaborative');
-  await page.getByTestId('session-create-idle-timeout').fill('1800');
+  await page.getByTestId('session-create-owner-mode').selectOption('');
+  await page.getByTestId('session-create-idle-timeout').fill('');
   await page.getByTestId('session-create-labels').fill('case=1234\npurpose=import-repro');
 }
 
-async function verifyPayloadPreview(page) {
+async function verifyPayloadPreview(page, template) {
   const previewText = await page.getByTestId('session-create-preview').textContent();
   const preview = JSON.parse(previewText ?? '{}');
   const expectedLabels = { case: '1234', purpose: 'import-repro' };
   if (
-    preview.owner_mode !== 'collaborative'
-    || preview.idle_timeout_sec !== 1800
+    preview.template_id !== template.id
+    || Object.hasOwn(preview, 'owner_mode')
+    || Object.hasOwn(preview, 'idle_timeout_sec')
     || JSON.stringify(preview.labels) !== JSON.stringify(expectedLabels)
   ) {
     throw new Error(`Unexpected session create payload preview: ${previewText}`);
   }
 }
 
-async function verifyDetailUi(page, options, sessionId) {
+async function verifyDetailUi(page, options, sessionId, template) {
   await page.getByTestId('session-inspector-detail').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,
@@ -119,26 +150,110 @@ async function verifyDetailUi(page, options, sessionId) {
   await page.getByTestId('session-owner-mode').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   const ownerMode = await page.getByTestId('session-owner-mode').textContent();
   const idleTimeout = await page.getByTestId('session-idle-timeout').textContent();
+  const detailTemplate = await page.getByTestId('session-template').textContent();
   const labels = await page.getByTestId('session-labels').textContent();
-  if (ownerMode !== 'collaborative' || idleTimeout !== '1800' || !labels?.includes('purpose=import-repro')) {
-    throw new Error(`Unexpected configured session detail facts: ${ownerMode} / ${idleTimeout} / ${labels}`);
+  const integration = await page.getByTestId('session-integration-context').textContent();
+  if (
+    ownerMode !== 'collaborative'
+    || idleTimeout !== '1200'
+    || !detailTemplate?.includes(template.name)
+    || !labels?.includes('purpose=import-repro')
+    || !labels.includes('team=support')
+    || !integration?.includes('source=admin-smoke-template')
+  ) {
+    throw new Error(`Unexpected configured session detail facts: ${ownerMode} / ${idleTimeout} / ${detailTemplate} / ${labels} / ${integration}`);
   }
   await page.getByTestId('session-file-bindings').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
 }
 
-function verifyCreatedSession(session, sessionId) {
+async function verifyInspectorTemplateFilter(page, options, sessionId, template) {
+  await page.goto(adminRouteUrl(options, 'sessions'), { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('session-inspector-list').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await selectOptionWhenAvailable(page, page.getByTestId('session-inspector-template-filter'), template.id, options);
+  const row = page.locator(`[data-testid="session-inspector-row"][data-session-id="${sessionId}"]`);
+  await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  const rowTemplate = await row.getByTestId('session-inspector-row-template').textContent();
+  if (!rowTemplate?.includes(template.name)) {
+    throw new Error(`Expected inspector row template ${template.name}, got ${rowTemplate}`);
+  }
+  const count = await page.getByTestId('session-inspector-count').textContent();
+  if (!count?.includes('visible sessions')) {
+    throw new Error(`Expected inspector filter count to be visible, got ${count}`);
+  }
+
+  await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
+  await openAdminTab(page, 'sessions');
+  const liveRow = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
+  await liveRow.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await liveRow.click();
+  const selectedTemplate = await page.getByTestId('session-selected-template').textContent();
+  if (!selectedTemplate?.includes(template.name)) {
+    throw new Error(`Expected live selected session template ${template.name}, got ${selectedTemplate}`);
+  }
+}
+
+function verifyCreatedSession(session, sessionId, template) {
   if (session.id !== sessionId) {
     throw new Error(`Expected API session ${sessionId}, got ${session.id}`);
+  }
+  if (session.template_id !== template.id) {
+    throw new Error(`Expected template_id ${template.id}, got ${session.template_id}`);
   }
   if (session.owner_mode !== 'collaborative') {
     throw new Error(`Expected collaborative owner mode, got ${session.owner_mode}`);
   }
-  if (session.idle_timeout_sec !== 1800) {
-    throw new Error(`Expected idle timeout 1800, got ${session.idle_timeout_sec}`);
+  if (session.idle_timeout_sec !== 1200) {
+    throw new Error(`Expected template idle timeout 1200, got ${session.idle_timeout_sec}`);
   }
-  if (session.labels?.case !== '1234' || session.labels?.purpose !== 'import-repro') {
+  if (session.labels?.case !== '1234' || session.labels?.purpose !== 'import-repro' || session.labels?.team !== 'support') {
     throw new Error(`Expected configured labels, got ${JSON.stringify(session.labels)}`);
   }
+  if (session.integration_context?.source !== 'admin-smoke-template') {
+    throw new Error(`Expected template integration context, got ${JSON.stringify(session.integration_context)}`);
+  }
+}
+
+async function createSessionTemplate(page, options) {
+  const accessToken = await getAdminAccessToken(page);
+  const name = `Admin smoke template ${Date.now()}`;
+  return await fetchJson(`${apiOrigin(options)}/api/v1/session-templates`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      description: 'Admin configurator smoke template',
+      labels: { suite: 'admin-session-configurator-smoke' },
+      defaults: {
+        owner_mode: 'collaborative',
+        idle_timeout_sec: 1200,
+        labels: { team: 'support' },
+        integration_context: { source: 'admin-smoke-template' },
+      },
+    }),
+  });
+}
+
+async function selectSessionTemplate(page, template, options) {
+  const selector = page.getByTestId('session-create-template');
+  await selectOptionWhenAvailable(page, selector, template.id, options);
+}
+
+async function selectOptionWhenAvailable(page, selector, value, options) {
+  await selector.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await poll(
+    `select option ${value}`,
+    async () => await selector.locator(`option[value="${value}"]`).count(),
+    (count) => count > 0,
+    options.connectTimeoutMs,
+    100,
+  );
+  await selector.selectOption(value);
 }
 
 async function fetchSession(page, options, sessionId) {
@@ -169,10 +284,12 @@ async function waitForSessionDetailUrl(page, options) {
   return sessionId;
 }
 
-async function emitSummary(page, options, session, log) {
+async function emitSummary(page, options, session, template, log) {
   const summary = {
     pageUrl: options.pageUrl,
     sessionId: session.id,
+    templateId: template.id,
+    templateName: template.name,
     ownerMode: session.owner_mode,
     idleTimeoutSec: session.idle_timeout_sec,
     labels: session.labels ?? {},

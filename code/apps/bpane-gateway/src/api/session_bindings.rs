@@ -135,6 +135,75 @@ async fn resolve_session_extensions(
     Ok(extensions)
 }
 
+pub(super) async fn resolve_session_template_defaults(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    request: CreateSessionRequest,
+) -> Result<CreateSessionRequest, (StatusCode, Json<ErrorResponse>)> {
+    let Some(template_id) = request.template_id.clone() else {
+        return Ok(request);
+    };
+    let Ok(template_uuid) = Uuid::parse_str(&template_id) else {
+        return Ok(request);
+    };
+    let Some(template) = state
+        .session_store
+        .get_session_template_for_owner(principal, template_uuid)
+        .await
+        .map_err(map_session_store_error)?
+    else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("session template {template_id} not found"),
+            }),
+        ));
+    };
+
+    Ok(merge_template_defaults(request, template.defaults))
+}
+
+fn merge_template_defaults(
+    mut request: CreateSessionRequest,
+    defaults: SessionTemplateDefaults,
+) -> CreateSessionRequest {
+    request.owner_mode = request.owner_mode.or(defaults.owner_mode);
+    if request.viewport.is_none() {
+        request.viewport = defaults.viewport;
+    }
+    request.idle_timeout_sec = request.idle_timeout_sec.or(defaults.idle_timeout_sec);
+
+    let mut labels = defaults.labels;
+    labels.extend(request.labels);
+    request.labels = labels;
+
+    request.integration_context =
+        merge_integration_context(defaults.integration_context, request.integration_context);
+
+    if request.recording == SessionRecordingPolicy::default() {
+        if let Some(recording) = defaults.recording {
+            request.recording = recording;
+        }
+    }
+
+    request
+}
+
+fn merge_integration_context(
+    defaults: Option<Value>,
+    override_value: Option<Value>,
+) -> Option<Value> {
+    match (defaults, override_value) {
+        (Some(Value::Object(mut default_object)), Some(Value::Object(override_object))) => {
+            default_object.extend(override_object);
+            Some(Value::Object(default_object))
+        }
+        (_, Some(value)) => Some(value),
+        (Some(value), None) => Some(value),
+        (None, None) => None,
+    }
+}
+
 pub(super) async fn create_owned_session(
     state: &ApiState,
     principal: &AuthenticatedPrincipal,
@@ -242,6 +311,8 @@ pub(super) async fn resolve_task_session_binding(
             existing_session_id: None,
             create_session: Some(create_session_request),
         }) => {
+            let create_session_request =
+                resolve_session_template_defaults(state, principal, create_session_request).await?;
             let owner_mode = resolve_owner_mode(state, create_session_request.owner_mode)?;
             let created = create_owned_session(
                 state,
@@ -283,6 +354,8 @@ pub(super) async fn resolve_task_session_binding(
                     }),
                 )
             })?;
+            let create_session_request =
+                resolve_session_template_defaults(state, principal, create_session_request).await?;
             let owner_mode = resolve_owner_mode(state, create_session_request.owner_mode)?;
             let created = create_owned_session(
                 state,

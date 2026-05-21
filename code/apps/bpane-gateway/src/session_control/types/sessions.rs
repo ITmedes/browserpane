@@ -307,6 +307,76 @@ pub struct CreateSessionRequest {
     pub extensions: Vec<AppliedExtension>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SessionTemplateDefaults {
+    #[serde(default)]
+    pub owner_mode: Option<SessionOwnerMode>,
+    #[serde(default)]
+    pub viewport: Option<SessionViewport>,
+    #[serde(default)]
+    pub idle_timeout_sec: Option<u32>,
+    #[serde(default)]
+    pub labels: HashMap<String, String>,
+    #[serde(default)]
+    pub integration_context: Option<Value>,
+    #[serde(default)]
+    pub recording: Option<crate::session_control::SessionRecordingPolicy>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PersistSessionTemplateRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub defaults: SessionTemplateDefaults,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredSessionTemplate {
+    pub id: Uuid,
+    pub owner_subject: String,
+    pub owner_issuer: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub defaults: SessionTemplateDefaults,
+    pub version: u32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SessionTemplateResource {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub defaults: SessionTemplateDefaults,
+    pub version: u32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionTemplateListResponse {
+    pub templates: Vec<SessionTemplateResource>,
+}
+
+impl StoredSessionTemplate {
+    pub fn to_resource(&self) -> SessionTemplateResource {
+        SessionTemplateResource {
+            id: self.id,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            labels: self.labels.clone(),
+            defaults: self.defaults.clone(),
+            version: self.version,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SetAutomationDelegateRequest {
     pub client_id: String,
