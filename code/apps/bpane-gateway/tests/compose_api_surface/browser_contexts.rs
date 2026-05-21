@@ -1,8 +1,11 @@
+use std::io::{Cursor, Read};
+
 use anyhow::{anyhow, Context, Result};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
 use tokio::process::Command;
 use uuid::Uuid;
+use zip::ZipArchive;
 
 use super::support::{json_array, json_id, label_map, ComposeHarness};
 
@@ -276,6 +279,16 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
             "browser context profile storage limit should not be exceeded: {storage_context}"
         ));
     }
+    let active_export = harness
+        .get_json_outcome(&format!("/api/v1/browser-contexts/{context_id}/export"))
+        .await?;
+    if active_export.status != StatusCode::CONFLICT {
+        return Err(anyhow!(
+            "active browser context export returned {} instead of 409: {}",
+            active_export.status,
+            active_export.body
+        ));
+    }
     let restored_deleted_session = harness
         .delete_json(&format!("/api/v1/sessions/{restored_session_id}"))
         .await?;
@@ -284,6 +297,11 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
             "browser-context restored session cleanup did not stop"
         ));
     }
+
+    let export_bytes = harness
+        .get_bytes(&format!("/api/v1/browser-contexts/{context_id}/export"))
+        .await?;
+    verify_browser_context_export_archive(&export_bytes, &context_id, true)?;
 
     let cloned_context = harness
         .post_json(
@@ -392,6 +410,43 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
 
     verify_browser_context_storage_quota(harness).await?;
 
+    Ok(())
+}
+
+fn verify_browser_context_export_archive(
+    bytes: &[u8],
+    context_id: &str,
+    expect_profile_payload: bool,
+) -> Result<()> {
+    let cursor = Cursor::new(bytes.to_vec());
+    let mut archive =
+        ZipArchive::new(cursor).context("failed to read browser context export zip")?;
+    let mut manifest_file = archive
+        .by_name("manifest.json")
+        .context("browser context export did not include manifest.json")?;
+    let mut manifest_bytes = Vec::new();
+    manifest_file
+        .read_to_end(&mut manifest_bytes)
+        .context("failed to read browser context export manifest")?;
+    drop(manifest_file);
+    let manifest: Value = serde_json::from_slice(&manifest_bytes)
+        .context("failed to parse browser context export manifest")?;
+    if manifest["format_version"] != json!(1)
+        || manifest["archive_type"] != json!("browser_context_export")
+        || manifest["source_context"]["id"] != json!(context_id)
+    {
+        return Err(anyhow!(
+            "browser context export manifest returned unexpected data: {manifest}"
+        ));
+    }
+    if expect_profile_payload {
+        let profile = archive
+            .by_name("profile.tar.gz")
+            .context("browser context export did not include profile.tar.gz")?;
+        if profile.size() == 0 {
+            return Err(anyhow!("browser context profile export payload was empty"));
+        }
+    }
     Ok(())
 }
 

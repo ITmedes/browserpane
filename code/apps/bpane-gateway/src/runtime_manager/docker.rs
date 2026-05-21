@@ -398,6 +398,25 @@ impl DockerRuntimeManager {
         self.clone_browser_context_profile_volume(source_context_id, target_context_id)
             .await
     }
+
+    pub(super) async fn export_browser_context_profile_archive(
+        &self,
+        context_id: Uuid,
+    ) -> Result<Option<Vec<u8>>, RuntimeManagerError> {
+        let active_session_id = {
+            let leases = self.leases.lock().await;
+            active_browser_context_session_id(&leases, context_id)
+        };
+        if let Some(active_session_id) = active_session_id {
+            return Err(RuntimeManagerError::BrowserContextInUse {
+                browser_context_id: context_id,
+                active_session_id,
+            });
+        }
+
+        self.export_browser_context_profile_volume_archive(context_id)
+            .await
+    }
 }
 
 impl DockerLeaseState {

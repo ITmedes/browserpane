@@ -95,6 +95,15 @@ impl SessionManager {
             .await
     }
 
+    pub async fn export_browser_context_profile_archive(
+        &self,
+        context_id: Uuid,
+    ) -> Result<Option<Vec<u8>>, SessionManagerError> {
+        self.inner
+            .export_browser_context_profile_archive(context_id)
+            .await
+    }
+
     pub async fn browser_context_profile_storage_bytes(
         &self,
         context_ids: &[Uuid],

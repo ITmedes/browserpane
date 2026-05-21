@@ -148,6 +148,23 @@ async function verifyRouteCatalog(page, options, accessToken, referencedContext,
   const deletableRow = page.locator(`[data-testid="browser-context-row"][data-context-id="${deletableContext.id}"]`);
   await deletableRow.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await deletableRow.click();
+  await poll(
+    'browser context export enabled',
+    async () => await page.getByTestId('browser-context-export').isEnabled(),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+  const downloadPromise = page.waitForEvent('download', { timeout: options.connectTimeoutMs });
+  await page.getByTestId('browser-context-export').click();
+  const download = await downloadPromise;
+  if (!download.suggestedFilename().endsWith('.zip')) {
+    throw new Error(`Expected browser context export zip download, got ${download.suggestedFilename()}`);
+  }
+  await page.getByTestId('browser-context-export-message').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
   const cloneName = `${deletableContext.name} clone`;
   await page.getByTestId('browser-context-clone-name').fill(cloneName);
   await page.getByTestId('browser-context-clone').click();

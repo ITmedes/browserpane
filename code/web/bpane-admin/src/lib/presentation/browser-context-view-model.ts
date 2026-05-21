@@ -25,6 +25,8 @@ export type BrowserContextCatalogRowViewModel = {
   readonly deleteHint: string;
   readonly canClone: boolean;
   readonly cloneHint: string;
+  readonly canExport: boolean;
+  readonly exportHint: string;
 };
 
 export type BrowserContextCatalogViewModel = {
@@ -161,7 +163,22 @@ function toRow(context: BrowserContextResource, usage: ContextUsage): BrowserCon
     deleteHint: deleteHint(context, sessionCount, activeSessionCount),
     canClone,
     cloneHint: cloneHint(context, activeSessionCount),
+    canExport: canClone,
+    exportHint: exportHint(context, activeSessionCount),
   };
+}
+
+function exportHint(context: BrowserContextResource, activeSessionCount: number): string {
+  if (context.state === 'deleted') {
+    return 'Deleted contexts cannot be exported.';
+  }
+  if (context.persistence_mode !== 'reusable') {
+    return 'Only reusable browser contexts can be exported.';
+  }
+  if (activeSessionCount > 0) {
+    return 'Stop active sessions before exporting this context.';
+  }
+  return 'Downloads a zip archive with a manifest and profile data when available.';
 }
 
 function cloneHint(context: BrowserContextResource, activeSessionCount: number): string {
@@ -257,6 +274,7 @@ function profileStorageLimitSummary(
 function apiExample(contextId: string): string {
   return [
     `GET /api/v1/browser-contexts/${contextId}`,
+    `GET /api/v1/browser-contexts/${contextId}/export`,
     [
       `POST /api/v1/browser-contexts/${contextId}/clone`,
       JSON.stringify({

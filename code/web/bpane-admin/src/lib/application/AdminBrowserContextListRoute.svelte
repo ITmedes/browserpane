@@ -6,6 +6,7 @@
   import AdminMessage from '../presentation/AdminMessage.svelte';
   import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import BrowserContextCatalogPanel from '../presentation/BrowserContextCatalogPanel.svelte';
+  import { saveBlob } from './recording-downloads';
 
   type AdminBrowserContextListRouteProps = {
     readonly controlClient: ControlClient;
@@ -16,6 +17,7 @@
   let sessions = $state<readonly SessionResource[]>([]);
   let loading = $state(false);
   let cloningContextId = $state<string | null>(null);
+  let exportingContextId = $state<string | null>(null);
   let deletingContextId = $state<string | null>(null);
   let error = $state<string | null>(null);
   let actionFeedback = $state<AdminMessageFeedback | null>(null);
@@ -107,6 +109,33 @@
     }
   }
 
+  async function exportBrowserContext(contextId: string): Promise<void> {
+    exportingContextId = contextId;
+    error = null;
+    actionFeedback = null;
+    try {
+      const context = contexts.find((candidate) => candidate.id === contextId);
+      const blob = await controlClient.exportBrowserContext(contextId);
+      saveBlob(blob, `browserpane-browser-context-${context?.name ?? contextId}.zip`);
+      actionFeedback = {
+        variant: 'success',
+        title: 'Browser context export started',
+        message: `Exported browser context ${context?.name ?? contextId}.`,
+        testId: 'browser-context-route-message',
+      };
+    } catch (exportError) {
+      actionFeedback = {
+        variant: 'error',
+        title: 'Browser context export failed',
+        message: errorMessage(exportError),
+        testId: 'browser-context-route-message',
+      };
+      throw exportError;
+    } finally {
+      exportingContextId = null;
+    }
+  }
+
   function formatDate(value: string | null): string {
     return value ? new Date(value).toLocaleString() : 'not refreshed';
   }
@@ -160,9 +189,11 @@
       {loading}
       {error}
       {cloningContextId}
+      {exportingContextId}
       {deletingContextId}
       onRefresh={() => void refreshCatalog()}
       onCloneContext={(contextId, command) => cloneBrowserContext(contextId, command)}
+      onExportContext={(contextId) => exportBrowserContext(contextId)}
       onDeleteContext={(contextId) => void deleteBrowserContext(contextId)}
     />
   </section>

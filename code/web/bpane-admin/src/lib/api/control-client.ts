@@ -106,6 +106,16 @@ export class ControlClient {
     return ControlSessionMapper.toBrowserContextResource(payload);
   }
 
+  async exportBrowserContext(contextId: string): Promise<Blob> {
+    const response = await this.#send(
+      'GET',
+      `/api/v1/browser-contexts/${encodeURIComponent(contextId)}/export`,
+      undefined,
+      'application/zip',
+    );
+    return await response.blob();
+  }
+
   async deleteBrowserContext(contextId: string): Promise<BrowserContextResource> {
     const payload = await this.#request('DELETE', `/api/v1/browser-contexts/${encodeURIComponent(contextId)}`);
     return ControlSessionMapper.toBrowserContextResource(payload);

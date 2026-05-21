@@ -345,6 +345,20 @@ impl SessionRuntimeManager {
         }
     }
 
+    pub async fn export_browser_context_profile_archive(
+        &self,
+        context_id: Uuid,
+    ) -> Result<Option<Vec<u8>>, RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => Ok(None),
+            RuntimeBackend::Docker(manager) => {
+                manager
+                    .export_browser_context_profile_archive(context_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn browser_context_profile_storage_bytes(
         &self,
         context_ids: &[Uuid],

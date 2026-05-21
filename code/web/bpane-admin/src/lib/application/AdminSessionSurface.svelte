@@ -42,6 +42,7 @@
   import { subscribeAdminSessionEvents } from './admin-session-event-sync';
   import { AdminWorkflowSessionFollower } from './admin-workflow-follow';
   import BrowserWorkspaceOverlayLayout from './BrowserWorkspaceOverlayLayout.svelte';
+  import { saveBlob } from './recording-downloads';
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient; readonly adminEventClient: AdminEventClient; readonly workflowClient: WorkflowClient;
     readonly mcpBridge: McpBridgeConfig | null;
@@ -60,6 +61,7 @@
   let templatesLoading = $state(false);
   let browserContextsLoading = $state(false);
   let cloningBrowserContextId = $state<string | null>(null);
+  let exportingBrowserContextId = $state<string | null>(null);
   let templateError = $state<string | null>(null);
   let browserContextError = $state<string | null>(null);
   let globalMessage = $state<AdminMessageFeedback | null>(null);
@@ -236,6 +238,22 @@
       throw error;
     } finally {
       cloningBrowserContextId = null;
+    }
+  }
+  async function exportBrowserContext(contextId: string): Promise<void> {
+    exportingBrowserContextId = contextId;
+    browserContextError = null;
+    try {
+      const context = browserContexts.find((candidate) => candidate.id === contextId);
+      const blob = await controlClient.exportBrowserContext(contextId);
+      saveBlob(blob, `browserpane-browser-context-${context?.name ?? contextId}.zip`);
+      showGlobalMessage('success', 'Browser context export started', `Exported context ${shortAdminId(contextId)}.`);
+    } catch (error) {
+      browserContextError = errorMessage(error);
+      showGlobalMessage('error', 'Browser context export failed', browserContextError);
+      throw error;
+    } finally {
+      exportingBrowserContextId = null;
     }
   }
   async function deleteBrowserContext(contextId: string): Promise<void> {
@@ -449,11 +467,13 @@
       {controlClient} {workflowClient} {selectedSession} {sessionTemplates} {templatesLoading} {templateError} {mcpBridge} {liveConnection}
       {sessions} {browserContexts} {browserContextsLoading} {browserContextError}
       cloningContextId={cloningBrowserContextId}
+      exportingContextId={exportingBrowserContextId}
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries} {globalMessage}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}
       onCreateBrowserContext={createBrowserContext}
       onCloneBrowserContext={cloneBrowserContext}
+      onExportBrowserContext={exportBrowserContext}
       onRefreshBrowserContexts={loadBrowserContexts}
       onDeleteBrowserContext={deleteBrowserContext}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}

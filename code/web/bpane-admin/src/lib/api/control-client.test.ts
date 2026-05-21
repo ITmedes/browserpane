@@ -129,7 +129,9 @@ describe('ControlClient', () => {
       labels: { copy: 'sandbox' },
     });
     await client.getBrowserContext('context/with space');
+    const exported = await client.exportBrowserContext(BROWSER_CONTEXT.id);
     await client.deleteBrowserContext(BROWSER_CONTEXT.id);
+    expect(await exported.text()).toBe(JSON.stringify(BROWSER_CONTEXT));
 
     expect(created).toMatchObject({
       id: BROWSER_CONTEXT.id,
@@ -178,6 +180,14 @@ describe('ControlClient', () => {
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       4,
+      new URL(`http://localhost:8932/api/v1/browser-contexts/${BROWSER_CONTEXT.id}/export`),
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ accept: 'application/zip' }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      5,
       new URL(`http://localhost:8932/api/v1/browser-contexts/${BROWSER_CONTEXT.id}`),
       expect.objectContaining({ method: 'DELETE' }),
     );
