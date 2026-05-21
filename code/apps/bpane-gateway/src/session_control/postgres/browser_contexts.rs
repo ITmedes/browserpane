@@ -9,6 +9,7 @@ const BROWSER_CONTEXT_COLUMNS: &str = r#"
     labels,
     persistence_mode,
     retention_sec,
+    max_profile_storage_bytes,
     state,
     created_at,
     updated_at,
@@ -102,16 +103,26 @@ impl BrowserContextRepository<'_> {
                 labels,
                 persistence_mode,
                 retention_sec,
+                max_profile_storage_bytes,
                 state,
                 created_at,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, 'ready', $9, $9)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, 'ready', $10, $10)
             RETURNING
                 {BROWSER_CONTEXT_COLUMNS}
             "#
         );
         let retention_sec = request.retention_sec.map(i64::from);
+        let max_profile_storage_bytes = request
+            .max_profile_storage_bytes
+            .map(i64::try_from)
+            .transpose()
+            .map_err(|error| {
+                SessionStoreError::InvalidRequest(format!(
+                    "browser context max_profile_storage_bytes exceeds the storage backend limit: {error}"
+                ))
+            })?;
         let row = self
             .store
             .db
@@ -128,6 +139,7 @@ impl BrowserContextRepository<'_> {
                     &json_labels(&request.labels),
                     &request.persistence_mode.as_str(),
                     &retention_sec,
+                    &max_profile_storage_bytes,
                     &now,
                 ],
             )

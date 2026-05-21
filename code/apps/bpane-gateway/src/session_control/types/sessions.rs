@@ -286,6 +286,7 @@ pub struct PersistBrowserContextRequest {
     pub labels: HashMap<String, String>,
     pub persistence_mode: BrowserContextPersistenceMode,
     pub retention_sec: Option<u32>,
+    pub max_profile_storage_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -298,6 +299,7 @@ pub struct StoredBrowserContext {
     pub labels: HashMap<String, String>,
     pub persistence_mode: BrowserContextPersistenceMode,
     pub retention_sec: Option<u32>,
+    pub max_profile_storage_bytes: Option<u64>,
     pub state: BrowserContextState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -320,6 +322,7 @@ pub struct BrowserContextResource {
     pub persistence_mode: BrowserContextPersistenceMode,
     pub retention_sec: Option<u32>,
     pub retention_expires_at: Option<DateTime<Utc>>,
+    pub max_profile_storage_bytes: Option<u64>,
     pub state: BrowserContextState,
     pub usage: BrowserContextUsageResource,
     pub created_at: DateTime<Utc>,
@@ -334,6 +337,7 @@ pub struct BrowserContextUsageResource {
     pub active_runtime_session_count: u32,
     pub active_runtime_session_id: Option<Uuid>,
     pub profile_storage_bytes: Option<u64>,
+    pub profile_storage_limit_exceeded: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -631,6 +635,7 @@ impl StoredBrowserContext {
             persistence_mode: self.persistence_mode,
             retention_sec: self.retention_sec,
             retention_expires_at: self.retention_expires_at(),
+            max_profile_storage_bytes: self.max_profile_storage_bytes,
             state: self.state,
             usage: BrowserContextUsageResource::default(),
             created_at: self.created_at,

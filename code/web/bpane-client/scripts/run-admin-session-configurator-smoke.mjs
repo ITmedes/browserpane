@@ -115,16 +115,18 @@ async function verifyClientValidation(page, options) {
 
   await page.getByTestId('session-create-context-name').fill('Invalid context');
   await page.getByTestId('session-create-context-labels').fill('malformed-label');
+  await page.getByTestId('session-create-context-max-profile-mb').fill('0');
   const contextCreateDisabled = await page.getByTestId('session-create-context-create').isDisabled();
   if (!contextCreateDisabled) {
     throw new Error('Expected browser context quick-create to be disabled for malformed labels.');
   }
   const contextCreateError = await page.getByTestId('session-create-context-create-error').textContent();
-  if (!contextCreateError?.includes('key=value')) {
+  if (!contextCreateError?.includes('key=value') || !contextCreateError.includes('Max profile storage')) {
     throw new Error(`Expected browser context quick-create validation error, got ${contextCreateError}`);
   }
   await page.getByTestId('session-create-context-name').fill('');
   await page.getByTestId('session-create-context-labels').fill('');
+  await page.getByTestId('session-create-context-max-profile-mb').fill('');
 
   await page.getByTestId('session-create-idle-timeout').fill('0');
   await page.getByTestId('session-create-labels').fill('case=1234\ncase=5678');
@@ -188,7 +190,13 @@ async function verifyDetailUi(page, options, sessionId, template, browserContext
   const ownerMode = await page.getByTestId('session-owner-mode').textContent();
   const idleTimeout = await page.getByTestId('session-idle-timeout').textContent();
   const detailTemplate = await page.getByTestId('session-template').textContent();
-  const detailBrowserContext = await page.getByTestId('session-browser-context').textContent();
+  const detailBrowserContext = await poll(
+    'session detail browser context name',
+    async () => await page.getByTestId('session-browser-context').textContent(),
+    (value) => value?.includes(browserContext.name) === true,
+    options.connectTimeoutMs,
+    100,
+  );
   const labels = await page.getByTestId('session-labels').textContent();
   const integration = await page.getByTestId('session-integration-context').textContent();
   if (
@@ -215,7 +223,13 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template,
   const row = page.locator(`[data-testid="session-inspector-row"][data-session-id="${sessionId}"]`);
   await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   const rowTemplate = await row.getByTestId('session-inspector-row-template').textContent();
-  const rowBrowserContext = await row.getByTestId('session-inspector-row-browser-context').textContent();
+  const rowBrowserContext = await poll(
+    'session inspector row browser context name',
+    async () => await row.getByTestId('session-inspector-row-browser-context').textContent(),
+    (value) => value?.includes(browserContext.name) === true,
+    options.connectTimeoutMs,
+    100,
+  );
   if (!rowTemplate?.includes(template.name)) {
     throw new Error(`Expected inspector row template ${template.name}, got ${rowTemplate}`);
   }
@@ -233,7 +247,13 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template,
   await liveRow.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await liveRow.click();
   const selectedTemplate = await page.getByTestId('session-selected-template').textContent();
-  const selectedBrowserContext = await page.getByTestId('session-selected-browser-context').textContent();
+  const selectedBrowserContext = await poll(
+    'live selected session browser context name',
+    async () => await page.getByTestId('session-selected-browser-context').textContent(),
+    (value) => value?.includes(browserContext.name) === true,
+    options.connectTimeoutMs,
+    100,
+  );
   if (!selectedTemplate?.includes(template.name)) {
     throw new Error(`Expected live selected session template ${template.name}, got ${selectedTemplate}`);
   }
@@ -308,6 +328,8 @@ async function createBrowserContextThroughUi(page, options) {
   const name = `Admin smoke context ${Date.now()}`;
   await page.getByTestId('session-create-context-name').fill(name);
   await page.getByTestId('session-create-context-labels').fill('suite=admin-session-configurator-smoke');
+  await page.getByTestId('session-create-context-retention-days').fill('7');
+  await page.getByTestId('session-create-context-max-profile-mb').fill('128');
   await page.getByTestId('session-create-context-create').click();
   await poll(
     'browser context quick-create selection',
@@ -322,6 +344,9 @@ async function createBrowserContextThroughUi(page, options) {
   const created = await fetchBrowserContextByName(page, options, name);
   if (!created) {
     throw new Error(`Browser context quick-create did not create ${name}.`);
+  }
+  if (created.retention_sec !== 604800 || created.max_profile_storage_bytes !== 134217728) {
+    throw new Error(`Browser context quick-create did not persist retention/storage limit: ${JSON.stringify(created)}`);
   }
   return created;
 }

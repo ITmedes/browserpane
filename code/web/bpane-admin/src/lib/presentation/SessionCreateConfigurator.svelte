@@ -69,9 +69,11 @@
   let browserContextName = $state('');
   let browserContextLabels = $state('');
   let browserContextRetentionDays = $state('');
+  let browserContextMaxProfileMb = $state('');
   let browserContextCreateError = $state<string | null>(null);
   let browserContextCreateTouched = $state(false);
   let creatingBrowserContext = $state(false);
+  let justCreatedBrowserContextId = $state<string | null>(null);
   let payloadOpenInternal = $state(false);
   let previousTemplateId = $state(defaults.templateId);
   let ownerModeTouched = $state(false);
@@ -81,11 +83,13 @@
     name: browserContextName,
     labels: browserContextLabels,
     retentionDays: browserContextRetentionDays,
+    maxProfileStorageMb: browserContextMaxProfileMb,
   }));
   const browserContextCreateActive = $derived(Boolean(
     browserContextName.trim()
     || browserContextLabels.trim()
-    || browserContextRetentionDays.trim(),
+    || browserContextRetentionDays.trim()
+    || browserContextMaxProfileMb.trim(),
   ));
   const validation = $derived(validateSessionCreateForm({
     templateId,
@@ -129,7 +133,19 @@
       && browserContexts.length > 0
       && !browserContexts.some((context) => context.id === browserContextId)
     ) {
+      if (justCreatedBrowserContextId === browserContextId) {
+        return;
+      }
       browserContextId = '';
+    }
+    if (
+      justCreatedBrowserContextId
+      && browserContexts.some((context) => context.id === justCreatedBrowserContextId)
+    ) {
+      if (browserContextMode === 'reusable') {
+        browserContextId = justCreatedBrowserContextId;
+      }
+      justCreatedBrowserContextId = null;
     }
   });
 
@@ -176,8 +192,10 @@
       browserContextName = '';
       browserContextLabels = '';
       browserContextRetentionDays = '';
+      browserContextMaxProfileMb = '';
       browserContextCreateTouched = false;
       if (created?.id) {
+        justCreatedBrowserContextId = created.id;
         browserContextMode = 'reusable';
         browserContextId = created.id;
       }
@@ -289,7 +307,7 @@
               {browserContextMode}
             </span>
           </div>
-          <p class="m-0 mt-2 text-xs leading-normal text-admin-ink/62">
+          <p class="m-0 mt-2 text-xs leading-normal text-admin-ink/62 [overflow-wrap:anywhere]">
             {selectedBrowserContextSummary}
           </p>
         </div>
@@ -333,7 +351,7 @@
 
       {#if onCreateBrowserContext}
         <div class="grid min-w-0 gap-2 rounded-xl border border-admin-ink/10 bg-admin-panel/52 p-3">
-          <div class="grid min-w-0 gap-2 md:grid-cols-[minmax(160px,0.7fr)_minmax(180px,1fr)_minmax(130px,0.45fr)_auto] md:items-end">
+          <div class="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr))]">
             <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
               New context
               <input
@@ -367,6 +385,19 @@
                 placeholder="Manual"
                 type="text"
                 bind:value={browserContextRetentionDays}
+                oninput={() => { browserContextCreateTouched = true; }}
+                disabled={loading || disabled || creatingBrowserContext}
+              />
+            </label>
+            <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+              Max profile MB
+              <input
+                class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+                data-testid="session-create-context-max-profile-mb"
+                inputmode="numeric"
+                placeholder="No limit"
+                type="text"
+                bind:value={browserContextMaxProfileMb}
                 oninput={() => { browserContextCreateTouched = true; }}
                 disabled={loading || disabled || creatingBrowserContext}
               />
@@ -419,7 +450,7 @@
               v{selectedTemplate.version}
             </span>
           </div>
-          <p class="m-0 mt-2 text-xs leading-normal text-admin-ink/62">
+          <p class="m-0 mt-2 text-xs leading-normal text-admin-ink/62 [overflow-wrap:anywhere]">
             {selectedTemplateSummary}
           </p>
         {/if}
@@ -472,5 +503,16 @@
     >
       {loading ? 'Creating...' : submitLabel}
     </button>
-  </form>
+</form>
 </section>
+
+<style>
+  section[data-testid='session-create-configurator'] :where(input, select, textarea) {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  section[data-testid='session-create-configurator'] :where(a, button) {
+    max-width: 100%;
+  }
+</style>

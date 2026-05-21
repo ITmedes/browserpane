@@ -17,6 +17,7 @@ const BROWSER_CONTEXT = {
   persistence_mode: 'reusable',
   retention_sec: 172800,
   retention_expires_at: '2026-05-06T18:30:00Z',
+  max_profile_storage_bytes: 268435456,
   state: 'ready',
   created_at: '2026-05-04T18:30:00Z',
   updated_at: '2026-05-04T18:30:00Z',
@@ -187,11 +188,13 @@ describe('session create configurator', () => {
       name: 'Support profile',
       labels: 'team=support, suite=admin',
       retentionDays: '7',
+      maxProfileStorageMb: '256',
     });
     const invalid = validateBrowserContextCreateForm({
       name: '',
       labels: 'bad-label',
       retentionDays: '0',
+      maxProfileStorageMb: '0',
     });
 
     expect(valid.command).toEqual({
@@ -199,19 +202,21 @@ describe('session create configurator', () => {
       labels: { team: 'support', suite: 'admin' },
       persistence_mode: 'reusable',
       retention_sec: 604800,
+      max_profile_storage_bytes: 268435456,
     });
     expect(invalid.command).toBeNull();
     expect(invalid.errors).toEqual([
       'Browser context name is required.',
       'Label "bad-label" must use key=value.',
       'Retention days must be a positive whole number.',
+      'Max profile storage must be a positive whole number of MB.',
     ]);
   });
 
   it('summarizes browser context catalog choices for the UI', () => {
     expect(browserContextOptionLabel(BROWSER_CONTEXT)).toBe('Support profile (019df7be...4a72)');
     expect(sessionBrowserContextSummary('reusable', BROWSER_CONTEXT)).toBe(
-      'state=ready | persistence=reusable | never used | labels=team=support | retention=2d',
+      'state=ready | persistence=reusable | never used | labels=team=support | retention=2d | storage_limit=256MiB',
     );
     expect(sessionBrowserContextSummary('fresh', null)).toContain('fresh persisted browser profile');
   });

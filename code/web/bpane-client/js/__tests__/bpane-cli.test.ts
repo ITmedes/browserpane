@@ -459,6 +459,8 @@ describe('bpane operator CLI', () => {
         'team=support',
         '--retention-sec',
         '604800',
+        '--max-profile-storage-bytes',
+        '67108864',
       ],
       { BPANE_ACCESS_TOKEN: 'token-1' },
       createContextIo.io,
@@ -473,6 +475,7 @@ describe('bpane operator CLI', () => {
       description: 'Support profile',
       labels: { team: 'support' },
       retention_sec: 604800,
+      max_profile_storage_bytes: 67108864,
     });
 
     const listIo = createIo();
@@ -533,6 +536,16 @@ describe('bpane operator CLI', () => {
     );
     expect(invalidRetentionCode).toBe(EXIT_CODES.usage);
     expect(parseStderr(invalidRetentionIo).error).toContain('--retention-sec');
+
+    const invalidStorageLimitIo = createIo();
+    const invalidStorageLimitCode = await runBpaneCli(
+      ['browser-context', 'create', 'support-profile', '--max-profile-storage-bytes', '0'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      invalidStorageLimitIo.io,
+      fetchImpl,
+    );
+    expect(invalidStorageLimitCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(invalidStorageLimitIo).error).toContain('--max-profile-storage-bytes');
 
     const missingContextIo = createIo();
     const missingContextCode = await runBpaneCli(

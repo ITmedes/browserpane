@@ -162,12 +162,15 @@ async function run() {
       'suite=bpane-cli-smoke',
       '--retention-sec',
       '604800',
+      '--max-profile-storage-bytes',
+      '67108864',
     ], cliEnv);
     contextId = browserContext.id;
     if (
       !contextId
       || browserContext.persistence_mode !== 'reusable'
       || browserContext.retention_sec !== 604800
+      || browserContext.max_profile_storage_bytes !== 67108864
       || !browserContext.retention_expires_at
       || browserContext.state !== 'ready'
     ) {

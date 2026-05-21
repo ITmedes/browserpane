@@ -242,18 +242,19 @@ pub(super) async fn create_owned_session(
         .recording_lifecycle
         .validate_mode(request.recording.mode)
         .map_err(map_recording_lifecycle_error)?;
-    let reusable_context_id = validate_session_browser_context(state, principal, &request).await?;
-    if let Some(context_id) = reusable_context_id {
+    let reusable_context = validate_session_browser_context(state, principal, &request).await?;
+    if let Some(context) = reusable_context {
+        enforce_browser_context_storage_limit(state, &context).await?;
         state
             .session_store
-            .mark_browser_context_used_for_owner(principal, context_id)
+            .mark_browser_context_used_for_owner(principal, context.id)
             .await
             .map_err(map_session_store_error)?
             .ok_or_else(|| {
                 (
                     StatusCode::NOT_FOUND,
                     Json(ErrorResponse {
-                        error: format!("browser context {context_id} not found"),
+                        error: format!("browser context {} not found", context.id),
                     }),
                 )
             })?;
@@ -293,7 +294,7 @@ async fn validate_session_browser_context(
     state: &ApiState,
     principal: &AuthenticatedPrincipal,
     request: &CreateSessionRequest,
-) -> Result<Option<Uuid>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Option<StoredBrowserContext>, (StatusCode, Json<ErrorResponse>)> {
     let Some(browser_context) = &request.browser_context else {
         return Ok(None);
     };
@@ -337,7 +338,44 @@ async fn validate_session_browser_context(
             }),
         ));
     }
-    Ok(Some(context_id))
+    Ok(Some(context))
+}
+
+async fn enforce_browser_context_storage_limit(
+    state: &ApiState,
+    context: &StoredBrowserContext,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let Some(limit) = context.max_profile_storage_bytes else {
+        return Ok(());
+    };
+    let storage_by_context = state
+        .session_manager
+        .browser_context_profile_storage_bytes(&[context.id])
+        .await
+        .map_err(|error| {
+            (
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: format!(
+                        "could not inspect browser context {} storage for quota enforcement: {error}",
+                        context.id
+                    ),
+                }),
+            )
+        })?;
+    let storage_bytes = storage_by_context.get(&context.id).copied().unwrap_or(0);
+    if storage_bytes > limit {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "browser context {} profile storage {} bytes exceeds configured limit {} bytes",
+                    context.id, storage_bytes, limit
+                ),
+            }),
+        ));
+    }
+    Ok(())
 }
 
 pub(super) async fn resolve_task_session_binding(

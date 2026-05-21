@@ -70,6 +70,7 @@ export type BrowserContextCreateFormState = {
   readonly name: string;
   readonly labels: string;
   readonly retentionDays?: string;
+  readonly maxProfileStorageMb?: string;
 };
 
 export type BrowserContextCreateValidation = {
@@ -164,6 +165,7 @@ export function validateBrowserContextCreateForm(
   }
   const labels = parseSessionCreateLabels(state.labels, errors);
   const retentionSec = parseRetentionDays(state.retentionDays ?? '', errors);
+  const maxProfileStorageBytes = parseMaxProfileStorageMb(state.maxProfileStorageMb ?? '', errors);
   return {
     command: errors.length === 0
       ? {
@@ -171,6 +173,7 @@ export function validateBrowserContextCreateForm(
           labels,
           persistence_mode: 'reusable',
           ...(retentionSec !== undefined ? { retention_sec: retentionSec } : {}),
+          ...(maxProfileStorageBytes !== undefined ? { max_profile_storage_bytes: maxProfileStorageBytes } : {}),
         }
       : null,
     errors,
@@ -288,6 +291,9 @@ export function sessionBrowserContextSummary(
   if (context.retention_sec) {
     facts.push(`retention=${formatDuration(context.retention_sec)}`);
   }
+  if (context.max_profile_storage_bytes) {
+    facts.push(`storage_limit=${formatBytes(context.max_profile_storage_bytes)}`);
+  }
   return facts.join(' | ');
 }
 
@@ -311,6 +317,40 @@ function parseRetentionDays(value: string, errors: string[]): number | undefined
     return undefined;
   }
   return seconds;
+}
+
+function parseMaxProfileStorageMb(value: string, errors: string[]): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    errors.push('Max profile storage must be a positive whole number of MB.');
+    return undefined;
+  }
+  const bytes = parsed * 1024 * 1024;
+  if (!Number.isSafeInteger(bytes)) {
+    errors.push('Max profile storage is too large to send safely.');
+    return undefined;
+  }
+  return bytes;
+}
+
+function formatBytes(value: number): string {
+  if (value % (1024 * 1024 * 1024) === 0) {
+    const gib = value / (1024 * 1024 * 1024);
+    return `${gib}GiB`;
+  }
+  if (value % (1024 * 1024) === 0) {
+    const mib = value / (1024 * 1024);
+    return `${mib}MiB`;
+  }
+  if (value % 1024 === 0) {
+    const kib = value / 1024;
+    return `${kib}KiB`;
+  }
+  return `${value}B`;
 }
 
 function formatDuration(seconds: number): string {

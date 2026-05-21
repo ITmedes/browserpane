@@ -17,7 +17,8 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
                         "name": "support-profile",
                         "description": "Support engineer profile",
                         "labels": { "team": "support" },
-                        "retention_sec": 86400
+                        "retention_sec": 86400,
+                        "max_profile_storage_bytes": 1048576
                     })
                     .to_string(),
                 ))
@@ -32,11 +33,13 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert_eq!(context["persistence_mode"], "reusable");
     assert_eq!(context["retention_sec"], 86400);
     assert!(!context["retention_expires_at"].is_null());
+    assert_eq!(context["max_profile_storage_bytes"], 1048576);
     assert_eq!(context["state"], "ready");
     assert_eq!(context["usage"]["visible_session_count"], 0);
     assert_eq!(context["usage"]["active_runtime_session_count"], 0);
     assert!(context["usage"]["active_runtime_session_id"].is_null());
     assert!(context["usage"]["profile_storage_bytes"].is_null());
+    assert_eq!(context["usage"]["profile_storage_limit_exceeded"], false);
     assert!(context["last_used_at"].is_null());
 
     let duplicate_response = app
@@ -184,6 +187,7 @@ async fn rejects_invalid_browser_context_requests_and_bindings() {
         json!({ "name": "bad-label", "labels": { "": "value" } }),
         json!({ "name": "bad-label-value", "labels": { "team": "" } }),
         json!({ "name": "bad-retention", "retention_sec": 0 }),
+        json!({ "name": "bad-storage-limit", "max_profile_storage_bytes": 0 }),
     ] {
         let response = app
             .clone()

@@ -36,6 +36,20 @@ pub(in crate::session_control) fn validate_browser_context_request(
             ));
         }
     }
+    if let Some(max_profile_storage_bytes) = request.max_profile_storage_bytes {
+        if max_profile_storage_bytes == 0 {
+            return Err(SessionStoreError::InvalidRequest(
+                "browser context max_profile_storage_bytes must be greater than zero when provided"
+                    .to_string(),
+            ));
+        }
+        if max_profile_storage_bytes > i64::MAX as u64 {
+            return Err(SessionStoreError::InvalidRequest(
+                "browser context max_profile_storage_bytes exceeds the storage backend limit"
+                    .to_string(),
+            ));
+        }
+    }
     Ok(())
 }
 

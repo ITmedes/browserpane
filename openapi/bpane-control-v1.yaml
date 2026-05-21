@@ -4700,6 +4700,11 @@ components:
           format: int32
           minimum: 1
           nullable: true
+        max_profile_storage_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
     BrowserContextResource:
       type: object
       required:
@@ -4710,6 +4715,7 @@ components:
         - persistence_mode
         - retention_sec
         - retention_expires_at
+        - max_profile_storage_bytes
         - state
         - usage
         - created_at
@@ -4740,6 +4746,11 @@ components:
           type: string
           format: date-time
           nullable: true
+        max_profile_storage_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
         state:
           $ref: '#/components/schemas/BrowserContextState'
         usage:
@@ -4765,6 +4776,7 @@ components:
         - active_runtime_session_count
         - active_runtime_session_id
         - profile_storage_bytes
+        - profile_storage_limit_exceeded
       properties:
         visible_session_count:
           type: integer
@@ -4784,6 +4796,8 @@ components:
           format: int64
           minimum: 0
           nullable: true
+        profile_storage_limit_exceeded:
+          type: boolean
     BrowserContextListResponse:
       type: object
       required: [contexts]

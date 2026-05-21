@@ -47,6 +47,15 @@ pub(in crate::session_control) fn row_to_stored_browser_context(
                     "browser context retention_sec column is out of range: {error}"
                 ))
             })?,
+        max_profile_storage_bytes: row
+            .get::<_, Option<i64>>("max_profile_storage_bytes")
+            .map(u64::try_from)
+            .transpose()
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "browser context max_profile_storage_bytes column is out of range: {error}"
+                ))
+            })?,
         state,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
