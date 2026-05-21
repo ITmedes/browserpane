@@ -10,6 +10,7 @@ const EGRESS_PROFILE_COLUMNS: &str = r#"
     proxy,
     bypass_rules,
     custom_ca,
+    traffic_observation,
     state,
     created_at,
     updated_at
@@ -77,6 +78,12 @@ impl EgressProfileRepository<'_> {
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to encode egress custom_ca: {error}"))
             })?;
+        let traffic_observation_value = serde_json::to_value(&request.traffic_observation)
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to encode egress traffic_observation: {error}"
+                ))
+            })?;
         let query = format!(
             r#"
             INSERT INTO control_egress_profiles (
@@ -89,11 +96,12 @@ impl EgressProfileRepository<'_> {
                 proxy,
                 bypass_rules,
                 custom_ca,
+                traffic_observation,
                 state,
                 created_at,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11, $11)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $12)
             RETURNING
                 {EGRESS_PROFILE_COLUMNS}
             "#
@@ -115,6 +123,7 @@ impl EgressProfileRepository<'_> {
                     &proxy_value,
                     &json_string_array(&request.bypass_rules),
                     &custom_ca_value,
+                    &traffic_observation_value,
                     &request.state.as_str(),
                     &now,
                 ],

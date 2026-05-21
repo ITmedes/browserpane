@@ -697,7 +697,7 @@ impl DockerRuntimeManager {
         })
     }
 
-    async fn write_session_data_file(
+    pub(in crate::runtime_manager) async fn write_session_data_file(
         &self,
         session_id: Uuid,
         target_path: &str,

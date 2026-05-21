@@ -42,6 +42,9 @@ Current product shape:
 - Egress traffic logging is proxy-side. BrowserPane should expose sanitized
   session/profile/container correlation metadata, while the configured egress
   proxy or secure web gateway owns outbound URL/status/bytes/timing logs.
+  Full HTTPS inspection must be explicit through an egress profile
+  `traffic_observation.mode=tls_intercept` with proxy, custom CA, and approved
+  sensitive-log sink references.
 - Camera ingress: disabled by default in compose; requires browser H.264 encode support and a mapped `v4l2loopback` device on the host.
 - In exclusive-owner sessions, restricted browser viewers are view-only: no input, clipboard, microphone, camera, upload, download, or resize.
 
@@ -76,7 +79,7 @@ Current product shape:
   - `workflow_observability.rs`: gateway-local counters/timestamps for workflow event delivery, produced-file uploads, and workflow retention passes.
   - `workflow_retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. Local compose defaults to `docker_pool` for browser-session testing. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
-  - `runtime_manager/docker/container.rs`: docker runtime launch argument materialization, including safe egress observer labels and startup audit logs for correlating proxy access logs back to BrowserPane sessions.
+  - `runtime_manager/docker/container.rs`: docker runtime launch argument materialization, including safe egress observer labels, startup audit logs for correlating proxy access logs back to BrowserPane sessions, and TLS-interception CA bundle materialization for docker-backed runtimes.
   - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, and `mcp-owner` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.

@@ -70,6 +70,9 @@ const KNOWN_OPTIONS = new Set([
   'template-id',
   'token',
   'timezone',
+  'traffic-observation-mode',
+  'sensitive-log-sink-name',
+  'sensitive-log-sink-ref',
   'user-agent',
   'width',
 ]);
@@ -158,6 +161,9 @@ function usageText() {
     '  --bypass-rule <rule>      Repeatable egress profile proxy bypass rule.',
     '  --custom-ca-ref <ref>     Egress profile custom CA reference.',
     '  --custom-ca-name <name>   Egress profile custom CA display name.',
+    '  --traffic-observation-mode <mode> Egress observation mode: metadata_only or tls_intercept.',
+    '  --sensitive-log-sink-ref <ref> Approved SIEM/log-sink ref required for tls_intercept.',
+    '  --sensitive-log-sink-name <name> Sensitive log-sink display name.',
     '  --name <name>             Session template name for create/update.',
     '  --description <text>      Session template description for create/update.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
@@ -952,6 +958,38 @@ function buildEgressProfileRequest(options, fallbackName = null) {
     body.custom_ca = {
       certificate_ref: customCaRef,
       ...(customCaName ? { display_name: customCaName } : {}),
+    };
+  }
+  const trafficObservationMode = getOption(options, 'traffic-observation-mode');
+  const sensitiveLogSinkRef = getOption(options, 'sensitive-log-sink-ref');
+  const sensitiveLogSinkName = getOption(options, 'sensitive-log-sink-name');
+  if (trafficObservationMode || sensitiveLogSinkRef || sensitiveLogSinkName) {
+    const mode = trafficObservationMode ?? 'metadata_only';
+    if (!['metadata_only', 'tls_intercept'].includes(mode)) {
+      throw new CliError(
+        'USAGE',
+        '--traffic-observation-mode must be metadata_only or tls_intercept.',
+        EXIT_CODES.usage,
+      );
+    }
+    if (sensitiveLogSinkName && !sensitiveLogSinkRef) {
+      throw new CliError('USAGE', '--sensitive-log-sink-name requires --sensitive-log-sink-ref.', EXIT_CODES.usage);
+    }
+    if (mode === 'tls_intercept') {
+      if (!body.proxy) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --proxy-url.', EXIT_CODES.usage);
+      }
+      if (!body.custom_ca) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --custom-ca-ref.', EXIT_CODES.usage);
+      }
+      if (!sensitiveLogSinkRef) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --sensitive-log-sink-ref.', EXIT_CODES.usage);
+      }
+    }
+    body.traffic_observation = {
+      mode,
+      ...(sensitiveLogSinkRef ? { sensitive_log_sink_ref: sensitiveLogSinkRef } : {}),
+      ...(sensitiveLogSinkName ? { sensitive_log_sink_display_name: sensitiveLogSinkName } : {}),
     };
   }
   const state = getOption(options, 'state');

@@ -82,6 +82,32 @@ async fn manages_egress_profiles_and_session_network_identity() {
         .unwrap();
     assert_eq!(invalid_profile_response.status(), StatusCode::BAD_REQUEST);
 
+    let invalid_tls_observation_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "bad-tls-observer",
+                        "proxy": { "url": "https://proxy.example:8443" },
+                        "custom_ca": { "certificate_ref": "file:///workspace/dev/egress-ca.pem" },
+                        "traffic_observation": { "mode": "tls_intercept" }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        invalid_tls_observation_response.status(),
+        StatusCode::BAD_REQUEST
+    );
+
     let missing_profile_response = app
         .clone()
         .oneshot(
@@ -146,8 +172,13 @@ async fn manages_egress_profiles_and_session_network_identity() {
                         "proxy": { "url": "https://proxy.example:8443" },
                         "bypass_rules": ["localhost", "*.internal.example"],
                         "custom_ca": {
-                            "certificate_ref": "vault://pki/browserpane/eu-support",
+                            "certificate_ref": "file:///workspace/dev/egress-ca.pem",
                             "display_name": "EU support CA"
+                        },
+                        "traffic_observation": {
+                            "mode": "tls_intercept",
+                            "sensitive_log_sink_ref": "siem://browserpane/eu-support",
+                            "sensitive_log_sink_display_name": "EU support SIEM"
                         }
                     })
                     .to_string(),
@@ -164,6 +195,13 @@ async fn manages_egress_profiles_and_session_network_identity() {
     assert_eq!(profile["effective"]["proxy_configured"], true);
     assert_eq!(profile["effective"]["bypass_rule_count"], 2);
     assert_eq!(profile["effective"]["custom_ca_configured"], true);
+    assert_eq!(profile["effective"]["observation_mode"], "tls_intercept");
+    assert_eq!(profile["effective"]["tls_interception_enabled"], true);
+    assert_eq!(profile["effective"]["sensitive_log_sink_configured"], true);
+    assert_eq!(
+        profile["traffic_observation"]["sensitive_log_sink_ref"],
+        "siem://browserpane/eu-support"
+    );
 
     let get_profile_response = app
         .clone()
@@ -261,6 +299,14 @@ async fn manages_egress_profiles_and_session_network_identity() {
         "eu-support-egress"
     );
     assert_eq!(session["effective_egress"]["bypass_rule_count"], 2);
+    assert_eq!(
+        session["effective_egress"]["observation_mode"],
+        "tls_intercept"
+    );
+    assert_eq!(
+        session["effective_egress"]["tls_interception_enabled"],
+        true
+    );
     assert_eq!(session["labels"]["region"], "eu");
     assert_eq!(session["labels"]["case"], "INC-1234");
 
@@ -282,6 +328,7 @@ async fn manages_egress_profiles_and_session_network_identity() {
         status["effective_egress"]["profile_name"],
         "eu-support-egress"
     );
+    assert_eq!(status["effective_egress"]["tls_interception_enabled"], true);
 
     let list_response = app
         .oneshot(

@@ -311,6 +311,8 @@ function effectiveEgressLabel(egress: SessionEffectiveEgress | null | undefined)
     egress.profile_name ?? `Profile ${shortId(egress.profile_id)}`,
     egress.profile_state ?? 'unknown',
     egress.proxy_configured ? 'proxy' : null,
+    egress.tls_interception_enabled ? 'TLS inspect' : null,
+    egress.sensitive_log_sink_configured ? 'log sink' : null,
     egress.custom_ca_configured ? 'custom CA' : null,
     egress.bypass_rule_count > 0 ? `${egress.bypass_rule_count} bypass` : null,
   ].filter(Boolean);

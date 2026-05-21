@@ -25,6 +25,9 @@ const SESSION = {
     proxy_configured: true,
     bypass_rule_count: 2,
     custom_ca_configured: true,
+    observation_mode: 'tls_intercept',
+    tls_interception_enabled: true,
+    sensitive_log_sink_configured: true,
   },
   owner_mode: 'shared',
   integration_context: { ticket: 'INC-1234' },
@@ -118,11 +121,19 @@ const EGRESS_PROFILE = {
     certificate_ref: 'vault://pki/browserpane/eu-support',
     display_name: 'EU support CA',
   },
+  traffic_observation: {
+    mode: 'tls_intercept',
+    sensitive_log_sink_ref: 'siem://browserpane/eu-support',
+    sensitive_log_sink_display_name: 'EU support SIEM',
+  },
   state: 'ready',
   effective: {
     proxy_configured: true,
     bypass_rule_count: 2,
     custom_ca_configured: true,
+    observation_mode: 'tls_intercept',
+    tls_interception_enabled: true,
+    sensitive_log_sink_configured: true,
   },
   created_at: '2026-05-04T18:45:00Z',
   updated_at: '2026-05-04T18:45:00Z',
@@ -322,6 +333,11 @@ describe('ControlClient', () => {
         certificate_ref: 'vault://pki/browserpane/eu-support',
         display_name: 'EU support CA',
       },
+      traffic_observation: {
+        mode: 'tls_intercept',
+        sensitive_log_sink_ref: 'siem://browserpane/eu-support',
+        sensitive_log_sink_display_name: 'EU support SIEM',
+      },
     });
     await client.getEgressProfile('profile/with space');
 
@@ -332,6 +348,9 @@ describe('ControlClient', () => {
         proxy_configured: true,
         bypass_rule_count: 2,
         custom_ca_configured: true,
+        observation_mode: 'tls_intercept',
+        tls_interception_enabled: true,
+        sensitive_log_sink_configured: true,
       },
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(
@@ -347,6 +366,11 @@ describe('ControlClient', () => {
           custom_ca: {
             certificate_ref: 'vault://pki/browserpane/eu-support',
             display_name: 'EU support CA',
+          },
+          traffic_observation: {
+            mode: 'tls_intercept',
+            sensitive_log_sink_ref: 'siem://browserpane/eu-support',
+            sensitive_log_sink_display_name: 'EU support SIEM',
           },
         }),
       }),

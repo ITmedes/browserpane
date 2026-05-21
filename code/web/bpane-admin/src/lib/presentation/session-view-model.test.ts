@@ -27,6 +27,9 @@ const SESSION: SessionResource = {
     proxy_configured: true,
     bypass_rule_count: 2,
     custom_ca_configured: true,
+    observation_mode: 'tls_intercept',
+    tls_interception_enabled: true,
+    sensitive_log_sink_configured: true,
   },
   owner_mode: 'shared',
   idle_timeout_sec: 1800,
@@ -179,7 +182,7 @@ describe('SessionViewModelBuilder', () => {
       browserContext: 'Support profile (019df7be...4a72)',
       browserContextId: BROWSER_CONTEXT.id,
       networkIdentity: 'de-DE | Europe/Berlin | de-DE/en-US | geo 52.52,13.405 | desktop-chromium-stable',
-      egress: 'EU support egress | ready | proxy | custom CA | 2 bypass',
+      egress: 'EU support egress | ready | proxy | TLS inspect | log sink | custom CA | 2 bypass',
       mcpDelegation: 'MCP not delegated',
       labels: 'case=1234, purpose=import-repro',
     });
@@ -248,7 +251,7 @@ describe('SessionViewModelBuilder', () => {
     });
     expect(viewModel.facts).toContainEqual({
       label: 'egress',
-      value: 'EU support egress | ready | proxy | custom CA | 2 bypass',
+      value: 'EU support egress | ready | proxy | TLS inspect | log sink | custom CA | 2 bypass',
       testId: 'session-effective-egress',
     });
     expect(viewModel.connections).toEqual([{

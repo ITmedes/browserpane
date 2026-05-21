@@ -321,6 +321,14 @@ runtime containers carry `browserpane.session_id` and egress-profile labels,
 and the gateway logs a sanitized runtime startup event that joins the session,
 runtime container, and egress profile. A runnable local Squid access-log example
 is available in `deploy/examples/egress-observer`.
+Egress profiles default to `traffic_observation.mode=metadata_only`. Full HTTPS
+inspection must be explicit with `mode=tls_intercept`, and the API requires a
+proxy, custom CA reference, and `sensitive_log_sink_ref` so operators do not
+enable decrypted traffic logging without an approved SIEM/log-storage target.
+Docker-backed runtimes materialize `file://` or absolute-path custom CA bundle
+references into the session data volume and install them into Chromium's NSS
+trust store before launch; non-file CA providers remain a provider-integration
+follow-up.
 Browser context resources let callers name owner-scoped Chromium profile
 contexts and bind new sessions with `browser_context.mode=reusable` plus a
 `context_id`. Docker-backed runtimes materialize reusable contexts as a
@@ -533,6 +541,19 @@ Common egress-profile operations:
   --custom-ca-name "EU support CA"
 ./scripts/bpane egress-profile list
 ./scripts/bpane egress-profile get <egress-profile-id>
+```
+
+For a proxy that performs approved TLS interception, make that explicit and
+name the sensitive-log sink:
+
+```bash
+./scripts/bpane egress-profile create inspected-support-egress \
+  --proxy-url https://inspect-proxy.example:8443 \
+  --custom-ca-ref file:///workspace/dev/egress-ca.pem \
+  --custom-ca-name "Support inspection CA" \
+  --traffic-observation-mode tls_intercept \
+  --sensitive-log-sink-ref siem://browserpane/support-egress \
+  --sensitive-log-sink-name "Support SIEM"
 ```
 
 To observe egress traffic locally without changing the BrowserPane gateway,

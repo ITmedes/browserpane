@@ -207,6 +207,35 @@ impl FromStr for EgressProfileState {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EgressTrafficObservationMode {
+    #[default]
+    MetadataOnly,
+    TlsIntercept,
+}
+
+impl EgressTrafficObservationMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MetadataOnly => "metadata_only",
+            Self::TlsIntercept => "tls_intercept",
+        }
+    }
+}
+
+impl FromStr for EgressTrafficObservationMode {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "metadata_only" => Ok(Self::MetadataOnly),
+            "tls_intercept" => Ok(Self::TlsIntercept),
+            _ => Err("unknown egress traffic observation mode"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionGeolocation {
     pub latitude: f64,
@@ -246,10 +275,23 @@ pub struct EgressCustomCaConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EgressTrafficObservationConfig {
+    #[serde(default)]
+    pub mode: EgressTrafficObservationMode,
+    #[serde(default)]
+    pub sensitive_log_sink_ref: Option<String>,
+    #[serde(default)]
+    pub sensitive_log_sink_display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EgressProfileEffectiveStatus {
     pub proxy_configured: bool,
     pub bypass_rule_count: u32,
     pub custom_ca_configured: bool,
+    pub observation_mode: EgressTrafficObservationMode,
+    pub tls_interception_enabled: bool,
+    pub sensitive_log_sink_configured: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -260,6 +302,9 @@ pub struct SessionEffectiveEgress {
     pub proxy_configured: bool,
     pub bypass_rule_count: u32,
     pub custom_ca_configured: bool,
+    pub observation_mode: EgressTrafficObservationMode,
+    pub tls_interception_enabled: bool,
+    pub sensitive_log_sink_configured: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -270,6 +315,7 @@ pub struct PersistEgressProfileRequest {
     pub proxy: Option<EgressProxyConfig>,
     pub bypass_rules: Vec<String>,
     pub custom_ca: Option<EgressCustomCaConfig>,
+    pub traffic_observation: EgressTrafficObservationConfig,
     pub state: EgressProfileState,
 }
 
@@ -284,6 +330,7 @@ pub struct StoredEgressProfile {
     pub proxy: Option<EgressProxyConfig>,
     pub bypass_rules: Vec<String>,
     pub custom_ca: Option<EgressCustomCaConfig>,
+    pub traffic_observation: EgressTrafficObservationConfig,
     pub state: EgressProfileState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -298,6 +345,7 @@ pub struct EgressProfileResource {
     pub proxy: Option<EgressProxyConfig>,
     pub bypass_rules: Vec<String>,
     pub custom_ca: Option<EgressCustomCaConfig>,
+    pub traffic_observation: EgressTrafficObservationConfig,
     pub state: EgressProfileState,
     pub effective: EgressProfileEffectiveStatus,
     pub created_at: DateTime<Utc>,
@@ -315,6 +363,14 @@ impl StoredEgressProfile {
             proxy_configured: self.proxy.is_some(),
             bypass_rule_count: self.bypass_rules.len() as u32,
             custom_ca_configured: self.custom_ca.is_some(),
+            observation_mode: self.traffic_observation.mode,
+            tls_interception_enabled: self.traffic_observation.mode
+                == EgressTrafficObservationMode::TlsIntercept,
+            sensitive_log_sink_configured: self
+                .traffic_observation
+                .sensitive_log_sink_ref
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
         }
     }
 
@@ -327,6 +383,7 @@ impl StoredEgressProfile {
             proxy: self.proxy.clone(),
             bypass_rules: self.bypass_rules.clone(),
             custom_ca: self.custom_ca.clone(),
+            traffic_observation: self.traffic_observation.clone(),
             state: self.state,
             effective: self.effective_status(),
             created_at: self.created_at,
@@ -343,6 +400,9 @@ impl StoredEgressProfile {
             proxy_configured: effective.proxy_configured,
             bypass_rule_count: effective.bypass_rule_count,
             custom_ca_configured: effective.custom_ca_configured,
+            observation_mode: effective.observation_mode,
+            tls_interception_enabled: effective.tls_interception_enabled,
+            sensitive_log_sink_configured: effective.sensitive_log_sink_configured,
         }
     }
 }

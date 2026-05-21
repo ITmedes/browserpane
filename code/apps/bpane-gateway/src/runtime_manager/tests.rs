@@ -11,10 +11,11 @@ use super::*;
 use crate::auth::AuthenticatedPrincipal;
 use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig, EgressProfileState,
-    EgressProxyConfig, PersistBrowserContextRequest, SessionBrowserContextMode,
-    SessionBrowserContextRequest, SessionBrowserContextResource, SessionGeolocation,
-    SessionLifecycleState, SessionNetworkIdentity, SessionOwner, SessionOwnerMode,
-    SessionRecordingPolicy, SessionStore, SessionViewport, StoredEgressProfile, StoredSession,
+    EgressProxyConfig, EgressTrafficObservationConfig, EgressTrafficObservationMode,
+    PersistBrowserContextRequest, SessionBrowserContextMode, SessionBrowserContextRequest,
+    SessionBrowserContextResource, SessionGeolocation, SessionLifecycleState,
+    SessionNetworkIdentity, SessionOwner, SessionOwnerMode, SessionRecordingPolicy, SessionStore,
+    SessionViewport, StoredEgressProfile, StoredSession,
 };
 use crate::session_files::{
     SessionFileBindingMode, SessionFileBindingState, StoredSessionFileBinding,
@@ -353,9 +354,14 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         }),
         bypass_rules: vec!["localhost".to_string(), "*.internal.example".to_string()],
         custom_ca: Some(EgressCustomCaConfig {
-            certificate_ref: "vault://pki/browserpane/eu-support".to_string(),
+            certificate_ref: "file:///workspace/dev/egress-ca.pem".to_string(),
             display_name: Some("EU support CA".to_string()),
         }),
+        traffic_observation: EgressTrafficObservationConfig {
+            mode: EgressTrafficObservationMode::TlsIntercept,
+            sensitive_log_sink_ref: Some("siem://browserpane/eu-support".to_string()),
+            sensitive_log_sink_display_name: Some("EU support SIEM".to_string()),
+        },
         state: EgressProfileState::Ready,
         created_at: now,
         updated_at: now,
@@ -369,8 +375,11 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         idle_generation: 0,
     };
 
-    let launch_options =
-        DockerRuntimeManager::network_identity_launch_options(&session, Some(&profile));
+    let launch_options = DockerRuntimeManager::network_identity_launch_options(
+        &session,
+        Some(&profile),
+        &manager.egress_custom_ca_bundle_path_for_session(),
+    );
     let env = launch_options
         .env
         .iter()
@@ -397,6 +406,24 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         env.get("BPANE_CHROMIUM_PROXY_BYPASS_LIST")
             .map(String::as_str),
         Some("localhost;*.internal.example")
+    );
+    assert_eq!(
+        env.get("BPANE_EGRESS_OBSERVATION_MODE").map(String::as_str),
+        Some("tls_intercept")
+    );
+    assert_eq!(
+        env.get("BPANE_CHROMIUM_TRUSTED_CA_BUNDLE")
+            .map(String::as_str),
+        Some("/run/bpane/session/egress/custom-ca.pem")
+    );
+    assert_eq!(
+        env.get("BPANE_CHROMIUM_TRUSTED_CA_NAME")
+            .map(String::as_str),
+        Some("EU support CA")
+    );
+    assert_eq!(
+        launch_options.egress_custom_ca_ref.as_deref(),
+        Some("file:///workspace/dev/egress-ca.pem")
     );
     let labels = launch_options
         .labels
@@ -428,11 +455,36 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         Some("true")
     );
     assert_eq!(
-        launch_options
-            .egress_observer
-            .as_ref()
-            .map(|summary| (&summary.profile_id, summary.proxy_configured)),
-        Some((&profile_id, true))
+        labels
+            .get("browserpane.egress_observation_mode")
+            .map(String::as_str),
+        Some("tls_intercept")
+    );
+    assert_eq!(
+        labels
+            .get("browserpane.egress_tls_interception_enabled")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        labels
+            .get("browserpane.egress_sensitive_log_sink_configured")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        launch_options.egress_observer.as_ref().map(|summary| (
+            &summary.profile_id,
+            summary.observation_mode,
+            summary.proxy_configured,
+            summary.tls_interception_enabled,
+        )),
+        Some((
+            &profile_id,
+            EgressTrafficObservationMode::TlsIntercept,
+            true,
+            true,
+        ))
     );
     let geolocation: Value =
         serde_json::from_str(env.get("BPANE_SESSION_GEOLOCATION").unwrap()).unwrap();

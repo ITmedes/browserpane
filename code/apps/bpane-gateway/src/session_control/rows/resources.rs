@@ -368,6 +368,16 @@ pub(in crate::session_control) fn row_to_stored_egress_profile(
                 "failed to decode egress profile custom_ca: {error}"
             ))
         })?;
+    let traffic_observation = row
+        .get::<_, Option<Value>>("traffic_observation")
+        .map(serde_json::from_value::<EgressTrafficObservationConfig>)
+        .transpose()
+        .map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "failed to decode egress profile traffic_observation: {error}"
+            ))
+        })?
+        .unwrap_or_default();
     let state = row
         .get::<_, String>("state")
         .parse::<EgressProfileState>()
@@ -383,6 +393,7 @@ pub(in crate::session_control) fn row_to_stored_egress_profile(
         proxy,
         bypass_rules,
         custom_ca,
+        traffic_observation,
         state,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
