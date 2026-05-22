@@ -79,6 +79,7 @@
         {@render Fact('Context', viewModel.selectedSession.browserContext, 'session-selected-browser-context')}
         {@render Fact('Network', viewModel.selectedSession.networkIdentity, 'session-selected-network-identity')}
         {@render Fact('Egress', viewModel.selectedSession.egress, 'session-selected-egress')}
+        {@render Fact('Egress proof', viewModel.selectedSession.egressDiagnostics, 'session-selected-egress-diagnostics')}
         {@render Fact('Runtime', viewModel.selectedSession.runtime, 'session-selected-runtime')}
         {@render Fact('Clients', String(viewModel.selectedSession.clients), 'session-selected-clients')}
         {@render Fact('MCP', viewModel.selectedSession.mcpDelegation, 'session-selected-mcp')}

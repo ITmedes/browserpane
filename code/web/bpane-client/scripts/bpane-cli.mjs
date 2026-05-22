@@ -97,6 +97,7 @@ function usageText() {
     '  bpane session list [options]',
     '  bpane session get <session-id> [options]',
     '  bpane session status <session-id> [options]',
+    '  bpane session egress-diagnostics <session-id> [options]',
     '  bpane session access-token <session-id> [options]',
     '  bpane session automation-access <session-id> [options]',
     '  bpane session disconnect-all <session-id> [options]',
@@ -110,6 +111,7 @@ function usageText() {
   '  bpane egress-profile create [profile-name] [options]',
   '  bpane egress-profile list [options]',
   '  bpane egress-profile get <profile-id> [options]',
+  '  bpane egress-profile diagnostics <profile-id> [options]',
   '  bpane egress-profile update <profile-id> [options]',
   '  bpane egress-profile disable <profile-id> [options]',
     '  bpane browser-context create [context-name] [options]',
@@ -1802,6 +1804,13 @@ async function handleSessionCommand(config, positionals, options) {
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/status`,
     );
   }
+  if (action === 'egress-diagnostics') {
+    const sessionId = requiredSessionId(positionals, 'session egress-diagnostics');
+    return await requestGateway(
+      config,
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`,
+    );
+  }
   if (action === 'access-token') {
     const sessionId = requiredSessionId(positionals, 'session access-token');
     return await requestGateway(
@@ -1894,6 +1903,10 @@ async function handleEgressProfileCommand(config, positionals, options) {
   if (action === 'get') {
     const profileId = requiredEgressProfileId(positionals, 'egress-profile get');
     return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
+  }
+  if (action === 'diagnostics') {
+    const profileId = requiredEgressProfileId(positionals, 'egress-profile diagnostics');
+    return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}/diagnostics`);
   }
   if (action === 'update') {
     const profileId = requiredEgressProfileId(positionals, 'egress-profile update');

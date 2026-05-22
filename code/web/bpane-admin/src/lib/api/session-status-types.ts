@@ -1,6 +1,7 @@
 import type { SessionRecordingPlaybackResource } from './recording-types';
 import type {
   SessionConnectionCounts,
+  EgressDiagnosticsResource,
   SessionEffectiveEgress,
   SessionNetworkIdentity,
   SessionStopEligibility,
@@ -66,6 +67,7 @@ export type SessionStatus = {
   readonly resolution: readonly [number, number];
   readonly network_identity?: SessionNetworkIdentity;
   readonly effective_egress?: SessionEffectiveEgress;
+  readonly egress_diagnostics?: EgressDiagnosticsResource;
   readonly recording: SessionRecordingStatus;
   readonly playback: SessionRecordingPlaybackResource;
   readonly telemetry: SessionTelemetry;

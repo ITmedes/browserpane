@@ -12,6 +12,10 @@ pub(super) fn egress_profile_routes() -> Router<Arc<ApiState>> {
             "/api/v1/egress-profiles/{profile_id}",
             get(get_egress_profile).put(update_egress_profile),
         )
+        .route(
+            "/api/v1/egress-profiles/{profile_id}/diagnostics",
+            get(get_egress_profile_diagnostics),
+        )
 }
 
 async fn list_egress_profiles(
@@ -70,6 +74,30 @@ async fn get_egress_profile(
             )
         })?;
     Ok(Json(profile.to_resource()))
+}
+
+async fn get_egress_profile_diagnostics(
+    headers: HeaderMap,
+    Path(profile_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<EgressDiagnosticsResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let profile = state
+        .session_store
+        .get_egress_profile_for_owner(&principal, profile_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("egress profile {profile_id} not found"),
+                }),
+            )
+        })?;
+    Ok(Json(profile.to_diagnostics(None, None, Utc::now())))
 }
 
 async fn update_egress_profile(

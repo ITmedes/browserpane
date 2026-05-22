@@ -38,6 +38,7 @@ export class ControlSessionStatusMapper {
       resolution: toResolution(object.resolution),
       network_identity: ControlSessionMapper.toSessionNetworkIdentity(object.network_identity),
       effective_egress: ControlSessionMapper.toSessionEffectiveEgress(object.effective_egress),
+      egress_diagnostics: ControlSessionMapper.toEgressDiagnosticsResource(object.egress_diagnostics),
       recording: toRecordingStatus(object.recording),
       playback: RecordingMapper.toPlayback(object.playback),
       telemetry: toTelemetry(object.telemetry),

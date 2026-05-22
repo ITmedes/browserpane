@@ -32,6 +32,37 @@ const PROFILE: EgressProfileResource = {
     tls_interception_enabled: true,
     sensitive_log_sink_configured: true,
   },
+  diagnostics: {
+    profile_id: 'profile-1',
+    profile_name: 'EU support egress',
+    profile_state: 'ready',
+    health: 'ready',
+    observation_mode: 'tls_intercept',
+    proof_level: 'configuration',
+    runtime_binding: null,
+    runtime_assignment: null,
+    proxy_configured: true,
+    bypass_rule_count: 1,
+    custom_ca_configured: true,
+    tls_interception_enabled: true,
+    sensitive_log_sink_configured: true,
+    proof: {
+      profile_resolved: true,
+      profile_ready: true,
+      proxy_launch_config_expected: true,
+      bypass_rules_expected: 1,
+      custom_ca_launch_config_expected: true,
+      tls_interception_expected: true,
+      sensitive_log_sink_declared: true,
+      runtime_launch_observed: false,
+      active_probe_collected: false,
+      observed_public_ip: null,
+      observed_tls_issuer: null,
+      last_failure_reason: null,
+    },
+    warnings: [],
+    observed_at: '2026-05-22T08:10:00Z',
+  },
   created_at: '2026-05-22T08:00:00Z',
   updated_at: '2026-05-22T08:10:00Z',
 };
@@ -44,7 +75,9 @@ describe('egress profile catalog helpers', () => {
     expect(rows[0]).toMatchObject({
       id: 'profile-1',
       kind: 'tls',
-      badges: ['proxy', 'TLS inspect', 'custom CA', 'log sink'],
+      health: 'ready',
+      proofLevel: 'configuration',
+      badges: ['proxy', 'TLS inspect', 'custom CA', 'log sink', 'config proof'],
     });
   });
 

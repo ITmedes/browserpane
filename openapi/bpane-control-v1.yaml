@@ -514,6 +514,26 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/egress-profiles/{profile_id}/diagnostics:
+    parameters:
+      - $ref: '#/components/parameters/EgressProfileId'
+    get:
+      tags: [Egress Profiles]
+      summary: Fetch sanitized egress profile diagnostics
+      operationId: getEgressProfileDiagnostics
+      responses:
+        '200':
+          description: Egress profile diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressDiagnosticsResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/automation-tasks:
     get:
       tags: [Automation Tasks]
@@ -2304,6 +2324,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/egress-diagnostics:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Session Runtime]
+      summary: Get sanitized effective egress diagnostics for a session
+      operationId: getSessionEgressDiagnostics
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Session effective egress diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressDiagnosticsResource'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -5163,6 +5206,129 @@ components:
           type: boolean
         sensitive_log_sink_configured:
           type: boolean
+    EgressDiagnosticsHealth:
+      type: string
+      enum:
+        - ready
+        - unknown
+        - attention
+        - blocked
+        - missing
+    EgressDiagnosticsProofLevel:
+      type: string
+      enum:
+        - none
+        - configuration
+        - runtime_launch_metadata
+    EgressDiagnosticsProof:
+      type: object
+      required:
+        - profile_resolved
+        - profile_ready
+        - proxy_launch_config_expected
+        - bypass_rules_expected
+        - custom_ca_launch_config_expected
+        - tls_interception_expected
+        - sensitive_log_sink_declared
+        - runtime_launch_observed
+        - active_probe_collected
+        - observed_public_ip
+        - observed_tls_issuer
+        - last_failure_reason
+      properties:
+        profile_resolved:
+          type: boolean
+        profile_ready:
+          type: boolean
+        proxy_launch_config_expected:
+          type: boolean
+        bypass_rules_expected:
+          type: integer
+          minimum: 0
+        custom_ca_launch_config_expected:
+          type: boolean
+        tls_interception_expected:
+          type: boolean
+        sensitive_log_sink_declared:
+          type: boolean
+        runtime_launch_observed:
+          type: boolean
+        active_probe_collected:
+          type: boolean
+          description: False until an explicit active egress probe implementation records public-IP or TLS issuer evidence.
+        observed_public_ip:
+          type: string
+          nullable: true
+        observed_tls_issuer:
+          type: string
+          nullable: true
+        last_failure_reason:
+          type: string
+          nullable: true
+    EgressDiagnosticsResource:
+      type: object
+      required:
+        - profile_id
+        - profile_name
+        - profile_state
+        - health
+        - observation_mode
+        - proof_level
+        - runtime_binding
+        - runtime_assignment
+        - proxy_configured
+        - bypass_rule_count
+        - custom_ca_configured
+        - tls_interception_enabled
+        - sensitive_log_sink_configured
+        - proof
+        - warnings
+        - observed_at
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        profile_name:
+          type: string
+          nullable: true
+        profile_state:
+          allOf:
+            - $ref: '#/components/schemas/EgressProfileState'
+          nullable: true
+        health:
+          $ref: '#/components/schemas/EgressDiagnosticsHealth'
+        observation_mode:
+          $ref: '#/components/schemas/EgressTrafficObservationMode'
+        proof_level:
+          $ref: '#/components/schemas/EgressDiagnosticsProofLevel'
+        runtime_binding:
+          type: string
+          nullable: true
+        runtime_assignment:
+          type: string
+          nullable: true
+          description: Runtime assignment status such as `starting` or `ready` when a session runtime exists.
+        proxy_configured:
+          type: boolean
+        bypass_rule_count:
+          type: integer
+          minimum: 0
+        custom_ca_configured:
+          type: boolean
+        tls_interception_enabled:
+          type: boolean
+        sensitive_log_sink_configured:
+          type: boolean
+        proof:
+          $ref: '#/components/schemas/EgressDiagnosticsProof'
+        warnings:
+          type: array
+          items:
+            type: string
+        observed_at:
+          type: string
+          format: date-time
     SessionEffectiveEgress:
       type: object
       required:
@@ -5248,6 +5414,7 @@ components:
         - traffic_observation
         - state
         - effective
+        - diagnostics
         - created_at
         - updated_at
       properties:
@@ -5281,6 +5448,8 @@ components:
           $ref: '#/components/schemas/EgressProfileState'
         effective:
           $ref: '#/components/schemas/EgressProfileEffectiveStatus'
+        diagnostics:
+          $ref: '#/components/schemas/EgressDiagnosticsResource'
         created_at:
           type: string
           format: date-time
@@ -5304,6 +5473,7 @@ components:
         - browser_context
         - network_identity
         - effective_egress
+        - egress_diagnostics
         - owner_mode
         - viewport
         - capabilities
@@ -5336,6 +5506,8 @@ components:
           $ref: '#/components/schemas/SessionNetworkIdentity'
         effective_egress:
           $ref: '#/components/schemas/SessionEffectiveEgress'
+        egress_diagnostics:
+          $ref: '#/components/schemas/EgressDiagnosticsResource'
         owner_mode:
           $ref: '#/components/schemas/SessionOwnerMode'
         viewport:
@@ -5873,6 +6045,7 @@ components:
         - resolution
         - network_identity
         - effective_egress
+        - egress_diagnostics
         - recording
         - playback
         - telemetry
@@ -5925,6 +6098,8 @@ components:
           $ref: '#/components/schemas/SessionNetworkIdentity'
         effective_egress:
           $ref: '#/components/schemas/SessionEffectiveEgress'
+        egress_diagnostics:
+          $ref: '#/components/schemas/EgressDiagnosticsResource'
         recording:
           $ref: '#/components/schemas/SessionRecordingStatus'
         playback:

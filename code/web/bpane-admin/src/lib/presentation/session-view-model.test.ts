@@ -1,7 +1,39 @@
 import { describe, expect, it } from 'vitest';
-import type { SessionResource } from '../api/control-types';
+import type { EgressDiagnosticsResource, SessionResource } from '../api/control-types';
 import type { SessionStatus } from '../api/session-status-types';
 import { SessionViewModelBuilder } from './session-view-model';
+
+const EGRESS_DIAGNOSTICS: EgressDiagnosticsResource = {
+  profile_id: '019df7be-6222-7b00-8c86-9e1f3f8d4a73',
+  profile_name: 'EU support egress',
+  profile_state: 'ready',
+  health: 'ready',
+  observation_mode: 'tls_intercept',
+  proof_level: 'runtime_launch_metadata',
+  runtime_binding: 'docker_runtime_pool',
+  runtime_assignment: 'ready',
+  proxy_configured: true,
+  bypass_rule_count: 2,
+  custom_ca_configured: true,
+  tls_interception_enabled: true,
+  sensitive_log_sink_configured: true,
+  proof: {
+    profile_resolved: true,
+    profile_ready: true,
+    proxy_launch_config_expected: true,
+    bypass_rules_expected: 2,
+    custom_ca_launch_config_expected: true,
+    tls_interception_expected: true,
+    sensitive_log_sink_declared: true,
+    runtime_launch_observed: true,
+    active_probe_collected: false,
+    observed_public_ip: null,
+    observed_tls_issuer: null,
+    last_failure_reason: null,
+  },
+  warnings: [],
+  observed_at: '2026-05-04T19:01:00Z',
+};
 
 const SESSION: SessionResource = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
@@ -31,6 +63,7 @@ const SESSION: SessionResource = {
     tls_interception_enabled: true,
     sensitive_log_sink_configured: true,
   },
+  egress_diagnostics: EGRESS_DIAGNOSTICS,
   owner_mode: 'shared',
   idle_timeout_sec: 1800,
   labels: { case: '1234', purpose: 'import-repro' },
@@ -114,6 +147,7 @@ const STATUS: SessionStatus = {
   resolution: [1280, 720],
   network_identity: SESSION.network_identity!,
   effective_egress: SESSION.effective_egress!,
+  egress_diagnostics: EGRESS_DIAGNOSTICS,
   recording: {
     configured_mode: 'manual',
     format: 'webm',

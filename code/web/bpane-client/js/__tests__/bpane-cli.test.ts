@@ -394,6 +394,22 @@ describe('bpane operator CLI', () => {
     expect(calls[0].url).toBe('http://localhost:8080/api/v1/sessions/session%2Fwith%20space/status');
   });
 
+  it('fetches session egress diagnostics by id', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ health: 'ready' }));
+
+    const code = await runBpaneCli(
+      ['session', 'egress-diagnostics', 'session/with space'],
+      { BPANE_BASE_URL: 'http://localhost:8080', BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toEqual({ health: 'ready' });
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/sessions/session%2Fwith%20space/egress-diagnostics');
+  });
+
   it('creates a session with structured CLI options', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'session-1' }));
@@ -1140,6 +1156,30 @@ describe('bpane operator CLI', () => {
       traffic_observation: { mode: 'metadata_only' },
       state: 'disabled',
     });
+  });
+
+  it('fetches egress profile diagnostics through the CLI', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({
+      profile_id: 'egress-1',
+      health: 'ready',
+      proof_level: 'configuration',
+    }));
+
+    const code = await runBpaneCli(
+      ['egress-profile', 'diagnostics', 'egress/with space'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toEqual({
+      profile_id: 'egress-1',
+      health: 'ready',
+      proof_level: 'configuration',
+    });
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/egress-profiles/egress%2Fwith%20space/diagnostics');
   });
 
   it('preserves equals signs in inline option values', async () => {

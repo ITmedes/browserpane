@@ -294,6 +294,60 @@ pub struct EgressProfileEffectiveStatus {
     pub sensitive_log_sink_configured: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EgressDiagnosticsHealth {
+    Ready,
+    Unknown,
+    Attention,
+    Blocked,
+    Missing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EgressDiagnosticsProofLevel {
+    None,
+    Configuration,
+    RuntimeLaunchMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EgressDiagnosticsProof {
+    pub profile_resolved: bool,
+    pub profile_ready: bool,
+    pub proxy_launch_config_expected: bool,
+    pub bypass_rules_expected: u32,
+    pub custom_ca_launch_config_expected: bool,
+    pub tls_interception_expected: bool,
+    pub sensitive_log_sink_declared: bool,
+    pub runtime_launch_observed: bool,
+    pub active_probe_collected: bool,
+    pub observed_public_ip: Option<String>,
+    pub observed_tls_issuer: Option<String>,
+    pub last_failure_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EgressDiagnosticsResource {
+    pub profile_id: Option<Uuid>,
+    pub profile_name: Option<String>,
+    pub profile_state: Option<EgressProfileState>,
+    pub health: EgressDiagnosticsHealth,
+    pub observation_mode: EgressTrafficObservationMode,
+    pub proof_level: EgressDiagnosticsProofLevel,
+    pub runtime_binding: Option<String>,
+    pub runtime_assignment: Option<String>,
+    pub proxy_configured: bool,
+    pub bypass_rule_count: u32,
+    pub custom_ca_configured: bool,
+    pub tls_interception_enabled: bool,
+    pub sensitive_log_sink_configured: bool,
+    pub proof: EgressDiagnosticsProof,
+    pub warnings: Vec<String>,
+    pub observed_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct SessionEffectiveEgress {
     pub profile_id: Option<Uuid>,
@@ -348,6 +402,7 @@ pub struct EgressProfileResource {
     pub traffic_observation: EgressTrafficObservationConfig,
     pub state: EgressProfileState,
     pub effective: EgressProfileEffectiveStatus,
+    pub diagnostics: EgressDiagnosticsResource,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -386,6 +441,7 @@ impl StoredEgressProfile {
             traffic_observation: self.traffic_observation.clone(),
             state: self.state,
             effective: self.effective_status(),
+            diagnostics: self.to_diagnostics(None, None, Utc::now()),
             created_at: self.created_at,
             updated_at: self.updated_at,
         }
@@ -403,6 +459,186 @@ impl StoredEgressProfile {
             observation_mode: effective.observation_mode,
             tls_interception_enabled: effective.tls_interception_enabled,
             sensitive_log_sink_configured: effective.sensitive_log_sink_configured,
+        }
+    }
+
+    pub fn to_diagnostics(
+        &self,
+        runtime_binding: Option<String>,
+        runtime_assignment: Option<String>,
+        observed_at: DateTime<Utc>,
+    ) -> EgressDiagnosticsResource {
+        let effective = self.effective_status();
+        let mut warnings = Vec::new();
+        let session_scoped = runtime_binding.is_some() || runtime_assignment.is_some();
+        let runtime_ready = runtime_assignment.as_deref() == Some("ready");
+        let runtime_starting = runtime_assignment.as_deref() == Some("starting");
+
+        if self.state == EgressProfileState::Disabled {
+            warnings.push(
+                "Egress profile is disabled and cannot be used as a healthy launch choice."
+                    .to_string(),
+            );
+        }
+        if effective.tls_interception_enabled {
+            if !effective.proxy_configured {
+                warnings.push("TLS interception requires a configured proxy.".to_string());
+            }
+            if !effective.custom_ca_configured {
+                warnings.push(
+                    "TLS interception requires a configured custom CA reference.".to_string(),
+                );
+            }
+            if !effective.sensitive_log_sink_configured {
+                warnings.push(
+                    "TLS interception requires an approved sensitive log-sink reference."
+                        .to_string(),
+                );
+            }
+        }
+        if session_scoped && self.state == EgressProfileState::Ready && !runtime_ready {
+            if runtime_starting {
+                warnings.push(
+                    "Runtime launch is still starting; egress launch metadata is pending."
+                        .to_string(),
+                );
+            } else {
+                warnings.push(
+                    "No active runtime launch metadata has been observed for this session yet."
+                        .to_string(),
+                );
+            }
+        }
+
+        let has_configuration_gap = effective.tls_interception_enabled
+            && (!effective.proxy_configured
+                || !effective.custom_ca_configured
+                || !effective.sensitive_log_sink_configured);
+        let health = if self.state == EgressProfileState::Disabled {
+            EgressDiagnosticsHealth::Blocked
+        } else if has_configuration_gap {
+            EgressDiagnosticsHealth::Attention
+        } else if session_scoped && !runtime_ready {
+            EgressDiagnosticsHealth::Unknown
+        } else {
+            EgressDiagnosticsHealth::Ready
+        };
+        let proof_level = if runtime_ready {
+            EgressDiagnosticsProofLevel::RuntimeLaunchMetadata
+        } else {
+            EgressDiagnosticsProofLevel::Configuration
+        };
+
+        EgressDiagnosticsResource {
+            profile_id: Some(self.id),
+            profile_name: Some(self.name.clone()),
+            profile_state: Some(self.state),
+            health,
+            observation_mode: effective.observation_mode,
+            proof_level,
+            runtime_binding,
+            runtime_assignment,
+            proxy_configured: effective.proxy_configured,
+            bypass_rule_count: effective.bypass_rule_count,
+            custom_ca_configured: effective.custom_ca_configured,
+            tls_interception_enabled: effective.tls_interception_enabled,
+            sensitive_log_sink_configured: effective.sensitive_log_sink_configured,
+            proof: EgressDiagnosticsProof {
+                profile_resolved: true,
+                profile_ready: self.state == EgressProfileState::Ready,
+                proxy_launch_config_expected: effective.proxy_configured,
+                bypass_rules_expected: effective.bypass_rule_count,
+                custom_ca_launch_config_expected: effective.custom_ca_configured
+                    && effective.tls_interception_enabled,
+                tls_interception_expected: effective.tls_interception_enabled,
+                sensitive_log_sink_declared: effective.sensitive_log_sink_configured,
+                runtime_launch_observed: runtime_ready,
+                active_probe_collected: false,
+                observed_public_ip: None,
+                observed_tls_issuer: None,
+                last_failure_reason: None,
+            },
+            warnings,
+            observed_at,
+        }
+    }
+}
+
+impl EgressDiagnosticsResource {
+    pub fn direct(
+        runtime_binding: Option<String>,
+        runtime_assignment: Option<String>,
+        observed_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            profile_id: None,
+            profile_name: None,
+            profile_state: None,
+            health: EgressDiagnosticsHealth::Ready,
+            observation_mode: EgressTrafficObservationMode::MetadataOnly,
+            proof_level: EgressDiagnosticsProofLevel::Configuration,
+            runtime_binding,
+            runtime_assignment,
+            proxy_configured: false,
+            bypass_rule_count: 0,
+            custom_ca_configured: false,
+            tls_interception_enabled: false,
+            sensitive_log_sink_configured: false,
+            proof: EgressDiagnosticsProof {
+                profile_resolved: true,
+                profile_ready: true,
+                proxy_launch_config_expected: false,
+                bypass_rules_expected: 0,
+                custom_ca_launch_config_expected: false,
+                tls_interception_expected: false,
+                sensitive_log_sink_declared: false,
+                runtime_launch_observed: false,
+                active_probe_collected: false,
+                observed_public_ip: None,
+                observed_tls_issuer: None,
+                last_failure_reason: None,
+            },
+            warnings: Vec::new(),
+            observed_at,
+        }
+    }
+
+    pub fn missing_profile(
+        profile_id: Uuid,
+        runtime_binding: Option<String>,
+        runtime_assignment: Option<String>,
+        observed_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            profile_id: Some(profile_id),
+            profile_name: None,
+            profile_state: None,
+            health: EgressDiagnosticsHealth::Missing,
+            observation_mode: EgressTrafficObservationMode::MetadataOnly,
+            proof_level: EgressDiagnosticsProofLevel::None,
+            runtime_binding,
+            runtime_assignment,
+            proxy_configured: false,
+            bypass_rule_count: 0,
+            custom_ca_configured: false,
+            tls_interception_enabled: false,
+            sensitive_log_sink_configured: false,
+            proof: EgressDiagnosticsProof {
+                profile_resolved: false,
+                profile_ready: false,
+                proxy_launch_config_expected: false,
+                bypass_rules_expected: 0,
+                custom_ca_launch_config_expected: false,
+                tls_interception_expected: false,
+                sensitive_log_sink_declared: false,
+                runtime_launch_observed: false,
+                active_probe_collected: false,
+                observed_public_ip: None,
+                observed_tls_issuer: None,
+                last_failure_reason: None,
+            },
+            warnings: vec!["Selected egress profile was not found for this owner.".to_string()],
+            observed_at,
         }
     }
 }
@@ -664,6 +900,7 @@ pub struct SessionResource {
     pub browser_context: SessionBrowserContextResource,
     pub network_identity: SessionNetworkIdentity,
     pub effective_egress: SessionEffectiveEgress,
+    pub egress_diagnostics: EgressDiagnosticsResource,
     pub owner_mode: SessionOwnerMode,
     pub viewport: SessionViewport,
     pub capabilities: SessionCapabilities,
@@ -825,6 +1062,7 @@ impl StoredSession {
         status: SessionStatusSummary,
         state_override: Option<SessionLifecycleState>,
         effective_egress: SessionEffectiveEgress,
+        egress_diagnostics: EgressDiagnosticsResource,
     ) -> SessionResource {
         SessionResource {
             id: self.id,
@@ -833,6 +1071,7 @@ impl StoredSession {
             browser_context: self.browser_context.clone(),
             network_identity: self.network_identity.clone(),
             effective_egress,
+            egress_diagnostics,
             owner_mode: self.owner_mode,
             viewport: self.viewport.clone(),
             capabilities: SessionCapabilities::default(),

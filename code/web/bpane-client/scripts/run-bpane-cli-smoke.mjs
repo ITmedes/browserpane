@@ -126,6 +126,10 @@ async function run() {
     if (fetchedEgressProfile.id !== egressProfileId || fetchedEgressProfile.bypass_rules?.length !== 2) {
       throw new Error(`CLI egress-profile get returned unexpected profile data: ${JSON.stringify(fetchedEgressProfile)}`);
     }
+    const egressProfileDiagnostics = runBpaneCli(['egress-profile', 'diagnostics', egressProfileId], cliEnv);
+    if (egressProfileDiagnostics.profile_id !== egressProfileId || egressProfileDiagnostics.health !== 'ready') {
+      throw new Error(`CLI egress-profile diagnostics returned unexpected data: ${JSON.stringify(egressProfileDiagnostics)}`);
+    }
 
     const template = runBpaneCli([
       'session-template',
@@ -375,6 +379,14 @@ async function run() {
     const automationAccess = runBpaneCli(['session', 'automation-access', sessionId], cliEnv);
     if (automationAccess.token_type !== 'session_automation_access_token' || !automationAccess.automation?.endpoint_url) {
       throw new Error('CLI session automation-access did not mint automation access.');
+    }
+
+    const sessionEgressDiagnostics = runBpaneCli(['session', 'egress-diagnostics', sessionId], cliEnv);
+    if (
+      sessionEgressDiagnostics.profile_id !== egressProfileId
+      || sessionEgressDiagnostics.proof_level !== 'runtime_launch_metadata'
+    ) {
+      throw new Error(`CLI session egress-diagnostics returned unexpected data: ${JSON.stringify(sessionEgressDiagnostics)}`);
     }
 
     const disconnected = runBpaneCli(['session', 'disconnect-all', sessionId], cliEnv);
