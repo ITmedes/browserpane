@@ -133,4 +133,52 @@ impl InMemorySessionStore {
             .get(&session_id)
             .cloned())
     }
+
+    pub(in crate::session_control) async fn upsert_egress_profile_reachability_probe_result(
+        &self,
+        result: PersistEgressProfileReachabilityProbeResult,
+    ) -> Result<StoredEgressProfileReachabilityProbeResult, SessionStoreError> {
+        let mut results = self.egress_profile_reachability_probe_results.lock().await;
+        results.insert(result.profile_id, result.clone());
+        Ok(result)
+    }
+
+    pub(in crate::session_control) async fn get_egress_profile_reachability_probe_result(
+        &self,
+        profile_id: Uuid,
+    ) -> Result<Option<StoredEgressProfileReachabilityProbeResult>, SessionStoreError> {
+        Ok(self
+            .egress_profile_reachability_probe_results
+            .lock()
+            .await
+            .get(&profile_id)
+            .cloned())
+    }
+
+    pub(in crate::session_control) async fn list_egress_profile_reachability_probe_results_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<HashMap<Uuid, StoredEgressProfileReachabilityProbeResult>, SessionStoreError> {
+        let profile_ids = self
+            .egress_profiles
+            .lock()
+            .await
+            .iter()
+            .filter(|profile| {
+                profile.owner_subject == principal.subject
+                    && profile.owner_issuer == principal.issuer
+            })
+            .map(|profile| profile.id)
+            .collect::<Vec<_>>();
+        let results = self.egress_profile_reachability_probe_results.lock().await;
+        Ok(profile_ids
+            .into_iter()
+            .filter_map(|profile_id| {
+                results
+                    .get(&profile_id)
+                    .cloned()
+                    .map(|result| (profile_id, result))
+            })
+            .collect())
+    }
 }

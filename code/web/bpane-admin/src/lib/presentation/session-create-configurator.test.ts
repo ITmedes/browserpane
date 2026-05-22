@@ -72,6 +72,10 @@ const EGRESS_PROFILE = {
     proof: {
       profile_resolved: true,
       profile_ready: true,
+      profile_reachability_collected: false,
+      profile_reachability_healthy: false,
+      profile_reachability_observed_at: null,
+      profile_reachability_failure: null,
       proxy_launch_config_expected: true,
       bypass_rules_expected: 2,
       custom_ca_launch_config_expected: true,

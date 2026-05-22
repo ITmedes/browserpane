@@ -14,6 +14,7 @@
     CreateBrowserContextCommand,
     CreateEgressProfileCommand,
     CreateSessionCommand,
+    EgressDiagnosticsResource,
     EgressProfileResource,
     ImportBrowserContextCommand,
     SessionResource,
@@ -239,6 +240,31 @@
     } catch (error) {
       egressProfileError = errorMessage(error);
       showGlobalMessage('error', 'Egress profile update failed', egressProfileError);
+      throw error;
+    } finally {
+      egressProfilesLoading = false;
+    }
+  }
+  async function runEgressProfileReachabilityProbe(profileId: string): Promise<EgressDiagnosticsResource> {
+    egressProfilesLoading = true;
+    egressProfileError = null;
+    try {
+      const diagnostics = await controlClient.runEgressProfileReachabilityProbe(profileId);
+      const refreshed = await controlClient.getEgressProfile(profileId);
+      egressProfiles = egressProfiles.some((profile) => profile.id === refreshed.id)
+        ? egressProfiles.map((profile) => profile.id === refreshed.id ? refreshed : profile)
+        : [refreshed, ...egressProfiles];
+      showGlobalMessage(
+        diagnostics.proof.profile_reachability_healthy ? 'success' : 'warning',
+        diagnostics.proof.profile_reachability_healthy ? 'Egress profile reachable' : 'Egress profile reachability failed',
+        diagnostics.proof.profile_reachability_healthy
+          ? `${refreshed.name} can reach its configured egress endpoint.`
+          : diagnostics.proof.profile_reachability_failure ?? 'The configured egress endpoint did not accept a gateway TCP connection.',
+      );
+      return diagnostics;
+    } catch (error) {
+      egressProfileError = errorMessage(error);
+      showGlobalMessage('error', 'Egress profile reachability failed', egressProfileError);
       throw error;
     } finally {
       egressProfilesLoading = false;
@@ -590,6 +616,7 @@
       onCreateBrowserContext={createBrowserContext}
       onCreateEgressProfile={createEgressProfile}
       onUpdateEgressProfile={updateEgressProfile}
+      onRunEgressProfileReachabilityProbe={runEgressProfileReachabilityProbe}
       onCloneBrowserContext={cloneBrowserContext}
       onExportBrowserContext={exportBrowserContext}
       onImportBrowserContext={importBrowserContext}

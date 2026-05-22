@@ -356,6 +356,14 @@ function toEgressDiagnosticsResource(value: unknown): EgressDiagnosticsResource 
   const observedPublicIp = optionalString(proof.observed_public_ip, 'egress diagnostics proof observed_public_ip');
   const observedTlsIssuer = optionalString(proof.observed_tls_issuer, 'egress diagnostics proof observed_tls_issuer');
   const lastFailureReason = optionalString(proof.last_failure_reason, 'egress diagnostics proof last_failure_reason');
+  const profileReachabilityObservedAt = optionalString(
+    proof.profile_reachability_observed_at,
+    'egress diagnostics proof profile_reachability_observed_at',
+  );
+  const profileReachabilityFailure = optionalString(
+    proof.profile_reachability_failure,
+    'egress diagnostics proof profile_reachability_failure',
+  );
   return {
     profile_id: profileId ?? null,
     profile_name: profileName ?? null,
@@ -395,6 +403,16 @@ function toEgressDiagnosticsResource(value: unknown): EgressDiagnosticsResource 
     proof: {
       profile_resolved: expectBoolean(proof.profile_resolved ?? false, 'egress diagnostics proof profile_resolved'),
       profile_ready: expectBoolean(proof.profile_ready ?? false, 'egress diagnostics proof profile_ready'),
+      profile_reachability_collected: expectBoolean(
+        proof.profile_reachability_collected ?? false,
+        'egress diagnostics proof profile_reachability_collected',
+      ),
+      profile_reachability_healthy: expectBoolean(
+        proof.profile_reachability_healthy ?? false,
+        'egress diagnostics proof profile_reachability_healthy',
+      ),
+      profile_reachability_observed_at: profileReachabilityObservedAt ?? null,
+      profile_reachability_failure: profileReachabilityFailure ?? null,
       proxy_launch_config_expected: expectBoolean(
         proof.proxy_launch_config_expected ?? false,
         'egress diagnostics proof proxy_launch_config_expected',

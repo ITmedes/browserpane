@@ -19,6 +19,7 @@
     CreateBrowserContextCommand,
     CreateEgressProfileCommand,
     CreateSessionCommand,
+    EgressDiagnosticsResource,
     EgressProfileResource,
     ImportBrowserContextCommand,
     SessionResource,
@@ -86,6 +87,7 @@
     readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onCreateEgressProfile?: (command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void>;
     readonly onUpdateEgressProfile?: (profileId: string, command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void>;
+    readonly onRunEgressProfileReachabilityProbe?: (profileId: string) => Promise<EgressDiagnosticsResource | void>;
     readonly onCloneBrowserContext?: (contextId: string, command: CloneBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onExportBrowserContext?: (contextId: string) => Promise<void>;
     readonly onImportBrowserContext?: (command: ImportBrowserContextCommand) => Promise<BrowserContextResource | void>;
@@ -235,6 +237,7 @@
           onRefresh={() => void props.onRefreshEgressProfiles(true)}
           onCreateProfile={props.onCreateEgressProfile}
           onUpdateProfile={props.onUpdateEgressProfile}
+          onRunProfileReachabilityProbe={props.onRunEgressProfileReachabilityProbe}
         />
       {:else if activePanel.id === 'lifecycle'}
         <SessionLifecycleSurface

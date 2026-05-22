@@ -36,6 +36,7 @@ import type {
   SessionResource,
   SessionTemplateListResponse,
   RunEgressDiagnosticsProbeCommand,
+  RunEgressProfileReachabilityProbeCommand,
   SetAutomationDelegateCommand,
   UploadFileWorkspaceFileCommand,
 } from './control-types';
@@ -104,6 +105,18 @@ export class ControlClient {
 
   async getEgressProfileDiagnostics(profileId: string): Promise<EgressDiagnosticsResource> {
     const payload = await this.#request('GET', `/api/v1/egress-profiles/${encodeURIComponent(profileId)}/diagnostics`);
+    return ControlSessionMapper.toEgressDiagnosticsResource(payload);
+  }
+
+  async runEgressProfileReachabilityProbe(
+    profileId: string,
+    command: RunEgressProfileReachabilityProbeCommand = {},
+  ): Promise<EgressDiagnosticsResource> {
+    const payload = await this.#request(
+      'POST',
+      `/api/v1/egress-profiles/${encodeURIComponent(profileId)}/diagnostics/probe`,
+      command,
+    );
     return ControlSessionMapper.toEgressDiagnosticsResource(payload);
   }
 

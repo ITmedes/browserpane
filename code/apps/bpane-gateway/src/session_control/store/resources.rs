@@ -264,6 +264,60 @@ impl SessionStore {
         }
     }
 
+    pub async fn upsert_egress_profile_reachability_probe_result(
+        &self,
+        result: PersistEgressProfileReachabilityProbeResult,
+    ) -> Result<StoredEgressProfileReachabilityProbeResult, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .upsert_egress_profile_reachability_probe_result(result)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .upsert_egress_profile_reachability_probe_result(result)
+                    .await
+            }
+        }
+    }
+
+    pub async fn get_egress_profile_reachability_probe_result(
+        &self,
+        profile_id: Uuid,
+    ) -> Result<Option<StoredEgressProfileReachabilityProbeResult>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_egress_profile_reachability_probe_result(profile_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_egress_profile_reachability_probe_result(profile_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn list_egress_profile_reachability_probe_results_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<HashMap<Uuid, StoredEgressProfileReachabilityProbeResult>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .list_egress_profile_reachability_probe_results_for_owner(principal)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .list_egress_profile_reachability_probe_results_for_owner(principal)
+                    .await
+            }
+        }
+    }
+
     pub async fn create_file_workspace(
         &self,
         principal: &AuthenticatedPrincipal,

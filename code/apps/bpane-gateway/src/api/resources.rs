@@ -435,8 +435,13 @@ pub(super) async fn session_egress_diagnostics(
         )
         .with_probe_result(probe_result.as_ref()));
     };
+    let reachability = state
+        .session_store
+        .get_egress_profile_reachability_probe_result(profile.id)
+        .await?;
     Ok(profile
         .to_diagnostics(runtime_binding, runtime_assignment, observed_at)
+        .with_profile_reachability_result(reachability.as_ref())
         .with_probe_result(probe_result.as_ref()))
 }
 

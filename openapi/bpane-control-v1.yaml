@@ -534,6 +534,35 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/egress-profiles/{profile_id}/diagnostics/probe:
+    parameters:
+      - $ref: '#/components/parameters/EgressProfileId'
+    post:
+      tags: [Egress Profiles]
+      summary: Run an active egress profile reachability probe
+      description: Checks the configured proxy authority from the gateway side without starting a browser runtime and persists only sanitized health metadata.
+      operationId: runEgressProfileReachabilityProbe
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunEgressProfileReachabilityProbeRequest'
+      responses:
+        '200':
+          description: Updated egress profile diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressDiagnosticsResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/automation-tasks:
     get:
       tags: [Automation Tasks]
@@ -5257,6 +5286,10 @@ components:
       required:
         - profile_resolved
         - profile_ready
+        - profile_reachability_collected
+        - profile_reachability_healthy
+        - profile_reachability_observed_at
+        - profile_reachability_failure
         - proxy_launch_config_expected
         - bypass_rules_expected
         - custom_ca_launch_config_expected
@@ -5272,6 +5305,19 @@ components:
           type: boolean
         profile_ready:
           type: boolean
+        profile_reachability_collected:
+          type: boolean
+          description: True when a profile-level reachability probe has produced a latest result.
+        profile_reachability_healthy:
+          type: boolean
+          description: True when the latest profile-level reachability probe succeeded.
+        profile_reachability_observed_at:
+          type: string
+          format: date-time
+          nullable: true
+        profile_reachability_failure:
+          type: string
+          nullable: true
         proxy_launch_config_expected:
           type: boolean
         bypass_rules_expected:
@@ -5377,6 +5423,14 @@ components:
           minimum: 250
           maximum: 30000
           default: 8000
+    RunEgressProfileReachabilityProbeRequest:
+      type: object
+      properties:
+        timeout_ms:
+          type: integer
+          minimum: 250
+          maximum: 30000
+          default: 5000
     SessionEffectiveEgress:
       type: object
       required:

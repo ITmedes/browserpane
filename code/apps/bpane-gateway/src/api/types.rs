@@ -344,6 +344,12 @@ pub(super) struct RunEgressDiagnosticsProbeRequest {
     pub(super) timeout_ms: Option<u64>,
 }
 
+#[derive(Default, Deserialize)]
+pub(super) struct RunEgressProfileReachabilityProbeRequest {
+    #[serde(default)]
+    pub(super) timeout_ms: Option<u64>,
+}
+
 #[derive(Deserialize)]
 pub(super) struct CreateBrowserContextRequest {
     pub(super) name: String,

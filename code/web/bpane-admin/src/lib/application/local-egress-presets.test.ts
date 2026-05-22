@@ -113,6 +113,10 @@ function profileFromCommand(command: CreateEgressProfileCommand, id: string): Eg
       proof: {
         profile_resolved: true,
         profile_ready: (command.state ?? 'ready') === 'ready',
+        profile_reachability_collected: false,
+        profile_reachability_healthy: false,
+        profile_reachability_observed_at: null,
+        profile_reachability_failure: null,
         proxy_launch_config_expected: Boolean(command.proxy),
         bypass_rules_expected: command.bypass_rules?.length ?? 0,
         custom_ca_launch_config_expected: Boolean(command.custom_ca) && observationMode === 'tls_intercept',

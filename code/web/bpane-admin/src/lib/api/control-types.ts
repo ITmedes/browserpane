@@ -60,6 +60,10 @@ export type EgressDiagnosticsProofLevel = 'none' | 'configuration' | 'runtime_la
 export type EgressDiagnosticsProof = {
   readonly profile_resolved: boolean;
   readonly profile_ready: boolean;
+  readonly profile_reachability_collected: boolean;
+  readonly profile_reachability_healthy: boolean;
+  readonly profile_reachability_observed_at?: string | null;
+  readonly profile_reachability_failure?: string | null;
   readonly proxy_launch_config_expected: boolean;
   readonly bypass_rules_expected: number;
   readonly custom_ca_launch_config_expected: boolean;
@@ -94,6 +98,10 @@ export type EgressDiagnosticsResource = {
 export type RunEgressDiagnosticsProbeCommand = {
   readonly public_ip_url?: string | null;
   readonly tls_probe_url?: string | null;
+  readonly timeout_ms?: number | null;
+};
+
+export type RunEgressProfileReachabilityProbeCommand = {
   readonly timeout_ms?: number | null;
 };
 
