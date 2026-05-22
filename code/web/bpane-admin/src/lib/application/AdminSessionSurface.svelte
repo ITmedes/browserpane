@@ -400,6 +400,32 @@
       sessionsLoading = false;
     }
   }
+  async function runSelectedSessionEgressProbe(): Promise<void> {
+    if (!selectedSession) {
+      showGlobalMessage('warning', 'Egress probe skipped', 'Select a session before running an egress probe.');
+      return;
+    }
+    const sessionId = selectedSession.id;
+    sessionsLoading = true;
+    sessionsError = null;
+    showGlobalMessage('loading', 'Egress probe', `Running browser egress probe for session ${shortAdminId(sessionId)}...`);
+    try {
+      const diagnostics = await controlClient.runSessionEgressDiagnosticsProbe(sessionId);
+      upsertSession(await controlClient.getSession(sessionId));
+      showGlobalMessage(
+        diagnostics.proof.active_probe_collected ? 'success' : 'warning',
+        diagnostics.proof.active_probe_collected ? 'Egress probe collected' : 'Egress probe failed',
+        diagnostics.proof.active_probe_collected
+          ? `Observed ${diagnostics.proof.observed_public_ip ?? 'egress'}${diagnostics.proof.observed_tls_issuer ? ` via ${diagnostics.proof.observed_tls_issuer}` : ''}.`
+          : diagnostics.proof.last_failure_reason ?? 'The browser egress probe did not collect evidence.',
+      );
+    } catch (error) {
+      sessionsError = errorMessage(error);
+      showGlobalMessage('error', 'Egress probe failed', sessionsError);
+    } finally {
+      sessionsLoading = false;
+    }
+  }
   async function connectBrowser(container: HTMLElement): Promise<void> {
     const session = selectedSession;
     if (!session) return;
@@ -560,6 +586,7 @@
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries} {globalMessage}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}
+      onRunSelectedSessionEgressProbe={runSelectedSessionEgressProbe}
       onCreateBrowserContext={createBrowserContext}
       onCreateEgressProfile={createEgressProfile}
       onUpdateEgressProfile={updateEgressProfile}

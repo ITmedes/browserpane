@@ -185,6 +185,30 @@
     );
   }
 
+  async function runEgressProbe(): Promise<void> {
+    loading = true;
+    error = null;
+    actionFeedback = lifecycleFeedback('loading', 'Egress probe', 'Running browser egress probe...');
+    try {
+      const diagnostics = await controlClient.runSessionEgressDiagnosticsProbe(sessionId);
+      session = await controlClient.getSession(sessionId);
+      status = await controlClient.getSessionStatus(sessionId);
+      lastRefreshedAt = new Date().toISOString();
+      actionFeedback = lifecycleFeedback(
+        diagnostics.proof.active_probe_collected ? 'success' : 'warning',
+        diagnostics.proof.active_probe_collected ? 'Egress probe collected' : 'Egress probe failed',
+        diagnostics.proof.active_probe_collected
+          ? `Observed ${diagnostics.proof.observed_public_ip ?? 'egress'}${diagnostics.proof.observed_tls_issuer ? ` via ${diagnostics.proof.observed_tls_issuer}` : ''}.`
+          : diagnostics.proof.last_failure_reason ?? 'The browser egress probe did not collect evidence.',
+      );
+    } catch (probeError) {
+      error = errorMessage(probeError, 'Unexpected egress probe error');
+      actionFeedback = null;
+    } finally {
+      loading = false;
+    }
+  }
+
   async function mutateSession(
     progressMessage: string,
     successMessage: string,
@@ -313,6 +337,7 @@
         onRelease={() => void releaseSessionRuntime()}
         onStop={() => void stopSession()}
         onKill={() => void killSession()}
+        onRunEgressProbe={() => void runEgressProbe()}
         onDisconnectConnection={(connectionId) => void disconnectConnection(connectionId)}
         onDisconnectAll={() => void disconnectAllConnections()}
       />

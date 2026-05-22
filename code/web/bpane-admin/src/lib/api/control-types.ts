@@ -55,7 +55,7 @@ export type EgressProfileEffectiveStatus = {
 
 export type EgressDiagnosticsHealth = 'ready' | 'unknown' | 'attention' | 'blocked' | 'missing';
 
-export type EgressDiagnosticsProofLevel = 'none' | 'configuration' | 'runtime_launch_metadata';
+export type EgressDiagnosticsProofLevel = 'none' | 'configuration' | 'runtime_launch_metadata' | 'active_probe';
 
 export type EgressDiagnosticsProof = {
   readonly profile_resolved: boolean;
@@ -89,6 +89,12 @@ export type EgressDiagnosticsResource = {
   readonly proof: EgressDiagnosticsProof;
   readonly warnings: readonly string[];
   readonly observed_at: string;
+};
+
+export type RunEgressDiagnosticsProbeCommand = {
+  readonly public_ip_url?: string | null;
+  readonly tls_probe_url?: string | null;
+  readonly timeout_ms?: number | null;
 };
 
 export type SessionEffectiveEgress = {

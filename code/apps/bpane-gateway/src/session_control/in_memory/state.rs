@@ -5,6 +5,8 @@ pub(in crate::session_control) struct InMemoryStoreState {
     pub(in crate::session_control) sessions: Mutex<Vec<StoredSession>>,
     pub(in crate::session_control) session_templates: Mutex<Vec<StoredSessionTemplate>>,
     pub(in crate::session_control) egress_profiles: Mutex<Vec<StoredEgressProfile>>,
+    pub(in crate::session_control) egress_diagnostics_probe_results:
+        Mutex<HashMap<Uuid, StoredEgressDiagnosticsProbeResult>>,
     pub(in crate::session_control) automation_tasks: Mutex<Vec<StoredAutomationTask>>,
     pub(in crate::session_control) automation_task_events: Mutex<Vec<StoredAutomationTaskEvent>>,
     pub(in crate::session_control) automation_task_logs: Mutex<Vec<StoredAutomationTaskLog>>,
@@ -43,6 +45,7 @@ impl InMemoryStoreState {
             sessions: Mutex::new(Vec::new()),
             session_templates: Mutex::new(Vec::new()),
             egress_profiles: Mutex::new(Vec::new()),
+            egress_diagnostics_probe_results: Mutex::new(HashMap::new()),
             automation_tasks: Mutex::new(Vec::new()),
             automation_task_events: Mutex::new(Vec::new()),
             automation_task_logs: Mutex::new(Vec::new()),

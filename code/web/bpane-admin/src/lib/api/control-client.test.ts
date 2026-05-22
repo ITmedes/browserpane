@@ -397,6 +397,65 @@ describe('ControlClient', () => {
     });
   });
 
+  it('runs session egress diagnostics probes with bearer auth', async () => {
+    const fetchImpl = jsonFetch({
+      profile_id: EGRESS_PROFILE.id,
+      profile_name: EGRESS_PROFILE.name,
+      profile_state: 'ready',
+      health: 'ready',
+      observation_mode: 'tls_intercept',
+      proof_level: 'active_probe',
+      runtime_binding: 'docker_runtime_pool',
+      runtime_assignment: 'ready',
+      proxy_configured: true,
+      bypass_rule_count: 2,
+      custom_ca_configured: true,
+      tls_interception_enabled: true,
+      sensitive_log_sink_configured: true,
+      proof: {
+        profile_resolved: true,
+        profile_ready: true,
+        proxy_launch_config_expected: true,
+        bypass_rules_expected: 2,
+        custom_ca_launch_config_expected: true,
+        tls_interception_expected: true,
+        sensitive_log_sink_declared: true,
+        runtime_launch_observed: true,
+        active_probe_collected: true,
+        observed_public_ip: '203.0.113.10',
+        observed_tls_issuer: 'BrowserPane Local Egress Test CA',
+        last_failure_reason: null,
+      },
+      warnings: [],
+      observed_at: '2026-05-22T09:30:00Z',
+    });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const diagnostics = await client.runSessionEgressDiagnosticsProbe('session/with space', {
+      public_ip_url: 'https://probe.example/ip',
+      tls_probe_url: 'https://probe.example/tls',
+      timeout_ms: 1000,
+    });
+
+    expect(diagnostics.proof_level).toBe('active_probe');
+    expect(diagnostics.proof.observed_public_ip).toBe('203.0.113.10');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/sessions/session%2Fwith%20space/egress-diagnostics'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          public_ip_url: 'https://probe.example/ip',
+          tls_probe_url: 'https://probe.example/tls',
+          timeout_ms: 1000,
+        }),
+      }),
+    );
+  });
+
   it('passes catalog filters to the session list endpoint', async () => {
     const fetchImpl = jsonFetch({ sessions: [SESSION] });
     const client = new ControlClient({

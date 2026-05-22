@@ -410,6 +410,39 @@ describe('bpane operator CLI', () => {
     expect(calls[0].url).toBe('http://localhost:8080/api/v1/sessions/session%2Fwith%20space/egress-diagnostics');
   });
 
+  it('runs a session egress diagnostics probe by id', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ proof_level: 'active_probe' }));
+
+    const code = await runBpaneCli(
+      [
+        'session',
+        'egress-diagnostics',
+        'probe',
+        'session/with space',
+        '--probe-public-ip-url',
+        'https://probe.example/ip',
+        '--probe-tls-url',
+        'https://probe.example/tls',
+        '--probe-timeout-ms',
+        '1000',
+      ],
+      { BPANE_BASE_URL: 'http://localhost:8080', BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toEqual({ proof_level: 'active_probe' });
+    expect(calls[0].init.method).toBe('POST');
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/sessions/session%2Fwith%20space/egress-diagnostics');
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      public_ip_url: 'https://probe.example/ip',
+      tls_probe_url: 'https://probe.example/tls',
+      timeout_ms: 1000,
+    });
+  });
+
   it('creates a session with structured CLI options', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'session-1' }));

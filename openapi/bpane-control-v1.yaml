@@ -2353,6 +2353,37 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Session Runtime]
+      summary: Run an active browser egress diagnostics probe for a session
+      description: Runs against an already-ready session runtime and persists sanitized evidence or a sanitized failure reason. The probe does not implicitly start stopped sessions.
+      operationId: runSessionEgressDiagnosticsProbe
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunEgressDiagnosticsProbeRequest'
+      responses:
+        '200':
+          description: Updated session effective egress diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressDiagnosticsResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/connections/{connection_id}/disconnect:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -5220,6 +5251,7 @@ components:
         - none
         - configuration
         - runtime_launch_metadata
+        - active_probe
     EgressDiagnosticsProof:
       type: object
       required:
@@ -5255,7 +5287,7 @@ components:
           type: boolean
         active_probe_collected:
           type: boolean
-          description: False until an explicit active egress probe implementation records public-IP or TLS issuer evidence.
+          description: True when the latest session probe collected browser-observed egress evidence.
         observed_public_ip:
           type: string
           nullable: true
@@ -5329,6 +5361,22 @@ components:
         observed_at:
           type: string
           format: date-time
+    RunEgressDiagnosticsProbeRequest:
+      type: object
+      properties:
+        public_ip_url:
+          type: string
+          format: uri
+          description: Optional HTTP(S) endpoint the browser navigates to for public-IP evidence. Defaults to api.ipify.org.
+        tls_probe_url:
+          type: string
+          format: uri
+          description: Optional HTTPS endpoint used to capture the browser-observed certificate issuer.
+        timeout_ms:
+          type: integer
+          minimum: 250
+          maximum: 30000
+          default: 8000
     SessionEffectiveEgress:
       type: object
       required:

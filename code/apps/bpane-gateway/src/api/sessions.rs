@@ -5,6 +5,7 @@ use super::*;
 mod access;
 mod crud;
 mod disconnect;
+mod egress_diagnostics;
 mod kill;
 mod mcp;
 mod ownership;
@@ -44,7 +45,8 @@ pub(super) fn session_operation_routes() -> Router<Arc<ApiState>> {
         )
         .route(
             "/api/v1/sessions/{session_id}/egress-diagnostics",
-            get(status::get_session_egress_diagnostics),
+            get(status::get_session_egress_diagnostics)
+                .post(egress_diagnostics::run_session_egress_diagnostics_probe),
         )
         .route(
             "/api/v1/sessions/{session_id}/connections/{connection_id}/disconnect",

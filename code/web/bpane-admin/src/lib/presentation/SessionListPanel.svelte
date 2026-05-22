@@ -29,6 +29,7 @@
     readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onJoinSession: () => void;
     readonly onDisconnectSession: () => void;
+    readonly onRunEgressProbe: () => void;
     readonly onSelectSessionId: (sessionId: string) => void;
   };
 
@@ -49,6 +50,7 @@
     onCreateBrowserContext,
     onJoinSession,
     onDisconnectSession,
+    onRunEgressProbe,
     onSelectSessionId,
   }: SessionListPanelProps = $props();
   let createPayloadOpen = $state(false);
@@ -113,6 +115,15 @@
         Disconnect
       </button>
       {#if viewModel.selectedSessionId}
+        <button
+          class="admin-button-ghost"
+          type="button"
+          data-testid="session-selected-egress-probe-run"
+          disabled={!viewModel.authenticated || viewModel.loading}
+          onclick={onRunEgressProbe}
+        >
+          Run egress probe
+        </button>
         <a class="admin-button-ghost" data-testid="session-detail-link" href={detailHref(viewModel.selectedSessionId)}>
           Inspect details
         </a>

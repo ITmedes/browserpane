@@ -497,3 +497,96 @@ async fn manages_egress_profiles_and_session_network_identity() {
     let list = response_json(list_response).await;
     assert_eq!(list["profiles"].as_array().unwrap().len(), 2);
 }
+
+#[tokio::test]
+async fn active_egress_probe_failures_are_persisted_as_session_diagnostics() {
+    let (app, token) = test_router();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let session = response_json(create_session_response).await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+
+    let invalid_probe_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/egress-diagnostics"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "tls_probe_url": "http://example.com"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_probe_response.status(), StatusCode::BAD_REQUEST);
+
+    let probe_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/egress-diagnostics"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "public_ip_url": "https://example.com/",
+                        "tls_probe_url": "https://example.com/",
+                        "timeout_ms": 250
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(probe_response.status(), StatusCode::OK);
+    let probe = response_json(probe_response).await;
+    assert_eq!(probe["health"], "attention");
+    assert_eq!(probe["proof"]["active_probe_collected"], false);
+    assert!(probe["proof"]["last_failure_reason"].as_str().is_some());
+    assert!(probe["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|warning| warning
+            .as_str()
+            .unwrap()
+            .contains("Last active egress probe failed")));
+
+    let fetched_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/egress-diagnostics"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(fetched_response.status(), StatusCode::OK);
+    let fetched = response_json(fetched_response).await;
+    assert_eq!(
+        fetched["proof"]["last_failure_reason"],
+        probe["proof"]["last_failure_reason"]
+    );
+}
