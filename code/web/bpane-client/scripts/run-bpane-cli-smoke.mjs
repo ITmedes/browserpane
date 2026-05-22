@@ -126,6 +126,28 @@ async function run() {
     if (fetchedEgressProfile.id !== egressProfileId || fetchedEgressProfile.bypass_rules?.length !== 2) {
       throw new Error(`CLI egress-profile get returned unexpected profile data: ${JSON.stringify(fetchedEgressProfile)}`);
     }
+    const egressProfileDiagnostics = runBpaneCli(['egress-profile', 'diagnostics', egressProfileId], cliEnv);
+    if (egressProfileDiagnostics.profile_id !== egressProfileId || egressProfileDiagnostics.health !== 'ready') {
+      throw new Error(`CLI egress-profile diagnostics returned unexpected data: ${JSON.stringify(egressProfileDiagnostics)}`);
+    }
+    const egressProfileProbe = runBpaneCli([
+      'egress-profile',
+      'diagnostics',
+      'probe',
+      egressProfileId,
+      '--probe-timeout-ms',
+      '1000',
+    ], cliEnv);
+    if (
+      egressProfileProbe.profile_id !== egressProfileId
+      || typeof egressProfileProbe.proof?.profile_reachability_collected !== 'boolean'
+      || (
+        !egressProfileProbe.proof.profile_reachability_healthy
+        && !egressProfileProbe.proof.profile_reachability_failure
+      )
+    ) {
+      throw new Error(`CLI egress-profile diagnostics probe returned unexpected data: ${JSON.stringify(egressProfileProbe)}`);
+    }
 
     const template = runBpaneCli([
       'session-template',
@@ -375,6 +397,33 @@ async function run() {
     const automationAccess = runBpaneCli(['session', 'automation-access', sessionId], cliEnv);
     if (automationAccess.token_type !== 'session_automation_access_token' || !automationAccess.automation?.endpoint_url) {
       throw new Error('CLI session automation-access did not mint automation access.');
+    }
+
+    const sessionEgressDiagnostics = runBpaneCli(['session', 'egress-diagnostics', sessionId], cliEnv);
+    if (
+      sessionEgressDiagnostics.profile_id !== egressProfileId
+      || sessionEgressDiagnostics.proof_level !== 'runtime_launch_metadata'
+    ) {
+      throw new Error(`CLI session egress-diagnostics returned unexpected data: ${JSON.stringify(sessionEgressDiagnostics)}`);
+    }
+    const sessionEgressProbe = runBpaneCli([
+      'session',
+      'egress-diagnostics',
+      'probe',
+      sessionId,
+      '--probe-public-ip-url',
+      'https://example.com/',
+      '--probe-tls-url',
+      'https://example.com/',
+      '--probe-timeout-ms',
+      '1000',
+    ], cliEnv);
+    if (
+      sessionEgressProbe.profile_id !== egressProfileId
+      || typeof sessionEgressProbe.proof?.active_probe_collected !== 'boolean'
+      || (!sessionEgressProbe.proof.active_probe_collected && !sessionEgressProbe.proof.last_failure_reason)
+    ) {
+      throw new Error(`CLI session egress-diagnostics probe returned unexpected data: ${JSON.stringify(sessionEgressProbe)}`);
     }
 
     const disconnected = runBpaneCli(['session', 'disconnect-all', sessionId], cliEnv);

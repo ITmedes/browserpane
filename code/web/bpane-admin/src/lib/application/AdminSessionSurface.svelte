@@ -12,7 +12,9 @@
     BrowserContextResource,
     CloneBrowserContextCommand,
     CreateBrowserContextCommand,
+    CreateEgressProfileCommand,
     CreateSessionCommand,
+    EgressDiagnosticsResource,
     EgressProfileResource,
     ImportBrowserContextCommand,
     SessionResource,
@@ -103,6 +105,7 @@
   const workspaceViewModel = $derived(AdminWorkspaceViewModelBuilder.build({
     browserStatus, selectedSessionId: selectedSession?.id ?? null,
     sessionCount: sessions.length, browserContextCount: browserContexts.length,
+    egressProfileCount: egressProfiles.length,
     fileCount: sessionFileCount, connected: browserConnected,
   }));
   const sessionListViewModel = $derived(SessionViewModelBuilder.list({
@@ -204,6 +207,65 @@
     } catch (error) {
       egressProfileError = errorMessage(error);
       showGlobalMessage('warning', 'Egress profiles unavailable', egressProfileError);
+    } finally {
+      egressProfilesLoading = false;
+    }
+  }
+  async function createEgressProfile(command: CreateEgressProfileCommand): Promise<EgressProfileResource> {
+    egressProfilesLoading = true;
+    egressProfileError = null;
+    try {
+      const created = await controlClient.createEgressProfile(command);
+      egressProfiles = [created, ...egressProfiles.filter((profile) => profile.id !== created.id)];
+      showGlobalMessage('success', 'Egress profile created', `Created egress profile ${created.name}.`);
+      return created;
+    } catch (error) {
+      egressProfileError = errorMessage(error);
+      showGlobalMessage('error', 'Egress profile create failed', egressProfileError);
+      throw error;
+    } finally {
+      egressProfilesLoading = false;
+    }
+  }
+  async function updateEgressProfile(profileId: string, command: CreateEgressProfileCommand): Promise<EgressProfileResource> {
+    egressProfilesLoading = true;
+    egressProfileError = null;
+    try {
+      const updated = await controlClient.updateEgressProfile(profileId, command);
+      egressProfiles = egressProfiles.some((profile) => profile.id === updated.id)
+        ? egressProfiles.map((profile) => profile.id === updated.id ? updated : profile)
+        : [updated, ...egressProfiles];
+      showGlobalMessage('success', 'Egress profile updated', `Updated egress profile ${updated.name}.`);
+      return updated;
+    } catch (error) {
+      egressProfileError = errorMessage(error);
+      showGlobalMessage('error', 'Egress profile update failed', egressProfileError);
+      throw error;
+    } finally {
+      egressProfilesLoading = false;
+    }
+  }
+  async function runEgressProfileReachabilityProbe(profileId: string): Promise<EgressDiagnosticsResource> {
+    egressProfilesLoading = true;
+    egressProfileError = null;
+    try {
+      const diagnostics = await controlClient.runEgressProfileReachabilityProbe(profileId);
+      const refreshed = await controlClient.getEgressProfile(profileId);
+      egressProfiles = egressProfiles.some((profile) => profile.id === refreshed.id)
+        ? egressProfiles.map((profile) => profile.id === refreshed.id ? refreshed : profile)
+        : [refreshed, ...egressProfiles];
+      showGlobalMessage(
+        diagnostics.proof.profile_reachability_healthy ? 'success' : 'warning',
+        diagnostics.proof.profile_reachability_healthy ? 'Egress profile reachable' : 'Egress profile reachability failed',
+        diagnostics.proof.profile_reachability_healthy
+          ? `${refreshed.name} can reach its configured egress endpoint.`
+          : diagnostics.proof.profile_reachability_failure ?? 'The configured egress endpoint did not accept a gateway TCP connection.',
+      );
+      return diagnostics;
+    } catch (error) {
+      egressProfileError = errorMessage(error);
+      showGlobalMessage('error', 'Egress profile reachability failed', egressProfileError);
+      throw error;
     } finally {
       egressProfilesLoading = false;
     }
@@ -360,6 +422,32 @@
     } catch (error) {
       sessionsError = errorMessage(error);
       throw error;
+    } finally {
+      sessionsLoading = false;
+    }
+  }
+  async function runSelectedSessionEgressProbe(): Promise<void> {
+    if (!selectedSession) {
+      showGlobalMessage('warning', 'Egress probe skipped', 'Select a session before running an egress probe.');
+      return;
+    }
+    const sessionId = selectedSession.id;
+    sessionsLoading = true;
+    sessionsError = null;
+    showGlobalMessage('loading', 'Egress probe', `Running browser egress probe for session ${shortAdminId(sessionId)}...`);
+    try {
+      const diagnostics = await controlClient.runSessionEgressDiagnosticsProbe(sessionId);
+      upsertSession(await controlClient.getSession(sessionId));
+      showGlobalMessage(
+        diagnostics.proof.active_probe_collected ? 'success' : 'warning',
+        diagnostics.proof.active_probe_collected ? 'Egress probe collected' : 'Egress probe failed',
+        diagnostics.proof.active_probe_collected
+          ? `Observed ${diagnostics.proof.observed_public_ip ?? 'egress'}${diagnostics.proof.observed_tls_issuer ? ` via ${diagnostics.proof.observed_tls_issuer}` : ''}.`
+          : diagnostics.proof.last_failure_reason ?? 'The browser egress probe did not collect evidence.',
+      );
+    } catch (error) {
+      sessionsError = errorMessage(error);
+      showGlobalMessage('error', 'Egress probe failed', sessionsError);
     } finally {
       sessionsLoading = false;
     }
@@ -524,12 +612,17 @@
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries} {globalMessage}
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}
+      onRunSelectedSessionEgressProbe={runSelectedSessionEgressProbe}
       onCreateBrowserContext={createBrowserContext}
+      onCreateEgressProfile={createEgressProfile}
+      onUpdateEgressProfile={updateEgressProfile}
+      onRunEgressProfileReachabilityProbe={runEgressProfileReachabilityProbe}
       onCloneBrowserContext={cloneBrowserContext}
       onExportBrowserContext={exportBrowserContext}
       onImportBrowserContext={importBrowserContext}
       {importingBrowserContext}
       onRefreshBrowserContexts={loadBrowserContexts}
+      onRefreshEgressProfiles={loadEgressProfiles}
       onDeleteBrowserContext={deleteBrowserContext}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
       onReleaseSessionRuntime={() => runLifecycle('release')}

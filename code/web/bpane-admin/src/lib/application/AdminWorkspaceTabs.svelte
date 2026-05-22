@@ -7,6 +7,7 @@
     FolderOpen,
     Gauge,
     MonitorCog,
+    Network,
     Radio,
     ScrollText,
     Video,
@@ -16,7 +17,9 @@
     BrowserContextResource,
     CloneBrowserContextCommand,
     CreateBrowserContextCommand,
+    CreateEgressProfileCommand,
     CreateSessionCommand,
+    EgressDiagnosticsResource,
     EgressProfileResource,
     ImportBrowserContextCommand,
     SessionResource,
@@ -38,6 +41,7 @@
   import type { BrowserSessionConnectPreferences, LiveBrowserSessionConnection } from '../session/browser-session-types';
   import BrowserPolicySurface from './BrowserPolicySurface.svelte';
   import BrowserContextCatalogPanel from '../presentation/BrowserContextCatalogPanel.svelte';
+  import EgressProfileCatalogPanel from '../presentation/EgressProfileCatalogPanel.svelte';
   import DisplayControlsSurface from './DisplayControlsSurface.svelte';
   import LiveSessionActionsSurface from './LiveSessionActionsSurface.svelte';
   import LogsSurface from './LogsSurface.svelte';
@@ -78,13 +82,18 @@
     readonly mcpDelegationRefreshVersion: number;
     readonly onRefreshSessions: (showFeedback?: boolean) => Promise<void>;
     readonly onRefreshBrowserContexts: (showFeedback?: boolean) => Promise<void>;
+    readonly onRefreshEgressProfiles: (showFeedback?: boolean) => Promise<void>;
     readonly onCreateSession: (command?: CreateSessionCommand) => void;
     readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
+    readonly onCreateEgressProfile?: (command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void>;
+    readonly onUpdateEgressProfile?: (profileId: string, command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void>;
+    readonly onRunEgressProfileReachabilityProbe?: (profileId: string) => Promise<EgressDiagnosticsResource | void>;
     readonly onCloneBrowserContext?: (contextId: string, command: CloneBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onExportBrowserContext?: (contextId: string) => Promise<void>;
     readonly onImportBrowserContext?: (command: ImportBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onDeleteBrowserContext?: (contextId: string) => Promise<void>;
     readonly onJoinSelectedSession: () => void;
+    readonly onRunSelectedSessionEgressProbe: () => Promise<void>;
     readonly onSelectSessionId: (sessionId: string) => void;
     readonly onRefreshSelectedSession: () => Promise<void>;
     readonly onReleaseSessionRuntime: () => Promise<void>;
@@ -116,6 +125,7 @@
     metrics: Gauge,
     logs: ScrollText,
     contexts: Database,
+    egress: Network,
   } satisfies Record<AdminFeaturePanelId, typeof Activity>;
 </script>
 
@@ -193,6 +203,7 @@
           onCreateBrowserContext={props.onCreateBrowserContext}
           onJoinSession={props.onJoinSelectedSession}
           onDisconnectSession={props.onDisconnectEmbeddedBrowser}
+          onRunEgressProbe={() => void props.onRunSelectedSessionEgressProbe()}
           onSelectSessionId={props.onSelectSessionId}
         />
         <McpDelegationSurface
@@ -217,6 +228,16 @@
           onExportContext={(contextId) => props.onExportBrowserContext?.(contextId)}
           onImportContext={(command) => props.onImportBrowserContext?.(command)}
           onDeleteContext={(contextId) => void props.onDeleteBrowserContext?.(contextId)}
+        />
+      {:else if activePanel.id === 'egress'}
+        <EgressProfileCatalogPanel
+          profiles={props.egressProfiles ?? []}
+          loading={props.egressProfilesLoading ?? false}
+          error={props.egressProfileError ?? null}
+          onRefresh={() => void props.onRefreshEgressProfiles(true)}
+          onCreateProfile={props.onCreateEgressProfile}
+          onUpdateProfile={props.onUpdateEgressProfile}
+          onRunProfileReachabilityProbe={props.onRunEgressProfileReachabilityProbe}
         />
       {:else if activePanel.id === 'lifecycle'}
         <SessionLifecycleSurface

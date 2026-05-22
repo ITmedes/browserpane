@@ -507,6 +507,9 @@ mod tests {
             },
             network_identity: crate::session_control::SessionNetworkIdentity::default(),
             effective_egress: crate::session_control::SessionEffectiveEgress::default(),
+            egress_diagnostics: crate::session_control::EgressDiagnosticsResource::direct(
+                None, None, now,
+            ),
             owner_mode: SessionOwnerMode::Collaborative,
             viewport: SessionViewport {
                 width: 1600,

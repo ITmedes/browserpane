@@ -19,6 +19,7 @@ import type {
   CreateSessionCommand,
   CreateFileWorkspaceCommand,
   CreateSessionFileBindingCommand,
+  EgressDiagnosticsResource,
   EgressProfileListResponse,
   EgressProfileResource,
   FileWorkspaceFileListResponse,
@@ -34,6 +35,8 @@ import type {
   SessionListResponse,
   SessionResource,
   SessionTemplateListResponse,
+  RunEgressDiagnosticsProbeCommand,
+  RunEgressProfileReachabilityProbeCommand,
   SetAutomationDelegateCommand,
   UploadFileWorkspaceFileCommand,
 } from './control-types';
@@ -97,6 +100,32 @@ export class ControlClient {
 
   async getEgressProfile(profileId: string): Promise<EgressProfileResource> {
     const payload = await this.#request('GET', `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
+    return ControlSessionMapper.toEgressProfileResource(payload);
+  }
+
+  async getEgressProfileDiagnostics(profileId: string): Promise<EgressDiagnosticsResource> {
+    const payload = await this.#request('GET', `/api/v1/egress-profiles/${encodeURIComponent(profileId)}/diagnostics`);
+    return ControlSessionMapper.toEgressDiagnosticsResource(payload);
+  }
+
+  async runEgressProfileReachabilityProbe(
+    profileId: string,
+    command: RunEgressProfileReachabilityProbeCommand = {},
+  ): Promise<EgressDiagnosticsResource> {
+    const payload = await this.#request(
+      'POST',
+      `/api/v1/egress-profiles/${encodeURIComponent(profileId)}/diagnostics/probe`,
+      command,
+    );
+    return ControlSessionMapper.toEgressDiagnosticsResource(payload);
+  }
+
+  async updateEgressProfile(profileId: string, command: CreateEgressProfileCommand): Promise<EgressProfileResource> {
+    const payload = await this.#request('PUT', `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`, {
+      ...command,
+      labels: command.labels ?? {},
+      bypass_rules: command.bypass_rules ?? [],
+    });
     return ControlSessionMapper.toEgressProfileResource(payload);
   }
 
@@ -187,6 +216,23 @@ export class ControlClient {
   async getSessionStatus(sessionId: string): Promise<SessionStatus> {
     const payload = await this.#request('GET', `/api/v1/sessions/${encodeURIComponent(sessionId)}/status`);
     return ControlSessionStatusMapper.toSessionStatus(payload);
+  }
+
+  async getSessionEgressDiagnostics(sessionId: string): Promise<EgressDiagnosticsResource> {
+    const payload = await this.#request('GET', `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`);
+    return ControlSessionMapper.toEgressDiagnosticsResource(payload);
+  }
+
+  async runSessionEgressDiagnosticsProbe(
+    sessionId: string,
+    command: RunEgressDiagnosticsProbeCommand = {},
+  ): Promise<EgressDiagnosticsResource> {
+    const payload = await this.#request(
+      'POST',
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`,
+      command,
+    );
+    return ControlSessionMapper.toEgressDiagnosticsResource(payload);
   }
 
   async stopSession(sessionId: string): Promise<SessionResource> {

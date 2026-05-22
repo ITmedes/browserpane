@@ -23,6 +23,7 @@ const SESSION = {
     profile_name: 'EU support egress',
     profile_state: 'ready',
     proxy_configured: true,
+    proxy_auth_configured: false,
     bypass_rule_count: 2,
     custom_ca_configured: true,
     observation_mode: 'tls_intercept',
@@ -129,6 +130,7 @@ const EGRESS_PROFILE = {
   state: 'ready',
   effective: {
     proxy_configured: true,
+    proxy_auth_configured: false,
     bypass_rule_count: 2,
     custom_ca_configured: true,
     observation_mode: 'tls_intercept',
@@ -340,12 +342,17 @@ describe('ControlClient', () => {
       },
     });
     await client.getEgressProfile('profile/with space');
+    await client.updateEgressProfile('profile/with space', {
+      name: 'EU support egress disabled',
+      state: 'disabled',
+    });
 
     expect(created).toMatchObject({
       id: EGRESS_PROFILE.id,
       name: 'EU support egress',
       effective: {
         proxy_configured: true,
+        proxy_auth_configured: false,
         bypass_rule_count: 2,
         custom_ca_configured: true,
         observation_mode: 'tls_intercept',
@@ -379,6 +386,138 @@ describe('ControlClient', () => {
       2,
       new URL('http://localhost:8932/api/v1/egress-profiles/profile%2Fwith%20space'),
       expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      new URL('http://localhost:8932/api/v1/egress-profiles/profile%2Fwith%20space'),
+      expect.objectContaining({ method: 'PUT' }),
+    );
+    expect(JSON.parse(fetchImpl.mock.calls[2]?.[1]?.body as string)).toEqual({
+      name: 'EU support egress disabled',
+      labels: {},
+      bypass_rules: [],
+      state: 'disabled',
+    });
+  });
+
+  it('runs session egress diagnostics probes with bearer auth', async () => {
+    const fetchImpl = jsonFetch({
+      profile_id: EGRESS_PROFILE.id,
+      profile_name: EGRESS_PROFILE.name,
+      profile_state: 'ready',
+      health: 'ready',
+      observation_mode: 'tls_intercept',
+      proof_level: 'active_probe',
+      runtime_binding: 'docker_runtime_pool',
+      runtime_assignment: 'ready',
+      proxy_configured: true,
+      proxy_auth_configured: false,
+      bypass_rule_count: 2,
+      custom_ca_configured: true,
+      tls_interception_enabled: true,
+      sensitive_log_sink_configured: true,
+      proof: {
+        profile_resolved: true,
+        profile_ready: true,
+        profile_reachability_collected: true,
+        profile_reachability_healthy: true,
+        profile_reachability_observed_at: '2026-05-22T09:29:00Z',
+        profile_reachability_failure: null,
+        proxy_launch_config_expected: true,
+        bypass_rules_expected: 2,
+        custom_ca_launch_config_expected: true,
+        tls_interception_expected: true,
+        sensitive_log_sink_declared: true,
+        runtime_launch_observed: true,
+        active_probe_collected: true,
+        observed_public_ip: '203.0.113.10',
+        observed_tls_issuer: 'BrowserPane Local Egress Test CA',
+        last_failure_reason: null,
+      },
+      warnings: [],
+      observed_at: '2026-05-22T09:30:00Z',
+    });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const diagnostics = await client.runSessionEgressDiagnosticsProbe('session/with space', {
+      public_ip_url: 'https://probe.example/ip',
+      tls_probe_url: 'https://probe.example/tls',
+      timeout_ms: 1000,
+    });
+
+    expect(diagnostics.proof_level).toBe('active_probe');
+    expect(diagnostics.proof.observed_public_ip).toBe('203.0.113.10');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/sessions/session%2Fwith%20space/egress-diagnostics'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          public_ip_url: 'https://probe.example/ip',
+          tls_probe_url: 'https://probe.example/tls',
+          timeout_ms: 1000,
+        }),
+      }),
+    );
+  });
+
+  it('runs egress profile reachability probes with bearer auth', async () => {
+    const fetchImpl = jsonFetch({
+      profile_id: EGRESS_PROFILE.id,
+      profile_name: EGRESS_PROFILE.name,
+      profile_state: 'ready',
+      health: 'ready',
+      observation_mode: 'tls_intercept',
+      proof_level: 'active_probe',
+      runtime_binding: null,
+      runtime_assignment: null,
+      proxy_configured: true,
+      proxy_auth_configured: false,
+      bypass_rule_count: 2,
+      custom_ca_configured: true,
+      tls_interception_enabled: true,
+      sensitive_log_sink_configured: true,
+      proof: {
+        profile_resolved: true,
+        profile_ready: true,
+        profile_reachability_collected: true,
+        profile_reachability_healthy: true,
+        profile_reachability_observed_at: '2026-05-22T09:29:00Z',
+        profile_reachability_failure: null,
+        proxy_launch_config_expected: true,
+        bypass_rules_expected: 2,
+        custom_ca_launch_config_expected: true,
+        tls_interception_expected: true,
+        sensitive_log_sink_declared: true,
+        runtime_launch_observed: false,
+        active_probe_collected: false,
+        observed_public_ip: null,
+        observed_tls_issuer: null,
+        last_failure_reason: null,
+      },
+      warnings: [],
+      observed_at: '2026-05-22T09:30:00Z',
+    });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const diagnostics = await client.runEgressProfileReachabilityProbe('profile/with space', {
+      timeout_ms: 1000,
+    });
+
+    expect(diagnostics.proof.profile_reachability_healthy).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/egress-profiles/profile%2Fwith%20space/diagnostics/probe'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ timeout_ms: 1000 }),
+      }),
     );
   });
 

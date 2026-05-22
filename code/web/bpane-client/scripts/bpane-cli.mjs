@@ -58,6 +58,10 @@ const KNOWN_OPTIONS = new Set([
   'output',
   'owner-mode',
   'profile',
+  'probe-public-ip-url',
+  'probe-timeout-ms',
+  'probe-tls-url',
+  'proxy-credential-binding-id',
   'proxy-url',
   'persistence-mode',
   'recording-mode',
@@ -97,6 +101,8 @@ function usageText() {
     '  bpane session list [options]',
     '  bpane session get <session-id> [options]',
     '  bpane session status <session-id> [options]',
+    '  bpane session egress-diagnostics <session-id> [options]',
+    '  bpane session egress-diagnostics probe <session-id> [options]',
     '  bpane session access-token <session-id> [options]',
     '  bpane session automation-access <session-id> [options]',
     '  bpane session disconnect-all <session-id> [options]',
@@ -107,9 +113,13 @@ function usageText() {
     '  bpane session-template list [options]',
     '  bpane session-template get <template-id> [options]',
     '  bpane session-template update <template-id> [options]',
-    '  bpane egress-profile create [profile-name] [options]',
-    '  bpane egress-profile list [options]',
-    '  bpane egress-profile get <profile-id> [options]',
+  '  bpane egress-profile create [profile-name] [options]',
+  '  bpane egress-profile list [options]',
+  '  bpane egress-profile get <profile-id> [options]',
+  '  bpane egress-profile diagnostics <profile-id> [options]',
+  '  bpane egress-profile diagnostics probe <profile-id> [options]',
+  '  bpane egress-profile update <profile-id> [options]',
+  '  bpane egress-profile disable <profile-id> [options]',
     '  bpane browser-context create [context-name] [options]',
     '  bpane browser-context clone <source-context-id> <target-context-name> [options]',
     '  bpane browser-context export <context-id> --output <path> [options]',
@@ -158,12 +168,16 @@ function usageText() {
     '  --browser-identity <id>   Approved browser identity hint for session create/template defaults.',
     '  --egress-profile-id <id>  Approved egress profile id for session create/template defaults.',
     '  --proxy-url <url>         Egress profile proxy URL.',
+    '  --proxy-credential-binding-id <id> Secret-backed credential binding for proxy auth.',
     '  --bypass-rule <rule>      Repeatable egress profile proxy bypass rule.',
     '  --custom-ca-ref <ref>     Egress profile custom CA reference.',
     '  --custom-ca-name <name>   Egress profile custom CA display name.',
     '  --traffic-observation-mode <mode> Egress observation mode: metadata_only or tls_intercept.',
     '  --sensitive-log-sink-ref <ref> Approved SIEM/log-sink ref required for tls_intercept.',
     '  --sensitive-log-sink-name <name> Sensitive log-sink display name.',
+    '  --probe-public-ip-url <url>  Public-IP endpoint for session egress probe.',
+    '  --probe-tls-url <url>        HTTPS endpoint for TLS issuer probe.',
+    '  --probe-timeout-ms <ms>      Session egress probe timeout. Requires an already-ready runtime.',
     '  --name <name>             Session template name for create/update.',
     '  --description <text>      Session template description for create/update.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
@@ -477,6 +491,14 @@ function requiredSessionId(positionals, commandLabel) {
   return sessionId;
 }
 
+function requiredNestedSessionId(positionals, commandLabel) {
+  const sessionId = positionals[3];
+  if (!sessionId || positionals.length > 4) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <session-id>`, EXIT_CODES.usage);
+  }
+  return sessionId;
+}
+
 function requiredTemplateId(positionals, commandLabel) {
   const templateId = positionals[2];
   if (!templateId || positionals.length > 3) {
@@ -496,6 +518,14 @@ function requiredBrowserContextId(positionals, commandLabel) {
 function requiredEgressProfileId(positionals, commandLabel) {
   const profileId = positionals[2];
   if (!profileId || positionals.length > 3) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <profile-id>`, EXIT_CODES.usage);
+  }
+  return profileId;
+}
+
+function requiredNestedEgressProfileId(positionals, commandLabel) {
+  const profileId = positionals[3];
+  if (!profileId || positionals.length > 4) {
     throw new CliError('USAGE', `Usage: bpane ${commandLabel} <profile-id>`, EXIT_CODES.usage);
   }
   return profileId;
@@ -1035,8 +1065,14 @@ function buildEgressProfileRequest(options, fallbackName = null) {
     body.labels = labels;
   }
   const proxyUrl = getOption(options, 'proxy-url');
+  const proxyCredentialBindingId = getOption(options, 'proxy-credential-binding-id');
   if (proxyUrl) {
-    body.proxy = { url: proxyUrl };
+    body.proxy = {
+      url: proxyUrl,
+      ...(proxyCredentialBindingId ? { credential_binding_id: proxyCredentialBindingId } : {}),
+    };
+  } else if (proxyCredentialBindingId) {
+    throw new CliError('USAGE', '--proxy-credential-binding-id requires --proxy-url.', EXIT_CODES.usage);
   }
   const bypassRules = getOptions(options, 'bypass-rule')
     .flatMap((value) => value.split(','))
@@ -1091,6 +1127,159 @@ function buildEgressProfileRequest(options, fallbackName = null) {
   const state = getOption(options, 'state');
   if (state) {
     body.state = state;
+  }
+  return body;
+}
+
+function buildEgressProfileUpdateRequest(existingProfile, options, forcedState = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? existingProfile?.name;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Egress profile update requires --name when the existing profile response has no name.',
+      EXIT_CODES.usage,
+    );
+  }
+
+  const body = { name };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  } else if (existingProfile?.description != null) {
+    body.description = existingProfile.description;
+  }
+
+  const labels = {
+    ...(isObjectRecord(existingProfile?.labels) ? existingProfile.labels : {}),
+    ...parseKeyValueOptions(options, 'label'),
+  };
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+
+  const proxyUrl = getOption(options, 'proxy-url');
+  const proxyCredentialBindingId = getOption(options, 'proxy-credential-binding-id');
+  if (proxyUrl) {
+    body.proxy = {
+      url: proxyUrl,
+      ...(proxyCredentialBindingId ? { credential_binding_id: proxyCredentialBindingId } : {}),
+    };
+  } else if (isObjectRecord(existingProfile?.proxy)) {
+    body.proxy = {
+      ...existingProfile.proxy,
+      ...(proxyCredentialBindingId ? { credential_binding_id: proxyCredentialBindingId } : {}),
+    };
+  } else if (proxyCredentialBindingId) {
+    throw new CliError('USAGE', '--proxy-credential-binding-id requires --proxy-url or an existing proxy profile.', EXIT_CODES.usage);
+  }
+
+  const bypassRules = getOptions(options, 'bypass-rule')
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (bypassRules.length) {
+    body.bypass_rules = Array.from(new Set(bypassRules));
+  } else if (Array.isArray(existingProfile?.bypass_rules)) {
+    body.bypass_rules = existingProfile.bypass_rules;
+  }
+
+  const customCaRef = getOption(options, 'custom-ca-ref');
+  const customCaName = getOption(options, 'custom-ca-name');
+  if (customCaRef || customCaName) {
+    if (!customCaRef) {
+      throw new CliError('USAGE', '--custom-ca-name requires --custom-ca-ref.', EXIT_CODES.usage);
+    }
+    body.custom_ca = {
+      certificate_ref: customCaRef,
+      ...(customCaName ? { display_name: customCaName } : {}),
+    };
+  } else if (isObjectRecord(existingProfile?.custom_ca)) {
+    body.custom_ca = existingProfile.custom_ca;
+  }
+
+  const existingObservation = isObjectRecord(existingProfile?.traffic_observation)
+    ? existingProfile.traffic_observation
+    : null;
+  const trafficObservationMode = getOption(options, 'traffic-observation-mode');
+  const sensitiveLogSinkRef = getOption(options, 'sensitive-log-sink-ref');
+  const sensitiveLogSinkName = getOption(options, 'sensitive-log-sink-name');
+  if (trafficObservationMode || sensitiveLogSinkRef || sensitiveLogSinkName) {
+    const mode = trafficObservationMode ?? existingObservation?.mode ?? 'metadata_only';
+    if (!['metadata_only', 'tls_intercept'].includes(mode)) {
+      throw new CliError(
+        'USAGE',
+        '--traffic-observation-mode must be metadata_only or tls_intercept.',
+        EXIT_CODES.usage,
+      );
+    }
+    const sinkRef = sensitiveLogSinkRef ?? existingObservation?.sensitive_log_sink_ref ?? null;
+    const sinkName =
+      sensitiveLogSinkName ?? existingObservation?.sensitive_log_sink_display_name ?? null;
+    if (sensitiveLogSinkName && !sinkRef) {
+      throw new CliError('USAGE', '--sensitive-log-sink-name requires --sensitive-log-sink-ref.', EXIT_CODES.usage);
+    }
+    if (mode === 'tls_intercept') {
+      if (!body.proxy) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --proxy-url.', EXIT_CODES.usage);
+      }
+      if (!body.custom_ca) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --custom-ca-ref.', EXIT_CODES.usage);
+      }
+      if (!sinkRef) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --sensitive-log-sink-ref.', EXIT_CODES.usage);
+      }
+    }
+    body.traffic_observation = {
+      mode,
+      ...(sinkRef ? { sensitive_log_sink_ref: sinkRef } : {}),
+      ...(sinkName ? { sensitive_log_sink_display_name: sinkName } : {}),
+    };
+  } else if (existingObservation) {
+    body.traffic_observation = existingObservation;
+  }
+
+  const state = forcedState ?? getOption(options, 'state') ?? existingProfile?.state;
+  if (state) {
+    body.state = state;
+  }
+  return body;
+}
+
+function buildEgressDiagnosticsProbeRequest(options) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+  const body = {};
+  const publicIpUrl = getOption(options, 'probe-public-ip-url');
+  if (publicIpUrl !== null) {
+    body.public_ip_url = publicIpUrl;
+  }
+  const tlsProbeUrl = getOption(options, 'probe-tls-url');
+  if (tlsProbeUrl !== null) {
+    body.tls_probe_url = tlsProbeUrl;
+  }
+  const timeoutMs = parseIntegerOption(options, 'probe-timeout-ms');
+  if (timeoutMs !== null) {
+    body.timeout_ms = timeoutMs;
+  }
+  return body;
+}
+
+function buildEgressProfileReachabilityProbeRequest(options) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+  const body = {};
+  const timeoutMs = parseIntegerOption(options, 'probe-timeout-ms');
+  if (timeoutMs !== null) {
+    body.timeout_ms = timeoutMs;
   }
   return body;
 }
@@ -1690,6 +1879,25 @@ async function handleSessionCommand(config, positionals, options) {
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/status`,
     );
   }
+  if (action === 'egress-diagnostics') {
+    if (positionals[2] === 'probe') {
+      const sessionId = requiredNestedSessionId(positionals, 'session egress-diagnostics probe');
+      return await requestGateway(
+        config,
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildEgressDiagnosticsProbeRequest(options)),
+        },
+      );
+    }
+    const sessionId = requiredSessionId(positionals, 'session egress-diagnostics');
+    return await requestGateway(
+      config,
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`,
+    );
+  }
   if (action === 'access-token') {
     const sessionId = requiredSessionId(positionals, 'session access-token');
     return await requestGateway(
@@ -1782,6 +1990,40 @@ async function handleEgressProfileCommand(config, positionals, options) {
   if (action === 'get') {
     const profileId = requiredEgressProfileId(positionals, 'egress-profile get');
     return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
+  }
+  if (action === 'diagnostics') {
+    if (positionals[2] === 'probe') {
+      const profileId = requiredNestedEgressProfileId(positionals, 'egress-profile diagnostics probe');
+      return await requestGateway(
+        config,
+        `/api/v1/egress-profiles/${encodeURIComponent(profileId)}/diagnostics/probe`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildEgressProfileReachabilityProbeRequest(options)),
+        },
+      );
+    }
+    const profileId = requiredEgressProfileId(positionals, 'egress-profile diagnostics');
+    return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}/diagnostics`);
+  }
+  if (action === 'update') {
+    const profileId = requiredEgressProfileId(positionals, 'egress-profile update');
+    const existingProfile = await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
+    return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildEgressProfileUpdateRequest(existingProfile, options)),
+    });
+  }
+  if (action === 'disable') {
+    const profileId = requiredEgressProfileId(positionals, 'egress-profile disable');
+    const existingProfile = await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
+    return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildEgressProfileUpdateRequest(existingProfile, options, 'disabled')),
+    });
   }
   throw new CliError(
     'USAGE',

@@ -21,8 +21,9 @@ use crate::recording::{
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
-    BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig, EgressProfileState,
-    EgressProxyConfig, EgressTrafficObservationConfig, SessionConnectInfo, SessionEffectiveEgress,
+    BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig,
+    EgressDiagnosticsResource, EgressProfileState, EgressProxyConfig,
+    EgressTrafficObservationConfig, SessionConnectInfo, SessionEffectiveEgress,
     SessionLifecycleState, SessionNetworkIdentity, SessionOwnerMode, SessionRecordingFormat,
     SessionRecordingMode, SessionResource, SessionStatusSummary, SessionStore,
     SessionTemplateDefaults,
@@ -114,6 +115,7 @@ pub(super) struct SessionStatus {
     pub(super) resolution: (u16, u16),
     pub(super) network_identity: SessionNetworkIdentity,
     pub(super) effective_egress: SessionEffectiveEgress,
+    pub(super) egress_diagnostics: EgressDiagnosticsResource,
     pub(super) recording: SessionRecordingStatus,
     pub(super) playback: SessionRecordingPlaybackResource,
     pub(super) telemetry: SessionTelemetry,
@@ -330,6 +332,22 @@ pub(super) struct CreateEgressProfileRequest {
 
 fn default_egress_profile_state() -> EgressProfileState {
     EgressProfileState::Ready
+}
+
+#[derive(Default, Deserialize)]
+pub(super) struct RunEgressDiagnosticsProbeRequest {
+    #[serde(default)]
+    pub(super) public_ip_url: Option<String>,
+    #[serde(default)]
+    pub(super) tls_probe_url: Option<String>,
+    #[serde(default)]
+    pub(super) timeout_ms: Option<u64>,
+}
+
+#[derive(Default, Deserialize)]
+pub(super) struct RunEgressProfileReachabilityProbeRequest {
+    #[serde(default)]
+    pub(super) timeout_ms: Option<u64>,
 }
 
 #[derive(Deserialize)]

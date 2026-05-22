@@ -211,6 +211,113 @@ impl SessionStore {
         }
     }
 
+    pub async fn update_egress_profile_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistEgressProfileRequest,
+    ) -> Result<Option<StoredEgressProfile>, SessionStoreError> {
+        validate_egress_profile_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .update_egress_profile_for_owner(principal, id, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .update_egress_profile_for_owner(principal, id, request)
+                    .await
+            }
+        }
+    }
+
+    pub async fn upsert_egress_diagnostics_probe_result(
+        &self,
+        result: PersistEgressDiagnosticsProbeResult,
+    ) -> Result<StoredEgressDiagnosticsProbeResult, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.upsert_egress_diagnostics_probe_result(result).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.upsert_egress_diagnostics_probe_result(result).await
+            }
+        }
+    }
+
+    pub async fn get_egress_diagnostics_probe_result_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<StoredEgressDiagnosticsProbeResult>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_egress_diagnostics_probe_result_for_session(session_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_egress_diagnostics_probe_result_for_session(session_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn upsert_egress_profile_reachability_probe_result(
+        &self,
+        result: PersistEgressProfileReachabilityProbeResult,
+    ) -> Result<StoredEgressProfileReachabilityProbeResult, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .upsert_egress_profile_reachability_probe_result(result)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .upsert_egress_profile_reachability_probe_result(result)
+                    .await
+            }
+        }
+    }
+
+    pub async fn get_egress_profile_reachability_probe_result(
+        &self,
+        profile_id: Uuid,
+    ) -> Result<Option<StoredEgressProfileReachabilityProbeResult>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_egress_profile_reachability_probe_result(profile_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_egress_profile_reachability_probe_result(profile_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn list_egress_profile_reachability_probe_results_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<HashMap<Uuid, StoredEgressProfileReachabilityProbeResult>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .list_egress_profile_reachability_probe_results_for_owner(principal)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .list_egress_profile_reachability_probe_results_for_owner(principal)
+                    .await
+            }
+        }
+    }
+
     pub async fn create_file_workspace(
         &self,
         principal: &AuthenticatedPrincipal,

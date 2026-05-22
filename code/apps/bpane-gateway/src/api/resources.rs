@@ -83,6 +83,7 @@ pub(super) fn session_status_from_snapshot(
     snapshot: SessionTelemetrySnapshot,
     network_identity: SessionNetworkIdentity,
     effective_egress: SessionEffectiveEgress,
+    egress_diagnostics: EgressDiagnosticsResource,
     recording_policy: &SessionRecordingPolicy,
     latest_recording: Option<&StoredSessionRecording>,
     playback: SessionRecordingPlaybackResource,
@@ -101,6 +102,7 @@ pub(super) fn session_status_from_snapshot(
         resolution: snapshot.resolution,
         network_identity,
         effective_egress,
+        egress_diagnostics,
         recording: recording_status_from_snapshot(&snapshot, recording_policy, latest_recording),
         playback,
         telemetry: SessionTelemetry {
@@ -361,6 +363,7 @@ pub(super) async fn session_resource(
 ) -> Result<SessionResource, SessionStoreError> {
     let status = session_status_summary(state, stored).await?;
     let effective_egress = session_effective_egress(state, stored).await?;
+    let egress_diagnostics = session_egress_diagnostics(state, stored).await?;
     Ok(stored.to_resource(
         &state.public_gateway_url,
         state
@@ -370,6 +373,7 @@ pub(super) async fn session_resource(
         status,
         state_override,
         effective_egress,
+        egress_diagnostics,
     ))
 }
 
@@ -394,6 +398,53 @@ pub(super) async fn session_effective_egress(
     Ok(profile.to_session_effective_egress())
 }
 
+pub(super) async fn session_egress_diagnostics(
+    state: &ApiState,
+    stored: &StoredSession,
+) -> Result<EgressDiagnosticsResource, SessionStoreError> {
+    let runtime_binding = Some(state.session_manager.profile().runtime_binding.clone());
+    let runtime_assignment = state
+        .session_manager
+        .describe_session_runtime_assignment_status(stored.id)
+        .await
+        .map(|status| status.as_str().to_string());
+    let observed_at = Utc::now();
+    let probe_result = state
+        .session_store
+        .get_egress_diagnostics_probe_result_for_session(stored.id)
+        .await?;
+    let Some(profile_id) = stored.network_identity.egress_profile_id else {
+        return Ok(EgressDiagnosticsResource::direct(
+            runtime_binding,
+            runtime_assignment,
+            observed_at,
+        )
+        .with_probe_result(probe_result.as_ref()));
+    };
+    let owner = session_owner_principal(stored);
+    let Some(profile) = state
+        .session_store
+        .get_egress_profile_for_owner(&owner, profile_id)
+        .await?
+    else {
+        return Ok(EgressDiagnosticsResource::missing_profile(
+            profile_id,
+            runtime_binding,
+            runtime_assignment,
+            observed_at,
+        )
+        .with_probe_result(probe_result.as_ref()));
+    };
+    let reachability = state
+        .session_store
+        .get_egress_profile_reachability_probe_result(profile.id)
+        .await?;
+    Ok(profile
+        .to_diagnostics(runtime_binding, runtime_assignment, observed_at)
+        .with_profile_reachability_result(reachability.as_ref())
+        .with_probe_result(probe_result.as_ref()))
+}
+
 pub(super) async fn load_session_status(
     state: &ApiState,
     session: &StoredSession,
@@ -411,6 +462,7 @@ pub(super) async fn load_session_status(
     let latest_recording = latest_recording(&recordings);
     let playback = prepare_session_recording_playback(session.id, &recordings, Utc::now());
     let effective_egress = session_effective_egress(state, session).await?;
+    let egress_diagnostics = session_egress_diagnostics(state, session).await?;
 
     Ok(session_status_from_snapshot(
         session.state,
@@ -418,6 +470,7 @@ pub(super) async fn load_session_status(
         snapshot,
         session.network_identity.clone(),
         effective_egress,
+        egress_diagnostics,
         &session.recording,
         latest_recording,
         playback.resource,

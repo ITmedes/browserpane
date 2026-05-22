@@ -9,13 +9,19 @@ use uuid::Uuid;
 use super::docker::DockerLeaseState;
 use super::*;
 use crate::auth::AuthenticatedPrincipal;
+use crate::credentials::provider::{CredentialProviderBackend, ResolvedCredentialSecret};
+use crate::credentials::{
+    CredentialBindingProvider, CredentialInjectionMode, CredentialProvider,
+    CredentialProviderError, PersistCredentialBindingRequest, StoreCredentialSecretRequest,
+    StoredCredentialSecret,
+};
 use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig, EgressProfileState,
     EgressProxyConfig, EgressTrafficObservationConfig, EgressTrafficObservationMode,
-    PersistBrowserContextRequest, SessionBrowserContextMode, SessionBrowserContextRequest,
-    SessionBrowserContextResource, SessionGeolocation, SessionLifecycleState,
-    SessionNetworkIdentity, SessionOwner, SessionOwnerMode, SessionRecordingPolicy, SessionStore,
-    SessionViewport, StoredEgressProfile, StoredSession,
+    PersistBrowserContextRequest, PersistEgressProfileRequest, SessionBrowserContextMode,
+    SessionBrowserContextRequest, SessionBrowserContextResource, SessionGeolocation,
+    SessionLifecycleState, SessionNetworkIdentity, SessionOwner, SessionOwnerMode,
+    SessionRecordingPolicy, SessionStore, SessionViewport, StoredEgressProfile, StoredSession,
 };
 use crate::session_files::{
     SessionFileBindingMode, SessionFileBindingState, StoredSessionFileBinding,
@@ -58,6 +64,34 @@ fn test_principal(subject: &str) -> AuthenticatedPrincipal {
         issuer: "https://issuer.example".to_string(),
         display_name: Some(subject.to_string()),
         client_id: None,
+    }
+}
+
+#[derive(Debug)]
+struct FixedCredentialProviderBackend {
+    payload: Value,
+}
+
+#[async_trait::async_trait]
+impl CredentialProviderBackend for FixedCredentialProviderBackend {
+    async fn store_secret(
+        &self,
+        request: StoreCredentialSecretRequest,
+    ) -> Result<StoredCredentialSecret, CredentialProviderError> {
+        Ok(StoredCredentialSecret {
+            external_ref: request
+                .external_ref
+                .unwrap_or_else(|| format!("test/{}", request.binding_id)),
+        })
+    }
+
+    async fn resolve_secret(
+        &self,
+        _external_ref: &str,
+    ) -> Result<ResolvedCredentialSecret, CredentialProviderError> {
+        Ok(ResolvedCredentialSecret {
+            payload: self.payload.clone(),
+        })
     }
 }
 
@@ -302,6 +336,7 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
     let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
     let session_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
     let profile_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf12").unwrap();
+    let proxy_auth_binding_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf13").unwrap();
     let now = Utc::now();
     let session = StoredSession {
         id: session_id,
@@ -351,6 +386,7 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         labels: HashMap::new(),
         proxy: Some(EgressProxyConfig {
             url: "https://proxy.example:8443".to_string(),
+            credential_binding_id: Some(proxy_auth_binding_id),
         }),
         bypass_rules: vec!["localhost".to_string(), "*.internal.example".to_string()],
         custom_ca: Some(EgressCustomCaConfig {
@@ -379,6 +415,7 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         &session,
         Some(&profile),
         &manager.egress_custom_ca_bundle_path_for_session(),
+        &manager.egress_proxy_auth_config_path_for_session(),
     );
     let env = launch_options
         .env
@@ -401,6 +438,11 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
     assert_eq!(
         env.get("BPANE_CHROMIUM_PROXY_SERVER").map(String::as_str),
         Some("https://proxy.example:8443")
+    );
+    assert_eq!(
+        env.get("BPANE_CHROMIUM_PROXY_AUTH_FILE")
+            .map(String::as_str),
+        Some("/run/bpane/session/egress/proxy-auth.json")
     );
     assert_eq!(
         env.get("BPANE_CHROMIUM_PROXY_BYPASS_LIST")
@@ -439,6 +481,12 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
     assert_eq!(
         labels
             .get("browserpane.egress_proxy_configured")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        labels
+            .get("browserpane.egress_proxy_auth_configured")
             .map(String::as_str),
         Some("true")
     );
@@ -497,8 +545,124 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
     assert!(args.contains(&"BPANE_CHROMIUM_USER_AGENT=BrowserPane Test/1.0".to_string()));
     assert!(args.contains(&"BPANE_CHROMIUM_PROXY_SERVER=https://proxy.example:8443".to_string()));
     assert!(args.contains(
+        &"BPANE_CHROMIUM_PROXY_AUTH_FILE=/run/bpane/session/egress/proxy-auth.json".to_string()
+    ));
+    assert!(args.contains(
         &"browserpane.egress_profile_id=019db438-c74a-7ef2-810c-792e298faf12".to_string()
     ));
+    assert!(!args.iter().any(|arg| arg.contains("secret-password")));
+}
+
+#[tokio::test]
+async fn docker_runtime_resolves_secret_backed_proxy_auth_for_launch() {
+    let manager = Arc::new(DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap());
+    let store = SessionStore::in_memory_with_config(docker_profile(2));
+    let principal = test_principal("owner");
+    let binding_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf20").unwrap();
+    manager.attach_session_store(store.clone()).await;
+    manager
+        .attach_credential_provider(Some(Arc::new(CredentialProvider::new(Arc::new(
+            FixedCredentialProviderBackend {
+                payload: json!({
+                    "username": "proxy-user",
+                    "password": "secret-password"
+                }),
+            },
+        )))))
+        .await;
+    store
+        .create_credential_binding(
+            &principal,
+            PersistCredentialBindingRequest {
+                id: binding_id,
+                name: "support-proxy-auth".to_string(),
+                provider: CredentialBindingProvider::VaultKvV2,
+                external_ref: "test/proxy-auth".to_string(),
+                namespace: None,
+                allowed_origins: Vec::new(),
+                injection_mode: CredentialInjectionMode::FormFill,
+                totp: None,
+                labels: HashMap::from([("purpose".to_string(), "egress_proxy_auth".to_string())]),
+            },
+        )
+        .await
+        .unwrap();
+    let profile = store
+        .create_egress_profile(
+            &principal,
+            PersistEgressProfileRequest {
+                name: "authenticated-proxy".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                proxy: Some(EgressProxyConfig {
+                    url: "https://proxy.example:8443".to_string(),
+                    credential_binding_id: Some(binding_id),
+                }),
+                bypass_rules: Vec::new(),
+                custom_ca: None,
+                traffic_observation: EgressTrafficObservationConfig::default(),
+                state: EgressProfileState::Ready,
+            },
+        )
+        .await
+        .unwrap();
+    let session = store
+        .create_session(
+            &principal,
+            CreateSessionRequest {
+                network_identity: Some(SessionNetworkIdentity {
+                    egress_profile_id: Some(profile.id),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+
+    let launch_options = manager
+        .session_network_identity_launch_options(session.id)
+        .await
+        .unwrap();
+    let env = launch_options
+        .env
+        .iter()
+        .cloned()
+        .collect::<HashMap<_, _>>();
+    assert_eq!(
+        env.get("BPANE_CHROMIUM_PROXY_AUTH_FILE")
+            .map(String::as_str),
+        Some("/run/bpane/session/egress/proxy-auth.json")
+    );
+    let material = launch_options.egress_proxy_auth.as_ref().unwrap();
+    assert_eq!(material.binding_id, binding_id);
+    assert_eq!(
+        material.target_path,
+        "/run/bpane/session/egress/proxy-auth.json"
+    );
+    let payload: Value = serde_json::from_slice(&material.payload).unwrap();
+    assert_eq!(payload["username"], "proxy-user");
+    assert_eq!(payload["password"], "secret-password");
+    let labels = launch_options
+        .labels
+        .iter()
+        .cloned()
+        .collect::<HashMap<_, _>>();
+    assert_eq!(
+        labels
+            .get("browserpane.egress_proxy_auth_configured")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert!(!launch_options
+        .env
+        .iter()
+        .any(|(_, value)| value.contains("secret-password")));
+    assert!(!launch_options
+        .labels
+        .iter()
+        .any(|(_, value)| value.contains("secret-password")));
 }
 
 #[test]

@@ -1,3 +1,4 @@
+use crate::credentials::CredentialProvider;
 use crate::runtime_manager::{
     DockerRuntimeConfig, PersistedRuntimeAssignment, ResolvedSessionRuntime,
     RuntimeAssignmentStatus, RuntimeManagerConfig, RuntimeManagerError, RuntimeProfile,
@@ -41,6 +42,10 @@ impl SessionManager {
 
     pub async fn attach_session_store(&self, store: SessionStore) {
         self.inner.attach_session_store(store).await;
+    }
+
+    pub async fn attach_credential_provider(&self, provider: Option<Arc<CredentialProvider>>) {
+        self.inner.attach_credential_provider(provider).await;
     }
 
     pub async fn attach_workspace_file_store(&self, store: Arc<WorkspaceFileStore>) {
