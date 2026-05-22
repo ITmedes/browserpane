@@ -45,11 +45,13 @@ async function run() {
       timeout: options.connectTimeoutMs,
     });
 
+    const proxyCredentialBinding = await createProxyCredentialBinding(accessToken, options, runLabel);
     const proxyProfile = await createProfileThroughUi(page, options, {
       name: `smoke-proxy-${runLabel}`,
-      description: 'Admin smoke metadata-only proxy profile',
+      description: 'Admin smoke metadata-only proxy profile with secret-backed proxy auth',
       labels: 'suite=admin-egress\nmode=proxy',
       proxyUrl: 'http://bpane-egress-observer:3128',
+      proxyCredentialBindingId: proxyCredentialBinding.id,
       bypassRules: 'localhost\n*.local',
       mode: 'metadata_only',
     });
@@ -80,6 +82,7 @@ async function run() {
 
     console.log(JSON.stringify({
       proxyProfileId: proxyProfile.id,
+      proxyCredentialBindingId: proxyCredentialBinding.id,
       tlsProfileId: tlsProfile.id,
       disabledProfileId: clonedProfile.id,
       sessionIds,
@@ -125,6 +128,9 @@ async function createProfileThroughUi(page, options, profile) {
   await page.getByTestId('egress-profile-description').fill(profile.description);
   await page.getByTestId('egress-profile-labels').fill(profile.labels);
   await page.getByTestId('egress-profile-proxy-url').fill(profile.proxyUrl);
+  if (profile.proxyCredentialBindingId) {
+    await page.getByTestId('egress-profile-proxy-credential-binding-id').fill(profile.proxyCredentialBindingId);
+  }
   await page.getByTestId('egress-profile-bypass-rules').fill(profile.bypassRules);
   await page.getByTestId('egress-profile-observation-mode').selectOption(profile.mode);
   if (profile.customCaRef) {
@@ -225,9 +231,15 @@ async function verifySessionEffectiveEgress(accessToken, options, context) {
   if (proxy.effective_egress?.profile_id !== proxyProfile.id || proxy.effective_egress?.tls_interception_enabled) {
     throw new Error(`Expected proxy session effective egress for ${proxyProfile.id}, got ${JSON.stringify(proxy.effective_egress)}`);
   }
+  if (proxy.effective_egress?.proxy_auth_configured !== true) {
+    throw new Error(`Expected proxy session to report configured proxy auth, got ${JSON.stringify(proxy.effective_egress)}`);
+  }
   const proxyDiagnostics = await launchAndFetchEgressDiagnostics(accessToken, options, proxy.id);
   if (proxyDiagnostics.health !== 'ready' || proxyDiagnostics.proof_level !== 'runtime_launch_metadata') {
     throw new Error(`Expected proxy runtime diagnostics to be ready with launch metadata, got ${JSON.stringify(proxyDiagnostics)}`);
+  }
+  if (proxyDiagnostics.proxy_auth_configured !== true) {
+    throw new Error(`Expected proxy diagnostics to report configured proxy auth, got ${JSON.stringify(proxyDiagnostics)}`);
   }
   const proxyProbe = await runSessionEgressProbe(accessToken, options, proxy.id, runLabel).catch(() => null);
   await assertObserverCorrelation({
@@ -237,7 +249,9 @@ async function verifySessionEffectiveEgress(accessToken, options, context) {
     observerSince,
     expectedMode: 'metadata_only',
     expectedHost: probeObserved(proxyProbe) ? 'example.com' : null,
+    expectedProxyAuth: true,
   });
+  await assertSecretBackedProxyAuthRuntime(proxy.id);
   await deleteSession(accessToken, options, proxy.id);
 
   const tls = await createSession(accessToken, options, {
@@ -263,9 +277,32 @@ async function verifySessionEffectiveEgress(accessToken, options, context) {
     observerSince,
     expectedMode: 'tls_intercept',
     expectedHost: probeObserved(tlsProbe) ? 'example.com' : null,
+    expectedProxyAuth: false,
   });
   await deleteSession(accessToken, options, tls.id);
   return verifiedSessionIds;
+}
+
+async function createProxyCredentialBinding(accessToken, options, runLabel) {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/credential-bindings`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: `smoke-proxy-auth-${runLabel}`,
+      provider: 'vault_kv_v2',
+      namespace: 'admin-egress-smoke',
+      allowed_origins: ['http://bpane-egress-observer:3128'],
+      injection_mode: 'form_fill',
+      secret_payload: {
+        username: 'proxy-user',
+        password: 'proxy-pass',
+      },
+      labels: {
+        suite: 'admin-egress',
+        purpose: 'egress-proxy-auth',
+      },
+    }),
+  });
 }
 
 async function launchAndFetchEgressDiagnostics(accessToken, options, sessionId) {
@@ -301,6 +338,7 @@ async function assertObserverCorrelation({
   observerSince,
   expectedMode,
   expectedHost,
+  expectedProxyAuth,
 }) {
   const metadata = dockerSessionMetadata(sessionId);
   if (metadata.labels['browserpane.session_id'] !== sessionId) {
@@ -311,6 +349,9 @@ async function assertObserverCorrelation({
   }
   if (metadata.labels['browserpane.egress_observation_mode'] !== expectedMode) {
     throw new Error(`Container labels did not include expected egress mode ${expectedMode}: ${JSON.stringify(metadata.labels)}`);
+  }
+  if (metadata.labels['browserpane.egress_proxy_auth_configured'] !== String(expectedProxyAuth)) {
+    throw new Error(`Container labels did not include expected proxy-auth state ${expectedProxyAuth}: ${JSON.stringify(metadata.labels)}`);
   }
   if (!metadata.ipAddress) {
     throw new Error(`Could not resolve Docker network IP for session ${sessionId}.`);
@@ -325,6 +366,37 @@ async function assertObserverCorrelation({
   );
 }
 
+async function assertSecretBackedProxyAuthRuntime(sessionId) {
+  const metadata = dockerSessionMetadata(sessionId);
+  const env = metadata.env.join('\n');
+  if (!env.includes('BPANE_CHROMIUM_PROXY_AUTH_FILE=/run/bpane/session/egress/proxy-auth.json')) {
+    throw new Error(`Expected proxy-auth runtime file env for session ${sessionId}.`);
+  }
+  if (env.includes('proxy-pass') || JSON.stringify(metadata.labels).includes('proxy-pass')) {
+    throw new Error(`Proxy auth secret leaked into docker inspect metadata for session ${sessionId}.`);
+  }
+  await poll(
+    `proxy auth extension materialization for ${sessionId}`,
+    async () => {
+      try {
+        dockerCapture(['exec', metadata.id, 'test', '-s', '/run/bpane/session/egress/proxy-auth.json']);
+        dockerCapture(['exec', metadata.id, 'test', '-s', '/run/bpane/session/proxy-auth-extension/manifest.json']);
+        dockerCapture(['exec', metadata.id, 'test', '-s', '/run/bpane/session/proxy-auth-extension/background.js']);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    Boolean,
+    10000,
+    250,
+  );
+  const payload = JSON.parse(dockerCapture(['exec', metadata.id, 'cat', '/run/bpane/session/egress/proxy-auth.json']));
+  if (payload.username !== 'proxy-user' || payload.password !== 'proxy-pass') {
+    throw new Error(`Proxy auth runtime payload for session ${sessionId} did not match the credential binding.`);
+  }
+}
+
 function dockerSessionMetadata(sessionId) {
   const ids = dockerCapture(['ps', '-q', '--filter', `label=browserpane.session_id=${sessionId}`]).trim().split(/\s+/).filter(Boolean);
   if (ids.length !== 1) {
@@ -333,9 +405,10 @@ function dockerSessionMetadata(sessionId) {
   const inspect = JSON.parse(dockerCapture(['inspect', ids[0]]));
   const container = inspect[0];
   const labels = container?.Config?.Labels ?? {};
+  const env = container?.Config?.Env ?? [];
   const networks = container?.NetworkSettings?.Networks ?? {};
   const ipAddress = Object.values(networks).map((network) => network?.IPAddress).find(Boolean) ?? '';
-  return { id: ids[0], labels, ipAddress };
+  return { id: ids[0], labels, env, ipAddress };
 }
 
 function dockerLogs(containerName, since) {

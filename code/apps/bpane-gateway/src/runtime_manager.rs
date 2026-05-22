@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use uuid::Uuid;
 
+use crate::credentials::CredentialProvider;
 use crate::session_control::SessionStore;
 use crate::workspaces::WorkspaceFileStore;
 
@@ -254,6 +255,13 @@ impl SessionRuntimeManager {
         match &self.backend {
             RuntimeBackend::StaticSingle(_) => {}
             RuntimeBackend::Docker(manager) => manager.attach_session_store(store).await,
+        }
+    }
+
+    pub async fn attach_credential_provider(&self, provider: Option<Arc<CredentialProvider>>) {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => {}
+            RuntimeBackend::Docker(manager) => manager.attach_credential_provider(provider).await,
         }
     }
 

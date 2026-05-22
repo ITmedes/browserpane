@@ -329,6 +329,7 @@
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">State: {selectedProfile.state}</span>
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]" data-testid="egress-profile-health">Health: {selectedProfile.diagnostics.health}</span>
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">Proxy: {selectedProfile.effective.proxy_configured ? 'configured' : 'none'}</span>
+            <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">Proxy auth: {selectedProfile.effective.proxy_auth_configured ? 'binding' : 'none'}</span>
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">TLS: {selectedProfile.effective.tls_interception_enabled ? 'inspect' : 'metadata'}</span>
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">Bypass: {selectedProfile.effective.bypass_rule_count}</span>
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">Reachability: {selectedProfile.diagnostics.proof.profile_reachability_collected ? (selectedProfile.diagnostics.proof.profile_reachability_healthy ? 'healthy' : 'failed') : 'not probed'}</span>
@@ -403,6 +404,13 @@
             Proxy URL
             <input class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-panel/78 px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="egress-profile-proxy-url" placeholder="http://bpane-egress-observer:3128" bind:value={form.proxyUrl} disabled={disabled} />
           </label>
+          <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+            Proxy auth binding ID
+            <input class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-panel/78 px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="egress-profile-proxy-credential-binding-id" placeholder="credential binding UUID" bind:value={form.proxyCredentialBindingId} disabled={disabled} />
+          </label>
+        </div>
+
+        <div class="grid min-w-0 gap-3 md:grid-cols-2">
           <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
             Observation mode
             <select class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-panel/78 px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="egress-profile-observation-mode" bind:value={form.observationMode} disabled={disabled}>

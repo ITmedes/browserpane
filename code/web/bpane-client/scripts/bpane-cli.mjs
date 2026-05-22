@@ -61,6 +61,7 @@ const KNOWN_OPTIONS = new Set([
   'probe-public-ip-url',
   'probe-timeout-ms',
   'probe-tls-url',
+  'proxy-credential-binding-id',
   'proxy-url',
   'persistence-mode',
   'recording-mode',
@@ -167,6 +168,7 @@ function usageText() {
     '  --browser-identity <id>   Approved browser identity hint for session create/template defaults.',
     '  --egress-profile-id <id>  Approved egress profile id for session create/template defaults.',
     '  --proxy-url <url>         Egress profile proxy URL.',
+    '  --proxy-credential-binding-id <id> Secret-backed credential binding for proxy auth.',
     '  --bypass-rule <rule>      Repeatable egress profile proxy bypass rule.',
     '  --custom-ca-ref <ref>     Egress profile custom CA reference.',
     '  --custom-ca-name <name>   Egress profile custom CA display name.',
@@ -1063,8 +1065,14 @@ function buildEgressProfileRequest(options, fallbackName = null) {
     body.labels = labels;
   }
   const proxyUrl = getOption(options, 'proxy-url');
+  const proxyCredentialBindingId = getOption(options, 'proxy-credential-binding-id');
   if (proxyUrl) {
-    body.proxy = { url: proxyUrl };
+    body.proxy = {
+      url: proxyUrl,
+      ...(proxyCredentialBindingId ? { credential_binding_id: proxyCredentialBindingId } : {}),
+    };
+  } else if (proxyCredentialBindingId) {
+    throw new CliError('USAGE', '--proxy-credential-binding-id requires --proxy-url.', EXIT_CODES.usage);
   }
   const bypassRules = getOptions(options, 'bypass-rule')
     .flatMap((value) => value.split(','))
@@ -1155,10 +1163,19 @@ function buildEgressProfileUpdateRequest(existingProfile, options, forcedState =
   }
 
   const proxyUrl = getOption(options, 'proxy-url');
+  const proxyCredentialBindingId = getOption(options, 'proxy-credential-binding-id');
   if (proxyUrl) {
-    body.proxy = { url: proxyUrl };
+    body.proxy = {
+      url: proxyUrl,
+      ...(proxyCredentialBindingId ? { credential_binding_id: proxyCredentialBindingId } : {}),
+    };
   } else if (isObjectRecord(existingProfile?.proxy)) {
-    body.proxy = existingProfile.proxy;
+    body.proxy = {
+      ...existingProfile.proxy,
+      ...(proxyCredentialBindingId ? { credential_binding_id: proxyCredentialBindingId } : {}),
+    };
+  } else if (proxyCredentialBindingId) {
+    throw new CliError('USAGE', '--proxy-credential-binding-id requires --proxy-url or an existing proxy profile.', EXIT_CODES.usage);
   }
 
   const bypassRules = getOptions(options, 'bypass-rule')

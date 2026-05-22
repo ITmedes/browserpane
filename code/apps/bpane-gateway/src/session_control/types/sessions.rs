@@ -265,6 +265,8 @@ pub struct SessionNetworkIdentity {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EgressProxyConfig {
     pub url: String,
+    #[serde(default)]
+    pub credential_binding_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -287,6 +289,7 @@ pub struct EgressTrafficObservationConfig {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EgressProfileEffectiveStatus {
     pub proxy_configured: bool,
+    pub proxy_auth_configured: bool,
     pub bypass_rule_count: u32,
     pub custom_ca_configured: bool,
     pub observation_mode: EgressTrafficObservationMode,
@@ -344,6 +347,7 @@ pub struct EgressDiagnosticsResource {
     pub runtime_binding: Option<String>,
     pub runtime_assignment: Option<String>,
     pub proxy_configured: bool,
+    pub proxy_auth_configured: bool,
     pub bypass_rule_count: u32,
     pub custom_ca_configured: bool,
     pub tls_interception_enabled: bool,
@@ -383,6 +387,7 @@ pub struct SessionEffectiveEgress {
     pub profile_name: Option<String>,
     pub profile_state: Option<EgressProfileState>,
     pub proxy_configured: bool,
+    pub proxy_auth_configured: bool,
     pub bypass_rule_count: u32,
     pub custom_ca_configured: bool,
     pub observation_mode: EgressTrafficObservationMode,
@@ -445,6 +450,11 @@ impl StoredEgressProfile {
     pub fn effective_status(&self) -> EgressProfileEffectiveStatus {
         EgressProfileEffectiveStatus {
             proxy_configured: self.proxy.is_some(),
+            proxy_auth_configured: self
+                .proxy
+                .as_ref()
+                .and_then(|proxy| proxy.credential_binding_id)
+                .is_some(),
             bypass_rule_count: self.bypass_rules.len() as u32,
             custom_ca_configured: self.custom_ca.is_some(),
             observation_mode: self.traffic_observation.mode,
@@ -494,6 +504,7 @@ impl StoredEgressProfile {
             profile_name: Some(self.name.clone()),
             profile_state: Some(self.state),
             proxy_configured: effective.proxy_configured,
+            proxy_auth_configured: effective.proxy_auth_configured,
             bypass_rule_count: effective.bypass_rule_count,
             custom_ca_configured: effective.custom_ca_configured,
             observation_mode: effective.observation_mode,
@@ -579,6 +590,7 @@ impl StoredEgressProfile {
             runtime_binding,
             runtime_assignment,
             proxy_configured: effective.proxy_configured,
+            proxy_auth_configured: effective.proxy_auth_configured,
             bypass_rule_count: effective.bypass_rule_count,
             custom_ca_configured: effective.custom_ca_configured,
             tls_interception_enabled: effective.tls_interception_enabled,
@@ -700,6 +712,7 @@ impl EgressDiagnosticsResource {
             runtime_binding,
             runtime_assignment,
             proxy_configured: false,
+            proxy_auth_configured: false,
             bypass_rule_count: 0,
             custom_ca_configured: false,
             tls_interception_enabled: false,
@@ -743,6 +756,7 @@ impl EgressDiagnosticsResource {
             runtime_binding,
             runtime_assignment,
             proxy_configured: false,
+            proxy_auth_configured: false,
             bypass_rule_count: 0,
             custom_ca_configured: false,
             tls_interception_enabled: false,

@@ -276,10 +276,10 @@ service.
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
   - `GET /api/v1/session-templates/{id}` — fetch one session template
   - `PUT /api/v1/session-templates/{id}` — replace a session template and increment its version
-  - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, bypass, custom CA, and traffic-observation metadata
+  - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, optional proxy-auth credential binding reference, bypass, custom CA, and traffic-observation metadata
   - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
-  - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references.
+  - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Proxy authentication is secret-backed through owner-scoped credential bindings and is materialized only as a session-local runtime auth file.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
   - `POST /api/v1/sessions/{id}/release` — release the live runtime while preserving the session resource and profile
@@ -541,7 +541,8 @@ The supported local operator CLI lives in
 - Commands cover profile inspection/init, egress-profile create/list/get,
   session create/list/get/status with network-identity options, access-ticket
   and automation-access minting, connection disconnect, stop, kill, and bounded
-  cleanup.
+  cleanup. Egress-profile create/update commands can attach a proxy-auth
+  credential binding with `--proxy-credential-binding-id`.
 - `deploy/examples/egress-observer` provides a local Squid forward-proxy
   example for metadata-only access-log observation and session/container IP
   correlation, plus a mitmproxy TLS-intercept fixture for local inspection

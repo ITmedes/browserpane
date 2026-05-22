@@ -105,6 +105,9 @@ if [ -n "${BPANE_SESSION_DATA_DIR:-}" ]; then
   if [ -n "${BPANE_CHROMIUM_TRUSTED_CA_BUNDLE:-}" ]; then
     validate_session_data_path "BPANE_CHROMIUM_TRUSTED_CA_BUNDLE" "$BPANE_CHROMIUM_TRUSTED_CA_BUNDLE" "$BPANE_SESSION_DATA_DIR"
   fi
+  if [ -n "${BPANE_CHROMIUM_PROXY_AUTH_FILE:-}" ]; then
+    validate_session_data_path "BPANE_CHROMIUM_PROXY_AUTH_FILE" "$BPANE_CHROMIUM_PROXY_AUTH_FILE" "$BPANE_SESSION_DATA_DIR"
+  fi
   export BPANE_SESSION_DATA_DIR
 fi
 export BPANE_SESSION_ID BPANE_PROFILE_ROOT PROFILE_DIR BPANE_UPLOAD_DIR BPANE_DOWNLOAD_DIR
@@ -351,6 +354,54 @@ BPANE_EXTENSION_DIR="${BPANE_EXTENSION_DIR:-/home/bpane/bpane-ext}"
 if [ -d "${BPANE_EXTENSION_DIR}" ]; then
   CHROMIUM_EXTENSION_DIRS+=("${BPANE_EXTENSION_DIR}")
 fi
+
+if [ -n "${BPANE_CHROMIUM_PROXY_AUTH_FILE:-}" ]; then
+  if [ ! -s "${BPANE_CHROMIUM_PROXY_AUTH_FILE}" ]; then
+    echo "Configured proxy auth file is missing or empty: ${BPANE_CHROMIUM_PROXY_AUTH_FILE}" >&2
+    exit 1
+  fi
+  PROXY_AUTH_EXTENSION_DIR="${BPANE_SESSION_DATA_DIR:-/tmp}/proxy-auth-extension"
+  mkdir -p "${PROXY_AUTH_EXTENSION_DIR}"
+  cat > "${PROXY_AUTH_EXTENSION_DIR}/manifest.json" <<'JSON'
+{
+  "manifest_version": 3,
+  "name": "BrowserPane Proxy Auth",
+  "version": "1.0",
+  "description": "Provides BrowserPane-managed proxy credentials for the configured runtime proxy",
+  "permissions": ["webRequest", "webRequestAuthProvider"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
+JSON
+  {
+    printf 'const BPANE_PROXY_AUTH = '
+    cat "${BPANE_CHROMIUM_PROXY_AUTH_FILE}"
+    cat <<'JS'
+;
+
+chrome.webRequest.onAuthRequired.addListener(
+  (details, callback) => {
+    if (!details.isProxy) {
+      callback({});
+      return;
+    }
+    callback({
+      authCredentials: {
+        username: String(BPANE_PROXY_AUTH.username || ''),
+        password: String(BPANE_PROXY_AUTH.password || '')
+      }
+    });
+  },
+  { urls: ['<all_urls>'] },
+  ['asyncBlocking']
+);
+JS
+  } > "${PROXY_AUTH_EXTENSION_DIR}/background.js"
+  CHROMIUM_EXTENSION_DIRS+=("${PROXY_AUTH_EXTENSION_DIR}")
+fi
+
 if [ "${#CHROMIUM_EXTENSION_DIRS[@]}" -gt 0 ]; then
   CHROMIUM_FLAGS+=("--load-extension=$(IFS=,; echo "${CHROMIUM_EXTENSION_DIRS[*]}")")
 fi

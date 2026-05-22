@@ -1082,6 +1082,8 @@ describe('bpane operator CLI', () => {
         'region=eu',
         '--proxy-url',
         'https://proxy.example:8443',
+        '--proxy-credential-binding-id',
+        'credential-binding-1',
         '--bypass-rule',
         'localhost',
         '--bypass-rule',
@@ -1109,7 +1111,10 @@ describe('bpane operator CLI', () => {
       name: 'eu-support-egress',
       description: 'EU support outbound path',
       labels: { region: 'eu' },
-      proxy: { url: 'https://proxy.example:8443' },
+      proxy: {
+        url: 'https://proxy.example:8443',
+        credential_binding_id: 'credential-binding-1',
+      },
       bypass_rules: ['localhost', '*.internal.example'],
       custom_ca: {
         certificate_ref: 'file:///workspace/dev/egress-ca.pem',

@@ -63,9 +63,11 @@ async fn create_egress_profile(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let request = persist_egress_profile_request(request);
+    validate_proxy_auth_binding(&state, &principal, &request).await?;
     let profile = state
         .session_store
-        .create_egress_profile(&principal, persist_egress_profile_request(request))
+        .create_egress_profile(&principal, request)
         .await
         .map_err(map_session_store_error)?;
     Ok((StatusCode::CREATED, Json(profile.to_resource())))
@@ -136,13 +138,11 @@ async fn update_egress_profile(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let request = persist_egress_profile_request(request);
+    validate_proxy_auth_binding(&state, &principal, &request).await?;
     let profile = state
         .session_store
-        .update_egress_profile_for_owner(
-            &principal,
-            profile_id,
-            persist_egress_profile_request(request),
-        )
+        .update_egress_profile_for_owner(&principal, profile_id, request)
         .await
         .map_err(map_session_store_error)?
         .ok_or_else(|| {
@@ -209,6 +209,42 @@ fn persist_egress_profile_request(
         traffic_observation: request.traffic_observation,
         state: request.state,
     }
+}
+
+async fn validate_proxy_auth_binding(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    request: &PersistEgressProfileRequest,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let Some(binding_id) = request
+        .proxy
+        .as_ref()
+        .and_then(|proxy| proxy.credential_binding_id)
+    else {
+        return Ok(());
+    };
+    if state.credential_provider.is_none() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "egress profile proxy.credential_binding_id requires a configured credential provider".to_string(),
+            }),
+        ));
+    }
+    let binding = state
+        .session_store
+        .get_credential_binding_for_owner(principal, binding_id)
+        .await
+        .map_err(map_session_store_error)?;
+    if binding.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("credential binding {binding_id} not found"),
+            }),
+        ));
+    }
+    Ok(())
 }
 
 async fn profile_resource_with_reachability(

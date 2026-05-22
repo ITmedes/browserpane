@@ -90,6 +90,7 @@ function profileFromCommand(command: CreateEgressProfileCommand, id: string): Eg
     state: command.state ?? 'ready',
     effective: {
       proxy_configured: Boolean(command.proxy),
+      proxy_auth_configured: Boolean(command.proxy?.credential_binding_id),
       bypass_rule_count: command.bypass_rules?.length ?? 0,
       custom_ca_configured: Boolean(command.custom_ca),
       observation_mode: observationMode,
@@ -106,6 +107,7 @@ function profileFromCommand(command: CreateEgressProfileCommand, id: string): Eg
       runtime_binding: null,
       runtime_assignment: null,
       proxy_configured: Boolean(command.proxy),
+      proxy_auth_configured: Boolean(command.proxy?.credential_binding_id),
       bypass_rule_count: command.bypass_rules?.length ?? 0,
       custom_ca_configured: Boolean(command.custom_ca),
       tls_interception_enabled: observationMode === 'tls_intercept',

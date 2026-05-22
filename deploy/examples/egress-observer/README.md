@@ -128,6 +128,7 @@ Docker-backed BrowserPane runtime containers carry these labels:
 - `browserpane.egress_profile_id`
 - `browserpane.egress_observation_mode`
 - `browserpane.egress_proxy_configured`
+- `browserpane.egress_proxy_auth_configured`
 - `browserpane.egress_bypass_rule_count`
 - `browserpane.egress_custom_ca_configured`
 - `browserpane.egress_tls_interception_enabled`
@@ -137,6 +138,11 @@ The gateway also emits a startup audit log named
 `starting docker runtime with egress observer correlation` with the session id,
 container name, egress profile id/name, and sanitized profile flags. Use that
 log to join control-plane events with proxy access logs.
+
+If a profile references `proxy.credential_binding_id`, BrowserPane resolves the
+secret at runtime launch and configures Chromium proxy authentication from a
+session-local auth file. The credential value is not written to proxy URLs,
+Docker labels, or gateway startup logs.
 
 ## Production Pattern
 
