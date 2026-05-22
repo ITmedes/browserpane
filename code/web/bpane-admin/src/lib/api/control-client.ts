@@ -100,6 +100,15 @@ export class ControlClient {
     return ControlSessionMapper.toEgressProfileResource(payload);
   }
 
+  async updateEgressProfile(profileId: string, command: CreateEgressProfileCommand): Promise<EgressProfileResource> {
+    const payload = await this.#request('PUT', `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`, {
+      ...command,
+      labels: command.labels ?? {},
+      bypass_rules: command.bypass_rules ?? [],
+    });
+    return ControlSessionMapper.toEgressProfileResource(payload);
+  }
+
   async listBrowserContexts(): Promise<BrowserContextListResponse> {
     const payload = await this.#request('GET', '/api/v1/browser-contexts');
     return ControlSessionMapper.toBrowserContextList(payload);

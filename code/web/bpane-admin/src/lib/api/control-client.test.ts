@@ -340,6 +340,10 @@ describe('ControlClient', () => {
       },
     });
     await client.getEgressProfile('profile/with space');
+    await client.updateEgressProfile('profile/with space', {
+      name: 'EU support egress disabled',
+      state: 'disabled',
+    });
 
     expect(created).toMatchObject({
       id: EGRESS_PROFILE.id,
@@ -380,6 +384,17 @@ describe('ControlClient', () => {
       new URL('http://localhost:8932/api/v1/egress-profiles/profile%2Fwith%20space'),
       expect.objectContaining({ method: 'GET' }),
     );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      new URL('http://localhost:8932/api/v1/egress-profiles/profile%2Fwith%20space'),
+      expect.objectContaining({ method: 'PUT' }),
+    );
+    expect(JSON.parse(fetchImpl.mock.calls[2]?.[1]?.body as string)).toEqual({
+      name: 'EU support egress disabled',
+      labels: {},
+      bypass_rules: [],
+      state: 'disabled',
+    });
   });
 
   it('passes catalog filters to the session list endpoint', async () => {

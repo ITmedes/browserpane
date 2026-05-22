@@ -107,9 +107,11 @@ function usageText() {
     '  bpane session-template list [options]',
     '  bpane session-template get <template-id> [options]',
     '  bpane session-template update <template-id> [options]',
-    '  bpane egress-profile create [profile-name] [options]',
-    '  bpane egress-profile list [options]',
-    '  bpane egress-profile get <profile-id> [options]',
+  '  bpane egress-profile create [profile-name] [options]',
+  '  bpane egress-profile list [options]',
+  '  bpane egress-profile get <profile-id> [options]',
+  '  bpane egress-profile update <profile-id> [options]',
+  '  bpane egress-profile disable <profile-id> [options]',
     '  bpane browser-context create [context-name] [options]',
     '  bpane browser-context clone <source-context-id> <target-context-name> [options]',
     '  bpane browser-context export <context-id> --output <path> [options]',
@@ -1095,6 +1097,116 @@ function buildEgressProfileRequest(options, fallbackName = null) {
   return body;
 }
 
+function buildEgressProfileUpdateRequest(existingProfile, options, forcedState = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? existingProfile?.name;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Egress profile update requires --name when the existing profile response has no name.',
+      EXIT_CODES.usage,
+    );
+  }
+
+  const body = { name };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  } else if (existingProfile?.description != null) {
+    body.description = existingProfile.description;
+  }
+
+  const labels = {
+    ...(isObjectRecord(existingProfile?.labels) ? existingProfile.labels : {}),
+    ...parseKeyValueOptions(options, 'label'),
+  };
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+
+  const proxyUrl = getOption(options, 'proxy-url');
+  if (proxyUrl) {
+    body.proxy = { url: proxyUrl };
+  } else if (isObjectRecord(existingProfile?.proxy)) {
+    body.proxy = existingProfile.proxy;
+  }
+
+  const bypassRules = getOptions(options, 'bypass-rule')
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (bypassRules.length) {
+    body.bypass_rules = Array.from(new Set(bypassRules));
+  } else if (Array.isArray(existingProfile?.bypass_rules)) {
+    body.bypass_rules = existingProfile.bypass_rules;
+  }
+
+  const customCaRef = getOption(options, 'custom-ca-ref');
+  const customCaName = getOption(options, 'custom-ca-name');
+  if (customCaRef || customCaName) {
+    if (!customCaRef) {
+      throw new CliError('USAGE', '--custom-ca-name requires --custom-ca-ref.', EXIT_CODES.usage);
+    }
+    body.custom_ca = {
+      certificate_ref: customCaRef,
+      ...(customCaName ? { display_name: customCaName } : {}),
+    };
+  } else if (isObjectRecord(existingProfile?.custom_ca)) {
+    body.custom_ca = existingProfile.custom_ca;
+  }
+
+  const existingObservation = isObjectRecord(existingProfile?.traffic_observation)
+    ? existingProfile.traffic_observation
+    : null;
+  const trafficObservationMode = getOption(options, 'traffic-observation-mode');
+  const sensitiveLogSinkRef = getOption(options, 'sensitive-log-sink-ref');
+  const sensitiveLogSinkName = getOption(options, 'sensitive-log-sink-name');
+  if (trafficObservationMode || sensitiveLogSinkRef || sensitiveLogSinkName) {
+    const mode = trafficObservationMode ?? existingObservation?.mode ?? 'metadata_only';
+    if (!['metadata_only', 'tls_intercept'].includes(mode)) {
+      throw new CliError(
+        'USAGE',
+        '--traffic-observation-mode must be metadata_only or tls_intercept.',
+        EXIT_CODES.usage,
+      );
+    }
+    const sinkRef = sensitiveLogSinkRef ?? existingObservation?.sensitive_log_sink_ref ?? null;
+    const sinkName =
+      sensitiveLogSinkName ?? existingObservation?.sensitive_log_sink_display_name ?? null;
+    if (sensitiveLogSinkName && !sinkRef) {
+      throw new CliError('USAGE', '--sensitive-log-sink-name requires --sensitive-log-sink-ref.', EXIT_CODES.usage);
+    }
+    if (mode === 'tls_intercept') {
+      if (!body.proxy) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --proxy-url.', EXIT_CODES.usage);
+      }
+      if (!body.custom_ca) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --custom-ca-ref.', EXIT_CODES.usage);
+      }
+      if (!sinkRef) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --sensitive-log-sink-ref.', EXIT_CODES.usage);
+      }
+    }
+    body.traffic_observation = {
+      mode,
+      ...(sinkRef ? { sensitive_log_sink_ref: sinkRef } : {}),
+      ...(sinkName ? { sensitive_log_sink_display_name: sinkName } : {}),
+    };
+  } else if (existingObservation) {
+    body.traffic_observation = existingObservation;
+  }
+
+  const state = forcedState ?? getOption(options, 'state') ?? existingProfile?.state;
+  if (state) {
+    body.state = state;
+  }
+  return body;
+}
+
 function buildBrowserContextRequest(options, fallbackName = null, commandLabel = 'create') {
   const rawBody = parseJsonOption(options, 'body-json');
   if (rawBody !== null) {
@@ -1782,6 +1894,24 @@ async function handleEgressProfileCommand(config, positionals, options) {
   if (action === 'get') {
     const profileId = requiredEgressProfileId(positionals, 'egress-profile get');
     return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
+  }
+  if (action === 'update') {
+    const profileId = requiredEgressProfileId(positionals, 'egress-profile update');
+    const existingProfile = await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
+    return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildEgressProfileUpdateRequest(existingProfile, options)),
+    });
+  }
+  if (action === 'disable') {
+    const profileId = requiredEgressProfileId(positionals, 'egress-profile disable');
+    const existingProfile = await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
+    return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildEgressProfileUpdateRequest(existingProfile, options, 'disabled')),
+    });
   }
   throw new CliError(
     'USAGE',

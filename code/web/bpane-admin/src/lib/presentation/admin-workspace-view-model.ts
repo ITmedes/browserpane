@@ -1,6 +1,7 @@
 export type AdminFeaturePanelId =
   | 'sessions'
   | 'contexts'
+  | 'egress'
   | 'lifecycle'
   | 'display'
   | 'files'
@@ -38,6 +39,7 @@ export class AdminWorkspaceViewModelBuilder {
     readonly selectedSessionId: string | null;
     readonly sessionCount: number;
     readonly browserContextCount: number;
+    readonly egressProfileCount: number;
     readonly fileCount: number;
     readonly connected: boolean;
   }): AdminWorkspaceViewModel {
@@ -59,6 +61,12 @@ export class AdminWorkspaceViewModelBuilder {
           'Copy API examples',
           'Delete unused context',
         ], ['ready contexts', 'session references']),
+        panel('egress', 'Egress', 'Network identity and outbound paths', 'Manage approved proxy and TLS-intercept profiles before attaching them to sessions.', `${input.egressProfileCount} profiles`, true, [
+          'Create profile',
+          'Clone profile',
+          'Disable profile',
+          'Inspect diagnostics',
+        ], ['proxy state', 'TLS proof', 'log sink']),
         panel('lifecycle', 'Lifecycle', 'Runtime state, stop blockers, live clients', 'Inspect lifecycle safety before mutating a runtime.', input.connected ? 'busy' : 'ready', true, [
           'Refresh status',
           'Stop selected',

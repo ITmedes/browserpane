@@ -487,6 +487,33 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+    put:
+      tags: [Egress Profiles]
+      summary: Replace one owner-scoped egress profile
+      operationId: updateEgressProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEgressProfileRequest'
+      responses:
+        '200':
+          description: Updated egress profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressProfileResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/automation-tasks:
     get:
       tags: [Automation Tasks]

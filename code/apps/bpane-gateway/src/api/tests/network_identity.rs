@@ -218,6 +218,89 @@ async fn manages_egress_profiles_and_session_network_identity() {
     let fetched_profile = response_json(get_profile_response).await;
     assert_eq!(fetched_profile["id"], profile_id);
 
+    let update_profile_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/egress-profiles/{profile_id}"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "eu-support-egress-v2",
+                        "description": "Updated support EU egress",
+                        "labels": { "region": "eu", "managed": "true" },
+                        "proxy": { "url": "https://proxy.example:8443" },
+                        "bypass_rules": ["localhost", "*.internal.example"],
+                        "custom_ca": {
+                            "certificate_ref": "file:///workspace/dev/egress-ca.pem",
+                            "display_name": "EU support CA"
+                        },
+                        "traffic_observation": {
+                            "mode": "tls_intercept",
+                            "sensitive_log_sink_ref": "siem://browserpane/eu-support",
+                            "sensitive_log_sink_display_name": "EU support SIEM"
+                        },
+                        "state": "ready"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(update_profile_response.status(), StatusCode::OK);
+    let updated_profile = response_json(update_profile_response).await;
+    assert_eq!(updated_profile["id"], profile_id);
+    assert_eq!(updated_profile["name"], "eu-support-egress-v2");
+    assert_eq!(updated_profile["labels"]["managed"], "true");
+    assert_eq!(
+        updated_profile["effective"]["tls_interception_enabled"],
+        true
+    );
+
+    let missing_update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/egress-profiles/{}", Uuid::now_v7()))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "missing-egress"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_update_response.status(), StatusCode::NOT_FOUND);
+
+    let invalid_update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/egress-profiles/{profile_id}"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "bad-update",
+                        "proxy": { "url": "http://user:pass@proxy.example:3128" }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_update_response.status(), StatusCode::BAD_REQUEST);
+
     let create_template_response = app
         .clone()
         .oneshot(
@@ -296,7 +379,7 @@ async fn manages_egress_profiles_and_session_network_identity() {
     assert_eq!(session["effective_egress"]["profile_id"], profile_id);
     assert_eq!(
         session["effective_egress"]["profile_name"],
-        "eu-support-egress"
+        "eu-support-egress-v2"
     );
     assert_eq!(session["effective_egress"]["bypass_rule_count"], 2);
     assert_eq!(
@@ -326,7 +409,7 @@ async fn manages_egress_profiles_and_session_network_identity() {
     assert_eq!(status["network_identity"]["timezone"], "UTC");
     assert_eq!(
         status["effective_egress"]["profile_name"],
-        "eu-support-egress"
+        "eu-support-egress-v2"
     );
     assert_eq!(status["effective_egress"]["tls_interception_enabled"], true);
 
