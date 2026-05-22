@@ -8,6 +8,7 @@ describe('AdminWorkspaceViewModelBuilder', () => {
       selectedSessionId: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
       sessionCount: 2,
       browserContextCount: 1,
+      egressProfileCount: 2,
       fileCount: 1,
       connected: true,
     });
@@ -16,6 +17,7 @@ describe('AdminWorkspaceViewModelBuilder', () => {
     expect(viewModel.panels.map((panel) => panel.id)).toEqual([
       'sessions',
       'contexts',
+      'egress',
       'lifecycle',
       'display',
       'files',
@@ -33,6 +35,7 @@ describe('AdminWorkspaceViewModelBuilder', () => {
       selectedSessionId: null,
       sessionCount: 0,
       browserContextCount: 0,
+      egressProfileCount: 0,
       fileCount: 0,
       connected: false,
     });
@@ -40,6 +43,7 @@ describe('AdminWorkspaceViewModelBuilder', () => {
     expect(viewModel.panels.filter((panel) => panel.implemented).map((panel) => panel.id)).toEqual([
       'sessions',
       'contexts',
+      'egress',
       'lifecycle',
       'display',
       'files',

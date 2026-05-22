@@ -211,6 +211,27 @@ impl SessionStore {
         }
     }
 
+    pub async fn update_egress_profile_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistEgressProfileRequest,
+    ) -> Result<Option<StoredEgressProfile>, SessionStoreError> {
+        validate_egress_profile_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .update_egress_profile_for_owner(principal, id, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .update_egress_profile_for_owner(principal, id, request)
+                    .await
+            }
+        }
+    }
+
     pub async fn create_file_workspace(
         &self,
         principal: &AuthenticatedPrincipal,

@@ -7,6 +7,7 @@
     FolderOpen,
     Gauge,
     MonitorCog,
+    Network,
     Radio,
     ScrollText,
     Video,
@@ -16,6 +17,7 @@
     BrowserContextResource,
     CloneBrowserContextCommand,
     CreateBrowserContextCommand,
+    CreateEgressProfileCommand,
     CreateSessionCommand,
     EgressProfileResource,
     ImportBrowserContextCommand,
@@ -38,6 +40,7 @@
   import type { BrowserSessionConnectPreferences, LiveBrowserSessionConnection } from '../session/browser-session-types';
   import BrowserPolicySurface from './BrowserPolicySurface.svelte';
   import BrowserContextCatalogPanel from '../presentation/BrowserContextCatalogPanel.svelte';
+  import EgressProfileCatalogPanel from '../presentation/EgressProfileCatalogPanel.svelte';
   import DisplayControlsSurface from './DisplayControlsSurface.svelte';
   import LiveSessionActionsSurface from './LiveSessionActionsSurface.svelte';
   import LogsSurface from './LogsSurface.svelte';
@@ -78,8 +81,11 @@
     readonly mcpDelegationRefreshVersion: number;
     readonly onRefreshSessions: (showFeedback?: boolean) => Promise<void>;
     readonly onRefreshBrowserContexts: (showFeedback?: boolean) => Promise<void>;
+    readonly onRefreshEgressProfiles: (showFeedback?: boolean) => Promise<void>;
     readonly onCreateSession: (command?: CreateSessionCommand) => void;
     readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
+    readonly onCreateEgressProfile?: (command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void>;
+    readonly onUpdateEgressProfile?: (profileId: string, command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void>;
     readonly onCloneBrowserContext?: (contextId: string, command: CloneBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onExportBrowserContext?: (contextId: string) => Promise<void>;
     readonly onImportBrowserContext?: (command: ImportBrowserContextCommand) => Promise<BrowserContextResource | void>;
@@ -116,6 +122,7 @@
     metrics: Gauge,
     logs: ScrollText,
     contexts: Database,
+    egress: Network,
   } satisfies Record<AdminFeaturePanelId, typeof Activity>;
 </script>
 
@@ -217,6 +224,15 @@
           onExportContext={(contextId) => props.onExportBrowserContext?.(contextId)}
           onImportContext={(command) => props.onImportBrowserContext?.(command)}
           onDeleteContext={(contextId) => void props.onDeleteBrowserContext?.(contextId)}
+        />
+      {:else if activePanel.id === 'egress'}
+        <EgressProfileCatalogPanel
+          profiles={props.egressProfiles ?? []}
+          loading={props.egressProfilesLoading ?? false}
+          error={props.egressProfileError ?? null}
+          onRefresh={() => void props.onRefreshEgressProfiles(true)}
+          onCreateProfile={props.onCreateEgressProfile}
+          onUpdateProfile={props.onUpdateEgressProfile}
         />
       {:else if activePanel.id === 'lifecycle'}
         <SessionLifecycleSurface

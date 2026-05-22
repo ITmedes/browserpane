@@ -550,6 +550,8 @@ Common egress-profile operations:
   --custom-ca-name "EU support CA"
 ./scripts/bpane egress-profile list
 ./scripts/bpane egress-profile get <egress-profile-id>
+./scripts/bpane egress-profile update <egress-profile-id> --name eu-support-egress-v2 --label managed=true
+./scripts/bpane egress-profile disable <egress-profile-id>
 ```
 
 For a proxy that performs approved TLS interception, make that explicit and
@@ -605,6 +607,16 @@ it loads the egress catalog: `Local: Egress as Proxy` and `Local: Egress as TLS
 Interceptor`. The session configurator groups egress choices as `No egress`,
 `Egress as Proxy`, and `Egress as TLS Interceptor` so local testers can compare
 all three modes.
+
+The admin Operations Overlay also includes an egress profile catalog for
+creating, cloning, editing, and disabling approved outbound profiles. The
+catalog shows sanitized proxy, TLS-inspection, custom-CA, and log-sink status;
+active proxy reachability and TLS issuer proof are still tracked as a production
+hardening follow-up.
+
+```bash
+cd code/web/bpane-client && npm run smoke:admin-egress-profiles -- --headless
+```
 
 Common browser-context operations:
 

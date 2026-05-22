@@ -12,6 +12,7 @@
     BrowserContextResource,
     CloneBrowserContextCommand,
     CreateBrowserContextCommand,
+    CreateEgressProfileCommand,
     CreateSessionCommand,
     EgressProfileResource,
     ImportBrowserContextCommand,
@@ -103,6 +104,7 @@
   const workspaceViewModel = $derived(AdminWorkspaceViewModelBuilder.build({
     browserStatus, selectedSessionId: selectedSession?.id ?? null,
     sessionCount: sessions.length, browserContextCount: browserContexts.length,
+    egressProfileCount: egressProfiles.length,
     fileCount: sessionFileCount, connected: browserConnected,
   }));
   const sessionListViewModel = $derived(SessionViewModelBuilder.list({
@@ -204,6 +206,40 @@
     } catch (error) {
       egressProfileError = errorMessage(error);
       showGlobalMessage('warning', 'Egress profiles unavailable', egressProfileError);
+    } finally {
+      egressProfilesLoading = false;
+    }
+  }
+  async function createEgressProfile(command: CreateEgressProfileCommand): Promise<EgressProfileResource> {
+    egressProfilesLoading = true;
+    egressProfileError = null;
+    try {
+      const created = await controlClient.createEgressProfile(command);
+      egressProfiles = [created, ...egressProfiles.filter((profile) => profile.id !== created.id)];
+      showGlobalMessage('success', 'Egress profile created', `Created egress profile ${created.name}.`);
+      return created;
+    } catch (error) {
+      egressProfileError = errorMessage(error);
+      showGlobalMessage('error', 'Egress profile create failed', egressProfileError);
+      throw error;
+    } finally {
+      egressProfilesLoading = false;
+    }
+  }
+  async function updateEgressProfile(profileId: string, command: CreateEgressProfileCommand): Promise<EgressProfileResource> {
+    egressProfilesLoading = true;
+    egressProfileError = null;
+    try {
+      const updated = await controlClient.updateEgressProfile(profileId, command);
+      egressProfiles = egressProfiles.some((profile) => profile.id === updated.id)
+        ? egressProfiles.map((profile) => profile.id === updated.id ? updated : profile)
+        : [updated, ...egressProfiles];
+      showGlobalMessage('success', 'Egress profile updated', `Updated egress profile ${updated.name}.`);
+      return updated;
+    } catch (error) {
+      egressProfileError = errorMessage(error);
+      showGlobalMessage('error', 'Egress profile update failed', egressProfileError);
+      throw error;
     } finally {
       egressProfilesLoading = false;
     }
@@ -525,11 +561,14 @@
       {sessionFilesRefreshVersion} {recordingsRefreshVersion} {mcpDelegationRefreshVersion} onRefreshSessions={loadSessions}
       onCreateSession={(command) => void createSession(command)} onJoinSelectedSession={requestBrowserConnect}
       onCreateBrowserContext={createBrowserContext}
+      onCreateEgressProfile={createEgressProfile}
+      onUpdateEgressProfile={updateEgressProfile}
       onCloneBrowserContext={cloneBrowserContext}
       onExportBrowserContext={exportBrowserContext}
       onImportBrowserContext={importBrowserContext}
       {importingBrowserContext}
       onRefreshBrowserContexts={loadBrowserContexts}
+      onRefreshEgressProfiles={loadEgressProfiles}
       onDeleteBrowserContext={deleteBrowserContext}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
       onReleaseSessionRuntime={() => runLifecycle('release')}

@@ -53,6 +53,17 @@ impl PostgresSessionStore {
             .get_egress_profile_for_owner(principal, id)
             .await
     }
+
+    pub(in crate::session_control) async fn update_egress_profile_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistEgressProfileRequest,
+    ) -> Result<Option<StoredEgressProfile>, SessionStoreError> {
+        self.egress_profile_repository()
+            .update_egress_profile_for_owner(principal, id, request)
+            .await
+    }
 }
 
 impl EgressProfileRepository<'_> {
@@ -192,6 +203,88 @@ impl EgressProfileRepository<'_> {
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to fetch egress profile: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_egress_profile).transpose()
+    }
+
+    async fn update_egress_profile_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistEgressProfileRequest,
+    ) -> Result<Option<StoredEgressProfile>, SessionStoreError> {
+        let proxy_value = request
+            .proxy
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to encode egress proxy: {error}"))
+            })?;
+        let custom_ca_value = request
+            .custom_ca
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to encode egress custom_ca: {error}"))
+            })?;
+        let traffic_observation_value = serde_json::to_value(&request.traffic_observation)
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to encode egress traffic_observation: {error}"
+                ))
+            })?;
+        let query = format!(
+            r#"
+            UPDATE control_egress_profiles
+            SET
+                name = $4,
+                description = $5,
+                labels = $6::jsonb,
+                proxy = $7::jsonb,
+                bypass_rules = $8::jsonb,
+                custom_ca = $9::jsonb,
+                traffic_observation = $10::jsonb,
+                state = $11,
+                updated_at = NOW()
+            WHERE id = $1
+              AND owner_subject = $2
+              AND owner_issuer = $3
+            RETURNING
+                {EGRESS_PROFILE_COLUMNS}
+            "#
+        );
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                &query,
+                &[
+                    &id,
+                    &principal.subject,
+                    &principal.issuer,
+                    &request.name,
+                    &request.description,
+                    &json_labels(&request.labels),
+                    &proxy_value,
+                    &json_string_array(&request.bypass_rules),
+                    &custom_ca_value,
+                    &traffic_observation_value,
+                    &request.state.as_str(),
+                ],
+            )
+            .await
+            .map_err(|error| {
+                if error.code().is_some_and(|code| code.code() == "23505") {
+                    return SessionStoreError::Conflict(format!(
+                        "egress profile {} already exists",
+                        request.name
+                    ));
+                }
+                SessionStoreError::Backend(format!("failed to update egress profile: {error}"))
             })?;
         row.as_ref().map(row_to_stored_egress_profile).transpose()
     }

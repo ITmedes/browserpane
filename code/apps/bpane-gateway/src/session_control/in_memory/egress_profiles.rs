@@ -74,4 +74,42 @@ impl InMemorySessionStore {
             })
             .cloned())
     }
+
+    pub(in crate::session_control) async fn update_egress_profile_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistEgressProfileRequest,
+    ) -> Result<Option<StoredEgressProfile>, SessionStoreError> {
+        let mut profiles = self.egress_profiles.lock().await;
+        if profiles.iter().any(|profile| {
+            profile.id != id
+                && profile.owner_subject == principal.subject
+                && profile.owner_issuer == principal.issuer
+                && profile.name == request.name
+        }) {
+            return Err(SessionStoreError::Conflict(format!(
+                "egress profile {} already exists",
+                request.name
+            )));
+        }
+        let Some(profile) = profiles.iter_mut().find(|profile| {
+            profile.id == id
+                && profile.owner_subject == principal.subject
+                && profile.owner_issuer == principal.issuer
+        }) else {
+            return Ok(None);
+        };
+
+        profile.name = request.name;
+        profile.description = request.description;
+        profile.labels = request.labels;
+        profile.proxy = request.proxy;
+        profile.bypass_rules = request.bypass_rules;
+        profile.custom_ca = request.custom_ca;
+        profile.traffic_observation = request.traffic_observation;
+        profile.state = request.state;
+        profile.updated_at = Utc::now();
+        Ok(Some(profile.clone()))
+    }
 }

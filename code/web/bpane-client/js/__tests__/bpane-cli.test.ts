@@ -1000,6 +1000,26 @@ describe('bpane operator CLI', () => {
       jsonResponse({ id: 'egress-1', name: 'eu-support-egress' }, 201),
       jsonResponse({ profiles: [{ id: 'egress-1' }] }),
       jsonResponse({ id: 'egress-1', name: 'eu-support-egress' }),
+      jsonResponse({
+        id: 'egress-1',
+        name: 'eu-support-egress',
+        description: 'EU support outbound path',
+        labels: { region: 'eu' },
+        proxy: { url: 'https://proxy.example:8443' },
+        bypass_rules: ['localhost'],
+        traffic_observation: { mode: 'metadata_only' },
+        state: 'ready',
+      }),
+      jsonResponse({ id: 'egress-1', name: 'eu-support-egress-v2', state: 'ready' }),
+      jsonResponse({
+        id: 'egress-1',
+        name: 'eu-support-egress-v2',
+        proxy: { url: 'https://proxy.example:8443' },
+        bypass_rules: ['localhost', '*.internal.example'],
+        traffic_observation: { mode: 'metadata_only' },
+        state: 'ready',
+      }),
+      jsonResponse({ id: 'egress-1', name: 'eu-support-egress-v2', state: 'disabled' }),
     );
 
     const createCode = await runBpaneCli(
@@ -1072,6 +1092,54 @@ describe('bpane operator CLI', () => {
     );
     expect(getCode).toBe(EXIT_CODES.ok);
     expect(calls[2].url).toBe('http://localhost:8080/api/v1/egress-profiles/egress%2Fwith%20space');
+
+    const updateIo = createIo();
+    const updateCode = await runBpaneCli(
+      [
+        'egress-profile',
+        'update',
+        'egress-1',
+        '--name',
+        'eu-support-egress-v2',
+        '--label',
+        'managed=true',
+        '--bypass-rule',
+        'localhost,*.internal.example',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      updateIo.io,
+      fetchImpl,
+    );
+    expect(updateCode).toBe(EXIT_CODES.ok);
+    expect(calls[3].url).toBe('http://localhost:8080/api/v1/egress-profiles/egress-1');
+    expect(calls[4].url).toBe('http://localhost:8080/api/v1/egress-profiles/egress-1');
+    expect(calls[4].init.method).toBe('PUT');
+    expect(JSON.parse(calls[4].init.body)).toEqual({
+      name: 'eu-support-egress-v2',
+      description: 'EU support outbound path',
+      labels: { region: 'eu', managed: 'true' },
+      proxy: { url: 'https://proxy.example:8443' },
+      bypass_rules: ['localhost', '*.internal.example'],
+      traffic_observation: { mode: 'metadata_only' },
+      state: 'ready',
+    });
+
+    const disableIo = createIo();
+    const disableCode = await runBpaneCli(
+      ['egress-profile', 'disable', 'egress-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      disableIo.io,
+      fetchImpl,
+    );
+    expect(disableCode).toBe(EXIT_CODES.ok);
+    expect(calls[6].init.method).toBe('PUT');
+    expect(JSON.parse(calls[6].init.body)).toEqual({
+      name: 'eu-support-egress-v2',
+      proxy: { url: 'https://proxy.example:8443' },
+      bypass_rules: ['localhost', '*.internal.example'],
+      traffic_observation: { mode: 'metadata_only' },
+      state: 'disabled',
+    });
   });
 
   it('preserves equals signs in inline option values', async () => {
