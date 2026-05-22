@@ -12,7 +12,10 @@ const PROFILE: EgressProfileResource = {
   name: 'EU support egress',
   description: 'Support outbound path',
   labels: { region: 'eu' },
-  proxy: { url: 'http://proxy.example:3128' },
+  proxy: {
+    url: 'http://proxy.example:3128',
+    credential_binding_id: '019e4faf-5171-75c3-9927-28fa1c982aa1',
+  },
   bypass_rules: ['localhost'],
   custom_ca: {
     certificate_ref: 'file:///workspace/dev/egress-ca.pem',
@@ -26,6 +29,7 @@ const PROFILE: EgressProfileResource = {
   state: 'ready',
   effective: {
     proxy_configured: true,
+    proxy_auth_configured: true,
     bypass_rule_count: 1,
     custom_ca_configured: true,
     observation_mode: 'tls_intercept',
@@ -42,6 +46,7 @@ const PROFILE: EgressProfileResource = {
     runtime_binding: null,
     runtime_assignment: null,
     proxy_configured: true,
+    proxy_auth_configured: true,
     bypass_rule_count: 1,
     custom_ca_configured: true,
     tls_interception_enabled: true,
@@ -81,7 +86,7 @@ describe('egress profile catalog helpers', () => {
       kind: 'tls',
       health: 'ready',
       proofLevel: 'configuration',
-      badges: ['proxy', 'TLS inspect', 'custom CA', 'log sink', 'config proof'],
+      badges: ['proxy', 'proxy auth', 'TLS inspect', 'custom CA', 'log sink', 'config proof'],
     });
   });
 
@@ -91,6 +96,7 @@ describe('egress profile catalog helpers', () => {
       description: 'Local interception profile',
       labels: 'browserpane.local=true\nregion=local',
       proxyUrl: 'http://bpane-egress-tls-observer:3129',
+      proxyCredentialBindingId: '019e4faf-5171-75c3-9927-28fa1c982aa1',
       bypassRules: 'localhost,*.local',
       customCaRef: 'file:///workspace/dev/egress-ca.pem',
       customCaName: 'Local CA',
@@ -105,7 +111,10 @@ describe('egress profile catalog helpers', () => {
       command: {
         name: 'Local TLS',
         labels: { 'browserpane.local': 'true', region: 'local' },
-        proxy: { url: 'http://bpane-egress-tls-observer:3129' },
+        proxy: {
+          url: 'http://bpane-egress-tls-observer:3129',
+          credential_binding_id: '019e4faf-5171-75c3-9927-28fa1c982aa1',
+        },
         bypass_rules: ['localhost', '*.local'],
         custom_ca: {
           certificate_ref: 'file:///workspace/dev/egress-ca.pem',
@@ -126,6 +135,7 @@ describe('egress profile catalog helpers', () => {
       description: '',
       labels: '',
       proxyUrl: 'http://proxy.example:3128',
+      proxyCredentialBindingId: '',
       bypassRules: '',
       customCaRef: '',
       customCaName: '',

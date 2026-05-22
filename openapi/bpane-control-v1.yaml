@@ -5216,6 +5216,11 @@ components:
           type: string
           format: uri
           description: HTTP or HTTPS proxy URL. Inline credentials are rejected by the API.
+        credential_binding_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Owner-scoped credential binding whose secret payload contains proxy auth `username` and `password`; the API stores only this reference.
     EgressCustomCaConfig:
       type: object
       additionalProperties: false
@@ -5247,6 +5252,7 @@ components:
       type: object
       required:
         - proxy_configured
+        - proxy_auth_configured
         - bypass_rule_count
         - custom_ca_configured
         - observation_mode
@@ -5255,6 +5261,9 @@ components:
       properties:
         proxy_configured:
           type: boolean
+        proxy_auth_configured:
+          type: boolean
+          description: True when the proxy uses a secret-backed credential binding for proxy authentication.
         bypass_rule_count:
           type: integer
           minimum: 0
@@ -5355,6 +5364,7 @@ components:
         - runtime_binding
         - runtime_assignment
         - proxy_configured
+        - proxy_auth_configured
         - bypass_rule_count
         - custom_ca_configured
         - tls_interception_enabled
@@ -5388,6 +5398,8 @@ components:
           nullable: true
           description: Runtime assignment status such as `starting` or `ready` when a session runtime exists.
         proxy_configured:
+          type: boolean
+        proxy_auth_configured:
           type: boolean
         bypass_rule_count:
           type: integer
@@ -5438,6 +5450,7 @@ components:
         - profile_name
         - profile_state
         - proxy_configured
+        - proxy_auth_configured
         - bypass_rule_count
         - custom_ca_configured
         - observation_mode
@@ -5456,6 +5469,8 @@ components:
             - $ref: '#/components/schemas/EgressProfileState'
           nullable: true
         proxy_configured:
+          type: boolean
+        proxy_auth_configured:
           type: boolean
         bypass_rule_count:
           type: integer

@@ -49,6 +49,7 @@ const EGRESS_PROFILE = {
   state: 'ready',
   effective: {
     proxy_configured: true,
+    proxy_auth_configured: false,
     bypass_rule_count: 2,
     custom_ca_configured: true,
     observation_mode: 'tls_intercept',
@@ -65,6 +66,7 @@ const EGRESS_PROFILE = {
     runtime_binding: null,
     runtime_assignment: null,
     proxy_configured: true,
+    proxy_auth_configured: false,
     bypass_rule_count: 2,
     custom_ca_configured: true,
     tls_interception_enabled: true,
@@ -392,6 +394,7 @@ describe('session create configurator', () => {
       traffic_observation: { mode: 'metadata_only' },
       effective: {
         proxy_configured: true,
+        proxy_auth_configured: false,
         bypass_rule_count: 1,
         custom_ca_configured: false,
         observation_mode: 'metadata_only',

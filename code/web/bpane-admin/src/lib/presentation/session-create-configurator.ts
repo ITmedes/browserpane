@@ -456,6 +456,7 @@ export function egressProfileOptionLabel(profile: EgressProfileResource): string
   const signals = [
     profile.state,
     profile.effective.proxy_configured ? 'proxy' : null,
+    profile.effective.proxy_auth_configured ? 'proxy auth' : null,
     profile.effective.tls_interception_enabled ? 'TLS inspect' : null,
     profile.effective.sensitive_log_sink_configured ? 'log sink' : null,
     profile.effective.custom_ca_configured ? 'custom CA' : null,

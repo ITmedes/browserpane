@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use super::*;
 use crate::auth::AuthenticatedPrincipal;
+use crate::credentials::CredentialProvider;
 use crate::session_control::{
     EgressProfileState, EgressTrafficObservationMode, SessionBrowserContextMode,
     StoredEgressProfile, StoredSession,
@@ -27,6 +28,7 @@ pub(super) struct DockerRuntimeManager {
     pub(super) profile: RuntimeProfile,
     pub(super) leases: Mutex<HashMap<Uuid, DockerLeaseState>>,
     pub(super) session_store: Mutex<Option<SessionStore>>,
+    pub(super) credential_provider: Mutex<Option<Arc<CredentialProvider>>>,
     pub(super) workspace_file_store: Mutex<Option<Arc<WorkspaceFileStore>>>,
 }
 
@@ -134,6 +136,7 @@ impl DockerRuntimeManager {
             profile,
             leases: Mutex::new(HashMap::new()),
             session_store: Mutex::new(None),
+            credential_provider: Mutex::new(None),
             workspace_file_store: Mutex::new(None),
         })
     }
@@ -144,6 +147,17 @@ impl DockerRuntimeManager {
 
     async fn session_store(&self) -> Option<SessionStore> {
         self.session_store.lock().await.clone()
+    }
+
+    pub(super) async fn attach_credential_provider(
+        &self,
+        provider: Option<Arc<CredentialProvider>>,
+    ) {
+        *self.credential_provider.lock().await = provider;
+    }
+
+    async fn credential_provider(&self) -> Option<Arc<CredentialProvider>> {
+        self.credential_provider.lock().await.clone()
     }
 
     pub(super) async fn attach_workspace_file_store(&self, store: Arc<WorkspaceFileStore>) {

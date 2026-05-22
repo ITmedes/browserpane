@@ -10,6 +10,7 @@ export type EgressProfileFormInput = {
   readonly description: string;
   readonly labels: string;
   readonly proxyUrl: string;
+  readonly proxyCredentialBindingId: string;
   readonly bypassRules: string;
   readonly customCaRef: string;
   readonly customCaName: string;
@@ -79,6 +80,7 @@ export function emptyEgressProfileForm(): EgressProfileFormInput {
     description: '',
     labels: '',
     proxyUrl: '',
+    proxyCredentialBindingId: '',
     bypassRules: '',
     customCaRef: '',
     customCaName: '',
@@ -100,6 +102,7 @@ export function formFromEgressProfile(
       .map(([key, value]) => `${key}=${value}`)
       .join('\n'),
     proxyUrl: profile.proxy?.url ?? '',
+    proxyCredentialBindingId: profile.proxy?.credential_binding_id ?? '',
     bypassRules: profile.bypass_rules.join('\n'),
     customCaRef: profile.custom_ca?.certificate_ref ?? '',
     customCaName: profile.custom_ca?.display_name ?? '',
@@ -122,6 +125,7 @@ export function buildEgressProfileCommand(input: EgressProfileFormInput): Egress
   }
 
   const proxyUrl = input.proxyUrl.trim();
+  const proxyCredentialBindingId = input.proxyCredentialBindingId.trim();
   const customCaRef = input.customCaRef.trim();
   const customCaName = input.customCaName.trim();
   const sensitiveLogSinkRef = input.sensitiveLogSinkRef.trim();
@@ -143,13 +147,22 @@ export function buildEgressProfileCommand(input: EgressProfileFormInput): Egress
       return { ok: false, error: 'TLS interception requires a sensitive log-sink reference.' };
     }
   }
+  if (proxyCredentialBindingId && !proxyUrl) {
+    return { ok: false, error: 'Proxy auth binding requires a proxy URL.' };
+  }
 
   const description = input.description.trim();
+  const proxy = proxyUrl
+    ? {
+        url: proxyUrl,
+        ...(proxyCredentialBindingId ? { credential_binding_id: proxyCredentialBindingId } : {}),
+      }
+    : null;
   const command: CreateEgressProfileCommand = {
     name,
     ...(description ? { description } : {}),
     labels: labels.value,
-    ...(proxyUrl ? { proxy: { url: proxyUrl } } : {}),
+    ...(proxy ? { proxy } : {}),
     bypass_rules: splitList(input.bypassRules),
     ...(customCaRef
       ? {
@@ -188,6 +201,7 @@ export function commandFromEgressProfile(
 export function egressProfileBadges(profile: EgressProfileResource): readonly string[] {
   return [
     profile.effective.proxy_configured ? 'proxy' : 'direct',
+    profile.effective.proxy_auth_configured ? 'proxy auth' : null,
     profile.effective.tls_interception_enabled ? 'TLS inspect' : null,
     profile.effective.custom_ca_configured ? 'custom CA' : null,
     profile.effective.sensitive_log_sink_configured ? 'log sink' : null,

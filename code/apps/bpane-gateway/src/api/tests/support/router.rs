@@ -241,6 +241,10 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
     session_manager
         .attach_session_store(session_store.clone())
         .await;
+    let credential_provider = test_credential_provider();
+    session_manager
+        .attach_credential_provider(Some(credential_provider.clone()))
+        .await;
     let state = Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
@@ -254,7 +258,7 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
         )),
         session_store,
         session_manager,
-        credential_provider: Some(test_credential_provider()),
+        credential_provider: Some(credential_provider),
         recording_artifact_store: test_artifact_store(),
         workspace_file_store: test_workspace_file_store(),
         workflow_source_resolver: test_workflow_source_resolver(),

@@ -324,10 +324,11 @@ Network identity metadata lets callers declare locale, language preferences,
 timezone, geolocation, browser identity, user-agent override, and an
 `egress_profile_id` on either a session template or an explicit session create
 payload. Egress profiles are owner-scoped resources with safe proxy metadata,
-bypass rules, custom CA references, state, labels, and sanitized effective
-status; session resources, `/status`, and `/egress-diagnostics` include the
-inherited network identity, effective egress summary, and sanitized diagnostics
-without embedding proxy credentials or raw CA material. Diagnostics distinguish
+bypass rules, optional credential-binding references for proxy auth, custom CA
+references, state, labels, and sanitized effective status; session resources,
+`/status`, and `/egress-diagnostics` include the inherited network identity,
+effective egress summary, and sanitized diagnostics without embedding proxy
+credentials or raw CA material. Diagnostics distinguish
 configuration-only evidence, runtime launch metadata, and the latest active
 browser probe. The active probe runs only against an already-ready session
 runtime and stores sanitized public-IP, TLS issuer, and failure summary fields;
@@ -346,7 +347,10 @@ enable decrypted traffic logging without an approved SIEM/log-storage target.
 Docker-backed runtimes materialize `file://` or absolute-path custom CA bundle
 references into the session data volume and install them into Chromium's NSS
 trust store before launch; non-file CA providers remain a provider-integration
-follow-up.
+follow-up. If `proxy.credential_binding_id` is set, the gateway resolves the
+owner-visible credential binding through the configured secret provider at
+runtime launch and writes only a session-local proxy-auth file; credentials are
+not embedded in proxy URLs, API responses, Docker labels, or normal logs.
 Browser context resources let callers name owner-scoped Chromium profile
 contexts and bind new sessions with `browser_context.mode=reusable` plus a
 `context_id`. Docker-backed runtimes materialize reusable contexts as a
@@ -553,6 +557,7 @@ Common egress-profile operations:
   --description "Approved support outbound path" \
   --label region=eu \
   --proxy-url https://proxy.example:8443 \
+  --proxy-credential-binding-id <credential-binding-id> \
   --bypass-rule localhost \
   --bypass-rule "*.internal.example" \
   --custom-ca-ref vault://pki/browserpane/eu-support \
@@ -565,6 +570,9 @@ Common egress-profile operations:
 ./scripts/bpane session egress-diagnostics <session-id>
 ./scripts/bpane session egress-diagnostics probe <session-id>
 ```
+
+Omit `--proxy-credential-binding-id` for proxies that do not require
+authentication.
 
 For a proxy that performs approved TLS interception, make that explicit and
 name the sensitive-log sink:
@@ -623,11 +631,12 @@ all three modes.
 The admin Operations Overlay also includes an egress profile catalog for
 creating, cloning, editing, and disabling approved outbound profiles. The
 catalog shows sanitized proxy, TLS-inspection, custom-CA, log-sink status, and
-diagnostics health. Session diagnostics move from configuration proof to runtime
-launch metadata once the selected profile has been applied to a live runtime,
-and to active-probe proof after the operator runs an egress probe from the live
-or detail session view. Run the probe after connecting or starting the session;
-otherwise diagnostics record a sanitized "runtime not ready" failure instead of
+proxy-auth binding status, plus diagnostics health. Session diagnostics move
+from configuration proof to runtime launch metadata once the selected profile
+has been applied to a live runtime, and to active-probe proof after the operator
+runs an egress probe from the live or detail session view. Run the probe after
+connecting or starting the session; otherwise diagnostics record a sanitized
+"runtime not ready" failure instead of
 launching a browser implicitly. The probe can optionally receive
 `public_ip_url`, `tls_probe_url`, and `timeout_ms` in the API or the matching
 CLI options `--probe-public-ip-url`, `--probe-tls-url`, and

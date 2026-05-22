@@ -50,6 +50,10 @@ impl GatewayApp {
         )
         .await?;
         let credential_provider = build_credential_provider(&config)?;
+        runtime_services
+            .session_manager
+            .attach_credential_provider(credential_provider.clone())
+            .await;
         let recording_services = RecordingServices::build(
             &config,
             auth_services.auth_validator.clone(),

@@ -108,6 +108,63 @@ async fn manages_egress_profiles_and_session_network_identity() {
         StatusCode::BAD_REQUEST
     );
 
+    let missing_proxy_auth_binding_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "missing-proxy-auth",
+                        "proxy": {
+                            "url": "https://proxy.example:8443",
+                            "credential_binding_id": Uuid::now_v7()
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        missing_proxy_auth_binding_response.status(),
+        StatusCode::NOT_FOUND
+    );
+
+    let proxy_auth_binding_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/credential-bindings")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "support-proxy-auth",
+                        "provider": "vault_kv_v2",
+                        "allowed_origins": ["https://proxy.example"],
+                        "injection_mode": "form_fill",
+                        "secret_payload": {
+                            "username": "proxy-user",
+                            "password": "proxy-pass"
+                        },
+                        "labels": { "purpose": "egress_proxy_auth" }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(proxy_auth_binding_response.status(), StatusCode::CREATED);
+    let proxy_auth_binding = response_json(proxy_auth_binding_response).await;
+    let proxy_auth_binding_id = proxy_auth_binding["id"].as_str().unwrap().to_string();
+
     let missing_profile_response = app
         .clone()
         .oneshot(
@@ -169,7 +226,10 @@ async fn manages_egress_profiles_and_session_network_identity() {
                         "name": "eu-support-egress",
                         "description": "Support EU egress",
                         "labels": { "region": "eu" },
-                        "proxy": { "url": "https://proxy.example:8443" },
+                        "proxy": {
+                            "url": "https://proxy.example:8443",
+                            "credential_binding_id": proxy_auth_binding_id.clone()
+                        },
                         "bypass_rules": ["localhost", "*.internal.example"],
                         "custom_ca": {
                             "certificate_ref": "file:///workspace/dev/egress-ca.pem",
@@ -193,6 +253,7 @@ async fn manages_egress_profiles_and_session_network_identity() {
     assert_eq!(profile["name"], "eu-support-egress");
     assert_eq!(profile["state"], "ready");
     assert_eq!(profile["effective"]["proxy_configured"], true);
+    assert_eq!(profile["effective"]["proxy_auth_configured"], true);
     assert_eq!(profile["effective"]["bypass_rule_count"], 2);
     assert_eq!(profile["effective"]["custom_ca_configured"], true);
     assert_eq!(profile["effective"]["observation_mode"], "tls_intercept");
@@ -201,6 +262,10 @@ async fn manages_egress_profiles_and_session_network_identity() {
     assert_eq!(
         profile["traffic_observation"]["sensitive_log_sink_ref"],
         "siem://browserpane/eu-support"
+    );
+    assert_eq!(
+        profile["proxy"]["credential_binding_id"],
+        proxy_auth_binding_id
     );
     assert_eq!(profile["diagnostics"]["health"], "ready");
     assert_eq!(profile["diagnostics"]["proof_level"], "configuration");
@@ -262,7 +327,10 @@ async fn manages_egress_profiles_and_session_network_identity() {
                         "name": "eu-support-egress-v2",
                         "description": "Updated support EU egress",
                         "labels": { "region": "eu", "managed": "true" },
-                        "proxy": { "url": "https://proxy.example:8443" },
+                        "proxy": {
+                            "url": "https://proxy.example:8443",
+                            "credential_binding_id": proxy_auth_binding_id.clone()
+                        },
                         "bypass_rules": ["localhost", "*.internal.example"],
                         "custom_ca": {
                             "certificate_ref": "file:///workspace/dev/egress-ca.pem",
@@ -421,7 +489,9 @@ async fn manages_egress_profiles_and_session_network_identity() {
         session["effective_egress"]["tls_interception_enabled"],
         true
     );
+    assert_eq!(session["effective_egress"]["proxy_auth_configured"], true);
     assert_eq!(session["egress_diagnostics"]["profile_id"], profile_id);
+    assert_eq!(session["egress_diagnostics"]["proxy_auth_configured"], true);
     assert_eq!(session["egress_diagnostics"]["health"], "unknown");
     assert_eq!(
         session["egress_diagnostics"]["runtime_binding"],
@@ -461,6 +531,7 @@ async fn manages_egress_profiles_and_session_network_identity() {
         "eu-support-egress-v2"
     );
     assert_eq!(status["effective_egress"]["tls_interception_enabled"], true);
+    assert_eq!(status["effective_egress"]["proxy_auth_configured"], true);
     assert_eq!(status["egress_diagnostics"]["profile_id"], profile_id);
     assert_eq!(status["egress_diagnostics"]["health"], "unknown");
 

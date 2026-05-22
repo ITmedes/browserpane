@@ -262,8 +262,13 @@ function toEgressProxyConfig(value: unknown): EgressProxyConfig | null | undefin
     return value;
   }
   const object = expectRecord(value, 'egress profile proxy');
+  const credentialBindingId = optionalString(
+    object.credential_binding_id,
+    'egress profile proxy credential_binding_id',
+  );
   return {
     url: expectString(object.url, 'egress profile proxy url'),
+    credential_binding_id: credentialBindingId ?? null,
   };
 }
 
@@ -315,6 +320,10 @@ function toEgressEffectiveStatus(value: unknown): EgressProfileEffectiveStatus {
     proxy_configured: expectBoolean(
       object.proxy_configured ?? false,
       'egress profile effective proxy_configured',
+    ),
+    proxy_auth_configured: expectBoolean(
+      object.proxy_auth_configured ?? false,
+      'egress profile effective proxy_auth_configured',
     ),
     bypass_rule_count: expectNumber(
       object.bypass_rule_count ?? 0,
@@ -390,6 +399,10 @@ function toEgressDiagnosticsResource(value: unknown): EgressDiagnosticsResource 
     runtime_binding: runtimeBinding ?? null,
     runtime_assignment: runtimeAssignment ?? null,
     proxy_configured: expectBoolean(object.proxy_configured ?? false, 'egress diagnostics proxy_configured'),
+    proxy_auth_configured: expectBoolean(
+      object.proxy_auth_configured ?? false,
+      'egress diagnostics proxy_auth_configured',
+    ),
     bypass_rule_count: expectNumber(object.bypass_rule_count ?? 0, 'egress diagnostics bypass_rule_count'),
     custom_ca_configured: expectBoolean(object.custom_ca_configured ?? false, 'egress diagnostics custom_ca_configured'),
     tls_interception_enabled: expectBoolean(
@@ -511,6 +524,10 @@ function toSessionEffectiveEgress(value: unknown): SessionEffectiveEgress {
     proxy_configured: expectBoolean(
       object.proxy_configured ?? false,
       'session effective_egress proxy_configured',
+    ),
+    proxy_auth_configured: expectBoolean(
+      object.proxy_auth_configured ?? false,
+      'session effective_egress proxy_auth_configured',
     ),
     bypass_rule_count: expectNumber(
       object.bypass_rule_count ?? 0,

@@ -189,6 +189,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
         labels: HashMap::from([("region".to_string(), "eu".to_string())]),
         proxy: Some(EgressProxyConfig {
             url: "https://proxy.example:8443".to_string(),
+            credential_binding_id: None,
         }),
         bypass_rules: vec!["localhost".to_string()],
         custom_ca: Some(EgressCustomCaConfig {
@@ -221,6 +222,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
             labels: HashMap::new(),
             proxy: Some(EgressProxyConfig {
                 url: "https://user:pass@proxy.example:8443".to_string(),
+                credential_binding_id: None,
             }),
             bypass_rules: Vec::new(),
             custom_ca: None,
@@ -246,6 +248,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
             labels: HashMap::new(),
             proxy: Some(EgressProxyConfig {
                 url: "https://proxy.example:8443".to_string(),
+                credential_binding_id: None,
             }),
             bypass_rules: Vec::new(),
             custom_ca: Some(EgressCustomCaConfig {

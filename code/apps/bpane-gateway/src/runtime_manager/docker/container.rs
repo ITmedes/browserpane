@@ -1,6 +1,9 @@
+use std::fmt;
 use std::path::Path;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio::process::Command;
 use tokio::time::{sleep, Instant};
 use tracing::info;
@@ -15,6 +18,7 @@ pub(in crate::runtime_manager) struct DockerNetworkIdentityLaunchOptions {
     pub(in crate::runtime_manager) egress_observer: Option<DockerEgressObserverLaunchSummary>,
     pub(in crate::runtime_manager) egress_custom_ca_ref: Option<String>,
     pub(in crate::runtime_manager) egress_custom_ca_path: Option<String>,
+    pub(in crate::runtime_manager) egress_proxy_auth: Option<DockerEgressProxyAuthMaterial>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,10 +27,34 @@ pub(in crate::runtime_manager) struct DockerEgressObserverLaunchSummary {
     pub(in crate::runtime_manager) profile_name: String,
     pub(in crate::runtime_manager) observation_mode: EgressTrafficObservationMode,
     pub(in crate::runtime_manager) proxy_configured: bool,
+    pub(in crate::runtime_manager) proxy_auth_configured: bool,
     pub(in crate::runtime_manager) bypass_rule_count: usize,
     pub(in crate::runtime_manager) custom_ca_configured: bool,
     pub(in crate::runtime_manager) tls_interception_enabled: bool,
     pub(in crate::runtime_manager) sensitive_log_sink_configured: bool,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(in crate::runtime_manager) struct DockerEgressProxyAuthMaterial {
+    pub(in crate::runtime_manager) binding_id: Uuid,
+    pub(in crate::runtime_manager) target_path: String,
+    pub(in crate::runtime_manager) payload: Vec<u8>,
+}
+
+impl fmt::Debug for DockerEgressProxyAuthMaterial {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DockerEgressProxyAuthMaterial")
+            .field("binding_id", &self.binding_id)
+            .field("target_path", &self.target_path)
+            .field("payload", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct EgressProxyAuthPayload {
+    username: String,
+    password: String,
 }
 
 impl DockerRuntimeManager {
@@ -141,6 +169,7 @@ impl DockerRuntimeManager {
         session: &StoredSession,
         egress_profile: Option<&StoredEgressProfile>,
         trusted_ca_bundle_path: &str,
+        proxy_auth_config_path: &str,
     ) -> DockerNetworkIdentityLaunchOptions {
         let mut env = Vec::new();
         let mut labels = Vec::new();
@@ -233,6 +262,11 @@ impl DockerRuntimeManager {
             );
             push_label(
                 &mut labels,
+                "browserpane.egress_proxy_auth_configured",
+                effective.proxy_auth_configured.to_string(),
+            );
+            push_label(
+                &mut labels,
                 "browserpane.egress_bypass_rule_count",
                 profile.bypass_rules.len().to_string(),
             );
@@ -256,6 +290,7 @@ impl DockerRuntimeManager {
                 profile_name: profile.name.clone(),
                 observation_mode: profile.traffic_observation.mode,
                 proxy_configured: profile.proxy.is_some(),
+                proxy_auth_configured: effective.proxy_auth_configured,
                 bypass_rule_count: profile.bypass_rules.len(),
                 custom_ca_configured: profile.custom_ca.is_some(),
                 tls_interception_enabled: effective.tls_interception_enabled,
@@ -263,6 +298,13 @@ impl DockerRuntimeManager {
             });
             if let Some(proxy) = &profile.proxy {
                 push_env(&mut env, "BPANE_CHROMIUM_PROXY_SERVER", proxy.url.clone());
+                if proxy.credential_binding_id.is_some() {
+                    push_env(
+                        &mut env,
+                        "BPANE_CHROMIUM_PROXY_AUTH_FILE",
+                        proxy_auth_config_path.to_string(),
+                    );
+                }
             }
             if !profile.bypass_rules.is_empty() {
                 push_env(
@@ -303,10 +345,11 @@ impl DockerRuntimeManager {
             egress_observer,
             egress_custom_ca_ref,
             egress_custom_ca_path,
+            egress_proxy_auth: None,
         }
     }
 
-    async fn session_network_identity_launch_options(
+    pub(in crate::runtime_manager) async fn session_network_identity_launch_options(
         &self,
         session_id: Uuid,
     ) -> Result<DockerNetworkIdentityLaunchOptions, RuntimeManagerError> {
@@ -322,13 +365,13 @@ impl DockerRuntimeManager {
                     "session {session_id} not found while resolving network identity launch options"
                 ))
             })?;
+        let principal = AuthenticatedPrincipal {
+            subject: session.owner.subject.clone(),
+            issuer: session.owner.issuer.clone(),
+            display_name: session.owner.display_name.clone(),
+            client_id: None,
+        };
         let egress_profile = if let Some(profile_id) = session.network_identity.egress_profile_id {
-            let principal = AuthenticatedPrincipal {
-                subject: session.owner.subject.clone(),
-                issuer: session.owner.issuer.clone(),
-                display_name: session.owner.display_name.clone(),
-                client_id: None,
-            };
             let profile = store
                 .get_egress_profile_for_owner(&principal, profile_id)
                 .await
@@ -348,15 +391,73 @@ impl DockerRuntimeManager {
             None
         };
 
-        Ok(Self::network_identity_launch_options(
+        let mut launch_options = Self::network_identity_launch_options(
             &session,
             egress_profile.as_ref(),
             &self.egress_custom_ca_bundle_path_for_session(),
-        ))
+            &self.egress_proxy_auth_config_path_for_session(),
+        );
+        if let Some(profile) = egress_profile.as_ref() {
+            launch_options.egress_proxy_auth = self
+                .resolve_egress_proxy_auth_material(&principal, profile)
+                .await?;
+        }
+        Ok(launch_options)
     }
 
     pub(in crate::runtime_manager) fn egress_custom_ca_bundle_path_for_session(&self) -> String {
         format!("{}/egress/custom-ca.pem", self.session_data_root())
+    }
+
+    pub(in crate::runtime_manager) fn egress_proxy_auth_config_path_for_session(&self) -> String {
+        format!("{}/egress/proxy-auth.json", self.session_data_root())
+    }
+
+    async fn resolve_egress_proxy_auth_material(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        profile: &StoredEgressProfile,
+    ) -> Result<Option<DockerEgressProxyAuthMaterial>, RuntimeManagerError> {
+        let Some(binding_id) = profile
+            .proxy
+            .as_ref()
+            .and_then(|proxy| proxy.credential_binding_id)
+        else {
+            return Ok(None);
+        };
+        let Some(store) = self.session_store().await else {
+            return Err(RuntimeManagerError::StartupFailed(
+                "egress proxy auth requires a session store".to_string(),
+            ));
+        };
+        let binding = store
+            .get_credential_binding_for_owner(principal, binding_id)
+            .await
+            .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?
+            .ok_or_else(|| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "egress proxy auth credential binding {binding_id} was not found"
+                ))
+            })?;
+        let provider = self.credential_provider().await.ok_or_else(|| {
+            RuntimeManagerError::StartupFailed(
+                "egress proxy auth requires a configured credential provider".to_string(),
+            )
+        })?;
+        let secret = provider
+            .resolve_secret(&binding.external_ref)
+            .await
+            .map_err(|error| {
+                RuntimeManagerError::StartupFailed(format!(
+                    "failed to resolve egress proxy auth credential binding {binding_id}: {error}"
+                ))
+            })?;
+        let payload = proxy_auth_payload_from_secret(secret.payload)?;
+        Ok(Some(DockerEgressProxyAuthMaterial {
+            binding_id,
+            target_path: self.egress_proxy_auth_config_path_for_session(),
+            payload,
+        }))
     }
 
     pub(super) async fn start_container(
@@ -378,6 +479,8 @@ impl DockerRuntimeManager {
         log_egress_observer_launch(lease, container_name, &launch_options);
         self.initialize_session_data_volume(lease).await?;
         self.materialize_egress_custom_ca_bundle(lease.session_id, &launch_options)
+            .await?;
+        self.materialize_egress_proxy_auth_config(lease.session_id, &launch_options)
             .await?;
         self.materialize_session_file_bindings(lease.session_id)
             .await?;
@@ -423,6 +526,18 @@ impl DockerRuntimeManager {
             )));
         }
         self.write_session_data_file(session_id, target_path, "0444", &bytes)
+            .await
+    }
+
+    async fn materialize_egress_proxy_auth_config(
+        &self,
+        session_id: Uuid,
+        launch_options: &DockerNetworkIdentityLaunchOptions,
+    ) -> Result<(), RuntimeManagerError> {
+        let Some(material) = launch_options.egress_proxy_auth.as_ref() else {
+            return Ok(());
+        };
+        self.write_session_data_file(session_id, &material.target_path, "0444", &material.payload)
             .await
     }
 
@@ -577,6 +692,7 @@ fn log_egress_observer_launch(
             egress_profile_name = %summary.profile_name,
             egress_observation_mode = summary.observation_mode.as_str(),
             egress_proxy_configured = summary.proxy_configured,
+            egress_proxy_auth_configured = summary.proxy_auth_configured,
             egress_bypass_rule_count = summary.bypass_rule_count,
             egress_custom_ca_configured = summary.custom_ca_configured,
             egress_tls_interception_enabled = summary.tls_interception_enabled,
@@ -584,6 +700,32 @@ fn log_egress_observer_launch(
             "starting docker runtime with egress observer correlation",
         );
     }
+}
+
+fn proxy_auth_payload_from_secret(payload: Value) -> Result<Vec<u8>, RuntimeManagerError> {
+    let payload: EgressProxyAuthPayload = serde_json::from_value(payload).map_err(|_| {
+        RuntimeManagerError::StartupFailed(
+            "egress proxy auth credential payload must include username and password strings"
+                .to_string(),
+        )
+    })?;
+    if payload.username.trim().is_empty() || payload.password.trim().is_empty() {
+        return Err(RuntimeManagerError::StartupFailed(
+            "egress proxy auth credential payload username and password must not be empty"
+                .to_string(),
+        ));
+    }
+    if payload.username.contains(['\r', '\n']) || payload.password.contains(['\r', '\n']) {
+        return Err(RuntimeManagerError::StartupFailed(
+            "egress proxy auth credential payload username and password must be single-line values"
+                .to_string(),
+        ));
+    }
+    serde_json::to_vec(&payload).map_err(|error| {
+        RuntimeManagerError::StartupFailed(format!(
+            "failed to encode egress proxy auth credential payload: {error}"
+        ))
+    })
 }
 
 async fn read_egress_custom_ca_bundle(
