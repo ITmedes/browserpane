@@ -45,15 +45,57 @@ async function run() {
       timeout: options.connectTimeoutMs,
     });
 
-    const proxyCredentialBinding = await createProxyCredentialBinding(accessToken, options, runLabel);
+    const authProxyCredentialBinding = await createProxyCredentialBinding(accessToken, options, {
+      name: `smoke-proxy-auth-${runLabel}`,
+      namespace: 'admin-egress-smoke',
+      allowedOrigins: ['http://bpane-egress-auth-observer:3130'],
+      password: 'proxy-pass',
+      runLabel,
+    });
+    const rejectedProxyCredentialBinding = await createProxyCredentialBinding(accessToken, options, {
+      name: `smoke-proxy-auth-rejected-${runLabel}`,
+      namespace: 'admin-egress-smoke',
+      allowedOrigins: ['http://bpane-egress-auth-observer:3130'],
+      password: 'wrong-pass',
+      runLabel,
+    });
     const proxyProfile = await createProfileThroughUi(page, options, {
       name: `smoke-proxy-${runLabel}`,
-      description: 'Admin smoke metadata-only proxy profile with secret-backed proxy auth',
+      description: 'Admin smoke metadata-only proxy profile',
       labels: 'suite=admin-egress\nmode=proxy',
       proxyUrl: 'http://bpane-egress-observer:3128',
-      proxyCredentialBindingId: proxyCredentialBinding.id,
       bypassRules: 'localhost\n*.local',
       mode: 'metadata_only',
+    });
+    const authProxyProfile = await createProfileThroughUi(page, options, {
+      name: `smoke-auth-proxy-${runLabel}`,
+      description: 'Admin smoke authenticated proxy profile with secret-backed proxy auth',
+      labels: 'suite=admin-egress\nmode=proxy-auth',
+      proxyUrl: 'http://bpane-egress-auth-observer:3130',
+      proxyCredentialBindingId: authProxyCredentialBinding.id,
+      bypassRules: 'localhost\n*.local',
+      mode: 'metadata_only',
+    });
+    const rejectedAuthProfile = await createEgressProfile(accessToken, options, {
+      name: `smoke-auth-rejected-${runLabel}`,
+      description: 'Admin smoke authenticated proxy profile with rejected credentials',
+      labels: { suite: 'admin-egress', mode: 'proxy-auth-rejected' },
+      proxy: {
+        url: 'http://bpane-egress-auth-observer:3130',
+        credential_binding_id: rejectedProxyCredentialBinding.id,
+      },
+      bypass_rules: ['localhost', '*.local'],
+      traffic_observation: { mode: 'metadata_only' },
+    });
+    const missingAuthProfile = await createEgressProfile(accessToken, options, {
+      name: `smoke-auth-missing-${runLabel}`,
+      description: 'Admin smoke authenticated proxy profile without credentials',
+      labels: { suite: 'admin-egress', mode: 'proxy-auth-missing' },
+      proxy: {
+        url: 'http://bpane-egress-auth-observer:3130',
+      },
+      bypass_rules: ['localhost', '*.local'],
+      traffic_observation: { mode: 'metadata_only' },
     });
     const tlsProfile = await createProfileThroughUi(page, options, {
       name: `smoke-tls-${runLabel}`,
@@ -69,12 +111,16 @@ async function run() {
     });
 
     await probeProfileReachabilityThroughUi(page, options, accessToken, proxyProfile);
+    await probeProfileReachabilityThroughUi(page, options, accessToken, authProxyProfile);
+    await probeProfileReachabilityFailure(accessToken, options, rejectedAuthProfile, /proxy authentication/i);
+    await probeProfileReachabilityFailure(accessToken, options, missingAuthProfile, /proxy authentication/i);
     await probeProfileReachabilityThroughUi(page, options, accessToken, tlsProfile);
 
     const clonedProfile = await cloneAndDisableProfile(page, options, accessToken, tlsProfile);
     await verifyDisabledProfileIsNotHealthyLaunchChoice(page, options, clonedProfile.id);
     sessionIds = await verifySessionEffectiveEgress(accessToken, options, {
       proxyProfile,
+      authProxyProfile,
       tlsProfile,
       observerSince,
       runLabel,
@@ -82,7 +128,11 @@ async function run() {
 
     console.log(JSON.stringify({
       proxyProfileId: proxyProfile.id,
-      proxyCredentialBindingId: proxyCredentialBinding.id,
+      authProxyProfileId: authProxyProfile.id,
+      authProxyCredentialBindingId: authProxyCredentialBinding.id,
+      rejectedAuthProfileId: rejectedAuthProfile.id,
+      rejectedProxyCredentialBindingId: rejectedProxyCredentialBinding.id,
+      missingAuthProfileId: missingAuthProfile.id,
       tlsProfileId: tlsProfile.id,
       disabledProfileId: clonedProfile.id,
       sessionIds,
@@ -98,6 +148,26 @@ async function run() {
     }
     await context.close();
     await browser.close();
+  }
+}
+
+async function probeProfileReachabilityFailure(accessToken, options, profile, expectedFailure) {
+  const diagnostics = await fetchJson(`${apiOrigin(options)}/api/v1/egress-profiles/${profile.id}/diagnostics/probe`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ timeout_ms: 10000 }),
+  });
+  const failure = diagnostics?.proof?.profile_reachability_failure ?? '';
+  if (
+    diagnostics?.proof?.profile_reachability_collected !== true
+    || diagnostics?.proof?.profile_reachability_healthy !== false
+    || !expectedFailure.test(failure)
+  ) {
+    throw new Error(`Expected profile reachability diagnostics to fail for ${profile.name}, got ${JSON.stringify(diagnostics)}`);
+  }
+  const serialized = JSON.stringify(diagnostics);
+  if (serialized.includes('wrong-pass') || serialized.includes('proxy-pass')) {
+    throw new Error(`Proxy-auth diagnostics leaked a credential value for ${profile.name}: ${serialized}`);
   }
 }
 
@@ -204,7 +274,7 @@ async function verifyDisabledProfileIsNotHealthyLaunchChoice(page, options, prof
 }
 
 async function verifySessionEffectiveEgress(accessToken, options, context) {
-  const { proxyProfile, tlsProfile, observerSince, runLabel } = context;
+  const { proxyProfile, authProxyProfile, tlsProfile, observerSince, runLabel } = context;
   const verifiedSessionIds = [];
   const noEgress = await createSession(accessToken, options, {});
   verifiedSessionIds.push(noEgress.id);
@@ -231,15 +301,15 @@ async function verifySessionEffectiveEgress(accessToken, options, context) {
   if (proxy.effective_egress?.profile_id !== proxyProfile.id || proxy.effective_egress?.tls_interception_enabled) {
     throw new Error(`Expected proxy session effective egress for ${proxyProfile.id}, got ${JSON.stringify(proxy.effective_egress)}`);
   }
-  if (proxy.effective_egress?.proxy_auth_configured !== true) {
-    throw new Error(`Expected proxy session to report configured proxy auth, got ${JSON.stringify(proxy.effective_egress)}`);
+  if (proxy.effective_egress?.proxy_auth_configured !== false) {
+    throw new Error(`Expected proxy session to report no configured proxy auth, got ${JSON.stringify(proxy.effective_egress)}`);
   }
   const proxyDiagnostics = await launchAndFetchEgressDiagnostics(accessToken, options, proxy.id);
   if (proxyDiagnostics.health !== 'ready' || proxyDiagnostics.proof_level !== 'runtime_launch_metadata') {
     throw new Error(`Expected proxy runtime diagnostics to be ready with launch metadata, got ${JSON.stringify(proxyDiagnostics)}`);
   }
-  if (proxyDiagnostics.proxy_auth_configured !== true) {
-    throw new Error(`Expected proxy diagnostics to report configured proxy auth, got ${JSON.stringify(proxyDiagnostics)}`);
+  if (proxyDiagnostics.proxy_auth_configured !== false) {
+    throw new Error(`Expected proxy diagnostics to report no configured proxy auth, got ${JSON.stringify(proxyDiagnostics)}`);
   }
   const proxyProbe = await runSessionEgressProbe(accessToken, options, proxy.id, runLabel).catch(() => null);
   await assertObserverCorrelation({
@@ -249,10 +319,33 @@ async function verifySessionEffectiveEgress(accessToken, options, context) {
     observerSince,
     expectedMode: 'metadata_only',
     expectedHost: probeObserved(proxyProbe) ? 'example.com' : null,
+    expectedProxyAuth: false,
+  });
+  await deleteSession(accessToken, options, proxy.id);
+
+  const authProxy = await createSession(accessToken, options, {
+    network_identity: { egress_profile_id: authProxyProfile.id },
+  });
+  verifiedSessionIds.push(authProxy.id);
+  if (authProxy.effective_egress?.profile_id !== authProxyProfile.id || authProxy.effective_egress?.proxy_auth_configured !== true) {
+    throw new Error(`Expected auth proxy session effective egress for ${authProxyProfile.id}, got ${JSON.stringify(authProxy.effective_egress)}`);
+  }
+  const authProxyDiagnostics = await launchAndFetchEgressDiagnostics(accessToken, options, authProxy.id);
+  if (authProxyDiagnostics.health !== 'ready' || authProxyDiagnostics.proof_level !== 'runtime_launch_metadata') {
+    throw new Error(`Expected auth proxy runtime diagnostics to be ready with launch metadata, got ${JSON.stringify(authProxyDiagnostics)}`);
+  }
+  const authProxyProbe = await runSessionEgressProbeUntilObserved(accessToken, options, authProxy.id, runLabel);
+  await assertObserverCorrelation({
+    sessionId: authProxy.id,
+    profileId: authProxyProfile.id,
+    observerContainer: 'bpane-egress-auth-observer',
+    observerSince,
+    expectedMode: 'metadata_only',
+    expectedHost: 'example.com',
     expectedProxyAuth: true,
   });
-  await assertSecretBackedProxyAuthRuntime(proxy.id);
-  await deleteSession(accessToken, options, proxy.id);
+  await assertSecretBackedProxyAuthRuntime(authProxy.id);
+  await deleteSession(accessToken, options, authProxy.id);
 
   const tls = await createSession(accessToken, options, {
     network_identity: { egress_profile_id: tlsProfile.id },
@@ -283,25 +376,34 @@ async function verifySessionEffectiveEgress(accessToken, options, context) {
   return verifiedSessionIds;
 }
 
-async function createProxyCredentialBinding(accessToken, options, runLabel) {
+async function createProxyCredentialBinding(accessToken, options, request) {
   return await fetchJson(`${apiOrigin(options)}/api/v1/credential-bindings`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name: `smoke-proxy-auth-${runLabel}`,
+      name: request.name,
       provider: 'vault_kv_v2',
-      namespace: 'admin-egress-smoke',
-      allowed_origins: ['http://bpane-egress-observer:3128'],
+      namespace: request.namespace,
+      allowed_origins: request.allowedOrigins,
       injection_mode: 'form_fill',
       secret_payload: {
         username: 'proxy-user',
-        password: 'proxy-pass',
+        password: request.password,
       },
       labels: {
         suite: 'admin-egress',
         purpose: 'egress-proxy-auth',
+        run_id: String(request.runLabel),
       },
     }),
+  });
+}
+
+async function createEgressProfile(accessToken, options, profile) {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/egress-profiles`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
   });
 }
 
@@ -327,8 +429,31 @@ async function runSessionEgressProbe(accessToken, options, sessionId, runLabel) 
   });
 }
 
+async function runSessionEgressProbeUntilObserved(accessToken, options, sessionId, runLabel) {
+  const lastProbe = { value: null };
+  return await poll(
+    `authenticated proxy browser egress probe ${sessionId}`,
+    async () => {
+      lastProbe.value = await runSessionEgressProbe(accessToken, options, sessionId, runLabel).catch((error) => ({
+        error: error.message,
+      }));
+      return lastProbe.value;
+    },
+    probeObserved,
+    Math.max(options.connectTimeoutMs, 90000),
+    1000,
+  ).catch(() => {
+    throw new Error(`Expected authenticated proxy browser probe to collect active egress proof, got ${JSON.stringify(lastProbe.value)}`);
+  });
+}
+
 function probeObserved(probe) {
-  return probe?.proof?.active_probe_collected === true && probe?.proof?.active_probe_healthy === true;
+  return (
+    probe?.health === 'ready'
+    && probe?.proof_level === 'active_probe'
+    && probe?.proof?.active_probe_collected === true
+    && !probe?.proof?.last_failure_reason
+  );
 }
 
 async function assertObserverCorrelation({

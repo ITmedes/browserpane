@@ -540,7 +540,7 @@ paths:
     post:
       tags: [Egress Profiles]
       summary: Run an active egress profile reachability probe
-      description: Checks the configured proxy authority from the gateway side without starting a browser runtime and persists only sanitized health metadata.
+      description: Checks the configured proxy from the gateway side without starting a browser runtime. When proxy authentication is configured, the gateway resolves the credential binding for the probe, performs a real proxy request, and persists only sanitized success/failure metadata.
       operationId: runEgressProfileReachabilityProbe
       requestBody:
         required: false

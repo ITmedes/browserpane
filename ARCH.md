@@ -543,11 +543,13 @@ The supported local operator CLI lives in
   and automation-access minting, connection disconnect, stop, kill, and bounded
   cleanup. Egress-profile create/update commands can attach a proxy-auth
   credential binding with `--proxy-credential-binding-id`.
-- `deploy/examples/egress-observer` provides a local Squid forward-proxy
-  example for metadata-only access-log observation and session/container IP
-  correlation, plus a mitmproxy TLS-intercept fixture for local inspection
-  checks with an explicit custom CA and sensitive-log sink. On localhost, the
-  admin app auto-creates owner-scoped local presets for both proxy variants.
+- `deploy/examples/egress-observer` provides local Squid forward-proxy
+  examples for metadata-only access-log observation, session/container IP
+  correlation, and authenticated proxy validation, plus a mitmproxy
+  TLS-intercept fixture for local inspection checks with an explicit custom CA
+  and sensitive-log sink. On localhost, the admin app auto-creates
+  owner-scoped local presets for the unauthenticated proxy and TLS-intercept
+  variants.
 - MCP commands cover health, authorize, revoke, set-default, clear-default,
   doctor, preflight, and repair.
 - `mcp repair` applies missing automation delegation and bridge default-session
