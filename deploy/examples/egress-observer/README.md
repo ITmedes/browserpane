@@ -9,11 +9,11 @@ The example uses Squid as a plain forward proxy. HTTPS traffic is not
 man-in-the-middle inspected, so proxy logs normally contain `CONNECT host:443`
 for TLS traffic rather than request paths or response bodies.
 
-For local full HTTPS inspection, use the mitmproxy-based TLS observer in
-`compose.tls.yml`. It uses the same `bpane-egress-observer:3128` network alias,
-but mints per-site certificates from the local egress CA keypair. BrowserPane
-then installs the CA certificate into the docker runtime's Chromium trust store.
-The egress profile must be created with `traffic_observation.mode=tls_intercept`
+For local full HTTPS inspection, also start the mitmproxy-based TLS observer in
+`compose.tls.yml`. It listens as `bpane-egress-tls-observer:3129` and mints
+per-site certificates from the local egress CA keypair. BrowserPane then
+installs the CA certificate into the docker runtime's Chromium trust store. The
+egress profile must be created with `traffic_observation.mode=tls_intercept`
 plus a `sensitive_log_sink_ref` so decrypted-log routing remains explicit in
 the control-plane metadata.
 
@@ -37,12 +37,11 @@ BPANE_EGRESS_OBSERVER_NETWORK=<compose-project>_bpane-internal \
 
 ## Start The TLS-Intercept Observer
 
-Stop the plain observer first if it is running, then prepare mitmproxy's local
-CA material from the same CA certificate that BrowserPane will install into the
-runtime:
+Prepare mitmproxy's local CA material from the same CA certificate that
+BrowserPane will install into the runtime, then start the TLS observer alongside
+the plain observer:
 
 ```bash
-docker compose -f deploy/examples/egress-observer/compose.yml down
 deploy/examples/egress-observer/prepare-mitmproxy-ca.sh
 docker compose -f deploy/examples/egress-observer/compose.tls.yml up
 ```
@@ -80,7 +79,7 @@ For the TLS-intercept observer, include the CA and sensitive-log metadata:
 ./scripts/bpane egress-profile create local-tls-observer \
   --description "Local mitmproxy TLS observer" \
   --label observer=local-mitmproxy \
-  --proxy-url http://bpane-egress-observer:3128 \
+  --proxy-url http://bpane-egress-tls-observer:3129 \
   --bypass-rule localhost \
   --bypass-rule 127.0.0.1 \
   --custom-ca-ref file:///workspace/dev/egress-ca.pem \
@@ -89,6 +88,10 @@ For the TLS-intercept observer, include the CA and sensitive-log metadata:
   --sensitive-log-sink-ref siem://browserpane/local-egress \
   --sensitive-log-sink-name "Local Egress SIEM"
 ```
+
+On `localhost`, the admin app creates the plain proxy and TLS-interceptor
+profiles automatically for the signed-in owner if they are missing. The manual
+commands above are still useful for CLI-only testing or non-local deployments.
 
 Create or start a session with the returned profile id:
 

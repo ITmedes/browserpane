@@ -44,6 +44,7 @@
   import { subscribeAdminSessionEvents } from './admin-session-event-sync';
   import { AdminWorkflowSessionFollower } from './admin-workflow-follow';
   import BrowserWorkspaceOverlayLayout from './BrowserWorkspaceOverlayLayout.svelte';
+  import { ensureLocalEgressPresets } from './local-egress-presets';
   import { saveBlob } from './recording-downloads';
   type AdminSessionSurfaceProps = {
     readonly controlClient: ControlClient; readonly adminEventClient: AdminEventClient; readonly workflowClient: WorkflowClient;
@@ -183,12 +184,21 @@
     egressProfilesLoading = true;
     egressProfileError = null;
     try {
-      egressProfiles = (await controlClient.listEgressProfiles()).profiles;
-      if (showFeedback) {
+      const listed = (await controlClient.listEgressProfiles()).profiles;
+      const localPresets = await ensureLocalEgressPresets(controlClient, listed);
+      egressProfiles = localPresets.profiles;
+      if (localPresets.error) {
+        egressProfileError = localPresets.error;
+        showGlobalMessage('warning', 'Local egress presets incomplete', localPresets.error);
+      }
+      if (showFeedback && !localPresets.error) {
+        const createdSuffix = localPresets.created > 0
+          ? ` Created ${localPresets.created} local preset${localPresets.created === 1 ? '' : 's'}.`
+          : '';
         showGlobalMessage(
           'success',
           'Egress profiles refreshed',
-          `${egressProfiles.length} profile${egressProfiles.length === 1 ? '' : 's'} refreshed.`,
+          `${egressProfiles.length} profile${egressProfiles.length === 1 ? '' : 's'} refreshed.${createdSuffix}`,
         );
       }
     } catch (error) {

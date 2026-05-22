@@ -1,7 +1,7 @@
 services:
-  egress-proxy:
+  egress-tls-proxy:
     image: "${BPANE_EGRESS_MITMPROXY_IMAGE:-mitmproxy/mitmproxy:11.0.2}"
-    container_name: bpane-egress-observer
+    container_name: bpane-egress-tls-observer
     command:
       - mitmdump
       - --mode
@@ -9,7 +9,7 @@ services:
       - --listen-host
       - 0.0.0.0
       - --listen-port
-      - "3128"
+      - "3129"
       - --set
       - confdir=/mitmproxy
       - --set
@@ -17,13 +17,13 @@ services:
       - --set
       - showhost=true
     ports:
-      - "${BPANE_EGRESS_OBSERVER_PORT:-3128}:3128"
+      - "${BPANE_EGRESS_TLS_OBSERVER_PORT:-3129}:3129"
     volumes:
       - ../../../dev/egress-mitmproxy:/mitmproxy
     networks:
       bpane-internal:
         aliases:
-          - bpane-egress-observer
+          - bpane-egress-tls-observer
 
 networks:
   bpane-internal:
