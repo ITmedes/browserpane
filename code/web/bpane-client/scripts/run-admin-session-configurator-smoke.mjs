@@ -207,7 +207,13 @@ async function verifyDetailUi(page, options, sessionId, template, browserContext
   await page.getByTestId('session-owner-mode').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   const ownerMode = await page.getByTestId('session-owner-mode').textContent();
   const idleTimeout = await page.getByTestId('session-idle-timeout').textContent();
-  const detailTemplate = await page.getByTestId('session-template').textContent();
+  const detailTemplate = await poll(
+    'session detail template name',
+    async () => await page.getByTestId('session-template').textContent(),
+    (value) => value?.includes(template.name) === true,
+    options.connectTimeoutMs,
+    100,
+  );
   const detailBrowserContext = await poll(
     'session detail browser context name',
     async () => await page.getByTestId('session-browser-context').textContent(),

@@ -487,6 +487,82 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+    put:
+      tags: [Egress Profiles]
+      summary: Replace one owner-scoped egress profile
+      operationId: updateEgressProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEgressProfileRequest'
+      responses:
+        '200':
+          description: Updated egress profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressProfileResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/egress-profiles/{profile_id}/diagnostics:
+    parameters:
+      - $ref: '#/components/parameters/EgressProfileId'
+    get:
+      tags: [Egress Profiles]
+      summary: Fetch sanitized egress profile diagnostics
+      operationId: getEgressProfileDiagnostics
+      responses:
+        '200':
+          description: Egress profile diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressDiagnosticsResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/egress-profiles/{profile_id}/diagnostics/probe:
+    parameters:
+      - $ref: '#/components/parameters/EgressProfileId'
+    post:
+      tags: [Egress Profiles]
+      summary: Run an active egress profile reachability probe
+      description: Checks the configured proxy authority from the gateway side without starting a browser runtime and persists only sanitized health metadata.
+      operationId: runEgressProfileReachabilityProbe
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunEgressProfileReachabilityProbeRequest'
+      responses:
+        '200':
+          description: Updated egress profile diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressDiagnosticsResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/automation-tasks:
     get:
       tags: [Automation Tasks]
@@ -2281,6 +2357,60 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/egress-diagnostics:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Session Runtime]
+      summary: Get sanitized effective egress diagnostics for a session
+      operationId: getSessionEgressDiagnostics
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      responses:
+        '200':
+          description: Session effective egress diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressDiagnosticsResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Session Runtime]
+      summary: Run an active browser egress diagnostics probe for a session
+      description: Runs against an already-ready session runtime and persists sanitized evidence or a sanitized failure reason. The probe does not implicitly start stopped sessions.
+      operationId: runSessionEgressDiagnosticsProbe
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunEgressDiagnosticsProbeRequest'
+      responses:
+        '200':
+          description: Updated session effective egress diagnostics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressDiagnosticsResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/connections/{connection_id}/disconnect:
@@ -5086,6 +5216,11 @@ components:
           type: string
           format: uri
           description: HTTP or HTTPS proxy URL. Inline credentials are rejected by the API.
+        credential_binding_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Owner-scoped credential binding whose secret payload contains proxy auth `username` and `password`; the API stores only this reference.
     EgressCustomCaConfig:
       type: object
       additionalProperties: false
@@ -5117,6 +5252,7 @@ components:
       type: object
       required:
         - proxy_configured
+        - proxy_auth_configured
         - bypass_rule_count
         - custom_ca_configured
         - observation_mode
@@ -5125,6 +5261,9 @@ components:
       properties:
         proxy_configured:
           type: boolean
+        proxy_auth_configured:
+          type: boolean
+          description: True when the proxy uses a secret-backed credential binding for proxy authentication.
         bypass_rule_count:
           type: integer
           minimum: 0
@@ -5136,6 +5275,174 @@ components:
           type: boolean
         sensitive_log_sink_configured:
           type: boolean
+    EgressDiagnosticsHealth:
+      type: string
+      enum:
+        - ready
+        - unknown
+        - attention
+        - blocked
+        - missing
+    EgressDiagnosticsProofLevel:
+      type: string
+      enum:
+        - none
+        - configuration
+        - runtime_launch_metadata
+        - active_probe
+    EgressDiagnosticsProof:
+      type: object
+      required:
+        - profile_resolved
+        - profile_ready
+        - profile_reachability_collected
+        - profile_reachability_healthy
+        - profile_reachability_observed_at
+        - profile_reachability_failure
+        - proxy_launch_config_expected
+        - bypass_rules_expected
+        - custom_ca_launch_config_expected
+        - tls_interception_expected
+        - sensitive_log_sink_declared
+        - runtime_launch_observed
+        - active_probe_collected
+        - observed_public_ip
+        - observed_tls_issuer
+        - last_failure_reason
+      properties:
+        profile_resolved:
+          type: boolean
+        profile_ready:
+          type: boolean
+        profile_reachability_collected:
+          type: boolean
+          description: True when a profile-level reachability probe has produced a latest result.
+        profile_reachability_healthy:
+          type: boolean
+          description: True when the latest profile-level reachability probe succeeded.
+        profile_reachability_observed_at:
+          type: string
+          format: date-time
+          nullable: true
+        profile_reachability_failure:
+          type: string
+          nullable: true
+        proxy_launch_config_expected:
+          type: boolean
+        bypass_rules_expected:
+          type: integer
+          minimum: 0
+        custom_ca_launch_config_expected:
+          type: boolean
+        tls_interception_expected:
+          type: boolean
+        sensitive_log_sink_declared:
+          type: boolean
+        runtime_launch_observed:
+          type: boolean
+        active_probe_collected:
+          type: boolean
+          description: True when the latest session probe collected browser-observed egress evidence.
+        observed_public_ip:
+          type: string
+          nullable: true
+        observed_tls_issuer:
+          type: string
+          nullable: true
+        last_failure_reason:
+          type: string
+          nullable: true
+    EgressDiagnosticsResource:
+      type: object
+      required:
+        - profile_id
+        - profile_name
+        - profile_state
+        - health
+        - observation_mode
+        - proof_level
+        - runtime_binding
+        - runtime_assignment
+        - proxy_configured
+        - proxy_auth_configured
+        - bypass_rule_count
+        - custom_ca_configured
+        - tls_interception_enabled
+        - sensitive_log_sink_configured
+        - proof
+        - warnings
+        - observed_at
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        profile_name:
+          type: string
+          nullable: true
+        profile_state:
+          allOf:
+            - $ref: '#/components/schemas/EgressProfileState'
+          nullable: true
+        health:
+          $ref: '#/components/schemas/EgressDiagnosticsHealth'
+        observation_mode:
+          $ref: '#/components/schemas/EgressTrafficObservationMode'
+        proof_level:
+          $ref: '#/components/schemas/EgressDiagnosticsProofLevel'
+        runtime_binding:
+          type: string
+          nullable: true
+        runtime_assignment:
+          type: string
+          nullable: true
+          description: Runtime assignment status such as `starting` or `ready` when a session runtime exists.
+        proxy_configured:
+          type: boolean
+        proxy_auth_configured:
+          type: boolean
+        bypass_rule_count:
+          type: integer
+          minimum: 0
+        custom_ca_configured:
+          type: boolean
+        tls_interception_enabled:
+          type: boolean
+        sensitive_log_sink_configured:
+          type: boolean
+        proof:
+          $ref: '#/components/schemas/EgressDiagnosticsProof'
+        warnings:
+          type: array
+          items:
+            type: string
+        observed_at:
+          type: string
+          format: date-time
+    RunEgressDiagnosticsProbeRequest:
+      type: object
+      properties:
+        public_ip_url:
+          type: string
+          format: uri
+          description: Optional HTTP(S) endpoint the browser navigates to for public-IP evidence. Defaults to api.ipify.org.
+        tls_probe_url:
+          type: string
+          format: uri
+          description: Optional HTTPS endpoint used to capture the browser-observed certificate issuer.
+        timeout_ms:
+          type: integer
+          minimum: 250
+          maximum: 30000
+          default: 8000
+    RunEgressProfileReachabilityProbeRequest:
+      type: object
+      properties:
+        timeout_ms:
+          type: integer
+          minimum: 250
+          maximum: 30000
+          default: 5000
     SessionEffectiveEgress:
       type: object
       required:
@@ -5143,6 +5450,7 @@ components:
         - profile_name
         - profile_state
         - proxy_configured
+        - proxy_auth_configured
         - bypass_rule_count
         - custom_ca_configured
         - observation_mode
@@ -5161,6 +5469,8 @@ components:
             - $ref: '#/components/schemas/EgressProfileState'
           nullable: true
         proxy_configured:
+          type: boolean
+        proxy_auth_configured:
           type: boolean
         bypass_rule_count:
           type: integer
@@ -5221,6 +5531,7 @@ components:
         - traffic_observation
         - state
         - effective
+        - diagnostics
         - created_at
         - updated_at
       properties:
@@ -5254,6 +5565,8 @@ components:
           $ref: '#/components/schemas/EgressProfileState'
         effective:
           $ref: '#/components/schemas/EgressProfileEffectiveStatus'
+        diagnostics:
+          $ref: '#/components/schemas/EgressDiagnosticsResource'
         created_at:
           type: string
           format: date-time
@@ -5277,6 +5590,7 @@ components:
         - browser_context
         - network_identity
         - effective_egress
+        - egress_diagnostics
         - owner_mode
         - viewport
         - capabilities
@@ -5309,6 +5623,8 @@ components:
           $ref: '#/components/schemas/SessionNetworkIdentity'
         effective_egress:
           $ref: '#/components/schemas/SessionEffectiveEgress'
+        egress_diagnostics:
+          $ref: '#/components/schemas/EgressDiagnosticsResource'
         owner_mode:
           $ref: '#/components/schemas/SessionOwnerMode'
         viewport:
@@ -5846,6 +6162,7 @@ components:
         - resolution
         - network_identity
         - effective_egress
+        - egress_diagnostics
         - recording
         - playback
         - telemetry
@@ -5898,6 +6215,8 @@ components:
           $ref: '#/components/schemas/SessionNetworkIdentity'
         effective_egress:
           $ref: '#/components/schemas/SessionEffectiveEgress'
+        egress_diagnostics:
+          $ref: '#/components/schemas/EgressDiagnosticsResource'
         recording:
           $ref: '#/components/schemas/SessionRecordingStatus'
         playback:

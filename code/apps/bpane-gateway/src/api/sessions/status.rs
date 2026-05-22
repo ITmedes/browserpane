@@ -15,6 +15,21 @@ pub(super) async fn get_session_status(
     ))
 }
 
+pub(super) async fn get_session_egress_diagnostics(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<EgressDiagnosticsResource>, (StatusCode, Json<ErrorResponse>)> {
+    let session =
+        authorize_visible_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
+    Ok(Json(
+        session_egress_diagnostics(&state, &session)
+            .await
+            .map_err(map_session_store_error)?,
+    ))
+}
+
 pub(super) async fn session_status(
     headers: HeaderMap,
     State(state): State<Arc<ApiState>>,

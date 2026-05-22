@@ -9,6 +9,7 @@
     readonly onRelease: () => void;
     readonly onStop: () => void;
     readonly onKill: () => void;
+    readonly onRunEgressProbe: () => void;
     readonly onDisconnectConnection: (connectionId: number) => void;
     readonly onDisconnectAll: () => void;
     readonly feedback?: AdminMessageFeedback | null;
@@ -20,6 +21,7 @@
     onRelease,
     onStop,
     onKill,
+    onRunEgressProbe,
     onDisconnectConnection,
     onDisconnectAll,
     feedback = null,
@@ -78,6 +80,15 @@
       onclick={onDisconnectAll}
     >
       Disconnect all
+    </button>
+    <button
+      class="admin-button-primary"
+      type="button"
+      data-testid="session-egress-probe-run"
+      disabled={viewModel.loading}
+      onclick={onRunEgressProbe}
+    >
+      Run egress probe
     </button>
   </div>
 
