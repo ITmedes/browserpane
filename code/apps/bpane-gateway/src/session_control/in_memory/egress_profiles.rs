@@ -112,4 +112,25 @@ impl InMemorySessionStore {
         profile.updated_at = Utc::now();
         Ok(Some(profile.clone()))
     }
+
+    pub(in crate::session_control) async fn upsert_egress_diagnostics_probe_result(
+        &self,
+        result: PersistEgressDiagnosticsProbeResult,
+    ) -> Result<StoredEgressDiagnosticsProbeResult, SessionStoreError> {
+        let mut results = self.egress_diagnostics_probe_results.lock().await;
+        results.insert(result.session_id, result.clone());
+        Ok(result)
+    }
+
+    pub(in crate::session_control) async fn get_egress_diagnostics_probe_result_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<StoredEgressDiagnosticsProbeResult>, SessionStoreError> {
+        Ok(self
+            .egress_diagnostics_probe_results
+            .lock()
+            .await
+            .get(&session_id)
+            .cloned())
+    }
 }

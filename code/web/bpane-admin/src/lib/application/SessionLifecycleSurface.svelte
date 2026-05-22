@@ -124,6 +124,39 @@
     );
   }
 
+  async function runEgressProbe(): Promise<void> {
+    const sessionId = selectedSession?.id ?? null;
+    if (!sessionId) {
+      return;
+    }
+    statusLoading = true;
+    statusError = null;
+    feedback = loadingFeedback('Running active egress diagnostics probe...');
+    try {
+      await controlClient.runSessionEgressDiagnosticsProbe(sessionId);
+      if (!isCurrentSession(sessionId)) {
+        return;
+      }
+      await onRefreshSelectedSession();
+      if (!isCurrentSession(sessionId)) {
+        return;
+      }
+      await refreshStatusFor(sessionId);
+      if (isCurrentSession(sessionId)) {
+        feedback = successFeedback('Egress diagnostics probe finished.');
+      }
+    } catch (error) {
+      if (isCurrentSession(sessionId)) {
+        statusError = errorMessage(error);
+        feedback = null;
+      }
+    } finally {
+      if (isCurrentSession(sessionId)) {
+        statusLoading = false;
+      }
+    }
+  }
+
   async function runDisconnect(
     sessionId: string,
     progressMessage: string,
@@ -241,6 +274,7 @@
   onRelease={() => void runLifecycleAction('Releasing selected session runtime...', 'Selected session runtime was released.', onReleaseSessionRuntime)}
   onStop={() => void runLifecycleAction('Stopping selected session...', 'Selected session stopped.', onStopSession)}
   onKill={() => void runLifecycleAction('Killing selected session...', 'Selected session was force killed.', onKillSession)}
+  onRunEgressProbe={() => void runEgressProbe()}
   onDisconnectConnection={(connectionId) => void disconnectConnection(connectionId)}
   onDisconnectAll={() => void disconnectAllConnections()}
 />

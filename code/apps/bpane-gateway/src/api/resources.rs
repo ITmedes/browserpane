@@ -409,12 +409,17 @@ pub(super) async fn session_egress_diagnostics(
         .await
         .map(|status| status.as_str().to_string());
     let observed_at = Utc::now();
+    let probe_result = state
+        .session_store
+        .get_egress_diagnostics_probe_result_for_session(stored.id)
+        .await?;
     let Some(profile_id) = stored.network_identity.egress_profile_id else {
         return Ok(EgressDiagnosticsResource::direct(
             runtime_binding,
             runtime_assignment,
             observed_at,
-        ));
+        )
+        .with_probe_result(probe_result.as_ref()));
     };
     let owner = session_owner_principal(stored);
     let Some(profile) = state
@@ -427,9 +432,12 @@ pub(super) async fn session_egress_diagnostics(
             runtime_binding,
             runtime_assignment,
             observed_at,
-        ));
+        )
+        .with_probe_result(probe_result.as_ref()));
     };
-    Ok(profile.to_diagnostics(runtime_binding, runtime_assignment, observed_at))
+    Ok(profile
+        .to_diagnostics(runtime_binding, runtime_assignment, observed_at)
+        .with_probe_result(probe_result.as_ref()))
 }
 
 pub(super) async fn load_session_status(

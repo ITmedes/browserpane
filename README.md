@@ -304,6 +304,7 @@ Canonical contract:
 - `PUT /api/v1/egress-profiles/{id}`
 - `GET /api/v1/egress-profiles/{id}/diagnostics`
 - `GET /api/v1/sessions/{id}/egress-diagnostics`
+- `POST /api/v1/sessions/{id}/egress-diagnostics`
 
 These endpoints are bearer-protected, owner-scoped, and stored in Postgres. The
 full contract is in the OpenAPI file; the route lists below call out the
@@ -327,8 +328,11 @@ bypass rules, custom CA references, state, labels, and sanitized effective
 status; session resources, `/status`, and `/egress-diagnostics` include the
 inherited network identity, effective egress summary, and sanitized diagnostics
 without embedding proxy credentials or raw CA material. Diagnostics distinguish
-configuration-only evidence from runtime launch metadata, and reserve explicit
-fields for future active probes such as observed public IP or TLS issuer.
+configuration-only evidence, runtime launch metadata, and the latest active
+browser probe. The active probe runs only against an already-ready session
+runtime and stores sanitized public-IP, TLS issuer, and failure summary fields;
+it does not store requested URLs, headers, proxy credentials, CA material, or
+decrypted traffic.
 Egress-side communication tracking belongs at the configured proxy or secure
 web gateway. BrowserPane emits safe correlation metadata instead: docker-backed
 runtime containers carry `browserpane.session_id` and egress-profile labels,
@@ -559,6 +563,7 @@ Common egress-profile operations:
 ./scripts/bpane egress-profile update <egress-profile-id> --name eu-support-egress-v2 --label managed=true
 ./scripts/bpane egress-profile disable <egress-profile-id>
 ./scripts/bpane session egress-diagnostics <session-id>
+./scripts/bpane session egress-diagnostics probe <session-id>
 ```
 
 For a proxy that performs approved TLS interception, make that explicit and
@@ -619,9 +624,14 @@ The admin Operations Overlay also includes an egress profile catalog for
 creating, cloning, editing, and disabling approved outbound profiles. The
 catalog shows sanitized proxy, TLS-inspection, custom-CA, log-sink status, and
 diagnostics health. Session diagnostics move from configuration proof to runtime
-launch metadata once the selected profile has been applied to a live runtime;
-active proxy reachability and TLS issuer proof remain production hardening
-follow-ups.
+launch metadata once the selected profile has been applied to a live runtime,
+and to active-probe proof after the operator runs an egress probe from the live
+or detail session view. Run the probe after connecting or starting the session;
+otherwise diagnostics record a sanitized "runtime not ready" failure instead of
+launching a browser implicitly. The probe can optionally receive
+`public_ip_url`, `tls_probe_url`, and `timeout_ms` in the API or the matching
+CLI options `--probe-public-ip-url`, `--probe-tls-url`, and
+`--probe-timeout-ms`.
 
 ```bash
 cd code/web/bpane-client && npm run smoke:admin-egress-profiles -- --headless

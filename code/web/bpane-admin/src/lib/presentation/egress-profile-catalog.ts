@@ -193,7 +193,11 @@ export function egressProfileBadges(profile: EgressProfileResource): readonly st
     profile.effective.sensitive_log_sink_configured ? 'log sink' : null,
     profile.state === 'disabled' ? 'disabled' : null,
     profile.diagnostics.health !== 'ready' ? `health ${profile.diagnostics.health}` : null,
-    profile.diagnostics.proof_level === 'runtime_launch_metadata' ? 'runtime proof' : 'config proof',
+    profile.diagnostics.proof_level === 'active_probe'
+      ? 'active proof'
+      : profile.diagnostics.proof_level === 'runtime_launch_metadata'
+        ? 'runtime proof'
+        : 'config proof',
   ].filter((value): value is string => Boolean(value));
 }
 

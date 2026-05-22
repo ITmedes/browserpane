@@ -337,7 +337,13 @@ function egressDiagnosticsLabel(diagnostics: EgressDiagnosticsResource | null | 
     diagnostics.runtime_binding ? `runtime=${diagnostics.runtime_binding}` : null,
     diagnostics.runtime_assignment ? `assignment=${diagnostics.runtime_assignment}` : null,
     diagnostics.proof.runtime_launch_observed ? 'runtime launch observed' : null,
-    diagnostics.proof.active_probe_collected ? 'active probe collected' : 'active probe pending',
+    diagnostics.proof.active_probe_collected
+      ? 'active probe collected'
+      : diagnostics.proof.last_failure_reason
+        ? 'active probe failed'
+        : 'active probe pending',
+    diagnostics.proof.observed_public_ip ? `ip=${diagnostics.proof.observed_public_ip}` : null,
+    diagnostics.proof.observed_tls_issuer ? `issuer=${diagnostics.proof.observed_tls_issuer}` : null,
     diagnostics.warnings.length > 0 ? `${diagnostics.warnings.length} warning` : null,
   ].filter(Boolean);
   return facts.join(' | ');

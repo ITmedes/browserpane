@@ -310,6 +310,7 @@ pub enum EgressDiagnosticsProofLevel {
     None,
     Configuration,
     RuntimeLaunchMetadata,
+    ActiveProbe,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -347,6 +348,19 @@ pub struct EgressDiagnosticsResource {
     pub warnings: Vec<String>,
     pub observed_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistEgressDiagnosticsProbeResult {
+    pub session_id: Uuid,
+    pub profile_id: Option<Uuid>,
+    pub active_probe_collected: bool,
+    pub observed_public_ip: Option<String>,
+    pub observed_tls_issuer: Option<String>,
+    pub last_failure_reason: Option<String>,
+    pub observed_at: DateTime<Utc>,
+}
+
+pub type StoredEgressDiagnosticsProbeResult = PersistEgressDiagnosticsProbeResult;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct SessionEffectiveEgress {
@@ -565,6 +579,39 @@ impl StoredEgressProfile {
 }
 
 impl EgressDiagnosticsResource {
+    pub fn with_probe_result(mut self, probe: Option<&StoredEgressDiagnosticsProbeResult>) -> Self {
+        let Some(probe) = probe else {
+            return self;
+        };
+        if probe.profile_id != self.profile_id {
+            return self;
+        }
+
+        self.proof.active_probe_collected = probe.active_probe_collected;
+        self.proof.observed_public_ip = probe.observed_public_ip.clone();
+        self.proof.observed_tls_issuer = probe.observed_tls_issuer.clone();
+        self.proof.last_failure_reason = probe.last_failure_reason.clone();
+        if probe.active_probe_collected {
+            self.proof_level = EgressDiagnosticsProofLevel::ActiveProbe;
+            if !matches!(
+                self.health,
+                EgressDiagnosticsHealth::Blocked | EgressDiagnosticsHealth::Missing
+            ) {
+                self.health = EgressDiagnosticsHealth::Ready;
+            }
+        } else if let Some(reason) = probe.last_failure_reason.as_deref() {
+            if !matches!(
+                self.health,
+                EgressDiagnosticsHealth::Blocked | EgressDiagnosticsHealth::Missing
+            ) {
+                self.health = EgressDiagnosticsHealth::Attention;
+            }
+            self.warnings
+                .push(format!("Last active egress probe failed: {reason}"));
+        }
+        self
+    }
+
     pub fn direct(
         runtime_binding: Option<String>,
         runtime_assignment: Option<String>,

@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 bpane-protocol.workspace = true
 bytes = "1"
+futures-util = "0.3"
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
@@ -31,6 +32,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio-tungstenite = "0.24"
 jsonwebtoken = { version = "9", features = ["use_pem"] }
 sqlx = { version = "0.8", default-features = false, features = ["macros", "migrate", "postgres", "runtime-tokio-rustls"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1", "with-uuid-1"] }

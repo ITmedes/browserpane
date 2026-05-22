@@ -58,6 +58,9 @@ const KNOWN_OPTIONS = new Set([
   'output',
   'owner-mode',
   'profile',
+  'probe-public-ip-url',
+  'probe-timeout-ms',
+  'probe-tls-url',
   'proxy-url',
   'persistence-mode',
   'recording-mode',
@@ -98,6 +101,7 @@ function usageText() {
     '  bpane session get <session-id> [options]',
     '  bpane session status <session-id> [options]',
     '  bpane session egress-diagnostics <session-id> [options]',
+    '  bpane session egress-diagnostics probe <session-id> [options]',
     '  bpane session access-token <session-id> [options]',
     '  bpane session automation-access <session-id> [options]',
     '  bpane session disconnect-all <session-id> [options]',
@@ -168,6 +172,9 @@ function usageText() {
     '  --traffic-observation-mode <mode> Egress observation mode: metadata_only or tls_intercept.',
     '  --sensitive-log-sink-ref <ref> Approved SIEM/log-sink ref required for tls_intercept.',
     '  --sensitive-log-sink-name <name> Sensitive log-sink display name.',
+    '  --probe-public-ip-url <url>  Public-IP endpoint for session egress probe.',
+    '  --probe-tls-url <url>        HTTPS endpoint for TLS issuer probe.',
+    '  --probe-timeout-ms <ms>      Session egress probe timeout. Requires an already-ready runtime.',
     '  --name <name>             Session template name for create/update.',
     '  --description <text>      Session template description for create/update.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
@@ -476,6 +483,14 @@ function joinUrl(baseUrl, path) {
 function requiredSessionId(positionals, commandLabel) {
   const sessionId = positionals[2];
   if (!sessionId || positionals.length > 3) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <session-id>`, EXIT_CODES.usage);
+  }
+  return sessionId;
+}
+
+function requiredNestedSessionId(positionals, commandLabel) {
+  const sessionId = positionals[3];
+  if (!sessionId || positionals.length > 4) {
     throw new CliError('USAGE', `Usage: bpane ${commandLabel} <session-id>`, EXIT_CODES.usage);
   }
   return sessionId;
@@ -1209,6 +1224,27 @@ function buildEgressProfileUpdateRequest(existingProfile, options, forcedState =
   return body;
 }
 
+function buildEgressDiagnosticsProbeRequest(options) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+  const body = {};
+  const publicIpUrl = getOption(options, 'probe-public-ip-url');
+  if (publicIpUrl !== null) {
+    body.public_ip_url = publicIpUrl;
+  }
+  const tlsProbeUrl = getOption(options, 'probe-tls-url');
+  if (tlsProbeUrl !== null) {
+    body.tls_probe_url = tlsProbeUrl;
+  }
+  const timeoutMs = parseIntegerOption(options, 'probe-timeout-ms');
+  if (timeoutMs !== null) {
+    body.timeout_ms = timeoutMs;
+  }
+  return body;
+}
+
 function buildBrowserContextRequest(options, fallbackName = null, commandLabel = 'create') {
   const rawBody = parseJsonOption(options, 'body-json');
   if (rawBody !== null) {
@@ -1805,6 +1841,18 @@ async function handleSessionCommand(config, positionals, options) {
     );
   }
   if (action === 'egress-diagnostics') {
+    if (positionals[2] === 'probe') {
+      const sessionId = requiredNestedSessionId(positionals, 'session egress-diagnostics probe');
+      return await requestGateway(
+        config,
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildEgressDiagnosticsProbeRequest(options)),
+        },
+      );
+    }
     const sessionId = requiredSessionId(positionals, 'session egress-diagnostics');
     return await requestGateway(
       config,

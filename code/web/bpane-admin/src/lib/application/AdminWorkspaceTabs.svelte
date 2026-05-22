@@ -91,6 +91,7 @@
     readonly onImportBrowserContext?: (command: ImportBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onDeleteBrowserContext?: (contextId: string) => Promise<void>;
     readonly onJoinSelectedSession: () => void;
+    readonly onRunSelectedSessionEgressProbe: () => Promise<void>;
     readonly onSelectSessionId: (sessionId: string) => void;
     readonly onRefreshSelectedSession: () => Promise<void>;
     readonly onReleaseSessionRuntime: () => Promise<void>;
@@ -200,6 +201,7 @@
           onCreateBrowserContext={props.onCreateBrowserContext}
           onJoinSession={props.onJoinSelectedSession}
           onDisconnectSession={props.onDisconnectEmbeddedBrowser}
+          onRunEgressProbe={() => void props.onRunSelectedSessionEgressProbe()}
           onSelectSessionId={props.onSelectSessionId}
         />
         <McpDelegationSurface

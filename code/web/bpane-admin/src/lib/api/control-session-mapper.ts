@@ -222,7 +222,7 @@ const SESSION_BROWSER_CONTEXT_MODES = ['fresh', 'ephemeral', 'reusable'] satisfi
 const EGRESS_PROFILE_STATES = ['ready', 'disabled'] satisfies readonly EgressProfileState[];
 const EGRESS_TRAFFIC_OBSERVATION_MODES = ['metadata_only', 'tls_intercept'] satisfies readonly EgressTrafficObservationMode[];
 const EGRESS_DIAGNOSTICS_HEALTHS = ['ready', 'unknown', 'attention', 'blocked', 'missing'] satisfies readonly EgressDiagnosticsHealth[];
-const EGRESS_DIAGNOSTICS_PROOF_LEVELS = ['none', 'configuration', 'runtime_launch_metadata'] satisfies readonly EgressDiagnosticsProofLevel[];
+const EGRESS_DIAGNOSTICS_PROOF_LEVELS = ['none', 'configuration', 'runtime_launch_metadata', 'active_probe'] satisfies readonly EgressDiagnosticsProofLevel[];
 
 function expectEnum<T extends string>(
   value: unknown,

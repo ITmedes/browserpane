@@ -40,11 +40,11 @@ use crate::session_control::{
     BrowserContextState, CompleteSessionRecordingRequest, CreateSessionRequest,
     EgressDiagnosticsResource, EgressProfileListResponse, EgressProfileResource,
     EgressProfileState, FailSessionRecordingRequest, PersistBrowserContextRequest,
-    PersistCompletedSessionRecordingRequest, PersistEgressProfileRequest,
-    PersistSessionFileBindingRequest, PersistSessionTemplateRequest, SessionBrowserContextMode,
-    SessionEffectiveEgress, SessionLifecycleState, SessionListResponse, SessionNetworkIdentity,
-    SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
-    SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
+    PersistCompletedSessionRecordingRequest, PersistEgressDiagnosticsProbeResult,
+    PersistEgressProfileRequest, PersistSessionFileBindingRequest, PersistSessionTemplateRequest,
+    SessionBrowserContextMode, SessionEffectiveEgress, SessionLifecycleState, SessionListResponse,
+    SessionNetworkIdentity, SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse,
+    SessionRecordingMode, SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
     SessionRecordingTerminationReason, SessionResource, SessionStore, SessionTemplateDefaults,
     SessionTemplateListResponse, SessionTemplateResource, SetAutomationDelegateRequest,
     StoredBrowserContext, StoredEgressProfile, StoredSession, StoredSessionRecording,
@@ -54,7 +54,7 @@ use crate::session_files::{
     SessionFileResource,
 };
 use crate::session_hub::SessionTelemetrySnapshot;
-use crate::session_manager::{SessionManagerError, SessionRuntime};
+use crate::session_manager::{SessionManagerError, SessionRuntime, SessionRuntimeAssignmentStatus};
 use crate::workflow::{
     derive_workflow_run_admission_resource, derive_workflow_run_intervention_resource,
     derive_workflow_run_runtime_resource, PersistWorkflowDefinitionRequest,

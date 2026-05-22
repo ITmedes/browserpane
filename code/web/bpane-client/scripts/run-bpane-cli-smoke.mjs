@@ -388,6 +388,25 @@ async function run() {
     ) {
       throw new Error(`CLI session egress-diagnostics returned unexpected data: ${JSON.stringify(sessionEgressDiagnostics)}`);
     }
+    const sessionEgressProbe = runBpaneCli([
+      'session',
+      'egress-diagnostics',
+      'probe',
+      sessionId,
+      '--probe-public-ip-url',
+      'https://example.com/',
+      '--probe-tls-url',
+      'https://example.com/',
+      '--probe-timeout-ms',
+      '1000',
+    ], cliEnv);
+    if (
+      sessionEgressProbe.profile_id !== egressProfileId
+      || typeof sessionEgressProbe.proof?.active_probe_collected !== 'boolean'
+      || (!sessionEgressProbe.proof.active_probe_collected && !sessionEgressProbe.proof.last_failure_reason)
+    ) {
+      throw new Error(`CLI session egress-diagnostics probe returned unexpected data: ${JSON.stringify(sessionEgressProbe)}`);
+    }
 
     const disconnected = runBpaneCli(['session', 'disconnect-all', sessionId], cliEnv);
     if (!disconnected.connection_counts) {

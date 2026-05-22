@@ -334,6 +334,16 @@ fn default_egress_profile_state() -> EgressProfileState {
     EgressProfileState::Ready
 }
 
+#[derive(Default, Deserialize)]
+pub(super) struct RunEgressDiagnosticsProbeRequest {
+    #[serde(default)]
+    pub(super) public_ip_url: Option<String>,
+    #[serde(default)]
+    pub(super) tls_probe_url: Option<String>,
+    #[serde(default)]
+    pub(super) timeout_ms: Option<u64>,
+}
+
 #[derive(Deserialize)]
 pub(super) struct CreateBrowserContextRequest {
     pub(super) name: String,

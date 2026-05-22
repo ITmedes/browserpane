@@ -232,6 +232,38 @@ impl SessionStore {
         }
     }
 
+    pub async fn upsert_egress_diagnostics_probe_result(
+        &self,
+        result: PersistEgressDiagnosticsProbeResult,
+    ) -> Result<StoredEgressDiagnosticsProbeResult, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.upsert_egress_diagnostics_probe_result(result).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.upsert_egress_diagnostics_probe_result(result).await
+            }
+        }
+    }
+
+    pub async fn get_egress_diagnostics_probe_result_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<StoredEgressDiagnosticsProbeResult>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_egress_diagnostics_probe_result_for_session(session_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_egress_diagnostics_probe_result_for_session(session_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn create_file_workspace(
         &self,
         principal: &AuthenticatedPrincipal,

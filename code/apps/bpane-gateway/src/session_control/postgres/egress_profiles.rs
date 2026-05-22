@@ -64,6 +64,24 @@ impl PostgresSessionStore {
             .update_egress_profile_for_owner(principal, id, request)
             .await
     }
+
+    pub(in crate::session_control) async fn upsert_egress_diagnostics_probe_result(
+        &self,
+        result: PersistEgressDiagnosticsProbeResult,
+    ) -> Result<StoredEgressDiagnosticsProbeResult, SessionStoreError> {
+        self.egress_profile_repository()
+            .upsert_egress_diagnostics_probe_result(result)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_egress_diagnostics_probe_result_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<StoredEgressDiagnosticsProbeResult>, SessionStoreError> {
+        self.egress_profile_repository()
+            .get_egress_diagnostics_probe_result_for_session(session_id)
+            .await
+    }
 }
 
 impl EgressProfileRepository<'_> {
@@ -287,5 +305,94 @@ impl EgressProfileRepository<'_> {
                 SessionStoreError::Backend(format!("failed to update egress profile: {error}"))
             })?;
         row.as_ref().map(row_to_stored_egress_profile).transpose()
+    }
+
+    async fn upsert_egress_diagnostics_probe_result(
+        &self,
+        result: PersistEgressDiagnosticsProbeResult,
+    ) -> Result<StoredEgressDiagnosticsProbeResult, SessionStoreError> {
+        self.store
+            .db
+            .client()
+            .await?
+            .execute(
+                r#"
+                INSERT INTO control_session_egress_diagnostics_probe_results (
+                    session_id,
+                    profile_id,
+                    active_probe_collected,
+                    observed_public_ip,
+                    observed_tls_issuer,
+                    last_failure_reason,
+                    observed_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (session_id) DO UPDATE
+                SET
+                    profile_id = EXCLUDED.profile_id,
+                    active_probe_collected = EXCLUDED.active_probe_collected,
+                    observed_public_ip = EXCLUDED.observed_public_ip,
+                    observed_tls_issuer = EXCLUDED.observed_tls_issuer,
+                    last_failure_reason = EXCLUDED.last_failure_reason,
+                    observed_at = EXCLUDED.observed_at
+                "#,
+                &[
+                    &result.session_id,
+                    &result.profile_id,
+                    &result.active_probe_collected,
+                    &result.observed_public_ip,
+                    &result.observed_tls_issuer,
+                    &result.last_failure_reason,
+                    &result.observed_at,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to upsert egress diagnostics probe result: {error}"
+                ))
+            })?;
+        Ok(result)
+    }
+
+    async fn get_egress_diagnostics_probe_result_for_session(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<StoredEgressDiagnosticsProbeResult>, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                SELECT
+                    session_id,
+                    profile_id,
+                    active_probe_collected,
+                    observed_public_ip,
+                    observed_tls_issuer,
+                    last_failure_reason,
+                    observed_at
+                FROM control_session_egress_diagnostics_probe_results
+                WHERE session_id = $1
+                "#,
+                &[&session_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to fetch egress diagnostics probe result: {error}"
+                ))
+            })?;
+        Ok(row.map(|row| StoredEgressDiagnosticsProbeResult {
+            session_id: row.get("session_id"),
+            profile_id: row.get("profile_id"),
+            active_probe_collected: row.get("active_probe_collected"),
+            observed_public_ip: row.get("observed_public_ip"),
+            observed_tls_issuer: row.get("observed_tls_issuer"),
+            last_failure_reason: row.get("last_failure_reason"),
+            observed_at: row.get("observed_at"),
+        }))
     }
 }
