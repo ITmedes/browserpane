@@ -4,8 +4,8 @@
 
 BrowserPane is a browser-native remote browser and workflow platform. It renders
 a Linux desktop inside a browser `<div>` using WebTransport, WebCodecs, and
-WebGL 2 while exposing owner-scoped control-plane APIs for sessions,
-recordings, workflows, files, credentials, and approved extensions. The
+WebGL 2 while exposing owner-scoped control-plane APIs for sessions, egress
+profiles, recordings, workflows, files, credentials, and approved extensions. The
 container size drives the remote resolution pixel-for-pixel.
 
 The canonical frozen v1 session-control contract is [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
@@ -276,6 +276,10 @@ service.
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
   - `GET /api/v1/session-templates/{id}` — fetch one session template
   - `PUT /api/v1/session-templates/{id}` — replace a session template and increment its version
+  - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, bypass, custom CA, and traffic-observation metadata
+  - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
+  - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
+  - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
   - `POST /api/v1/sessions/{id}/release` — release the live runtime while preserving the session resource and profile
@@ -465,7 +469,7 @@ The default dev stack no longer uses a shared token file.
 - the admin console discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
-- after login, the admin console lists owner-scoped `/api/v1/sessions`, session templates, and browser contexts; it lets the user join an existing session, start a new one with optional template and reusable-context bindings, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
+- after login, the admin console lists owner-scoped `/api/v1/sessions`, session templates, egress profiles, and browser contexts; it lets the user join an existing session, start a new one with optional template, network-identity, egress-profile, and reusable-context bindings, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
 - docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
 - browser-context retention cleanup is metadata-driven per context and removes expired reusable profile data only when the runtime manager confirms there is no active writer
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
@@ -534,9 +538,15 @@ The supported local operator CLI lives in
 `code/web/bpane-client/scripts/bpane-cli.mjs`, is exposed as the package binary
 `bpane`, and has a repo-level wrapper at `scripts/bpane`.
 
-- Commands cover profile inspection/init, session create/list/get/status,
-  access-ticket and automation-access minting, connection disconnect, stop,
-  kill, and bounded cleanup.
+- Commands cover profile inspection/init, egress-profile create/list/get,
+  session create/list/get/status with network-identity options, access-ticket
+  and automation-access minting, connection disconnect, stop, kill, and bounded
+  cleanup.
+- `deploy/examples/egress-observer` provides a local Squid forward-proxy
+  example for metadata-only access-log observation and session/container IP
+  correlation, plus a mitmproxy TLS-intercept fixture for local inspection
+  checks with an explicit custom CA and sensitive-log sink. On localhost, the
+  admin app auto-creates owner-scoped local presets for both proxy variants.
 - MCP commands cover health, authorize, revoke, set-default, clear-default,
   doctor, preflight, and repair.
 - `mcp repair` applies missing automation delegation and bridge default-session

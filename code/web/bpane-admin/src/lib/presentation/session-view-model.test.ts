@@ -11,6 +11,26 @@ const SESSION: SessionResource = {
     mode: 'reusable',
     context_id: '019df7be-6222-7b00-8c86-9e1f3f8d4a72',
   },
+  network_identity: {
+    locale: 'de-DE',
+    languages: ['de-DE', 'en-US'],
+    timezone: 'Europe/Berlin',
+    geolocation: { latitude: 52.52, longitude: 13.405, accuracy_meters: 100 },
+    user_agent: null,
+    browser_identity: 'desktop-chromium-stable',
+    egress_profile_id: '019df7be-6222-7b00-8c86-9e1f3f8d4a73',
+  },
+  effective_egress: {
+    profile_id: '019df7be-6222-7b00-8c86-9e1f3f8d4a73',
+    profile_name: 'EU support egress',
+    profile_state: 'ready',
+    proxy_configured: true,
+    bypass_rule_count: 2,
+    custom_ca_configured: true,
+    observation_mode: 'tls_intercept',
+    tls_interception_enabled: true,
+    sensitive_log_sink_configured: true,
+  },
   owner_mode: 'shared',
   idle_timeout_sec: 1800,
   labels: { case: '1234', purpose: 'import-repro' },
@@ -68,6 +88,7 @@ const TEMPLATE = {
     owner_mode: 'collaborative',
     idle_timeout_sec: 1800,
     labels: { team: 'support' },
+    network_identity: null,
   },
   version: 1,
   created_at: '2026-05-04T18:00:00Z',
@@ -91,6 +112,8 @@ const STATUS: SessionStatus = {
   exclusive_browser_owner: false,
   mcp_owner: true,
   resolution: [1280, 720],
+  network_identity: SESSION.network_identity!,
+  effective_egress: SESSION.effective_egress!,
   recording: {
     configured_mode: 'manual',
     format: 'webm',
@@ -158,6 +181,8 @@ describe('SessionViewModelBuilder', () => {
       templateId: TEMPLATE.id,
       browserContext: 'Support profile (019df7be...4a72)',
       browserContextId: BROWSER_CONTEXT.id,
+      networkIdentity: 'de-DE | Europe/Berlin | de-DE/en-US | geo 52.52,13.405 | desktop-chromium-stable',
+      egress: 'EU support egress | ready | proxy | TLS inspect | log sink | custom CA | 2 bypass',
       mcpDelegation: 'MCP not delegated',
       labels: 'case=1234, purpose=import-repro',
     });
@@ -218,6 +243,16 @@ describe('SessionViewModelBuilder', () => {
       label: 'integration',
       value: 'ticket=INC-1234',
       testId: 'session-integration-context',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'network identity',
+      value: 'de-DE | Europe/Berlin | de-DE/en-US | geo 52.52,13.405 | desktop-chromium-stable',
+      testId: 'session-network-identity',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'egress',
+      value: 'EU support egress | ready | proxy | TLS inspect | log sink | custom CA | 2 bypass',
+      testId: 'session-effective-egress',
     });
     expect(viewModel.connections).toEqual([{
       id: 7,

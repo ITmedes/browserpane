@@ -152,6 +152,39 @@ describe('BrowserSessionConnector', () => {
 
     expect(connection.handle).toBe(handle);
   });
+
+  it('adds local compose guidance when WebTransport opening handshake fails', async () => {
+    const handshakeError = new Error('Opening handshake failed.');
+    const connector = new BrowserSessionConnector({
+      controlClient: new ControlClient({
+        baseUrl: 'http://localhost:8932',
+        accessTokenProvider: () => 'owner-token',
+        fetchImpl: ticketFetch(),
+      }),
+      sdkProvider: {
+        load: async () => ({
+          BpaneSession: {
+            connect: async () => {
+              throw handshakeError;
+            },
+          },
+        }),
+      },
+    });
+
+    let thrown: unknown;
+    try {
+      await connector.connect(SESSION, document.createElement('div'));
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toContain('WebTransport opening handshake failed');
+    expect((thrown as Error).message).toContain('https://localhost:4433/session');
+    expect((thrown as Error).message).toContain('--origin-to-force-quic-on=localhost:4433');
+    expect((thrown as Error & { cause?: unknown }).cause).toBe(handshakeError);
+  });
 });
 
 function ticketFetch(): FetchLike {

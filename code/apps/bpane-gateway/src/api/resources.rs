@@ -81,6 +81,8 @@ pub(super) fn session_status_from_snapshot(
     state: SessionLifecycleState,
     summary: SessionStatusSummary,
     snapshot: SessionTelemetrySnapshot,
+    network_identity: SessionNetworkIdentity,
+    effective_egress: SessionEffectiveEgress,
     recording_policy: &SessionRecordingPolicy,
     latest_recording: Option<&StoredSessionRecording>,
     playback: SessionRecordingPlaybackResource,
@@ -97,6 +99,8 @@ pub(super) fn session_status_from_snapshot(
         exclusive_browser_owner: snapshot.exclusive_browser_owner,
         mcp_owner: snapshot.mcp_owner,
         resolution: snapshot.resolution,
+        network_identity,
+        effective_egress,
         recording: recording_status_from_snapshot(&snapshot, recording_policy, latest_recording),
         playback,
         telemetry: SessionTelemetry {
@@ -356,6 +360,7 @@ pub(super) async fn session_resource(
     state_override: Option<SessionLifecycleState>,
 ) -> Result<SessionResource, SessionStoreError> {
     let status = session_status_summary(state, stored).await?;
+    let effective_egress = session_effective_egress(state, stored).await?;
     Ok(stored.to_resource(
         &state.public_gateway_url,
         state
@@ -364,7 +369,29 @@ pub(super) async fn session_resource(
             .into(),
         status,
         state_override,
+        effective_egress,
     ))
+}
+
+pub(super) async fn session_effective_egress(
+    state: &ApiState,
+    stored: &StoredSession,
+) -> Result<SessionEffectiveEgress, SessionStoreError> {
+    let Some(profile_id) = stored.network_identity.egress_profile_id else {
+        return Ok(SessionEffectiveEgress::default());
+    };
+    let owner = session_owner_principal(stored);
+    let Some(profile) = state
+        .session_store
+        .get_egress_profile_for_owner(&owner, profile_id)
+        .await?
+    else {
+        return Ok(SessionEffectiveEgress {
+            profile_id: Some(profile_id),
+            ..SessionEffectiveEgress::default()
+        });
+    };
+    Ok(profile.to_session_effective_egress())
 }
 
 pub(super) async fn load_session_status(
@@ -383,11 +410,14 @@ pub(super) async fn load_session_status(
         .await?;
     let latest_recording = latest_recording(&recordings);
     let playback = prepare_session_recording_playback(session.id, &recordings, Utc::now());
+    let effective_egress = session_effective_egress(state, session).await?;
 
     Ok(session_status_from_snapshot(
         session.state,
         summary,
         snapshot,
+        session.network_identity.clone(),
+        effective_egress,
         &session.recording,
         latest_recording,
         playback.resource,

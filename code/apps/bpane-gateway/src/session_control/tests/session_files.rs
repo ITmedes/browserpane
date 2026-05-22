@@ -6,6 +6,7 @@ fn create_session_request() -> CreateSessionRequest {
     CreateSessionRequest {
         template_id: None,
         browser_context: None,
+        network_identity: None,
         owner_mode: None,
         viewport: None,
         idle_timeout_sec: None,

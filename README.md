@@ -82,7 +82,7 @@ Current support and scope:
 - Shared sessions: collaborative by default, intended for small curated groups rather than broadcast-scale delivery.
 - Owner/viewer mode: optional exclusive-owner mode is supported in the gateway; restricted viewers are read-only.
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
-- Control plane: owner-scoped v1 APIs now cover sessions, session templates, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
+- Control plane: owner-scoped v1 APIs now cover sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 
@@ -255,6 +255,15 @@ http://localhost:8080/cert-hash
 
 `./deploy/gen-dev-cert.sh dev/certs` also refreshes `dev/certs/cert-fingerprint.txt` and `dev/certs/cert-hash.txt` from the same `cert.pem` for CLI and WebTransport certificate-hash use. The admin app and browser client request these local certificate metadata endpoints without browser cache reuse so certificate rotations can be picked up after reload.
 
+If a manually launched local Chromium reports `Opening handshake failed` when joining a session, start it with the local QUIC origin and SPKI trust flags:
+
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --origin-to-force-quic-on=localhost:4433 \
+  --ignore-certificate-errors-spki-list="$(cat dev/certs/cert-fingerprint.txt)" \
+  http://localhost:8080/admin/
+```
+
 ### Remote / Self-Hosted Testing
 
 The checked-in compose stack is a local development and regression environment,
@@ -289,13 +298,16 @@ Canonical contract:
 - `GET /api/v1/session-templates`
 - `GET /api/v1/session-templates/{id}`
 - `PUT /api/v1/session-templates/{id}`
+- `POST /api/v1/egress-profiles`
+- `GET /api/v1/egress-profiles`
+- `GET /api/v1/egress-profiles/{id}`
 
 These endpoints are bearer-protected, owner-scoped, and stored in Postgres. The
 full contract is in the OpenAPI file; the route lists below call out the
 operator-facing surfaces that are most relevant for local development.
 
 Session templates store reusable defaults for session creation, including owner
-mode, viewport, idle timeout, labels, integration context, and recording policy.
+mode, viewport, idle timeout, labels, integration context, network identity, and recording policy.
 Creating a session with a UUID `template_id` merges those defaults before the
 session is persisted; explicit caller fields win over template defaults.
 The admin create-session configurator follows the same rule: selecting a
@@ -304,6 +316,28 @@ explicit override, and the API payload preview shows the exact fields that will
 be sent.
 `GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
+Network identity metadata lets callers declare locale, language preferences,
+timezone, geolocation, browser identity, user-agent override, and an
+`egress_profile_id` on either a session template or an explicit session create
+payload. Egress profiles are owner-scoped resources with safe proxy metadata,
+bypass rules, custom CA references, state, labels, and sanitized effective
+status; session resources and `/status` include the inherited network identity
+and effective egress summary without embedding proxy credentials or raw CA
+material.
+Egress-side communication tracking belongs at the configured proxy or secure
+web gateway. BrowserPane emits safe correlation metadata instead: docker-backed
+runtime containers carry `browserpane.session_id` and egress-profile labels,
+and the gateway logs a sanitized runtime startup event that joins the session,
+runtime container, and egress profile. A runnable local Squid access-log example
+is available in `deploy/examples/egress-observer`.
+Egress profiles default to `traffic_observation.mode=metadata_only`. Full HTTPS
+inspection must be explicit with `mode=tls_intercept`, and the API requires a
+proxy, custom CA reference, and `sensitive_log_sink_ref` so operators do not
+enable decrypted traffic logging without an approved SIEM/log-storage target.
+Docker-backed runtimes materialize `file://` or absolute-path custom CA bundle
+references into the session data volume and install them into Chromium's NSS
+trust store before launch; non-file CA providers remain a provider-integration
+follow-up.
 Browser context resources let callers name owner-scoped Chromium profile
 contexts and bind new sessions with `browser_context.mode=reusable` plus a
 `context_id`. Docker-backed runtimes materialize reusable contexts as a
@@ -471,6 +505,13 @@ Common session operations:
 ./scripts/bpane session list --template-id <template-id> --label team=support
 ./scripts/bpane session create --label purpose=manual-test
 ./scripts/bpane session create --browser-context-id <context-id> --label purpose=context-test
+./scripts/bpane session create \
+  --locale de-DE \
+  --language de-DE \
+  --language en-US \
+  --timezone Europe/Berlin \
+  --egress-profile-id <egress-profile-id> \
+  --label purpose=regional-test
 ./scripts/bpane session get <session-id>
 ./scripts/bpane session status <session-id>
 ./scripts/bpane session access-token <session-id>
@@ -495,6 +536,75 @@ Common session-template operations:
 ./scripts/bpane session-template update <template-id> --name customer-debug-session --default-label purpose=debug
 ./scripts/bpane session create --template-id <template-id> --label case=INC-1234
 ```
+
+Common egress-profile operations:
+
+```bash
+./scripts/bpane egress-profile create eu-support-egress \
+  --description "Approved support outbound path" \
+  --label region=eu \
+  --proxy-url https://proxy.example:8443 \
+  --bypass-rule localhost \
+  --bypass-rule "*.internal.example" \
+  --custom-ca-ref vault://pki/browserpane/eu-support \
+  --custom-ca-name "EU support CA"
+./scripts/bpane egress-profile list
+./scripts/bpane egress-profile get <egress-profile-id>
+```
+
+For a proxy that performs approved TLS interception, make that explicit and
+name the sensitive-log sink:
+
+```bash
+./scripts/bpane egress-profile create inspected-support-egress \
+  --proxy-url https://inspect-proxy.example:8443 \
+  --custom-ca-ref file:///workspace/dev/egress-ca.pem \
+  --custom-ca-name "Support inspection CA" \
+  --traffic-observation-mode tls_intercept \
+  --sensitive-log-sink-ref siem://browserpane/support-egress \
+  --sensitive-log-sink-name "Support SIEM"
+```
+
+To observe egress traffic locally without changing the BrowserPane gateway,
+start the normal compose stack first, then start the example forward proxy and
+point an egress profile at it:
+
+```bash
+docker compose -f deploy/examples/egress-observer/compose.yml up --build
+./scripts/bpane egress-profile create local-egress-observer \
+  --proxy-url http://bpane-egress-observer:3128 \
+  --bypass-rule localhost \
+  --bypass-rule 127.0.0.1
+docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-proxy
+deploy/examples/egress-observer/correlate-session-ip.sh
+```
+
+For local HTTPS interception, run the mitmproxy-backed observer alongside the
+plain Squid observer:
+
+```bash
+docker compose -f deploy/examples/egress-observer/compose.yml up -d
+deploy/examples/egress-observer/prepare-mitmproxy-ca.sh
+docker compose -f deploy/examples/egress-observer/compose.tls.yml up -d
+./scripts/bpane egress-profile create local-tls-observer \
+  --proxy-url http://bpane-egress-tls-observer:3129 \
+  --custom-ca-ref file:///workspace/dev/egress-ca.pem \
+  --custom-ca-name "BrowserPane Local Egress Test CA" \
+  --traffic-observation-mode tls_intercept \
+  --sensitive-log-sink-ref siem://browserpane/local-egress \
+  --sensitive-log-sink-name "Local Egress SIEM"
+```
+
+Sessions using that profile should show certificates issued by the local egress
+CA in the remote Chromium certificate viewer. The TLS observer logs decrypted
+request metadata and should only be used for local development or an approved
+sensitive-log sink.
+
+On `localhost`, the admin app auto-creates two owner-scoped local presets when
+it loads the egress catalog: `Local: Egress as Proxy` and `Local: Egress as TLS
+Interceptor`. The session configurator groups egress choices as `No egress`,
+`Egress as Proxy`, and `Egress as TLS Interceptor` so local testers can compare
+all three modes.
 
 Common browser-context operations:
 

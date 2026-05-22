@@ -2,9 +2,10 @@
 mod suite;
 
 use suite::{
-    automation_access_boundaries, browser_contexts, credentials_extensions, ownership_boundaries,
-    recording_artifacts, session_churn, session_compatibility, session_templates,
-    sessions_recordings, support, workflow_run_controls, workflows_events, workspaces_automation,
+    automation_access_boundaries, browser_contexts, credentials_extensions, network_identity,
+    ownership_boundaries, recording_artifacts, session_churn, session_compatibility,
+    session_templates, sessions_recordings, support, workflow_run_controls, workflows_events,
+    workspaces_automation,
 };
 
 #[tokio::test]
@@ -32,6 +33,15 @@ async fn compose_browser_contexts_api_surface() -> anyhow::Result<()> {
     let harness = support::ComposeHarness::connect().await?;
     harness.cleanup_active_sessions().await?;
     browser_contexts::run(&harness).await
+}
+
+#[tokio::test]
+#[ignore = "requires running local compose stack"]
+async fn compose_network_identity_api_surface() -> anyhow::Result<()> {
+    let _guard = support::suite_lock().lock().await;
+    let harness = support::ComposeHarness::connect().await?;
+    harness.cleanup_active_sessions().await?;
+    network_identity::run(&harness).await
 }
 
 #[tokio::test]

@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   browserContextOptionLabel,
   defaultSessionCreateFormState,
+  egressProfileKind,
+  egressProfileOptionLabel,
+  isLocalProxyEgressPreset,
+  isLocalTlsInterceptorEgressPreset,
+  networkIdentitySummary,
   parseSessionCreateLabels,
   sessionBrowserContextSummary,
   sessionTemplateDefaultsSummary,
@@ -25,6 +30,35 @@ const BROWSER_CONTEXT = {
   deleted_at: null,
 } as const;
 
+const EGRESS_PROFILE = {
+  id: '019df7be-6222-7b00-8c86-9e1f3f8d4a73',
+  name: 'EU support egress',
+  description: null,
+  labels: { region: 'eu' },
+  proxy: { url: 'https://proxy.example:8443' },
+  bypass_rules: ['localhost', '*.internal.example'],
+  custom_ca: {
+    certificate_ref: 'vault://pki/browserpane/eu-support',
+    display_name: 'EU support CA',
+  },
+  traffic_observation: {
+    mode: 'tls_intercept',
+    sensitive_log_sink_ref: 'siem://browserpane/eu-support',
+    sensitive_log_sink_display_name: 'EU support SIEM',
+  },
+  state: 'ready',
+  effective: {
+    proxy_configured: true,
+    bypass_rule_count: 2,
+    custom_ca_configured: true,
+    observation_mode: 'tls_intercept',
+    tls_interception_enabled: true,
+    sensitive_log_sink_configured: true,
+  },
+  created_at: '2026-05-04T18:45:00Z',
+  updated_at: '2026-05-04T18:45:00Z',
+} as const;
+
 describe('session create configurator', () => {
   it('builds the backend-default collaborative command', () => {
     const validation = validateSessionCreateForm(defaultSessionCreateFormState());
@@ -40,18 +74,60 @@ describe('session create configurator', () => {
       ownerMode: 'exclusive_browser_owner',
       idleTimeoutSec: '1800',
       labels: 'case=1234\npurpose=import-repro, suite=admin',
+      locale: 'de-DE',
+      languages: 'de-DE, en-US',
+      timezone: 'Europe/Berlin',
+      geolocationLatitude: '52.52',
+      geolocationLongitude: '13.405',
+      geolocationAccuracyMeters: '100',
+      browserIdentity: 'desktop-chromium-stable',
+      egressProfileId: EGRESS_PROFILE.id,
+      egressProfiles: [EGRESS_PROFILE],
     });
 
     expect(validation.errors).toEqual([]);
     expect(validation.command).toEqual({
       owner_mode: 'exclusive_browser_owner',
       idle_timeout_sec: 1800,
+      network_identity: {
+        locale: 'de-DE',
+        languages: ['de-DE', 'en-US'],
+        timezone: 'Europe/Berlin',
+        geolocation: {
+          latitude: 52.52,
+          longitude: 13.405,
+          accuracy_meters: 100,
+        },
+        browser_identity: 'desktop-chromium-stable',
+        egress_profile_id: EGRESS_PROFILE.id,
+      },
       labels: {
         case: '1234',
         purpose: 'import-repro',
         suite: 'admin',
       },
     });
+  });
+
+  it('validates network identity and egress profile selections', () => {
+    const validation = validateSessionCreateForm({
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      geolocationLatitude: '91',
+      geolocationLongitude: '13.405',
+      geolocationAccuracyMeters: '0',
+      egressProfileId: 'missing-profile',
+      egressProfiles: [EGRESS_PROFILE],
+    });
+
+    expect(validation.command).toBeNull();
+    expect(validation.errors).toEqual([
+      'Selected egress profile is not available.',
+      'Latitude must be between -90 and 90.',
+      'Geolocation accuracy must be greater than zero.',
+    ]);
   });
 
   it('rejects unsupported owner modes and invalid idle timeout values', () => {
@@ -248,13 +324,55 @@ describe('session create configurator', () => {
         idle_timeout_sec: 1800,
         labels: { team: 'support' },
         integration_context: { ticket: 'INC-1234' },
+        network_identity: {
+          locale: 'de-DE',
+          languages: ['de-DE'],
+          timezone: 'Europe/Berlin',
+          egress_profile_id: EGRESS_PROFILE.id,
+        },
         recording: { mode: 'manual', format: 'webm' },
       },
       version: 1,
       created_at: '2026-05-04T18:00:00Z',
       updated_at: '2026-05-04T18:00:00Z',
     })).toBe(
-      'owner=collaborative | idle=1800s | viewport=1440x900 | labels=team=support | integration=ticket | recording=manual',
+      'owner=collaborative | idle=1800s | viewport=1440x900 | labels=team=support | integration=ticket | recording=manual | locale=de-DE | languages=de-DE | timezone=Europe/Berlin | egress=019df7be...4a73',
     );
+    expect(networkIdentitySummary({
+      locale: 'de-DE',
+      languages: ['de-DE'],
+      timezone: 'Europe/Berlin',
+      geolocation: null,
+      user_agent: null,
+      browser_identity: null,
+      egress_profile_id: EGRESS_PROFILE.id,
+    }, [EGRESS_PROFILE])).toBe('locale=de-DE | languages=de-DE | timezone=Europe/Berlin | egress=EU support egress');
+    expect(egressProfileOptionLabel(EGRESS_PROFILE)).toBe('EU support egress (ready, proxy, TLS inspect, log sink, custom CA, 2 bypass)');
+    expect(egressProfileKind(EGRESS_PROFILE)).toBe('tls_interceptor');
+    expect(egressProfileKind({
+      ...EGRESS_PROFILE,
+      id: '019df7be-6222-7b00-8c86-9e1f3f8d4a75',
+      name: 'Plain proxy',
+      custom_ca: null,
+      traffic_observation: { mode: 'metadata_only' },
+      effective: {
+        proxy_configured: true,
+        bypass_rule_count: 1,
+        custom_ca_configured: false,
+        observation_mode: 'metadata_only',
+        tls_interception_enabled: false,
+        sensitive_log_sink_configured: false,
+      },
+    })).toBe('proxy');
+    expect(isLocalProxyEgressPreset({
+      ...EGRESS_PROFILE,
+      name: 'Local: Egress as Proxy',
+      labels: {},
+    })).toBe(true);
+    expect(isLocalTlsInterceptorEgressPreset({
+      ...EGRESS_PROFILE,
+      name: 'Local: Egress as TLS Interceptor',
+      labels: {},
+    })).toBe(true);
   });
 });

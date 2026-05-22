@@ -10,6 +10,7 @@ code/tests/e2e
 # TLS certificates (generated)
 *.pem
 *.key
+dev/egress-mitmproxy/
 !dev/gen-cert.sh
 
 # WASM build output

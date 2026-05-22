@@ -26,6 +26,14 @@ impl SessionRepository<'_> {
         let labels_value = json_labels(&request.labels);
         let extensions_value = json_applied_extensions(&request.extensions)?;
         let recording_value = json_recording_policy(&request.recording)?;
+        let network_identity_value = serde_json::to_value(
+            request.network_identity.clone().unwrap_or_default(),
+        )
+        .map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "failed to encode session network identity: {error}"
+            ))
+        })?;
         let browser_context = request.browser_context.clone().unwrap_or_default();
         let session_id = Uuid::now_v7();
         let insert_query = format!(
@@ -39,6 +47,7 @@ impl SessionRepository<'_> {
                 template_id,
                 browser_context_mode,
                 browser_context_id,
+                network_identity,
                 owner_mode,
                 viewport_width,
                 viewport_height,
@@ -52,8 +61,8 @@ impl SessionRepository<'_> {
                 updated_at
             )
             VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                $13::jsonb, $14::jsonb, $15::jsonb, $16::jsonb, $17, $18, $18
+                $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13,
+                $14::jsonb, $15::jsonb, $16::jsonb, $17::jsonb, $18, $19, $19
             )
             RETURNING
                 {SESSION_COLUMNS}
@@ -71,6 +80,7 @@ impl SessionRepository<'_> {
                     &request.template_id,
                     &browser_context.mode.as_str(),
                     &browser_context.context_id,
+                    &network_identity_value,
                     &owner_mode.as_str(),
                     &(viewport.width as i32),
                     &(viewport.height as i32),

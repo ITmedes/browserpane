@@ -505,6 +505,8 @@ mod tests {
                 mode: crate::session_control::SessionBrowserContextMode::Fresh,
                 context_id: None,
             },
+            network_identity: crate::session_control::SessionNetworkIdentity::default(),
+            effective_egress: crate::session_control::SessionEffectiveEgress::default(),
             owner_mode: SessionOwnerMode::Collaborative,
             viewport: SessionViewport {
                 width: 1600,

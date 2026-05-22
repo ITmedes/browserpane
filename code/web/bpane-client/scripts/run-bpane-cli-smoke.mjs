@@ -91,6 +91,42 @@ async function run() {
       throw new Error('CLI profile show did not return the smoke profile.');
     }
 
+    const egressProfile = runBpaneCli([
+      'egress-profile',
+      'create',
+      `eu-support-egress-${runLabel}`,
+      '--description',
+      'Operator CLI smoke egress profile',
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--label',
+      `run_id=${runLabel}`,
+      '--proxy-url',
+      'https://proxy.example:8443',
+      '--bypass-rule',
+      'localhost',
+      '--bypass-rule',
+      '*.internal.example',
+      '--custom-ca-ref',
+      'vault://pki/browserpane/eu-support',
+      '--custom-ca-name',
+      'EU support CA',
+    ], cliEnv);
+    const egressProfileId = egressProfile.id;
+    if (!egressProfileId || egressProfile.effective?.proxy_configured !== true) {
+      throw new Error(`CLI egress-profile create returned an invalid profile: ${JSON.stringify(egressProfile)}`);
+    }
+
+    const listedEgressProfiles = runBpaneCli(['egress-profile', 'list'], cliEnv);
+    if (!Array.isArray(listedEgressProfiles.profiles) || !listedEgressProfiles.profiles.some((item) => item.id === egressProfileId)) {
+      throw new Error(`CLI egress-profile list did not include ${egressProfileId}.`);
+    }
+
+    const fetchedEgressProfile = runBpaneCli(['egress-profile', 'get', egressProfileId], cliEnv);
+    if (fetchedEgressProfile.id !== egressProfileId || fetchedEgressProfile.bypass_rules?.length !== 2) {
+      throw new Error(`CLI egress-profile get returned unexpected profile data: ${JSON.stringify(fetchedEgressProfile)}`);
+    }
+
     const template = runBpaneCli([
       'session-template',
       'create',
@@ -107,6 +143,16 @@ async function run() {
       'collaborative',
       '--idle-timeout-sec',
       '1800',
+      '--locale',
+      'de-DE',
+      '--language',
+      'de-DE',
+      '--language',
+      'en-US',
+      '--timezone',
+      'Europe/Berlin',
+      '--egress-profile-id',
+      egressProfileId,
       '--integration-json',
       JSON.stringify({ source: 'bpane-cli-smoke-template' }),
       '--recording-mode',
@@ -275,6 +321,10 @@ async function run() {
       created.template_id !== templateId
       || created.browser_context?.mode !== 'reusable'
       || created.browser_context?.context_id !== contextId
+      || created.network_identity?.locale !== 'de-DE'
+      || created.network_identity?.timezone !== 'Europe/Berlin'
+      || created.network_identity?.egress_profile_id !== egressProfileId
+      || created.effective_egress?.profile_id !== egressProfileId
       || created.labels?.team !== 'support'
       || created.labels?.tier !== 'gold'
       || created.labels?.run_id !== runLabel

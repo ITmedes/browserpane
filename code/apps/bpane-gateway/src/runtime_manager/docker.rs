@@ -16,7 +16,10 @@ use uuid::Uuid;
 
 use super::*;
 use crate::auth::AuthenticatedPrincipal;
-use crate::session_control::{SessionBrowserContextMode, StoredSession};
+use crate::session_control::{
+    EgressProfileState, EgressTrafficObservationMode, SessionBrowserContextMode,
+    StoredEgressProfile, StoredSession,
+};
 use crate::workspaces::WorkspaceFileStore;
 
 pub(super) struct DockerRuntimeManager {

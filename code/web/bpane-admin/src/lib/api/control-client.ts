@@ -14,10 +14,13 @@ import type {
   BrowserContextResource,
   CloneBrowserContextCommand,
   CreateBrowserContextCommand,
+  CreateEgressProfileCommand,
   ImportBrowserContextCommand,
   CreateSessionCommand,
   CreateFileWorkspaceCommand,
   CreateSessionFileBindingCommand,
+  EgressProfileListResponse,
+  EgressProfileResource,
   FileWorkspaceFileListResponse,
   FileWorkspaceFileResource,
   FileWorkspaceListResponse,
@@ -76,6 +79,25 @@ export class ControlClient {
   async listSessionTemplates(): Promise<SessionTemplateListResponse> {
     const payload = await this.#request('GET', '/api/v1/session-templates');
     return ControlSessionMapper.toSessionTemplateList(payload);
+  }
+
+  async listEgressProfiles(): Promise<EgressProfileListResponse> {
+    const payload = await this.#request('GET', '/api/v1/egress-profiles');
+    return ControlSessionMapper.toEgressProfileList(payload);
+  }
+
+  async createEgressProfile(command: CreateEgressProfileCommand): Promise<EgressProfileResource> {
+    const payload = await this.#request('POST', '/api/v1/egress-profiles', {
+      ...command,
+      labels: command.labels ?? {},
+      bypass_rules: command.bypass_rules ?? [],
+    });
+    return ControlSessionMapper.toEgressProfileResource(payload);
+  }
+
+  async getEgressProfile(profileId: string): Promise<EgressProfileResource> {
+    const payload = await this.#request('GET', `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
+    return ControlSessionMapper.toEgressProfileResource(payload);
   }
 
   async listBrowserContexts(): Promise<BrowserContextListResponse> {

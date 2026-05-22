@@ -5,8 +5,8 @@ info:
   description: >
     Frozen v1 owner-scoped BrowserPane control-plane contract. This document
     covers the canonical `/api/v1` surfaces for sessions, session templates,
-    browser contexts, automation tasks, recordings, workflows, reusable files, credentials,
-    approved extensions, and admin realtime snapshots. Legacy global compatibility routes such as
+    browser contexts, egress profiles, automation tasks, recordings, workflows,
+    reusable files, credentials, approved extensions, and admin realtime snapshots. Legacy global compatibility routes such as
     `/api/session/status` and `/api/session/mcp-owner` are intentionally excluded
     from this freeze and remain transitional.
 servers:
@@ -18,6 +18,7 @@ tags:
   - name: Admin Events
   - name: Sessions
   - name: Session Templates
+  - name: Egress Profiles
   - name: Browser Contexts
   - name: Session Runtime
   - name: Session Recordings
@@ -423,6 +424,67 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/egress-profiles:
+    get:
+      tags: [Egress Profiles]
+      summary: List owner-scoped egress profiles
+      operationId: listEgressProfiles
+      responses:
+        '200':
+          description: Owner-scoped egress profile list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressProfileListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Egress Profiles]
+      summary: Create an owner-scoped egress profile
+      operationId: createEgressProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEgressProfileRequest'
+      responses:
+        '201':
+          description: Egress profile created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressProfileResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/egress-profiles/{profile_id}:
+    parameters:
+      - $ref: '#/components/parameters/EgressProfileId'
+    get:
+      tags: [Egress Profiles]
+      summary: Fetch one owner-scoped egress profile
+      operationId: getEgressProfile
+      responses:
+        '200':
+          description: Egress profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EgressProfileResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/automation-tasks:
@@ -2455,6 +2517,13 @@ components:
         format: uuid
     SessionTemplateId:
       name: template_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EgressProfileId:
+      name: profile_id
       in: path
       required: true
       schema:
@@ -4946,6 +5015,259 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BrowserContextResource'
+    EgressProfileState:
+      type: string
+      enum:
+        - ready
+        - disabled
+    EgressTrafficObservationMode:
+      type: string
+      enum:
+        - metadata_only
+        - tls_intercept
+    SessionGeolocation:
+      type: object
+      additionalProperties: false
+      required: [latitude, longitude]
+      properties:
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        accuracy_meters:
+          type: number
+          format: double
+          minimum: 0
+          nullable: true
+    SessionNetworkIdentity:
+      type: object
+      additionalProperties: false
+      properties:
+        locale:
+          type: string
+          nullable: true
+          description: "BCP-47-like locale tag, for example `de-DE`."
+        languages:
+          type: array
+          items:
+            type: string
+          default: []
+        timezone:
+          type: string
+          nullable: true
+          description: "`UTC` or an IANA-style timezone such as `Europe/Berlin`."
+        geolocation:
+          allOf:
+            - $ref: '#/components/schemas/SessionGeolocation'
+          nullable: true
+        user_agent:
+          type: string
+          nullable: true
+        browser_identity:
+          type: string
+          nullable: true
+          description: Approved browser identity key understood by the runtime.
+        egress_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+    EgressProxyConfig:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: HTTP or HTTPS proxy URL. Inline credentials are rejected by the API.
+    EgressCustomCaConfig:
+      type: object
+      additionalProperties: false
+      required: [certificate_ref]
+      properties:
+        certificate_ref:
+          type: string
+          description: Opaque reference to approved CA material; raw certificates are not embedded in session metadata.
+        display_name:
+          type: string
+          nullable: true
+    EgressTrafficObservationConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        mode:
+          allOf:
+            - $ref: '#/components/schemas/EgressTrafficObservationMode'
+          default: metadata_only
+          description: "`metadata_only` logs destinations at the configured proxy. `tls_intercept` requires proxy, custom_ca, and sensitive_log_sink_ref."
+        sensitive_log_sink_ref:
+          type: string
+          nullable: true
+          description: Opaque reference to an approved SIEM/log sink for sensitive TLS-intercepted traffic logs.
+        sensitive_log_sink_display_name:
+          type: string
+          nullable: true
+    EgressProfileEffectiveStatus:
+      type: object
+      required:
+        - proxy_configured
+        - bypass_rule_count
+        - custom_ca_configured
+        - observation_mode
+        - tls_interception_enabled
+        - sensitive_log_sink_configured
+      properties:
+        proxy_configured:
+          type: boolean
+        bypass_rule_count:
+          type: integer
+          minimum: 0
+        custom_ca_configured:
+          type: boolean
+        observation_mode:
+          $ref: '#/components/schemas/EgressTrafficObservationMode'
+        tls_interception_enabled:
+          type: boolean
+        sensitive_log_sink_configured:
+          type: boolean
+    SessionEffectiveEgress:
+      type: object
+      required:
+        - profile_id
+        - profile_name
+        - profile_state
+        - proxy_configured
+        - bypass_rule_count
+        - custom_ca_configured
+        - observation_mode
+        - tls_interception_enabled
+        - sensitive_log_sink_configured
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        profile_name:
+          type: string
+          nullable: true
+        profile_state:
+          allOf:
+            - $ref: '#/components/schemas/EgressProfileState'
+          nullable: true
+        proxy_configured:
+          type: boolean
+        bypass_rule_count:
+          type: integer
+          minimum: 0
+        custom_ca_configured:
+          type: boolean
+        observation_mode:
+          $ref: '#/components/schemas/EgressTrafficObservationMode'
+        tls_interception_enabled:
+          type: boolean
+        sensitive_log_sink_configured:
+          type: boolean
+    CreateEgressProfileRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        proxy:
+          allOf:
+            - $ref: '#/components/schemas/EgressProxyConfig'
+          nullable: true
+        bypass_rules:
+          type: array
+          items:
+            type: string
+        custom_ca:
+          allOf:
+            - $ref: '#/components/schemas/EgressCustomCaConfig'
+          nullable: true
+        traffic_observation:
+          allOf:
+            - $ref: '#/components/schemas/EgressTrafficObservationConfig'
+          default:
+            mode: metadata_only
+        state:
+          allOf:
+            - $ref: '#/components/schemas/EgressProfileState'
+          default: ready
+    EgressProfileResource:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - labels
+        - proxy
+        - bypass_rules
+        - custom_ca
+        - traffic_observation
+        - state
+        - effective
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        proxy:
+          allOf:
+            - $ref: '#/components/schemas/EgressProxyConfig'
+          nullable: true
+        bypass_rules:
+          type: array
+          items:
+            type: string
+        custom_ca:
+          allOf:
+            - $ref: '#/components/schemas/EgressCustomCaConfig'
+          nullable: true
+        traffic_observation:
+          $ref: '#/components/schemas/EgressTrafficObservationConfig'
+        state:
+          $ref: '#/components/schemas/EgressProfileState'
+        effective:
+          $ref: '#/components/schemas/EgressProfileEffectiveStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    EgressProfileListResponse:
+      type: object
+      required: [profiles]
+      properties:
+        profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/EgressProfileResource'
     SessionResource:
       type: object
       required:
@@ -4953,6 +5275,8 @@ components:
         - state
         - template_id
         - browser_context
+        - network_identity
+        - effective_egress
         - owner_mode
         - viewport
         - capabilities
@@ -4981,6 +5305,10 @@ components:
           nullable: true
         browser_context:
           $ref: '#/components/schemas/SessionBrowserContextResource'
+        network_identity:
+          $ref: '#/components/schemas/SessionNetworkIdentity'
+        effective_egress:
+          $ref: '#/components/schemas/SessionEffectiveEgress'
         owner_mode:
           $ref: '#/components/schemas/SessionOwnerMode'
         viewport:
@@ -5040,6 +5368,8 @@ components:
           nullable: true
         browser_context:
           $ref: '#/components/schemas/SessionBrowserContextRequest'
+        network_identity:
+          $ref: '#/components/schemas/SessionNetworkIdentity'
         owner_mode:
           $ref: '#/components/schemas/SessionOwnerMode'
         viewport:
@@ -5083,6 +5413,10 @@ components:
           type: object
           nullable: true
           additionalProperties: true
+        network_identity:
+          allOf:
+            - $ref: '#/components/schemas/SessionNetworkIdentity'
+          nullable: true
         recording:
           allOf:
             - $ref: '#/components/schemas/SessionRecordingPolicy'
@@ -5510,6 +5844,8 @@ components:
         - exclusive_browser_owner
         - mcp_owner
         - resolution
+        - network_identity
+        - effective_egress
         - recording
         - playback
         - telemetry
@@ -5558,6 +5894,10 @@ components:
           items:
             type: integer
             minimum: 0
+        network_identity:
+          $ref: '#/components/schemas/SessionNetworkIdentity'
+        effective_egress:
+          $ref: '#/components/schemas/SessionEffectiveEgress'
         recording:
           $ref: '#/components/schemas/SessionRecordingStatus'
         playback:

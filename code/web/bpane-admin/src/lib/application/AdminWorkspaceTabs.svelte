@@ -17,6 +17,7 @@
     CloneBrowserContextCommand,
     CreateBrowserContextCommand,
     CreateSessionCommand,
+    EgressProfileResource,
     ImportBrowserContextCommand,
     SessionResource,
     SessionTemplateResource,
@@ -54,13 +55,16 @@
     readonly sessions?: readonly SessionResource[];
     readonly sessionTemplates?: readonly SessionTemplateResource[];
     readonly browserContexts?: readonly BrowserContextResource[];
+    readonly egressProfiles?: readonly EgressProfileResource[];
     readonly templatesLoading?: boolean;
     readonly browserContextsLoading?: boolean;
+    readonly egressProfilesLoading?: boolean;
     readonly cloningContextId?: string | null;
     readonly exportingContextId?: string | null;
     readonly importingBrowserContext?: boolean;
     readonly templateError?: string | null;
     readonly browserContextError?: string | null;
+    readonly egressProfileError?: string | null;
     readonly mcpBridge: McpBridgeConfig | null;
     readonly liveConnection: LiveBrowserSessionConnection | null;
     readonly browserConnected: boolean;
@@ -176,10 +180,13 @@
           viewModel={props.sessionListViewModel}
           sessionTemplates={props.sessionTemplates ?? []}
           browserContexts={props.browserContexts ?? []}
+          egressProfiles={props.egressProfiles ?? []}
           templatesLoading={props.templatesLoading ?? false}
           browserContextsLoading={props.browserContextsLoading ?? false}
+          egressProfilesLoading={props.egressProfilesLoading ?? false}
           templateError={props.templateError ?? null}
           browserContextError={props.browserContextError ?? null}
+          egressProfileError={props.egressProfileError ?? null}
           connected={props.browserConnected}
           onRefresh={() => void props.onRefreshSessions(true)}
           onCreateSession={props.onCreateSession}
