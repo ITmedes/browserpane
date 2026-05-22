@@ -10,6 +10,18 @@ services:
         aliases:
           - bpane-egress-observer
 
+  egress-auth-proxy:
+    build:
+      context: .
+    container_name: bpane-egress-auth-observer
+    command: ["squid", "-N", "-f", "/etc/squid/squid-auth.conf"]
+    ports:
+      - "${BPANE_EGRESS_AUTH_OBSERVER_PORT:-3130}:3130"
+    networks:
+      bpane-internal:
+        aliases:
+          - bpane-egress-auth-observer
+
 networks:
   bpane-internal:
     external: true

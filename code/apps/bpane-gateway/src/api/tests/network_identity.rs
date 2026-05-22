@@ -1,4 +1,5 @@
 use super::*;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]
 async fn manages_egress_profiles_and_session_network_identity() {
@@ -665,11 +666,7 @@ async fn active_egress_probe_failures_are_persisted_as_session_diagnostics() {
 #[tokio::test]
 async fn profile_reachability_probe_results_are_persisted_as_profile_diagnostics() {
     let (app, token) = test_router();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let proxy_addr = listener.local_addr().unwrap();
-    let accept_task = tokio::spawn(async move {
-        let _ = listener.accept().await;
-    });
+    let (proxy_url, proxy_task) = start_profile_proxy_probe_server(None).await;
 
     let create_profile_response = app
         .clone()
@@ -682,7 +679,7 @@ async fn profile_reachability_probe_results_are_persisted_as_profile_diagnostics
                 .body(Body::from(
                     json!({
                         "name": "reachable-proxy",
-                        "proxy": { "url": format!("http://{proxy_addr}") }
+                        "proxy": { "url": proxy_url }
                     })
                     .to_string(),
                 ))
@@ -770,5 +767,258 @@ async fn profile_reachability_probe_results_are_persisted_as_profile_diagnostics
         true
     );
 
-    accept_task.abort();
+    let observed_request = proxy_task.await.unwrap();
+    assert!(observed_request.starts_with("GET http://example.com/"));
+}
+
+#[tokio::test]
+async fn profile_reachability_probe_validates_proxy_auth_without_leaking_secret() {
+    let (app, token) = test_router();
+    let expected_auth = "Basic cHJveHktdXNlcjpwcm94eS1wYXNz";
+
+    let valid_binding_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/credential-bindings")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "valid-proxy-auth",
+                        "provider": "vault_kv_v2",
+                        "allowed_origins": ["http://127.0.0.1"],
+                        "injection_mode": "form_fill",
+                        "secret_payload": {
+                            "username": "proxy-user",
+                            "password": "proxy-pass"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(valid_binding_response.status(), StatusCode::CREATED);
+    let valid_binding = response_json(valid_binding_response).await;
+    let valid_binding_id = valid_binding["id"].as_str().unwrap().to_string();
+
+    let (valid_proxy_url, valid_proxy_task) =
+        start_profile_proxy_probe_server(Some(expected_auth)).await;
+    let valid_profile_id = create_proxy_auth_profile(
+        &app,
+        &token,
+        "valid-auth-proxy",
+        &valid_proxy_url,
+        &valid_binding_id,
+    )
+    .await;
+    let valid_probe = run_profile_probe(&app, &token, &valid_profile_id).await;
+    assert_eq!(valid_probe["health"], "ready");
+    assert_eq!(valid_probe["proof"]["profile_reachability_collected"], true);
+    assert_eq!(valid_probe["proof"]["profile_reachability_healthy"], true);
+    assert_eq!(
+        valid_probe["proof"]["profile_reachability_failure"],
+        Value::Null
+    );
+    let valid_request = valid_proxy_task.await.unwrap();
+    assert!(valid_request
+        .to_ascii_lowercase()
+        .contains(&format!("proxy-authorization: {expected_auth}").to_ascii_lowercase()));
+    assert!(!valid_request.contains("proxy-pass"));
+
+    let invalid_binding_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/credential-bindings")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "invalid-proxy-auth",
+                        "provider": "vault_kv_v2",
+                        "allowed_origins": ["http://127.0.0.1"],
+                        "injection_mode": "form_fill",
+                        "secret_payload": {
+                            "username": "proxy-user",
+                            "password": "wrong-pass"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_binding_response.status(), StatusCode::CREATED);
+    let invalid_binding = response_json(invalid_binding_response).await;
+    let invalid_binding_id = invalid_binding["id"].as_str().unwrap().to_string();
+
+    let (invalid_proxy_url, invalid_proxy_task) =
+        start_profile_proxy_probe_server(Some(expected_auth)).await;
+    let invalid_profile_id = create_proxy_auth_profile(
+        &app,
+        &token,
+        "invalid-auth-proxy",
+        &invalid_proxy_url,
+        &invalid_binding_id,
+    )
+    .await;
+    let invalid_probe = run_profile_probe(&app, &token, &invalid_profile_id).await;
+    assert_eq!(invalid_probe["health"], "attention");
+    assert_eq!(
+        invalid_probe["proof"]["profile_reachability_healthy"],
+        false
+    );
+    let failure = invalid_probe["proof"]["profile_reachability_failure"]
+        .as_str()
+        .unwrap();
+    assert!(failure.contains("proxy authentication"));
+    assert!(!failure.contains("wrong-pass"));
+    let invalid_request = invalid_proxy_task.await.unwrap();
+    assert!(invalid_request
+        .to_ascii_lowercase()
+        .contains("proxy-authorization: basic"));
+    assert!(!invalid_request.contains("wrong-pass"));
+
+    let malformed_binding_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/credential-bindings")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "malformed-proxy-auth",
+                        "provider": "vault_kv_v2",
+                        "allowed_origins": ["http://127.0.0.1"],
+                        "injection_mode": "form_fill",
+                        "secret_payload": {
+                            "username": "",
+                            "password": ""
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(malformed_binding_response.status(), StatusCode::CREATED);
+    let malformed_binding = response_json(malformed_binding_response).await;
+    let malformed_binding_id = malformed_binding["id"].as_str().unwrap().to_string();
+    let malformed_profile_id = create_proxy_auth_profile(
+        &app,
+        &token,
+        "malformed-auth-proxy",
+        "http://127.0.0.1:9",
+        &malformed_binding_id,
+    )
+    .await;
+    let malformed_probe = run_profile_probe(&app, &token, &malformed_profile_id).await;
+    assert_eq!(malformed_probe["health"], "attention");
+    let malformed_failure = malformed_probe["proof"]["profile_reachability_failure"]
+        .as_str()
+        .unwrap();
+    assert!(malformed_failure.contains("username and password must not be empty"));
+    assert!(!malformed_failure.contains("proxy-pass"));
+}
+
+async fn create_proxy_auth_profile(
+    app: &Router,
+    token: &str,
+    name: &str,
+    proxy_url: &str,
+    credential_binding_id: &str,
+) -> String {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": name,
+                        "proxy": {
+                            "url": proxy_url,
+                            "credential_binding_id": credential_binding_id
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    response_json(response).await["id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+async fn run_profile_probe(app: &Router, token: &str, profile_id: &str) -> Value {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/egress-profiles/{profile_id}/diagnostics/probe"
+                ))
+                .header("authorization", bearer(token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "timeout_ms": 1000 }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    response_json(response).await
+}
+
+async fn start_profile_proxy_probe_server(
+    expected_proxy_auth: Option<&str>,
+) -> (String, tokio::task::JoinHandle<String>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_url = format!("http://{}", listener.local_addr().unwrap());
+    let expected_proxy_auth = expected_proxy_auth.map(str::to_string);
+    let task = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 1024];
+        loop {
+            let read = stream.read(&mut buffer).await.unwrap();
+            if read == 0 {
+                break;
+            }
+            request.extend_from_slice(&buffer[..read]);
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                break;
+            }
+        }
+        let request_text = String::from_utf8_lossy(&request).to_string();
+        let authenticated = expected_proxy_auth.as_ref().map_or(true, |expected| {
+            request_text
+                .lines()
+                .any(|line| line.eq_ignore_ascii_case(&format!("Proxy-Authorization: {expected}")))
+        });
+        let response = if authenticated {
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK"
+        } else {
+            "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"BrowserPane Test\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        };
+        stream.write_all(response.as_bytes()).await.unwrap();
+        request_text
+    });
+    (proxy_url, task)
 }

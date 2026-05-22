@@ -1,10 +1,13 @@
 use std::collections::HashSet;
+use std::net::IpAddr;
 use std::time::Duration as StdDuration;
 
 use chrono::DateTime;
 use futures_util::{SinkExt, StreamExt};
-use reqwest::Url;
+use reqwest::{header::HOST as HTTP_HOST, Url};
 use serde_json::json;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::{header::HOST as WS_HOST, HeaderValue as WsHeaderValue};
 use tokio_tungstenite::tungstenite::Message;
 
 use super::super::*;
@@ -223,6 +226,7 @@ async fn run_browser_egress_probe(
     let endpoint = normalize_cdp_endpoint(cdp_endpoint)?;
     let target = create_cdp_target(&client, &endpoint, options.timeout).await?;
     let target_id = target.id.clone();
+    let cdp_host_header = cdp_http_host_header(&endpoint);
     let websocket_url = rewrite_websocket_url(
         target
             .web_socket_debugger_url
@@ -230,11 +234,20 @@ async fn run_browser_egress_probe(
             .ok_or_else(|| "CDP target did not include webSocketDebuggerUrl".to_string())?,
         &endpoint,
     )?;
+    let mut websocket_request = websocket_url
+        .as_str()
+        .into_client_request()
+        .map_err(|error| format!("CDP WebSocket request could not be built: {error}"))?;
+    let websocket_host = WsHeaderValue::from_str(&cdp_host_header)
+        .map_err(|error| format!("CDP WebSocket Host header could not be built: {error}"))?;
+    websocket_request
+        .headers_mut()
+        .insert(WS_HOST, websocket_host);
 
     let probe = async {
         let (socket, _) = tokio::time::timeout(
             options.timeout,
-            tokio_tungstenite::connect_async(websocket_url.as_str()),
+            tokio_tungstenite::connect_async(websocket_request),
         )
         .await
         .map_err(|_| "CDP WebSocket open timed out".to_string())?
@@ -331,24 +344,42 @@ async fn create_cdp_target(
     let target_url = endpoint
         .join("json/new?about%3Ablank")
         .map_err(|error| format!("failed to build CDP target URL: {error}"))?;
-    let response = tokio::time::timeout(timeout, client.put(target_url.clone()).send())
-        .await
-        .map_err(|_| "CDP target creation timed out".to_string())?
-        .map_err(|error| format!("CDP target creation failed: {error}"))?;
+    let host_header = cdp_http_host_header(endpoint);
+    let response = tokio::time::timeout(
+        timeout,
+        client
+            .put(target_url.clone())
+            .header(HTTP_HOST, host_header.clone())
+            .send(),
+    )
+    .await
+    .map_err(|_| "CDP target creation timed out".to_string())?
+    .map_err(|error| format!("CDP target creation failed: {error}"))?;
     let response = if response.status() == StatusCode::METHOD_NOT_ALLOWED
         || response.status() == StatusCode::NOT_FOUND
     {
-        tokio::time::timeout(timeout, client.get(target_url).send())
-            .await
-            .map_err(|_| "CDP target creation fallback timed out".to_string())?
-            .map_err(|error| format!("CDP target creation fallback failed: {error}"))?
+        tokio::time::timeout(
+            timeout,
+            client.get(target_url).header(HTTP_HOST, host_header).send(),
+        )
+        .await
+        .map_err(|_| "CDP target creation fallback timed out".to_string())?
+        .map_err(|error| format!("CDP target creation fallback failed: {error}"))?
     } else {
         response
     };
     if !response.status().is_success() {
+        let status = response.status();
+        let detail = response
+            .text()
+            .await
+            .map(|body| sanitize_failure_reason(&body))
+            .unwrap_or_else(|_| "egress probe failed".to_string());
+        if detail == "egress probe failed" {
+            return Err(format!("CDP target creation returned HTTP {status}"));
+        }
         return Err(format!(
-            "CDP target creation returned HTTP {}",
-            response.status()
+            "CDP target creation returned HTTP {status}: {detail}"
         ));
     }
     response
@@ -362,7 +393,34 @@ async fn close_cdp_target(client: &reqwest::Client, endpoint: &Url, target_id: O
         return;
     };
     if let Ok(url) = endpoint.join(&format!("json/close/{target_id}")) {
-        let _ = client.get(url).send().await;
+        let _ = client
+            .get(url)
+            .header(HTTP_HOST, cdp_http_host_header(endpoint))
+            .send()
+            .await;
+    }
+}
+
+fn cdp_http_host_header(endpoint: &Url) -> String {
+    let Some(host) = endpoint.host_str() else {
+        return "127.0.0.1".to_string();
+    };
+    let host_ip_candidate = host.trim_start_matches('[').trim_end_matches(']');
+    let safe_host =
+        if host.eq_ignore_ascii_case("localhost") || host_ip_candidate.parse::<IpAddr>().is_ok() {
+            if host_ip_candidate.contains(':') && !host.starts_with('[') {
+                format!("[{host}]")
+            } else {
+                host.to_string()
+            }
+        } else {
+            // Chromium's CDP HTTP server rejects Docker DNS names in Host. Keep the
+            // TCP destination unchanged, but present a loopback Host header.
+            "127.0.0.1".to_string()
+        };
+    match endpoint.port_or_known_default() {
+        Some(port) => format!("{safe_host}:{port}"),
+        None => safe_host,
     }
 }
 
@@ -560,5 +618,33 @@ fn sanitize_failure_reason(message: &str) -> String {
         "egress probe failed".to_string()
     } else {
         sanitized
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cdp_host_header_uses_loopback_for_docker_dns_names() {
+        let endpoint = Url::parse("http://bpane-runtime-abc:9223").unwrap();
+
+        assert_eq!(cdp_http_host_header(&endpoint), "127.0.0.1:9223");
+    }
+
+    #[test]
+    fn cdp_host_header_preserves_ip_and_localhost_endpoints() {
+        assert_eq!(
+            cdp_http_host_header(&Url::parse("http://172.28.0.12:9223").unwrap()),
+            "172.28.0.12:9223"
+        );
+        assert_eq!(
+            cdp_http_host_header(&Url::parse("http://localhost:9223").unwrap()),
+            "localhost:9223"
+        );
+        assert_eq!(
+            cdp_http_host_header(&Url::parse("http://[::1]:9223").unwrap()),
+            "[::1]:9223"
+        );
     }
 }

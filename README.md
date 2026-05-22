@@ -330,10 +330,13 @@ references, state, labels, and sanitized effective status; session resources,
 effective egress summary, and sanitized diagnostics without embedding proxy
 credentials or raw CA material. Diagnostics distinguish
 configuration-only evidence, runtime launch metadata, and the latest active
-browser probe. The active probe runs only against an already-ready session
+profile or browser probe. Egress-profile probes perform a real proxy request
+and, when a proxy credential binding is configured, resolve the binding only for
+that probe so operators can see whether proxy authentication succeeds or is
+rejected. The active browser probe runs only against an already-ready session
 runtime and stores sanitized public-IP, TLS issuer, and failure summary fields;
-it does not store requested URLs, headers, proxy credentials, CA material, or
-decrypted traffic.
+diagnostics do not store requested URLs, headers, proxy credentials, CA
+material, or decrypted traffic.
 Egress-side communication tracking belongs at the configured proxy or secure
 web gateway. BrowserPane emits safe correlation metadata instead: docker-backed
 runtime containers carry `browserpane.session_id` and egress-profile labels,
@@ -350,7 +353,8 @@ trust store before launch; non-file CA providers remain a provider-integration
 follow-up. If `proxy.credential_binding_id` is set, the gateway resolves the
 owner-visible credential binding through the configured secret provider at
 runtime launch and writes only a session-local proxy-auth file; credentials are
-not embedded in proxy URLs, API responses, Docker labels, or normal logs.
+not embedded in proxy URLs, API responses, CLI output, Docker labels, or normal
+logs.
 Browser context resources let callers name owner-scoped Chromium profile
 contexts and bind new sessions with `browser_context.mode=reusable` plus a
 `context_id`. Docker-backed runtimes materialize reusable contexts as a
@@ -588,8 +592,8 @@ name the sensitive-log sink:
 ```
 
 To observe egress traffic locally without changing the BrowserPane gateway,
-start the normal compose stack first, then start the example forward proxy and
-point an egress profile at it:
+start the normal compose stack first, then start the example forward proxies and
+point an egress profile at one of them:
 
 ```bash
 docker compose -f deploy/examples/egress-observer/compose.yml up --build
@@ -600,6 +604,15 @@ docker compose -f deploy/examples/egress-observer/compose.yml up --build
 docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-proxy
 deploy/examples/egress-observer/correlate-session-ip.sh
 ```
+
+The same compose file also starts an authenticated Squid fixture at
+`bpane-egress-auth-observer:3130` with local test credentials
+`proxy-user / proxy-pass`. Create a credential binding through the admin app or
+`POST /api/v1/credential-bindings`, attach its id with
+`--proxy-credential-binding-id`, and run
+`./scripts/bpane egress-profile diagnostics probe <egress-profile-id>` to prove
+the proxy accepts the binding. Bad credentials or unavailable secret backends
+surface as sanitized diagnostics instead of returning the secret value.
 
 For local HTTPS interception, run the mitmproxy-backed observer alongside the
 plain Squid observer:

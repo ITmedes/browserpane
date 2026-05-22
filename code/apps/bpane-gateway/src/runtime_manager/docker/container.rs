@@ -304,6 +304,7 @@ impl DockerRuntimeManager {
                         "BPANE_CHROMIUM_PROXY_AUTH_FILE",
                         proxy_auth_config_path.to_string(),
                     );
+                    push_env(&mut env, "BPANE_URL", "about:blank".to_string());
                 }
             }
             if !profile.bypass_rules.is_empty() {
