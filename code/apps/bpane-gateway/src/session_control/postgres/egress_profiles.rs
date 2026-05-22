@@ -82,6 +82,33 @@ impl PostgresSessionStore {
             .get_egress_diagnostics_probe_result_for_session(session_id)
             .await
     }
+
+    pub(in crate::session_control) async fn upsert_egress_profile_reachability_probe_result(
+        &self,
+        result: PersistEgressProfileReachabilityProbeResult,
+    ) -> Result<StoredEgressProfileReachabilityProbeResult, SessionStoreError> {
+        self.egress_profile_repository()
+            .upsert_egress_profile_reachability_probe_result(result)
+            .await
+    }
+
+    pub(in crate::session_control) async fn get_egress_profile_reachability_probe_result(
+        &self,
+        profile_id: Uuid,
+    ) -> Result<Option<StoredEgressProfileReachabilityProbeResult>, SessionStoreError> {
+        self.egress_profile_repository()
+            .get_egress_profile_reachability_probe_result(profile_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn list_egress_profile_reachability_probe_results_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<HashMap<Uuid, StoredEgressProfileReachabilityProbeResult>, SessionStoreError> {
+        self.egress_profile_repository()
+            .list_egress_profile_reachability_probe_results_for_owner(principal)
+            .await
+    }
 }
 
 impl EgressProfileRepository<'_> {
@@ -394,5 +421,129 @@ impl EgressProfileRepository<'_> {
             last_failure_reason: row.get("last_failure_reason"),
             observed_at: row.get("observed_at"),
         }))
+    }
+
+    async fn upsert_egress_profile_reachability_probe_result(
+        &self,
+        result: PersistEgressProfileReachabilityProbeResult,
+    ) -> Result<StoredEgressProfileReachabilityProbeResult, SessionStoreError> {
+        self.store
+            .db
+            .client()
+            .await?
+            .execute(
+                r#"
+                INSERT INTO control_egress_profile_reachability_probe_results (
+                    profile_id,
+                    reachability_collected,
+                    reachability_healthy,
+                    last_failure_reason,
+                    observed_at
+                )
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (profile_id) DO UPDATE
+                SET
+                    reachability_collected = EXCLUDED.reachability_collected,
+                    reachability_healthy = EXCLUDED.reachability_healthy,
+                    last_failure_reason = EXCLUDED.last_failure_reason,
+                    observed_at = EXCLUDED.observed_at
+                "#,
+                &[
+                    &result.profile_id,
+                    &result.reachability_collected,
+                    &result.reachability_healthy,
+                    &result.last_failure_reason,
+                    &result.observed_at,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to upsert egress profile reachability probe result: {error}"
+                ))
+            })?;
+        Ok(result)
+    }
+
+    async fn get_egress_profile_reachability_probe_result(
+        &self,
+        profile_id: Uuid,
+    ) -> Result<Option<StoredEgressProfileReachabilityProbeResult>, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                SELECT
+                    profile_id,
+                    reachability_collected,
+                    reachability_healthy,
+                    last_failure_reason,
+                    observed_at
+                FROM control_egress_profile_reachability_probe_results
+                WHERE profile_id = $1
+                "#,
+                &[&profile_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to fetch egress profile reachability probe result: {error}"
+                ))
+            })?;
+        Ok(row
+            .as_ref()
+            .map(row_to_egress_profile_reachability_probe_result))
+    }
+
+    async fn list_egress_profile_reachability_probe_results_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<HashMap<Uuid, StoredEgressProfileReachabilityProbeResult>, SessionStoreError> {
+        let rows = self
+            .store
+            .db
+            .client()
+            .await?
+            .query(
+                r#"
+                SELECT
+                    result.profile_id,
+                    result.reachability_collected,
+                    result.reachability_healthy,
+                    result.last_failure_reason,
+                    result.observed_at
+                FROM control_egress_profile_reachability_probe_results result
+                JOIN control_egress_profiles profile ON profile.id = result.profile_id
+                WHERE profile.owner_subject = $1
+                  AND profile.owner_issuer = $2
+                "#,
+                &[&principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to list egress profile reachability probe results: {error}"
+                ))
+            })?;
+        Ok(rows
+            .iter()
+            .map(row_to_egress_profile_reachability_probe_result)
+            .map(|result| (result.profile_id, result))
+            .collect())
+    }
+}
+
+fn row_to_egress_profile_reachability_probe_result(
+    row: &Row,
+) -> StoredEgressProfileReachabilityProbeResult {
+    StoredEgressProfileReachabilityProbeResult {
+        profile_id: row.get("profile_id"),
+        reachability_collected: row.get("reachability_collected"),
+        reachability_healthy: row.get("reachability_healthy"),
+        last_failure_reason: row.get("last_failure_reason"),
+        observed_at: row.get("observed_at"),
     }
 }

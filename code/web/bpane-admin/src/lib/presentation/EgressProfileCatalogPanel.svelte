@@ -2,6 +2,7 @@
   import { Copy, Network, RefreshCw, ShieldCheck, ShieldOff } from 'lucide-svelte';
   import type {
     CreateEgressProfileCommand,
+    EgressDiagnosticsResource,
     EgressProfileResource,
   } from '../api/control-types';
   import AdminMessage from './AdminMessage.svelte';
@@ -21,6 +22,7 @@
     readonly onRefresh: () => void;
     readonly onCreateProfile?: (command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void> | EgressProfileResource | void;
     readonly onUpdateProfile?: (profileId: string, command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void> | EgressProfileResource | void;
+    readonly onRunProfileReachabilityProbe?: (profileId: string) => Promise<EgressDiagnosticsResource | void> | EgressDiagnosticsResource | void;
   };
 
   let {
@@ -30,6 +32,7 @@
     onRefresh,
     onCreateProfile,
     onUpdateProfile,
+    onRunProfileReachabilityProbe,
   }: EgressProfileCatalogPanelProps = $props();
 
   let search = $state('');
@@ -159,6 +162,35 @@
     }
   }
 
+  async function runReachabilityProbe(): Promise<void> {
+    const profile = selectedProfile;
+    if (!profile || !onRunProfileReachabilityProbe) {
+      return;
+    }
+    mutating = true;
+    feedback = null;
+    try {
+      const diagnostics = await onRunProfileReachabilityProbe(profile.id);
+      const healthy = diagnostics?.proof.profile_reachability_healthy ?? false;
+      feedback = {
+        variant: healthy ? 'success' : 'warning',
+        title: healthy ? 'Profile reachability verified' : 'Profile reachability failed',
+        message: healthy
+          ? `${profile.name} can reach its configured egress endpoint.`
+          : diagnostics?.proof.profile_reachability_failure ?? 'The egress endpoint could not be reached from the gateway.',
+      };
+      onRefresh();
+    } catch (probeError) {
+      feedback = {
+        variant: 'error',
+        title: 'Profile reachability probe failed',
+        message: probeError instanceof Error ? probeError.message : 'Could not run profile reachability diagnostics.',
+      };
+    } finally {
+      mutating = false;
+    }
+  }
+
   function rowClass(state: string, selected: boolean): string {
     if (selected) {
       return 'border-admin-leaf/42 bg-admin-leaf/12 text-admin-ink';
@@ -278,6 +310,16 @@
             <ShieldOff size={15} aria-hidden="true" />
             Disable
           </button>
+          <button
+            class="admin-button-primary inline-flex items-center gap-2"
+            type="button"
+            disabled={!selectedProfile || disabled || !onRunProfileReachabilityProbe}
+            data-testid="egress-profile-reachability-probe"
+            onclick={() => void runReachabilityProbe()}
+          >
+            <RefreshCw class={mutating ? 'animate-spin' : ''} size={15} aria-hidden="true" />
+            Probe
+          </button>
         </div>
       </div>
 
@@ -289,12 +331,17 @@
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">Proxy: {selectedProfile.effective.proxy_configured ? 'configured' : 'none'}</span>
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">TLS: {selectedProfile.effective.tls_interception_enabled ? 'inspect' : 'metadata'}</span>
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">Bypass: {selectedProfile.effective.bypass_rule_count}</span>
+            <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">Reachability: {selectedProfile.diagnostics.proof.profile_reachability_collected ? (selectedProfile.diagnostics.proof.profile_reachability_healthy ? 'healthy' : 'failed') : 'not probed'}</span>
           </div>
           <AdminMessage
             variant={selectedProfile.diagnostics.health === 'ready' ? 'info' : 'warning'}
             title={`Diagnostics: ${selectedProfile.diagnostics.proof_level.replaceAll('_', ' ')}`}
             message={selectedProfile.diagnostics.warnings.length > 0
               ? selectedProfile.diagnostics.warnings.join(' ')
+              : selectedProfile.diagnostics.proof.profile_reachability_collected
+                ? (selectedProfile.diagnostics.proof.profile_reachability_healthy
+                    ? 'Profile reachability evidence is available for this egress endpoint.'
+                    : selectedProfile.diagnostics.proof.profile_reachability_failure ?? 'Profile reachability was probed and failed.')
               : selectedProfile.diagnostics.proof.active_probe_collected
                 ? 'Active egress probe evidence is available for this profile.'
                 : 'No active probe has been collected yet; proof is based on sanitized configuration metadata.'}
@@ -304,6 +351,7 @@
             <span>Profile resolved: {selectedProfile.diagnostics.proof.profile_resolved ? 'yes' : 'no'}</span>
             <span>Runtime launch: {selectedProfile.diagnostics.proof.runtime_launch_observed ? 'observed' : 'not observed'}</span>
             <span>Active probe: {selectedProfile.diagnostics.proof.active_probe_collected ? 'collected' : 'not collected'}</span>
+            <span>Profile reachability: {selectedProfile.diagnostics.proof.profile_reachability_collected ? (selectedProfile.diagnostics.proof.profile_reachability_healthy ? 'healthy' : 'failed') : 'not collected'}</span>
             <span>TLS expected: {selectedProfile.diagnostics.proof.tls_interception_expected ? 'yes' : 'no'}</span>
             <span>Custom CA launch: {selectedProfile.diagnostics.proof.custom_ca_launch_config_expected ? 'expected' : 'not expected'}</span>
             <span>Log sink: {selectedProfile.diagnostics.proof.sensitive_log_sink_declared ? 'declared' : 'not declared'}</span>

@@ -317,6 +317,10 @@ pub enum EgressDiagnosticsProofLevel {
 pub struct EgressDiagnosticsProof {
     pub profile_resolved: bool,
     pub profile_ready: bool,
+    pub profile_reachability_collected: bool,
+    pub profile_reachability_healthy: bool,
+    pub profile_reachability_observed_at: Option<DateTime<Utc>>,
+    pub profile_reachability_failure: Option<String>,
     pub proxy_launch_config_expected: bool,
     pub bypass_rules_expected: u32,
     pub custom_ca_launch_config_expected: bool,
@@ -361,6 +365,17 @@ pub struct PersistEgressDiagnosticsProbeResult {
 }
 
 pub type StoredEgressDiagnosticsProbeResult = PersistEgressDiagnosticsProbeResult;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistEgressProfileReachabilityProbeResult {
+    pub profile_id: Uuid,
+    pub reachability_collected: bool,
+    pub reachability_healthy: bool,
+    pub last_failure_reason: Option<String>,
+    pub observed_at: DateTime<Utc>,
+}
+
+pub type StoredEgressProfileReachabilityProbeResult = PersistEgressProfileReachabilityProbeResult;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct SessionEffectiveEgress {
@@ -459,6 +474,17 @@ impl StoredEgressProfile {
             created_at: self.created_at,
             updated_at: self.updated_at,
         }
+    }
+
+    pub fn to_resource_with_reachability(
+        &self,
+        reachability: Option<&StoredEgressProfileReachabilityProbeResult>,
+    ) -> EgressProfileResource {
+        let mut resource = self.to_resource();
+        resource.diagnostics = resource
+            .diagnostics
+            .with_profile_reachability_result(reachability);
+        resource
     }
 
     pub fn to_session_effective_egress(&self) -> SessionEffectiveEgress {
@@ -560,6 +586,10 @@ impl StoredEgressProfile {
             proof: EgressDiagnosticsProof {
                 profile_resolved: true,
                 profile_ready: self.state == EgressProfileState::Ready,
+                profile_reachability_collected: false,
+                profile_reachability_healthy: false,
+                profile_reachability_observed_at: None,
+                profile_reachability_failure: None,
                 proxy_launch_config_expected: effective.proxy_configured,
                 bypass_rules_expected: effective.bypass_rule_count,
                 custom_ca_launch_config_expected: effective.custom_ca_configured
@@ -579,6 +609,44 @@ impl StoredEgressProfile {
 }
 
 impl EgressDiagnosticsResource {
+    pub fn with_profile_reachability_result(
+        mut self,
+        result: Option<&StoredEgressProfileReachabilityProbeResult>,
+    ) -> Self {
+        let Some(result) = result else {
+            return self;
+        };
+        if self.profile_id != Some(result.profile_id) {
+            return self;
+        }
+
+        self.proof.profile_reachability_collected = result.reachability_collected;
+        self.proof.profile_reachability_healthy = result.reachability_healthy;
+        self.proof.profile_reachability_observed_at = Some(result.observed_at);
+        self.proof.profile_reachability_failure = result.last_failure_reason.clone();
+        if result.reachability_collected && result.reachability_healthy {
+            if self.proof_level == EgressDiagnosticsProofLevel::Configuration {
+                self.proof_level = EgressDiagnosticsProofLevel::ActiveProbe;
+            }
+            if !matches!(
+                self.health,
+                EgressDiagnosticsHealth::Blocked | EgressDiagnosticsHealth::Missing
+            ) {
+                self.health = EgressDiagnosticsHealth::Ready;
+            }
+        } else if let Some(reason) = result.last_failure_reason.as_deref() {
+            if !matches!(
+                self.health,
+                EgressDiagnosticsHealth::Blocked | EgressDiagnosticsHealth::Missing
+            ) {
+                self.health = EgressDiagnosticsHealth::Attention;
+            }
+            self.warnings
+                .push(format!("Last profile reachability probe failed: {reason}"));
+        }
+        self
+    }
+
     pub fn with_probe_result(mut self, probe: Option<&StoredEgressDiagnosticsProbeResult>) -> Self {
         let Some(probe) = probe else {
             return self;
@@ -617,13 +685,18 @@ impl EgressDiagnosticsResource {
         runtime_assignment: Option<String>,
         observed_at: DateTime<Utc>,
     ) -> Self {
+        let runtime_ready = runtime_assignment.as_deref() == Some("ready");
         Self {
             profile_id: None,
             profile_name: None,
             profile_state: None,
             health: EgressDiagnosticsHealth::Ready,
             observation_mode: EgressTrafficObservationMode::MetadataOnly,
-            proof_level: EgressDiagnosticsProofLevel::Configuration,
+            proof_level: if runtime_ready {
+                EgressDiagnosticsProofLevel::RuntimeLaunchMetadata
+            } else {
+                EgressDiagnosticsProofLevel::Configuration
+            },
             runtime_binding,
             runtime_assignment,
             proxy_configured: false,
@@ -634,12 +707,16 @@ impl EgressDiagnosticsResource {
             proof: EgressDiagnosticsProof {
                 profile_resolved: true,
                 profile_ready: true,
+                profile_reachability_collected: false,
+                profile_reachability_healthy: false,
+                profile_reachability_observed_at: None,
+                profile_reachability_failure: None,
                 proxy_launch_config_expected: false,
                 bypass_rules_expected: 0,
                 custom_ca_launch_config_expected: false,
                 tls_interception_expected: false,
                 sensitive_log_sink_declared: false,
-                runtime_launch_observed: false,
+                runtime_launch_observed: runtime_ready,
                 active_probe_collected: false,
                 observed_public_ip: None,
                 observed_tls_issuer: None,
@@ -673,6 +750,10 @@ impl EgressDiagnosticsResource {
             proof: EgressDiagnosticsProof {
                 profile_resolved: false,
                 profile_ready: false,
+                profile_reachability_collected: false,
+                profile_reachability_healthy: false,
+                profile_reachability_observed_at: None,
+                profile_reachability_failure: None,
                 proxy_launch_config_expected: false,
                 bypass_rules_expected: 0,
                 custom_ca_launch_config_expected: false,

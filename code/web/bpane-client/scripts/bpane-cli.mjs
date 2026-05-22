@@ -116,6 +116,7 @@ function usageText() {
   '  bpane egress-profile list [options]',
   '  bpane egress-profile get <profile-id> [options]',
   '  bpane egress-profile diagnostics <profile-id> [options]',
+  '  bpane egress-profile diagnostics probe <profile-id> [options]',
   '  bpane egress-profile update <profile-id> [options]',
   '  bpane egress-profile disable <profile-id> [options]',
     '  bpane browser-context create [context-name] [options]',
@@ -515,6 +516,14 @@ function requiredBrowserContextId(positionals, commandLabel) {
 function requiredEgressProfileId(positionals, commandLabel) {
   const profileId = positionals[2];
   if (!profileId || positionals.length > 3) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <profile-id>`, EXIT_CODES.usage);
+  }
+  return profileId;
+}
+
+function requiredNestedEgressProfileId(positionals, commandLabel) {
+  const profileId = positionals[3];
+  if (!profileId || positionals.length > 4) {
     throw new CliError('USAGE', `Usage: bpane ${commandLabel} <profile-id>`, EXIT_CODES.usage);
   }
   return profileId;
@@ -1245,6 +1254,19 @@ function buildEgressDiagnosticsProbeRequest(options) {
   return body;
 }
 
+function buildEgressProfileReachabilityProbeRequest(options) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+  const body = {};
+  const timeoutMs = parseIntegerOption(options, 'probe-timeout-ms');
+  if (timeoutMs !== null) {
+    body.timeout_ms = timeoutMs;
+  }
+  return body;
+}
+
 function buildBrowserContextRequest(options, fallbackName = null, commandLabel = 'create') {
   const rawBody = parseJsonOption(options, 'body-json');
   if (rawBody !== null) {
@@ -1953,6 +1975,18 @@ async function handleEgressProfileCommand(config, positionals, options) {
     return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
   }
   if (action === 'diagnostics') {
+    if (positionals[2] === 'probe') {
+      const profileId = requiredNestedEgressProfileId(positionals, 'egress-profile diagnostics probe');
+      return await requestGateway(
+        config,
+        `/api/v1/egress-profiles/${encodeURIComponent(profileId)}/diagnostics/probe`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildEgressProfileReachabilityProbeRequest(options)),
+        },
+      );
+    }
     const profileId = requiredEgressProfileId(positionals, 'egress-profile diagnostics');
     return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}/diagnostics`);
   }

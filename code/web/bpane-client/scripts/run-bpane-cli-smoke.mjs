@@ -130,6 +130,24 @@ async function run() {
     if (egressProfileDiagnostics.profile_id !== egressProfileId || egressProfileDiagnostics.health !== 'ready') {
       throw new Error(`CLI egress-profile diagnostics returned unexpected data: ${JSON.stringify(egressProfileDiagnostics)}`);
     }
+    const egressProfileProbe = runBpaneCli([
+      'egress-profile',
+      'diagnostics',
+      'probe',
+      egressProfileId,
+      '--probe-timeout-ms',
+      '1000',
+    ], cliEnv);
+    if (
+      egressProfileProbe.profile_id !== egressProfileId
+      || typeof egressProfileProbe.proof?.profile_reachability_collected !== 'boolean'
+      || (
+        !egressProfileProbe.proof.profile_reachability_healthy
+        && !egressProfileProbe.proof.profile_reachability_failure
+      )
+    ) {
+      throw new Error(`CLI egress-profile diagnostics probe returned unexpected data: ${JSON.stringify(egressProfileProbe)}`);
+    }
 
     const template = runBpaneCli([
       'session-template',

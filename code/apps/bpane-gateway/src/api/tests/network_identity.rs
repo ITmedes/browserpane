@@ -590,3 +590,114 @@ async fn active_egress_probe_failures_are_persisted_as_session_diagnostics() {
         probe["proof"]["last_failure_reason"]
     );
 }
+
+#[tokio::test]
+async fn profile_reachability_probe_results_are_persisted_as_profile_diagnostics() {
+    let (app, token) = test_router();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_addr = listener.local_addr().unwrap();
+    let accept_task = tokio::spawn(async move {
+        let _ = listener.accept().await;
+    });
+
+    let create_profile_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "reachable-proxy",
+                        "proxy": { "url": format!("http://{proxy_addr}") }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_profile_response.status(), StatusCode::CREATED);
+    let profile = response_json(create_profile_response).await;
+    let profile_id = profile["id"].as_str().unwrap().to_string();
+
+    let invalid_probe_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/egress-profiles/{profile_id}/diagnostics/probe"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "timeout_ms": 100 }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_probe_response.status(), StatusCode::BAD_REQUEST);
+
+    let probe_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/egress-profiles/{profile_id}/diagnostics/probe"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "timeout_ms": 1000 }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(probe_response.status(), StatusCode::OK);
+    let probe = response_json(probe_response).await;
+    assert_eq!(probe["profile_id"], profile_id);
+    assert_eq!(probe["health"], "ready");
+    assert_eq!(probe["proof_level"], "active_probe");
+    assert_eq!(probe["proof"]["profile_reachability_collected"], true);
+    assert_eq!(probe["proof"]["profile_reachability_healthy"], true);
+    assert!(probe["proof"]["profile_reachability_observed_at"]
+        .as_str()
+        .is_some());
+    assert_eq!(probe["proof"]["profile_reachability_failure"], Value::Null);
+
+    let fetched_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/egress-profiles/{profile_id}/diagnostics"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(fetched_response.status(), StatusCode::OK);
+    let fetched = response_json(fetched_response).await;
+    assert_eq!(fetched["proof"]["profile_reachability_healthy"], true);
+
+    let list_response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list = response_json(list_response).await;
+    assert_eq!(
+        list["profiles"][0]["diagnostics"]["proof"]["profile_reachability_healthy"],
+        true
+    );
+
+    accept_task.abort();
+}

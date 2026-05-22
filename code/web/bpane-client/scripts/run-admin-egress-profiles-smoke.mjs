@@ -1,4 +1,5 @@
 import process from 'node:process';
+import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 import {
   ensureAdminLoggedIn,
@@ -26,6 +27,7 @@ async function run() {
   const context = await browser.newContext({ viewport: { width: 1440, height: 980 } });
   const page = await context.newPage();
   const runLabel = Date.now();
+  const observerSince = new Date(Date.now() - 1000).toISOString();
   let sessionIds = [];
 
   try {
@@ -64,9 +66,17 @@ async function run() {
       mode: 'tls_intercept',
     });
 
+    await probeProfileReachabilityThroughUi(page, options, accessToken, proxyProfile);
+    await probeProfileReachabilityThroughUi(page, options, accessToken, tlsProfile);
+
     const clonedProfile = await cloneAndDisableProfile(page, options, accessToken, tlsProfile);
     await verifyDisabledProfileIsNotHealthyLaunchChoice(page, options, clonedProfile.id);
-    sessionIds = await verifySessionEffectiveEgress(accessToken, options, proxyProfile, tlsProfile);
+    sessionIds = await verifySessionEffectiveEgress(accessToken, options, {
+      proxyProfile,
+      tlsProfile,
+      observerSince,
+      runLabel,
+    });
 
     console.log(JSON.stringify({
       proxyProfileId: proxyProfile.id,
@@ -85,6 +95,27 @@ async function run() {
     }
     await context.close();
     await browser.close();
+  }
+}
+
+async function probeProfileReachabilityThroughUi(page, options, accessToken, profile) {
+  await page.getByTestId('egress-profile-search').fill(profile.name);
+  await page.locator(`[data-testid="egress-profile-row"][data-profile-id="${profile.id}"]`).click();
+  await page.getByTestId('egress-profile-reachability-probe').click();
+  const diagnostics = await poll(
+    `profile reachability probe ${profile.name}`,
+    async () => {
+      const refreshed = await fetchJson(`${apiOrigin(options)}/api/v1/egress-profiles/${profile.id}/diagnostics`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      return refreshed?.proof ?? null;
+    },
+    (proof) => proof?.profile_reachability_collected === true && proof?.profile_reachability_healthy === true,
+    options.connectTimeoutMs,
+    250,
+  );
+  if (!diagnostics.profile_reachability_healthy) {
+    throw new Error(`Expected profile reachability diagnostics to pass for ${profile.name}, got ${JSON.stringify(diagnostics)}`);
   }
 }
 
@@ -166,7 +197,8 @@ async function verifyDisabledProfileIsNotHealthyLaunchChoice(page, options, prof
   }
 }
 
-async function verifySessionEffectiveEgress(accessToken, options, proxyProfile, tlsProfile) {
+async function verifySessionEffectiveEgress(accessToken, options, context) {
+  const { proxyProfile, tlsProfile, observerSince, runLabel } = context;
   const verifiedSessionIds = [];
   const noEgress = await createSession(accessToken, options, {});
   verifiedSessionIds.push(noEgress.id);
@@ -175,6 +207,14 @@ async function verifySessionEffectiveEgress(accessToken, options, proxyProfile, 
   }
   if (noEgress.egress_diagnostics?.health !== 'ready') {
     throw new Error(`Expected no-egress diagnostics to be ready, got ${JSON.stringify(noEgress.egress_diagnostics)}`);
+  }
+  const noEgressDiagnostics = await launchAndFetchEgressDiagnostics(accessToken, options, noEgress.id);
+  if (noEgressDiagnostics.profile_id !== null || noEgressDiagnostics.proof?.runtime_launch_observed !== true) {
+    throw new Error(`Expected no-egress runtime diagnostics without profile metadata, got ${JSON.stringify(noEgressDiagnostics)}`);
+  }
+  const noEgressMetadata = dockerSessionMetadata(noEgress.id);
+  if (noEgressMetadata.labels['browserpane.egress_profile_id']) {
+    throw new Error(`Expected no-egress container to omit egress profile labels, got ${JSON.stringify(noEgressMetadata.labels)}`);
   }
   await deleteSession(accessToken, options, noEgress.id);
 
@@ -189,6 +229,15 @@ async function verifySessionEffectiveEgress(accessToken, options, proxyProfile, 
   if (proxyDiagnostics.health !== 'ready' || proxyDiagnostics.proof_level !== 'runtime_launch_metadata') {
     throw new Error(`Expected proxy runtime diagnostics to be ready with launch metadata, got ${JSON.stringify(proxyDiagnostics)}`);
   }
+  const proxyProbe = await runSessionEgressProbe(accessToken, options, proxy.id, runLabel).catch(() => null);
+  await assertObserverCorrelation({
+    sessionId: proxy.id,
+    profileId: proxyProfile.id,
+    observerContainer: 'bpane-egress-observer',
+    observerSince,
+    expectedMode: 'metadata_only',
+    expectedHost: probeObserved(proxyProbe) ? 'example.com' : null,
+  });
   await deleteSession(accessToken, options, proxy.id);
 
   const tls = await createSession(accessToken, options, {
@@ -206,6 +255,15 @@ async function verifySessionEffectiveEgress(accessToken, options, proxyProfile, 
   ) {
     throw new Error(`Expected TLS runtime diagnostics with custom CA launch proof, got ${JSON.stringify(tlsDiagnostics)}`);
   }
+  const tlsProbe = await runSessionEgressProbe(accessToken, options, tls.id, runLabel).catch(() => null);
+  await assertObserverCorrelation({
+    sessionId: tls.id,
+    profileId: tlsProfile.id,
+    observerContainer: 'bpane-egress-tls-observer',
+    observerSince,
+    expectedMode: 'tls_intercept',
+    expectedHost: probeObserved(tlsProbe) ? 'example.com' : null,
+  });
   await deleteSession(accessToken, options, tls.id);
   return verifiedSessionIds;
 }
@@ -218,6 +276,82 @@ async function launchAndFetchEgressDiagnostics(accessToken, options, sessionId) 
   return await fetchJson(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/egress-diagnostics`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+}
+
+async function runSessionEgressProbe(accessToken, options, sessionId, runLabel) {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/egress-diagnostics`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      public_ip_url: `https://example.com/?bpane_egress_smoke=${encodeURIComponent(runLabel)}`,
+      tls_probe_url: `https://example.com/?bpane_egress_smoke=${encodeURIComponent(runLabel)}`,
+      timeout_ms: 10000,
+    }),
+  });
+}
+
+function probeObserved(probe) {
+  return probe?.proof?.active_probe_collected === true && probe?.proof?.active_probe_healthy === true;
+}
+
+async function assertObserverCorrelation({
+  sessionId,
+  profileId,
+  observerContainer,
+  observerSince,
+  expectedMode,
+  expectedHost,
+}) {
+  const metadata = dockerSessionMetadata(sessionId);
+  if (metadata.labels['browserpane.session_id'] !== sessionId) {
+    throw new Error(`Container labels did not include expected session id ${sessionId}: ${JSON.stringify(metadata.labels)}`);
+  }
+  if (metadata.labels['browserpane.egress_profile_id'] !== profileId) {
+    throw new Error(`Container labels did not include expected egress profile ${profileId}: ${JSON.stringify(metadata.labels)}`);
+  }
+  if (metadata.labels['browserpane.egress_observation_mode'] !== expectedMode) {
+    throw new Error(`Container labels did not include expected egress mode ${expectedMode}: ${JSON.stringify(metadata.labels)}`);
+  }
+  if (!metadata.ipAddress) {
+    throw new Error(`Could not resolve Docker network IP for session ${sessionId}.`);
+  }
+
+  await poll(
+    `${observerContainer} observer log correlation for ${sessionId}`,
+    async () => dockerLogs(observerContainer, observerSince),
+    (logs) => logs.includes(metadata.ipAddress) && (!expectedHost || logs.includes(expectedHost)),
+    15000,
+    500,
+  );
+}
+
+function dockerSessionMetadata(sessionId) {
+  const ids = dockerCapture(['ps', '-q', '--filter', `label=browserpane.session_id=${sessionId}`]).trim().split(/\s+/).filter(Boolean);
+  if (ids.length !== 1) {
+    throw new Error(`Expected exactly one runtime container for session ${sessionId}, got ${ids.length}.`);
+  }
+  const inspect = JSON.parse(dockerCapture(['inspect', ids[0]]));
+  const container = inspect[0];
+  const labels = container?.Config?.Labels ?? {};
+  const networks = container?.NetworkSettings?.Networks ?? {};
+  const ipAddress = Object.values(networks).map((network) => network?.IPAddress).find(Boolean) ?? '';
+  return { id: ids[0], labels, ipAddress };
+}
+
+function dockerLogs(containerName, since) {
+  return dockerCapture(['logs', '--since', since, containerName]);
+}
+
+function dockerCapture(args) {
+  const result = spawnSync('docker', args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const combined = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  if (result.status !== 0) {
+    throw new Error(`docker ${args.join(' ')} failed: ${combined.trim()}`);
+  }
+  return combined;
 }
 
 async function createSession(accessToken, options, body) {
