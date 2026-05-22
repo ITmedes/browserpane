@@ -71,6 +71,8 @@ RUN apt-get update && apt-get install -y \
     libopus0 \
     # Chromium GPU probe requires libpci
     libpci3 \
+    # certutil installs per-session interception CAs into Chromium's NSS trust DB
+    libnss3-tools \
     # Window manager
     openbox \
     # Fonts

@@ -119,6 +119,8 @@ fn session_status_maps_recorder_clients() {
             egress_lagged_receives_total: 0,
             egress_lagged_frames_total: 0,
         },
+        SessionNetworkIdentity::default(),
+        SessionEffectiveEgress::default(),
         &SessionRecordingPolicy {
             mode: SessionRecordingMode::Manual,
             format: SessionRecordingFormat::Webm,

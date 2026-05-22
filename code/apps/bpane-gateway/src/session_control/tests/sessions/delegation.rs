@@ -12,6 +12,7 @@ async fn in_memory_store_allows_delegated_client_to_load_session() {
             CreateSessionRequest {
                 template_id: None,
                 browser_context: None,
+                network_identity: None,
                 owner_mode: None,
                 viewport: None,
                 idle_timeout_sec: None,

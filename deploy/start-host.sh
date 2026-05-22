@@ -102,6 +102,9 @@ if [ -n "${BPANE_SESSION_DATA_DIR:-}" ]; then
   validate_session_data_path "BPANE_PROFILE_DIR" "$PROFILE_DIR" "$BPANE_SESSION_DATA_DIR"
   validate_session_data_path "BPANE_UPLOAD_DIR" "$BPANE_UPLOAD_DIR" "$BPANE_SESSION_DATA_DIR"
   validate_session_data_path "BPANE_DOWNLOAD_DIR" "$BPANE_DOWNLOAD_DIR" "$BPANE_SESSION_DATA_DIR"
+  if [ -n "${BPANE_CHROMIUM_TRUSTED_CA_BUNDLE:-}" ]; then
+    validate_session_data_path "BPANE_CHROMIUM_TRUSTED_CA_BUNDLE" "$BPANE_CHROMIUM_TRUSTED_CA_BUNDLE" "$BPANE_SESSION_DATA_DIR"
+  fi
   export BPANE_SESSION_DATA_DIR
 fi
 export BPANE_SESSION_ID BPANE_PROFILE_ROOT PROFILE_DIR BPANE_UPLOAD_DIR BPANE_DOWNLOAD_DIR
@@ -234,13 +237,14 @@ rm -f \
 
 write_chromium_preferences() {
   local profile_dir="$1"
-  PROFILE_DIR="$profile_dir" BPANE_DOWNLOAD_DIR="$BPANE_DOWNLOAD_DIR" python3 - <<'PY'
+  PROFILE_DIR="$profile_dir" BPANE_DOWNLOAD_DIR="$BPANE_DOWNLOAD_DIR" BPANE_CHROMIUM_ACCEPT_LANG="${BPANE_CHROMIUM_ACCEPT_LANG:-}" python3 - <<'PY'
 import json
 import os
 from pathlib import Path
 
 profile_dir = Path(os.environ["PROFILE_DIR"])
 download_dir = os.environ["BPANE_DOWNLOAD_DIR"]
+accept_languages = os.environ.get("BPANE_CHROMIUM_ACCEPT_LANG", "").strip()
 preferences_path = profile_dir / "Default" / "Preferences"
 preferences_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -264,9 +268,39 @@ profile = data.setdefault("profile", {})
 default_content = profile.setdefault("default_content_setting_values", {})
 default_content["media_stream_camera"] = 1
 default_content["media_stream_mic"] = 1
+if accept_languages:
+    intl = data.setdefault("intl", {})
+    intl["accept_languages"] = accept_languages
 
 preferences_path.write_text(json.dumps(data, separators=(",", ":")))
 PY
+}
+
+install_chromium_trusted_ca_bundle() {
+  local ca_bundle="${BPANE_CHROMIUM_TRUSTED_CA_BUNDLE:-}"
+  if [ -z "$ca_bundle" ]; then
+    return 0
+  fi
+  if [ ! -r "$ca_bundle" ]; then
+    echo "Configured egress inspection CA bundle is not readable: $ca_bundle" >&2
+    exit 64
+  fi
+  if ! command -v certutil >/dev/null 2>&1; then
+    echo "Configured egress inspection CA bundle requires certutil from libnss3-tools" >&2
+    exit 64
+  fi
+
+  local cert_name="${BPANE_CHROMIUM_TRUSTED_CA_NAME:-BrowserPane Egress Interception CA}"
+  local db_dir
+  for db_dir in "${HOME}/.pki/nssdb" "$PROFILE_DIR"; do
+    mkdir -p "$db_dir"
+    if [ ! -f "${db_dir}/cert9.db" ]; then
+      certutil -N --empty-password -d "sql:${db_dir}" >/dev/null 2>&1 || true
+    fi
+    certutil -D -d "sql:${db_dir}" -n "$cert_name" >/dev/null 2>&1 || true
+    certutil -A -d "sql:${db_dir}" -n "$cert_name" -t "C,," -i "$ca_bundle"
+  done
+  echo "Browser egress inspection CA installed: name=${cert_name} bundle=${ca_bundle}" >&2
 }
 
 # Chromium runtime flags tuned to keep rendering deterministic and reduce
@@ -328,12 +362,33 @@ if [ "${BPANE_CHROMIUM_DEBUG_ENABLE:-1}" != "0" ]; then
   )
 fi
 
+if [ -n "${BPANE_CHROMIUM_LANG:-}" ]; then
+  CHROMIUM_FLAGS+=("--lang=${BPANE_CHROMIUM_LANG}")
+fi
+
+if [ -n "${BPANE_CHROMIUM_ACCEPT_LANG:-}" ]; then
+  CHROMIUM_FLAGS+=("--accept-lang=${BPANE_CHROMIUM_ACCEPT_LANG}")
+fi
+
+if [ -n "${BPANE_CHROMIUM_USER_AGENT:-}" ]; then
+  CHROMIUM_FLAGS+=("--user-agent=${BPANE_CHROMIUM_USER_AGENT}")
+fi
+
+if [ -n "${BPANE_CHROMIUM_PROXY_SERVER:-}" ]; then
+  CHROMIUM_FLAGS+=("--proxy-server=${BPANE_CHROMIUM_PROXY_SERVER}")
+fi
+
+if [ -n "${BPANE_CHROMIUM_PROXY_BYPASS_LIST:-}" ]; then
+  CHROMIUM_FLAGS+=("--proxy-bypass-list=${BPANE_CHROMIUM_PROXY_BYPASS_LIST}")
+fi
+
 if [ -n "${BPANE_CHROMIUM_EXTRA_FLAGS:-}" ]; then
   # shellcheck disable=SC2206
   EXTRA_CHROMIUM_FLAGS=(${BPANE_CHROMIUM_EXTRA_FLAGS})
   CHROMIUM_FLAGS+=("${EXTRA_CHROMIUM_FLAGS[@]}")
 fi
 
+install_chromium_trusted_ca_bundle
 write_chromium_preferences "$PROFILE_DIR"
 
 CHROMIUM_PIPE_PID=""

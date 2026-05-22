@@ -1,4 +1,5 @@
 import { RecordingMapper } from './recording-mapper';
+import { ControlSessionMapper } from './control-session-mapper';
 import type {
   SessionConnectionInfo,
   SessionIdleStatus,
@@ -35,6 +36,8 @@ export class ControlSessionStatusMapper {
       exclusive_browser_owner: expectBoolean(object.exclusive_browser_owner, 'exclusive_browser_owner'),
       mcp_owner: expectBoolean(object.mcp_owner, 'mcp_owner'),
       resolution: toResolution(object.resolution),
+      network_identity: ControlSessionMapper.toSessionNetworkIdentity(object.network_identity),
+      effective_egress: ControlSessionMapper.toSessionEffectiveEgress(object.effective_egress),
       recording: toRecordingStatus(object.recording),
       playback: RecordingMapper.toPlayback(object.playback),
       telemetry: toTelemetry(object.telemetry),

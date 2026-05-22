@@ -4,6 +4,7 @@ mod automation_tasks;
 mod browser_contexts;
 mod credential_bindings;
 mod db;
+mod egress_profiles;
 mod extensions;
 mod file_workspaces;
 mod recordings;

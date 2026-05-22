@@ -1,6 +1,7 @@
 pub mod automation_access_boundaries;
 pub mod browser_contexts;
 pub mod credentials_extensions;
+pub mod network_identity;
 pub mod ownership_boundaries;
 pub mod recording_artifacts;
 pub mod session_churn;

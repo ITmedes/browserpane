@@ -21,14 +21,22 @@ const KNOWN_OPTIONS = new Set([
   'body-json',
   'browser-context-id',
   'browser-context-mode',
+  'browser-identity',
+  'bypass-rule',
   'cleanup-action',
   'config',
   'confirm',
+  'custom-ca-name',
+  'custom-ca-ref',
   'default-label',
   'description',
   'dry-run',
+  'egress-profile-id',
   'extension-id',
   'fail-on-issues',
+  'geolocation-accuracy-meters',
+  'geolocation-latitude',
+  'geolocation-longitude',
   'height',
   'help',
   'idle-timeout-sec',
@@ -36,7 +44,9 @@ const KNOWN_OPTIONS = new Set([
   'integration-json',
   'integration',
   'label',
+  'language',
   'limit',
+  'locale',
   'mcp-client-id',
   'mcp-control-url',
   'mcp-display-name',
@@ -48,6 +58,7 @@ const KNOWN_OPTIONS = new Set([
   'output',
   'owner-mode',
   'profile',
+  'proxy-url',
   'persistence-mode',
   'recording-mode',
   'recording-retention-sec',
@@ -58,6 +69,11 @@ const KNOWN_OPTIONS = new Set([
   'state',
   'template-id',
   'token',
+  'timezone',
+  'traffic-observation-mode',
+  'sensitive-log-sink-name',
+  'sensitive-log-sink-ref',
+  'user-agent',
   'width',
 ]);
 
@@ -91,6 +107,9 @@ function usageText() {
     '  bpane session-template list [options]',
     '  bpane session-template get <template-id> [options]',
     '  bpane session-template update <template-id> [options]',
+    '  bpane egress-profile create [profile-name] [options]',
+    '  bpane egress-profile list [options]',
+    '  bpane egress-profile get <profile-id> [options]',
     '  bpane browser-context create [context-name] [options]',
     '  bpane browser-context clone <source-context-id> <target-context-name> [options]',
     '  bpane browser-context export <context-id> --output <path> [options]',
@@ -129,6 +148,22 @@ function usageText() {
     '  --template-id <id>        Session template id for create/list filters.',
     '  --browser-context-id <id> Browser context id for reusable session creation.',
     '  --browser-context-mode <mode> Browser context mode: fresh, ephemeral, reusable.',
+    '  --locale <tag>            Session locale, for example de-DE.',
+    '  --language <tag>          Repeatable session language preference.',
+    '  --timezone <zone>         Session timezone, for example Europe/Berlin.',
+    '  --geolocation-latitude <number>  Session geolocation latitude.',
+    '  --geolocation-longitude <number> Session geolocation longitude.',
+    '  --geolocation-accuracy-meters <number> Optional geolocation accuracy.',
+    '  --user-agent <value>      Custom Chromium user agent for session create/template defaults.',
+    '  --browser-identity <id>   Approved browser identity hint for session create/template defaults.',
+    '  --egress-profile-id <id>  Approved egress profile id for session create/template defaults.',
+    '  --proxy-url <url>         Egress profile proxy URL.',
+    '  --bypass-rule <rule>      Repeatable egress profile proxy bypass rule.',
+    '  --custom-ca-ref <ref>     Egress profile custom CA reference.',
+    '  --custom-ca-name <name>   Egress profile custom CA display name.',
+    '  --traffic-observation-mode <mode> Egress observation mode: metadata_only or tls_intercept.',
+    '  --sensitive-log-sink-ref <ref> Approved SIEM/log-sink ref required for tls_intercept.',
+    '  --sensitive-log-sink-name <name> Sensitive log-sink display name.',
     '  --name <name>             Session template name for create/update.',
     '  --description <text>      Session template description for create/update.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
@@ -247,6 +282,18 @@ function parseNonNegativeIntegerOption(options, name) {
   const value = Number.parseInt(raw, 10);
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new CliError('USAGE', `--${name} must be a non-negative integer.`, EXIT_CODES.usage);
+  }
+  return value;
+}
+
+function parseFiniteNumberOption(options, name) {
+  const raw = getOption(options, name);
+  if (raw === null || raw === '') {
+    return null;
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    throw new CliError('USAGE', `--${name} must be a finite number.`, EXIT_CODES.usage);
   }
   return value;
 }
@@ -444,6 +491,14 @@ function requiredBrowserContextId(positionals, commandLabel) {
     throw new CliError('USAGE', `Usage: bpane ${commandLabel} <context-id>`, EXIT_CODES.usage);
   }
   return contextId;
+}
+
+function requiredEgressProfileId(positionals, commandLabel) {
+  const profileId = positionals[2];
+  if (!profileId || positionals.length > 3) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <profile-id>`, EXIT_CODES.usage);
+  }
+  return profileId;
 }
 
 function requireAccessToken(config) {
@@ -650,6 +705,67 @@ function buildDelegateBody(mcpConfig) {
   return body;
 }
 
+function buildNetworkIdentityRequest(options) {
+  const identity = {};
+  const locale = getOption(options, 'locale');
+  if (locale) {
+    identity.locale = locale;
+  }
+  const languages = getOptions(options, 'language')
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (languages.length) {
+    identity.languages = Array.from(new Set(languages));
+  }
+  const timezone = getOption(options, 'timezone');
+  if (timezone) {
+    identity.timezone = timezone;
+  }
+  const userAgent = getOption(options, 'user-agent');
+  if (userAgent) {
+    if (/[\r\n]/u.test(userAgent)) {
+      throw new CliError('USAGE', '--user-agent must be a single line.', EXIT_CODES.usage);
+    }
+    identity.user_agent = userAgent;
+  }
+  const browserIdentity = getOption(options, 'browser-identity');
+  if (browserIdentity) {
+    identity.browser_identity = browserIdentity;
+  }
+  const egressProfileId = getOption(options, 'egress-profile-id');
+  if (egressProfileId) {
+    identity.egress_profile_id = egressProfileId;
+  }
+  const latitude = parseFiniteNumberOption(options, 'geolocation-latitude');
+  const longitude = parseFiniteNumberOption(options, 'geolocation-longitude');
+  const accuracyMeters = parseFiniteNumberOption(options, 'geolocation-accuracy-meters');
+  if (latitude !== null || longitude !== null || accuracyMeters !== null) {
+    if (latitude === null || longitude === null) {
+      throw new CliError(
+        'USAGE',
+        'Use --geolocation-latitude and --geolocation-longitude together.',
+        EXIT_CODES.usage,
+      );
+    }
+    if (latitude < -90 || latitude > 90) {
+      throw new CliError('USAGE', '--geolocation-latitude must be between -90 and 90.', EXIT_CODES.usage);
+    }
+    if (longitude < -180 || longitude > 180) {
+      throw new CliError('USAGE', '--geolocation-longitude must be between -180 and 180.', EXIT_CODES.usage);
+    }
+    if (accuracyMeters !== null && accuracyMeters <= 0) {
+      throw new CliError('USAGE', '--geolocation-accuracy-meters must be greater than zero.', EXIT_CODES.usage);
+    }
+    identity.geolocation = {
+      latitude,
+      longitude,
+      ...(accuracyMeters !== null ? { accuracy_meters: accuracyMeters } : {}),
+    };
+  }
+  return Object.keys(identity).length ? identity : null;
+}
+
 function buildCreateSessionRequest(options) {
   const rawBody = parseJsonOption(options, 'body-json');
   if (rawBody !== null) {
@@ -687,6 +803,10 @@ function buildCreateSessionRequest(options) {
   const ownerMode = getOption(options, 'owner-mode');
   if (ownerMode) {
     body.owner_mode = ownerMode;
+  }
+  const networkIdentity = buildNetworkIdentityRequest(options);
+  if (networkIdentity !== null) {
+    body.network_identity = networkIdentity;
   }
   const width = parseIntegerOption(options, 'width');
   const height = parseIntegerOption(options, 'height');
@@ -742,6 +862,10 @@ function buildSessionTemplateDefaults(options) {
   if (idleTimeoutSec !== null) {
     defaults.idle_timeout_sec = idleTimeoutSec;
   }
+  const networkIdentity = buildNetworkIdentityRequest(options);
+  if (networkIdentity !== null) {
+    defaults.network_identity = networkIdentity;
+  }
   const labels = parseKeyValueOptions(options, 'default-label');
   if (Object.keys(labels).length) {
     defaults.labels = labels;
@@ -760,6 +884,68 @@ function buildSessionTemplateDefaults(options) {
     };
   }
   return defaults;
+}
+
+function isObjectRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergeOptionalObjectDefaults(existingValue, overrideValue) {
+  if (isObjectRecord(existingValue) && isObjectRecord(overrideValue)) {
+    return { ...existingValue, ...overrideValue };
+  }
+  return overrideValue ?? existingValue;
+}
+
+function mergeSessionTemplateNetworkIdentity(existingValue, overrideValue) {
+  if (!isObjectRecord(existingValue)) {
+    return overrideValue;
+  }
+  if (!isObjectRecord(overrideValue)) {
+    return existingValue;
+  }
+  return {
+    ...existingValue,
+    ...overrideValue,
+  };
+}
+
+function mergeSessionTemplateDefaults(existingDefaults, overrideDefaults) {
+  const existing = isObjectRecord(existingDefaults) ? existingDefaults : {};
+  const overrides = isObjectRecord(overrideDefaults) ? overrideDefaults : {};
+  const merged = { ...existing };
+
+  for (const key of ['owner_mode', 'viewport', 'idle_timeout_sec', 'recording']) {
+    if (Object.prototype.hasOwnProperty.call(overrides, key)) {
+      merged[key] = overrides[key];
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'labels')) {
+    merged.labels = {
+      ...(isObjectRecord(existing.labels) ? existing.labels : {}),
+      ...(isObjectRecord(overrides.labels) ? overrides.labels : {}),
+    };
+  } else if (isObjectRecord(existing.labels)) {
+    merged.labels = existing.labels;
+  }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'integration_context')) {
+    merged.integration_context = mergeOptionalObjectDefaults(
+      existing.integration_context,
+      overrides.integration_context,
+    );
+  } else if (Object.prototype.hasOwnProperty.call(existing, 'integration_context')) {
+    merged.integration_context = existing.integration_context;
+  }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'network_identity')) {
+    merged.network_identity = mergeSessionTemplateNetworkIdentity(
+      existing.network_identity,
+      overrides.network_identity,
+    );
+  } else if (Object.prototype.hasOwnProperty.call(existing, 'network_identity')) {
+    merged.network_identity = existing.network_identity;
+  }
+
+  return merged;
 }
 
 function buildSessionTemplateRequest(options, fallbackName = null) {
@@ -787,6 +973,124 @@ function buildSessionTemplateRequest(options, fallbackName = null) {
   const labels = parseKeyValueOptions(options, 'label');
   if (Object.keys(labels).length) {
     body.labels = labels;
+  }
+  return body;
+}
+
+function buildSessionTemplateUpdateRequest(existingTemplate, options) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? existingTemplate?.name;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Session template update requires --name when the existing template response has no name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const body = {
+    name,
+    labels: {
+      ...(isObjectRecord(existingTemplate?.labels) ? existingTemplate.labels : {}),
+      ...parseKeyValueOptions(options, 'label'),
+    },
+    defaults: mergeSessionTemplateDefaults(
+      existingTemplate?.defaults ?? {},
+      buildSessionTemplateDefaults(options),
+    ),
+  };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  } else if (existingTemplate?.description != null) {
+    body.description = existingTemplate.description;
+  }
+  return body;
+}
+
+function buildEgressProfileRequest(options, fallbackName = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? fallbackName;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Egress profile create requires --name or a positional profile name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const body = { name };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  }
+  const labels = parseKeyValueOptions(options, 'label');
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+  const proxyUrl = getOption(options, 'proxy-url');
+  if (proxyUrl) {
+    body.proxy = { url: proxyUrl };
+  }
+  const bypassRules = getOptions(options, 'bypass-rule')
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (bypassRules.length) {
+    body.bypass_rules = Array.from(new Set(bypassRules));
+  }
+  const customCaRef = getOption(options, 'custom-ca-ref');
+  const customCaName = getOption(options, 'custom-ca-name');
+  if (customCaRef || customCaName) {
+    if (!customCaRef) {
+      throw new CliError('USAGE', '--custom-ca-name requires --custom-ca-ref.', EXIT_CODES.usage);
+    }
+    body.custom_ca = {
+      certificate_ref: customCaRef,
+      ...(customCaName ? { display_name: customCaName } : {}),
+    };
+  }
+  const trafficObservationMode = getOption(options, 'traffic-observation-mode');
+  const sensitiveLogSinkRef = getOption(options, 'sensitive-log-sink-ref');
+  const sensitiveLogSinkName = getOption(options, 'sensitive-log-sink-name');
+  if (trafficObservationMode || sensitiveLogSinkRef || sensitiveLogSinkName) {
+    const mode = trafficObservationMode ?? 'metadata_only';
+    if (!['metadata_only', 'tls_intercept'].includes(mode)) {
+      throw new CliError(
+        'USAGE',
+        '--traffic-observation-mode must be metadata_only or tls_intercept.',
+        EXIT_CODES.usage,
+      );
+    }
+    if (sensitiveLogSinkName && !sensitiveLogSinkRef) {
+      throw new CliError('USAGE', '--sensitive-log-sink-name requires --sensitive-log-sink-ref.', EXIT_CODES.usage);
+    }
+    if (mode === 'tls_intercept') {
+      if (!body.proxy) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --proxy-url.', EXIT_CODES.usage);
+      }
+      if (!body.custom_ca) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --custom-ca-ref.', EXIT_CODES.usage);
+      }
+      if (!sensitiveLogSinkRef) {
+        throw new CliError('USAGE', '--traffic-observation-mode tls_intercept requires --sensitive-log-sink-ref.', EXIT_CODES.usage);
+      }
+    }
+    body.traffic_observation = {
+      mode,
+      ...(sensitiveLogSinkRef ? { sensitive_log_sink_ref: sensitiveLogSinkRef } : {}),
+      ...(sensitiveLogSinkName ? { sensitive_log_sink_display_name: sensitiveLogSinkName } : {}),
+    };
+  }
+  const state = getOption(options, 'state');
+  if (state) {
+    body.state = state;
   }
   return body;
 }
@@ -1446,15 +1750,42 @@ async function handleSessionTemplateCommand(config, positionals, options) {
   }
   if (action === 'update') {
     const templateId = requiredTemplateId(positionals, 'session-template update');
+    const existingTemplate = await requestGateway(
+      config,
+      `/api/v1/session-templates/${encodeURIComponent(templateId)}`,
+    );
     return await requestGateway(config, `/api/v1/session-templates/${encodeURIComponent(templateId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildSessionTemplateRequest(options)),
+      body: JSON.stringify(buildSessionTemplateUpdateRequest(existingTemplate, options)),
     });
   }
   throw new CliError(
     'USAGE',
     `Unknown session-template command: ${action ?? ''}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
+async function handleEgressProfileCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length <= 3) {
+    return await requestGateway(config, '/api/v1/egress-profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildEgressProfileRequest(options, positionals[2] ?? null)),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/egress-profiles');
+  }
+  if (action === 'get') {
+    const profileId = requiredEgressProfileId(positionals, 'egress-profile get');
+    return await requestGateway(config, `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown egress-profile command: ${action ?? ''}`.trim(),
     EXIT_CODES.usage,
   );
 }
@@ -1780,6 +2111,9 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     } else if (scope === 'session-template') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleSessionTemplateCommand(config, positionals, options);
+    } else if (scope === 'egress-profile') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleEgressProfileCommand(config, positionals, options);
     } else if (scope === 'browser-context') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleBrowserContextCommand(config, positionals, options);

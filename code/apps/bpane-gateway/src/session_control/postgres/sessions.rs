@@ -16,6 +16,7 @@ const SESSION_COLUMNS: &str = r#"
     template_id,
     browser_context_mode,
     browser_context_id,
+    network_identity,
     owner_mode,
     viewport_width,
     viewport_height,

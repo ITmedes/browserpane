@@ -47,6 +47,7 @@ mod browser_contexts;
 mod credential_bindings;
 mod extensions;
 mod file_workspaces;
+mod network_identity;
 mod recordings;
 mod session_files;
 mod session_templates;

@@ -9,6 +9,26 @@ const SESSION = {
     mode: 'reusable',
     context_id: '019df7be-6222-7b00-8c86-9e1f3f8d4a72',
   },
+  network_identity: {
+    locale: 'de-DE',
+    languages: ['de-DE', 'en-US'],
+    timezone: 'Europe/Berlin',
+    geolocation: { latitude: 52.52, longitude: 13.405, accuracy_meters: 100 },
+    user_agent: null,
+    browser_identity: 'desktop-chromium-stable',
+    egress_profile_id: '019df7be-6222-7b00-8c86-9e1f3f8d4a73',
+  },
+  effective_egress: {
+    profile_id: '019df7be-6222-7b00-8c86-9e1f3f8d4a73',
+    profile_name: 'EU support egress',
+    profile_state: 'ready',
+    proxy_configured: true,
+    bypass_rule_count: 2,
+    custom_ca_configured: true,
+    observation_mode: 'tls_intercept',
+    tls_interception_enabled: true,
+    sensitive_log_sink_configured: true,
+  },
   owner_mode: 'shared',
   integration_context: { ticket: 'INC-1234' },
   connect: {
@@ -78,10 +98,45 @@ const TEMPLATE = {
     idle_timeout_sec: 1800,
     labels: { team: 'support' },
     integration_context: { source: 'template' },
+    network_identity: {
+      locale: 'de-DE',
+      languages: ['de-DE'],
+      timezone: 'Europe/Berlin',
+      egress_profile_id: '019df7be-6222-7b00-8c86-9e1f3f8d4a73',
+    },
   },
   version: 1,
   created_at: '2026-05-04T18:00:00Z',
   updated_at: '2026-05-04T18:00:00Z',
+};
+
+const EGRESS_PROFILE = {
+  id: '019df7be-6222-7b00-8c86-9e1f3f8d4a73',
+  name: 'EU support egress',
+  description: 'Approved support outbound path',
+  labels: { region: 'eu' },
+  proxy: { url: 'https://proxy.example:8443' },
+  bypass_rules: ['localhost', '*.internal.example'],
+  custom_ca: {
+    certificate_ref: 'vault://pki/browserpane/eu-support',
+    display_name: 'EU support CA',
+  },
+  traffic_observation: {
+    mode: 'tls_intercept',
+    sensitive_log_sink_ref: 'siem://browserpane/eu-support',
+    sensitive_log_sink_display_name: 'EU support SIEM',
+  },
+  state: 'ready',
+  effective: {
+    proxy_configured: true,
+    bypass_rule_count: 2,
+    custom_ca_configured: true,
+    observation_mode: 'tls_intercept',
+    tls_interception_enabled: true,
+    sensitive_log_sink_configured: true,
+  },
+  created_at: '2026-05-04T18:45:00Z',
+  updated_at: '2026-05-04T18:45:00Z',
 };
 
 describe('ControlClient', () => {
@@ -98,6 +153,8 @@ describe('ControlClient', () => {
     expect(response.sessions).toHaveLength(1);
     expect(response.sessions[0]?.id).toBe(SESSION.id);
     expect(response.sessions[0]?.browser_context).toEqual(SESSION.browser_context);
+    expect(response.sessions[0]?.network_identity?.locale).toBe('de-DE');
+    expect(response.sessions[0]?.effective_egress?.profile_name).toBe('EU support egress');
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('https://browserpane.example/api/v1/sessions'),
       expect.objectContaining({
@@ -248,10 +305,79 @@ describe('ControlClient', () => {
       name: 'Support triage',
       defaults: expect.objectContaining({
         idle_timeout_sec: 1800,
+        network_identity: expect.objectContaining({
+          locale: 'de-DE',
+        }),
       }),
     });
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('http://localhost:8932/api/v1/session-templates'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('manages egress profiles with bearer auth', async () => {
+    const fetchImpl = jsonFetch(EGRESS_PROFILE);
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const created = await client.createEgressProfile({
+      name: 'EU support egress',
+      labels: { region: 'eu' },
+      proxy: { url: 'https://proxy.example:8443' },
+      bypass_rules: ['localhost', '*.internal.example'],
+      custom_ca: {
+        certificate_ref: 'vault://pki/browserpane/eu-support',
+        display_name: 'EU support CA',
+      },
+      traffic_observation: {
+        mode: 'tls_intercept',
+        sensitive_log_sink_ref: 'siem://browserpane/eu-support',
+        sensitive_log_sink_display_name: 'EU support SIEM',
+      },
+    });
+    await client.getEgressProfile('profile/with space');
+
+    expect(created).toMatchObject({
+      id: EGRESS_PROFILE.id,
+      name: 'EU support egress',
+      effective: {
+        proxy_configured: true,
+        bypass_rule_count: 2,
+        custom_ca_configured: true,
+        observation_mode: 'tls_intercept',
+        tls_interception_enabled: true,
+        sensitive_log_sink_configured: true,
+      },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      new URL('http://localhost:8932/api/v1/egress-profiles'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'EU support egress',
+          labels: { region: 'eu' },
+          proxy: { url: 'https://proxy.example:8443' },
+          bypass_rules: ['localhost', '*.internal.example'],
+          custom_ca: {
+            certificate_ref: 'vault://pki/browserpane/eu-support',
+            display_name: 'EU support CA',
+          },
+          traffic_observation: {
+            mode: 'tls_intercept',
+            sensitive_log_sink_ref: 'siem://browserpane/eu-support',
+            sensitive_log_sink_display_name: 'EU support SIEM',
+          },
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      new URL('http://localhost:8932/api/v1/egress-profiles/profile%2Fwith%20space'),
       expect.objectContaining({ method: 'GET' }),
     );
   });
@@ -299,6 +425,12 @@ describe('ControlClient', () => {
         mode: 'reusable',
         context_id: BROWSER_CONTEXT.id,
       },
+      network_identity: {
+        locale: 'de-DE',
+        languages: ['de-DE', 'en-US'],
+        timezone: 'Europe/Berlin',
+        egress_profile_id: EGRESS_PROFILE.id,
+      },
       idle_timeout_sec: 300,
       labels: { source: 'admin-smoke' },
     });
@@ -312,6 +444,12 @@ describe('ControlClient', () => {
           browser_context: {
             mode: 'reusable',
             context_id: BROWSER_CONTEXT.id,
+          },
+          network_identity: {
+            locale: 'de-DE',
+            languages: ['de-DE', 'en-US'],
+            timezone: 'Europe/Berlin',
+            egress_profile_id: EGRESS_PROFILE.id,
           },
           idle_timeout_sec: 300,
           labels: { source: 'admin-smoke' },

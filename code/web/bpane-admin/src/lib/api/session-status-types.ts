@@ -1,5 +1,10 @@
 import type { SessionRecordingPlaybackResource } from './recording-types';
-import type { SessionConnectionCounts, SessionStopEligibility } from './control-types';
+import type {
+  SessionConnectionCounts,
+  SessionEffectiveEgress,
+  SessionNetworkIdentity,
+  SessionStopEligibility,
+} from './control-types';
 
 export type SessionIdleStatus = {
   readonly idle_timeout_sec: number | null;
@@ -59,6 +64,8 @@ export type SessionStatus = {
   readonly exclusive_browser_owner: boolean;
   readonly mcp_owner: boolean;
   readonly resolution: readonly [number, number];
+  readonly network_identity?: SessionNetworkIdentity;
+  readonly effective_egress?: SessionEffectiveEgress;
   readonly recording: SessionRecordingStatus;
   readonly playback: SessionRecordingPlaybackResource;
   readonly telemetry: SessionTelemetry;
