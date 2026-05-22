@@ -579,15 +579,15 @@ docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-pro
 deploy/examples/egress-observer/correlate-session-ip.sh
 ```
 
-For local HTTPS interception, run the mitmproxy-backed observer instead of the
+For local HTTPS interception, run the mitmproxy-backed observer alongside the
 plain Squid observer:
 
 ```bash
-docker compose -f deploy/examples/egress-observer/compose.yml down
+docker compose -f deploy/examples/egress-observer/compose.yml up -d
 deploy/examples/egress-observer/prepare-mitmproxy-ca.sh
-docker compose -f deploy/examples/egress-observer/compose.tls.yml up
+docker compose -f deploy/examples/egress-observer/compose.tls.yml up -d
 ./scripts/bpane egress-profile create local-tls-observer \
-  --proxy-url http://bpane-egress-observer:3128 \
+  --proxy-url http://bpane-egress-tls-observer:3129 \
   --custom-ca-ref file:///workspace/dev/egress-ca.pem \
   --custom-ca-name "BrowserPane Local Egress Test CA" \
   --traffic-observation-mode tls_intercept \
@@ -599,6 +599,12 @@ Sessions using that profile should show certificates issued by the local egress
 CA in the remote Chromium certificate viewer. The TLS observer logs decrypted
 request metadata and should only be used for local development or an approved
 sensitive-log sink.
+
+On `localhost`, the admin app auto-creates two owner-scoped local presets when
+it loads the egress catalog: `Local: Egress as Proxy` and `Local: Egress as TLS
+Interceptor`. The session configurator groups egress choices as `No egress`,
+`Egress as Proxy`, and `Egress as TLS Interceptor` so local testers can compare
+all three modes.
 
 Common browser-context operations:
 

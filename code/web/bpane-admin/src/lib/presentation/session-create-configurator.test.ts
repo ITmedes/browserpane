@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   browserContextOptionLabel,
   defaultSessionCreateFormState,
+  egressProfileKind,
   egressProfileOptionLabel,
+  isLocalProxyEgressPreset,
+  isLocalTlsInterceptorEgressPreset,
   networkIdentitySummary,
   parseSessionCreateLabels,
   sessionBrowserContextSummary,
@@ -345,5 +348,31 @@ describe('session create configurator', () => {
       egress_profile_id: EGRESS_PROFILE.id,
     }, [EGRESS_PROFILE])).toBe('locale=de-DE | languages=de-DE | timezone=Europe/Berlin | egress=EU support egress');
     expect(egressProfileOptionLabel(EGRESS_PROFILE)).toBe('EU support egress (ready, proxy, TLS inspect, log sink, custom CA, 2 bypass)');
+    expect(egressProfileKind(EGRESS_PROFILE)).toBe('tls_interceptor');
+    expect(egressProfileKind({
+      ...EGRESS_PROFILE,
+      id: '019df7be-6222-7b00-8c86-9e1f3f8d4a75',
+      name: 'Plain proxy',
+      custom_ca: null,
+      traffic_observation: { mode: 'metadata_only' },
+      effective: {
+        proxy_configured: true,
+        bypass_rule_count: 1,
+        custom_ca_configured: false,
+        observation_mode: 'metadata_only',
+        tls_interception_enabled: false,
+        sensitive_log_sink_configured: false,
+      },
+    })).toBe('proxy');
+    expect(isLocalProxyEgressPreset({
+      ...EGRESS_PROFILE,
+      name: 'Local: Egress as Proxy',
+      labels: {},
+    })).toBe(true);
+    expect(isLocalTlsInterceptorEgressPreset({
+      ...EGRESS_PROFILE,
+      name: 'Local: Egress as TLS Interceptor',
+      labels: {},
+    })).toBe(true);
   });
 });

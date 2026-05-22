@@ -8,6 +8,13 @@ import type {
   SessionNetworkIdentity,
   SessionTemplateResource,
 } from '../api/control-types';
+import {
+  LOCAL_EGRESS_PRESET_LABEL_KEY,
+  LOCAL_EGRESS_PROXY_NAME,
+  LOCAL_EGRESS_PROXY_PRESET,
+  LOCAL_EGRESS_TLS_NAME,
+  LOCAL_EGRESS_TLS_PRESET,
+} from '../api/local-egress-preset-types';
 
 export const SESSION_CREATE_OWNER_MODES = [
   {
@@ -455,6 +462,26 @@ export function egressProfileOptionLabel(profile: EgressProfileResource): string
     profile.effective.bypass_rule_count > 0 ? `${profile.effective.bypass_rule_count} bypass` : null,
   ].filter(Boolean);
   return `${profile.name} (${signals.join(', ')})`;
+}
+
+export function egressProfileKind(profile: EgressProfileResource): 'tls_interceptor' | 'proxy' | 'other' {
+  if (profile.effective.tls_interception_enabled || profile.traffic_observation.mode === 'tls_intercept') {
+    return 'tls_interceptor';
+  }
+  if (profile.effective.proxy_configured || profile.proxy) {
+    return 'proxy';
+  }
+  return 'other';
+}
+
+export function isLocalProxyEgressPreset(profile: EgressProfileResource): boolean {
+  return profile.name === LOCAL_EGRESS_PROXY_NAME
+    || profile.labels[LOCAL_EGRESS_PRESET_LABEL_KEY] === LOCAL_EGRESS_PROXY_PRESET;
+}
+
+export function isLocalTlsInterceptorEgressPreset(profile: EgressProfileResource): boolean {
+  return profile.name === LOCAL_EGRESS_TLS_NAME
+    || profile.labels[LOCAL_EGRESS_PRESET_LABEL_KEY] === LOCAL_EGRESS_TLS_PRESET;
 }
 
 export function browserContextOptionLabel(context: BrowserContextResource): string {

@@ -14,6 +14,9 @@
     browserContextOptionLabel,
     defaultSessionCreateFormState,
     egressProfileOptionLabel,
+    egressProfileKind,
+    isLocalProxyEgressPreset,
+    isLocalTlsInterceptorEgressPreset,
     networkIdentitySummary,
     sessionBrowserContextSummary,
     sessionTemplateDefaultsSummary,
@@ -145,6 +148,17 @@
     ? 'grid min-w-0 gap-3 xl:grid-cols-[minmax(220px,1.2fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)]'
     : 'grid min-w-0 gap-3');
   const payloadOpen = $derived(controlledPayloadOpen ?? payloadOpenInternal);
+  const proxyEgressProfiles = $derived(egressProfiles.filter((profile) => egressProfileKind(profile) === 'proxy'));
+  const tlsEgressProfiles = $derived(egressProfiles.filter((profile) => egressProfileKind(profile) === 'tls_interceptor'));
+  const otherEgressProfiles = $derived(egressProfiles.filter((profile) => egressProfileKind(profile) === 'other'));
+  const localProxyEgressPreset = $derived(proxyEgressProfiles.find(isLocalProxyEgressPreset) ?? null);
+  const localTlsEgressPreset = $derived(tlsEgressProfiles.find(isLocalTlsInterceptorEgressPreset) ?? null);
+  const additionalProxyEgressProfiles = $derived(
+    proxyEgressProfiles.filter((profile) => profile.id !== localProxyEgressPreset?.id),
+  );
+  const additionalTlsEgressProfiles = $derived(
+    tlsEgressProfiles.filter((profile) => profile.id !== localTlsEgressPreset?.id),
+  );
 
   $effect(() => {
     if (payloadInitiallyOpen) {
@@ -527,12 +541,44 @@
             bind:value={egressProfileId}
             disabled={loading || disabled || egressProfilesLoading}
           >
-            <option value="">No egress profile</option>
-            {#each egressProfiles as profile}
-              <option value={profile.id} disabled={profile.state === 'disabled'}>
-                {egressProfileOptionLabel(profile)}
+            <option value="">No egress</option>
+            {#if localProxyEgressPreset}
+              <option value={localProxyEgressPreset.id} disabled={localProxyEgressPreset.state === 'disabled'}>
+                Egress as Proxy
               </option>
-            {/each}
+            {/if}
+            {#if localTlsEgressPreset}
+              <option value={localTlsEgressPreset.id} disabled={localTlsEgressPreset.state === 'disabled'}>
+                Egress as TLS Interceptor
+              </option>
+            {/if}
+            {#if additionalProxyEgressProfiles.length > 0}
+              <optgroup label={localProxyEgressPreset ? 'Additional proxy profiles' : 'Egress as Proxy'}>
+                {#each additionalProxyEgressProfiles as profile}
+                  <option value={profile.id} disabled={profile.state === 'disabled'}>
+                    {egressProfileOptionLabel(profile)}
+                  </option>
+                {/each}
+              </optgroup>
+            {/if}
+            {#if additionalTlsEgressProfiles.length > 0}
+              <optgroup label={localTlsEgressPreset ? 'Additional TLS interceptor profiles' : 'Egress as TLS Interceptor'}>
+                {#each additionalTlsEgressProfiles as profile}
+                  <option value={profile.id} disabled={profile.state === 'disabled'}>
+                    {egressProfileOptionLabel(profile)}
+                  </option>
+                {/each}
+              </optgroup>
+            {/if}
+            {#if otherEgressProfiles.length > 0}
+              <optgroup label="Other egress profiles">
+                {#each otherEgressProfiles as profile}
+                  <option value={profile.id} disabled={profile.state === 'disabled'}>
+                    {egressProfileOptionLabel(profile)}
+                  </option>
+                {/each}
+              </optgroup>
+            {/if}
           </select>
         </label>
       </div>

@@ -15,6 +15,7 @@
   import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import SessionCreateConfigurator from '../presentation/SessionCreateConfigurator.svelte';
   import { SessionViewModelBuilder, type SessionListItemViewModel } from '../presentation/session-view-model';
+  import { ensureLocalEgressPresets } from './local-egress-presets';
 
   type AdminSessionListRouteProps = {
     readonly controlClient: ControlClient;
@@ -85,7 +86,12 @@
     egressProfilesLoading = true;
     egressProfileError = null;
     try {
-      egressProfiles = (await controlClient.listEgressProfiles()).profiles;
+      const listed = (await controlClient.listEgressProfiles()).profiles;
+      const localPresets = await ensureLocalEgressPresets(controlClient, listed);
+      egressProfiles = localPresets.profiles;
+      if (localPresets.error) {
+        egressProfileError = localPresets.error;
+      }
     } catch (loadError) {
       egressProfileError = errorMessage(loadError);
     } finally {

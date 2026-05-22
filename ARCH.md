@@ -545,7 +545,8 @@ The supported local operator CLI lives in
 - `deploy/examples/egress-observer` provides a local Squid forward-proxy
   example for metadata-only access-log observation and session/container IP
   correlation, plus a mitmproxy TLS-intercept fixture for local inspection
-  checks with an explicit custom CA and sensitive-log sink.
+  checks with an explicit custom CA and sensitive-log sink. On localhost, the
+  admin app auto-creates owner-scoped local presets for both proxy variants.
 - MCP commands cover health, authorize, revoke, set-default, clear-default,
   doctor, preflight, and repair.
 - `mcp repair` applies missing automation delegation and bridge default-session
