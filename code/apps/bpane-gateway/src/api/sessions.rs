@@ -43,6 +43,10 @@ pub(super) fn session_operation_routes() -> Router<Arc<ApiState>> {
             get(status::get_session_status),
         )
         .route(
+            "/api/v1/sessions/{session_id}/egress-diagnostics",
+            get(status::get_session_egress_diagnostics),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/connections/{connection_id}/disconnect",
             post(disconnect::disconnect_session_connection),
         )

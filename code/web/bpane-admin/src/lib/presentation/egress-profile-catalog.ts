@@ -28,6 +28,8 @@ export type EgressProfileCatalogRow = {
   readonly name: string;
   readonly description: string;
   readonly state: EgressProfileState;
+  readonly health: string;
+  readonly proofLevel: string;
   readonly kind: 'proxy' | 'tls' | 'direct';
   readonly badges: readonly string[];
   readonly updatedAt: string;
@@ -44,6 +46,8 @@ export function egressProfileRows(
       name: profile.name,
       description: profile.description ?? '',
       state: profile.state,
+      health: profile.diagnostics.health,
+      proofLevel: profile.diagnostics.proof_level,
       kind: profile.effective.tls_interception_enabled
         ? 'tls' as const
         : profile.effective.proxy_configured
@@ -61,6 +65,8 @@ export function egressProfileRows(
         row.name,
         row.description,
         row.state,
+        row.health,
+        row.proofLevel,
         row.kind,
         ...row.badges,
       ].some((value) => value.toLowerCase().includes(needle));
@@ -186,6 +192,8 @@ export function egressProfileBadges(profile: EgressProfileResource): readonly st
     profile.effective.custom_ca_configured ? 'custom CA' : null,
     profile.effective.sensitive_log_sink_configured ? 'log sink' : null,
     profile.state === 'disabled' ? 'disabled' : null,
+    profile.diagnostics.health !== 'ready' ? `health ${profile.diagnostics.health}` : null,
+    profile.diagnostics.proof_level === 'runtime_launch_metadata' ? 'runtime proof' : 'config proof',
   ].filter((value): value is string => Boolean(value));
 }
 

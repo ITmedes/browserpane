@@ -1,5 +1,6 @@
 import type {
   BrowserContextResource,
+  EgressDiagnosticsResource,
   SessionEffectiveEgress,
   SessionNetworkIdentity,
   SessionResource,
@@ -22,6 +23,7 @@ export type SessionListItemViewModel = {
   readonly browserContextId: string | null;
   readonly networkIdentity: string;
   readonly egress: string;
+  readonly egressDiagnostics: string;
   readonly mcpDelegation: string;
   readonly labels: string;
 };
@@ -151,6 +153,11 @@ export class SessionViewModelBuilder {
           value: effectiveEgressLabel(session.effective_egress),
           testId: 'session-effective-egress',
         },
+        {
+          label: 'egress proof',
+          value: egressDiagnosticsLabel(status?.egress_diagnostics ?? session.egress_diagnostics),
+          testId: 'session-egress-diagnostics',
+        },
         { label: 'labels', value: labelSummary(session.labels ?? {}), testId: 'session-labels' },
         {
           label: 'integration',
@@ -207,6 +214,7 @@ function toListItem(
     browserContextId: session.browser_context?.context_id ?? null,
     networkIdentity: networkIdentityLabel(session.network_identity),
     egress: effectiveEgressLabel(session.effective_egress),
+    egressDiagnostics: egressDiagnosticsLabel(session.egress_diagnostics),
     mcpDelegation: mcpDelegationLabel(session),
     labels: labelSummary(session.labels ?? {}),
   };
@@ -315,6 +323,22 @@ function effectiveEgressLabel(egress: SessionEffectiveEgress | null | undefined)
     egress.sensitive_log_sink_configured ? 'log sink' : null,
     egress.custom_ca_configured ? 'custom CA' : null,
     egress.bypass_rule_count > 0 ? `${egress.bypass_rule_count} bypass` : null,
+  ].filter(Boolean);
+  return facts.join(' | ');
+}
+
+function egressDiagnosticsLabel(diagnostics: EgressDiagnosticsResource | null | undefined): string {
+  if (!diagnostics) {
+    return 'No egress diagnostics';
+  }
+  const facts = [
+    diagnostics.health,
+    diagnostics.proof_level.replaceAll('_', ' '),
+    diagnostics.runtime_binding ? `runtime=${diagnostics.runtime_binding}` : null,
+    diagnostics.runtime_assignment ? `assignment=${diagnostics.runtime_assignment}` : null,
+    diagnostics.proof.runtime_launch_observed ? 'runtime launch observed' : null,
+    diagnostics.proof.active_probe_collected ? 'active probe collected' : 'active probe pending',
+    diagnostics.warnings.length > 0 ? `${diagnostics.warnings.length} warning` : null,
   ].filter(Boolean);
   return facts.join(' | ');
 }

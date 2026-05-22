@@ -121,6 +121,7 @@ fn session_status_maps_recorder_clients() {
         },
         SessionNetworkIdentity::default(),
         SessionEffectiveEgress::default(),
+        EgressDiagnosticsResource::direct(None, None, chrono::Utc::now()),
         &SessionRecordingPolicy {
             mode: SessionRecordingMode::Manual,
             format: SessionRecordingFormat::Webm,

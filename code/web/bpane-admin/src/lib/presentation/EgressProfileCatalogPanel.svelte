@@ -235,6 +235,9 @@
                 {row.state}
               </span>
             </span>
+            <span class="text-xs font-bold text-admin-ink/64" data-testid="egress-profile-row-health">
+              {row.health} | {row.proofLevel.replaceAll('_', ' ')}
+            </span>
             <span class="flex min-w-0 flex-wrap gap-1">
               {#each row.badges as badge}
                 <span class="rounded-lg bg-admin-night/58 px-2 py-0.5 text-[11px] font-bold text-[#c1d0e8]">{badge}</span>
@@ -282,18 +285,29 @@
         <div class="grid min-w-0 gap-2 rounded-xl border border-admin-ink/10 bg-admin-field/62 p-3">
           <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">State: {selectedProfile.state}</span>
+            <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]" data-testid="egress-profile-health">Health: {selectedProfile.diagnostics.health}</span>
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">Proxy: {selectedProfile.effective.proxy_configured ? 'configured' : 'none'}</span>
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">TLS: {selectedProfile.effective.tls_interception_enabled ? 'inspect' : 'metadata'}</span>
             <span class="rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]">Bypass: {selectedProfile.effective.bypass_rule_count}</span>
           </div>
           <AdminMessage
-            variant={selectedProfile.state === 'disabled' ? 'warning' : 'info'}
-            title={selectedProfile.state === 'disabled' ? 'Disabled profile' : 'Diagnostics scaffold'}
-            message={selectedProfile.state === 'disabled'
-              ? 'This profile is retained for historical sessions but is blocked as a healthy launch choice.'
-              : 'Active probe evidence is not collected yet. Current proof is based on sanitized profile and session metadata.'}
+            variant={selectedProfile.diagnostics.health === 'ready' ? 'info' : 'warning'}
+            title={`Diagnostics: ${selectedProfile.diagnostics.proof_level.replaceAll('_', ' ')}`}
+            message={selectedProfile.diagnostics.warnings.length > 0
+              ? selectedProfile.diagnostics.warnings.join(' ')
+              : selectedProfile.diagnostics.proof.active_probe_collected
+                ? 'Active egress probe evidence is available for this profile.'
+                : 'No active probe has been collected yet; proof is based on sanitized configuration metadata.'}
             compact={true}
           />
+          <div class="grid min-w-0 gap-2 text-xs font-bold text-admin-ink/68 sm:grid-cols-2 lg:grid-cols-3" data-testid="egress-profile-diagnostics-proof">
+            <span>Profile resolved: {selectedProfile.diagnostics.proof.profile_resolved ? 'yes' : 'no'}</span>
+            <span>Runtime launch: {selectedProfile.diagnostics.proof.runtime_launch_observed ? 'observed' : 'not observed'}</span>
+            <span>Active probe: {selectedProfile.diagnostics.proof.active_probe_collected ? 'collected' : 'not collected'}</span>
+            <span>TLS expected: {selectedProfile.diagnostics.proof.tls_interception_expected ? 'yes' : 'no'}</span>
+            <span>Custom CA launch: {selectedProfile.diagnostics.proof.custom_ca_launch_config_expected ? 'expected' : 'not expected'}</span>
+            <span>Log sink: {selectedProfile.diagnostics.proof.sensitive_log_sink_declared ? 'declared' : 'not declared'}</span>
+          </div>
         </div>
       {/if}
 

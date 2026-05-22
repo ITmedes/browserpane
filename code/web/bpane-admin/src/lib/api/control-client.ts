@@ -19,6 +19,7 @@ import type {
   CreateSessionCommand,
   CreateFileWorkspaceCommand,
   CreateSessionFileBindingCommand,
+  EgressDiagnosticsResource,
   EgressProfileListResponse,
   EgressProfileResource,
   FileWorkspaceFileListResponse,
@@ -98,6 +99,11 @@ export class ControlClient {
   async getEgressProfile(profileId: string): Promise<EgressProfileResource> {
     const payload = await this.#request('GET', `/api/v1/egress-profiles/${encodeURIComponent(profileId)}`);
     return ControlSessionMapper.toEgressProfileResource(payload);
+  }
+
+  async getEgressProfileDiagnostics(profileId: string): Promise<EgressDiagnosticsResource> {
+    const payload = await this.#request('GET', `/api/v1/egress-profiles/${encodeURIComponent(profileId)}/diagnostics`);
+    return ControlSessionMapper.toEgressDiagnosticsResource(payload);
   }
 
   async updateEgressProfile(profileId: string, command: CreateEgressProfileCommand): Promise<EgressProfileResource> {
@@ -196,6 +202,11 @@ export class ControlClient {
   async getSessionStatus(sessionId: string): Promise<SessionStatus> {
     const payload = await this.#request('GET', `/api/v1/sessions/${encodeURIComponent(sessionId)}/status`);
     return ControlSessionStatusMapper.toSessionStatus(payload);
+  }
+
+  async getSessionEgressDiagnostics(sessionId: string): Promise<EgressDiagnosticsResource> {
+    const payload = await this.#request('GET', `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`);
+    return ControlSessionMapper.toEgressDiagnosticsResource(payload);
   }
 
   async stopSession(sessionId: string): Promise<SessionResource> {

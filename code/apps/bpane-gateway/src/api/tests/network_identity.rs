@@ -202,6 +202,16 @@ async fn manages_egress_profiles_and_session_network_identity() {
         profile["traffic_observation"]["sensitive_log_sink_ref"],
         "siem://browserpane/eu-support"
     );
+    assert_eq!(profile["diagnostics"]["health"], "ready");
+    assert_eq!(profile["diagnostics"]["proof_level"], "configuration");
+    assert_eq!(
+        profile["diagnostics"]["proof"]["active_probe_collected"],
+        false
+    );
+    assert_eq!(
+        profile["diagnostics"]["proof"]["tls_interception_expected"],
+        true
+    );
 
     let get_profile_response = app
         .clone()
@@ -217,6 +227,27 @@ async fn manages_egress_profiles_and_session_network_identity() {
     assert_eq!(get_profile_response.status(), StatusCode::OK);
     let fetched_profile = response_json(get_profile_response).await;
     assert_eq!(fetched_profile["id"], profile_id);
+
+    let profile_diagnostics_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/egress-profiles/{profile_id}/diagnostics"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(profile_diagnostics_response.status(), StatusCode::OK);
+    let profile_diagnostics = response_json(profile_diagnostics_response).await;
+    assert_eq!(profile_diagnostics["profile_id"], profile_id);
+    assert_eq!(profile_diagnostics["health"], "ready");
+    assert_eq!(profile_diagnostics["runtime_binding"], Value::Null);
+    assert_eq!(
+        profile_diagnostics["proof"]["sensitive_log_sink_declared"],
+        true
+    );
 
     let update_profile_response = app
         .clone()
@@ -390,6 +421,24 @@ async fn manages_egress_profiles_and_session_network_identity() {
         session["effective_egress"]["tls_interception_enabled"],
         true
     );
+    assert_eq!(session["egress_diagnostics"]["profile_id"], profile_id);
+    assert_eq!(session["egress_diagnostics"]["health"], "unknown");
+    assert_eq!(
+        session["egress_diagnostics"]["runtime_binding"],
+        "docker_runtime_pool"
+    );
+    assert_eq!(
+        session["egress_diagnostics"]["proof"]["runtime_launch_observed"],
+        false
+    );
+    assert!(session["egress_diagnostics"]["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|warning| warning
+            .as_str()
+            .unwrap()
+            .contains("No active runtime launch metadata")));
     assert_eq!(session["labels"]["region"], "eu");
     assert_eq!(session["labels"]["case"], "INC-1234");
 
@@ -412,6 +461,27 @@ async fn manages_egress_profiles_and_session_network_identity() {
         "eu-support-egress-v2"
     );
     assert_eq!(status["effective_egress"]["tls_interception_enabled"], true);
+    assert_eq!(status["egress_diagnostics"]["profile_id"], profile_id);
+    assert_eq!(status["egress_diagnostics"]["health"], "unknown");
+
+    let session_diagnostics_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/egress-diagnostics"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(session_diagnostics_response.status(), StatusCode::OK);
+    let session_diagnostics = response_json(session_diagnostics_response).await;
+    assert_eq!(session_diagnostics["profile_name"], "eu-support-egress-v2");
+    assert_eq!(
+        session_diagnostics["proof"]["custom_ca_launch_config_expected"],
+        true
+    );
 
     let list_response = app
         .oneshot(

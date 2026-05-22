@@ -38,8 +38,8 @@ use crate::session_access::SessionAutomationAccessTokenClaims;
 use crate::session_control::{
     BrowserContextListResponse, BrowserContextPersistenceMode, BrowserContextResource,
     BrowserContextState, CompleteSessionRecordingRequest, CreateSessionRequest,
-    EgressProfileListResponse, EgressProfileResource, EgressProfileState,
-    FailSessionRecordingRequest, PersistBrowserContextRequest,
+    EgressDiagnosticsResource, EgressProfileListResponse, EgressProfileResource,
+    EgressProfileState, FailSessionRecordingRequest, PersistBrowserContextRequest,
     PersistCompletedSessionRecordingRequest, PersistEgressProfileRequest,
     PersistSessionFileBindingRequest, PersistSessionTemplateRequest, SessionBrowserContextMode,
     SessionEffectiveEgress, SessionLifecycleState, SessionListResponse, SessionNetworkIdentity,

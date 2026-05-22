@@ -117,6 +117,9 @@ async function createProfileThroughUi(page, options, profile) {
     options.connectTimeoutMs,
     100,
   );
+  await page.locator(`[data-testid="egress-profile-row"]`).filter({ hasText: profile.name }).first().click();
+  await page.getByTestId('egress-profile-health').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await page.getByTestId('egress-profile-diagnostics-proof').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   return await fetchProfileByName(page, options, profile.name);
 }
 
@@ -170,6 +173,9 @@ async function verifySessionEffectiveEgress(accessToken, options, proxyProfile, 
   if (noEgress.effective_egress?.profile_id !== null) {
     throw new Error(`Expected no-egress session to have no profile id, got ${JSON.stringify(noEgress.effective_egress)}`);
   }
+  if (noEgress.egress_diagnostics?.health !== 'ready') {
+    throw new Error(`Expected no-egress diagnostics to be ready, got ${JSON.stringify(noEgress.egress_diagnostics)}`);
+  }
   await deleteSession(accessToken, options, noEgress.id);
 
   const proxy = await createSession(accessToken, options, {
@@ -178,6 +184,10 @@ async function verifySessionEffectiveEgress(accessToken, options, proxyProfile, 
   verifiedSessionIds.push(proxy.id);
   if (proxy.effective_egress?.profile_id !== proxyProfile.id || proxy.effective_egress?.tls_interception_enabled) {
     throw new Error(`Expected proxy session effective egress for ${proxyProfile.id}, got ${JSON.stringify(proxy.effective_egress)}`);
+  }
+  const proxyDiagnostics = await launchAndFetchEgressDiagnostics(accessToken, options, proxy.id);
+  if (proxyDiagnostics.health !== 'ready' || proxyDiagnostics.proof_level !== 'runtime_launch_metadata') {
+    throw new Error(`Expected proxy runtime diagnostics to be ready with launch metadata, got ${JSON.stringify(proxyDiagnostics)}`);
   }
   await deleteSession(accessToken, options, proxy.id);
 
@@ -188,8 +198,26 @@ async function verifySessionEffectiveEgress(accessToken, options, proxyProfile, 
   if (tls.effective_egress?.profile_id !== tlsProfile.id || !tls.effective_egress?.tls_interception_enabled) {
     throw new Error(`Expected TLS session effective egress for ${tlsProfile.id}, got ${JSON.stringify(tls.effective_egress)}`);
   }
+  const tlsDiagnostics = await launchAndFetchEgressDiagnostics(accessToken, options, tls.id);
+  if (
+    tlsDiagnostics.health !== 'ready'
+    || tlsDiagnostics.proof_level !== 'runtime_launch_metadata'
+    || !tlsDiagnostics.proof?.custom_ca_launch_config_expected
+  ) {
+    throw new Error(`Expected TLS runtime diagnostics with custom CA launch proof, got ${JSON.stringify(tlsDiagnostics)}`);
+  }
   await deleteSession(accessToken, options, tls.id);
   return verifiedSessionIds;
+}
+
+async function launchAndFetchEgressDiagnostics(accessToken, options, sessionId) {
+  await fetchJson(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/automation-access`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return await fetchJson(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/egress-diagnostics`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
 }
 
 async function createSession(accessToken, options, body) {

@@ -5,6 +5,9 @@ import type {
   BrowserContextState,
   BrowserContextUsageResource,
   EgressCustomCaConfig,
+  EgressDiagnosticsHealth,
+  EgressDiagnosticsProofLevel,
+  EgressDiagnosticsResource,
   EgressProfileEffectiveStatus,
   EgressProfileListResponse,
   EgressProfileResource,
@@ -67,6 +70,7 @@ export class ControlSessionMapper {
       traffic_observation: toEgressTrafficObservationConfig(object.traffic_observation),
       state: expectEnum(object.state, 'egress profile state', EGRESS_PROFILE_STATES),
       effective: toEgressEffectiveStatus(object.effective),
+      diagnostics: toEgressDiagnosticsResource(object.diagnostics),
       created_at: expectString(object.created_at, 'egress profile created_at'),
       updated_at: expectString(object.updated_at, 'egress profile updated_at'),
     };
@@ -78,6 +82,10 @@ export class ControlSessionMapper {
 
   static toSessionEffectiveEgress(payload: unknown): SessionEffectiveEgress {
     return toSessionEffectiveEgress(payload);
+  }
+
+  static toEgressDiagnosticsResource(payload: unknown): EgressDiagnosticsResource {
+    return toEgressDiagnosticsResource(payload);
   }
 
   static toBrowserContextList(payload: unknown): BrowserContextListResponse {
@@ -164,6 +172,7 @@ export class ControlSessionMapper {
       browser_context: toSessionBrowserContextResource(object.browser_context),
       network_identity: toSessionNetworkIdentity(object.network_identity),
       effective_egress: toSessionEffectiveEgress(object.effective_egress),
+      egress_diagnostics: toEgressDiagnosticsResource(object.egress_diagnostics),
       owner_mode: expectString(object.owner_mode, 'session resource owner_mode'),
       viewport: toOptionalViewport(object.viewport, 'session resource viewport') ?? null,
       idle_timeout_sec: optionalNumber(object.idle_timeout_sec, 'session resource idle_timeout_sec') ?? null,
@@ -212,6 +221,8 @@ const BROWSER_CONTEXT_PERSISTENCE_MODES = ['reusable', 'ephemeral'] satisfies re
 const SESSION_BROWSER_CONTEXT_MODES = ['fresh', 'ephemeral', 'reusable'] satisfies readonly SessionBrowserContextMode[];
 const EGRESS_PROFILE_STATES = ['ready', 'disabled'] satisfies readonly EgressProfileState[];
 const EGRESS_TRAFFIC_OBSERVATION_MODES = ['metadata_only', 'tls_intercept'] satisfies readonly EgressTrafficObservationMode[];
+const EGRESS_DIAGNOSTICS_HEALTHS = ['ready', 'unknown', 'attention', 'blocked', 'missing'] satisfies readonly EgressDiagnosticsHealth[];
+const EGRESS_DIAGNOSTICS_PROOF_LEVELS = ['none', 'configuration', 'runtime_launch_metadata'] satisfies readonly EgressDiagnosticsProofLevel[];
 
 function expectEnum<T extends string>(
   value: unknown,
@@ -328,6 +339,96 @@ function toEgressEffectiveStatus(value: unknown): EgressProfileEffectiveStatus {
       object.sensitive_log_sink_configured ?? false,
       'egress profile effective sensitive_log_sink_configured',
     ),
+  };
+}
+
+function toEgressDiagnosticsResource(value: unknown): EgressDiagnosticsResource {
+  const object = value === undefined || value === null
+    ? {}
+    : expectRecord(value, 'egress diagnostics');
+  const profileId = optionalString(object.profile_id, 'egress diagnostics profile_id');
+  const profileName = optionalString(object.profile_name, 'egress diagnostics profile_name');
+  const runtimeBinding = optionalString(object.runtime_binding, 'egress diagnostics runtime_binding');
+  const runtimeAssignment = optionalString(object.runtime_assignment, 'egress diagnostics runtime_assignment');
+  const proof = object.proof === undefined || object.proof === null
+    ? {}
+    : expectRecord(object.proof, 'egress diagnostics proof');
+  const observedPublicIp = optionalString(proof.observed_public_ip, 'egress diagnostics proof observed_public_ip');
+  const observedTlsIssuer = optionalString(proof.observed_tls_issuer, 'egress diagnostics proof observed_tls_issuer');
+  const lastFailureReason = optionalString(proof.last_failure_reason, 'egress diagnostics proof last_failure_reason');
+  return {
+    profile_id: profileId ?? null,
+    profile_name: profileName ?? null,
+    profile_state: object.profile_state === undefined || object.profile_state === null
+      ? null
+      : expectEnum(object.profile_state, 'egress diagnostics profile_state', EGRESS_PROFILE_STATES),
+    health: object.health === undefined || object.health === null
+      ? 'unknown'
+      : expectEnum(object.health, 'egress diagnostics health', EGRESS_DIAGNOSTICS_HEALTHS),
+    observation_mode: object.observation_mode === undefined || object.observation_mode === null
+      ? 'metadata_only'
+      : expectEnum(
+        object.observation_mode,
+        'egress diagnostics observation_mode',
+        EGRESS_TRAFFIC_OBSERVATION_MODES,
+      ),
+    proof_level: object.proof_level === undefined || object.proof_level === null
+      ? 'none'
+      : expectEnum(
+        object.proof_level,
+        'egress diagnostics proof_level',
+        EGRESS_DIAGNOSTICS_PROOF_LEVELS,
+      ),
+    runtime_binding: runtimeBinding ?? null,
+    runtime_assignment: runtimeAssignment ?? null,
+    proxy_configured: expectBoolean(object.proxy_configured ?? false, 'egress diagnostics proxy_configured'),
+    bypass_rule_count: expectNumber(object.bypass_rule_count ?? 0, 'egress diagnostics bypass_rule_count'),
+    custom_ca_configured: expectBoolean(object.custom_ca_configured ?? false, 'egress diagnostics custom_ca_configured'),
+    tls_interception_enabled: expectBoolean(
+      object.tls_interception_enabled ?? false,
+      'egress diagnostics tls_interception_enabled',
+    ),
+    sensitive_log_sink_configured: expectBoolean(
+      object.sensitive_log_sink_configured ?? false,
+      'egress diagnostics sensitive_log_sink_configured',
+    ),
+    proof: {
+      profile_resolved: expectBoolean(proof.profile_resolved ?? false, 'egress diagnostics proof profile_resolved'),
+      profile_ready: expectBoolean(proof.profile_ready ?? false, 'egress diagnostics proof profile_ready'),
+      proxy_launch_config_expected: expectBoolean(
+        proof.proxy_launch_config_expected ?? false,
+        'egress diagnostics proof proxy_launch_config_expected',
+      ),
+      bypass_rules_expected: expectNumber(
+        proof.bypass_rules_expected ?? 0,
+        'egress diagnostics proof bypass_rules_expected',
+      ),
+      custom_ca_launch_config_expected: expectBoolean(
+        proof.custom_ca_launch_config_expected ?? false,
+        'egress diagnostics proof custom_ca_launch_config_expected',
+      ),
+      tls_interception_expected: expectBoolean(
+        proof.tls_interception_expected ?? false,
+        'egress diagnostics proof tls_interception_expected',
+      ),
+      sensitive_log_sink_declared: expectBoolean(
+        proof.sensitive_log_sink_declared ?? false,
+        'egress diagnostics proof sensitive_log_sink_declared',
+      ),
+      runtime_launch_observed: expectBoolean(
+        proof.runtime_launch_observed ?? false,
+        'egress diagnostics proof runtime_launch_observed',
+      ),
+      active_probe_collected: expectBoolean(
+        proof.active_probe_collected ?? false,
+        'egress diagnostics proof active_probe_collected',
+      ),
+      observed_public_ip: observedPublicIp ?? null,
+      observed_tls_issuer: observedTlsIssuer ?? null,
+      last_failure_reason: lastFailureReason ?? null,
+    },
+    warnings: toStringArray(object.warnings ?? [], 'egress diagnostics warnings'),
+    observed_at: optionalString(object.observed_at, 'egress diagnostics observed_at') ?? '',
   };
 }
 

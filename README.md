@@ -301,6 +301,9 @@ Canonical contract:
 - `POST /api/v1/egress-profiles`
 - `GET /api/v1/egress-profiles`
 - `GET /api/v1/egress-profiles/{id}`
+- `PUT /api/v1/egress-profiles/{id}`
+- `GET /api/v1/egress-profiles/{id}/diagnostics`
+- `GET /api/v1/sessions/{id}/egress-diagnostics`
 
 These endpoints are bearer-protected, owner-scoped, and stored in Postgres. The
 full contract is in the OpenAPI file; the route lists below call out the
@@ -321,9 +324,11 @@ timezone, geolocation, browser identity, user-agent override, and an
 `egress_profile_id` on either a session template or an explicit session create
 payload. Egress profiles are owner-scoped resources with safe proxy metadata,
 bypass rules, custom CA references, state, labels, and sanitized effective
-status; session resources and `/status` include the inherited network identity
-and effective egress summary without embedding proxy credentials or raw CA
-material.
+status; session resources, `/status`, and `/egress-diagnostics` include the
+inherited network identity, effective egress summary, and sanitized diagnostics
+without embedding proxy credentials or raw CA material. Diagnostics distinguish
+configuration-only evidence from runtime launch metadata, and reserve explicit
+fields for future active probes such as observed public IP or TLS issuer.
 Egress-side communication tracking belongs at the configured proxy or secure
 web gateway. BrowserPane emits safe correlation metadata instead: docker-backed
 runtime containers carry `browserpane.session_id` and egress-profile labels,
@@ -550,8 +555,10 @@ Common egress-profile operations:
   --custom-ca-name "EU support CA"
 ./scripts/bpane egress-profile list
 ./scripts/bpane egress-profile get <egress-profile-id>
+./scripts/bpane egress-profile diagnostics <egress-profile-id>
 ./scripts/bpane egress-profile update <egress-profile-id> --name eu-support-egress-v2 --label managed=true
 ./scripts/bpane egress-profile disable <egress-profile-id>
+./scripts/bpane session egress-diagnostics <session-id>
 ```
 
 For a proxy that performs approved TLS interception, make that explicit and
@@ -610,9 +617,11 @@ all three modes.
 
 The admin Operations Overlay also includes an egress profile catalog for
 creating, cloning, editing, and disabling approved outbound profiles. The
-catalog shows sanitized proxy, TLS-inspection, custom-CA, and log-sink status;
-active proxy reachability and TLS issuer proof are still tracked as a production
-hardening follow-up.
+catalog shows sanitized proxy, TLS-inspection, custom-CA, log-sink status, and
+diagnostics health. Session diagnostics move from configuration proof to runtime
+launch metadata once the selected profile has been applied to a live runtime;
+active proxy reachability and TLS issuer proof remain production hardening
+follow-ups.
 
 ```bash
 cd code/web/bpane-client && npm run smoke:admin-egress-profiles -- --headless
