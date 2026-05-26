@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { Copy, Network, RefreshCw, ShieldCheck, ShieldOff } from 'lucide-svelte';
   import type {
     CreateEgressProfileCommand,
@@ -45,6 +46,8 @@
   let form = $state(emptyEgressProfileForm());
   let mutating = $state(false);
   let feedback = $state<AdminMessageFeedback | null>(null);
+  let editorSection = $state<HTMLElement | null>(null);
+  let nameInput = $state<HTMLInputElement | null>(null);
   const rows = $derived(egressProfileRows(profiles, search));
   const selectedProfile = $derived(profiles.find((profile) => profile.id === selectedProfileId) ?? null);
   const selectedRow = $derived(rows.find((row) => row.id === selectedProfileId) ?? null);
@@ -81,6 +84,7 @@
     editorOpen = true;
     form = emptyEgressProfileForm();
     feedback = null;
+    void revealEditor();
   }
 
   function closeEditor(): void {
@@ -99,6 +103,7 @@
     editorOpen = true;
     form = formFromEgressProfile(profile);
     feedback = null;
+    void revealEditor();
   }
 
   function cloneSelected(): void {
@@ -115,6 +120,14 @@
       title: 'Clone prepared',
       message: 'Review the copied profile payload before saving it as a new profile.',
     };
+    void revealEditor();
+  }
+
+  async function revealEditor(): Promise<void> {
+    await tick();
+    editorSection?.scrollIntoView({ block: 'start', behavior: 'auto' });
+    nameInput?.focus({ preventScroll: true });
+    nameInput?.select();
   }
 
   async function saveProfile(): Promise<void> {
@@ -385,7 +398,7 @@
   </section>
 
   {#if editorOpen}
-    <section class="grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Egress profile editor">
+    <section class="grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Egress profile editor" bind:this={editorSection}>
       <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <div class="min-w-0">
           <p class="admin-eyebrow mb-1">Profile editor</p>
@@ -399,7 +412,7 @@
       <form class="grid min-w-0 gap-3" onsubmit={(event) => { event.preventDefault(); void saveProfile(); }}>
         <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
           Name
-          <input class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="egress-profile-name" bind:value={form.name} disabled={disabled} />
+          <input class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="egress-profile-name" bind:this={nameInput} bind:value={form.name} disabled={disabled} />
         </label>
         <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
           State
