@@ -67,6 +67,7 @@ async function run() {
       bypassRules: 'localhost\n*.local',
       mode: 'metadata_only',
     });
+    await verifyProfileEditThroughUi(page, options, proxyProfile);
     const authProxyProfile = await createProfileThroughUi(page, options, {
       name: `smoke-auth-proxy-${runLabel}`,
       description: 'Admin smoke authenticated proxy profile with secret-backed proxy auth',
@@ -227,6 +228,30 @@ async function createProfileThroughUi(page, options, profile) {
   await page.locator(`[data-testid="egress-profile-row"]`).filter({ hasText: profile.name }).first().click();
   await page.getByTestId('egress-profile-health').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   return await fetchProfileByName(page, options, profile.name);
+}
+
+async function verifyProfileEditThroughUi(page, options, profile) {
+  await page.getByTestId('egress-profile-search').fill(profile.name);
+  await page.locator(`[data-testid="egress-profile-row"][data-profile-id="${profile.id}"]`).click();
+  await page.getByTestId('egress-profile-edit').click();
+  const nameInput = page.getByTestId('egress-profile-name');
+  await nameInput.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  const value = await nameInput.inputValue();
+  if (value !== profile.name) {
+    throw new Error(`Expected egress profile edit form to load ${profile.name}, got ${value}`);
+  }
+  await page.waitForFunction(
+    () => document.activeElement?.getAttribute('data-testid') === 'egress-profile-name',
+    null,
+    { timeout: options.connectTimeoutMs },
+  );
+  const inViewport = await nameInput.evaluate((input) => {
+    const rect = input.getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= window.innerHeight;
+  });
+  if (!inViewport) {
+    throw new Error('Expected egress profile edit form to be scrolled into view.');
+  }
 }
 
 async function cloneAndDisableProfile(page, options, accessToken, sourceProfile) {
