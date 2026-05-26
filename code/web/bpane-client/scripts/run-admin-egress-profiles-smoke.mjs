@@ -226,7 +226,6 @@ async function createProfileThroughUi(page, options, profile) {
   );
   await page.locator(`[data-testid="egress-profile-row"]`).filter({ hasText: profile.name }).first().click();
   await page.getByTestId('egress-profile-health').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  await page.getByTestId('egress-profile-diagnostics-proof').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   return await fetchProfileByName(page, options, profile.name);
 }
 

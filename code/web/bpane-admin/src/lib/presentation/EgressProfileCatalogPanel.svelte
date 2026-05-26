@@ -222,11 +222,18 @@
 
   function rowClass(state: string, selected: boolean): string {
     if (selected) {
-      return 'border-admin-leaf/42 bg-admin-leaf/12 text-admin-ink';
+      return 'border-admin-leaf/42 bg-admin-field/84';
     }
     return state === 'disabled'
-      ? 'border-admin-danger/24 bg-admin-danger/8 text-admin-ink/78'
-      : 'border-[#90a6cc]/18 bg-admin-field/70 text-admin-ink/82';
+      ? 'border-admin-danger/24 bg-admin-danger/8'
+      : 'border-admin-ink/10 bg-admin-panel/68';
+  }
+
+  function rowAccentClass(state: string, selected: boolean): string {
+    if (selected) {
+      return 'bg-admin-leaf';
+    }
+    return state === 'disabled' ? 'bg-admin-danger/62' : 'bg-admin-ink/12';
   }
 </script>
 
@@ -253,11 +260,11 @@
     {#if selectedProfile}
       <div class="grid min-w-0 grid-cols-2 gap-2 text-xs text-admin-ink/70 sm:grid-cols-3 xl:grid-cols-6">
         {@render ProfileFact('Mode', selectedRow?.kind ?? 'direct')}
+        {@render ProfileFact('Health', selectedProfile.diagnostics.health, 'egress-profile-health')}
         {@render ProfileFact('Proxy', selectedProfile.effective.proxy_configured ? 'configured' : 'none')}
         {@render ProfileFact('Proxy auth', selectedProfile.effective.proxy_auth_configured ? 'binding' : 'none')}
         {@render ProfileFact('TLS', selectedProfile.effective.tls_interception_enabled ? 'intercept' : 'metadata')}
         {@render ProfileFact('Bypass', String(selectedProfile.effective.bypass_rule_count))}
-        {@render ProfileFact('Updated', selectedProfile.updated_at)}
       </div>
       <p class="m-0 line-clamp-2 text-sm leading-normal text-admin-ink/64">
         {selectedProfile.description ?? 'No description configured for this outbound path.'}
@@ -307,102 +314,33 @@
     <AdminMessage variant={feedback.variant} title={feedback.title} message={feedback.message} compact={true} onDismiss={() => { feedback = null; }} />
   {/if}
 
-  <section class="grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Egress profile switcher">
+  <section class="grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Egress profile configurator">
     <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
       <div class="min-w-0">
-        <p class="admin-eyebrow mb-1">Profile switcher</p>
-        <p class="m-0 text-sm font-bold text-admin-ink/72" data-testid="egress-profile-count">
-          {rows.length} of {profiles.length} visible profiles
-        </p>
+        <p class="admin-eyebrow mb-1">Profile configurator</p>
+        <h4 class="m-0 text-sm font-bold text-admin-ink">{editorOpen ? editorTitle : 'Create or update an approved egress path'}</h4>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button
-          class="admin-button-primary inline-flex items-center gap-2"
-          type="button"
-          data-testid="egress-profile-new"
-          disabled={disabled}
-          onclick={resetForm}
-        >
+        <button class="admin-button-primary inline-flex items-center gap-2" type="button" data-testid="egress-profile-new" disabled={disabled} onclick={resetForm}>
           <ShieldCheck size={15} aria-hidden="true" />
           New profile
         </button>
-        <button
-          class="admin-button-primary inline-flex items-center gap-2"
-          type="button"
-          data-testid="egress-profile-refresh"
-          disabled={disabled}
-          onclick={onRefresh}
-        >
-          <RefreshCw class={loading ? 'animate-spin' : ''} size={15} aria-hidden="true" />
-          Refresh
-        </button>
-      </div>
-    </div>
-
-    <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
-      Search
-      <input
-        class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
-        data-testid="egress-profile-search"
-        placeholder="Name, state, proxy, TLS"
-        bind:value={search}
-      />
-    </label>
-
-    <div class="grid max-h-[min(48vh,34rem)] min-h-0 min-w-0 content-start gap-2 overflow-y-auto pr-1" aria-label="Visible egress profiles">
-      {#if rows.length === 0}
-        <p class="m-0 text-sm text-admin-ink/62">No egress profiles match the current filter.</p>
-      {:else}
-        {#each rows as row (row.id)}
-          <button
-            class={`grid min-w-0 gap-2 rounded-xl border p-3 text-left transition ${rowClass(row.state, row.id === selectedProfileId)}`}
-            type="button"
-            data-testid="egress-profile-row"
-            data-profile-id={row.id}
-            aria-pressed={row.id === selectedProfileId}
-            onclick={() => selectProfile(row.id)}
-          >
-            <span class="flex min-w-0 items-center justify-between gap-2">
-              <span class="truncate text-sm font-bold">{row.name}</span>
-              <span class={`shrink-0 rounded-lg border px-2 py-0.5 text-[11px] font-bold ${
-                row.state === 'ready'
-                  ? 'border-admin-leaf/30 bg-admin-leaf/12 text-admin-leaf'
-                  : 'border-admin-danger/32 bg-admin-danger/10 text-admin-danger'
-              }`}>
-                {row.state}
-              </span>
-            </span>
-            <span class="text-xs font-bold text-admin-ink/64" data-testid="egress-profile-row-health">
-              {row.kind} | updated {row.updatedAt}
-            </span>
-            <span class="flex min-w-0 flex-wrap gap-1">
-              {#each row.badges as badge}
-                {#if !badge.startsWith('health ') && !badge.endsWith('proof')}
-                  <span class="rounded-lg bg-admin-night/58 px-2 py-0.5 text-[11px] font-bold text-[#c1d0e8]">{badge}</span>
-                {/if}
-              {/each}
-            </span>
-            {#if row.description}
-              <span class="line-clamp-2 text-xs leading-normal text-admin-ink/62">{row.description}</span>
-            {/if}
+        {#if editorOpen}
+          <button class="admin-button-ghost" type="button" disabled={disabled} onclick={closeEditor}>
+            Cancel
           </button>
-        {/each}
-      {/if}
-    </div>
-  </section>
-
-  {#if editorOpen}
-    <form class="grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Egress profile editor" onsubmit={(event) => { event.preventDefault(); void saveProfile(); }}>
-      <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <div class="min-w-0">
-          <p class="admin-eyebrow mb-1">Profile editor</p>
-          <h4 class="m-0 text-sm font-bold text-admin-ink">{editorTitle}</h4>
-        </div>
-        <button class="admin-button-ghost" type="button" disabled={disabled} onclick={closeEditor}>
-          Cancel
-        </button>
+        {/if}
       </div>
+    </div>
 
+    {#if !editorOpen}
+      <AdminMessage
+        variant="info"
+        message="Use New profile to define a new outbound path, or select a profile above and use Edit or Clone."
+        compact={true}
+      />
+    {:else}
+    <form class="grid min-w-0 gap-3" aria-label="Egress profile editor" onsubmit={(event) => { event.preventDefault(); void saveProfile(); }}>
       <div class="grid min-w-0 gap-3 md:grid-cols-2">
         <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
           Name
@@ -491,65 +429,78 @@
         {/if}
       </button>
     </form>
-  {/if}
+    {/if}
+  </section>
 
-  <section class="grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Egress profile detail view">
-    <div class="min-w-0">
-      <p class="admin-eyebrow mb-1">Profile detail</p>
-      <h3 class="m-0 text-base font-bold text-admin-ink">Diagnostics and effective configuration</h3>
+  <section class="grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Egress profile switcher">
+    <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
+      <div class="min-w-0">
+        <p class="admin-eyebrow mb-1">Profile switcher</p>
+        <p class="m-0 text-sm font-bold text-admin-ink/72" data-testid="egress-profile-count">
+          {rows.length} of {profiles.length} visible profiles
+        </p>
+      </div>
+      <button
+        class="admin-button-primary inline-flex items-center gap-2"
+        type="button"
+        data-testid="egress-profile-refresh"
+        disabled={disabled}
+        onclick={onRefresh}
+      >
+        <RefreshCw class={loading ? 'animate-spin' : ''} size={15} aria-hidden="true" />
+        Refresh
+      </button>
     </div>
 
-    {#if selectedProfile}
-      <div class="grid min-w-0 gap-2 rounded-xl border border-admin-ink/10 bg-admin-field/62 p-3">
-        <div class="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {@render DetailPill('State', selectedProfile.state)}
-          {@render DetailPill('Health', selectedProfile.diagnostics.health, 'egress-profile-health')}
-          {@render DetailPill('Proof', selectedProfile.diagnostics.proof_level.replaceAll('_', ' '))}
-          {@render DetailPill('Proxy', selectedProfile.effective.proxy_configured ? 'configured' : 'none')}
-          {@render DetailPill('Proxy auth', selectedProfile.effective.proxy_auth_configured ? 'binding' : 'none')}
-          {@render DetailPill('TLS', selectedProfile.effective.tls_interception_enabled ? 'inspect' : 'metadata')}
-          {@render DetailPill('Bypass', String(selectedProfile.effective.bypass_rule_count))}
-          {@render DetailPill('Reachability', selectedProfile.diagnostics.proof.profile_reachability_collected ? (selectedProfile.diagnostics.proof.profile_reachability_healthy ? 'healthy' : 'failed') : 'not probed')}
-        </div>
-        <AdminMessage
-          variant={selectedProfile.diagnostics.health === 'ready' ? 'info' : 'warning'}
-          title={`Diagnostics: ${selectedProfile.diagnostics.proof_level.replaceAll('_', ' ')}`}
-          message={selectedProfile.diagnostics.warnings.length > 0
-            ? selectedProfile.diagnostics.warnings.join(' ')
-            : selectedProfile.diagnostics.proof.profile_reachability_collected
-              ? (selectedProfile.diagnostics.proof.profile_reachability_healthy
-                  ? 'Profile reachability evidence is available for this egress endpoint.'
-                  : selectedProfile.diagnostics.proof.profile_reachability_failure ?? 'Profile reachability was probed and failed.')
-            : selectedProfile.diagnostics.proof.active_probe_collected
-              ? 'Active egress probe evidence is available for this profile.'
-              : 'No active probe has been collected yet; proof is based on sanitized configuration metadata.'}
-          compact={true}
-        />
-        <div class="grid min-w-0 gap-2 text-xs font-bold text-admin-ink/68 sm:grid-cols-2 lg:grid-cols-3" data-testid="egress-profile-diagnostics-proof">
-          <span>Profile resolved: {selectedProfile.diagnostics.proof.profile_resolved ? 'yes' : 'no'}</span>
-          <span>Runtime launch: {selectedProfile.diagnostics.proof.runtime_launch_observed ? 'observed' : 'not observed'}</span>
-          <span>Active probe: {selectedProfile.diagnostics.proof.active_probe_collected ? 'collected' : 'not collected'}</span>
-          <span>Profile reachability: {selectedProfile.diagnostics.proof.profile_reachability_collected ? (selectedProfile.diagnostics.proof.profile_reachability_healthy ? 'healthy' : 'failed') : 'not collected'}</span>
-          <span>TLS expected: {selectedProfile.diagnostics.proof.tls_interception_expected ? 'yes' : 'no'}</span>
-          <span>Custom CA launch: {selectedProfile.diagnostics.proof.custom_ca_launch_config_expected ? 'expected' : 'not expected'}</span>
-          <span>Log sink: {selectedProfile.diagnostics.proof.sensitive_log_sink_declared ? 'declared' : 'not declared'}</span>
-        </div>
-      </div>
+    <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+      Search
+      <input
+        class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+        data-testid="egress-profile-search"
+        placeholder="Name, state, proxy, TLS"
+        bind:value={search}
+      />
+    </label>
+
+    {#if rows.length === 0}
+      <AdminMessage variant="empty" message="No egress profiles match the current filter." compact={true} />
     {:else}
-      <AdminMessage variant="empty" message="Select an egress profile to inspect diagnostics and effective runtime configuration." compact={true} />
+      <div class="grid max-h-[min(360px,42vh)] min-w-0 gap-1 overflow-y-auto pr-1" aria-label="Visible egress profiles">
+        {#each rows as row (row.id)}
+          <button
+            class={`grid w-full min-w-0 cursor-pointer grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border p-2 text-left text-admin-ink/78 hover:border-admin-leaf/42 hover:bg-admin-field/84 ${rowClass(row.state, row.id === selectedProfileId)}`}
+            type="button"
+            data-testid="egress-profile-row"
+            data-profile-id={row.id}
+            aria-pressed={row.id === selectedProfileId}
+            onclick={() => selectProfile(row.id)}
+          >
+            <span class={`h-full min-h-12 rounded-full ${rowAccentClass(row.state, row.id === selectedProfileId)}`}></span>
+            <span class="grid min-w-0 gap-1">
+              <span class="flex min-w-0 items-center gap-2">
+                <strong class="min-w-0 truncate text-sm text-admin-ink" title={row.name}>{row.name}</strong>
+                {#if row.id === selectedProfileId}
+                  <span class="rounded-full bg-admin-leaf/14 px-2 py-0.5 text-[0.68rem] font-extrabold text-admin-leaf">selected</span>
+                {/if}
+              </span>
+              <span class="min-w-0 truncate text-xs text-admin-ink/52">
+                <span data-testid="egress-profile-row-health">{row.kind}</span> | {row.description || 'no description'} | updated {row.updatedAt}
+              </span>
+            </span>
+            <span class="grid justify-items-end gap-1 text-xs text-[#c1d0e8]">
+              <span class="rounded-lg bg-admin-field/72 px-2 py-1">{row.state}</span>
+              <span class="rounded-lg bg-admin-field/72 px-2 py-1">{row.kind}</span>
+            </span>
+          </button>
+        {/each}
+      </div>
     {/if}
   </section>
 </div>
 
-{#snippet ProfileFact(label: string, value: string)}
+{#snippet ProfileFact(label: string, value: string, testId?: string)}
   <span class="min-w-0 rounded-xl bg-admin-field/72 p-2 font-bold uppercase">
     {label}
-    <strong class="mt-1 block truncate font-mono text-admin-ink normal-case">{value}</strong>
-  </span>
-{/snippet}
-
-{#snippet DetailPill(label: string, value: string, testId?: string)}
-  <span class="min-w-0 rounded-lg bg-admin-night/58 px-2 py-1 text-xs font-bold text-[#c1d0e8]" data-testid={testId}>
-    {label}: {value}
+    <strong class="mt-1 block truncate font-mono text-admin-ink normal-case" data-testid={testId}>{value}</strong>
   </span>
 {/snippet}
