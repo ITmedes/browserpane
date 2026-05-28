@@ -9,6 +9,7 @@ async fn in_memory_store_tracks_automation_task_lifecycle_logs_and_events() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,

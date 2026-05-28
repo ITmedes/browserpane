@@ -48,6 +48,12 @@ pub(in crate::session_control) fn row_to_stored_session(
             "failed to decode session network identity: {error}"
         ))
     })?;
+    let admission = serde_json::from_value::<ProjectAdmissionDecision>(row.get("admission"))
+        .map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "failed to decode session admission decision: {error}"
+            ))
+        })?;
 
     let width = row.get::<_, i32>("viewport_width");
     let height = row.get::<_, i32>("viewport_height");
@@ -57,6 +63,8 @@ pub(in crate::session_control) fn row_to_stored_session(
     Ok(StoredSession {
         id: row.get("id"),
         state,
+        project_id: row.get("project_id"),
+        admission,
         template_id: row.get("template_id"),
         browser_context: SessionBrowserContextResource {
             mode: browser_context_mode,

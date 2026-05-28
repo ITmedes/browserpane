@@ -3,9 +3,9 @@ use std::collections::HashSet;
 
 use crate::auth::AuthenticatedPrincipal;
 use crate::session_control::{
-    SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionRuntimeResumeMode,
-    SessionRuntimeState, SessionStatusSummary, SessionStopBlocker, SessionStopBlockerKind,
-    SessionStopEligibility, SessionStoreError, StoredSession,
+    SessionConnectionCounts, SessionIdleStatus, SessionPresenceState, SessionProjectResource,
+    SessionRuntimeResumeMode, SessionRuntimeState, SessionStatusSummary, SessionStopBlocker,
+    SessionStopBlockerKind, SessionStopEligibility, SessionStoreError, StoredSession,
 };
 use crate::session_manager::SessionRuntimeAssignmentStatus;
 
@@ -79,6 +79,9 @@ pub(super) async fn session_status_summary(
 
 pub(super) fn session_status_from_snapshot(
     state: SessionLifecycleState,
+    project_id: Option<Uuid>,
+    project: Option<SessionProjectResource>,
+    admission: ProjectAdmissionDecision,
     summary: SessionStatusSummary,
     snapshot: SessionTelemetrySnapshot,
     network_identity: SessionNetworkIdentity,
@@ -90,6 +93,9 @@ pub(super) fn session_status_from_snapshot(
 ) -> SessionStatus {
     SessionStatus {
         state,
+        project_id,
+        project,
+        admission,
         summary,
         connections: session_connections_from_snapshot(&snapshot),
         browser_clients: snapshot.browser_clients,
@@ -362,10 +368,12 @@ pub(super) async fn session_resource(
     state_override: Option<SessionLifecycleState>,
 ) -> Result<SessionResource, SessionStoreError> {
     let status = session_status_summary(state, stored).await?;
+    let project = session_project_resource(state, stored).await?;
     let effective_egress = session_effective_egress(state, stored).await?;
     let egress_diagnostics = session_egress_diagnostics(state, stored).await?;
     Ok(stored.to_resource(
         &state.public_gateway_url,
+        project,
         state
             .session_manager
             .describe_session_runtime(stored.id)
@@ -375,6 +383,21 @@ pub(super) async fn session_resource(
         effective_egress,
         egress_diagnostics,
     ))
+}
+
+pub(super) async fn session_project_resource(
+    state: &ApiState,
+    stored: &StoredSession,
+) -> Result<Option<SessionProjectResource>, SessionStoreError> {
+    let Some(project_id) = stored.project_id else {
+        return Ok(None);
+    };
+    let owner = session_owner_principal(stored);
+    Ok(state
+        .session_store
+        .get_project_for_owner(&owner, project_id)
+        .await?
+        .map(|project| project.to_session_project_resource()))
 }
 
 pub(super) async fn session_effective_egress(
@@ -461,11 +484,15 @@ pub(super) async fn load_session_status(
         .await?;
     let latest_recording = latest_recording(&recordings);
     let playback = prepare_session_recording_playback(session.id, &recordings, Utc::now());
+    let project = session_project_resource(state, session).await?;
     let effective_egress = session_effective_egress(state, session).await?;
     let egress_diagnostics = session_egress_diagnostics(state, session).await?;
 
     Ok(session_status_from_snapshot(
         session.state,
+        session.project_id,
+        project,
+        session.admission.clone(),
         summary,
         snapshot,
         session.network_identity.clone(),

@@ -262,6 +262,233 @@ pub struct SessionNetworkIdentity {
     pub egress_profile_id: Option<Uuid>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectState {
+    Active,
+    Archived,
+}
+
+impl ProjectState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Archived => "archived",
+        }
+    }
+}
+
+impl FromStr for ProjectState {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "active" => Ok(Self::Active),
+            "archived" => Ok(Self::Archived),
+            _ => Err("unknown project state"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectQuotas {
+    #[serde(default)]
+    pub max_active_sessions: Option<u32>,
+    #[serde(default)]
+    pub max_active_workflow_runs: Option<u32>,
+    #[serde(default)]
+    pub max_retained_storage_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectAdmissionState {
+    Allowed,
+    Queued,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectAdmissionReasonCode {
+    OwnerScopeUnbounded,
+    ProjectQuotaAvailable,
+    ActiveSessionQuotaExceeded,
+    ProjectArchived,
+}
+
+impl ProjectAdmissionReasonCode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::OwnerScopeUnbounded => "owner_scope_unbounded",
+            Self::ProjectQuotaAvailable => "project_quota_available",
+            Self::ActiveSessionQuotaExceeded => "active_session_quota_exceeded",
+            Self::ProjectArchived => "project_archived",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectAdmissionDecision {
+    pub state: ProjectAdmissionState,
+    pub reason_code: ProjectAdmissionReasonCode,
+    pub message: String,
+    #[serde(default)]
+    pub project_id: Option<Uuid>,
+    #[serde(default)]
+    pub active_sessions: Option<u32>,
+    #[serde(default)]
+    pub max_active_sessions: Option<u32>,
+    pub checked_at: DateTime<Utc>,
+}
+
+impl ProjectAdmissionDecision {
+    pub fn owner_scope_unbounded(checked_at: DateTime<Utc>) -> Self {
+        Self {
+            state: ProjectAdmissionState::Allowed,
+            reason_code: ProjectAdmissionReasonCode::OwnerScopeUnbounded,
+            message: "No project was selected; owner-scoped admission is unbounded.".to_string(),
+            project_id: None,
+            active_sessions: None,
+            max_active_sessions: None,
+            checked_at,
+        }
+    }
+
+    pub fn project_quota_available(
+        project_id: Uuid,
+        active_sessions: u32,
+        max_active_sessions: Option<u32>,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Allowed,
+            reason_code: ProjectAdmissionReasonCode::ProjectQuotaAvailable,
+            message: "Project admission allowed.".to_string(),
+            project_id: Some(project_id),
+            active_sessions: Some(active_sessions),
+            max_active_sessions,
+            checked_at,
+        }
+    }
+
+    pub fn rejected(
+        project_id: Uuid,
+        reason_code: ProjectAdmissionReasonCode,
+        message: String,
+        active_sessions: u32,
+        max_active_sessions: Option<u32>,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Rejected,
+            reason_code,
+            message,
+            project_id: Some(project_id),
+            active_sessions: Some(active_sessions),
+            max_active_sessions,
+            checked_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PersistProjectRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub quotas: ProjectQuotas,
+    pub state: ProjectState,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredProject {
+    pub id: Uuid,
+    pub owner_subject: String,
+    pub owner_issuer: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub quotas: ProjectQuotas,
+    pub state: ProjectState,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProjectUsageResource {
+    pub project_id: Uuid,
+    pub active_sessions: u32,
+    pub max_active_sessions: Option<u32>,
+    pub active_workflow_runs: u32,
+    pub max_active_workflow_runs: Option<u32>,
+    pub retained_storage_bytes: u64,
+    pub max_retained_storage_bytes: Option<u64>,
+    pub observed_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProjectResource {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub quotas: ProjectQuotas,
+    pub state: ProjectState,
+    pub usage: ProjectUsageResource,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionProjectResource {
+    pub id: Uuid,
+    pub name: String,
+    pub state: ProjectState,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProjectListResponse {
+    pub projects: Vec<ProjectResource>,
+}
+
+impl StoredProject {
+    pub fn usage(&self, active_sessions: u32, observed_at: DateTime<Utc>) -> ProjectUsageResource {
+        ProjectUsageResource {
+            project_id: self.id,
+            active_sessions,
+            max_active_sessions: self.quotas.max_active_sessions,
+            active_workflow_runs: 0,
+            max_active_workflow_runs: self.quotas.max_active_workflow_runs,
+            retained_storage_bytes: 0,
+            max_retained_storage_bytes: self.quotas.max_retained_storage_bytes,
+            observed_at,
+        }
+    }
+
+    pub fn to_resource(&self, active_sessions: u32, observed_at: DateTime<Utc>) -> ProjectResource {
+        ProjectResource {
+            id: self.id,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            labels: self.labels.clone(),
+            quotas: self.quotas.clone(),
+            state: self.state,
+            usage: self.usage(active_sessions, observed_at),
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+
+    pub fn to_session_project_resource(&self) -> SessionProjectResource {
+        SessionProjectResource {
+            id: self.id,
+            name: self.name.clone(),
+            state: self.state,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EgressProxyConfig {
     pub url: String,
@@ -1038,6 +1265,9 @@ pub struct SessionStatusSummary {
 pub struct SessionResource {
     pub id: Uuid,
     pub state: SessionLifecycleState,
+    pub project_id: Option<Uuid>,
+    pub project: Option<SessionProjectResource>,
+    pub admission: ProjectAdmissionDecision,
     pub template_id: Option<String>,
     pub browser_context: SessionBrowserContextResource,
     pub network_identity: SessionNetworkIdentity,
@@ -1065,6 +1295,8 @@ pub struct SessionResource {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CreateSessionRequest {
     #[serde(default)]
+    pub project_id: Option<Uuid>,
+    #[serde(default)]
     pub template_id: Option<String>,
     #[serde(default)]
     pub browser_context: Option<SessionBrowserContextRequest>,
@@ -1090,6 +1322,8 @@ pub struct CreateSessionRequest {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SessionTemplateDefaults {
+    #[serde(default)]
+    pub project_id: Option<Uuid>,
     #[serde(default)]
     pub owner_mode: Option<SessionOwnerMode>,
     #[serde(default)]
@@ -1178,6 +1412,8 @@ pub struct SessionListResponse {
 pub struct StoredSession {
     pub id: Uuid,
     pub state: SessionLifecycleState,
+    pub project_id: Option<Uuid>,
+    pub admission: ProjectAdmissionDecision,
     pub template_id: Option<String>,
     pub browser_context: SessionBrowserContextResource,
     pub network_identity: SessionNetworkIdentity,
@@ -1200,6 +1436,7 @@ impl StoredSession {
     pub fn to_resource(
         &self,
         public_gateway_url: &str,
+        project: Option<SessionProjectResource>,
         runtime: SessionRuntimeInfo,
         status: SessionStatusSummary,
         state_override: Option<SessionLifecycleState>,
@@ -1209,6 +1446,9 @@ impl StoredSession {
         SessionResource {
             id: self.id,
             state: state_override.unwrap_or(self.state),
+            project_id: self.project_id,
+            project,
+            admission: self.admission.clone(),
             template_id: self.template_id.clone(),
             browser_context: self.browser_context.clone(),
             network_identity: self.network_identity.clone(),

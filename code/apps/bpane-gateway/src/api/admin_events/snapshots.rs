@@ -500,6 +500,9 @@ mod tests {
         SessionResource {
             id: Uuid::nil(),
             state: SessionLifecycleState::Ready,
+            project_id: None,
+            project: None,
+            admission: crate::session_control::ProjectAdmissionDecision::owner_scope_unbounded(now),
             template_id: None,
             browser_context: crate::session_control::SessionBrowserContextResource {
                 mode: crate::session_control::SessionBrowserContextMode::Fresh,

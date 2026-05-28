@@ -2,8 +2,10 @@ import type { SessionRecordingPlaybackResource } from './recording-types';
 import type {
   SessionConnectionCounts,
   EgressDiagnosticsResource,
+  ProjectAdmissionDecision,
   SessionEffectiveEgress,
   SessionNetworkIdentity,
+  SessionProjectResource,
   SessionStopEligibility,
 } from './control-types';
 
@@ -50,6 +52,9 @@ export type SessionTelemetry = {
 
 export type SessionStatus = {
   readonly state: string;
+  readonly project_id?: string | null;
+  readonly project?: SessionProjectResource | null;
+  readonly admission?: ProjectAdmissionDecision | null;
   readonly runtime_state: string;
   readonly runtime_resume_mode: string;
   readonly presence_state: string;

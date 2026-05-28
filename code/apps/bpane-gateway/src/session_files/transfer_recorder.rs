@@ -259,6 +259,7 @@ mod tests {
             .create_session(
                 &owner,
                 CreateSessionRequest {
+                    project_id: None,
                     recording: SessionRecordingPolicy::default(),
                     ..CreateSessionRequest::default()
                 },

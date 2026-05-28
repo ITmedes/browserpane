@@ -52,12 +52,16 @@ const KNOWN_OPTIONS = new Set([
   'mcp-display-name',
   'mcp-issuer',
   'max-profile-storage-bytes',
+  'max-active-sessions',
+  'max-active-workflow-runs',
+  'max-retained-storage-bytes',
   'name',
   'older-than-sec',
   'offset',
   'output',
   'owner-mode',
   'profile',
+  'project-id',
   'probe-public-ip-url',
   'probe-timeout-ms',
   'probe-tls-url',
@@ -113,13 +117,19 @@ function usageText() {
     '  bpane session-template list [options]',
     '  bpane session-template get <template-id> [options]',
     '  bpane session-template update <template-id> [options]',
-  '  bpane egress-profile create [profile-name] [options]',
-  '  bpane egress-profile list [options]',
-  '  bpane egress-profile get <profile-id> [options]',
-  '  bpane egress-profile diagnostics <profile-id> [options]',
-  '  bpane egress-profile diagnostics probe <profile-id> [options]',
-  '  bpane egress-profile update <profile-id> [options]',
-  '  bpane egress-profile disable <profile-id> [options]',
+    '  bpane project create [project-name] [options]',
+    '  bpane project list [options]',
+    '  bpane project get <project-id> [options]',
+    '  bpane project update <project-id> [options]',
+    '  bpane project usage <project-id> [options]',
+    '  bpane project archive <project-id> [options]',
+    '  bpane egress-profile create [profile-name] [options]',
+    '  bpane egress-profile list [options]',
+    '  bpane egress-profile get <profile-id> [options]',
+    '  bpane egress-profile diagnostics <profile-id> [options]',
+    '  bpane egress-profile diagnostics probe <profile-id> [options]',
+    '  bpane egress-profile update <profile-id> [options]',
+    '  bpane egress-profile disable <profile-id> [options]',
     '  bpane browser-context create [context-name] [options]',
     '  bpane browser-context clone <source-context-id> <target-context-name> [options]',
     '  bpane browser-context export <context-id> --output <path> [options]',
@@ -156,6 +166,7 @@ function usageText() {
     '  --state <state>           Repeatable cleanup state filter. Default: stopped.',
     '  --runtime-state <state>   Repeatable session runtime-state filter.',
     '  --template-id <id>        Session template id for create/list filters.',
+    '  --project-id <id>         Project id for session create/template defaults.',
     '  --browser-context-id <id> Browser context id for reusable session creation.',
     '  --browser-context-mode <mode> Browser context mode: fresh, ephemeral, reusable.',
     '  --locale <tag>            Session locale, for example de-DE.',
@@ -178,8 +189,11 @@ function usageText() {
     '  --probe-public-ip-url <url>  Public-IP endpoint for session egress probe.',
     '  --probe-tls-url <url>        HTTPS endpoint for TLS issuer probe.',
     '  --probe-timeout-ms <ms>      Session egress probe timeout. Requires an already-ready runtime.',
-    '  --name <name>             Session template name for create/update.',
-    '  --description <text>      Session template description for create/update.',
+    '  --name <name>             Resource name for create/update commands.',
+    '  --description <text>      Resource description for create/update commands.',
+    '  --max-active-sessions <count> Project active-session quota.',
+    '  --max-active-workflow-runs <count> Project active workflow-run quota.',
+    '  --max-retained-storage-bytes <bytes> Project retained-storage quota.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
     '  --retention-sec <sec>     Browser context retention window in seconds.',
   '  --max-profile-storage-bytes <bytes> Browser context profile storage limit in bytes.',
@@ -507,6 +521,14 @@ function requiredTemplateId(positionals, commandLabel) {
   return templateId;
 }
 
+function requiredProjectId(positionals, commandLabel) {
+  const projectId = positionals[2];
+  if (!projectId || positionals.length > 3) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <project-id>`, EXIT_CODES.usage);
+  }
+  return projectId;
+}
+
 function requiredBrowserContextId(positionals, commandLabel) {
   const contextId = positionals[2];
   if (!contextId || positionals.length > 3) {
@@ -803,6 +825,10 @@ function buildCreateSessionRequest(options) {
   }
 
   const body = {};
+  const projectId = getOption(options, 'project-id');
+  if (projectId) {
+    body.project_id = projectId;
+  }
   const templateId = getOption(options, 'template-id');
   if (templateId) {
     body.template_id = templateId;
@@ -876,6 +902,10 @@ function buildCreateSessionRequest(options) {
 
 function buildSessionTemplateDefaults(options) {
   const defaults = {};
+  const projectId = getOption(options, 'project-id');
+  if (projectId) {
+    defaults.project_id = projectId;
+  }
   const ownerMode = getOption(options, 'owner-mode');
   if (ownerMode) {
     defaults.owner_mode = ownerMode;
@@ -945,7 +975,7 @@ function mergeSessionTemplateDefaults(existingDefaults, overrideDefaults) {
   const overrides = isObjectRecord(overrideDefaults) ? overrideDefaults : {};
   const merged = { ...existing };
 
-  for (const key of ['owner_mode', 'viewport', 'idle_timeout_sec', 'recording']) {
+  for (const key of ['project_id', 'owner_mode', 'viewport', 'idle_timeout_sec', 'recording']) {
     if (Object.prototype.hasOwnProperty.call(overrides, key)) {
       merged[key] = overrides[key];
     }
@@ -1037,6 +1067,96 @@ function buildSessionTemplateUpdateRequest(existingTemplate, options) {
     body.description = description;
   } else if (existingTemplate?.description != null) {
     body.description = existingTemplate.description;
+  }
+  return body;
+}
+
+function buildProjectQuotas(options, existingQuotas = null) {
+  const quotas = isObjectRecord(existingQuotas) ? { ...existingQuotas } : {};
+  const maxActiveSessions = parseIntegerOption(options, 'max-active-sessions');
+  if (maxActiveSessions !== null) {
+    quotas.max_active_sessions = maxActiveSessions;
+  }
+  const maxActiveWorkflowRuns = parseIntegerOption(options, 'max-active-workflow-runs');
+  if (maxActiveWorkflowRuns !== null) {
+    quotas.max_active_workflow_runs = maxActiveWorkflowRuns;
+  }
+  const maxRetainedStorageBytes = parseIntegerOption(options, 'max-retained-storage-bytes');
+  if (maxRetainedStorageBytes !== null) {
+    quotas.max_retained_storage_bytes = maxRetainedStorageBytes;
+  }
+  return quotas;
+}
+
+function buildProjectRequest(options, fallbackName = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? fallbackName;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Project create requires --name or a positional project name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const body = { name };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  }
+  const labels = parseKeyValueOptions(options, 'label');
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+  const quotas = buildProjectQuotas(options);
+  if (Object.keys(quotas).length) {
+    body.quotas = quotas;
+  }
+  const state = getOption(options, 'state');
+  if (state) {
+    body.state = state;
+  }
+  return body;
+}
+
+function buildProjectUpdateRequest(existingProject, options, forcedState = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? existingProject?.name;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Project update requires --name when the existing project response has no name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const body = { name };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  } else if (existingProject?.description != null) {
+    body.description = existingProject.description;
+  }
+  const labels = {
+    ...(isObjectRecord(existingProject?.labels) ? existingProject.labels : {}),
+    ...parseKeyValueOptions(options, 'label'),
+  };
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+  const quotas = buildProjectQuotas(options, existingProject?.quotas ?? null);
+  if (Object.keys(quotas).length) {
+    body.quotas = quotas;
+  }
+  const state = forcedState ?? getOption(options, 'state') ?? existingProject?.state;
+  if (state) {
+    body.state = state;
   }
   return body;
 }
@@ -1975,6 +2095,47 @@ async function handleSessionTemplateCommand(config, positionals, options) {
   );
 }
 
+async function handleProjectCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length <= 3) {
+    return await requestGateway(config, '/api/v1/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildProjectRequest(options, positionals[2] ?? null)),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/projects');
+  }
+  if (action === 'get') {
+    const projectId = requiredProjectId(positionals, 'project get');
+    return await requestGateway(config, `/api/v1/projects/${encodeURIComponent(projectId)}`);
+  }
+  if (action === 'usage') {
+    const projectId = requiredProjectId(positionals, 'project usage');
+    return await requestGateway(config, `/api/v1/projects/${encodeURIComponent(projectId)}/usage`);
+  }
+  if (action === 'update') {
+    const projectId = requiredProjectId(positionals, 'project update');
+    const existingProject = await requestGateway(config, `/api/v1/projects/${encodeURIComponent(projectId)}`);
+    return await requestGateway(config, `/api/v1/projects/${encodeURIComponent(projectId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildProjectUpdateRequest(existingProject, options)),
+    });
+  }
+  if (action === 'archive') {
+    const projectId = requiredProjectId(positionals, 'project archive');
+    const existingProject = await requestGateway(config, `/api/v1/projects/${encodeURIComponent(projectId)}`);
+    return await requestGateway(config, `/api/v1/projects/${encodeURIComponent(projectId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildProjectUpdateRequest(existingProject, options, 'archived')),
+    });
+  }
+  throw new CliError('USAGE', `Unknown project command: ${action ?? ''}`.trim(), EXIT_CODES.usage);
+}
+
 async function handleEgressProfileCommand(config, positionals, options) {
   const action = positionals[1];
   if (action === 'create' && positionals.length <= 3) {
@@ -2353,6 +2514,9 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     } else if (scope === 'session-template') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleSessionTemplateCommand(config, positionals, options);
+    } else if (scope === 'project') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleProjectCommand(config, positionals, options);
     } else if (scope === 'egress-profile') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleEgressProfileCommand(config, positionals, options);

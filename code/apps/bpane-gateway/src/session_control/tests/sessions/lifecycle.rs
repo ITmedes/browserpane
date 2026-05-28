@@ -8,6 +8,7 @@ async fn in_memory_store_stops_unused_ready_sessions_and_idle_sessions() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -36,6 +37,7 @@ async fn in_memory_store_stops_unused_ready_sessions_and_idle_sessions() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -94,6 +96,7 @@ async fn in_memory_store_can_prepare_a_stopped_session_for_reconnect() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -136,6 +139,7 @@ async fn in_memory_store_can_prepare_a_released_session_for_reconnect() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -179,6 +183,7 @@ async fn in_memory_store_can_restore_runtime_candidate_to_ready_after_runtime_lo
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
