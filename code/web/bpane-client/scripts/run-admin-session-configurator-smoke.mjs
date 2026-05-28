@@ -28,6 +28,7 @@ async function run() {
   const context = await browser.newContext({ viewport: { width: 1440, height: 980 } });
   const page = await context.newPage();
   let sessionId = '';
+  let project = null;
   let template = null;
   let browserContext = null;
   let egressProfile = null;
@@ -36,10 +37,11 @@ async function run() {
     log(`Opening ${options.pageUrl}`);
     await ensureAdminLoggedIn(page, options);
     await cleanupAdminBeforeRun(page, options, log);
+    project = await createProject(page, options);
     egressProfile = await createEgressProfile(page, options);
     template = await createSessionTemplate(page, options, egressProfile);
 
-    browserContext = await verifyCompactPayloadToggle(page, options, template);
+    browserContext = await verifyCompactPayloadToggle(page, options, template, project);
 
     await page.goto(adminRouteUrl(options, 'sessions'), { waitUntil: 'domcontentloaded' });
     await page.getByTestId('session-create-configurator').waitFor({
@@ -48,31 +50,37 @@ async function run() {
     });
 
     await verifyClientValidation(page);
-    await configureTemplatedSession(page, options, template, browserContext, egressProfile);
-    await verifyPayloadPreview(page, template, browserContext, egressProfile);
+    await configureTemplatedSession(page, options, template, project, browserContext, egressProfile);
+    await verifyPayloadPreview(page, template, project, browserContext, egressProfile);
     await page.getByTestId('session-inspector-new').click();
     sessionId = await waitForSessionDetailUrl(page, options);
 
     const session = await fetchSession(page, options, sessionId);
-    verifyCreatedSession(session, sessionId, template, browserContext, egressProfile);
-    await verifyDetailUi(page, options, sessionId, template, browserContext, egressProfile);
-    await verifyInspectorTemplateFilter(page, options, sessionId, template, browserContext, egressProfile);
-    await emitSummary(page, options, session, template, log);
+    verifyCreatedSession(session, sessionId, template, project, browserContext, egressProfile);
+    await verifyDetailUi(page, options, sessionId, template, project, browserContext, egressProfile);
+    await verifyInspectorTemplateFilter(page, options, sessionId, template, project, browserContext, egressProfile);
+    await emitSummary(page, options, session, template, project, log);
   } finally {
     await cleanupCreatedSession(page, options, sessionId, log);
     await cleanupCreatedBrowserContext(page, options, browserContext?.id ?? '', log);
+    await cleanupCreatedProject(page, options, project, log);
     await context.close();
     await browser.close();
   }
 }
 
-async function verifyCompactPayloadToggle(page, options, template) {
+async function verifyCompactPayloadToggle(page, options, template, project) {
   await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
   await openAdminTab(page, 'sessions');
   const browserContext = await createBrowserContextThroughUi(page, options);
+  await selectProject(page, project, options);
   await selectSessionTemplate(page, template, options);
   await selectBrowserContext(page, browserContext, options);
   await assertNoHorizontalOverflow(page, 'session-create-configurator', 'live session create configurator');
+  const projectSummary = await page.getByTestId('session-create-project-summary').textContent();
+  if (!projectSummary?.includes(project.name) || !projectSummary.includes('sessions=0/1')) {
+    throw new Error(`Expected live configurator project summary for ${project.name}, got ${projectSummary}`);
+  }
   const templateSummary = await page.getByTestId('session-create-template-summary').textContent();
   if (!templateSummary?.includes(template.name) || !templateSummary.includes('team=support') || !templateSummary.includes('locale=de-DE')) {
     throw new Error(`Expected live configurator template summary for ${template.name}, got ${templateSummary}`);
@@ -85,8 +93,8 @@ async function verifyCompactPayloadToggle(page, options, template) {
   });
   const previewText = await page.getByTestId('session-create-preview').textContent();
   const preview = JSON.parse(previewText ?? '{}');
-  if (preview.template_id !== template.id) {
-    throw new Error(`Expected live configurator preview to include template_id ${template.id}, got ${previewText}`);
+  if (preview.project_id !== project.id || preview.template_id !== template.id) {
+    throw new Error(`Expected live configurator preview to include project/template ids ${project.id}/${template.id}, got ${previewText}`);
   }
   if (preview.browser_context?.mode !== 'reusable' || preview.browser_context?.context_id !== browserContext.id) {
     throw new Error(`Expected live configurator preview to include reusable browser context ${browserContext.id}, got ${previewText}`);
@@ -158,7 +166,8 @@ async function assertNoHorizontalOverflow(page, testId, label) {
   }
 }
 
-async function configureTemplatedSession(page, options, template, browserContext, egressProfile) {
+async function configureTemplatedSession(page, options, template, project, browserContext, egressProfile) {
+  await selectProject(page, project, options);
   await selectSessionTemplate(page, template, options);
   await selectBrowserContext(page, browserContext, options);
   await page.getByTestId('session-create-locale').fill('de-DE');
@@ -175,12 +184,13 @@ async function configureTemplatedSession(page, options, template, browserContext
   await page.getByTestId('session-create-labels').fill('case=1234\npurpose=import-repro');
 }
 
-async function verifyPayloadPreview(page, template, browserContext, egressProfile) {
+async function verifyPayloadPreview(page, template, project, browserContext, egressProfile) {
   const previewText = await page.getByTestId('session-create-preview').textContent();
   const preview = JSON.parse(previewText ?? '{}');
   const expectedLabels = { case: '1234', purpose: 'import-repro' };
   if (
-    preview.template_id !== template.id
+    preview.project_id !== project.id
+    || preview.template_id !== template.id
     || Object.hasOwn(preview, 'owner_mode')
     || Object.hasOwn(preview, 'idle_timeout_sec')
     || preview.browser_context?.mode !== 'reusable'
@@ -195,7 +205,7 @@ async function verifyPayloadPreview(page, template, browserContext, egressProfil
   }
 }
 
-async function verifyDetailUi(page, options, sessionId, template, browserContext, egressProfile) {
+async function verifyDetailUi(page, options, sessionId, template, project, browserContext, egressProfile) {
   await page.getByTestId('session-inspector-detail').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,
@@ -207,6 +217,14 @@ async function verifyDetailUi(page, options, sessionId, template, browserContext
   await page.getByTestId('session-owner-mode').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   const ownerMode = await page.getByTestId('session-owner-mode').textContent();
   const idleTimeout = await page.getByTestId('session-idle-timeout').textContent();
+  const detailProject = await poll(
+    'session detail project name',
+    async () => await page.getByTestId('session-project').textContent(),
+    (value) => value?.includes(project.name) === true,
+    options.connectTimeoutMs,
+    100,
+  );
+  const detailAdmission = await page.getByTestId('session-admission').textContent();
   const detailTemplate = await poll(
     'session detail template name',
     async () => await page.getByTestId('session-template').textContent(),
@@ -228,6 +246,8 @@ async function verifyDetailUi(page, options, sessionId, template, browserContext
   if (
     ownerMode !== 'collaborative'
     || idleTimeout !== '1200'
+    || !detailProject?.includes(project.name)
+    || !detailAdmission?.includes('project_quota_available')
     || !detailTemplate?.includes(template.name)
     || !detailBrowserContext?.includes(browserContext.name)
     || !network?.includes('de-DE')
@@ -237,12 +257,12 @@ async function verifyDetailUi(page, options, sessionId, template, browserContext
     || !labels.includes('team=support')
     || !integration?.includes('source=admin-smoke-template')
   ) {
-    throw new Error(`Unexpected configured session detail facts: ${ownerMode} / ${idleTimeout} / ${detailTemplate} / ${detailBrowserContext} / ${network} / ${egress} / ${labels} / ${integration}`);
+    throw new Error(`Unexpected configured session detail facts: ${ownerMode} / ${idleTimeout} / ${detailProject} / ${detailAdmission} / ${detailTemplate} / ${detailBrowserContext} / ${network} / ${egress} / ${labels} / ${integration}`);
   }
   await page.getByTestId('session-file-bindings').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
 }
 
-async function verifyInspectorTemplateFilter(page, options, sessionId, template, browserContext, egressProfile) {
+async function verifyInspectorTemplateFilter(page, options, sessionId, template, project, browserContext, egressProfile) {
   await page.goto(adminRouteUrl(options, 'sessions'), { waitUntil: 'domcontentloaded' });
   await page.getByTestId('session-inspector-list').waitFor({
     state: 'visible',
@@ -252,6 +272,8 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template,
   const row = page.locator(`[data-testid="session-inspector-row"][data-session-id="${sessionId}"]`);
   await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   const rowTemplate = await row.getByTestId('session-inspector-row-template').textContent();
+  const rowProject = await row.getByTestId('session-inspector-row-project').textContent();
+  const rowAdmission = await row.getByTestId('session-inspector-row-admission').textContent();
   const rowBrowserContext = await poll(
     'session inspector row browser context name',
     async () => await row.getByTestId('session-inspector-row-browser-context').textContent(),
@@ -262,6 +284,12 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template,
   const rowEgress = await row.getByTestId('session-inspector-row-egress').textContent();
   if (!rowTemplate?.includes(template.name)) {
     throw new Error(`Expected inspector row template ${template.name}, got ${rowTemplate}`);
+  }
+  if (!rowProject?.includes(project.name)) {
+    throw new Error(`Expected inspector row project ${project.name}, got ${rowProject}`);
+  }
+  if (!rowAdmission?.includes('project_quota_available')) {
+    throw new Error(`Expected inspector row project admission, got ${rowAdmission}`);
   }
   if (!rowBrowserContext?.includes(browserContext.name)) {
     throw new Error(`Expected inspector row browser context ${browserContext.name}, got ${rowBrowserContext}`);
@@ -279,6 +307,8 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template,
   const liveRow = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
   await liveRow.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await liveRow.click();
+  const selectedProject = await page.getByTestId('session-selected-project').textContent();
+  const selectedAdmission = await page.getByTestId('session-selected-admission').textContent();
   const selectedTemplate = await page.getByTestId('session-selected-template').textContent();
   const selectedBrowserContext = await poll(
     'live selected session browser context name',
@@ -291,6 +321,12 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template,
   if (!selectedTemplate?.includes(template.name)) {
     throw new Error(`Expected live selected session template ${template.name}, got ${selectedTemplate}`);
   }
+  if (!selectedProject?.includes(project.name)) {
+    throw new Error(`Expected live selected session project ${project.name}, got ${selectedProject}`);
+  }
+  if (!selectedAdmission?.includes('project_quota_available')) {
+    throw new Error(`Expected live selected session admission, got ${selectedAdmission}`);
+  }
   if (!selectedBrowserContext?.includes(browserContext.name)) {
     throw new Error(`Expected live selected session browser context ${browserContext.name}, got ${selectedBrowserContext}`);
   }
@@ -299,12 +335,24 @@ async function verifyInspectorTemplateFilter(page, options, sessionId, template,
   }
 }
 
-function verifyCreatedSession(session, sessionId, template, browserContext, egressProfile) {
+function verifyCreatedSession(session, sessionId, template, project, browserContext, egressProfile) {
   if (session.id !== sessionId) {
     throw new Error(`Expected API session ${sessionId}, got ${session.id}`);
   }
   if (session.template_id !== template.id) {
     throw new Error(`Expected template_id ${template.id}, got ${session.template_id}`);
+  }
+  if (
+    session.project_id !== project.id
+    || session.project?.id !== project.id
+    || session.admission?.state !== 'allowed'
+    || session.admission?.reason_code !== 'project_quota_available'
+  ) {
+    throw new Error(`Expected project admission for ${project.id}, got ${JSON.stringify({
+      project_id: session.project_id,
+      project: session.project,
+      admission: session.admission,
+    })}`);
   }
   if (session.owner_mode !== 'collaborative') {
     throw new Error(`Expected collaborative owner mode, got ${session.owner_mode}`);
@@ -329,6 +377,28 @@ function verifyCreatedSession(session, sessionId, template, browserContext, egre
   if (session.integration_context?.source !== 'admin-smoke-template') {
     throw new Error(`Expected template integration context, got ${JSON.stringify(session.integration_context)}`);
   }
+}
+
+async function createProject(page, options) {
+  const accessToken = await getAdminAccessToken(page);
+  const name = `Admin smoke project ${Date.now()}`;
+  return await fetchJson(`${apiOrigin(options)}/api/v1/projects`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      description: 'Admin configurator smoke project',
+      labels: { suite: 'admin-session-configurator-smoke' },
+      quotas: {
+        max_active_sessions: 1,
+        max_active_workflow_runs: 2,
+        max_retained_storage_bytes: 1048576,
+      },
+    }),
+  });
 }
 
 async function createEgressProfile(page, options) {
@@ -381,6 +451,10 @@ async function createSessionTemplate(page, options, egressProfile) {
       },
     }),
   });
+}
+
+async function selectProject(page, project, options) {
+  await selectOptionWhenAvailable(page, page.getByTestId('session-create-project'), project.id, options);
 }
 
 async function selectSessionTemplate(page, template, options) {
@@ -481,6 +555,33 @@ async function cleanupCreatedBrowserContext(page, options, contextId, log) {
   });
 }
 
+async function cleanupCreatedProject(page, options, project, log) {
+  if (!project?.id) {
+    return;
+  }
+  const accessToken = await getAdminAccessToken(page).catch(() => '');
+  if (!accessToken) {
+    log(`Skipped cleanup for project ${project.id}; no admin access token is available.`);
+    return;
+  }
+  await fetchJson(`${apiOrigin(options)}/api/v1/projects/${project.id}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: project.name,
+      description: project.description,
+      labels: project.labels ?? {},
+      quotas: project.quotas ?? {},
+      state: 'archived',
+    }),
+  }).catch((error) => {
+    log(`Project cleanup for ${project.id} failed: ${error.message}`);
+  });
+}
+
 async function waitForSessionDetailUrl(page, options) {
   await page.waitForURL(/\/sessions\/[^/]+$/, { timeout: options.connectTimeoutMs });
   const sessionId = decodeURIComponent(new URL(page.url()).pathname.split('/').filter(Boolean).at(-1) ?? '');
@@ -490,10 +591,12 @@ async function waitForSessionDetailUrl(page, options) {
   return sessionId;
 }
 
-async function emitSummary(page, options, session, template, log) {
+async function emitSummary(page, options, session, template, project, log) {
   const summary = {
     pageUrl: options.pageUrl,
     sessionId: session.id,
+    projectId: project.id,
+    projectName: project.name,
     templateId: template.id,
     templateName: template.name,
     ownerMode: session.owner_mode,
