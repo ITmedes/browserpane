@@ -60,7 +60,11 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     let fetched = harness
         .get_json(&format!("/api/v1/projects/{project_id}"))
         .await?;
-    if fetched["id"] != json!(project_id) || fetched["labels"]["suite"] != json!("projects") {
+    if fetched["id"] != json!(project_id)
+        || fetched["labels"]["suite"] != json!("bpane-gateway-compose-e2e")
+        || fetched["labels"]["scope"] != json!("projects")
+        || fetched["usage"]["max_active_sessions"] != json!(1)
+    {
         return Err(anyhow!(
             "project get returned unexpected resource: {fetched}"
         ));
