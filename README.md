@@ -298,6 +298,11 @@ Canonical contract:
 - `GET /api/v1/session-templates`
 - `GET /api/v1/session-templates/{id}`
 - `PUT /api/v1/session-templates/{id}`
+- `POST /api/v1/projects`
+- `GET /api/v1/projects`
+- `GET /api/v1/projects/{id}`
+- `PUT /api/v1/projects/{id}`
+- `GET /api/v1/projects/{id}/usage`
 - `POST /api/v1/egress-profiles`
 - `GET /api/v1/egress-profiles`
 - `GET /api/v1/egress-profiles/{id}`
@@ -311,7 +316,7 @@ full contract is in the OpenAPI file; the route lists below call out the
 operator-facing surfaces that are most relevant for local development.
 
 Session templates store reusable defaults for session creation, including owner
-mode, viewport, idle timeout, labels, integration context, network identity, and recording policy.
+mode, project id, viewport, idle timeout, labels, integration context, network identity, and recording policy.
 Creating a session with a UUID `template_id` merges those defaults before the
 session is persisted; explicit caller fields win over template defaults.
 The admin create-session configurator follows the same rule: selecting a
@@ -320,6 +325,14 @@ explicit override, and the API payload preview shows the exact fields that will
 be sent.
 `GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
+Project resources let operators group sessions under an owner-scoped tenant,
+case, customer, or environment boundary. A project carries labels, lifecycle
+state, optional quotas such as `max_active_sessions`, and sanitized usage
+counters. Creating a session with `project_id` records the admission decision on
+the session and enforces active-session quota and archived-project checks before
+runtime launch. Session resources and `/status` include the project summary and
+admission reason so the admin live view, inspector, CLI, and API clients all
+show whether a session was admitted under a project quota or left owner-scoped.
 Network identity metadata lets callers declare locale, language preferences,
 timezone, geolocation, browser identity, user-agent override, and an
 `egress_profile_id` on either a session template or an explicit session create
@@ -521,6 +534,7 @@ Common session operations:
 ./scripts/bpane session list --state stopped --label suite=smoke --limit 5
 ./scripts/bpane session list --template-id <template-id> --label team=support
 ./scripts/bpane session create --label purpose=manual-test
+./scripts/bpane session create --project-id <project-id> --label purpose=tenant-test
 ./scripts/bpane session create --browser-context-id <context-id> --label purpose=context-test
 ./scripts/bpane session create \
   --locale de-DE \
@@ -552,6 +566,23 @@ Common session-template operations:
 ./scripts/bpane session-template get <template-id>
 ./scripts/bpane session-template update <template-id> --name customer-debug-session --default-label purpose=debug
 ./scripts/bpane session create --template-id <template-id> --label case=INC-1234
+```
+
+Common project operations:
+
+```bash
+./scripts/bpane project create support-tenant \
+  --description "Support tenant quota" \
+  --label tenant=support \
+  --max-active-sessions 3 \
+  --max-active-workflow-runs 4 \
+  --max-retained-storage-bytes 1073741824
+./scripts/bpane project list
+./scripts/bpane project get <project-id>
+./scripts/bpane project usage <project-id>
+./scripts/bpane project update <project-id> --name support-tenant --max-active-sessions 5
+./scripts/bpane project archive <project-id>
+./scripts/bpane session-template create tenant-debug-session --project-id <project-id> --default-label purpose=debug
 ```
 
 Common egress-profile operations:
@@ -697,9 +728,10 @@ destructive cleanup.
 The operator CLI integration smoke is
 `cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless`. It logs in
 through the admin app, creates a session, initializes a CLI profile, exercises
-session access/status/disconnect/stop/kill/cleanup, and validates standalone MCP
-health, authorize, set-default, doctor, preflight, repair, revoke, and
-clear-default flows.
+project/session-template/browser-context/egress catalog operations,
+session access/status/diagnostics/disconnect/stop/kill/cleanup, and validates
+standalone MCP health, authorize, set-default, doctor, preflight, repair,
+revoke, and clear-default flows.
 
 Current runtime notes:
 

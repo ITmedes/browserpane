@@ -64,6 +64,48 @@ pub(in crate::session_control) fn row_to_stored_browser_context(
     })
 }
 
+pub(in crate::session_control) fn row_to_stored_project(
+    row: &Row,
+) -> Result<StoredProject, SessionStoreError> {
+    let state = row
+        .get::<_, String>("state")
+        .parse::<ProjectState>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("project labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("project label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let quotas = serde_json::from_value::<ProjectQuotas>(row.get("quotas")).map_err(|error| {
+        SessionStoreError::Backend(format!("failed to decode project quotas: {error}"))
+    })?;
+
+    Ok(StoredProject {
+        id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        description: row.get("description"),
+        labels,
+        quotas,
+        state,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
 pub(in crate::session_control) fn row_to_stored_credential_binding(
     row: &Row,
 ) -> Result<StoredCredentialBinding, SessionStoreError> {

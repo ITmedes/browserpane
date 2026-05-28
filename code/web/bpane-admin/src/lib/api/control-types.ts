@@ -121,6 +121,73 @@ export type SessionEffectiveEgress = {
   readonly sensitive_log_sink_configured: boolean;
 };
 
+export type ProjectState = 'active' | 'archived';
+
+export type ProjectQuotas = {
+  readonly max_active_sessions?: number | null;
+  readonly max_active_workflow_runs?: number | null;
+  readonly max_retained_storage_bytes?: number | null;
+};
+
+export type ProjectUsageResource = {
+  readonly project_id: string;
+  readonly active_sessions: number;
+  readonly max_active_sessions?: number | null;
+  readonly active_workflow_runs: number;
+  readonly max_active_workflow_runs?: number | null;
+  readonly retained_storage_bytes: number;
+  readonly max_retained_storage_bytes?: number | null;
+  readonly observed_at: string;
+};
+
+export type ProjectResource = {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly labels: Readonly<Record<string, string>>;
+  readonly quotas: ProjectQuotas;
+  readonly state: ProjectState;
+  readonly usage: ProjectUsageResource;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type SessionProjectResource = {
+  readonly id: string;
+  readonly name: string;
+  readonly state: ProjectState;
+};
+
+export type ProjectAdmissionState = 'allowed' | 'queued' | 'rejected';
+
+export type ProjectAdmissionReasonCode =
+  | 'owner_scope_unbounded'
+  | 'project_quota_available'
+  | 'active_session_quota_exceeded'
+  | 'project_archived';
+
+export type ProjectAdmissionDecision = {
+  readonly state: ProjectAdmissionState;
+  readonly reason_code: ProjectAdmissionReasonCode;
+  readonly message: string;
+  readonly project_id?: string | null;
+  readonly active_sessions?: number | null;
+  readonly max_active_sessions?: number | null;
+  readonly checked_at: string;
+};
+
+export type ProjectListResponse = {
+  readonly projects: readonly ProjectResource[];
+};
+
+export type CreateProjectCommand = {
+  readonly name: string;
+  readonly description?: string | null;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly quotas?: ProjectQuotas;
+  readonly state?: ProjectState;
+};
+
 export type EgressProfileResource = {
   readonly id: string;
   readonly name: string;
@@ -267,6 +334,9 @@ export type SessionStatusSummary = {
 export type SessionResource = {
   readonly id: string;
   readonly state: string;
+  readonly project_id?: string | null;
+  readonly project?: SessionProjectResource | null;
+  readonly admission?: ProjectAdmissionDecision | null;
   readonly template_id?: string | null;
   readonly browser_context: SessionBrowserContextResource;
   readonly network_identity?: SessionNetworkIdentity;
@@ -302,6 +372,7 @@ export type SessionListFilters = {
 };
 
 export type SessionTemplateDefaults = {
+  readonly project_id?: string | null;
   readonly owner_mode?: string | null;
   readonly viewport?: SessionViewport | null;
   readonly idle_timeout_sec?: number | null;
@@ -327,6 +398,7 @@ export type SessionTemplateListResponse = {
 };
 
 export type CreateSessionCommand = {
+  readonly project_id?: string | null;
   readonly template_id?: string | null;
   readonly browser_context?: SessionBrowserContextCommand;
   readonly network_identity?: SessionNetworkIdentity;

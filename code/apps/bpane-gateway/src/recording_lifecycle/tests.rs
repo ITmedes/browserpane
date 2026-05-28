@@ -52,6 +52,7 @@ async fn create_session_with_mode(
         .create_session(
             &test_principal(),
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,

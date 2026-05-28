@@ -15,6 +15,14 @@ import type {
   EgressProxyConfig,
   EgressTrafficObservationConfig,
   EgressTrafficObservationMode,
+  ProjectAdmissionDecision,
+  ProjectAdmissionReasonCode,
+  ProjectAdmissionState,
+  ProjectListResponse,
+  ProjectQuotas,
+  ProjectResource,
+  ProjectState,
+  ProjectUsageResource,
   SessionAutomationDelegate,
   SessionBrowserContextMode,
   SessionBrowserContextResource,
@@ -25,6 +33,7 @@ import type {
   SessionAccessTokenResponse,
   SessionListResponse,
   SessionNetworkIdentity,
+  SessionProjectResource,
   SessionResource,
   SessionRuntimeInfo,
   SessionStatusSummary,
@@ -45,6 +54,45 @@ import {
 } from './control-wire';
 
 export class ControlSessionMapper {
+  static toProjectList(payload: unknown): ProjectListResponse {
+    const object = expectRecord(payload, 'project list response');
+    const projects = object.projects;
+    if (!Array.isArray(projects)) {
+      throw new Error('project list response must contain a projects array');
+    }
+    return {
+      projects: projects.map((project) => this.toProjectResource(project)),
+    };
+  }
+
+  static toProjectResource(payload: unknown): ProjectResource {
+    const object = expectRecord(payload, 'project resource');
+    const description = optionalString(object.description, 'project description');
+    return {
+      id: expectString(object.id, 'project id'),
+      name: expectString(object.name, 'project name'),
+      description: description ?? null,
+      labels: expectStringRecord(object.labels ?? {}, 'project labels'),
+      quotas: toProjectQuotas(object.quotas),
+      state: expectEnum(object.state, 'project state', PROJECT_STATES),
+      usage: toProjectUsage(object.usage),
+      created_at: expectString(object.created_at, 'project created_at'),
+      updated_at: expectString(object.updated_at, 'project updated_at'),
+    };
+  }
+
+  static toProjectUsage(payload: unknown): ProjectUsageResource {
+    return toProjectUsage(payload);
+  }
+
+  static toProjectAdmissionDecision(payload: unknown): ProjectAdmissionDecision | null {
+    return toProjectAdmissionDecision(payload);
+  }
+
+  static toSessionProjectResource(payload: unknown): SessionProjectResource | null {
+    return toSessionProjectResource(payload) ?? null;
+  }
+
   static toEgressProfileList(payload: unknown): EgressProfileListResponse {
     const object = expectRecord(payload, 'egress profile list response');
     const profiles = object.profiles;
@@ -168,6 +216,9 @@ export class ControlSessionMapper {
     return {
       id: expectString(object.id, 'session resource id'),
       state: expectString(object.state, 'session resource state'),
+      project_id: optionalString(object.project_id, 'session resource project_id') ?? null,
+      project: toSessionProjectResource(object.project) ?? null,
+      admission: toProjectAdmissionDecision(object.admission),
       template_id: templateId ?? null,
       browser_context: toSessionBrowserContextResource(object.browser_context),
       network_identity: toSessionNetworkIdentity(object.network_identity),
@@ -219,6 +270,14 @@ export class ControlSessionMapper {
 const BROWSER_CONTEXT_STATES = ['ready', 'deleted'] satisfies readonly BrowserContextState[];
 const BROWSER_CONTEXT_PERSISTENCE_MODES = ['reusable', 'ephemeral'] satisfies readonly BrowserContextPersistenceMode[];
 const SESSION_BROWSER_CONTEXT_MODES = ['fresh', 'ephemeral', 'reusable'] satisfies readonly SessionBrowserContextMode[];
+const PROJECT_STATES = ['active', 'archived'] satisfies readonly ProjectState[];
+const PROJECT_ADMISSION_STATES = ['allowed', 'queued', 'rejected'] satisfies readonly ProjectAdmissionState[];
+const PROJECT_ADMISSION_REASON_CODES = [
+  'owner_scope_unbounded',
+  'project_quota_available',
+  'active_session_quota_exceeded',
+  'project_archived',
+] satisfies readonly ProjectAdmissionReasonCode[];
 const EGRESS_PROFILE_STATES = ['ready', 'disabled'] satisfies readonly EgressProfileState[];
 const EGRESS_TRAFFIC_OBSERVATION_MODES = ['metadata_only', 'tls_intercept'] satisfies readonly EgressTrafficObservationMode[];
 const EGRESS_DIAGNOSTICS_HEALTHS = ['ready', 'unknown', 'attention', 'blocked', 'missing'] satisfies readonly EgressDiagnosticsHealth[];
@@ -248,6 +307,93 @@ function optionalRecord(value: unknown, label: string): Readonly<Record<string, 
     return value;
   }
   return expectRecord(value, label);
+}
+
+function toProjectQuotas(value: unknown): ProjectQuotas {
+  const object = value === undefined || value === null
+    ? {}
+    : expectRecord(value, 'project quotas');
+  return {
+    max_active_sessions: optionalNumber(
+      object.max_active_sessions,
+      'project quotas max_active_sessions',
+    ) ?? null,
+    max_active_workflow_runs: optionalNumber(
+      object.max_active_workflow_runs,
+      'project quotas max_active_workflow_runs',
+    ) ?? null,
+    max_retained_storage_bytes: optionalNumber(
+      object.max_retained_storage_bytes,
+      'project quotas max_retained_storage_bytes',
+    ) ?? null,
+  };
+}
+
+function toProjectUsage(value: unknown): ProjectUsageResource {
+  const object = expectRecord(value, 'project usage');
+  return {
+    project_id: expectString(object.project_id, 'project usage project_id'),
+    active_sessions: expectNumber(object.active_sessions, 'project usage active_sessions'),
+    max_active_sessions: optionalNumber(
+      object.max_active_sessions,
+      'project usage max_active_sessions',
+    ) ?? null,
+    active_workflow_runs: expectNumber(
+      object.active_workflow_runs,
+      'project usage active_workflow_runs',
+    ),
+    max_active_workflow_runs: optionalNumber(
+      object.max_active_workflow_runs,
+      'project usage max_active_workflow_runs',
+    ) ?? null,
+    retained_storage_bytes: expectNumber(
+      object.retained_storage_bytes,
+      'project usage retained_storage_bytes',
+    ),
+    max_retained_storage_bytes: optionalNumber(
+      object.max_retained_storage_bytes,
+      'project usage max_retained_storage_bytes',
+    ) ?? null,
+    observed_at: expectString(object.observed_at, 'project usage observed_at'),
+  };
+}
+
+function toSessionProjectResource(value: unknown): SessionProjectResource | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const object = expectRecord(value, 'session project');
+  return {
+    id: expectString(object.id, 'session project id'),
+    name: expectString(object.name, 'session project name'),
+    state: expectEnum(object.state, 'session project state', PROJECT_STATES),
+  };
+}
+
+function toProjectAdmissionDecision(value: unknown): ProjectAdmissionDecision | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const object = expectRecord(value, 'project admission decision');
+  return {
+    state: expectEnum(object.state, 'project admission state', PROJECT_ADMISSION_STATES),
+    reason_code: expectEnum(
+      object.reason_code,
+      'project admission reason_code',
+      PROJECT_ADMISSION_REASON_CODES,
+    ),
+    message: expectString(object.message, 'project admission message'),
+    project_id: optionalString(object.project_id, 'project admission project_id') ?? null,
+    active_sessions: optionalNumber(
+      object.active_sessions,
+      'project admission active_sessions',
+    ) ?? null,
+    max_active_sessions: optionalNumber(
+      object.max_active_sessions,
+      'project admission max_active_sessions',
+    ) ?? null,
+    checked_at: expectString(object.checked_at, 'project admission checked_at'),
+  };
 }
 
 function toStringArray(value: unknown, label: string): readonly string[] {
@@ -600,7 +746,9 @@ function toOptionalViewport(value: unknown, label: string): SessionViewport | nu
 function toSessionTemplateDefaults(value: unknown): SessionTemplateDefaults {
   const object = expectRecord(value, 'session template defaults');
   const ownerMode = optionalString(object.owner_mode, 'session template defaults owner_mode');
+  const projectId = optionalString(object.project_id, 'session template defaults project_id');
   return {
+    project_id: projectId ?? null,
     ...(ownerMode !== undefined ? { owner_mode: ownerMode } : {}),
     viewport: toOptionalViewport(object.viewport, 'session template defaults viewport') ?? null,
     idle_timeout_sec: optionalNumber(

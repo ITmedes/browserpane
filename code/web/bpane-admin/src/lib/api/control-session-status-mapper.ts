@@ -21,6 +21,9 @@ export class ControlSessionStatusMapper {
     const object = expectRecord(payload, 'session status');
     return {
       state: expectString(object.state, 'session status state'),
+      project_id: optionalString(object.project_id, 'session status project_id') ?? null,
+      project: ControlSessionMapper.toSessionProjectResource(object.project),
+      admission: ControlSessionMapper.toProjectAdmissionDecision(object.admission),
       runtime_state: expectString(object.runtime_state, 'session status runtime_state'),
       runtime_resume_mode: expectString(object.runtime_resume_mode, 'session status runtime_resume_mode'),
       presence_state: expectString(object.presence_state, 'session status presence_state'),

@@ -13,6 +13,7 @@ use crate::session_hub::BrowserClientRole;
 
 fn empty_request() -> CreateSessionRequest {
     CreateSessionRequest {
+        project_id: None,
         template_id: None,
         browser_context: None,
         network_identity: None,

@@ -17,6 +17,7 @@
     EgressDiagnosticsResource,
     EgressProfileResource,
     ImportBrowserContextCommand,
+    ProjectResource,
     SessionResource,
     SessionTemplateResource,
   } from '../api/control-types';
@@ -59,18 +60,21 @@
   let liveConnection = $state<LiveBrowserSessionConnection | null>(null);
   let sessions = $state<readonly SessionResource[]>([]);
   let sessionTemplates = $state<readonly SessionTemplateResource[]>([]);
+  let projects = $state<readonly ProjectResource[]>([]);
   let browserContexts = $state<readonly BrowserContextResource[]>([]);
   let egressProfiles = $state<readonly EgressProfileResource[]>([]);
   let selectedSession = $state<SessionResource | null>(null);
   let sessionsLoading = $state(false);
   let sessionsError = $state<string | null>(null);
   let templatesLoading = $state(false);
+  let projectsLoading = $state(false);
   let browserContextsLoading = $state(false);
   let egressProfilesLoading = $state(false);
   let cloningBrowserContextId = $state<string | null>(null);
   let exportingBrowserContextId = $state<string | null>(null);
   let importingBrowserContext = $state(false);
   let templateError = $state<string | null>(null);
+  let projectError = $state<string | null>(null);
   let browserContextError = $state<string | null>(null);
   let egressProfileError = $state<string | null>(null);
   let globalMessage = $state<AdminMessageFeedback | null>(null);
@@ -140,11 +144,31 @@
       },
     });
     void loadSessions();
+    void loadProjects();
     void loadSessionTemplates();
     void loadBrowserContexts();
     void loadEgressProfiles();
     return () => { subscription.close(); disconnectBrowser(false); };
   });
+  async function loadProjects(showFeedback = false): Promise<void> {
+    projectsLoading = true;
+    projectError = null;
+    try {
+      projects = (await controlClient.listProjects()).projects;
+      if (showFeedback) {
+        showGlobalMessage(
+          'success',
+          'Projects refreshed',
+          `${projects.length} project${projects.length === 1 ? '' : 's'} refreshed.`,
+        );
+      }
+    } catch (error) {
+      projectError = errorMessage(error);
+      showGlobalMessage('warning', 'Project catalog unavailable', projectError);
+    } finally {
+      projectsLoading = false;
+    }
+  }
   async function loadSessionTemplates(showFeedback = false): Promise<void> {
     templatesLoading = true;
     templateError = null;
@@ -297,6 +321,7 @@
       upsertSession(created);
       setSessionList((await controlClient.listSessions()).sessions, 'local');
       showGlobalMessage('success', 'Session created', `Created session ${shortAdminId(created.id)}.`);
+      void loadProjects(false);
       void loadBrowserContexts(false);
       requestBrowserConnect();
     } catch (error) {
@@ -605,6 +630,7 @@
     {#snippet admin()}
     <AdminWorkspaceTabs
       {controlClient} {workflowClient} {selectedSession} {sessionTemplates} {templatesLoading} {templateError} {mcpBridge} {liveConnection}
+      {projects} {projectsLoading} {projectError}
       {sessions} {browserContexts} {browserContextsLoading} {browserContextError}
       {egressProfiles} {egressProfilesLoading} {egressProfileError}
       cloningContextId={cloningBrowserContextId}

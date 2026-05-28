@@ -4,6 +4,7 @@ use std::ops::Deref;
 mod automation_tasks;
 mod browser_contexts;
 mod egress_profiles;
+mod projects;
 mod recordings;
 mod runtime_assignments;
 mod session_files;

@@ -5,6 +5,11 @@ use super::*;
 pub(in crate::session_control) fn validate_create_request(
     request: &CreateSessionRequest,
 ) -> Result<(), SessionStoreError> {
+    if request.project_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "project_id must not be nil".to_string(),
+        ));
+    }
     if let Some(viewport) = &request.viewport {
         if viewport.width == 0 || viewport.height == 0 {
             return Err(SessionStoreError::InvalidRequest(
@@ -105,6 +110,7 @@ pub(in crate::session_control) fn validate_session_template_request(
 
 fn validate_template_defaults(defaults: &SessionTemplateDefaults) -> Result<(), SessionStoreError> {
     let request = CreateSessionRequest {
+        project_id: defaults.project_id,
         owner_mode: defaults.owner_mode,
         viewport: defaults.viewport.clone(),
         idle_timeout_sec: defaults.idle_timeout_sec,

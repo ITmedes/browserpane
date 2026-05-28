@@ -45,6 +45,9 @@ fn session_status_maps_recorder_clients() {
         prepare_session_recording_playback(latest_recording.session_id, &[], chrono::Utc::now());
     let status = session_status_from_snapshot(
         SessionLifecycleState::Active,
+        None,
+        None,
+        crate::session_control::ProjectAdmissionDecision::owner_scope_unbounded(chrono::Utc::now()),
         SessionStatusSummary {
             runtime_state: SessionRuntimeState::Running,
             runtime_resume_mode: SessionRuntimeResumeMode::ExactLive,

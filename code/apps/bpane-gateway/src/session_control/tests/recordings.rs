@@ -9,6 +9,7 @@ async fn in_memory_store_creates_and_stops_recording_metadata() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -125,6 +126,7 @@ async fn in_memory_store_lists_and_clears_expired_recording_artifacts() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,

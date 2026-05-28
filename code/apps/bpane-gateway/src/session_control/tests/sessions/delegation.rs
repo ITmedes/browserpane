@@ -10,6 +10,7 @@ async fn in_memory_store_allows_delegated_client_to_load_session() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,

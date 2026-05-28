@@ -7,6 +7,7 @@ mod db;
 mod egress_profiles;
 mod extensions;
 mod file_workspaces;
+mod projects;
 mod recordings;
 mod runtime_assignments;
 mod session_files;
