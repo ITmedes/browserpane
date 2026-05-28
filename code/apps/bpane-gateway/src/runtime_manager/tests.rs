@@ -445,6 +445,10 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         Some("/run/bpane/session/egress/proxy-auth.json")
     );
     assert_eq!(
+        env.get("BPANE_URL").map(String::as_str),
+        Some("about:blank")
+    );
+    assert_eq!(
         env.get("BPANE_CHROMIUM_PROXY_BYPASS_LIST")
             .map(String::as_str),
         Some("localhost;*.internal.example")
@@ -547,6 +551,7 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
     assert!(args.contains(
         &"BPANE_CHROMIUM_PROXY_AUTH_FILE=/run/bpane/session/egress/proxy-auth.json".to_string()
     ));
+    assert!(args.contains(&"BPANE_URL=about:blank".to_string()));
     assert!(args.contains(
         &"browserpane.egress_profile_id=019db438-c74a-7ef2-810c-792e298faf12".to_string()
     ));

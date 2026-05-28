@@ -116,7 +116,7 @@ Current product shape:
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 - `deploy/examples/egress-observer`
-  - Local egress observation fixtures. `compose.yml` runs a metadata-only Squid forward proxy at `bpane-egress-observer:3128`. `compose.tls.yml` runs a mitmproxy TLS-intercept proxy at `bpane-egress-tls-observer:3129` using local CA material prepared by `prepare-mitmproxy-ca.sh`.
+  - Local egress observation fixtures. `compose.yml` runs a metadata-only Squid forward proxy at `bpane-egress-observer:3128` and an auth-enforcing Squid proxy at `bpane-egress-auth-observer:3130` for proxy-auth validation. `compose.tls.yml` runs a mitmproxy TLS-intercept proxy at `bpane-egress-tls-observer:3129` using local CA material prepared by `prepare-mitmproxy-ca.sh`.
 
 ## Protocol and media facts
 

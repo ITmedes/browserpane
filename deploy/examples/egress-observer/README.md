@@ -7,7 +7,11 @@ correlation metadata; the proxy records destinations, status, bytes, and timing.
 
 The example uses Squid as a plain forward proxy. HTTPS traffic is not
 man-in-the-middle inspected, so proxy logs normally contain `CONNECT host:443`
-for TLS traffic rather than request paths or response bodies.
+for TLS traffic rather than request paths or response bodies. The same compose
+file also starts an auth-enforcing Squid proxy at
+`bpane-egress-auth-observer:3130` with local test credentials
+`proxy-user / proxy-pass` so proxy-auth success and rejection paths can be
+validated without a production proxy.
 
 For local full HTTPS inspection, also start the mitmproxy-based TLS observer in
 `compose.tls.yml`. It listens as `bpane-egress-tls-observer:3129` and mints
@@ -26,6 +30,13 @@ Docker network:
 docker compose -f deploy/compose.yml up --build
 docker compose -f deploy/examples/egress-observer/compose.yml up --build
 ```
+
+The compose file starts:
+
+- `bpane-egress-observer:3128` for metadata-only proxy observation without
+  authentication.
+- `bpane-egress-auth-observer:3130` for metadata-only proxy observation with
+  Basic proxy authentication.
 
 If your main compose project uses a non-default network name, pass it
 explicitly:
@@ -73,6 +84,28 @@ share the same network.
   --bypass-rule "*.local"
 ```
 
+To validate proxy authentication, create a credential binding through the admin
+app or `/api/v1/credential-bindings` with a JSON payload containing
+`username=proxy-user` and `password=proxy-pass`, then point an egress profile at
+the auth observer:
+
+```bash
+./scripts/bpane egress-profile create local-auth-egress-observer \
+  --description "Local authenticated Squid access-log observer" \
+  --label observer=local-squid-auth \
+  --proxy-url http://bpane-egress-auth-observer:3130 \
+  --proxy-credential-binding-id <credential-binding-id> \
+  --bypass-rule localhost \
+  --bypass-rule 127.0.0.1 \
+  --bypass-rule "*.local"
+```
+
+Running `./scripts/bpane egress-profile diagnostics probe
+<egress-profile-id>` performs a real proxy request. A valid binding reports a
+healthy profile reachability probe. A missing binding, unavailable credential
+provider, malformed secret payload, or rejected proxy credential reports a
+sanitized failure reason without returning the secret value.
+
 For the TLS-intercept observer, include the CA and sensitive-log metadata:
 
 ```bash
@@ -107,6 +140,7 @@ Squid writes access logs to container stdout:
 
 ```bash
 docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-proxy
+docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-auth-proxy
 ```
 
 The TLS observer writes mitmproxy flow logs to container stdout:
@@ -142,7 +176,9 @@ log to join control-plane events with proxy access logs.
 If a profile references `proxy.credential_binding_id`, BrowserPane resolves the
 secret at runtime launch and configures Chromium proxy authentication from a
 session-local auth file. The credential value is not written to proxy URLs,
-Docker labels, or gateway startup logs.
+Docker labels, API diagnostics, CLI output, or gateway startup logs. Profile
+reachability probes resolve the same binding and send proxy credentials only to
+the configured proxy.
 
 ## Production Pattern
 
@@ -158,3 +194,8 @@ pipeline is:
 3. The egress proxy logs outbound traffic.
 4. A log shipper or SIEM collector tails proxy logs and joins them with the
    BrowserPane session/profile correlation metadata.
+
+For authenticated enterprise proxies, keep proxy-auth verification at the proxy
+boundary: the proxy owns authentication accept/reject logs, while BrowserPane
+exposes only sanitized binding/configuration state plus profile/session
+diagnostics.
