@@ -206,6 +206,7 @@ async function verifySessionSwitchDisconnect(page, options, originalSessionId) {
   if (disconnectEnabled) {
     throw new Error('Expected session area disconnect control to be disabled after switching away from the live session.');
   }
+  await stopSwitchTargetSession(accessToken, options, switchTarget.id);
 
   await page.locator(`[data-testid="session-row"][data-session-id="${originalSessionId}"]`).click();
   await poll(
@@ -228,6 +229,13 @@ async function createSwitchTargetSession(accessToken, options) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ labels: { suite: 'admin-session-switch-smoke' } }),
+  });
+}
+
+async function stopSwitchTargetSession(accessToken, options, sessionId) {
+  await fetchJson(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/kill`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
 
