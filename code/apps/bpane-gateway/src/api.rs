@@ -96,6 +96,7 @@ mod errors;
 mod extensions;
 mod file_workspaces;
 mod http_helpers;
+mod identity;
 mod projects;
 mod recordings;
 mod resources;
