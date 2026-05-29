@@ -101,6 +101,8 @@ function usageText() {
     '  bpane profile init [profile-name] [options]',
     '  bpane profile list [options]',
     '  bpane profile show [profile-name] [options]',
+    '  bpane identity me [options]',
+    '  bpane identity access-review [options]',
     '  bpane session create [options]',
     '  bpane session list [options]',
     '  bpane session get <session-id> [options]',
@@ -2060,6 +2062,17 @@ async function handleSessionCommand(config, positionals, options) {
   throw new CliError('USAGE', `Unknown session command: ${action ?? ''}`.trim(), EXIT_CODES.usage);
 }
 
+async function handleIdentityCommand(config, positionals) {
+  const action = positionals[1];
+  if (action === 'me' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/identity/me');
+  }
+  if (action === 'access-review' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/identity/access-review');
+  }
+  throw new CliError('USAGE', `Unknown identity command: ${action ?? ''}`.trim(), EXIT_CODES.usage);
+}
+
 async function handleSessionTemplateCommand(config, positionals, options) {
   const action = positionals[1];
   if (action === 'create' && positionals.length <= 3) {
@@ -2508,6 +2521,9 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     let result;
     if (scope === 'profile') {
       result = await handleProfileCommand(options, env, positionals);
+    } else if (scope === 'identity') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleIdentityCommand(config, positionals);
     } else if (scope === 'session') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleSessionCommand(config, positionals, options);
