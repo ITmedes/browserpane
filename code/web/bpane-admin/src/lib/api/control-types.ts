@@ -180,6 +180,51 @@ export type ProjectListResponse = {
   readonly projects: readonly ProjectResource[];
 };
 
+export type IdentityPrincipalType = 'user' | 'service_principal' | 'legacy_dev_token';
+
+export type IdentityPrincipalResource = {
+  readonly subject: string;
+  readonly issuer: string;
+  readonly display_name?: string | null;
+  readonly client_id?: string | null;
+  readonly principal_type: IdentityPrincipalType;
+};
+
+export type IdentityResourceCounts = {
+  readonly projects: number;
+  readonly sessions: number;
+  readonly active_sessions: number;
+  readonly session_templates: number;
+  readonly browser_contexts: number;
+  readonly egress_profiles: number;
+  readonly credential_bindings: number;
+  readonly file_workspaces: number;
+  readonly workflow_definitions: number;
+  readonly workflow_runs: number;
+  readonly active_workflow_runs: number;
+  readonly automation_tasks: number;
+  readonly active_automation_tasks: number;
+  readonly extension_definitions: number;
+  readonly delegated_principals: number;
+};
+
+export type IdentityDelegatedPrincipalResource = {
+  readonly client_id: string;
+  readonly issuer: string;
+  readonly display_name?: string | null;
+  readonly session_count: number;
+  readonly active_session_count: number;
+  readonly session_ids: readonly string[];
+};
+
+export type IdentityAccessReviewResponse = {
+  readonly principal: IdentityPrincipalResource;
+  readonly generated_at: string;
+  readonly projects: readonly ProjectResource[];
+  readonly resource_counts: IdentityResourceCounts;
+  readonly delegated_principals: readonly IdentityDelegatedPrincipalResource[];
+};
+
 export type CreateProjectCommand = {
   readonly name: string;
   readonly description?: string | null;

@@ -27,6 +27,8 @@ import type {
   FileWorkspaceFileResource,
   FileWorkspaceListResponse,
   FileWorkspaceResource,
+  IdentityAccessReviewResponse,
+  IdentityPrincipalResource,
   ProjectListResponse,
   ProjectResource,
   ProjectUsageResource,
@@ -76,6 +78,16 @@ export class ControlClient {
     this.#accessTokenProvider = options.accessTokenProvider;
     this.#onAuthenticationFailure = options.onAuthenticationFailure;
     this.#fetchImpl = options.fetchImpl ?? fetch;
+  }
+
+  async getCurrentIdentity(): Promise<IdentityPrincipalResource> {
+    const payload = await this.#request('GET', '/api/v1/identity/me');
+    return ControlSessionMapper.toIdentityPrincipalResource(payload);
+  }
+
+  async getIdentityAccessReview(): Promise<IdentityAccessReviewResponse> {
+    const payload = await this.#request('GET', '/api/v1/identity/access-review');
+    return ControlSessionMapper.toIdentityAccessReview(payload);
   }
 
   async listSessions(filters: SessionListFilters = {}): Promise<SessionListResponse> {
