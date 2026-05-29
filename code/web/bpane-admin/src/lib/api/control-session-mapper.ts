@@ -15,6 +15,11 @@ import type {
   EgressProxyConfig,
   EgressTrafficObservationConfig,
   EgressTrafficObservationMode,
+  IdentityAccessReviewResponse,
+  IdentityDelegatedPrincipalResource,
+  IdentityPrincipalResource,
+  IdentityPrincipalType,
+  IdentityResourceCounts,
   ProjectAdmissionDecision,
   ProjectAdmissionReasonCode,
   ProjectAdmissionState,
@@ -54,6 +59,29 @@ import {
 } from './control-wire';
 
 export class ControlSessionMapper {
+  static toIdentityPrincipalResource(payload: unknown): IdentityPrincipalResource {
+    return toIdentityPrincipalResource(payload);
+  }
+
+  static toIdentityAccessReview(payload: unknown): IdentityAccessReviewResponse {
+    const object = expectRecord(payload, 'identity access review');
+    const projects = object.projects;
+    const delegatedPrincipals = object.delegated_principals;
+    if (!Array.isArray(projects)) {
+      throw new Error('identity access review must contain a projects array');
+    }
+    if (!Array.isArray(delegatedPrincipals)) {
+      throw new Error('identity access review must contain a delegated_principals array');
+    }
+    return {
+      principal: toIdentityPrincipalResource(object.principal),
+      generated_at: expectString(object.generated_at, 'identity access review generated_at'),
+      projects: projects.map((project) => this.toProjectResource(project)),
+      resource_counts: toIdentityResourceCounts(object.resource_counts),
+      delegated_principals: delegatedPrincipals.map((delegate) => toIdentityDelegatedPrincipal(delegate)),
+    };
+  }
+
   static toProjectList(payload: unknown): ProjectListResponse {
     const object = expectRecord(payload, 'project list response');
     const projects = object.projects;
@@ -278,6 +306,7 @@ const PROJECT_ADMISSION_REASON_CODES = [
   'active_session_quota_exceeded',
   'project_archived',
 ] satisfies readonly ProjectAdmissionReasonCode[];
+const IDENTITY_PRINCIPAL_TYPES = ['user', 'service_principal', 'legacy_dev_token'] satisfies readonly IdentityPrincipalType[];
 const EGRESS_PROFILE_STATES = ['ready', 'disabled'] satisfies readonly EgressProfileState[];
 const EGRESS_TRAFFIC_OBSERVATION_MODES = ['metadata_only', 'tls_intercept'] satisfies readonly EgressTrafficObservationMode[];
 const EGRESS_DIAGNOSTICS_HEALTHS = ['ready', 'unknown', 'attention', 'blocked', 'missing'] satisfies readonly EgressDiagnosticsHealth[];
@@ -307,6 +336,60 @@ function optionalRecord(value: unknown, label: string): Readonly<Record<string, 
     return value;
   }
   return expectRecord(value, label);
+}
+
+function toIdentityPrincipalResource(value: unknown): IdentityPrincipalResource {
+  const object = expectRecord(value, 'identity principal');
+  const displayName = optionalString(object.display_name, 'identity principal display_name');
+  const clientId = optionalString(object.client_id, 'identity principal client_id');
+  return {
+    subject: expectString(object.subject, 'identity principal subject'),
+    issuer: expectString(object.issuer, 'identity principal issuer'),
+    display_name: displayName ?? null,
+    client_id: clientId ?? null,
+    principal_type: expectEnum(
+      object.principal_type,
+      'identity principal principal_type',
+      IDENTITY_PRINCIPAL_TYPES,
+    ),
+  };
+}
+
+function toIdentityResourceCounts(value: unknown): IdentityResourceCounts {
+  const object = expectRecord(value, 'identity resource counts');
+  return {
+    projects: expectNumber(object.projects, 'identity resource counts projects'),
+    sessions: expectNumber(object.sessions, 'identity resource counts sessions'),
+    active_sessions: expectNumber(object.active_sessions, 'identity resource counts active_sessions'),
+    session_templates: expectNumber(object.session_templates, 'identity resource counts session_templates'),
+    browser_contexts: expectNumber(object.browser_contexts, 'identity resource counts browser_contexts'),
+    egress_profiles: expectNumber(object.egress_profiles, 'identity resource counts egress_profiles'),
+    credential_bindings: expectNumber(object.credential_bindings, 'identity resource counts credential_bindings'),
+    file_workspaces: expectNumber(object.file_workspaces, 'identity resource counts file_workspaces'),
+    workflow_definitions: expectNumber(object.workflow_definitions, 'identity resource counts workflow_definitions'),
+    workflow_runs: expectNumber(object.workflow_runs, 'identity resource counts workflow_runs'),
+    active_workflow_runs: expectNumber(object.active_workflow_runs, 'identity resource counts active_workflow_runs'),
+    automation_tasks: expectNumber(object.automation_tasks, 'identity resource counts automation_tasks'),
+    active_automation_tasks: expectNumber(object.active_automation_tasks, 'identity resource counts active_automation_tasks'),
+    extension_definitions: expectNumber(object.extension_definitions, 'identity resource counts extension_definitions'),
+    delegated_principals: expectNumber(object.delegated_principals, 'identity resource counts delegated_principals'),
+  };
+}
+
+function toIdentityDelegatedPrincipal(value: unknown): IdentityDelegatedPrincipalResource {
+  const object = expectRecord(value, 'identity delegated principal');
+  const displayName = optionalString(object.display_name, 'identity delegated principal display_name');
+  return {
+    client_id: expectString(object.client_id, 'identity delegated principal client_id'),
+    issuer: expectString(object.issuer, 'identity delegated principal issuer'),
+    display_name: displayName ?? null,
+    session_count: expectNumber(object.session_count, 'identity delegated principal session_count'),
+    active_session_count: expectNumber(
+      object.active_session_count,
+      'identity delegated principal active_session_count',
+    ),
+    session_ids: toStringArray(object.session_ids ?? [], 'identity delegated principal session_ids'),
+  };
 }
 
 function toProjectQuotas(value: unknown): ProjectQuotas {
