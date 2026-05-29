@@ -42,14 +42,15 @@ use crate::session_control::{
     EgressProfileState, FailSessionRecordingRequest, PersistBrowserContextRequest,
     PersistCompletedSessionRecordingRequest, PersistEgressDiagnosticsProbeResult,
     PersistEgressProfileReachabilityProbeResult, PersistEgressProfileRequest,
-    PersistSessionFileBindingRequest, PersistSessionTemplateRequest, SessionBrowserContextMode,
-    SessionEffectiveEgress, SessionLifecycleState, SessionListResponse, SessionNetworkIdentity,
-    SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
-    SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
+    PersistProjectRequest, PersistSessionFileBindingRequest, PersistSessionTemplateRequest,
+    ProjectAdmissionDecision, ProjectListResponse, ProjectResource, ProjectUsageResource,
+    SessionBrowserContextMode, SessionEffectiveEgress, SessionLifecycleState, SessionListResponse,
+    SessionNetworkIdentity, SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse,
+    SessionRecordingMode, SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
     SessionRecordingTerminationReason, SessionResource, SessionStore, SessionStoreError,
     SessionTemplateDefaults, SessionTemplateListResponse, SessionTemplateResource,
-    SetAutomationDelegateRequest, StoredBrowserContext, StoredEgressProfile, StoredSession,
-    StoredSessionRecording,
+    SetAutomationDelegateRequest, StoredBrowserContext, StoredEgressProfile, StoredProject,
+    StoredSession, StoredSessionRecording,
 };
 use crate::session_files::{
     SessionFileBindingListResponse, SessionFileBindingResource, SessionFileListResponse,
@@ -95,6 +96,7 @@ mod errors;
 mod extensions;
 mod file_workspaces;
 mod http_helpers;
+mod projects;
 mod recordings;
 mod resources;
 mod router;

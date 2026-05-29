@@ -34,6 +34,7 @@ async function run() {
   const page = await context.newPage();
   let accessToken = '';
   let sessionId = '';
+  let projectId = '';
   let contextId = '';
   let clonedContextId = '';
   let importedContextId = '';
@@ -89,6 +90,43 @@ async function run() {
     const profile = runBpaneCli(['profile', 'show'], cliEnv);
     if (profile.profile !== 'smoke' || profile.values?.base_url !== apiOrigin(options)) {
       throw new Error('CLI profile show did not return the smoke profile.');
+    }
+
+    const project = runBpaneCli([
+      'project',
+      'create',
+      `support-tenant-${runLabel}`,
+      '--description',
+      'Operator CLI smoke project',
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--label',
+      `run_id=${runLabel}`,
+      '--max-active-sessions',
+      '3',
+      '--max-active-workflow-runs',
+      '4',
+      '--max-retained-storage-bytes',
+      '1073741824',
+    ], cliEnv);
+    projectId = project.id;
+    if (!projectId || project.quotas?.max_active_sessions !== 3 || project.state !== 'active') {
+      throw new Error(`CLI project create returned an invalid project: ${JSON.stringify(project)}`);
+    }
+
+    const listedProjects = runBpaneCli(['project', 'list'], cliEnv);
+    if (!Array.isArray(listedProjects.projects) || !listedProjects.projects.some((item) => item.id === projectId)) {
+      throw new Error(`CLI project list did not include ${projectId}.`);
+    }
+
+    const fetchedProject = runBpaneCli(['project', 'get', projectId], cliEnv);
+    if (fetchedProject.id !== projectId || fetchedProject.labels?.run_id !== runLabel) {
+      throw new Error(`CLI project get returned unexpected project data: ${JSON.stringify(fetchedProject)}`);
+    }
+
+    const projectUsage = runBpaneCli(['project', 'usage', projectId], cliEnv);
+    if (projectUsage.project_id !== projectId || projectUsage.active_sessions !== 0) {
+      throw new Error(`CLI project usage returned unexpected data: ${JSON.stringify(projectUsage)}`);
     }
 
     const egressProfile = runBpaneCli([
@@ -155,6 +193,8 @@ async function run() {
       `customer-debug-${runLabel}`,
       '--description',
       'Operator CLI smoke template',
+      '--project-id',
+      projectId,
       '--label',
       'suite=bpane-cli-smoke',
       '--default-label',
@@ -326,6 +366,8 @@ async function run() {
       'create',
       '--template-id',
       templateId,
+      '--project-id',
+      projectId,
       '--browser-context-id',
       contextId,
       '--label',
@@ -341,6 +383,9 @@ async function run() {
     }
     if (
       created.template_id !== templateId
+      || created.project_id !== projectId
+      || created.project?.id !== projectId
+      || created.admission?.state !== 'allowed'
       || created.browser_context?.mode !== 'reusable'
       || created.browser_context?.context_id !== contextId
       || created.network_identity?.locale !== 'de-DE'
@@ -528,6 +573,12 @@ async function run() {
     }
     contextId = '';
 
+    const archivedProject = runBpaneCli(['project', 'archive', projectId], cliEnv);
+    if (archivedProject.id !== projectId || archivedProject.state !== 'archived') {
+      throw new Error(`CLI project archive did not archive the project: ${JSON.stringify(archivedProject)}`);
+    }
+    projectId = '';
+
     log('Operator CLI smoke passed.');
   } finally {
     if (clonedContextId && accessToken) {
@@ -559,6 +610,9 @@ async function run() {
         headers: { Authorization: `Bearer ${accessToken}` },
       }).catch(() => {});
     }
+    if (projectId && accessToken) {
+      await archiveProject(options, accessToken, projectId).catch(() => {});
+    }
     await cleanupAdminSmoke(page, options, log);
     if (configDir) {
       await fs.rm(configDir, { recursive: true, force: true }).catch(() => {});
@@ -584,6 +638,30 @@ async function clearMcpBridge(options) {
     const detail = await response.text().catch(() => '');
     throw new Error(`Could not clear MCP bridge control session: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
   }
+}
+
+async function archiveProject(options, accessToken, projectId) {
+  const projectResponse = await fetch(`${apiOrigin(options)}/api/v1/projects/${projectId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!projectResponse.ok) {
+    return;
+  }
+  const project = await projectResponse.json();
+  await fetch(`${apiOrigin(options)}/api/v1/projects/${projectId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: project.name,
+      description: project.description,
+      labels: project.labels ?? {},
+      quotas: project.quotas ?? {},
+      state: 'archived',
+    }),
+  });
 }
 
 function runBpaneCli(args, env) {

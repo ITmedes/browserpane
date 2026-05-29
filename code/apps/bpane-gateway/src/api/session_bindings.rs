@@ -167,6 +167,7 @@ fn merge_template_defaults(
     mut request: CreateSessionRequest,
     defaults: SessionTemplateDefaults,
 ) -> CreateSessionRequest {
+    request.project_id = request.project_id.or(defaults.project_id);
     request.owner_mode = request.owner_mode.or(defaults.owner_mode);
     if request.viewport.is_none() {
         request.viewport = defaults.viewport;

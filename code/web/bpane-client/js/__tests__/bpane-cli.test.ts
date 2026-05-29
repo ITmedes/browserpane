@@ -453,6 +453,8 @@ describe('bpane operator CLI', () => {
         'create',
         '--label',
         'suite=cli',
+        '--project-id',
+        '0198dff7-457e-7000-8000-000000000025',
         '--template-id',
         'desktop',
         '--browser-context-id',
@@ -502,6 +504,7 @@ describe('bpane operator CLI', () => {
     expect(calls[0].url).toBe('http://localhost:8080/api/v1/sessions');
     expect(calls[0].init.method).toBe('POST');
     expect(JSON.parse(calls[0].init.body)).toEqual({
+      project_id: '0198dff7-457e-7000-8000-000000000025',
       template_id: 'desktop',
       browser_context: {
         mode: 'reusable',
@@ -809,9 +812,11 @@ describe('bpane operator CLI', () => {
         'session-template',
         'create',
         'customer-debug-session',
-        '--description',
-        'Support debug session',
-        '--label',
+      '--description',
+      'Support debug session',
+      '--project-id',
+      'project-1',
+      '--label',
         'team=support',
         '--default-label',
         'purpose=debug',
@@ -852,6 +857,7 @@ describe('bpane operator CLI', () => {
       description: 'Support debug session',
       labels: { team: 'support' },
       defaults: {
+        project_id: 'project-1',
         owner_mode: 'collaborative',
         viewport: { width: 1440, height: 900 },
         idle_timeout_sec: 1800,
@@ -866,6 +872,185 @@ describe('bpane operator CLI', () => {
         recording: { mode: 'manual', format: 'webm', retention_sec: 86400 },
       },
     });
+  });
+
+  it('manages projects through the CLI', async () => {
+    const createProjectIo = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ id: 'project-1', name: 'support-tenant' }, 201),
+      jsonResponse({ projects: [{ id: 'project-1' }] }),
+      jsonResponse({ id: 'project-1', name: 'support-tenant' }),
+      jsonResponse({
+        id: 'project-1',
+        name: 'support-tenant',
+        description: 'Existing project',
+        labels: { tenant: 'support' },
+        quotas: {
+          max_active_sessions: 2,
+          max_active_workflow_runs: 4,
+          max_retained_storage_bytes: 1073741824,
+        },
+        state: 'active',
+      }),
+      jsonResponse({ id: 'project-1', name: 'support-tenant-v2', state: 'active' }),
+      jsonResponse({
+        project_id: 'project-1',
+        active_sessions: 1,
+        max_active_sessions: 3,
+        active_workflow_runs: 0,
+        max_active_workflow_runs: 4,
+        retained_storage_bytes: 0,
+        max_retained_storage_bytes: 1073741824,
+      }),
+      jsonResponse({
+        id: 'project-1',
+        name: 'support-tenant-v2',
+        labels: { tenant: 'support', managed: 'true' },
+        quotas: { max_active_sessions: 3 },
+        state: 'active',
+      }),
+      jsonResponse({ id: 'project-1', name: 'support-tenant-v2', state: 'archived' }),
+    );
+
+    const createCode = await runBpaneCli(
+      [
+        'project',
+        'create',
+        'support-tenant',
+        '--description',
+        'Support tenant',
+        '--label',
+        'tenant=support',
+        '--max-active-sessions',
+        '2',
+        '--max-active-workflow-runs',
+        '4',
+        '--max-retained-storage-bytes',
+        '1073741824',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      createProjectIo.io,
+      fetchImpl,
+    );
+    expect(createCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(createProjectIo)).toEqual({ id: 'project-1', name: 'support-tenant' });
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/projects');
+    expect(calls[0].init.method).toBe('POST');
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      name: 'support-tenant',
+      description: 'Support tenant',
+      labels: { tenant: 'support' },
+      quotas: {
+        max_active_sessions: 2,
+        max_active_workflow_runs: 4,
+        max_retained_storage_bytes: 1073741824,
+      },
+    });
+
+    const listIo = createIo();
+    const listCode = await runBpaneCli(
+      ['project', 'list'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      listIo.io,
+      fetchImpl,
+    );
+    expect(listCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(listIo)).toEqual({ projects: [{ id: 'project-1' }] });
+
+    const getIo = createIo();
+    const getCode = await runBpaneCli(
+      ['project', 'get', 'project/with space'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      getIo.io,
+      fetchImpl,
+    );
+    expect(getCode).toBe(EXIT_CODES.ok);
+    expect(calls[2].url).toBe('http://localhost:8080/api/v1/projects/project%2Fwith%20space');
+
+    const updateIo = createIo();
+    const updateCode = await runBpaneCli(
+      [
+        'project',
+        'update',
+        'project-1',
+        '--name',
+        'support-tenant-v2',
+        '--label',
+        'managed=true',
+        '--max-active-sessions',
+        '3',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      updateIo.io,
+      fetchImpl,
+    );
+    expect(updateCode).toBe(EXIT_CODES.ok);
+    expect(calls[3].url).toBe('http://localhost:8080/api/v1/projects/project-1');
+    expect(calls[4].url).toBe('http://localhost:8080/api/v1/projects/project-1');
+    expect(calls[4].init.method).toBe('PUT');
+    expect(JSON.parse(calls[4].init.body)).toEqual({
+      name: 'support-tenant-v2',
+      description: 'Existing project',
+      labels: { tenant: 'support', managed: 'true' },
+      quotas: {
+        max_active_sessions: 3,
+        max_active_workflow_runs: 4,
+        max_retained_storage_bytes: 1073741824,
+      },
+      state: 'active',
+    });
+
+    const usageIo = createIo();
+    const usageCode = await runBpaneCli(
+      ['project', 'usage', 'project-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      usageIo.io,
+      fetchImpl,
+    );
+    expect(usageCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(usageIo).active_sessions).toBe(1);
+    expect(calls[5].url).toBe('http://localhost:8080/api/v1/projects/project-1/usage');
+
+    const archiveIo = createIo();
+    const archiveCode = await runBpaneCli(
+      ['project', 'archive', 'project-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      archiveIo.io,
+      fetchImpl,
+    );
+    expect(archiveCode).toBe(EXIT_CODES.ok);
+    expect(calls[7].init.method).toBe('PUT');
+    expect(JSON.parse(calls[7].init.body)).toEqual({
+      name: 'support-tenant-v2',
+      labels: { tenant: 'support', managed: 'true' },
+      quotas: { max_active_sessions: 3 },
+      state: 'archived',
+    });
+  });
+
+  it('validates project CLI input before fetching', async () => {
+    const missingNameIo = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
+
+    const missingNameCode = await runBpaneCli(
+      ['project', 'create'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingNameIo.io,
+      fetchImpl,
+    );
+    expect(missingNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingNameIo).error).toContain('Project create requires');
+
+    const invalidQuotaIo = createIo();
+    const invalidQuotaCode = await runBpaneCli(
+      ['project', 'create', 'support-tenant', '--max-active-sessions', '0'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      invalidQuotaIo.io,
+      fetchImpl,
+    );
+    expect(invalidQuotaCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(invalidQuotaIo).error).toContain('--max-active-sessions');
+    expect(calls).toHaveLength(0);
   });
 
   it('validates session-template CLI input before fetching', async () => {

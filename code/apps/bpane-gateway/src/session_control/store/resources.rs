@@ -1,6 +1,79 @@
 use super::*;
 
 impl SessionStore {
+    pub async fn create_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistProjectRequest,
+    ) -> Result<StoredProject, SessionStoreError> {
+        validate_project_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.create_project(principal, request).await,
+            SessionStoreBackend::Postgres(store) => store.create_project(principal, request).await,
+        }
+    }
+
+    pub async fn list_projects_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredProject>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => store.list_projects_for_owner(principal).await,
+            SessionStoreBackend::Postgres(store) => store.list_projects_for_owner(principal).await,
+        }
+    }
+
+    pub async fn get_project_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredProject>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_project_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_project_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn update_project_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistProjectRequest,
+    ) -> Result<Option<StoredProject>, SessionStoreError> {
+        validate_project_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.update_project_for_owner(principal, id, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.update_project_for_owner(principal, id, request).await
+            }
+        }
+    }
+
+    pub async fn count_active_sessions_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .count_active_sessions_for_project(principal, project_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .count_active_sessions_for_project(principal, project_id)
+                    .await
+            }
+        }
+    }
+
     pub fn validate_browser_context_request(
         request: &PersistBrowserContextRequest,
     ) -> Result<(), SessionStoreError> {

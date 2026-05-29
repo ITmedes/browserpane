@@ -4,6 +4,21 @@ import { ControlClient, type FetchLike } from './control-client';
 const SESSION = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
   state: 'active',
+  project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+  project: {
+    id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+    name: 'Support tenant',
+    state: 'active',
+  },
+  admission: {
+    state: 'allowed',
+    reason_code: 'project_quota_available',
+    message: 'Project admission allowed.',
+    project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+    active_sessions: 1,
+    max_active_sessions: 2,
+    checked_at: '2026-05-04T19:00:00Z',
+  },
   template_id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
   browser_context: {
     mode: 'reusable',
@@ -89,6 +104,31 @@ const BROWSER_CONTEXT = {
   deleted_at: null,
 };
 
+const PROJECT = {
+  id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+  name: 'Support tenant',
+  description: 'Support tenant project',
+  labels: { tenant: 'support' },
+  quotas: {
+    max_active_sessions: 2,
+    max_active_workflow_runs: 4,
+    max_retained_storage_bytes: 1073741824,
+  },
+  state: 'active',
+  usage: {
+    project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+    active_sessions: 1,
+    max_active_sessions: 2,
+    active_workflow_runs: 1,
+    max_active_workflow_runs: 4,
+    retained_storage_bytes: 268435456,
+    max_retained_storage_bytes: 1073741824,
+    observed_at: '2026-05-04T18:50:00Z',
+  },
+  created_at: '2026-05-04T18:50:00Z',
+  updated_at: '2026-05-04T18:50:00Z',
+};
+
 const TEMPLATE = {
   id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
   name: 'Support triage',
@@ -154,6 +194,8 @@ describe('ControlClient', () => {
 
     expect(response.sessions).toHaveLength(1);
     expect(response.sessions[0]?.id).toBe(SESSION.id);
+    expect(response.sessions[0]?.project?.name).toBe('Support tenant');
+    expect(response.sessions[0]?.admission?.reason_code).toBe('project_quota_available');
     expect(response.sessions[0]?.browser_context).toEqual(SESSION.browser_context);
     expect(response.sessions[0]?.network_identity?.locale).toBe('de-DE');
     expect(response.sessions[0]?.effective_egress?.profile_name).toBe('EU support egress');
@@ -166,6 +208,106 @@ describe('ControlClient', () => {
           authorization: 'Bearer owner-token',
         }),
       }),
+    );
+  });
+
+  it('manages project catalog resources with bearer auth', async () => {
+    const responses = [PROJECT, PROJECT, { ...PROJECT, name: 'Support tenant archived', state: 'archived' }, PROJECT.usage];
+    const fetchImpl = vi.fn<FetchLike>(async () => new Response(JSON.stringify(responses.shift()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const created = await client.createProject({
+      name: 'Support tenant',
+      description: 'Support tenant project',
+      labels: { tenant: 'support' },
+      quotas: {
+        max_active_sessions: 2,
+        max_active_workflow_runs: 4,
+        max_retained_storage_bytes: 1073741824,
+      },
+    });
+    await client.getProject('project/with space');
+    await client.updateProject('project/with space', {
+      name: 'Support tenant archived',
+      state: 'archived',
+    });
+    await client.getProjectUsage('project/with space');
+
+    expect(created).toMatchObject({
+      id: PROJECT.id,
+      name: 'Support tenant',
+      usage: {
+        active_sessions: 1,
+        max_active_sessions: 2,
+      },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      new URL('http://localhost:8932/api/v1/projects'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Support tenant',
+          description: 'Support tenant project',
+          labels: { tenant: 'support' },
+          quotas: {
+            max_active_sessions: 2,
+            max_active_workflow_runs: 4,
+            max_retained_storage_bytes: 1073741824,
+          },
+          state: 'active',
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      new URL('http://localhost:8932/api/v1/projects/project%2Fwith%20space'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      new URL('http://localhost:8932/api/v1/projects/project%2Fwith%20space'),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          name: 'Support tenant archived',
+          state: 'archived',
+          labels: {},
+          quotas: {},
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      4,
+      new URL('http://localhost:8932/api/v1/projects/project%2Fwith%20space/usage'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('lists project catalog resources with bearer auth', async () => {
+    const fetchImpl = jsonFetch({ projects: [PROJECT] });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const response = await client.listProjects();
+
+    expect(response.projects[0]).toMatchObject({
+      id: PROJECT.id,
+      name: 'Support tenant',
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/projects'),
+      expect.objectContaining({ method: 'GET' }),
     );
   });
 
@@ -559,6 +701,7 @@ describe('ControlClient', () => {
     });
 
     await client.createSession({
+      project_id: PROJECT.id,
       template_id: TEMPLATE.id,
       browser_context: {
         mode: 'reusable',
@@ -579,6 +722,7 @@ describe('ControlClient', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
+          project_id: PROJECT.id,
           template_id: TEMPLATE.id,
           browser_context: {
             mode: 'reusable',

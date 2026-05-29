@@ -5,6 +5,7 @@
     CreateBrowserContextCommand,
     CreateSessionCommand,
     EgressProfileResource,
+    ProjectResource,
     SessionTemplateResource,
   } from '../api/control-types';
   import {
@@ -18,6 +19,8 @@
     isLocalProxyEgressPreset,
     isLocalTlsInterceptorEgressPreset,
     networkIdentitySummary,
+    projectOptionLabel,
+    projectUsageSummary,
     sessionBrowserContextSummary,
     sessionTemplateDefaultsSummary,
     validateBrowserContextCreateForm,
@@ -29,12 +32,15 @@
     readonly onCreateSession: (command: CreateSessionCommand) => void;
     readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly sessionTemplates?: readonly SessionTemplateResource[];
+    readonly projects?: readonly ProjectResource[];
     readonly browserContexts?: readonly BrowserContextResource[];
     readonly egressProfiles?: readonly EgressProfileResource[];
     readonly templatesLoading?: boolean;
+    readonly projectsLoading?: boolean;
     readonly browserContextsLoading?: boolean;
     readonly egressProfilesLoading?: boolean;
     readonly templateError?: string | null;
+    readonly projectError?: string | null;
     readonly browserContextError?: string | null;
     readonly egressProfileError?: string | null;
     readonly loading?: boolean;
@@ -52,12 +58,15 @@
     onCreateSession,
     onCreateBrowserContext,
     sessionTemplates = [],
+    projects = [],
     browserContexts = [],
     egressProfiles = [],
     templatesLoading = false,
+    projectsLoading = false,
     browserContextsLoading = false,
     egressProfilesLoading = false,
     templateError = null,
+    projectError = null,
     browserContextError = null,
     egressProfileError = null,
     loading = false,
@@ -72,6 +81,7 @@
   }: SessionCreateConfiguratorProps = $props();
 
   const defaults = defaultSessionCreateFormState();
+  let projectId = $state(defaults.projectId);
   let templateId = $state(defaults.templateId);
   let ownerMode = $state(defaults.ownerMode);
   let idleTimeoutSec = $state(defaults.idleTimeoutSec);
@@ -113,6 +123,7 @@
     || browserContextMaxProfileMb.trim(),
   ));
   const validation = $derived(validateSessionCreateForm({
+    projectId,
     templateId,
     ownerMode,
     idleTimeoutSec,
@@ -130,7 +141,9 @@
     browserContextId,
     browserContexts,
     egressProfiles,
+    projects,
   }));
+  const selectedProject = $derived(projects.find((project) => project.id === projectId) ?? null);
   const selectedTemplate = $derived(sessionTemplates.find((template) => template.id === templateId) ?? null);
   const selectedTemplateSummary = $derived(sessionTemplateDefaultsSummary(selectedTemplate));
   const selectedBrowserContextSummary = $derived(sessionBrowserContextSummary(
@@ -163,6 +176,17 @@
   $effect(() => {
     if (payloadInitiallyOpen) {
       payloadOpenInternal = true;
+    }
+  });
+
+  $effect(() => {
+    if (
+      projectId
+      && !projectsLoading
+      && projects.length > 0
+      && !projects.some((project) => project.id === projectId)
+    ) {
+      projectId = '';
     }
   });
 
@@ -293,6 +317,23 @@
   >
     <div class={fieldGridClass}>
       <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+        Project
+        <select
+          class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+          data-testid="session-create-project"
+          bind:value={projectId}
+          disabled={loading || disabled || projectsLoading}
+        >
+          <option value="">Owner scope</option>
+          {#each projects as project}
+            <option value={project.id} disabled={project.state === 'archived'}>
+              {projectOptionLabel(project)}
+            </option>
+          {/each}
+        </select>
+      </label>
+
+      <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
         Template
         <select
           class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
@@ -350,6 +391,38 @@
         </select>
       </label>
     </div>
+
+    {#if projectsLoading || projectError || selectedProject}
+      <section
+        class="grid min-w-0 gap-3 rounded-xl border border-admin-ink/10 bg-admin-field/68 p-3 text-sm text-admin-ink/72"
+        aria-label="Project scope"
+        data-testid="session-create-project-summary"
+      >
+        {#if projectsLoading}
+          <span class="text-xs font-bold text-[#c1d0e8]">Loading projects...</span>
+        {:else if projectError}
+          <AdminMessage
+            variant="warning"
+            title="Project catalog unavailable"
+            message={projectError}
+            compact={true}
+          />
+        {:else if selectedProject}
+          <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
+            <span class="min-w-0">
+              <strong class="block truncate text-admin-ink">{selectedProject.name}</strong>
+              <span class="block truncate text-xs text-admin-ink/58">{selectedProject.id}</span>
+            </span>
+            <span class="rounded-lg bg-admin-leaf/12 px-2 py-1 text-xs font-bold text-admin-leaf">
+              {selectedProject.state}
+            </span>
+          </div>
+          <p class="m-0 text-xs leading-normal text-admin-ink/62 [overflow-wrap:anywhere]">
+            {projectUsageSummary(selectedProject)}
+          </p>
+        {/if}
+      </section>
+    {/if}
 
     <section
       class="grid min-w-0 gap-3 rounded-xl border border-admin-ink/10 bg-admin-field/68 p-3 text-sm text-admin-ink/72"

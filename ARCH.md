@@ -276,9 +276,15 @@ service.
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
   - `GET /api/v1/session-templates/{id}` — fetch one session template
   - `PUT /api/v1/session-templates/{id}` — replace a session template and increment its version
+  - `POST /api/v1/projects` — create an owner-scoped project with labels, state, quota metadata, and usage counters
+  - `GET /api/v1/projects` — list owner-scoped projects with sanitized usage summaries
+  - `GET /api/v1/projects/{id}` — fetch one project
+  - `PUT /api/v1/projects/{id}` — replace one project, including quota metadata and lifecycle state
+  - `GET /api/v1/projects/{id}/usage` — fetch current project usage counters
   - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, optional proxy-auth credential binding reference, bypass, custom CA, and traffic-observation metadata
   - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
+  - session resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas and archived-project rejection before runtime launch
   - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Proxy authentication is secret-backed through owner-scoped credential bindings and is materialized only as a session-local runtime auth file.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
@@ -469,7 +475,7 @@ The default dev stack no longer uses a shared token file.
 - the admin console discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
-- after login, the admin console lists owner-scoped `/api/v1/sessions`, session templates, egress profiles, and browser contexts; it lets the user join an existing session, start a new one with optional template, network-identity, egress-profile, and reusable-context bindings, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
+- after login, the admin console lists owner-scoped `/api/v1/sessions`, projects, session templates, egress profiles, and browser contexts; it lets the user join an existing session, start a new one with optional project, template, network-identity, egress-profile, and reusable-context bindings, inspect project/admission metadata on live rows and session detail views, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
 - docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
 - browser-context retention cleanup is metadata-driven per context and removes expired reusable profile data only when the runtime manager confirms there is no active writer
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
@@ -538,11 +544,12 @@ The supported local operator CLI lives in
 `code/web/bpane-client/scripts/bpane-cli.mjs`, is exposed as the package binary
 `bpane`, and has a repo-level wrapper at `scripts/bpane`.
 
-- Commands cover profile inspection/init, egress-profile create/list/get,
-  session create/list/get/status with network-identity options, access-ticket
-  and automation-access minting, connection disconnect, stop, kill, and bounded
-  cleanup. Egress-profile create/update commands can attach a proxy-auth
-  credential binding with `--proxy-credential-binding-id`.
+- Commands cover profile inspection/init, project create/list/get/usage/update/archive,
+  egress-profile create/list/get, session create/list/get/status with project
+  and network-identity options, access-ticket and automation-access minting,
+  connection disconnect, stop, kill, and bounded cleanup. Egress-profile
+  create/update commands can attach a proxy-auth credential binding with
+  `--proxy-credential-binding-id`.
 - `deploy/examples/egress-observer` provides local Squid forward-proxy
   examples for metadata-only access-log observation, session/container IP
   correlation, and authenticated proxy validation, plus a mitmproxy
@@ -809,10 +816,12 @@ more custom code and therefore more surface area for bugs.
   workloads in production, this matters.
 
 - **Production operations are still limited.** The gateway now has a durable
-  owner-scoped control plane, docker-backed runtime assignments, and
-  profile-backed reconnect/release semantics. It is still not an HA production
-  control plane: backup/restore, zero-downtime upgrades, multi-node runtime
-  scheduling, and full enterprise governance remain future work.
+  owner-scoped control plane, project-scoped active-session admission,
+  docker-backed runtime assignments, and profile-backed reconnect/release
+  semantics. It is still not an HA production control plane: project queueing,
+  cross-resource project quotas, backup/restore, zero-downtime upgrades,
+  multi-node runtime scheduling, and full enterprise governance remain future
+  work.
 
 - **No end-to-end testing of the visual pipeline.** The protocol has unit tests
   and integration tests for framing. The tile compositor has unit tests. But

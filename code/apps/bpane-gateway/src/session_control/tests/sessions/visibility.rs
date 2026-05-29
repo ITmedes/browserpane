@@ -10,6 +10,7 @@ async fn in_memory_store_scopes_sessions_to_owner() {
         .create_session(
             &alpha,
             CreateSessionRequest {
+                project_id: None,
                 template_id: Some("default".to_string()),
                 browser_context: None,
                 network_identity: None,

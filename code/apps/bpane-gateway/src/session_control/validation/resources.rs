@@ -58,6 +58,54 @@ pub(in crate::session_control) fn validate_browser_context_request(
     Ok(())
 }
 
+pub(in crate::session_control) fn validate_project_request(
+    request: &PersistProjectRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "project name must not be empty".to_string(),
+        ));
+    }
+    if let Some(description) = &request.description {
+        if description.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "project description must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    for (key, value) in &request.labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "project label keys must not be empty".to_string(),
+            ));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "project label values must not be empty".to_string(),
+            ));
+        }
+    }
+    if request.quotas.max_active_sessions == Some(0) {
+        return Err(SessionStoreError::InvalidRequest(
+            "project quotas.max_active_sessions must be greater than zero when provided"
+                .to_string(),
+        ));
+    }
+    if request.quotas.max_active_workflow_runs == Some(0) {
+        return Err(SessionStoreError::InvalidRequest(
+            "project quotas.max_active_workflow_runs must be greater than zero when provided"
+                .to_string(),
+        ));
+    }
+    if request.quotas.max_retained_storage_bytes == Some(0) {
+        return Err(SessionStoreError::InvalidRequest(
+            "project quotas.max_retained_storage_bytes must be greater than zero when provided"
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
 pub(in crate::session_control) fn validate_credential_binding_request(
     request: &PersistCredentialBindingRequest,
 ) -> Result<(), SessionStoreError> {

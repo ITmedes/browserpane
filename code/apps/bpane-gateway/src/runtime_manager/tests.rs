@@ -341,6 +341,8 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
     let session = StoredSession {
         id: session_id,
         state: SessionLifecycleState::Ready,
+        project_id: None,
+        admission: crate::session_control::ProjectAdmissionDecision::owner_scope_unbounded(now),
         template_id: None,
         browser_context: SessionBrowserContextResource {
             mode: SessionBrowserContextMode::Fresh,
@@ -615,6 +617,7 @@ async fn docker_runtime_resolves_secret_backed_proxy_auth_for_launch() {
         .create_session(
             &principal,
             CreateSessionRequest {
+                project_id: None,
                 network_identity: Some(SessionNetworkIdentity {
                     egress_profile_id: Some(profile.id),
                     ..Default::default()
@@ -865,6 +868,7 @@ async fn docker_runtime_rejects_parallel_writer_for_reusable_browser_context() {
         .await
         .unwrap();
     let create_request = || CreateSessionRequest {
+        project_id: None,
         browser_context: Some(SessionBrowserContextRequest {
             mode: SessionBrowserContextMode::Reusable,
             context_id: Some(context.id),

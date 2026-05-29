@@ -8,6 +8,7 @@
     CreateBrowserContextCommand,
     CreateSessionCommand,
     EgressProfileResource,
+    ProjectResource,
     SessionResource,
     SessionTemplateResource,
   } from '../api/control-types';
@@ -23,14 +24,17 @@
 
   let { controlClient }: AdminSessionListRouteProps = $props();
   let sessions = $state<readonly SessionResource[]>([]);
+  let projects = $state<readonly ProjectResource[]>([]);
   let sessionTemplates = $state<readonly SessionTemplateResource[]>([]);
   let browserContexts = $state<readonly BrowserContextResource[]>([]);
   let egressProfiles = $state<readonly EgressProfileResource[]>([]);
   let loading = $state(false);
+  let projectsLoading = $state(false);
   let templatesLoading = $state(false);
   let browserContextsLoading = $state(false);
   let egressProfilesLoading = $state(false);
   let error = $state<string | null>(null);
+  let projectError = $state<string | null>(null);
   let templateError = $state<string | null>(null);
   let browserContextError = $state<string | null>(null);
   let egressProfileError = $state<string | null>(null);
@@ -52,11 +56,24 @@
   const filteredSessions = $derived(filterSessions(viewModel.sessions, search));
 
   onMount(() => {
+    void loadProjects();
     void loadSessionTemplates();
     void loadBrowserContexts();
     void loadEgressProfiles();
     void loadSessions(false);
   });
+
+  async function loadProjects(): Promise<void> {
+    projectsLoading = true;
+    projectError = null;
+    try {
+      projects = (await controlClient.listProjects()).projects;
+    } catch (loadError) {
+      projectError = errorMessage(loadError);
+    } finally {
+      projectsLoading = false;
+    }
+  }
 
   async function loadSessionTemplates(): Promise<void> {
     templatesLoading = true;
@@ -184,6 +201,8 @@
       session.presence,
       session.template,
       session.browserContext,
+      session.project,
+      session.admission,
       session.networkIdentity,
       session.egress,
       session.mcpDelegation,
@@ -302,12 +321,15 @@
 
   <SessionCreateConfigurator
     {sessionTemplates}
+    {projects}
     {browserContexts}
     {egressProfiles}
     {templatesLoading}
+    {projectsLoading}
     {browserContextsLoading}
     {egressProfilesLoading}
     {templateError}
+    {projectError}
     {browserContextError}
     {egressProfileError}
     loading={loading}
@@ -358,7 +380,7 @@
           <span class="grid min-w-0 gap-1">
             <strong class="truncate font-mono text-sm" title={session.id}>{session.id}</strong>
             <span class="truncate text-xs text-admin-ink/58">
-              <span data-testid="session-inspector-row-template">{session.template}</span> | <span data-testid="session-inspector-row-browser-context">{session.browserContext}</span> | <span data-testid="session-inspector-row-network-identity">{session.networkIdentity}</span> | <span data-testid="session-inspector-row-egress">{session.egress}</span> | {session.mcpDelegation} | {session.labels} | updated {session.updatedAt}
+              <span data-testid="session-inspector-row-project">{session.project}</span> | <span data-testid="session-inspector-row-admission">{session.admission}</span> | <span data-testid="session-inspector-row-template">{session.template}</span> | <span data-testid="session-inspector-row-browser-context">{session.browserContext}</span> | <span data-testid="session-inspector-row-network-identity">{session.networkIdentity}</span> | <span data-testid="session-inspector-row-egress">{session.egress}</span> | {session.mcpDelegation} | {session.labels} | updated {session.updatedAt}
             </span>
           </span>
           <span class="grid justify-items-end gap-1 text-xs text-[#c1d0e8]">

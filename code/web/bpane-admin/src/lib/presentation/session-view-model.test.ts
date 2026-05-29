@@ -43,6 +43,21 @@ const EGRESS_DIAGNOSTICS: EgressDiagnosticsResource = {
 const SESSION: SessionResource = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
   state: 'active',
+  project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+  project: {
+    id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+    name: 'Support tenant',
+    state: 'active',
+  },
+  admission: {
+    state: 'allowed',
+    reason_code: 'project_quota_available',
+    message: 'Project admission allowed.',
+    project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+    active_sessions: 1,
+    max_active_sessions: 2,
+    checked_at: '2026-05-04T19:00:00Z',
+  },
   template_id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
   browser_context: {
     mode: 'reusable',
@@ -136,6 +151,21 @@ const TEMPLATE = {
 
 const STATUS: SessionStatus = {
   state: 'active',
+  project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+  project: {
+    id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+    name: 'Support tenant',
+    state: 'active',
+  },
+  admission: {
+    state: 'allowed',
+    reason_code: 'project_quota_available',
+    message: 'Project admission allowed.',
+    project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+    active_sessions: 1,
+    max_active_sessions: 2,
+    checked_at: '2026-05-04T19:00:00Z',
+  },
   runtime_state: 'running',
   runtime_resume_mode: 'exact_live',
   presence_state: 'connected',
@@ -217,6 +247,9 @@ describe('SessionViewModelBuilder', () => {
       runtime: 'running',
       presence: 'connected',
       clients: 1,
+      project: 'Support tenant (019df811...7f19)',
+      projectId: SESSION.project_id,
+      admission: 'allowed | project_quota_available 1/2',
       template: 'Support triage (019df5c8...21c0)',
       templateId: TEMPLATE.id,
       browserContext: 'Support profile (019df7be...4a72)',
@@ -263,6 +296,16 @@ describe('SessionViewModelBuilder', () => {
       label: 'mcp owner',
       value: 'yes',
       testId: 'session-mcp-owner',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'project',
+      value: 'Support tenant (019df811...7f19)',
+      testId: 'session-project',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'admission',
+      value: 'allowed | project_quota_available 1/2',
+      testId: 'session-admission',
     });
     expect(viewModel.facts).toContainEqual({
       label: 'template',

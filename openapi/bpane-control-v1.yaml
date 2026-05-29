@@ -5,7 +5,7 @@ info:
   description: >
     Frozen v1 owner-scoped BrowserPane control-plane contract. This document
     covers the canonical `/api/v1` surfaces for sessions, session templates,
-    browser contexts, egress profiles, automation tasks, recordings, workflows,
+    projects, browser contexts, egress profiles, automation tasks, recordings, workflows,
     reusable files, credentials, approved extensions, and admin realtime snapshots. Legacy global compatibility routes such as
     `/api/session/status` and `/api/session/mcp-owner` are intentionally excluded
     from this freeze and remain transitional.
@@ -18,6 +18,7 @@ tags:
   - name: Admin Events
   - name: Sessions
   - name: Session Templates
+  - name: Projects
   - name: Egress Profiles
   - name: Browser Contexts
   - name: Session Runtime
@@ -424,6 +425,114 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/projects:
+    get:
+      tags: [Projects]
+      summary: List owner-scoped projects
+      operationId: listProjects
+      responses:
+        '200':
+          description: Owner-scoped project list with current usage counters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Projects]
+      summary: Create an owner-scoped project
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertProjectRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/projects/{project_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      summary: Fetch one owner-scoped project
+      operationId: getProject
+      responses:
+        '200':
+          description: Project with current usage counters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    put:
+      tags: [Projects]
+      summary: Replace one owner-scoped project
+      operationId: updateProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertProjectRequest'
+      responses:
+        '200':
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/projects/{project_id}/usage:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      summary: Fetch current sanitized usage counters for one project
+      operationId: getProjectUsage
+      responses:
+        '200':
+          description: Project usage counters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectUsageResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/egress-profiles:
@@ -2647,6 +2756,13 @@ components:
         format: uuid
     SessionTemplateId:
       name: template_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProjectId:
+      name: project_id
       in: path
       required: true
       schema:
@@ -5145,6 +5261,191 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BrowserContextResource'
+    ProjectState:
+      type: string
+      enum:
+        - active
+        - archived
+    ProjectQuotas:
+      type: object
+      additionalProperties: false
+      properties:
+        max_active_sessions:
+          type: integer
+          minimum: 1
+          nullable: true
+        max_active_workflow_runs:
+          type: integer
+          minimum: 1
+          nullable: true
+        max_retained_storage_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+    ProjectUsageResource:
+      type: object
+      required:
+        - project_id
+        - active_sessions
+        - max_active_sessions
+        - active_workflow_runs
+        - max_active_workflow_runs
+        - retained_storage_bytes
+        - max_retained_storage_bytes
+        - observed_at
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        active_sessions:
+          type: integer
+          minimum: 0
+        max_active_sessions:
+          type: integer
+          minimum: 1
+          nullable: true
+        active_workflow_runs:
+          type: integer
+          minimum: 0
+        max_active_workflow_runs:
+          type: integer
+          minimum: 1
+          nullable: true
+        retained_storage_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        max_retained_storage_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+        observed_at:
+          type: string
+          format: date-time
+    UpsertProjectRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        quotas:
+          $ref: '#/components/schemas/ProjectQuotas'
+        state:
+          $ref: '#/components/schemas/ProjectState'
+    ProjectResource:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - labels
+        - quotas
+        - state
+        - usage
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        quotas:
+          $ref: '#/components/schemas/ProjectQuotas'
+        state:
+          $ref: '#/components/schemas/ProjectState'
+        usage:
+          $ref: '#/components/schemas/ProjectUsageResource'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SessionProjectResource:
+      type: object
+      required:
+        - id
+        - name
+        - state
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        state:
+          $ref: '#/components/schemas/ProjectState'
+    ProjectListResponse:
+      type: object
+      required: [projects]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectResource'
+    ProjectAdmissionState:
+      type: string
+      enum:
+        - allowed
+        - queued
+        - rejected
+    ProjectAdmissionReasonCode:
+      type: string
+      enum:
+        - owner_scope_unbounded
+        - project_quota_available
+        - active_session_quota_exceeded
+        - project_archived
+    ProjectAdmissionDecision:
+      type: object
+      required:
+        - state
+        - reason_code
+        - message
+        - project_id
+        - active_sessions
+        - max_active_sessions
+        - checked_at
+      properties:
+        state:
+          $ref: '#/components/schemas/ProjectAdmissionState'
+        reason_code:
+          $ref: '#/components/schemas/ProjectAdmissionReasonCode'
+        message:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        active_sessions:
+          type: integer
+          minimum: 0
+          nullable: true
+        max_active_sessions:
+          type: integer
+          minimum: 1
+          nullable: true
+        checked_at:
+          type: string
+          format: date-time
     EgressProfileState:
       type: string
       enum:
@@ -5586,6 +5887,9 @@ components:
       required:
         - id
         - state
+        - project_id
+        - project
+        - admission
         - template_id
         - browser_context
         - network_identity
@@ -5614,6 +5918,16 @@ components:
           format: uuid
         state:
           $ref: '#/components/schemas/SessionLifecycleState'
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
+        admission:
+          $ref: '#/components/schemas/ProjectAdmissionDecision'
         template_id:
           type: string
           nullable: true
@@ -5679,6 +5993,10 @@ components:
       type: object
       additionalProperties: false
       properties:
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
         template_id:
           type: string
           nullable: true
@@ -5713,6 +6031,10 @@ components:
       type: object
       additionalProperties: false
       properties:
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
         owner_mode:
           $ref: '#/components/schemas/SessionOwnerMode'
         viewport:
@@ -6145,6 +6467,9 @@ components:
       type: object
       required:
         - state
+        - project_id
+        - project
+        - admission
         - runtime_state
         - runtime_resume_mode
         - presence_state
@@ -6169,6 +6494,16 @@ components:
       properties:
         state:
           $ref: '#/components/schemas/SessionLifecycleState'
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
+        admission:
+          $ref: '#/components/schemas/ProjectAdmissionDecision'
         runtime_state:
           $ref: '#/components/schemas/SessionRuntimeState'
         runtime_resume_mode:
