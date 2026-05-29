@@ -98,26 +98,10 @@ async function run() {
       throw new Error(`CLI identity me returned unexpected data: ${JSON.stringify(identity)}`);
     }
 
-    const servicePrincipal = runBpaneCli([
-      'service-principal',
-      'create',
-      `mcp-bridge-${runLabel}`,
-      '--description',
-      'Operator CLI smoke service principal',
-      '--client-id',
-      bridge.clientId,
-      '--issuer',
-      bridge.issuer,
-      '--label',
-      'suite=bpane-cli-smoke',
-      '--label',
-      `run_id=${runLabel}`,
-      '--scope',
-      'session:delegate',
-    ], cliEnv);
+    const servicePrincipal = ensureBridgeServicePrincipal(cliEnv, bridge, runLabel);
     servicePrincipalId = servicePrincipal.id;
     if (!servicePrincipalId || servicePrincipal.client_id !== bridge.clientId || servicePrincipal.state !== 'active') {
-      throw new Error(`CLI service-principal create returned unexpected data: ${JSON.stringify(servicePrincipal)}`);
+      throw new Error(`CLI service-principal ensure returned unexpected data: ${JSON.stringify(servicePrincipal)}`);
     }
 
     const listedServicePrincipals = runBpaneCli(['service-principal', 'list'], cliEnv);
@@ -702,6 +686,45 @@ async function loadMcpBridgeConfig(options) {
     throw new Error('Operator CLI smoke requires auth-config mcpBridge metadata.');
   }
   return bridge;
+}
+
+function ensureBridgeServicePrincipal(cliEnv, bridge, runLabel) {
+  const listed = runBpaneCli(['service-principal', 'list'], cliEnv);
+  const existing = listed.service_principals?.find((item) => (
+    item.client_id === bridge.clientId && item.issuer === bridge.issuer
+  ));
+  const args = existing
+    ? [
+        'service-principal',
+        'update',
+        existing.id,
+        '--name',
+        `mcp-bridge-${runLabel}`,
+        '--description',
+        'Operator CLI smoke service principal',
+        '--state',
+        'active',
+      ]
+    : [
+        'service-principal',
+        'create',
+        `mcp-bridge-${runLabel}`,
+        '--description',
+        'Operator CLI smoke service principal',
+        '--client-id',
+        bridge.clientId,
+        '--issuer',
+        bridge.issuer,
+      ];
+  return runBpaneCli([
+    ...args,
+    '--label',
+    'suite=bpane-cli-smoke',
+    '--label',
+    `run_id=${runLabel}`,
+    '--scope',
+    'session:delegate',
+  ], cliEnv);
 }
 
 async function clearMcpBridge(options) {
