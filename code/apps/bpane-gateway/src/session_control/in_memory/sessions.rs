@@ -37,10 +37,76 @@ impl InMemorySessionStore {
         }
 
         let now = Utc::now();
+        let admission = if let Some(project_id) = request.project_id {
+            let project = self
+                .projects
+                .lock()
+                .await
+                .iter()
+                .find(|project| {
+                    project.id == project_id
+                        && project.owner_subject == principal.subject
+                        && project.owner_issuer == principal.issuer
+                })
+                .cloned()
+                .ok_or_else(|| {
+                    SessionStoreError::NotFound(format!("project {project_id} not found"))
+                })?;
+            let active_project_sessions = sessions
+                .iter()
+                .filter(|session| {
+                    session.project_id == Some(project_id) && session.state.is_runtime_candidate()
+                })
+                .count() as u32;
+            if project.state == ProjectState::Archived {
+                let decision = ProjectAdmissionDecision::rejected(
+                    project_id,
+                    ProjectAdmissionReasonCode::ProjectArchived,
+                    format!("project {project_id} is archived"),
+                    active_project_sessions,
+                    project.quotas.max_active_sessions,
+                    now,
+                );
+                return Err(SessionStoreError::Conflict(format!(
+                    "project admission rejected: {}: {}",
+                    decision.reason_code.as_str(),
+                    decision.message
+                )));
+            }
+            if let Some(max_active_sessions) = project.quotas.max_active_sessions {
+                if active_project_sessions >= max_active_sessions {
+                    let decision = ProjectAdmissionDecision::rejected(
+                        project_id,
+                        ProjectAdmissionReasonCode::ActiveSessionQuotaExceeded,
+                        format!(
+                            "project {project_id} active session quota is exhausted ({active_project_sessions}/{max_active_sessions})"
+                        ),
+                        active_project_sessions,
+                        Some(max_active_sessions),
+                        now,
+                    );
+                    return Err(SessionStoreError::Conflict(format!(
+                        "project admission rejected: {}: {}",
+                        decision.reason_code.as_str(),
+                        decision.message
+                    )));
+                }
+            }
+            ProjectAdmissionDecision::project_quota_available(
+                project_id,
+                active_project_sessions.saturating_add(1),
+                project.quotas.max_active_sessions,
+                now,
+            )
+        } else {
+            ProjectAdmissionDecision::owner_scope_unbounded(now)
+        };
         let browser_context = request.browser_context.unwrap_or_default();
         let session = StoredSession {
             id: Uuid::now_v7(),
             state: SessionLifecycleState::Ready,
+            project_id: request.project_id,
+            admission,
             template_id: request.template_id,
             browser_context: SessionBrowserContextResource {
                 mode: browser_context.mode,

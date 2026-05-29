@@ -4,6 +4,7 @@ use serde_json::json;
 #[test]
 fn rejects_non_object_integration_context() {
     let error = validate_create_request(&CreateSessionRequest {
+        project_id: None,
         template_id: None,
         browser_context: None,
         network_identity: None,
@@ -24,6 +25,7 @@ fn rejects_non_object_integration_context() {
 #[test]
 fn rejects_zero_recording_retention() {
     let error = validate_create_request(&CreateSessionRequest {
+        project_id: None,
         template_id: None,
         browser_context: None,
         network_identity: None,
@@ -110,6 +112,7 @@ fn accepts_valid_session_template_defaults() {
         description: Some("Support debug sessions".to_string()),
         labels: HashMap::from([("team".to_string(), "support".to_string())]),
         defaults: SessionTemplateDefaults {
+            project_id: None,
             owner_mode: Some(SessionOwnerMode::Collaborative),
             viewport: Some(SessionViewport {
                 width: 1440,
@@ -132,6 +135,7 @@ fn accepts_valid_session_template_defaults() {
 #[test]
 fn validates_network_identity_and_egress_profile_shapes() {
     validate_create_request(&CreateSessionRequest {
+        project_id: None,
         network_identity: Some(SessionNetworkIdentity {
             locale: Some("de-DE".to_string()),
             languages: vec!["de-DE".to_string(), "en-US".to_string()],
@@ -176,6 +180,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
         },
     ] {
         let error = validate_create_request(&CreateSessionRequest {
+            project_id: None,
             network_identity: Some(identity),
             ..CreateSessionRequest::default()
         })

@@ -8,6 +8,8 @@ import {
   isLocalTlsInterceptorEgressPreset,
   networkIdentitySummary,
   parseSessionCreateLabels,
+  projectOptionLabel,
+  projectUsageSummary,
   sessionBrowserContextSummary,
   sessionTemplateDefaultsSummary,
   validateBrowserContextCreateForm,
@@ -94,6 +96,31 @@ const EGRESS_PROFILE = {
   },
   created_at: '2026-05-04T18:45:00Z',
   updated_at: '2026-05-04T18:45:00Z',
+} as const;
+
+const PROJECT = {
+  id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+  name: 'Support tenant',
+  description: 'Support tenant project',
+  labels: { tenant: 'support' },
+  quotas: {
+    max_active_sessions: 2,
+    max_active_workflow_runs: 4,
+    max_retained_storage_bytes: 1073741824,
+  },
+  state: 'active',
+  usage: {
+    project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+    active_sessions: 1,
+    max_active_sessions: 2,
+    active_workflow_runs: 1,
+    max_active_workflow_runs: 4,
+    retained_storage_bytes: 268435456,
+    max_retained_storage_bytes: 1073741824,
+    observed_at: '2026-05-04T18:50:00Z',
+  },
+  created_at: '2026-05-04T18:50:00Z',
+  updated_at: '2026-05-04T18:50:00Z',
 } as const;
 
 describe('session create configurator', () => {
@@ -213,6 +240,57 @@ describe('session create configurator', () => {
     });
     expect(validation.preview).toContain('"template_id"');
     expect(validation.preview).not.toContain('"owner_mode"');
+  });
+
+  it('adds selected project admission scope to the create-session payload', () => {
+    const validation = validateSessionCreateForm({
+      projectId: PROJECT.id,
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      projects: [PROJECT],
+    });
+
+    expect(validation.errors).toEqual([]);
+    expect(validation.command).toEqual({
+      project_id: PROJECT.id,
+      owner_mode: 'collaborative',
+    });
+    expect(validation.preview).toContain('"project_id"');
+    expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, workflows=1/4)');
+    expect(projectUsageSummary(PROJECT)).toBe(
+      'state=active | sessions=1/2 | workflow_runs=1/4 | storage=268435456/1073741824 | labels=tenant=support',
+    );
+  });
+
+  it('rejects unavailable or archived project selections', () => {
+    const archivedProject = {
+      ...PROJECT,
+      state: 'archived',
+    } as const;
+
+    const missing = validateSessionCreateForm({
+      projectId: '019df811-91a5-7b00-9fe5-93403ea57f20',
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      projects: [PROJECT],
+    });
+    const archived = validateSessionCreateForm({
+      projectId: archivedProject.id,
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      projects: [archivedProject],
+    });
+
+    expect(missing.command).toBeNull();
+    expect(missing.errors).toContain('Selected project is not available.');
+    expect(archived.command).toBeNull();
+    expect(archived.errors).toContain('Selected project is archived.');
   });
 
   it('adds reusable browser context bindings to the create-session payload', () => {
@@ -357,6 +435,7 @@ describe('session create configurator', () => {
       labels: {},
       defaults: {
         owner_mode: 'collaborative',
+        project_id: PROJECT.id,
         viewport: { width: 1440, height: 900 },
         idle_timeout_sec: 1800,
         labels: { team: 'support' },
@@ -373,7 +452,7 @@ describe('session create configurator', () => {
       created_at: '2026-05-04T18:00:00Z',
       updated_at: '2026-05-04T18:00:00Z',
     })).toBe(
-      'owner=collaborative | idle=1800s | viewport=1440x900 | labels=team=support | integration=ticket | recording=manual | locale=de-DE | languages=de-DE | timezone=Europe/Berlin | egress=019df7be...4a73',
+      'owner=collaborative | project=019df811...7f19 | idle=1800s | viewport=1440x900 | labels=team=support | integration=ticket | recording=manual | locale=de-DE | languages=de-DE | timezone=Europe/Berlin | egress=019df7be...4a73',
     );
     expect(networkIdentitySummary({
       locale: 'de-DE',

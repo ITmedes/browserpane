@@ -15,6 +15,7 @@ async fn in_memory_store_persists_runtime_assignments_and_can_clear_them() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -71,6 +72,7 @@ async fn in_memory_store_persists_recording_worker_assignments() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -141,6 +143,7 @@ async fn in_memory_store_persists_workflow_run_worker_assignments() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,

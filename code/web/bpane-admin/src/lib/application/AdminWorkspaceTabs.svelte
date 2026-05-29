@@ -22,6 +22,7 @@
     EgressDiagnosticsResource,
     EgressProfileResource,
     ImportBrowserContextCommand,
+    ProjectResource,
     SessionResource,
     SessionTemplateResource,
   } from '../api/control-types';
@@ -57,16 +58,19 @@
     readonly workflowClient: WorkflowClient;
     readonly selectedSession: SessionResource | null;
     readonly sessions?: readonly SessionResource[];
+    readonly projects?: readonly ProjectResource[];
     readonly sessionTemplates?: readonly SessionTemplateResource[];
     readonly browserContexts?: readonly BrowserContextResource[];
     readonly egressProfiles?: readonly EgressProfileResource[];
     readonly templatesLoading?: boolean;
+    readonly projectsLoading?: boolean;
     readonly browserContextsLoading?: boolean;
     readonly egressProfilesLoading?: boolean;
     readonly cloningContextId?: string | null;
     readonly exportingContextId?: string | null;
     readonly importingBrowserContext?: boolean;
     readonly templateError?: string | null;
+    readonly projectError?: string | null;
     readonly browserContextError?: string | null;
     readonly egressProfileError?: string | null;
     readonly mcpBridge: McpBridgeConfig | null;
@@ -188,13 +192,16 @@
         {#if activePanel.id === 'sessions'}
         <SessionListPanel
           viewModel={props.sessionListViewModel}
+          projects={props.projects ?? []}
           sessionTemplates={props.sessionTemplates ?? []}
           browserContexts={props.browserContexts ?? []}
           egressProfiles={props.egressProfiles ?? []}
           templatesLoading={props.templatesLoading ?? false}
+          projectsLoading={props.projectsLoading ?? false}
           browserContextsLoading={props.browserContextsLoading ?? false}
           egressProfilesLoading={props.egressProfilesLoading ?? false}
           templateError={props.templateError ?? null}
+          projectError={props.projectError ?? null}
           browserContextError={props.browserContextError ?? null}
           egressProfileError={props.egressProfileError ?? null}
           connected={props.browserConnected}

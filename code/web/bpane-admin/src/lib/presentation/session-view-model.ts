@@ -19,6 +19,9 @@ export type SessionListItemViewModel = {
   readonly updatedAt: string;
   readonly template: string;
   readonly templateId: string | null;
+  readonly project: string;
+  readonly projectId: string | null;
+  readonly admission: string;
   readonly browserContext: string;
   readonly browserContextId: string | null;
   readonly networkIdentity: string;
@@ -132,6 +135,16 @@ export class SessionViewModelBuilder {
       facts: [
         { label: 'state', value: session.state, testId: 'session-state' },
         {
+          label: 'project',
+          value: projectLabel(session),
+          testId: 'session-project',
+        },
+        {
+          label: 'admission',
+          value: admissionLabel(status?.admission ?? session.admission),
+          testId: 'session-admission',
+        },
+        {
           label: 'template',
           value: templateLabel(session, templateLookup),
           testId: 'session-template',
@@ -210,6 +223,9 @@ function toListItem(
     updatedAt: session.updated_at,
     template: templateLabel(session, templates),
     templateId: session.template_id ?? null,
+    project: projectLabel(session),
+    projectId: session.project_id ?? null,
+    admission: admissionLabel(session.admission),
     browserContext: browserContextLabel(session, browserContexts),
     browserContextId: session.browser_context?.context_id ?? null,
     networkIdentity: networkIdentityLabel(session.network_identity),
@@ -243,6 +259,7 @@ function statusFacts(status: SessionStatus | null): SessionFactViewModel[] {
   }
   return [
     { label: 'status state', value: status.state },
+    { label: 'status admission', value: admissionLabel(status.admission), testId: 'session-status-admission' },
     { label: 'resolution', value: `${status.resolution[0]}x${status.resolution[1]}` },
     { label: 'mcp owner', value: yesNo(status.mcp_owner), testId: 'session-mcp-owner' },
     { label: 'exclusive owner', value: yesNo(status.exclusive_browser_owner) },
@@ -392,6 +409,28 @@ function templateLabel(
   }
   const template = templates.get(templateId);
   return template ? `${template.name} (${shortId(template.id)})` : `Template ${shortId(templateId)}`;
+}
+
+function projectLabel(session: SessionResource): string {
+  if (session.project) {
+    const stateSuffix = session.project.state === 'active' ? '' : `, ${session.project.state}`;
+    return `${session.project.name} (${shortId(session.project.id)}${stateSuffix})`;
+  }
+  if (session.project_id) {
+    return `Project ${shortId(session.project_id)}`;
+  }
+  return 'No project';
+}
+
+function admissionLabel(admission: SessionResource['admission'] | SessionStatus['admission']): string {
+  if (!admission) {
+    return 'No admission decision';
+  }
+  const usage = admission.active_sessions !== null
+    && admission.active_sessions !== undefined
+    ? ` ${admission.active_sessions}/${admission.max_active_sessions ?? 'unlimited'}`
+    : '';
+  return `${admission.state} | ${admission.reason_code}${usage}`;
 }
 
 function browserContextLabel(

@@ -9,6 +9,7 @@ async fn in_memory_store_limits_legacy_runtime_to_one_active_session() {
         .create_session(
             &alpha,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -30,6 +31,7 @@ async fn in_memory_store_limits_legacy_runtime_to_one_active_session() {
         .create_session(
             &alpha,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -71,6 +73,7 @@ async fn in_memory_store_respects_runtime_pool_capacity() {
             .create_session(
                 &alpha,
                 CreateSessionRequest {
+                    project_id: None,
                     template_id: None,
                     browser_context: None,
                     network_identity: None,
@@ -93,6 +96,7 @@ async fn in_memory_store_respects_runtime_pool_capacity() {
         .create_session(
             &alpha,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -133,6 +137,7 @@ async fn reconnect_prep_respects_runtime_pool_capacity() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -162,6 +167,7 @@ async fn reconnect_prep_respects_runtime_pool_capacity() {
         .create_session(
             &owner,
             CreateSessionRequest {
+                project_id: None,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,

@@ -5,6 +5,7 @@
     CreateBrowserContextCommand,
     CreateSessionCommand,
     EgressProfileResource,
+    ProjectResource,
     SessionTemplateResource,
   } from '../api/control-types';
   import AdminMessage from './AdminMessage.svelte';
@@ -14,13 +15,16 @@
 
   type SessionListPanelProps = {
     readonly viewModel: SessionListPanelViewModel;
+    readonly projects?: readonly ProjectResource[];
     readonly sessionTemplates?: readonly SessionTemplateResource[];
     readonly browserContexts?: readonly BrowserContextResource[];
     readonly egressProfiles?: readonly EgressProfileResource[];
     readonly templatesLoading?: boolean;
+    readonly projectsLoading?: boolean;
     readonly browserContextsLoading?: boolean;
     readonly egressProfilesLoading?: boolean;
     readonly templateError?: string | null;
+    readonly projectError?: string | null;
     readonly browserContextError?: string | null;
     readonly egressProfileError?: string | null;
     readonly connected: boolean;
@@ -35,13 +39,16 @@
 
   let {
     viewModel,
+    projects = [],
     sessionTemplates = [],
     browserContexts = [],
     egressProfiles = [],
     templatesLoading = false,
+    projectsLoading = false,
     browserContextsLoading = false,
     egressProfilesLoading = false,
     templateError = null,
+    projectError = null,
     browserContextError = null,
     egressProfileError = null,
     connected,
@@ -77,6 +84,8 @@
     {#if viewModel.selectedSession}
       <div class="grid min-w-0 grid-cols-2 gap-2 text-xs text-admin-ink/70 sm:grid-cols-3">
         {@render Fact('State', viewModel.selectedSession.lifecycle, 'session-selected-state')}
+        {@render Fact('Project', viewModel.selectedSession.project, 'session-selected-project')}
+        {@render Fact('Admission', viewModel.selectedSession.admission, 'session-selected-admission')}
         {@render Fact('Template', viewModel.selectedSession.template, 'session-selected-template')}
         {@render Fact('Context', viewModel.selectedSession.browserContext, 'session-selected-browser-context')}
         {@render Fact('Network', viewModel.selectedSession.networkIdentity, 'session-selected-network-identity')}
@@ -133,12 +142,15 @@
 
   <SessionCreateConfigurator
     {sessionTemplates}
+    {projects}
     {browserContexts}
     {egressProfiles}
     {templatesLoading}
+    {projectsLoading}
     {browserContextsLoading}
     {egressProfilesLoading}
     {templateError}
+    {projectError}
     {browserContextError}
     {egressProfileError}
     loading={viewModel.loading}

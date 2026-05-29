@@ -3,6 +3,7 @@ import type {
   CreateBrowserContextCommand,
   CreateSessionCommand,
   EgressProfileResource,
+  ProjectResource,
   SessionBrowserContextCommand,
   SessionBrowserContextMode,
   SessionNetworkIdentity,
@@ -52,6 +53,7 @@ const BROWSER_CONTEXT_MODE_VALUES = new Set<string>(
 );
 
 export type SessionCreateFormState = {
+  readonly projectId?: string;
   readonly templateId: string;
   readonly ownerMode: string;
   readonly idleTimeoutSec: string;
@@ -69,6 +71,7 @@ export type SessionCreateFormState = {
   readonly browserContextId?: string;
   readonly browserContexts?: readonly BrowserContextResource[];
   readonly egressProfiles?: readonly EgressProfileResource[];
+  readonly projects?: readonly ProjectResource[];
 };
 
 export type SessionCreateValidation = {
@@ -78,6 +81,7 @@ export type SessionCreateValidation = {
 };
 
 type MutableCreateSessionCommand = {
+  project_id?: string;
   template_id?: string;
   browser_context?: SessionBrowserContextCommand;
   network_identity?: SessionNetworkIdentity;
@@ -100,6 +104,7 @@ export type BrowserContextCreateValidation = {
 
 export function defaultSessionCreateFormState(): SessionCreateFormState {
   return {
+    projectId: '',
     templateId: '',
     ownerMode: DEFAULT_SESSION_CREATE_OWNER_MODE,
     idleTimeoutSec: '',
@@ -123,6 +128,17 @@ export function validateSessionCreateForm(
 ): SessionCreateValidation {
   const errors: string[] = [];
   const command: MutableCreateSessionCommand = {};
+  const projectId = (state.projectId ?? '').trim();
+  if (projectId) {
+    const project = state.projects?.find((entry) => entry.id === projectId) ?? null;
+    if (state.projects && state.projects.length > 0 && !project) {
+      errors.push('Selected project is not available.');
+    } else if (project?.state === 'archived') {
+      errors.push('Selected project is archived.');
+    } else {
+      command.project_id = projectId;
+    }
+  }
   const templateId = state.templateId.trim();
   if (templateId) {
     command.template_id = templateId;
@@ -395,6 +411,9 @@ export function sessionTemplateDefaultsSummary(
   if (defaults.owner_mode) {
     facts.push(`owner=${defaults.owner_mode}`);
   }
+  if (defaults.project_id) {
+    facts.push(`project=${shortId(defaults.project_id)}`);
+  }
   if (defaults.idle_timeout_sec) {
     facts.push(`idle=${defaults.idle_timeout_sec}s`);
   }
@@ -463,6 +482,34 @@ export function egressProfileOptionLabel(profile: EgressProfileResource): string
     profile.effective.bypass_rule_count > 0 ? `${profile.effective.bypass_rule_count} bypass` : null,
   ].filter(Boolean);
   return `${profile.name} (${signals.join(', ')})`;
+}
+
+export function projectOptionLabel(project: ProjectResource): string {
+  const signals = [
+    project.state,
+    `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
+    project.usage.max_active_workflow_runs !== null && project.usage.max_active_workflow_runs !== undefined
+      ? `workflows=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`
+      : null,
+  ].filter(Boolean);
+  return `${project.name} (${signals.join(', ')})`;
+}
+
+export function projectUsageSummary(project: ProjectResource | null | undefined): string {
+  if (!project) {
+    return 'No project selected; the session remains owner-scoped.';
+  }
+  const facts = [
+    `state=${project.state}`,
+    `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
+    `workflow_runs=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`,
+    `storage=${usageFraction(project.usage.retained_storage_bytes, project.usage.max_retained_storage_bytes)}`,
+  ];
+  const labels = Object.entries(project.labels).sort(([left], [right]) => left.localeCompare(right));
+  if (labels.length > 0) {
+    facts.push(`labels=${labels.map(([key, value]) => `${key}=${value}`).join(',')}`);
+  }
+  return facts.join(' | ');
 }
 
 export function egressProfileKind(profile: EgressProfileResource): 'tls_interceptor' | 'proxy' | 'other' {
@@ -575,6 +622,10 @@ function formatBytes(value: number): string {
     return `${kib}KiB`;
   }
   return `${value}B`;
+}
+
+function usageFraction(value: number, max: number | null | undefined): string {
+  return max === null || max === undefined ? `${value}/unlimited` : `${value}/${max}`;
 }
 
 function formatDuration(seconds: number): string {

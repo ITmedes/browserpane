@@ -23,6 +23,66 @@ impl SessionRepository<'_> {
 
         let viewport = request.viewport.unwrap_or_default();
         let now = Utc::now();
+        let admission = if let Some(project_id) = request.project_id {
+            let project = self
+                .load_project_for_owner_in_transaction(&transaction, principal, project_id)
+                .await?
+                .ok_or_else(|| {
+                    SessionStoreError::NotFound(format!("project {project_id} not found"))
+                })?;
+            let active_project_sessions = self
+                .count_active_sessions_for_project_in_transaction(
+                    &transaction,
+                    principal,
+                    project_id,
+                )
+                .await?;
+            if project.state == ProjectState::Archived {
+                let decision = ProjectAdmissionDecision::rejected(
+                    project_id,
+                    ProjectAdmissionReasonCode::ProjectArchived,
+                    format!("project {project_id} is archived"),
+                    active_project_sessions,
+                    project.quotas.max_active_sessions,
+                    now,
+                );
+                return Err(SessionStoreError::Conflict(format!(
+                    "project admission rejected: {}: {}",
+                    decision.reason_code.as_str(),
+                    decision.message
+                )));
+            }
+            if let Some(max_active_sessions) = project.quotas.max_active_sessions {
+                if active_project_sessions >= max_active_sessions {
+                    let decision = ProjectAdmissionDecision::rejected(
+                        project_id,
+                        ProjectAdmissionReasonCode::ActiveSessionQuotaExceeded,
+                        format!(
+                            "project {project_id} active session quota is exhausted ({active_project_sessions}/{max_active_sessions})"
+                        ),
+                        active_project_sessions,
+                        Some(max_active_sessions),
+                        now,
+                    );
+                    return Err(SessionStoreError::Conflict(format!(
+                        "project admission rejected: {}: {}",
+                        decision.reason_code.as_str(),
+                        decision.message
+                    )));
+                }
+            }
+            ProjectAdmissionDecision::project_quota_available(
+                project_id,
+                active_project_sessions.saturating_add(1),
+                project.quotas.max_active_sessions,
+                now,
+            )
+        } else {
+            ProjectAdmissionDecision::owner_scope_unbounded(now)
+        };
+        let admission_value = serde_json::to_value(&admission).map_err(|error| {
+            SessionStoreError::Backend(format!("failed to encode session admission: {error}"))
+        })?;
         let labels_value = json_labels(&request.labels);
         let extensions_value = json_applied_extensions(&request.extensions)?;
         let recording_value = json_recording_policy(&request.recording)?;
@@ -44,6 +104,8 @@ impl SessionRepository<'_> {
                 owner_issuer,
                 owner_display_name,
                 state,
+                project_id,
+                admission,
                 template_id,
                 browser_context_mode,
                 browser_context_id,
@@ -61,8 +123,8 @@ impl SessionRepository<'_> {
                 updated_at
             )
             VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13,
-                $14::jsonb, $15::jsonb, $16::jsonb, $17::jsonb, $18, $19, $19
+                $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, $14, $15,
+                $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $21
             )
             RETURNING
                 {SESSION_COLUMNS}
@@ -77,6 +139,8 @@ impl SessionRepository<'_> {
                     &principal.issuer,
                     &principal.display_name,
                     &SessionLifecycleState::Ready.as_str(),
+                    &request.project_id,
+                    &admission_value,
                     &request.template_id,
                     &browser_context.mode.as_str(),
                     &browser_context.context_id,

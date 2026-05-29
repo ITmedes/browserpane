@@ -13,6 +13,8 @@ const SESSION_COLUMNS: &str = r#"
     automation_owner_issuer,
     automation_owner_display_name,
     state,
+    project_id,
+    admission,
     template_id,
     browser_context_mode,
     browser_context_id,
@@ -187,5 +189,73 @@ impl SessionRepository<'_> {
             .as_ref()
             .map(|row| row.get::<_, i64>("session_count"))
             .unwrap_or(0))
+    }
+
+    async fn load_project_for_owner_in_transaction(
+        &self,
+        transaction: &Transaction<'_>,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<Option<StoredProject>, SessionStoreError> {
+        let query = r#"
+            SELECT
+                id,
+                owner_subject,
+                owner_issuer,
+                name,
+                description,
+                labels,
+                quotas,
+                state,
+                created_at,
+                updated_at
+            FROM control_projects
+            WHERE id = $1
+              AND owner_subject = $2
+              AND owner_issuer = $3
+            FOR UPDATE
+        "#;
+        let row = transaction
+            .query_opt(query, &[&project_id, &principal.subject, &principal.issuer])
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to load project for admission: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_project).transpose()
+    }
+
+    async fn count_active_sessions_for_project_in_transaction(
+        &self,
+        transaction: &Transaction<'_>,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        let row = transaction
+            .query_opt(
+                r#"
+                SELECT COUNT(*)::BIGINT AS session_count
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                  AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
+                "#,
+                &[&principal.subject, &principal.issuer, &project_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to count project active sessions for admission: {error}"
+                ))
+            })?;
+        let count = row
+            .as_ref()
+            .map(|row| row.get::<_, i64>("session_count"))
+            .unwrap_or(0);
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "active project session count exceeded u32 range: {error}"
+            ))
+        })
     }
 }

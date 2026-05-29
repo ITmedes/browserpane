@@ -23,10 +23,10 @@ use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectT
 use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig,
     EgressDiagnosticsResource, EgressProfileState, EgressProxyConfig,
-    EgressTrafficObservationConfig, SessionConnectInfo, SessionEffectiveEgress,
-    SessionLifecycleState, SessionNetworkIdentity, SessionOwnerMode, SessionRecordingFormat,
-    SessionRecordingMode, SessionResource, SessionStatusSummary, SessionStore,
-    SessionTemplateDefaults,
+    EgressTrafficObservationConfig, ProjectAdmissionDecision, ProjectQuotas, ProjectState,
+    SessionConnectInfo, SessionEffectiveEgress, SessionLifecycleState, SessionNetworkIdentity,
+    SessionOwnerMode, SessionProjectResource, SessionRecordingFormat, SessionRecordingMode,
+    SessionResource, SessionStatusSummary, SessionStore, SessionTemplateDefaults,
 };
 use crate::session_files::SessionFileBindingMode;
 use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
@@ -102,6 +102,9 @@ pub(super) const WORKFLOW_RUN_WORKSPACE_ID_HEADER: &str = "x-bpane-workflow-work
 #[derive(Serialize)]
 pub(super) struct SessionStatus {
     pub(super) state: SessionLifecycleState,
+    pub(super) project_id: Option<Uuid>,
+    pub(super) project: Option<SessionProjectResource>,
+    pub(super) admission: ProjectAdmissionDecision,
     #[serde(flatten)]
     pub(super) summary: SessionStatusSummary,
     pub(super) connections: Vec<SessionConnectionInfo>,
@@ -309,6 +312,23 @@ pub(super) struct UpsertSessionTemplateRequest {
     pub(super) labels: HashMap<String, String>,
     #[serde(default)]
     pub(super) defaults: SessionTemplateDefaults,
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpsertProjectRequest {
+    pub(super) name: String,
+    #[serde(default)]
+    pub(super) description: Option<String>,
+    #[serde(default)]
+    pub(super) labels: HashMap<String, String>,
+    #[serde(default)]
+    pub(super) quotas: ProjectQuotas,
+    #[serde(default = "default_project_state")]
+    pub(super) state: ProjectState,
+}
+
+fn default_project_state() -> ProjectState {
+    ProjectState::Active
 }
 
 #[derive(Deserialize)]

@@ -4,6 +4,7 @@ use serde_json::json;
 
 fn create_session_request() -> CreateSessionRequest {
     CreateSessionRequest {
+        project_id: None,
         template_id: None,
         browser_context: None,
         network_identity: None,

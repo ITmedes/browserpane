@@ -15,6 +15,7 @@ import type {
   CloneBrowserContextCommand,
   CreateBrowserContextCommand,
   CreateEgressProfileCommand,
+  CreateProjectCommand,
   ImportBrowserContextCommand,
   CreateSessionCommand,
   CreateFileWorkspaceCommand,
@@ -26,6 +27,9 @@ import type {
   FileWorkspaceFileResource,
   FileWorkspaceListResponse,
   FileWorkspaceResource,
+  ProjectListResponse,
+  ProjectResource,
+  ProjectUsageResource,
   SessionAccessTokenResponse,
   SessionFileBindingListResponse,
   SessionFileBindingResource,
@@ -77,6 +81,41 @@ export class ControlClient {
   async listSessions(filters: SessionListFilters = {}): Promise<SessionListResponse> {
     const payload = await this.#request('GET', buildSessionListPath(filters));
     return ControlSessionMapper.toSessionList(payload);
+  }
+
+  async listProjects(): Promise<ProjectListResponse> {
+    const payload = await this.#request('GET', '/api/v1/projects');
+    return ControlSessionMapper.toProjectList(payload);
+  }
+
+  async createProject(command: CreateProjectCommand): Promise<ProjectResource> {
+    const payload = await this.#request('POST', '/api/v1/projects', {
+      ...command,
+      labels: command.labels ?? {},
+      quotas: command.quotas ?? {},
+      state: command.state ?? 'active',
+    });
+    return ControlSessionMapper.toProjectResource(payload);
+  }
+
+  async getProject(projectId: string): Promise<ProjectResource> {
+    const payload = await this.#request('GET', `/api/v1/projects/${encodeURIComponent(projectId)}`);
+    return ControlSessionMapper.toProjectResource(payload);
+  }
+
+  async updateProject(projectId: string, command: CreateProjectCommand): Promise<ProjectResource> {
+    const payload = await this.#request('PUT', `/api/v1/projects/${encodeURIComponent(projectId)}`, {
+      ...command,
+      labels: command.labels ?? {},
+      quotas: command.quotas ?? {},
+      state: command.state ?? 'active',
+    });
+    return ControlSessionMapper.toProjectResource(payload);
+  }
+
+  async getProjectUsage(projectId: string): Promise<ProjectUsageResource> {
+    const payload = await this.#request('GET', `/api/v1/projects/${encodeURIComponent(projectId)}/usage`);
+    return ControlSessionMapper.toProjectUsage(payload);
   }
 
   async listSessionTemplates(): Promise<SessionTemplateListResponse> {

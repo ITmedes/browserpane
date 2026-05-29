@@ -82,7 +82,7 @@ Current support and scope:
 - Shared sessions: collaborative by default, intended for small curated groups rather than broadcast-scale delivery.
 - Owner/viewer mode: optional exclusive-owner mode is supported in the gateway; restricted viewers are read-only.
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
-- Control plane: owner-scoped v1 APIs now cover sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
+- Control plane: owner-scoped v1 APIs now cover projects, sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 
@@ -94,8 +94,9 @@ At a high level, BrowserPane has five responsibilities:
 2. Capture and classify that surface efficiently.
 3. Transport state, input, and media between host and browser.
 4. Render the remote session in a regular web page.
-5. Coordinate durable control-plane resources for sessions, workflows,
-   recordings, files, credentials, extensions, and automation ownership.
+5. Coordinate durable control-plane resources for projects, sessions,
+   workflows, recordings, files, credentials, extensions, and automation
+   ownership.
 
 The default local runtime looks like this:
 
@@ -121,7 +122,7 @@ bpane-gateway also talks to:
 | Project | Responsibility |
 | --- | --- |
 | `code/apps/bpane-host` | Linux host agent. Captures the desktop surface, classifies tiles, drives ROI H.264 video, emits audio, injects input, and handles clipboard, file transfer, resize, and camera ingress plumbing. |
-| `code/apps/bpane-gateway` | WebTransport entry point, shared-session coordinator, runtime lifecycle boundary, and owner-scoped control-plane API for sessions, session templates, automation tasks, recordings, workflows, files, credentials, and extensions. |
+| `code/apps/bpane-gateway` | WebTransport entry point, shared-session coordinator, runtime lifecycle boundary, and owner-scoped control-plane API for projects, sessions, session templates, automation tasks, recordings, workflows, files, credentials, and extensions. |
 | `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
 | `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes compatibility Streamable HTTP on `/mcp`, session-scoped Streamable HTTP on `/sessions/{id}/mcp`, compatibility SSE on `/sse`, session-scoped SSE on `/sessions/{id}/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
@@ -298,6 +299,11 @@ Canonical contract:
 - `GET /api/v1/session-templates`
 - `GET /api/v1/session-templates/{id}`
 - `PUT /api/v1/session-templates/{id}`
+- `POST /api/v1/projects`
+- `GET /api/v1/projects`
+- `GET /api/v1/projects/{id}`
+- `PUT /api/v1/projects/{id}`
+- `GET /api/v1/projects/{id}/usage`
 - `POST /api/v1/egress-profiles`
 - `GET /api/v1/egress-profiles`
 - `GET /api/v1/egress-profiles/{id}`
@@ -311,7 +317,7 @@ full contract is in the OpenAPI file; the route lists below call out the
 operator-facing surfaces that are most relevant for local development.
 
 Session templates store reusable defaults for session creation, including owner
-mode, viewport, idle timeout, labels, integration context, network identity, and recording policy.
+mode, project id, viewport, idle timeout, labels, integration context, network identity, and recording policy.
 Creating a session with a UUID `template_id` merges those defaults before the
 session is persisted; explicit caller fields win over template defaults.
 The admin create-session configurator follows the same rule: selecting a
@@ -320,6 +326,14 @@ explicit override, and the API payload preview shows the exact fields that will
 be sent.
 `GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
+Project resources let operators group sessions under an owner-scoped tenant,
+case, customer, or environment boundary. A project carries labels, lifecycle
+state, optional quotas such as `max_active_sessions`, and sanitized usage
+counters. Creating a session with `project_id` records the admission decision on
+the session and enforces active-session quota and archived-project checks before
+runtime launch. Session resources and `/status` include the project summary and
+admission reason so the admin live view, inspector, CLI, and API clients all
+show whether a session was admitted under a project quota or left owner-scoped.
 Network identity metadata lets callers declare locale, language preferences,
 timezone, geolocation, browser identity, user-agent override, and an
 `egress_profile_id` on either a session template or an explicit session create
@@ -521,6 +535,7 @@ Common session operations:
 ./scripts/bpane session list --state stopped --label suite=smoke --limit 5
 ./scripts/bpane session list --template-id <template-id> --label team=support
 ./scripts/bpane session create --label purpose=manual-test
+./scripts/bpane session create --project-id <project-id> --label purpose=tenant-test
 ./scripts/bpane session create --browser-context-id <context-id> --label purpose=context-test
 ./scripts/bpane session create \
   --locale de-DE \
@@ -552,6 +567,23 @@ Common session-template operations:
 ./scripts/bpane session-template get <template-id>
 ./scripts/bpane session-template update <template-id> --name customer-debug-session --default-label purpose=debug
 ./scripts/bpane session create --template-id <template-id> --label case=INC-1234
+```
+
+Common project operations:
+
+```bash
+./scripts/bpane project create support-tenant \
+  --description "Support tenant quota" \
+  --label tenant=support \
+  --max-active-sessions 3 \
+  --max-active-workflow-runs 4 \
+  --max-retained-storage-bytes 1073741824
+./scripts/bpane project list
+./scripts/bpane project get <project-id>
+./scripts/bpane project usage <project-id>
+./scripts/bpane project update <project-id> --name support-tenant --max-active-sessions 5
+./scripts/bpane project archive <project-id>
+./scripts/bpane session-template create tenant-debug-session --project-id <project-id> --default-label purpose=debug
 ```
 
 Common egress-profile operations:
@@ -697,9 +729,10 @@ destructive cleanup.
 The operator CLI integration smoke is
 `cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless`. It logs in
 through the admin app, creates a session, initializes a CLI profile, exercises
-session access/status/disconnect/stop/kill/cleanup, and validates standalone MCP
-health, authorize, set-default, doctor, preflight, repair, revoke, and
-clear-default flows.
+project/session-template/browser-context/egress catalog operations,
+session access/status/diagnostics/disconnect/stop/kill/cleanup, and validates
+standalone MCP health, authorize, set-default, doctor, preflight, repair,
+revoke, and clear-default flows.
 
 Current runtime notes:
 

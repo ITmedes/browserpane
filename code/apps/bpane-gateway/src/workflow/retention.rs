@@ -165,6 +165,7 @@ mod tests {
             .create_session(
                 &principal,
                 CreateSessionRequest {
+                    project_id: None,
                     template_id: None,
                     browser_context: None,
                     network_identity: None,
