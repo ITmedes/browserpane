@@ -16,6 +16,7 @@
     CreateSessionCommand,
     EgressDiagnosticsResource,
     EgressProfileResource,
+    IdentityAccessReviewResponse,
     ImportBrowserContextCommand,
     ProjectResource,
     SessionResource,
@@ -63,6 +64,7 @@
   let projects = $state<readonly ProjectResource[]>([]);
   let browserContexts = $state<readonly BrowserContextResource[]>([]);
   let egressProfiles = $state<readonly EgressProfileResource[]>([]);
+  let identityAccessReview = $state<IdentityAccessReviewResponse | null>(null);
   let selectedSession = $state<SessionResource | null>(null);
   let sessionsLoading = $state(false);
   let sessionsError = $state<string | null>(null);
@@ -70,6 +72,7 @@
   let projectsLoading = $state(false);
   let browserContextsLoading = $state(false);
   let egressProfilesLoading = $state(false);
+  let identityAccessReviewLoading = $state(false);
   let cloningBrowserContextId = $state<string | null>(null);
   let exportingBrowserContextId = $state<string | null>(null);
   let importingBrowserContext = $state(false);
@@ -77,6 +80,7 @@
   let projectError = $state<string | null>(null);
   let browserContextError = $state<string | null>(null);
   let egressProfileError = $state<string | null>(null);
+  let identityAccessReviewError = $state<string | null>(null);
   let globalMessage = $state<AdminMessageFeedback | null>(null);
   let pendingSelectedSessionId = $state<string | null>(null);
   let browserConnecting = $state(false);
@@ -110,6 +114,7 @@
     browserStatus, selectedSessionId: selectedSession?.id ?? null,
     sessionCount: sessions.length, browserContextCount: browserContexts.length,
     egressProfileCount: egressProfiles.length,
+    delegatedPrincipalCount: identityAccessReview?.resource_counts.delegated_principals ?? 0,
     fileCount: sessionFileCount, connected: browserConnected,
   }));
   const sessionListViewModel = $derived(SessionViewModelBuilder.list({
@@ -148,8 +153,28 @@
     void loadSessionTemplates();
     void loadBrowserContexts();
     void loadEgressProfiles();
+    void loadIdentityAccessReview();
     return () => { subscription.close(); disconnectBrowser(false); };
   });
+  async function loadIdentityAccessReview(showFeedback = false): Promise<void> {
+    identityAccessReviewLoading = true;
+    identityAccessReviewError = null;
+    try {
+      identityAccessReview = await controlClient.getIdentityAccessReview();
+      if (showFeedback) {
+        showGlobalMessage(
+          'success',
+          'Access review refreshed',
+          `${identityAccessReview.resource_counts.sessions} session${identityAccessReview.resource_counts.sessions === 1 ? '' : 's'} and ${identityAccessReview.resource_counts.delegated_principals} delegated principal${identityAccessReview.resource_counts.delegated_principals === 1 ? '' : 's'} refreshed.`,
+        );
+      }
+    } catch (error) {
+      identityAccessReviewError = errorMessage(error);
+      showGlobalMessage('warning', 'Access review unavailable', identityAccessReviewError);
+    } finally {
+      identityAccessReviewLoading = false;
+    }
+  }
   async function loadProjects(showFeedback = false): Promise<void> {
     projectsLoading = true;
     projectError = null;
@@ -323,6 +348,7 @@
       showGlobalMessage('success', 'Session created', `Created session ${shortAdminId(created.id)}.`);
       void loadProjects(false);
       void loadBrowserContexts(false);
+      void loadIdentityAccessReview(false);
       requestBrowserConnect();
     } catch (error) {
       sessionsError = errorMessage(error);
@@ -444,6 +470,7 @@
           ? await controlClient.stopSession(selectedSession.id)
           : await controlClient.killSession(selectedSession.id);
       upsertSession(updated);
+      void loadIdentityAccessReview(false);
     } catch (error) {
       sessionsError = errorMessage(error);
       throw error;
@@ -633,6 +660,7 @@
       {projects} {projectsLoading} {projectError}
       {sessions} {browserContexts} {browserContextsLoading} {browserContextError}
       {egressProfiles} {egressProfilesLoading} {egressProfileError}
+      {identityAccessReview} {identityAccessReviewLoading} {identityAccessReviewError}
       cloningContextId={cloningBrowserContextId}
       exportingContextId={exportingBrowserContextId}
       {browserPreferences} {browserConnected} {workspaceViewModel} {sessionListViewModel} {logEntries} {globalMessage}
@@ -649,6 +677,7 @@
       {importingBrowserContext}
       onRefreshBrowserContexts={loadBrowserContexts}
       onRefreshEgressProfiles={loadEgressProfiles}
+      onRefreshIdentityAccessReview={loadIdentityAccessReview}
       onDeleteBrowserContext={deleteBrowserContext}
       onSelectSessionId={selectSession} onRefreshSelectedSession={refreshSelectedSession}
       onReleaseSessionRuntime={() => runLifecycle('release')}

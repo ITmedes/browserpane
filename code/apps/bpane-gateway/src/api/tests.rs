@@ -47,6 +47,7 @@ mod browser_contexts;
 mod credential_bindings;
 mod extensions;
 mod file_workspaces;
+mod identity;
 mod network_identity;
 mod projects;
 mod recordings;

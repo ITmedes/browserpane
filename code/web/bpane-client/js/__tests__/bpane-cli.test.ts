@@ -283,6 +283,66 @@ describe('bpane operator CLI', () => {
     });
   });
 
+  it('reports the authenticated identity through the gateway API', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({
+      subject: 'legacy-dev-token:abc123',
+      issuer: 'bpane-gateway',
+      display_name: null,
+      client_id: null,
+      principal_type: 'legacy_dev_token',
+    }));
+
+    const code = await runBpaneCli(
+      ['identity', 'me', '--base-url', 'http://bpane.example/root/'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toMatchObject({
+      subject: 'legacy-dev-token:abc123',
+      principal_type: 'legacy_dev_token',
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('http://bpane.example/api/v1/identity/me');
+    expect(calls[0].init.headers.Authorization).toBe('Bearer token-1');
+  });
+
+  it('reports the access-review payload through the gateway API', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({
+      principal: {
+        subject: 'demo',
+        issuer: 'http://localhost:8091/realms/browserpane',
+        display_name: 'demo',
+        client_id: 'bpane-web',
+        principal_type: 'user',
+      },
+      generated_at: '2026-05-29T10:00:00Z',
+      projects: [{ id: 'project-1', name: 'support', usage: { active_sessions: 1 } }],
+      resource_counts: { projects: 1, sessions: 1, delegated_principals: 1 },
+      delegated_principals: [{ client_id: 'bpane-mcp-bridge', session_count: 1 }],
+    }));
+
+    const code = await runBpaneCli(
+      ['identity', 'access-review'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toMatchObject({
+      principal: { subject: 'demo', principal_type: 'user' },
+      resource_counts: { projects: 1, sessions: 1, delegated_principals: 1 },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/identity/access-review');
+    expect(calls[0].init.headers.Authorization).toBe('Bearer token-1');
+  });
+
   it('lists sessions through the owner-scoped API', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ sessions: [{ id: 'session-1' }] }));
