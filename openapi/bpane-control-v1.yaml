@@ -16,6 +16,7 @@ servers:
     description: Same-origin local web proxy
 tags:
   - name: Admin Events
+  - name: Identity
   - name: Sessions
   - name: Session Templates
   - name: Projects
@@ -54,6 +55,44 @@ paths:
           description: WebSocket upgraded; text messages contain admin snapshot events or admin.error payloads.
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /api/v1/identity/me:
+    get:
+      tags: [Identity]
+      summary: Describe the authenticated owner principal
+      operationId: getCurrentIdentity
+      description: >
+        Returns normalized metadata for the bearer principal currently calling
+        the owner-scoped control plane. No secrets or raw token claims are
+        returned.
+      responses:
+        '200':
+          description: Authenticated principal metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityPrincipalResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/identity/access-review:
+    get:
+      tags: [Identity]
+      summary: Export the authenticated owner's access-review summary
+      operationId: getIdentityAccessReview
+      description: >
+        Returns a sanitized owner-scoped access review with the current
+        principal, project usage, resource counts, and delegated automation
+        principals visible through the session catalog.
+      responses:
+        '200':
+          description: Owner-scoped access review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityAccessReviewResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions:
     get:
       tags: [Sessions]
@@ -5401,6 +5440,153 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectResource'
+    IdentityPrincipalType:
+      type: string
+      enum:
+        - user
+        - service_principal
+        - legacy_dev_token
+    IdentityPrincipalResource:
+      type: object
+      additionalProperties: false
+      required:
+        - subject
+        - issuer
+        - display_name
+        - client_id
+        - principal_type
+      properties:
+        subject:
+          type: string
+        issuer:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+        client_id:
+          type: string
+          nullable: true
+        principal_type:
+          $ref: '#/components/schemas/IdentityPrincipalType'
+    IdentityResourceCounts:
+      type: object
+      additionalProperties: false
+      required:
+        - projects
+        - sessions
+        - active_sessions
+        - session_templates
+        - browser_contexts
+        - egress_profiles
+        - credential_bindings
+        - file_workspaces
+        - workflow_definitions
+        - workflow_runs
+        - active_workflow_runs
+        - automation_tasks
+        - active_automation_tasks
+        - extension_definitions
+        - delegated_principals
+      properties:
+        projects:
+          type: integer
+          minimum: 0
+        sessions:
+          type: integer
+          minimum: 0
+        active_sessions:
+          type: integer
+          minimum: 0
+        session_templates:
+          type: integer
+          minimum: 0
+        browser_contexts:
+          type: integer
+          minimum: 0
+        egress_profiles:
+          type: integer
+          minimum: 0
+        credential_bindings:
+          type: integer
+          minimum: 0
+        file_workspaces:
+          type: integer
+          minimum: 0
+        workflow_definitions:
+          type: integer
+          minimum: 0
+        workflow_runs:
+          type: integer
+          minimum: 0
+        active_workflow_runs:
+          type: integer
+          minimum: 0
+        automation_tasks:
+          type: integer
+          minimum: 0
+        active_automation_tasks:
+          type: integer
+          minimum: 0
+        extension_definitions:
+          type: integer
+          minimum: 0
+        delegated_principals:
+          type: integer
+          minimum: 0
+    IdentityDelegatedPrincipalResource:
+      type: object
+      additionalProperties: false
+      required:
+        - client_id
+        - issuer
+        - display_name
+        - session_count
+        - active_session_count
+        - session_ids
+      properties:
+        client_id:
+          type: string
+        issuer:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+        session_count:
+          type: integer
+          minimum: 0
+        active_session_count:
+          type: integer
+          minimum: 0
+        session_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+    IdentityAccessReviewResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - principal
+        - generated_at
+        - projects
+        - resource_counts
+        - delegated_principals
+      properties:
+        principal:
+          $ref: '#/components/schemas/IdentityPrincipalResource'
+        generated_at:
+          type: string
+          format: date-time
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectResource'
+        resource_counts:
+          $ref: '#/components/schemas/IdentityResourceCounts'
+        delegated_principals:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityDelegatedPrincipalResource'
     ProjectAdmissionState:
       type: string
       enum:

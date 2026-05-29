@@ -82,7 +82,7 @@ Current support and scope:
 - Shared sessions: collaborative by default, intended for small curated groups rather than broadcast-scale delivery.
 - Owner/viewer mode: optional exclusive-owner mode is supported in the gateway; restricted viewers are read-only.
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
-- Control plane: owner-scoped v1 APIs now cover projects, sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
+- Control plane: owner-scoped v1 APIs now cover identity/access-review summaries, projects, sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 
@@ -122,7 +122,7 @@ bpane-gateway also talks to:
 | Project | Responsibility |
 | --- | --- |
 | `code/apps/bpane-host` | Linux host agent. Captures the desktop surface, classifies tiles, drives ROI H.264 video, emits audio, injects input, and handles clipboard, file transfer, resize, and camera ingress plumbing. |
-| `code/apps/bpane-gateway` | WebTransport entry point, shared-session coordinator, runtime lifecycle boundary, and owner-scoped control-plane API for projects, sessions, session templates, automation tasks, recordings, workflows, files, credentials, and extensions. |
+| `code/apps/bpane-gateway` | WebTransport entry point, shared-session coordinator, runtime lifecycle boundary, and owner-scoped control-plane API for identity/access review, projects, sessions, session templates, automation tasks, recordings, workflows, files, credentials, and extensions. |
 | `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
 | `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes compatibility Streamable HTTP on `/mcp`, session-scoped Streamable HTTP on `/sessions/{id}/mcp`, compatibility SSE on `/sse`, session-scoped SSE on `/sessions/{id}/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
@@ -288,6 +288,8 @@ Canonical contract:
 - `GET /api/v1/sessions`
 - `GET /api/v1/sessions/{id}`
 - `DELETE /api/v1/sessions/{id}`
+- `GET /api/v1/identity/me`
+- `GET /api/v1/identity/access-review`
 - `POST /api/v1/browser-contexts`
 - `GET /api/v1/browser-contexts`
 - `GET /api/v1/browser-contexts/{id}`
@@ -334,6 +336,13 @@ the session and enforces active-session quota and archived-project checks before
 runtime launch. Session resources and `/status` include the project summary and
 admission reason so the admin live view, inspector, CLI, and API clients all
 show whether a session was admitted under a project quota or left owner-scoped.
+Identity resources expose a sanitized access-review foundation:
+`GET /api/v1/identity/me` returns the current bearer principal as `user`,
+`service_principal`, or `legacy_dev_token`, while
+`GET /api/v1/identity/access-review` returns project usage, owner-scoped
+resource counts, and currently delegated automation principals. The admin
+Operations Overlay has a matching Identity tab, and the operator CLI exposes
+the same payload through `identity me` and `identity access-review`.
 Network identity metadata lets callers declare locale, language preferences,
 timezone, geolocation, browser identity, user-agent override, and an
 `egress_profile_id` on either a session template or an explicit session create
@@ -553,6 +562,13 @@ Common session operations:
 ./scripts/bpane session kill <session-id>
 ```
 
+Common identity and access-review operations:
+
+```bash
+./scripts/bpane identity me
+./scripts/bpane identity access-review
+```
+
 Common session-template operations:
 
 ```bash
@@ -729,7 +745,7 @@ destructive cleanup.
 The operator CLI integration smoke is
 `cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless`. It logs in
 through the admin app, creates a session, initializes a CLI profile, exercises
-project/session-template/browser-context/egress catalog operations,
+identity/access-review, project/session-template/browser-context/egress catalog operations,
 session access/status/diagnostics/disconnect/stop/kill/cleanup, and validates
 standalone MCP health, authorize, set-default, doctor, preflight, repair,
 revoke, and clear-default flows.
