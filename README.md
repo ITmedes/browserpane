@@ -82,7 +82,7 @@ Current support and scope:
 - Shared sessions: collaborative by default, intended for small curated groups rather than broadcast-scale delivery.
 - Owner/viewer mode: optional exclusive-owner mode is supported in the gateway; restricted viewers are read-only.
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
-- Control plane: owner-scoped v1 APIs now cover sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
+- Control plane: owner-scoped v1 APIs now cover projects, sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 
@@ -94,8 +94,9 @@ At a high level, BrowserPane has five responsibilities:
 2. Capture and classify that surface efficiently.
 3. Transport state, input, and media between host and browser.
 4. Render the remote session in a regular web page.
-5. Coordinate durable control-plane resources for sessions, workflows,
-   recordings, files, credentials, extensions, and automation ownership.
+5. Coordinate durable control-plane resources for projects, sessions,
+   workflows, recordings, files, credentials, extensions, and automation
+   ownership.
 
 The default local runtime looks like this:
 
@@ -121,7 +122,7 @@ bpane-gateway also talks to:
 | Project | Responsibility |
 | --- | --- |
 | `code/apps/bpane-host` | Linux host agent. Captures the desktop surface, classifies tiles, drives ROI H.264 video, emits audio, injects input, and handles clipboard, file transfer, resize, and camera ingress plumbing. |
-| `code/apps/bpane-gateway` | WebTransport entry point, shared-session coordinator, runtime lifecycle boundary, and owner-scoped control-plane API for sessions, session templates, automation tasks, recordings, workflows, files, credentials, and extensions. |
+| `code/apps/bpane-gateway` | WebTransport entry point, shared-session coordinator, runtime lifecycle boundary, and owner-scoped control-plane API for projects, sessions, session templates, automation tasks, recordings, workflows, files, credentials, and extensions. |
 | `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
 | `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes compatibility Streamable HTTP on `/mcp`, session-scoped Streamable HTTP on `/sessions/{id}/mcp`, compatibility SSE on `/sse`, session-scoped SSE on `/sessions/{id}/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
