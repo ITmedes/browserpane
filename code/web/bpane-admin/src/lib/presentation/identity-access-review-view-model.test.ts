@@ -13,6 +13,7 @@ const REVIEW: IdentityAccessReviewResponse = {
   generated_at: '2026-05-29T10:00:00Z',
   resource_counts: {
     projects: 1,
+    service_principals: 1,
     sessions: 2,
     active_sessions: 1,
     session_templates: 1,
@@ -54,11 +55,34 @@ const REVIEW: IdentityAccessReviewResponse = {
       updated_at: '2026-05-29T10:00:00Z',
     },
   ],
+  service_principals: [
+    {
+      id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f7',
+      name: 'BrowserPane MCP bridge',
+      description: 'Bridge automation identity',
+      client_id: 'bpane-mcp-bridge',
+      issuer: 'http://localhost:8091/realms/browserpane',
+      labels: { system: 'mcp' },
+      scopes: ['session:delegate'],
+      allowed_project_ids: ['project-1'],
+      state: 'active',
+      last_seen_at: null,
+      last_delegated_at: '2026-05-29T10:00:00Z',
+      delegated_session_count: 1,
+      active_delegated_session_count: 1,
+      delegated_session_ids: ['019df4d2-f4f7-7b00-9e0c-79683b1c82f6'],
+      created_at: '2026-05-29T09:00:00Z',
+      updated_at: '2026-05-29T10:00:00Z',
+    },
+  ],
   delegated_principals: [
     {
       client_id: 'bpane-mcp-bridge',
       issuer: 'http://localhost:8091/realms/browserpane',
       display_name: 'BrowserPane MCP bridge',
+      registered: true,
+      registered_service_principal_id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f7',
+      state: 'active',
       session_count: 1,
       active_session_count: 1,
       session_ids: ['019df4d2-f4f7-7b00-9e0c-79683b1c82f6'],
@@ -83,9 +107,18 @@ describe('IdentityAccessReviewViewModelBuilder', () => {
       activeWorkflowRuns: '2/4',
       retainedStorage: '512 KiB / 1.0 MiB',
     });
+    expect(viewModel.servicePrincipals[0]).toMatchObject({
+      name: 'BrowserPane MCP bridge',
+      state: 'active',
+      scopes: 'session:delegate',
+      delegatedSummary: '1/1 active',
+      delegatedSessionIds: '019df4d2...82f6',
+    });
     expect(viewModel.delegations[0]).toMatchObject({
       clientId: 'bpane-mcp-bridge',
       displayName: 'BrowserPane MCP bridge',
+      registration: 'registered 019df4d2...82f7',
+      state: 'active',
       sessionSummary: '1/1 active',
       sessionIds: '019df4d2...82f6',
     });

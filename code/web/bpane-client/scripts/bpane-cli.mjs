@@ -23,7 +23,9 @@ const KNOWN_OPTIONS = new Set([
   'browser-context-mode',
   'browser-identity',
   'bypass-rule',
+  'allowed-project-id',
   'cleanup-action',
+  'client-id',
   'config',
   'confirm',
   'custom-ca-name',
@@ -43,6 +45,7 @@ const KNOWN_OPTIONS = new Set([
   'input',
   'integration-json',
   'integration',
+  'issuer',
   'label',
   'language',
   'limit',
@@ -73,6 +76,7 @@ const KNOWN_OPTIONS = new Set([
   'retention-sec',
   'save-token',
   'set-default',
+  'scope',
   'runtime-state',
   'state',
   'template-id',
@@ -103,6 +107,11 @@ function usageText() {
     '  bpane profile show [profile-name] [options]',
     '  bpane identity me [options]',
     '  bpane identity access-review [options]',
+    '  bpane service-principal create [principal-name] [options]',
+    '  bpane service-principal list [options]',
+    '  bpane service-principal get <service-principal-id> [options]',
+    '  bpane service-principal update <service-principal-id> [options]',
+    '  bpane service-principal disable <service-principal-id> [options]',
     '  bpane session create [options]',
     '  bpane session list [options]',
     '  bpane session get <session-id> [options]',
@@ -193,6 +202,10 @@ function usageText() {
     '  --probe-timeout-ms <ms>      Session egress probe timeout. Requires an already-ready runtime.',
     '  --name <name>             Resource name for create/update commands.',
     '  --description <text>      Resource description for create/update commands.',
+    '  --client-id <id>          External service-principal client id.',
+    '  --issuer <url>            External service-principal issuer.',
+    '  --scope <name>            Repeatable service-principal scope metadata.',
+    '  --allowed-project-id <id> Repeatable service-principal project metadata.',
     '  --max-active-sessions <count> Project active-session quota.',
     '  --max-active-workflow-runs <count> Project active workflow-run quota.',
     '  --max-retained-storage-bytes <bytes> Project retained-storage quota.',
@@ -529,6 +542,14 @@ function requiredProjectId(positionals, commandLabel) {
     throw new CliError('USAGE', `Usage: bpane ${commandLabel} <project-id>`, EXIT_CODES.usage);
   }
   return projectId;
+}
+
+function requiredServicePrincipalId(positionals, commandLabel) {
+  const servicePrincipalId = positionals[2];
+  if (!servicePrincipalId || positionals.length > 3) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <service-principal-id>`, EXIT_CODES.usage);
+  }
+  return servicePrincipalId;
 }
 
 function requiredBrowserContextId(positionals, commandLabel) {
@@ -1157,6 +1178,139 @@ function buildProjectUpdateRequest(existingProject, options, forcedState = null)
     body.quotas = quotas;
   }
   const state = forcedState ?? getOption(options, 'state') ?? existingProject?.state;
+  if (state) {
+    body.state = state;
+  }
+  return body;
+}
+
+function buildServicePrincipalRequest(options, fallbackName = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? fallbackName;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Service principal create requires --name or a positional principal name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const clientId = getOption(options, 'client-id') ?? getOption(options, 'mcp-client-id');
+  if (!clientId) {
+    throw new CliError(
+      'USAGE',
+      'Service principal create/update requires --client-id.',
+      EXIT_CODES.usage,
+    );
+  }
+  const issuer = getOption(options, 'issuer') ?? getOption(options, 'mcp-issuer');
+  if (!issuer) {
+    throw new CliError(
+      'USAGE',
+      'Service principal create/update requires --issuer.',
+      EXIT_CODES.usage,
+    );
+  }
+
+  const body = {
+    name,
+    client_id: clientId,
+    issuer,
+  };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  }
+  const labels = parseKeyValueOptions(options, 'label');
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+  const scopes = getOptions(options, 'scope').filter((scope) => scope !== '');
+  if (scopes.length) {
+    body.scopes = scopes;
+  }
+  const allowedProjectIds = getOptions(options, 'allowed-project-id').filter((projectId) => projectId !== '');
+  if (allowedProjectIds.length) {
+    body.allowed_project_ids = allowedProjectIds;
+  }
+  const state = getOption(options, 'state');
+  if (state) {
+    body.state = state;
+  }
+  return body;
+}
+
+function buildServicePrincipalUpdateRequest(existingServicePrincipal, options, forcedState = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? existingServicePrincipal?.name;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Service principal update requires --name when the existing service principal response has no name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const clientId =
+    getOption(options, 'client-id')
+    ?? getOption(options, 'mcp-client-id')
+    ?? existingServicePrincipal?.client_id;
+  if (!clientId) {
+    throw new CliError(
+      'USAGE',
+      'Service principal update requires --client-id when the existing response has no client_id.',
+      EXIT_CODES.usage,
+    );
+  }
+  const issuer =
+    getOption(options, 'issuer')
+    ?? getOption(options, 'mcp-issuer')
+    ?? existingServicePrincipal?.issuer;
+  if (!issuer) {
+    throw new CliError(
+      'USAGE',
+      'Service principal update requires --issuer when the existing response has no issuer.',
+      EXIT_CODES.usage,
+    );
+  }
+
+  const body = {
+    name,
+    client_id: clientId,
+    issuer,
+  };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  } else if (existingServicePrincipal?.description != null) {
+    body.description = existingServicePrincipal.description;
+  }
+  const labels = {
+    ...(isObjectRecord(existingServicePrincipal?.labels) ? existingServicePrincipal.labels : {}),
+    ...parseKeyValueOptions(options, 'label'),
+  };
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+  const scopes = getOptions(options, 'scope');
+  if (scopes.length) {
+    body.scopes = scopes.filter((scope) => scope !== '');
+  } else if (Array.isArray(existingServicePrincipal?.scopes)) {
+    body.scopes = existingServicePrincipal.scopes;
+  }
+  const allowedProjectIds = getOptions(options, 'allowed-project-id');
+  if (allowedProjectIds.length) {
+    body.allowed_project_ids = allowedProjectIds.filter((projectId) => projectId !== '');
+  } else if (Array.isArray(existingServicePrincipal?.allowed_project_ids)) {
+    body.allowed_project_ids = existingServicePrincipal.allowed_project_ids;
+  }
+  const state = forcedState ?? getOption(options, 'state') ?? existingServicePrincipal?.state;
   if (state) {
     body.state = state;
   }
@@ -2149,6 +2303,53 @@ async function handleProjectCommand(config, positionals, options) {
   throw new CliError('USAGE', `Unknown project command: ${action ?? ''}`.trim(), EXIT_CODES.usage);
 }
 
+async function handleServicePrincipalCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length <= 3) {
+    return await requestGateway(config, '/api/v1/service-principals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildServicePrincipalRequest(options, positionals[2] ?? null)),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/service-principals');
+  }
+  if (action === 'get') {
+    const servicePrincipalId = requiredServicePrincipalId(positionals, 'service-principal get');
+    return await requestGateway(config, `/api/v1/service-principals/${encodeURIComponent(servicePrincipalId)}`);
+  }
+  if (action === 'update') {
+    const servicePrincipalId = requiredServicePrincipalId(positionals, 'service-principal update');
+    const existingServicePrincipal = await requestGateway(
+      config,
+      `/api/v1/service-principals/${encodeURIComponent(servicePrincipalId)}`,
+    );
+    return await requestGateway(config, `/api/v1/service-principals/${encodeURIComponent(servicePrincipalId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildServicePrincipalUpdateRequest(existingServicePrincipal, options)),
+    });
+  }
+  if (action === 'disable') {
+    const servicePrincipalId = requiredServicePrincipalId(positionals, 'service-principal disable');
+    const existingServicePrincipal = await requestGateway(
+      config,
+      `/api/v1/service-principals/${encodeURIComponent(servicePrincipalId)}`,
+    );
+    return await requestGateway(config, `/api/v1/service-principals/${encodeURIComponent(servicePrincipalId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildServicePrincipalUpdateRequest(existingServicePrincipal, options, 'disabled')),
+    });
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown service-principal command: ${action ?? ''}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
 async function handleEgressProfileCommand(config, positionals, options) {
   const action = positionals[1];
   if (action === 'create' && positionals.length <= 3) {
@@ -2533,6 +2734,9 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     } else if (scope === 'project') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleProjectCommand(config, positionals, options);
+    } else if (scope === 'service-principal') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleServicePrincipalCommand(config, positionals, options);
     } else if (scope === 'egress-profile') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleEgressProfileCommand(config, positionals, options);

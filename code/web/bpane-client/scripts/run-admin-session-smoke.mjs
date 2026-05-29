@@ -131,6 +131,7 @@ async function verifyIdentityPanel(page, options) {
     100,
   );
   await page.getByTestId('identity-project-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await page.getByTestId('identity-service-principal-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await page.getByTestId('identity-delegation-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
 }
 
