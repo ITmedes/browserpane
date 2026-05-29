@@ -129,6 +129,47 @@ const PROJECT = {
   updated_at: '2026-05-04T18:50:00Z',
 };
 
+const IDENTITY_PRINCIPAL = {
+  subject: 'demo',
+  issuer: 'http://localhost:8091/realms/browserpane',
+  display_name: 'demo',
+  client_id: 'bpane-web',
+  principal_type: 'user',
+};
+
+const ACCESS_REVIEW = {
+  principal: IDENTITY_PRINCIPAL,
+  generated_at: '2026-05-29T10:00:00Z',
+  projects: [PROJECT],
+  resource_counts: {
+    projects: 1,
+    sessions: 2,
+    active_sessions: 1,
+    session_templates: 1,
+    browser_contexts: 1,
+    egress_profiles: 1,
+    credential_bindings: 0,
+    file_workspaces: 1,
+    workflow_definitions: 1,
+    workflow_runs: 2,
+    active_workflow_runs: 1,
+    automation_tasks: 2,
+    active_automation_tasks: 1,
+    extension_definitions: 0,
+    delegated_principals: 1,
+  },
+  delegated_principals: [
+    {
+      client_id: 'bpane-mcp-bridge',
+      issuer: 'http://localhost:8091/realms/browserpane',
+      display_name: 'BrowserPane MCP bridge',
+      session_count: 1,
+      active_session_count: 1,
+      session_ids: [SESSION.id],
+    },
+  ],
+};
+
 const TEMPLATE = {
   id: '019df5c8-3d03-7800-9e5d-79d69d9a21c0',
   name: 'Support triage',
@@ -208,6 +249,51 @@ describe('ControlClient', () => {
           authorization: 'Bearer owner-token',
         }),
       }),
+    );
+  });
+
+  it('loads identity and access-review resources with bearer auth', async () => {
+    const responses = [IDENTITY_PRINCIPAL, ACCESS_REVIEW];
+    const fetchImpl = vi.fn<FetchLike>(async () => new Response(JSON.stringify(responses.shift()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const principal = await client.getCurrentIdentity();
+    const review = await client.getIdentityAccessReview();
+
+    expect(principal).toMatchObject({
+      subject: 'demo',
+      principal_type: 'user',
+    });
+    expect(review).toMatchObject({
+      principal: { subject: 'demo', principal_type: 'user' },
+      resource_counts: {
+        projects: 1,
+        sessions: 2,
+        delegated_principals: 1,
+      },
+      delegated_principals: [
+        {
+          client_id: 'bpane-mcp-bridge',
+          session_ids: [SESSION.id],
+        },
+      ],
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      new URL('http://localhost:8932/api/v1/identity/me'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      new URL('http://localhost:8932/api/v1/identity/access-review'),
+      expect.objectContaining({ method: 'GET' }),
     );
   });
 

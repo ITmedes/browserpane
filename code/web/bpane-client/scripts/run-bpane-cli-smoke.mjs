@@ -92,6 +92,11 @@ async function run() {
       throw new Error('CLI profile show did not return the smoke profile.');
     }
 
+    const identity = runBpaneCli(['identity', 'me'], cliEnv);
+    if (!identity.subject || !identity.issuer || !['user', 'service_principal', 'legacy_dev_token'].includes(identity.principal_type)) {
+      throw new Error(`CLI identity me returned unexpected data: ${JSON.stringify(identity)}`);
+    }
+
     const project = runBpaneCli([
       'project',
       'create',
@@ -484,6 +489,19 @@ async function run() {
     const authorized = runBpaneCli(['mcp', 'authorize', sessionId], cliEnv);
     if (authorized.id !== sessionId) {
       throw new Error('CLI MCP authorize did not return the session.');
+    }
+
+    const accessReview = runBpaneCli(['identity', 'access-review'], cliEnv);
+    if (
+      accessReview.principal?.subject !== identity.subject
+      || accessReview.resource_counts?.sessions < 1
+      || accessReview.resource_counts?.projects < 1
+      || !Array.isArray(accessReview.projects)
+      || !accessReview.projects.some((item) => item.id === projectId)
+      || !Array.isArray(accessReview.delegated_principals)
+      || !accessReview.delegated_principals.some((item) => item.client_id === bridge.clientId)
+    ) {
+      throw new Error(`CLI identity access-review returned unexpected data: ${JSON.stringify(accessReview)}`);
     }
 
     const defaulted = runBpaneCli(['mcp', 'set-default', sessionId], cliEnv);

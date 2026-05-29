@@ -10,6 +10,7 @@
     Network,
     Radio,
     ScrollText,
+    UserCheck,
     Video,
   } from 'lucide-svelte';
   import type { ControlClient } from '../api/control-client';
@@ -21,6 +22,7 @@
     CreateSessionCommand,
     EgressDiagnosticsResource,
     EgressProfileResource,
+    IdentityAccessReviewResponse,
     ImportBrowserContextCommand,
     ProjectResource,
     SessionResource,
@@ -43,6 +45,7 @@
   import BrowserPolicySurface from './BrowserPolicySurface.svelte';
   import BrowserContextCatalogPanel from '../presentation/BrowserContextCatalogPanel.svelte';
   import EgressProfileCatalogPanel from '../presentation/EgressProfileCatalogPanel.svelte';
+  import IdentityAccessReviewPanel from '../presentation/IdentityAccessReviewPanel.svelte';
   import DisplayControlsSurface from './DisplayControlsSurface.svelte';
   import LiveSessionActionsSurface from './LiveSessionActionsSurface.svelte';
   import LogsSurface from './LogsSurface.svelte';
@@ -62,10 +65,12 @@
     readonly sessionTemplates?: readonly SessionTemplateResource[];
     readonly browserContexts?: readonly BrowserContextResource[];
     readonly egressProfiles?: readonly EgressProfileResource[];
+    readonly identityAccessReview?: IdentityAccessReviewResponse | null;
     readonly templatesLoading?: boolean;
     readonly projectsLoading?: boolean;
     readonly browserContextsLoading?: boolean;
     readonly egressProfilesLoading?: boolean;
+    readonly identityAccessReviewLoading?: boolean;
     readonly cloningContextId?: string | null;
     readonly exportingContextId?: string | null;
     readonly importingBrowserContext?: boolean;
@@ -73,6 +78,7 @@
     readonly projectError?: string | null;
     readonly browserContextError?: string | null;
     readonly egressProfileError?: string | null;
+    readonly identityAccessReviewError?: string | null;
     readonly mcpBridge: McpBridgeConfig | null;
     readonly liveConnection: LiveBrowserSessionConnection | null;
     readonly browserConnected: boolean;
@@ -87,6 +93,7 @@
     readonly onRefreshSessions: (showFeedback?: boolean) => Promise<void>;
     readonly onRefreshBrowserContexts: (showFeedback?: boolean) => Promise<void>;
     readonly onRefreshEgressProfiles: (showFeedback?: boolean) => Promise<void>;
+    readonly onRefreshIdentityAccessReview: (showFeedback?: boolean) => Promise<void>;
     readonly onCreateSession: (command?: CreateSessionCommand) => void;
     readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onCreateEgressProfile?: (command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void>;
@@ -118,8 +125,14 @@
     return panels.find((panel) => panel.id === id) ?? panels[0] ?? null;
   }
 
+  async function refreshSessionsAndIdentity(showFeedback = false): Promise<void> {
+    await props.onRefreshSessions(showFeedback);
+    await props.onRefreshIdentityAccessReview(false);
+  }
+
   const PANEL_ICONS = {
     sessions: ClipboardList,
+    identity: UserCheck,
     lifecycle: Activity,
     display: MonitorCog,
     files: FolderOpen,
@@ -218,7 +231,7 @@
           selectedSession={props.selectedSession}
           mcpBridge={props.mcpBridge}
           refreshVersion={props.mcpDelegationRefreshVersion}
-          onRefreshSessions={() => props.onRefreshSessions(false)}
+          onRefreshSessions={() => refreshSessionsAndIdentity(false)}
           onRefreshSelectedSession={props.onRefreshSelectedSession}
         />
       {:else if activePanel.id === 'contexts'}
@@ -245,6 +258,13 @@
           onCreateProfile={props.onCreateEgressProfile}
           onUpdateProfile={props.onUpdateEgressProfile}
           onRunProfileReachabilityProbe={props.onRunEgressProfileReachabilityProbe}
+        />
+      {:else if activePanel.id === 'identity'}
+        <IdentityAccessReviewPanel
+          review={props.identityAccessReview ?? null}
+          loading={props.identityAccessReviewLoading ?? false}
+          error={props.identityAccessReviewError ?? null}
+          onRefresh={() => void props.onRefreshIdentityAccessReview(true)}
         />
       {:else if activePanel.id === 'lifecycle'}
         <SessionLifecycleSurface

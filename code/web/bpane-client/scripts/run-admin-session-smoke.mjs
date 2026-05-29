@@ -39,6 +39,7 @@ async function run() {
     sessionId = await resolveSelectedSessionId(page, options);
     await waitForMcpDelegationReady(page, options);
     await waitForBrowserConnected(page, options);
+    await verifyIdentityPanel(page, options);
     await expectSessionDisconnectControl(page);
     await verifySessionSwitchDisconnect(page, options, sessionId);
     await expectGlobalMessage(page, options, (message) => message.trim().length > 0);
@@ -106,6 +107,31 @@ async function verifyBrowserPolicyPanel(page) {
   if (!copyEnabled) {
     throw new Error('Expected policy CDP probe command to be copyable after browser connect.');
   }
+}
+
+async function verifyIdentityPanel(page, options) {
+  await openAdminTab(page, 'identity');
+  await page.getByTestId('identity-principal-type').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await poll(
+    'admin identity refresh enabled',
+    async () => await page.getByTestId('identity-refresh').isEnabled(),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+  await page.getByTestId('identity-refresh').click();
+  await poll(
+    'admin identity session count',
+    async () => Number(await page.getByTestId('identity-resource-sessions').textContent()),
+    (count) => Number.isFinite(count) && count >= 1,
+    options.connectTimeoutMs,
+    100,
+  );
+  await page.getByTestId('identity-project-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await page.getByTestId('identity-delegation-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
 }
 
 async function verifyRemainingPanels(page) {

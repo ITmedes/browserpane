@@ -10,12 +10,14 @@ describe('AdminWorkspaceViewModelBuilder', () => {
       browserContextCount: 1,
       egressProfileCount: 2,
       fileCount: 1,
+      delegatedPrincipalCount: 1,
       connected: true,
     });
 
     expect(viewModel.browser.connectionLabel).toBe('connected');
     expect(viewModel.panels.map((panel) => panel.id)).toEqual([
       'sessions',
+      'identity',
       'contexts',
       'egress',
       'lifecycle',
@@ -37,11 +39,13 @@ describe('AdminWorkspaceViewModelBuilder', () => {
       browserContextCount: 0,
       egressProfileCount: 0,
       fileCount: 0,
+      delegatedPrincipalCount: 0,
       connected: false,
     });
 
     expect(viewModel.panels.filter((panel) => panel.implemented).map((panel) => panel.id)).toEqual([
       'sessions',
+      'identity',
       'contexts',
       'egress',
       'lifecycle',
