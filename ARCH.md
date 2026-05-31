@@ -259,16 +259,20 @@ service.
   - if a browser client is already active, that browser-defined input/ownership
     state remains authoritative while MCP automation attaches alongside it
 - **Auth** (`auth/`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
-- **Identity/access review** (`api/identity.rs`, `api/service_principals.rs`): bearer-principal summary, owner-scoped service-principal registry metadata, sanitized resource counts, project usage, and delegated automation-principal summaries
+- **Identity/access review** (`api/identity.rs`, `api/service_principals.rs`, `api/identity_mappings.rs`): bearer-principal summary, owner-scoped service-principal registry metadata, explicit identity-to-project mappings, unmapped-principal signals, sanitized resource counts, project usage, and delegated automation-principal summaries
 - **Heartbeat**: disconnects after 15s without CONTROL ping
 - **HTTP API** (`api.rs`, :8932):
   - canonical frozen v1 contract: `openapi/bpane-control-v1.yaml`
   - `GET /api/v1/identity/me` — normalized current bearer principal, classified as user, service principal, or legacy dev token
-  - `GET /api/v1/identity/access-review` — sanitized owner-scoped access review with service-principal registry metadata, project usage, resource counts, and automation delegations
+  - `GET /api/v1/identity/access-review` — sanitized owner-scoped access review with service-principal registry metadata, identity-to-project mappings, unmapped-principal signals, project usage, resource counts, and automation delegations
   - `POST /api/v1/service-principals` — register an owner-scoped external OIDC client as a service principal
   - `GET /api/v1/service-principals` — list owner-scoped service principals with lifecycle and last-observed metadata
   - `GET /api/v1/service-principals/{id}` — fetch one owner-scoped service principal
   - `PUT /api/v1/service-principals/{id}` — replace one owner-scoped service principal, including active/disabled state
+  - `POST /api/v1/identity-mappings` — map an external user, group, claim, or registered service principal to an owner-scoped project
+  - `GET /api/v1/identity-mappings` — list owner-scoped identity-to-project mappings
+  - `GET /api/v1/identity-mappings/{id}` — fetch one owner-scoped identity mapping
+  - `PUT /api/v1/identity-mappings/{id}` — replace one owner-scoped identity mapping, including active/disabled state
   - `POST /api/v1/sessions` — create a persistent session resource
   - `GET /api/v1/sessions` — list owner-scoped sessions, with catalog filters for template id, lifecycle/runtime state, labels, integration context, limit, and offset
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
@@ -483,7 +487,7 @@ The default dev stack no longer uses a shared token file.
 - the admin console discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
-- after login, the admin console lists owner-scoped `/api/v1/sessions`, projects, session templates, egress profiles, browser contexts, and the current `/api/v1/identity/access-review`; it lets the user join an existing session, start a new one with optional project, template, network-identity, egress-profile, and reusable-context bindings, inspect project/admission metadata on live rows and session detail views, inspect the current principal, resource counts, project usage, registered service principals, and delegated automation principals in the Identity tab, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
+- after login, the admin console lists owner-scoped `/api/v1/sessions`, projects, session templates, egress profiles, browser contexts, and the current `/api/v1/identity/access-review`; it lets the user join an existing session, start a new one with optional project, template, network-identity, egress-profile, and reusable-context bindings, inspect project/admission metadata on live rows and session detail views, inspect the current principal, resource counts, project usage, registered service principals, identity-to-project mappings, unmapped principal signals, and delegated automation principals in the Identity tab, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
 - docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
 - browser-context retention cleanup is metadata-driven per context and removes expired reusable profile data only when the runtime manager confirms there is no active writer
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
@@ -552,7 +556,7 @@ The supported local operator CLI lives in
 `code/web/bpane-client/scripts/bpane-cli.mjs`, is exposed as the package binary
 `bpane`, and has a repo-level wrapper at `scripts/bpane`.
 
-- Commands cover profile inspection/init, identity me/access-review, service-principal create/list/get/update/disable, project create/list/get/usage/update/archive,
+- Commands cover profile inspection/init, identity me/access-review, service-principal create/list/get/update/disable, identity-mapping create/list/get/update/disable, project create/list/get/usage/update/archive,
   egress-profile create/list/get, session create/list/get/status with project
   and network-identity options, access-ticket and automation-access minting,
   connection disconnect, stop, kill, and bounded cleanup. Egress-profile

@@ -533,6 +533,150 @@ pub struct ServicePrincipalListResponse {
     pub service_principals: Vec<ServicePrincipalResource>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IdentityMappingKind {
+    User,
+    Group,
+    Claim,
+    ServicePrincipal,
+}
+
+impl IdentityMappingKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Group => "group",
+            Self::Claim => "claim",
+            Self::ServicePrincipal => "service_principal",
+        }
+    }
+}
+
+impl FromStr for IdentityMappingKind {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "user" => Ok(Self::User),
+            "group" => Ok(Self::Group),
+            "claim" => Ok(Self::Claim),
+            "service_principal" => Ok(Self::ServicePrincipal),
+            _ => Err("unknown identity mapping kind"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IdentityMappingState {
+    Active,
+    Disabled,
+}
+
+impl IdentityMappingState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Disabled => "disabled",
+        }
+    }
+}
+
+impl FromStr for IdentityMappingState {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "active" => Ok(Self::Active),
+            "disabled" => Ok(Self::Disabled),
+            _ => Err("unknown identity mapping state"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PersistIdentityMappingRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub kind: IdentityMappingKind,
+    pub issuer: String,
+    pub external_id: String,
+    pub claim_name: Option<String>,
+    pub service_principal_id: Option<Uuid>,
+    pub project_id: Uuid,
+    pub labels: HashMap<String, String>,
+    pub scopes: Vec<String>,
+    pub state: IdentityMappingState,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredIdentityMapping {
+    pub id: Uuid,
+    pub owner_subject: String,
+    pub owner_issuer: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub kind: IdentityMappingKind,
+    pub issuer: String,
+    pub external_id: String,
+    pub claim_name: Option<String>,
+    pub service_principal_id: Option<Uuid>,
+    pub project_id: Uuid,
+    pub labels: HashMap<String, String>,
+    pub scopes: Vec<String>,
+    pub state: IdentityMappingState,
+    pub last_seen_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IdentityMappingResource {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub kind: IdentityMappingKind,
+    pub issuer: String,
+    pub external_id: String,
+    pub claim_name: Option<String>,
+    pub service_principal_id: Option<Uuid>,
+    pub project_id: Uuid,
+    pub labels: HashMap<String, String>,
+    pub scopes: Vec<String>,
+    pub state: IdentityMappingState,
+    pub last_seen_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct IdentityMappingListResponse {
+    pub identity_mappings: Vec<IdentityMappingResource>,
+}
+
+impl StoredIdentityMapping {
+    pub fn to_resource(&self) -> IdentityMappingResource {
+        IdentityMappingResource {
+            id: self.id,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            kind: self.kind,
+            issuer: self.issuer.clone(),
+            external_id: self.external_id.clone(),
+            claim_name: self.claim_name.clone(),
+            service_principal_id: self.service_principal_id,
+            project_id: self.project_id,
+            labels: self.labels.clone(),
+            scopes: self.scopes.clone(),
+            state: self.state,
+            last_seen_at: self.last_seen_at,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
 impl StoredServicePrincipal {
     pub fn to_resource(&self) -> ServicePrincipalResource {
         ServicePrincipalResource {

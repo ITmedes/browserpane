@@ -1286,6 +1286,190 @@ describe('bpane operator CLI', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('manages identity mappings through the CLI', async () => {
+    const createMappingIo = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ id: 'mapping-1', name: 'MCP bridge mapping' }, 201),
+      jsonResponse({ identity_mappings: [{ id: 'mapping-1' }] }),
+      jsonResponse({ id: 'mapping-1', name: 'MCP bridge mapping' }),
+      jsonResponse({
+        id: 'mapping-1',
+        name: 'MCP bridge mapping',
+        description: 'Existing identity mapping',
+        kind: 'service_principal',
+        issuer: 'https://issuer.example',
+        external_id: 'bpane-mcp-bridge',
+        service_principal_id: 'service-principal-1',
+        project_id: 'project-1',
+        labels: { system: 'mcp' },
+        scopes: ['session:create'],
+        state: 'active',
+      }),
+      jsonResponse({ id: 'mapping-1', name: 'MCP bridge mapping v2', state: 'active' }),
+      jsonResponse({
+        id: 'mapping-1',
+        name: 'MCP bridge mapping v2',
+        kind: 'service_principal',
+        issuer: 'https://issuer.example',
+        external_id: 'bpane-mcp-bridge',
+        service_principal_id: 'service-principal-1',
+        project_id: 'project-1',
+        labels: { system: 'mcp', managed: 'true' },
+        scopes: ['session:create', 'session:delegate'],
+        state: 'active',
+      }),
+      jsonResponse({ id: 'mapping-1', name: 'MCP bridge mapping v2', state: 'disabled' }),
+    );
+
+    const createCode = await runBpaneCli(
+      [
+        'identity-mapping',
+        'create',
+        'MCP bridge mapping',
+        '--kind',
+        'service_principal',
+        '--issuer',
+        'https://issuer.example',
+        '--external-id',
+        'bpane-mcp-bridge',
+        '--service-principal-id',
+        'service-principal-1',
+        '--project-id',
+        'project-1',
+        '--label',
+        'system=mcp',
+        '--scope',
+        'session:create',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      createMappingIo.io,
+      fetchImpl,
+    );
+    expect(createCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(createMappingIo)).toEqual({ id: 'mapping-1', name: 'MCP bridge mapping' });
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/identity-mappings');
+    expect(calls[0].init.method).toBe('POST');
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      name: 'MCP bridge mapping',
+      kind: 'service_principal',
+      issuer: 'https://issuer.example',
+      external_id: 'bpane-mcp-bridge',
+      service_principal_id: 'service-principal-1',
+      project_id: 'project-1',
+      labels: { system: 'mcp' },
+      scopes: ['session:create'],
+    });
+
+    const listIo = createIo();
+    const listCode = await runBpaneCli(
+      ['identity-mapping', 'list'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      listIo.io,
+      fetchImpl,
+    );
+    expect(listCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(listIo)).toEqual({ identity_mappings: [{ id: 'mapping-1' }] });
+
+    const getIo = createIo();
+    const getCode = await runBpaneCli(
+      ['identity-mapping', 'get', 'mapping/with space'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      getIo.io,
+      fetchImpl,
+    );
+    expect(getCode).toBe(EXIT_CODES.ok);
+    expect(calls[2].url).toBe('http://localhost:8080/api/v1/identity-mappings/mapping%2Fwith%20space');
+
+    const updateIo = createIo();
+    const updateCode = await runBpaneCli(
+      [
+        'identity-mapping',
+        'update',
+        'mapping-1',
+        '--name',
+        'MCP bridge mapping v2',
+        '--label',
+        'managed=true',
+        '--scope',
+        'session:delegate',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      updateIo.io,
+      fetchImpl,
+    );
+    expect(updateCode).toBe(EXIT_CODES.ok);
+    expect(calls[3].url).toBe('http://localhost:8080/api/v1/identity-mappings/mapping-1');
+    expect(calls[4].init.method).toBe('PUT');
+    expect(JSON.parse(calls[4].init.body)).toEqual({
+      name: 'MCP bridge mapping v2',
+      description: 'Existing identity mapping',
+      kind: 'service_principal',
+      issuer: 'https://issuer.example',
+      external_id: 'bpane-mcp-bridge',
+      service_principal_id: 'service-principal-1',
+      project_id: 'project-1',
+      labels: { system: 'mcp', managed: 'true' },
+      scopes: ['session:delegate'],
+      state: 'active',
+    });
+
+    const disableIo = createIo();
+    const disableCode = await runBpaneCli(
+      ['identity-mapping', 'disable', 'mapping-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      disableIo.io,
+      fetchImpl,
+    );
+    expect(disableCode).toBe(EXIT_CODES.ok);
+    expect(calls[6].init.method).toBe('PUT');
+    expect(JSON.parse(calls[6].init.body)).toEqual({
+      name: 'MCP bridge mapping v2',
+      kind: 'service_principal',
+      issuer: 'https://issuer.example',
+      external_id: 'bpane-mcp-bridge',
+      service_principal_id: 'service-principal-1',
+      project_id: 'project-1',
+      labels: { system: 'mcp', managed: 'true' },
+      scopes: ['session:create', 'session:delegate'],
+      state: 'disabled',
+    });
+  });
+
+  it('validates identity-mapping CLI input before fetching', async () => {
+    const missingNameIo = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
+
+    const missingNameCode = await runBpaneCli(
+      ['identity-mapping', 'create', '--kind', 'user', '--issuer', 'https://issuer.example', '--external-id', 'demo', '--project-id', 'project-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingNameIo.io,
+      fetchImpl,
+    );
+    expect(missingNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingNameIo).error).toContain('Identity mapping create requires');
+
+    const missingKindIo = createIo();
+    const missingKindCode = await runBpaneCli(
+      ['identity-mapping', 'create', 'Demo mapping', '--issuer', 'https://issuer.example', '--external-id', 'demo', '--project-id', 'project-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingKindIo.io,
+      fetchImpl,
+    );
+    expect(missingKindCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingKindIo).error).toContain('requires --kind');
+
+    const missingProjectIo = createIo();
+    const missingProjectCode = await runBpaneCli(
+      ['identity-mapping', 'create', 'Demo mapping', '--kind', 'user', '--issuer', 'https://issuer.example', '--external-id', 'demo'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingProjectIo.io,
+      fetchImpl,
+    );
+    expect(missingProjectCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingProjectIo).error).toContain('requires --project-id');
+    expect(calls).toHaveLength(0);
+  });
+
   it('validates session-template CLI input before fetching', async () => {
     const missingNameIo = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
