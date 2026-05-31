@@ -228,6 +228,20 @@ export type IdentityMappingListResponse = {
   readonly identity_mappings: readonly IdentityMappingResource[];
 };
 
+export type CreateIdentityMappingCommand = {
+  readonly name: string;
+  readonly description?: string | null;
+  readonly kind: IdentityMappingKind;
+  readonly issuer: string;
+  readonly external_id: string;
+  readonly claim_name?: string | null;
+  readonly service_principal_id?: string | null;
+  readonly project_id: string;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly scopes?: readonly string[];
+  readonly state?: IdentityMappingState;
+};
+
 export type CreateServicePrincipalCommand = {
   readonly name: string;
   readonly description?: string | null;

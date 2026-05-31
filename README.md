@@ -356,7 +356,8 @@ service principals to BrowserPane projects through `/api/v1/identity-mappings`,
 use active/disabled state for lifecycle review, and block new automation
 delegation to disabled registered clients while keeping existing session
 metadata inspectable for cleanup. The admin Operations Overlay has a matching
-Identity tab, and the operator CLI exposes the same payload through
+Identity tab for access-review visibility plus identity-mapping create, edit,
+disable, and re-enable operations, and the operator CLI exposes the same payload through
 `identity me`, `identity access-review`, `service-principal`, and
 `identity-mapping` commands.
 Network identity metadata lets callers declare locale, language preferences,
@@ -994,7 +995,7 @@ Admin and browser-harness smokes are also script-backed. Run the focused
 `smoke:admin-session` covers live session join, disconnect, release,
 profile-backed reconnect, stop/reconnect behavior, session-switch disconnect,
 display upload, policy/lifecycle panels, and Identity tab resource counts,
-identity mappings, and delegation lists.
+identity-mapping create/update/disable/re-enable, and delegation lists.
 
 Other useful checks:
 
