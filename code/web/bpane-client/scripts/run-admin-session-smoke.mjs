@@ -132,6 +132,11 @@ async function verifyIdentityPanel(page, options) {
   );
   await page.getByTestId('identity-project-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await page.getByTestId('identity-service-principal-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await page.getByTestId('identity-mapping-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  const mappingCount = Number(await page.getByTestId('identity-resource-identity-mappings').textContent());
+  if (!Number.isFinite(mappingCount) || mappingCount < 0) {
+    throw new Error(`Expected identity mapping count to be numeric, got ${mappingCount}`);
+  }
   await page.getByTestId('identity-delegation-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
 }
 
