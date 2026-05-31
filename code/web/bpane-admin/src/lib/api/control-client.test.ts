@@ -137,12 +137,29 @@ const IDENTITY_PRINCIPAL = {
   principal_type: 'user',
 };
 
+const SERVICE_PRINCIPAL = {
+  id: '019df8ec-a5e2-7b00-a14b-173e70c39f7d',
+  name: 'MCP bridge',
+  description: 'Bridge automation identity',
+  client_id: 'bpane-mcp-bridge',
+  issuer: 'http://localhost:8091/realms/browserpane',
+  labels: { system: 'mcp' },
+  scopes: ['session:delegate'],
+  allowed_project_ids: ['019df811-91a5-7b00-9fe5-93403ea57f19'],
+  state: 'active',
+  last_seen_at: null,
+  last_delegated_at: '2026-05-29T10:00:00Z',
+  created_at: '2026-05-29T09:00:00Z',
+  updated_at: '2026-05-29T10:00:00Z',
+};
+
 const ACCESS_REVIEW = {
   principal: IDENTITY_PRINCIPAL,
   generated_at: '2026-05-29T10:00:00Z',
   projects: [PROJECT],
   resource_counts: {
     projects: 1,
+    service_principals: 1,
     sessions: 2,
     active_sessions: 1,
     session_templates: 1,
@@ -158,11 +175,22 @@ const ACCESS_REVIEW = {
     extension_definitions: 0,
     delegated_principals: 1,
   },
+  service_principals: [
+    {
+      ...SERVICE_PRINCIPAL,
+      delegated_session_count: 1,
+      active_delegated_session_count: 1,
+      delegated_session_ids: [SESSION.id],
+    },
+  ],
   delegated_principals: [
     {
       client_id: 'bpane-mcp-bridge',
       issuer: 'http://localhost:8091/realms/browserpane',
       display_name: 'BrowserPane MCP bridge',
+      registered: true,
+      registered_service_principal_id: SERVICE_PRINCIPAL.id,
+      state: 'active',
       session_count: 1,
       active_session_count: 1,
       session_ids: [SESSION.id],
@@ -275,12 +303,20 @@ describe('ControlClient', () => {
       principal: { subject: 'demo', principal_type: 'user' },
       resource_counts: {
         projects: 1,
+        service_principals: 1,
         sessions: 2,
         delegated_principals: 1,
       },
+      service_principals: [
+        {
+          id: SERVICE_PRINCIPAL.id,
+          delegated_session_ids: [SESSION.id],
+        },
+      ],
       delegated_principals: [
         {
           client_id: 'bpane-mcp-bridge',
+          registered: true,
           session_ids: [SESSION.id],
         },
       ],
@@ -294,6 +330,88 @@ describe('ControlClient', () => {
       2,
       new URL('http://localhost:8932/api/v1/identity/access-review'),
       expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('manages service principal registry resources with bearer auth', async () => {
+    const responses = [
+      SERVICE_PRINCIPAL,
+      { service_principals: [SERVICE_PRINCIPAL] },
+      SERVICE_PRINCIPAL,
+      { ...SERVICE_PRINCIPAL, name: 'MCP bridge v2' },
+    ];
+    const fetchImpl = vi.fn<FetchLike>(async () => new Response(JSON.stringify(responses.shift()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const created = await client.createServicePrincipal({
+      name: 'MCP bridge',
+      description: 'Bridge automation identity',
+      client_id: 'bpane-mcp-bridge',
+      issuer: 'http://localhost:8091/realms/browserpane',
+      labels: { system: 'mcp' },
+      scopes: ['session:delegate'],
+      allowed_project_ids: ['019df811-91a5-7b00-9fe5-93403ea57f19'],
+    });
+    const listed = await client.listServicePrincipals();
+    await client.getServicePrincipal('service/principal with space');
+    await client.updateServicePrincipal(SERVICE_PRINCIPAL.id, {
+      name: 'MCP bridge v2',
+      client_id: 'bpane-mcp-bridge',
+      issuer: 'http://localhost:8091/realms/browserpane',
+      state: 'active',
+    });
+
+    expect(created.id).toBe(SERVICE_PRINCIPAL.id);
+    expect(listed.service_principals).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      new URL('http://localhost:8932/api/v1/service-principals'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'MCP bridge',
+          description: 'Bridge automation identity',
+          client_id: 'bpane-mcp-bridge',
+          issuer: 'http://localhost:8091/realms/browserpane',
+          labels: { system: 'mcp' },
+          scopes: ['session:delegate'],
+          allowed_project_ids: ['019df811-91a5-7b00-9fe5-93403ea57f19'],
+          state: 'active',
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      new URL('http://localhost:8932/api/v1/service-principals'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      new URL('http://localhost:8932/api/v1/service-principals/service%2Fprincipal%20with%20space'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      4,
+      new URL(`http://localhost:8932/api/v1/service-principals/${SERVICE_PRINCIPAL.id}`),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          name: 'MCP bridge v2',
+          client_id: 'bpane-mcp-bridge',
+          issuer: 'http://localhost:8091/realms/browserpane',
+          state: 'active',
+          labels: {},
+          scopes: [],
+          allowed_project_ids: [],
+        }),
+      }),
     );
   });
 

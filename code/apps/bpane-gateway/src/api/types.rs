@@ -24,9 +24,10 @@ use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig,
     EgressDiagnosticsResource, EgressProfileState, EgressProxyConfig,
     EgressTrafficObservationConfig, ProjectAdmissionDecision, ProjectQuotas, ProjectState,
-    SessionConnectInfo, SessionEffectiveEgress, SessionLifecycleState, SessionNetworkIdentity,
-    SessionOwnerMode, SessionProjectResource, SessionRecordingFormat, SessionRecordingMode,
-    SessionResource, SessionStatusSummary, SessionStore, SessionTemplateDefaults,
+    ServicePrincipalState, SessionConnectInfo, SessionEffectiveEgress, SessionLifecycleState,
+    SessionNetworkIdentity, SessionOwnerMode, SessionProjectResource, SessionRecordingFormat,
+    SessionRecordingMode, SessionResource, SessionStatusSummary, SessionStore,
+    SessionTemplateDefaults,
 };
 use crate::session_files::SessionFileBindingMode;
 use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
@@ -329,6 +330,27 @@ pub(super) struct UpsertProjectRequest {
 
 fn default_project_state() -> ProjectState {
     ProjectState::Active
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpsertServicePrincipalRequest {
+    pub(super) name: String,
+    #[serde(default)]
+    pub(super) description: Option<String>,
+    pub(super) client_id: String,
+    pub(super) issuer: String,
+    #[serde(default)]
+    pub(super) labels: HashMap<String, String>,
+    #[serde(default)]
+    pub(super) scopes: Vec<String>,
+    #[serde(default)]
+    pub(super) allowed_project_ids: Vec<Uuid>,
+    #[serde(default = "default_service_principal_state")]
+    pub(super) state: ServicePrincipalState,
+}
+
+fn default_service_principal_state() -> ServicePrincipalState {
+    ServicePrincipalState::Active
 }
 
 #[derive(Deserialize)]

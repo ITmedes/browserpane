@@ -42,15 +42,17 @@ use crate::session_control::{
     EgressProfileState, FailSessionRecordingRequest, PersistBrowserContextRequest,
     PersistCompletedSessionRecordingRequest, PersistEgressDiagnosticsProbeResult,
     PersistEgressProfileReachabilityProbeResult, PersistEgressProfileRequest,
-    PersistProjectRequest, PersistSessionFileBindingRequest, PersistSessionTemplateRequest,
-    ProjectAdmissionDecision, ProjectListResponse, ProjectResource, ProjectUsageResource,
-    SessionBrowserContextMode, SessionEffectiveEgress, SessionLifecycleState, SessionListResponse,
-    SessionNetworkIdentity, SessionOwnerMode, SessionRecordingFormat, SessionRecordingListResponse,
-    SessionRecordingMode, SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
+    PersistProjectRequest, PersistServicePrincipalRequest, PersistSessionFileBindingRequest,
+    PersistSessionTemplateRequest, ProjectAdmissionDecision, ProjectListResponse, ProjectResource,
+    ProjectUsageResource, ServicePrincipalListResponse, ServicePrincipalResource,
+    ServicePrincipalState, SessionBrowserContextMode, SessionEffectiveEgress,
+    SessionLifecycleState, SessionListResponse, SessionNetworkIdentity, SessionOwnerMode,
+    SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
+    SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
     SessionRecordingTerminationReason, SessionResource, SessionStore, SessionStoreError,
     SessionTemplateDefaults, SessionTemplateListResponse, SessionTemplateResource,
     SetAutomationDelegateRequest, StoredBrowserContext, StoredEgressProfile, StoredProject,
-    StoredSession, StoredSessionRecording,
+    StoredServicePrincipal, StoredSession, StoredSessionRecording,
 };
 use crate::session_files::{
     SessionFileBindingListResponse, SessionFileBindingResource, SessionFileListResponse,
@@ -102,6 +104,7 @@ mod recordings;
 mod resources;
 mod router;
 mod runtime_access;
+mod service_principals;
 mod session_bindings;
 mod session_files;
 mod session_templates;

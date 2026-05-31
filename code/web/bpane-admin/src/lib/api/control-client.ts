@@ -16,6 +16,7 @@ import type {
   CreateBrowserContextCommand,
   CreateEgressProfileCommand,
   CreateProjectCommand,
+  CreateServicePrincipalCommand,
   ImportBrowserContextCommand,
   CreateSessionCommand,
   CreateFileWorkspaceCommand,
@@ -32,6 +33,8 @@ import type {
   ProjectListResponse,
   ProjectResource,
   ProjectUsageResource,
+  ServicePrincipalListResponse,
+  ServicePrincipalResource,
   SessionAccessTokenResponse,
   SessionFileBindingListResponse,
   SessionFileBindingResource,
@@ -88,6 +91,41 @@ export class ControlClient {
   async getIdentityAccessReview(): Promise<IdentityAccessReviewResponse> {
     const payload = await this.#request('GET', '/api/v1/identity/access-review');
     return ControlSessionMapper.toIdentityAccessReview(payload);
+  }
+
+  async listServicePrincipals(): Promise<ServicePrincipalListResponse> {
+    const payload = await this.#request('GET', '/api/v1/service-principals');
+    return ControlSessionMapper.toServicePrincipalList(payload);
+  }
+
+  async createServicePrincipal(command: CreateServicePrincipalCommand): Promise<ServicePrincipalResource> {
+    const payload = await this.#request('POST', '/api/v1/service-principals', {
+      ...command,
+      labels: command.labels ?? {},
+      scopes: command.scopes ?? [],
+      allowed_project_ids: command.allowed_project_ids ?? [],
+      state: command.state ?? 'active',
+    });
+    return ControlSessionMapper.toServicePrincipalResource(payload);
+  }
+
+  async getServicePrincipal(servicePrincipalId: string): Promise<ServicePrincipalResource> {
+    const payload = await this.#request('GET', `/api/v1/service-principals/${encodeURIComponent(servicePrincipalId)}`);
+    return ControlSessionMapper.toServicePrincipalResource(payload);
+  }
+
+  async updateServicePrincipal(
+    servicePrincipalId: string,
+    command: CreateServicePrincipalCommand,
+  ): Promise<ServicePrincipalResource> {
+    const payload = await this.#request('PUT', `/api/v1/service-principals/${encodeURIComponent(servicePrincipalId)}`, {
+      ...command,
+      labels: command.labels ?? {},
+      scopes: command.scopes ?? [],
+      allowed_project_ids: command.allowed_project_ids ?? [],
+      state: command.state ?? 'active',
+    });
+    return ControlSessionMapper.toServicePrincipalResource(payload);
   }
 
   async listSessions(filters: SessionListFilters = {}): Promise<SessionListResponse> {

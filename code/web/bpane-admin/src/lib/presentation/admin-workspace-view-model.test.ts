@@ -10,6 +10,7 @@ describe('AdminWorkspaceViewModelBuilder', () => {
       browserContextCount: 1,
       egressProfileCount: 2,
       fileCount: 1,
+      servicePrincipalCount: 1,
       delegatedPrincipalCount: 1,
       connected: true,
     });
@@ -39,6 +40,7 @@ describe('AdminWorkspaceViewModelBuilder', () => {
       browserContextCount: 0,
       egressProfileCount: 0,
       fileCount: 0,
+      servicePrincipalCount: 0,
       delegatedPrincipalCount: 0,
       connected: false,
     });

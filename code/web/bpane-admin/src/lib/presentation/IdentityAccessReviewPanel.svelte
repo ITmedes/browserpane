@@ -24,7 +24,7 @@
 <section class="grid min-w-0 gap-4" aria-label="Identity access review" data-testid="identity-access-review-panel">
   <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
     <p class="m-0 text-sm leading-normal text-admin-ink/68">
-      Review the authenticated principal, owner-scoped resource counts, and delegated automation access.
+      Review the authenticated principal, owner-scoped resource counts, registered service principals, and delegated automation access.
     </p>
     <button
       class="admin-button-ghost inline-flex items-center gap-2"
@@ -125,6 +125,47 @@
       {/if}
     </section>
 
+    <section class="grid min-w-0 gap-2" aria-label="Service principal registry" data-testid="identity-service-principal-list">
+      <div class="flex items-center justify-between gap-2">
+        <p class="admin-eyebrow m-0">Service principals</p>
+        <span class="text-xs font-bold text-admin-ink/58">{viewModel.servicePrincipals.length}</span>
+      </div>
+      {#if viewModel.servicePrincipals.length === 0}
+        <AdminMessage variant="empty" message="No service principals are registered for this principal." compact={true} />
+      {:else}
+        <div class="grid gap-2">
+          {#each viewModel.servicePrincipals as servicePrincipal (servicePrincipal.id)}
+            <article class="rounded-[12px] border border-[#90a6cc]/16 bg-admin-panel/62 p-3">
+              <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                <div class="min-w-0">
+                  <strong class="block truncate text-sm font-extrabold text-admin-ink">{servicePrincipal.name}</strong>
+                  <p class="m-0 min-w-0 text-xs font-semibold leading-normal text-admin-ink/58 [overflow-wrap:anywhere]">
+                    {servicePrincipal.clientId} / {servicePrincipal.issuer}
+                  </p>
+                </div>
+                <span class={`w-fit rounded-lg px-2 py-1 text-xs font-bold ${
+                  servicePrincipal.state === 'active'
+                    ? 'bg-admin-leaf/12 text-admin-leaf'
+                    : 'bg-admin-danger/12 text-admin-danger'
+                }`}>
+                  {servicePrincipal.state}
+                </span>
+              </div>
+              <div class="mt-3 grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
+                <span class="text-xs font-bold text-admin-ink/58">Delegated <strong class="block text-admin-ink">{servicePrincipal.delegatedSummary}</strong></span>
+                <span class="text-xs font-bold text-admin-ink/58">Scopes <strong class="block text-admin-ink">{servicePrincipal.scopes}</strong></span>
+                <span class="text-xs font-bold text-admin-ink/58">Projects <strong class="block text-admin-ink">{servicePrincipal.projects}</strong></span>
+              </div>
+              <p class="mt-2 mb-0 text-xs font-semibold text-admin-ink/54">
+                {servicePrincipal.lastActivity}
+                <span class="block [overflow-wrap:anywhere]">{servicePrincipal.delegatedSessionIds}</span>
+              </p>
+            </article>
+          {/each}
+        </div>
+      {/if}
+    </section>
+
     <section class="grid min-w-0 gap-2" aria-label="Delegated automation access" data-testid="identity-delegation-list">
       <div class="flex items-center justify-between gap-2">
         <p class="admin-eyebrow m-0">Delegated automation</p>
@@ -141,7 +182,7 @@
                 {delegation.clientId} / {delegation.issuer}
               </p>
               <p class="mt-2 mb-0 text-xs font-bold text-admin-ink/72">
-                {delegation.sessionSummary}
+                {delegation.sessionSummary} / {delegation.registration} / {delegation.state}
                 <span class="block font-semibold text-admin-ink/54">{delegation.sessionIds}</span>
               </p>
             </article>

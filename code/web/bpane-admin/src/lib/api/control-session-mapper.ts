@@ -20,6 +20,7 @@ import type {
   IdentityPrincipalResource,
   IdentityPrincipalType,
   IdentityResourceCounts,
+  IdentityServicePrincipalReviewResource,
   ProjectAdmissionDecision,
   ProjectAdmissionReasonCode,
   ProjectAdmissionState,
@@ -28,6 +29,9 @@ import type {
   ProjectResource,
   ProjectState,
   ProjectUsageResource,
+  ServicePrincipalListResponse,
+  ServicePrincipalResource,
+  ServicePrincipalState,
   SessionAutomationDelegate,
   SessionBrowserContextMode,
   SessionBrowserContextResource,
@@ -66,9 +70,13 @@ export class ControlSessionMapper {
   static toIdentityAccessReview(payload: unknown): IdentityAccessReviewResponse {
     const object = expectRecord(payload, 'identity access review');
     const projects = object.projects;
+    const servicePrincipals = object.service_principals;
     const delegatedPrincipals = object.delegated_principals;
     if (!Array.isArray(projects)) {
       throw new Error('identity access review must contain a projects array');
+    }
+    if (!Array.isArray(servicePrincipals)) {
+      throw new Error('identity access review must contain a service_principals array');
     }
     if (!Array.isArray(delegatedPrincipals)) {
       throw new Error('identity access review must contain a delegated_principals array');
@@ -78,8 +86,24 @@ export class ControlSessionMapper {
       generated_at: expectString(object.generated_at, 'identity access review generated_at'),
       projects: projects.map((project) => this.toProjectResource(project)),
       resource_counts: toIdentityResourceCounts(object.resource_counts),
+      service_principals: servicePrincipals.map((servicePrincipal) => toIdentityServicePrincipalReview(servicePrincipal)),
       delegated_principals: delegatedPrincipals.map((delegate) => toIdentityDelegatedPrincipal(delegate)),
     };
+  }
+
+  static toServicePrincipalList(payload: unknown): ServicePrincipalListResponse {
+    const object = expectRecord(payload, 'service principal list response');
+    const servicePrincipals = object.service_principals;
+    if (!Array.isArray(servicePrincipals)) {
+      throw new Error('service principal list response must contain a service_principals array');
+    }
+    return {
+      service_principals: servicePrincipals.map((servicePrincipal) => this.toServicePrincipalResource(servicePrincipal)),
+    };
+  }
+
+  static toServicePrincipalResource(payload: unknown): ServicePrincipalResource {
+    return toServicePrincipalResource(payload);
   }
 
   static toProjectList(payload: unknown): ProjectListResponse {
@@ -307,6 +331,7 @@ const PROJECT_ADMISSION_REASON_CODES = [
   'project_archived',
 ] satisfies readonly ProjectAdmissionReasonCode[];
 const IDENTITY_PRINCIPAL_TYPES = ['user', 'service_principal', 'legacy_dev_token'] satisfies readonly IdentityPrincipalType[];
+const SERVICE_PRINCIPAL_STATES = ['active', 'disabled'] satisfies readonly ServicePrincipalState[];
 const EGRESS_PROFILE_STATES = ['ready', 'disabled'] satisfies readonly EgressProfileState[];
 const EGRESS_TRAFFIC_OBSERVATION_MODES = ['metadata_only', 'tls_intercept'] satisfies readonly EgressTrafficObservationMode[];
 const EGRESS_DIAGNOSTICS_HEALTHS = ['ready', 'unknown', 'attention', 'blocked', 'missing'] satisfies readonly EgressDiagnosticsHealth[];
@@ -359,6 +384,7 @@ function toIdentityResourceCounts(value: unknown): IdentityResourceCounts {
   const object = expectRecord(value, 'identity resource counts');
   return {
     projects: expectNumber(object.projects, 'identity resource counts projects'),
+    service_principals: expectNumber(object.service_principals, 'identity resource counts service_principals'),
     sessions: expectNumber(object.sessions, 'identity resource counts sessions'),
     active_sessions: expectNumber(object.active_sessions, 'identity resource counts active_sessions'),
     session_templates: expectNumber(object.session_templates, 'identity resource counts session_templates'),
@@ -379,10 +405,17 @@ function toIdentityResourceCounts(value: unknown): IdentityResourceCounts {
 function toIdentityDelegatedPrincipal(value: unknown): IdentityDelegatedPrincipalResource {
   const object = expectRecord(value, 'identity delegated principal');
   const displayName = optionalString(object.display_name, 'identity delegated principal display_name');
+  const registeredServicePrincipalId = optionalString(
+    object.registered_service_principal_id,
+    'identity delegated principal registered_service_principal_id',
+  );
   return {
     client_id: expectString(object.client_id, 'identity delegated principal client_id'),
     issuer: expectString(object.issuer, 'identity delegated principal issuer'),
     display_name: displayName ?? null,
+    registered: expectBoolean(object.registered, 'identity delegated principal registered'),
+    registered_service_principal_id: registeredServicePrincipalId ?? null,
+    state: optionalServicePrincipalState(object.state, 'identity delegated principal state') ?? null,
     session_count: expectNumber(object.session_count, 'identity delegated principal session_count'),
     active_session_count: expectNumber(
       object.active_session_count,
@@ -390,6 +423,57 @@ function toIdentityDelegatedPrincipal(value: unknown): IdentityDelegatedPrincipa
     ),
     session_ids: toStringArray(object.session_ids ?? [], 'identity delegated principal session_ids'),
   };
+}
+
+function toIdentityServicePrincipalReview(value: unknown): IdentityServicePrincipalReviewResource {
+  const object = expectRecord(value, 'identity service principal review');
+  return {
+    ...toServicePrincipalResource(object),
+    delegated_session_count: expectNumber(
+      object.delegated_session_count,
+      'identity service principal review delegated_session_count',
+    ),
+    active_delegated_session_count: expectNumber(
+      object.active_delegated_session_count,
+      'identity service principal review active_delegated_session_count',
+    ),
+    delegated_session_ids: toStringArray(
+      object.delegated_session_ids ?? [],
+      'identity service principal review delegated_session_ids',
+    ),
+  };
+}
+
+function toServicePrincipalResource(value: unknown): ServicePrincipalResource {
+  const object = expectRecord(value, 'service principal resource');
+  const description = optionalString(object.description, 'service principal description');
+  const lastSeenAt = optionalString(object.last_seen_at, 'service principal last_seen_at');
+  const lastDelegatedAt = optionalString(object.last_delegated_at, 'service principal last_delegated_at');
+  return {
+    id: expectString(object.id, 'service principal id'),
+    name: expectString(object.name, 'service principal name'),
+    description: description ?? null,
+    client_id: expectString(object.client_id, 'service principal client_id'),
+    issuer: expectString(object.issuer, 'service principal issuer'),
+    labels: expectStringRecord(object.labels ?? {}, 'service principal labels'),
+    scopes: toStringArray(object.scopes ?? [], 'service principal scopes'),
+    allowed_project_ids: toStringArray(object.allowed_project_ids ?? [], 'service principal allowed_project_ids'),
+    state: expectEnum(object.state, 'service principal state', SERVICE_PRINCIPAL_STATES),
+    last_seen_at: lastSeenAt ?? null,
+    last_delegated_at: lastDelegatedAt ?? null,
+    created_at: expectString(object.created_at, 'service principal created_at'),
+    updated_at: expectString(object.updated_at, 'service principal updated_at'),
+  };
+}
+
+function optionalServicePrincipalState(
+  value: unknown,
+  label: string,
+): ServicePrincipalState | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return expectEnum(value, label, SERVICE_PRINCIPAL_STATES);
 }
 
 function toProjectQuotas(value: unknown): ProjectQuotas {

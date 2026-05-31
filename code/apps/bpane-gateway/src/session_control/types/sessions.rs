@@ -452,6 +452,107 @@ pub struct ProjectListResponse {
     pub projects: Vec<ProjectResource>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ServicePrincipalState {
+    Active,
+    Disabled,
+}
+
+impl ServicePrincipalState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Disabled => "disabled",
+        }
+    }
+}
+
+impl FromStr for ServicePrincipalState {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "active" => Ok(Self::Active),
+            "disabled" => Ok(Self::Disabled),
+            _ => Err("unknown service principal state"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PersistServicePrincipalRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub client_id: String,
+    pub issuer: String,
+    pub labels: HashMap<String, String>,
+    pub scopes: Vec<String>,
+    pub allowed_project_ids: Vec<Uuid>,
+    pub state: ServicePrincipalState,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoredServicePrincipal {
+    pub id: Uuid,
+    pub owner_subject: String,
+    pub owner_issuer: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub client_id: String,
+    pub issuer: String,
+    pub labels: HashMap<String, String>,
+    pub scopes: Vec<String>,
+    pub allowed_project_ids: Vec<Uuid>,
+    pub state: ServicePrincipalState,
+    pub last_seen_at: Option<DateTime<Utc>>,
+    pub last_delegated_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ServicePrincipalResource {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub client_id: String,
+    pub issuer: String,
+    pub labels: HashMap<String, String>,
+    pub scopes: Vec<String>,
+    pub allowed_project_ids: Vec<Uuid>,
+    pub state: ServicePrincipalState,
+    pub last_seen_at: Option<DateTime<Utc>>,
+    pub last_delegated_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ServicePrincipalListResponse {
+    pub service_principals: Vec<ServicePrincipalResource>,
+}
+
+impl StoredServicePrincipal {
+    pub fn to_resource(&self) -> ServicePrincipalResource {
+        ServicePrincipalResource {
+            id: self.id,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            client_id: self.client_id.clone(),
+            issuer: self.issuer.clone(),
+            labels: self.labels.clone(),
+            scopes: self.scopes.clone(),
+            allowed_project_ids: self.allowed_project_ids.clone(),
+            state: self.state,
+            last_seen_at: self.last_seen_at,
+            last_delegated_at: self.last_delegated_at,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
 impl StoredProject {
     pub fn usage(&self, active_sessions: u32, observed_at: DateTime<Utc>) -> ProjectUsageResource {
         ProjectUsageResource {
@@ -1394,7 +1495,7 @@ impl StoredSessionTemplate {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct SetAutomationDelegateRequest {
     pub client_id: String,
     #[serde(default)]
