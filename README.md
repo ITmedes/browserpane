@@ -598,6 +598,7 @@ Common identity and access-review operations:
   --project-id <project-id>
 ./scripts/bpane identity-mapping list
 ./scripts/bpane identity-mapping get <identity-mapping-id>
+./scripts/bpane identity-mapping update <identity-mapping-id> --state active
 ./scripts/bpane identity-mapping disable <identity-mapping-id>
 ```
 
@@ -970,6 +971,7 @@ npm run test:coverage
 npm run build
 ../../../scripts/bpane --help
 npm run smoke:bpane-cli -- --headless
+npm run smoke:admin-session -- --headless
 npm run workflow:cli -- --help
 npm run smoke:automation-tasks -- --headless
 npm run smoke:file-workspaces -- --headless
@@ -989,6 +991,10 @@ Admin and browser-harness smokes are also script-backed. Run the focused
 `smoke:admin-*`, `smoke:workflow-*`, `smoke:test-embed-*`,
 `smoke:browser-policy`, and `smoke:multisession` commands from
 `code/web/bpane-client/package.json` when touching those areas.
+`smoke:admin-session` covers live session join, disconnect, release,
+profile-backed reconnect, stop/reconnect behavior, session-switch disconnect,
+display upload, policy/lifecycle panels, and Identity tab resource counts,
+identity mappings, and delegation lists.
 
 Other useful checks:
 
