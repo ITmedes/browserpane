@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use jsonwebtoken::jwk::{AlgorithmParameters, JwkSet};
@@ -9,9 +9,25 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration};
 
-use crate::auth::{AuthError, AuthenticatedPrincipal, OidcConfig};
+use crate::auth::{
+    AuthError, AuthenticatedPrincipal, AuthenticatedPrincipalClaimValue,
+    AuthenticatedPrincipalClaims, OidcConfig,
+};
 
 const JWT_CLOCK_SKEW_SECS: u64 = 30;
+const MAX_SAFE_CLAIM_VALUES: usize = 128;
+const MAX_SAFE_CLAIM_VALUE_LEN: usize = 256;
+const MAX_SAFE_CLAIM_NAME_LEN: usize = 128;
+const SAFE_TOP_LEVEL_CLAIMS: &[&str] = &[
+    "groups",
+    "roles",
+    "tenant",
+    "tenant_id",
+    "organization",
+    "organization_id",
+    "org_id",
+    "department",
+];
 
 #[derive(Debug, Deserialize)]
 struct OidcDiscoveryResponse {
@@ -72,12 +88,14 @@ impl OidcTokenValidator {
             .and_then(Value::as_str)
             .or_else(|| claims.get("azp").and_then(Value::as_str))
             .map(ToString::to_string);
+        let safe_claims = safe_principal_claims_from_token_claims(&claims);
 
         Ok(AuthenticatedPrincipal {
             subject: subject.to_string(),
             issuer: issuer.to_string(),
             display_name,
             client_id,
+            safe_claims,
         })
     }
 
@@ -233,5 +251,146 @@ fn map_jwt_error(error: jsonwebtoken::errors::Error) -> AuthError {
             AuthError::MalformedToken
         }
         _ => AuthError::MalformedToken,
+    }
+}
+
+fn safe_principal_claims_from_token_claims(claims: &Value) -> AuthenticatedPrincipalClaims {
+    let mut groups = BTreeSet::new();
+    let mut claim_values = BTreeSet::new();
+
+    for claim_name in SAFE_TOP_LEVEL_CLAIMS {
+        for value in safe_string_values_at(claims, &[*claim_name]) {
+            if *claim_name == "groups" {
+                groups.insert(value.clone());
+            }
+            claim_values.insert(((*claim_name).to_string(), value));
+        }
+    }
+
+    for value in safe_string_values_at(claims, &["realm_access", "roles"]) {
+        claim_values.insert(("realm_access.roles".to_string(), value));
+    }
+
+    if let Some(resource_access) = claims.get("resource_access").and_then(Value::as_object) {
+        for (client, client_access) in resource_access {
+            let Some(client_segment) = sanitize_safe_claim_path_segment(client) else {
+                continue;
+            };
+            let claim_name = format!("resource_access.{client_segment}.roles");
+            for value in safe_string_values_at(client_access, &["roles"]) {
+                claim_values.insert((claim_name.clone(), value));
+            }
+        }
+    }
+
+    AuthenticatedPrincipalClaims {
+        groups: groups.into_iter().take(MAX_SAFE_CLAIM_VALUES).collect(),
+        claims: claim_values
+            .into_iter()
+            .take(MAX_SAFE_CLAIM_VALUES)
+            .map(|(name, value)| AuthenticatedPrincipalClaimValue { name, value })
+            .collect(),
+    }
+}
+
+fn safe_string_values_at(root: &Value, path: &[&str]) -> Vec<String> {
+    let Some(value) = value_at_path(root, path) else {
+        return Vec::new();
+    };
+    safe_string_values(value)
+}
+
+fn value_at_path<'a>(root: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    let mut current = root;
+    for segment in path {
+        current = current.get(*segment)?;
+    }
+    Some(current)
+}
+
+fn safe_string_values(value: &Value) -> Vec<String> {
+    match value {
+        Value::String(value) => sanitize_safe_claim_value(value).into_iter().collect(),
+        Value::Array(values) => values
+            .iter()
+            .filter_map(Value::as_str)
+            .filter_map(sanitize_safe_claim_value)
+            .take(MAX_SAFE_CLAIM_VALUES)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn sanitize_safe_claim_value(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty()
+        || trimmed.len() > MAX_SAFE_CLAIM_VALUE_LEN
+        || trimmed.chars().any(char::is_control)
+    {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn sanitize_safe_claim_path_segment(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty()
+        || trimmed.len() > MAX_SAFE_CLAIM_NAME_LEN
+        || trimmed
+            .chars()
+            .any(|character| !(character.is_ascii_alphanumeric() || "-_:.@".contains(character)))
+    {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn safe_principal_claims_keep_only_allowlisted_string_values() {
+        let claims = json!({
+            "groups": ["customer-acme-support", " ", 7, "customer-acme-support"],
+            "roles": "workspace-admin",
+            "tenant": "acme",
+            "realm_access": { "roles": ["offline_access", "uma_authorization"] },
+            "resource_access": {
+                "bpane-admin": { "roles": ["admin-ui"] },
+                "bad/client": { "roles": ["ignored"] }
+            },
+            "address": { "street": "raw object is ignored" },
+            "unsafe": ["not allowlisted"]
+        });
+
+        let safe_claims = safe_principal_claims_from_token_claims(&claims);
+
+        assert_eq!(safe_claims.groups, vec!["customer-acme-support"]);
+        assert!(safe_claims.has_claim_value("groups", "customer-acme-support"));
+        assert!(safe_claims.has_claim_value("roles", "workspace-admin"));
+        assert!(safe_claims.has_claim_value("tenant", "acme"));
+        assert!(safe_claims.has_claim_value("realm_access.roles", "offline_access"));
+        assert!(safe_claims.has_claim_value("resource_access.bpane-admin.roles", "admin-ui"));
+        assert!(!safe_claims.has_claim_value("unsafe", "not allowlisted"));
+        assert!(!safe_claims.has_claim_value("resource_access.bad/client.roles", "ignored"));
+    }
+
+    #[test]
+    fn safe_principal_claims_drop_control_characters_and_long_values() {
+        let claims = json!({
+            "groups": [
+                "customer-acme-support\u{0000}",
+                "x".repeat(MAX_SAFE_CLAIM_VALUE_LEN + 1),
+                "customer-beta-support"
+            ]
+        });
+
+        let safe_claims = safe_principal_claims_from_token_claims(&claims);
+
+        assert_eq!(safe_claims.groups, vec!["customer-beta-support"]);
+        assert!(safe_claims.has_group("customer-beta-support"));
     }
 }

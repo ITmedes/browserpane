@@ -74,6 +74,7 @@ impl BrowserContextRetentionManager {
             issuer: context.owner_issuer,
             display_name: None,
             client_id: None,
+            safe_claims: Default::default(),
         };
         match self
             .session_store
@@ -121,6 +122,7 @@ mod tests {
             issuer: "issuer".to_string(),
             display_name: Some("Owner".to_string()),
             client_id: None,
+            safe_claims: Default::default(),
         }
     }
 

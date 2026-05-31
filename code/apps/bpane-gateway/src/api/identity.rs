@@ -78,6 +78,7 @@ struct IdentityUnmappedPrincipalSignalResource {
     kind: IdentityMappingKind,
     issuer: String,
     external_id: String,
+    claim_name: Option<String>,
     display_name: Option<String>,
     reason: String,
 }
@@ -412,7 +413,12 @@ fn identity_mapping_effective_for_principal(
             .client_id
             .as_deref()
             .is_some_and(|client_id| mapping.external_id == client_id),
-        IdentityMappingKind::Group | IdentityMappingKind::Claim => false,
+        IdentityMappingKind::Group => principal.safe_claims.has_group(&mapping.external_id),
+        IdentityMappingKind::Claim => mapping.claim_name.as_deref().is_some_and(|claim_name| {
+            principal
+                .safe_claims
+                .has_claim_value(claim_name, &mapping.external_id)
+        }),
     }
 }
 
@@ -432,9 +438,52 @@ fn unmapped_principal_signals(
             kind: IdentityMappingKind::User,
             issuer: principal.issuer.clone(),
             external_id: principal.subject.clone(),
+            claim_name: None,
             display_name: principal.display_name.clone(),
             reason: "current_principal_without_project_mapping".to_string(),
         });
+    }
+
+    for group in &principal.safe_claims.groups {
+        let has_active_mapping = mappings.iter().any(|mapping| {
+            mapping.state == IdentityMappingState::Active
+                && mapping.kind == IdentityMappingKind::Group
+                && mapping.issuer == principal.issuer
+                && mapping.external_id == *group
+        });
+        if !has_active_mapping {
+            signals.push(IdentityUnmappedPrincipalSignalResource {
+                kind: IdentityMappingKind::Group,
+                issuer: principal.issuer.clone(),
+                external_id: group.clone(),
+                claim_name: Some("groups".to_string()),
+                display_name: None,
+                reason: "group_without_project_mapping".to_string(),
+            });
+        }
+    }
+
+    for claim in &principal.safe_claims.claims {
+        if !claim_emits_unmapped_signal(&claim.name) {
+            continue;
+        }
+        let has_active_mapping = mappings.iter().any(|mapping| {
+            mapping.state == IdentityMappingState::Active
+                && mapping.kind == IdentityMappingKind::Claim
+                && mapping.issuer == principal.issuer
+                && mapping.claim_name.as_deref() == Some(claim.name.as_str())
+                && mapping.external_id == claim.value
+        });
+        if !has_active_mapping {
+            signals.push(IdentityUnmappedPrincipalSignalResource {
+                kind: IdentityMappingKind::Claim,
+                issuer: principal.issuer.clone(),
+                external_id: claim.value.clone(),
+                claim_name: Some(claim.name.clone()),
+                display_name: None,
+                reason: "safe_claim_without_project_mapping".to_string(),
+            });
+        }
     }
 
     for delegated_principal in delegated_principals {
@@ -449,6 +498,7 @@ fn unmapped_principal_signals(
                 kind: IdentityMappingKind::ServicePrincipal,
                 issuer: delegated_principal.issuer.clone(),
                 external_id: delegated_principal.client_id.clone(),
+                claim_name: None,
                 display_name: delegated_principal.display_name.clone(),
                 reason: if delegated_principal.registered {
                     "registered_service_principal_without_project_mapping".to_string()
@@ -466,6 +516,13 @@ fn unmapped_principal_signals(
             .then(left.issuer.cmp(&right.issuer))
     });
     signals
+}
+
+fn claim_emits_unmapped_signal(claim_name: &str) -> bool {
+    matches!(
+        claim_name,
+        "tenant" | "tenant_id" | "organization" | "organization_id" | "org_id" | "department"
+    )
 }
 
 fn service_principal_review_resources(
@@ -521,4 +578,144 @@ fn service_principal_review_resources(
             )
     });
     resources
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::auth::{
+        AuthenticatedPrincipal, AuthenticatedPrincipalClaimValue, AuthenticatedPrincipalClaims,
+    };
+
+    use super::*;
+
+    fn principal_with_safe_claims() -> AuthenticatedPrincipal {
+        AuthenticatedPrincipal {
+            subject: "demo".to_string(),
+            issuer: "https://issuer.example".to_string(),
+            display_name: Some("demo".to_string()),
+            client_id: Some("bpane-web".to_string()),
+            safe_claims: AuthenticatedPrincipalClaims {
+                groups: vec!["customer-acme-support".to_string()],
+                claims: vec![
+                    AuthenticatedPrincipalClaimValue {
+                        name: "groups".to_string(),
+                        value: "customer-acme-support".to_string(),
+                    },
+                    AuthenticatedPrincipalClaimValue {
+                        name: "tenant".to_string(),
+                        value: "acme".to_string(),
+                    },
+                    AuthenticatedPrincipalClaimValue {
+                        name: "realm_access.roles".to_string(),
+                        value: "support".to_string(),
+                    },
+                ],
+            },
+        }
+    }
+
+    fn mapping(
+        kind: IdentityMappingKind,
+        external_id: &str,
+        claim_name: Option<&str>,
+        state: IdentityMappingState,
+    ) -> StoredIdentityMapping {
+        let now = Utc::now();
+        StoredIdentityMapping {
+            id: Uuid::from_u128(0x018f_0000_0000_7000_8000_000000000001),
+            owner_subject: "owner".to_string(),
+            owner_issuer: "https://issuer.example".to_string(),
+            name: "mapping".to_string(),
+            description: None,
+            kind,
+            issuer: "https://issuer.example".to_string(),
+            external_id: external_id.to_string(),
+            claim_name: claim_name.map(ToString::to_string),
+            service_principal_id: None,
+            project_id: Uuid::from_u128(0x018f_0000_0000_7000_8000_000000000002),
+            labels: HashMap::new(),
+            scopes: Vec::new(),
+            state,
+            last_seen_at: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    #[test]
+    fn group_and_claim_identity_mappings_use_safe_principal_claims() {
+        let principal = principal_with_safe_claims();
+
+        assert!(identity_mapping_effective_for_principal(
+            &principal,
+            &mapping(
+                IdentityMappingKind::Group,
+                "customer-acme-support",
+                None,
+                IdentityMappingState::Active,
+            ),
+        ));
+        assert!(identity_mapping_effective_for_principal(
+            &principal,
+            &mapping(
+                IdentityMappingKind::Claim,
+                "acme",
+                Some("tenant"),
+                IdentityMappingState::Active,
+            ),
+        ));
+        assert!(identity_mapping_effective_for_principal(
+            &principal,
+            &mapping(
+                IdentityMappingKind::Claim,
+                "support",
+                Some("realm_access.roles"),
+                IdentityMappingState::Active,
+            ),
+        ));
+        assert!(!identity_mapping_effective_for_principal(
+            &principal,
+            &mapping(
+                IdentityMappingKind::Claim,
+                "acme",
+                Some("tenant"),
+                IdentityMappingState::Disabled,
+            ),
+        ));
+        assert!(!identity_mapping_effective_for_principal(
+            &principal,
+            &mapping(
+                IdentityMappingKind::Group,
+                "customer-beta-support",
+                None,
+                IdentityMappingState::Active,
+            ),
+        ));
+    }
+
+    #[test]
+    fn unmapped_signals_include_safe_groups_and_claims_without_raw_token_payloads() {
+        let principal = principal_with_safe_claims();
+        let signals = unmapped_principal_signals(&principal, &[], &[]);
+
+        assert!(signals.iter().any(|signal| {
+            signal.kind == IdentityMappingKind::Group
+                && signal.claim_name.as_deref() == Some("groups")
+                && signal.external_id == "customer-acme-support"
+                && signal.reason == "group_without_project_mapping"
+        }));
+        assert!(signals.iter().any(|signal| {
+            signal.kind == IdentityMappingKind::Claim
+                && signal.claim_name.as_deref() == Some("tenant")
+                && signal.external_id == "acme"
+                && signal.reason == "safe_claim_without_project_mapping"
+        }));
+        assert!(!signals.iter().any(|signal| {
+            signal.kind == IdentityMappingKind::Claim
+                && signal.claim_name.as_deref() == Some("realm_access.roles")
+        }));
+        assert!(signals
+            .iter()
+            .all(|signal| !signal.external_id.contains('{') && !signal.reason.contains("token")));
+    }
 }

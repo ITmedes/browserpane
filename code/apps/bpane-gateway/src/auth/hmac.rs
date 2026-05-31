@@ -76,6 +76,7 @@ impl HmacTokenValidator {
             issuer: "bpane-gateway".to_string(),
             display_name: None,
             client_id: None,
+            safe_claims: Default::default(),
         })
     }
 }

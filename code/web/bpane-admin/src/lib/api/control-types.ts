@@ -309,6 +309,7 @@ export type IdentityUnmappedPrincipalSignalResource = {
   readonly kind: IdentityMappingKind;
   readonly issuer: string;
   readonly external_id: string;
+  readonly claim_name?: string | null;
   readonly display_name?: string | null;
   readonly reason: string;
 };

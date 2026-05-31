@@ -38,6 +38,7 @@ pub(super) async fn validate_request_path(
                 issuer: claims.issuer,
                 display_name: None,
                 client_id: claims.client_id,
+                safe_claims: Default::default(),
             };
             let session = session_store
                 .get_session_for_principal(&principal, claims.session_id)

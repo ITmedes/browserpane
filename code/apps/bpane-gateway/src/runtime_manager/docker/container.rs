@@ -371,6 +371,7 @@ impl DockerRuntimeManager {
             issuer: session.owner.issuer.clone(),
             display_name: session.owner.display_name.clone(),
             client_id: None,
+            safe_claims: Default::default(),
         };
         let egress_profile = if let Some(profile_id) = session.network_identity.egress_profile_id {
             let profile = store
