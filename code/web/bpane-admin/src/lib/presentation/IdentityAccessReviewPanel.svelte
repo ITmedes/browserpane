@@ -1,12 +1,15 @@
 <script lang="ts">
-  import { Pencil, Plus, RefreshCw, ShieldCheck, ShieldOff } from 'lucide-svelte';
+  import { KeyRound, Pencil, Plus, RefreshCw, ShieldCheck, ShieldOff } from 'lucide-svelte';
   import { tick } from 'svelte';
   import type {
     CreateIdentityMappingCommand,
+    CreateServicePrincipalCommand,
     IdentityAccessReviewResponse,
     IdentityMappingKind,
     IdentityMappingResource,
     IdentityMappingState,
+    ServicePrincipalResource,
+    ServicePrincipalState,
   } from '../api/control-types';
   import AdminMessage from './AdminMessage.svelte';
   import { IdentityAccessReviewViewModelBuilder } from './identity-access-review-view-model';
@@ -18,6 +21,13 @@
     formWithServicePrincipal,
     identityMappingRows,
   } from './identity-mapping-catalog';
+  import {
+    buildServicePrincipalCommand,
+    commandFromServicePrincipal,
+    emptyServicePrincipalForm,
+    formFromServicePrincipal,
+    servicePrincipalRows as buildServicePrincipalRows,
+  } from './service-principal-catalog';
 
   type IdentityAccessReviewPanelProps = {
     readonly review: IdentityAccessReviewResponse | null;
@@ -26,6 +36,8 @@
     readonly onRefresh: () => void;
     readonly onCreateMapping?: (command: CreateIdentityMappingCommand) => Promise<IdentityMappingResource | void> | IdentityMappingResource | void;
     readonly onUpdateMapping?: (mappingId: string, command: CreateIdentityMappingCommand) => Promise<IdentityMappingResource | void> | IdentityMappingResource | void;
+    readonly onCreateServicePrincipal?: (command: CreateServicePrincipalCommand) => Promise<ServicePrincipalResource | void> | ServicePrincipalResource | void;
+    readonly onUpdateServicePrincipal?: (servicePrincipalId: string, command: CreateServicePrincipalCommand) => Promise<ServicePrincipalResource | void> | ServicePrincipalResource | void;
   };
 
   let {
@@ -35,8 +47,19 @@
     onRefresh,
     onCreateMapping,
     onUpdateMapping,
+    onCreateServicePrincipal,
+    onUpdateServicePrincipal,
   }: IdentityAccessReviewPanelProps = $props();
 
+  let servicePrincipalSearch = $state('');
+  let selectedServicePrincipalId = $state<string | null>(null);
+  let servicePrincipalEditorSection = $state<HTMLElement | null>(null);
+  let servicePrincipalNameInput = $state<HTMLInputElement | null>(null);
+  let servicePrincipalEditorOpen = $state(false);
+  let editingServicePrincipalId = $state<string | null>(null);
+  let servicePrincipalMutating = $state(false);
+  let servicePrincipalFeedback = $state<{ readonly variant: 'success' | 'error' | 'warning' | 'info'; readonly title?: string; readonly message: string } | null>(null);
+  let servicePrincipalForm = $state(emptyServicePrincipalForm(null));
   let mappingSearch = $state('');
   let selectedMappingId = $state<string | null>(null);
   let editorSection = $state<HTMLElement | null>(null);
@@ -48,15 +71,20 @@
   let mappingForm = $state(emptyIdentityMappingForm(null, []));
   const viewModel = $derived(review ? IdentityAccessReviewViewModelBuilder.build(review) : null);
   const mappings = $derived(review?.identity_mappings ?? []);
-  const mappingRows = $derived(identityMappingRows(mappings, mappingSearch));
+  const mappingRows = $derived(identityMappingRows(mappings, mappingSearch, projects));
   const selectedMapping = $derived(mappings.find((mapping) => mapping.id === selectedMappingId) ?? null);
   const selectedMappingRow = $derived(mappingRows.find((row) => row.id === selectedMappingId) ?? null);
   const projects = $derived(review?.projects ?? []);
   const activeProjects = $derived(projects.filter((project) => project.state === 'active'));
   const servicePrincipals = $derived(review?.service_principals ?? []);
-  const disabled = $derived(loading || mappingMutating);
+  const servicePrincipalRows = $derived(buildServicePrincipalRows(servicePrincipals, servicePrincipalSearch, projects));
+  const selectedServicePrincipal = $derived(servicePrincipals.find((servicePrincipal) => servicePrincipal.id === selectedServicePrincipalId) ?? null);
+  const selectedServicePrincipalRow = $derived(servicePrincipalRows.find((row) => row.id === selectedServicePrincipalId) ?? null);
+  const disabled = $derived(loading || mappingMutating || servicePrincipalMutating);
   const mappingEditorTitle = $derived(editingMappingId ? 'Edit identity mapping' : 'Create identity mapping');
   const mappingSaveLabel = $derived(editingMappingId ? 'Save mapping' : 'Create mapping');
+  const servicePrincipalEditorTitle = $derived(editingServicePrincipalId ? 'Edit service principal' : 'Create service principal');
+  const servicePrincipalSaveLabel = $derived(editingServicePrincipalId ? 'Save service principal' : 'Create service principal');
 
   $effect(() => {
     if (!mappingRows.length) {
@@ -65,6 +93,133 @@
       selectedMappingId = mappingRows[0]?.id ?? null;
     }
   });
+
+  $effect(() => {
+    if (!servicePrincipalRows.length) {
+      selectedServicePrincipalId = null;
+    } else if (!servicePrincipalRows.some((row) => row.id === selectedServicePrincipalId)) {
+      selectedServicePrincipalId = servicePrincipalRows[0]?.id ?? null;
+    }
+  });
+
+  function selectServicePrincipal(servicePrincipalId: string): void {
+    selectedServicePrincipalId = servicePrincipalId;
+    if (editingServicePrincipalId && editingServicePrincipalId !== servicePrincipalId) {
+      closeServicePrincipalEditor();
+    }
+    servicePrincipalFeedback = null;
+  }
+
+  function openCreateServicePrincipal(): void {
+    editingServicePrincipalId = null;
+    servicePrincipalEditorOpen = true;
+    servicePrincipalForm = emptyServicePrincipalForm(review?.principal ?? null);
+    servicePrincipalFeedback = null;
+    void revealServicePrincipalEditor();
+  }
+
+  function editSelectedServicePrincipal(): void {
+    const servicePrincipal = selectedServicePrincipal;
+    if (!servicePrincipal) {
+      return;
+    }
+    editingServicePrincipalId = servicePrincipal.id;
+    servicePrincipalEditorOpen = true;
+    servicePrincipalForm = formFromServicePrincipal(servicePrincipal);
+    servicePrincipalFeedback = null;
+    void revealServicePrincipalEditor();
+  }
+
+  function closeServicePrincipalEditor(): void {
+    servicePrincipalEditorOpen = false;
+    editingServicePrincipalId = null;
+    servicePrincipalForm = emptyServicePrincipalForm(review?.principal ?? null);
+  }
+
+  function setAllowedProjects(event: Event): void {
+    const target = event.currentTarget instanceof HTMLSelectElement ? event.currentTarget : null;
+    servicePrincipalForm = {
+      ...servicePrincipalForm,
+      allowedProjectIds: target ? Array.from(target.selectedOptions).map((option) => option.value) : [],
+    };
+  }
+
+  async function revealServicePrincipalEditor(): Promise<void> {
+    await tick();
+    servicePrincipalEditorSection?.scrollIntoView({ block: 'start', behavior: 'auto' });
+    servicePrincipalNameInput?.focus({ preventScroll: true });
+    servicePrincipalNameInput?.select();
+  }
+
+  async function saveServicePrincipal(): Promise<void> {
+    const result = buildServicePrincipalCommand(servicePrincipalForm);
+    if (!result.ok) {
+      servicePrincipalFeedback = { variant: 'error', title: 'Service principal validation failed', message: result.error };
+      return;
+    }
+    if (editingServicePrincipalId && !onUpdateServicePrincipal) {
+      servicePrincipalFeedback = { variant: 'error', title: 'Service principal update unavailable', message: 'This admin view cannot update service principals.' };
+      return;
+    }
+    if (!editingServicePrincipalId && !onCreateServicePrincipal) {
+      servicePrincipalFeedback = { variant: 'error', title: 'Service principal create unavailable', message: 'This admin view cannot create service principals.' };
+      return;
+    }
+
+    servicePrincipalMutating = true;
+    servicePrincipalFeedback = null;
+    try {
+      const saved = editingServicePrincipalId
+        ? await onUpdateServicePrincipal?.(editingServicePrincipalId, result.command)
+        : await onCreateServicePrincipal?.(result.command);
+      if (saved?.id) {
+        selectedServicePrincipalId = saved.id;
+      }
+      servicePrincipalFeedback = {
+        variant: 'success',
+        title: editingServicePrincipalId ? 'Service principal updated' : 'Service principal created',
+        message: saved?.name ? `${saved.name} is available in access review.` : 'Service principal saved.',
+      };
+      servicePrincipalEditorOpen = false;
+      editingServicePrincipalId = null;
+    } catch (saveError) {
+      servicePrincipalFeedback = {
+        variant: 'error',
+        title: 'Service principal save failed',
+        message: saveError instanceof Error ? saveError.message : 'Could not save service principal.',
+      };
+    } finally {
+      servicePrincipalMutating = false;
+    }
+  }
+
+  async function setSelectedServicePrincipalState(state: ServicePrincipalState): Promise<void> {
+    const servicePrincipal = selectedServicePrincipal;
+    if (!servicePrincipal || !onUpdateServicePrincipal || servicePrincipal.state === state) {
+      return;
+    }
+    servicePrincipalMutating = true;
+    servicePrincipalFeedback = null;
+    try {
+      const saved = await onUpdateServicePrincipal(servicePrincipal.id, commandFromServicePrincipal(servicePrincipal, state));
+      if (saved?.id) {
+        selectedServicePrincipalId = saved.id;
+      }
+      servicePrincipalFeedback = {
+        variant: 'success',
+        title: state === 'active' ? 'Service principal enabled' : 'Service principal disabled',
+        message: `${servicePrincipal.name} is now ${state}.`,
+      };
+    } catch (stateError) {
+      servicePrincipalFeedback = {
+        variant: 'error',
+        title: 'Service principal state change failed',
+        message: stateError instanceof Error ? stateError.message : 'Could not update service principal state.',
+      };
+    } finally {
+      servicePrincipalMutating = false;
+    }
+  }
 
   function selectMapping(mappingId: string): void {
     selectedMappingId = mappingId;
@@ -217,6 +372,15 @@
     }
     return state === 'disabled' ? 'bg-admin-danger/62' : 'bg-admin-ink/12';
   }
+
+  function servicePrincipalRowClass(state: string, selected: boolean): string {
+    if (selected) {
+      return 'border-admin-leaf/42 bg-admin-field/84';
+    }
+    return state === 'disabled'
+      ? 'border-admin-danger/24 bg-admin-danger/8'
+      : 'border-admin-ink/10 bg-admin-panel/68';
+  }
 </script>
 
 <section class="grid min-w-0 gap-4" aria-label="Identity access review" data-testid="identity-access-review-panel">
@@ -323,44 +487,233 @@
       {/if}
     </section>
 
-    <section class="grid min-w-0 gap-2" aria-label="Service principal registry" data-testid="identity-service-principal-list">
-      <div class="flex items-center justify-between gap-2">
-        <p class="admin-eyebrow m-0">Service principals</p>
-        <span class="text-xs font-bold text-admin-ink/58">{viewModel.servicePrincipals.length}</span>
-      </div>
-      {#if viewModel.servicePrincipals.length === 0}
-        <AdminMessage variant="empty" message="No service principals are registered for this principal." compact={true} />
-      {:else}
-        <div class="grid gap-2">
-          {#each viewModel.servicePrincipals as servicePrincipal (servicePrincipal.id)}
-            <article class="rounded-[12px] border border-[#90a6cc]/16 bg-admin-panel/62 p-3">
-              <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-                <div class="min-w-0">
-                  <strong class="block truncate text-sm font-extrabold text-admin-ink">{servicePrincipal.name}</strong>
-                  <p class="m-0 min-w-0 text-xs font-semibold leading-normal text-admin-ink/58 [overflow-wrap:anywhere]">
-                    {servicePrincipal.clientId} / {servicePrincipal.issuer}
-                  </p>
-                </div>
-                <span class={`w-fit rounded-lg px-2 py-1 text-xs font-bold ${
-                  servicePrincipal.state === 'active'
-                    ? 'bg-admin-leaf/12 text-admin-leaf'
-                    : 'bg-admin-danger/12 text-admin-danger'
-                }`}>
-                  {servicePrincipal.state}
-                </span>
-              </div>
-              <div class="mt-3 grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
-                <span class="text-xs font-bold text-admin-ink/58">Delegated <strong class="block text-admin-ink">{servicePrincipal.delegatedSummary}</strong></span>
-                <span class="text-xs font-bold text-admin-ink/58">Scopes <strong class="block text-admin-ink">{servicePrincipal.scopes}</strong></span>
-                <span class="text-xs font-bold text-admin-ink/58">Projects <strong class="block text-admin-ink">{servicePrincipal.projects}</strong></span>
-              </div>
-              <p class="mt-2 mb-0 text-xs font-semibold text-admin-ink/54">
-                {servicePrincipal.lastActivity}
-                <span class="block [overflow-wrap:anywhere]">{servicePrincipal.delegatedSessionIds}</span>
-              </p>
-            </article>
-          {/each}
+    <section class="grid min-w-0 gap-3" aria-label="Service principal registry" data-testid="identity-service-principal-list">
+      {#if servicePrincipalFeedback}
+        <AdminMessage
+          variant={servicePrincipalFeedback.variant}
+          title={servicePrincipalFeedback.title}
+          message={servicePrincipalFeedback.message}
+          testId="identity-service-principal-message"
+          compact={true}
+          onDismiss={() => { servicePrincipalFeedback = null; }}
+        />
+      {/if}
+
+      <section class="grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Service principal selection">
+        <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <div class="min-w-0">
+            <p class="admin-eyebrow mb-1">Service principals</p>
+            <p class="m-0 text-sm font-bold text-admin-ink/72">
+              {servicePrincipalRows.length} of {viewModel.servicePrincipals.length} visible principals
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              class="admin-button-primary inline-flex items-center gap-2"
+              type="button"
+              data-testid="identity-service-principal-new"
+              disabled={disabled || !onCreateServicePrincipal}
+              onclick={openCreateServicePrincipal}
+            >
+              <Plus size={15} aria-hidden="true" />
+              New principal
+            </button>
+            <button
+              class="admin-button-ghost inline-flex items-center gap-2"
+              type="button"
+              data-testid="identity-refresh-service-principals"
+              disabled={disabled}
+              onclick={onRefresh}
+            >
+              <RefreshCw size={15} class={loading ? 'animate-spin' : ''} aria-hidden="true" />
+              Refresh
+            </button>
+          </div>
         </div>
+
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Search
+          <input
+            class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+            data-testid="identity-service-principal-search"
+            placeholder="Name, client id, issuer, state"
+            bind:value={servicePrincipalSearch}
+          />
+        </label>
+
+        {#if servicePrincipalRows.length === 0}
+          <AdminMessage variant="empty" message="No service principals match the current filter." compact={true} />
+        {:else}
+          <div class="grid max-h-[min(300px,36vh)] min-w-0 gap-1 overflow-y-auto pr-1" aria-label="Visible service principals">
+            {#each servicePrincipalRows as servicePrincipal (servicePrincipal.id)}
+              <button
+                class={`grid w-full min-w-0 cursor-pointer grid-cols-[4px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border p-2 text-left text-admin-ink/78 hover:border-admin-leaf/42 hover:bg-admin-field/84 ${servicePrincipalRowClass(servicePrincipal.state, servicePrincipal.id === selectedServicePrincipalId)}`}
+                type="button"
+                data-testid="identity-service-principal-row"
+                data-service-principal-id={servicePrincipal.id}
+                aria-pressed={servicePrincipal.id === selectedServicePrincipalId}
+                onclick={() => selectServicePrincipal(servicePrincipal.id)}
+              >
+                <span class={`h-full min-h-12 rounded-full ${mappingAccentClass(servicePrincipal.state, servicePrincipal.id === selectedServicePrincipalId)}`}></span>
+                <span class="grid min-w-0 gap-1">
+                  <span class="flex min-w-0 items-center gap-2">
+                    <strong class="min-w-0 truncate text-sm text-admin-ink" title={servicePrincipal.name}>{servicePrincipal.name}</strong>
+                    {#if servicePrincipal.id === selectedServicePrincipalId}
+                      <span class="rounded-full bg-admin-leaf/14 px-2 py-0.5 text-[0.68rem] font-extrabold text-admin-leaf">selected</span>
+                    {/if}
+                  </span>
+                  <span class="min-w-0 truncate text-xs text-admin-ink/52">
+                    {servicePrincipal.clientId} | {servicePrincipal.delegatedSummary}
+                  </span>
+                </span>
+                <span class="grid justify-items-end text-xs text-[#c1d0e8]">
+                  <span class="rounded-lg bg-admin-field/72 px-2 py-1">{servicePrincipal.state}</span>
+                </span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </section>
+
+      <section class="grid gap-3 rounded-[16px] border border-admin-leaf/25 bg-admin-leaf/10 p-3" aria-label="Selected service principal">
+        <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
+          <div class="min-w-0">
+            <p class="admin-eyebrow mb-1">Selected principal</p>
+            <h3 class="m-0 truncate text-base font-bold text-admin-ink" data-testid="identity-service-principal-selected-name" title={selectedServicePrincipal?.name ?? ''}>
+              {selectedServicePrincipal?.name ?? 'No principal selected'}
+            </h3>
+          </div>
+          <span class={`rounded-full border px-3 py-1 text-xs font-extrabold ${
+            !selectedServicePrincipal
+              ? 'border-[#90a6cc]/28 bg-admin-field/72 text-admin-ink/68'
+              : selectedServicePrincipal.state === 'active'
+                ? 'border-admin-leaf/30 bg-admin-leaf/12 text-admin-leaf'
+                : 'border-admin-danger/32 bg-admin-danger/10 text-admin-danger'
+          }`}>
+            {selectedServicePrincipal?.state ?? 'select'}
+          </span>
+        </div>
+
+        {#if selectedServicePrincipal}
+          <div class="grid min-w-0 gap-2 text-xs text-admin-ink/70">
+            {@render MappingFact('Client id', selectedServicePrincipal.client_id, 'identity-service-principal-selected-client-id')}
+            {@render MappingFact('Projects', selectedServicePrincipalRow?.projects ?? 'all projects metadata unset', 'identity-service-principal-selected-projects')}
+            {@render MappingFact('Delegated', selectedServicePrincipalRow?.delegatedSummary ?? '0/0 active')}
+            {@render MappingFact('Scopes', selectedServicePrincipalRow?.scopes ?? 'no scopes')}
+            {@render MappingFact('Updated', selectedServicePrincipal.updated_at)}
+          </div>
+          <p class="m-0 min-w-0 text-sm leading-normal text-admin-ink/64 [overflow-wrap:anywhere]">
+            {selectedServicePrincipal.issuer}
+          </p>
+        {:else}
+          <p class="m-0 text-sm leading-normal text-admin-ink/68">
+            Select a service principal before editing or changing its lifecycle state.
+          </p>
+        {/if}
+
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="admin-button-primary inline-flex items-center gap-2"
+            type="button"
+            data-testid="identity-service-principal-edit"
+            disabled={!selectedServicePrincipal || disabled || !onUpdateServicePrincipal}
+            onclick={editSelectedServicePrincipal}
+          >
+            <Pencil size={15} aria-hidden="true" />
+            Edit
+          </button>
+          <button
+            class="admin-button-primary inline-flex items-center gap-2"
+            type="button"
+            data-testid="identity-service-principal-disable"
+            disabled={!selectedServicePrincipal || selectedServicePrincipal.state === 'disabled' || disabled || !onUpdateServicePrincipal}
+            onclick={() => void setSelectedServicePrincipalState('disabled')}
+          >
+            <ShieldOff size={15} aria-hidden="true" />
+            Disable
+          </button>
+          <button
+            class="admin-button-primary inline-flex items-center gap-2"
+            type="button"
+            data-testid="identity-service-principal-enable"
+            disabled={!selectedServicePrincipal || selectedServicePrincipal.state === 'active' || disabled || !onUpdateServicePrincipal}
+            onclick={() => void setSelectedServicePrincipalState('active')}
+          >
+            <ShieldCheck size={15} aria-hidden="true" />
+            Enable
+          </button>
+        </div>
+      </section>
+
+      {#if servicePrincipalEditorOpen}
+        <section class="grid min-w-0 gap-3 rounded-[16px] border border-admin-ink/10 bg-admin-panel/62 p-3" aria-label="Service principal editor" bind:this={servicePrincipalEditorSection}>
+          <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <div class="min-w-0">
+              <p class="admin-eyebrow mb-1">Principal editor</p>
+              <h4 class="m-0 text-sm font-bold text-admin-ink">{servicePrincipalEditorTitle}</h4>
+            </div>
+            <button class="admin-button-ghost" type="button" disabled={disabled} onclick={closeServicePrincipalEditor}>
+              Cancel
+            </button>
+          </div>
+
+          <form class="grid min-w-0 gap-3" onsubmit={(event) => { event.preventDefault(); void saveServicePrincipal(); }}>
+            <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+              Name
+              <input class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="identity-service-principal-name" bind:this={servicePrincipalNameInput} bind:value={servicePrincipalForm.name} disabled={disabled} />
+            </label>
+            <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+              Client id
+              <input class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="identity-service-principal-client-id" bind:value={servicePrincipalForm.clientId} disabled={disabled} />
+            </label>
+            <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+              Issuer
+              <input class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="identity-service-principal-issuer" bind:value={servicePrincipalForm.issuer} disabled={disabled} />
+            </label>
+            <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+              State
+              <select class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="identity-service-principal-state" bind:value={servicePrincipalForm.state} disabled={disabled}>
+                <option value="active">active</option>
+                <option value="disabled">disabled</option>
+              </select>
+            </label>
+            <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+              Allowed projects
+              <select class="min-h-28 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 py-2 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="identity-service-principal-projects" multiple disabled={disabled} onchange={setAllowedProjects}>
+                {#each projects as project (project.id)}
+                  <option value={project.id} selected={servicePrincipalForm.allowedProjectIds.includes(project.id)} disabled={project.state === 'archived'}>{project.name} / {project.state}</option>
+                {/each}
+              </select>
+            </label>
+            <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+              Description
+              <input class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="identity-service-principal-description" bind:value={servicePrincipalForm.description} disabled={disabled} />
+            </label>
+            <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+              Scopes
+              <textarea class="min-h-20 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field p-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="identity-service-principal-scopes" placeholder="session:create&#10;session:delegate" bind:value={servicePrincipalForm.scopes} disabled={disabled}></textarea>
+            </label>
+            <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+              Labels
+              <textarea class="min-h-20 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field p-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="identity-service-principal-labels" placeholder="system=mcp" bind:value={servicePrincipalForm.labels} disabled={disabled}></textarea>
+            </label>
+
+            <button
+              class="admin-button-primary inline-flex w-fit items-center gap-2"
+              type="submit"
+              data-testid="identity-service-principal-save"
+              disabled={disabled}
+            >
+              {#if servicePrincipalMutating}
+                <RefreshCw class="animate-spin" size={15} aria-hidden="true" />
+                Saving
+              {:else}
+                <KeyRound size={15} aria-hidden="true" />
+                {servicePrincipalSaveLabel}
+              {/if}
+            </button>
+          </form>
+        </section>
       {/if}
     </section>
 
@@ -475,7 +828,7 @@
           <div class="grid min-w-0 gap-2 text-xs text-admin-ink/70">
             {@render MappingFact('Kind', selectedMappingRow?.kind ?? selectedMapping.kind)}
             {@render MappingFact('External id', selectedMappingRow?.externalIdentity ?? selectedMapping.external_id, 'identity-mapping-selected-external-id')}
-            {@render MappingFact('Project', selectedMapping.project_id, 'identity-mapping-selected-project-id')}
+            {@render MappingFact('Project', selectedMappingRow?.projectId ?? selectedMapping.project_id, 'identity-mapping-selected-project-id')}
             {@render MappingFact('Principal', selectedMappingRow?.effective ?? 'not effective', 'identity-mapping-selected-effective')}
             {@render MappingFact('Scopes', selectedMappingRow?.scopes ?? 'no scopes')}
             {@render MappingFact('Updated', selectedMapping.updated_at)}

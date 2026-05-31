@@ -201,6 +201,7 @@ async fn kill_route_cancels_active_session_workloads() {
         issuer: created["owner"]["issuer"].as_str().unwrap().to_string(),
         display_name: None,
         client_id: None,
+        safe_claims: Default::default(),
     };
     let standalone_task = state
         .session_store

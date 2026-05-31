@@ -139,6 +139,7 @@ async function verifyIdentityPanel(page, options) {
   await page.getByTestId('identity-project-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await page.getByTestId('identity-service-principal-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await page.getByTestId('identity-mapping-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await verifyServicePrincipalCrud(page, options, identity, project);
   await verifyIdentityMappingCrud(page, options, identity, project);
   const mappingCount = Number(await page.getByTestId('identity-resource-identity-mappings').textContent());
   if (!Number.isFinite(mappingCount) || mappingCount < 0) {
@@ -161,6 +162,64 @@ async function createIdentityCrudProject(accessToken, options) {
   });
 }
 
+async function verifyServicePrincipalCrud(page, options, identity, project) {
+  const suffix = Date.now();
+  const principalName = `Admin service principal ${suffix}`;
+  const updatedName = `${principalName} updated`;
+  const clientId = `admin-sp-${suffix}`;
+
+  await page.getByTestId('identity-service-principal-new').click();
+  await page.getByTestId('identity-service-principal-name').fill(principalName);
+  await page.getByTestId('identity-service-principal-client-id').fill(clientId);
+  await page.getByTestId('identity-service-principal-issuer').fill(identity.issuer);
+  await page.getByTestId('identity-service-principal-projects').selectOption(project.id);
+  await page.getByTestId('identity-service-principal-scopes').fill('session:create\nsession:delegate');
+  await page.getByTestId('identity-service-principal-labels').fill('suite=admin-session-identity-crud-smoke');
+  await page.getByTestId('identity-service-principal-save').click();
+  await poll(
+    'admin service principal created',
+    async () => await page.getByTestId('identity-service-principal-selected-name').textContent().catch(() => ''),
+    (value) => value === principalName,
+    options.connectTimeoutMs,
+    100,
+  );
+  await poll(
+    'admin service principal project name rendered',
+    async () => await page.getByTestId('identity-service-principal-selected-projects').textContent().catch(() => ''),
+    (value) => value.includes(project.name),
+    options.connectTimeoutMs,
+    100,
+  );
+
+  await page.getByTestId('identity-service-principal-edit').click();
+  await page.getByTestId('identity-service-principal-name').fill(updatedName);
+  await page.getByTestId('identity-service-principal-save').click();
+  await poll(
+    'admin service principal updated',
+    async () => await page.getByTestId('identity-service-principal-selected-name').textContent().catch(() => ''),
+    (value) => value === updatedName,
+    options.connectTimeoutMs,
+    100,
+  );
+
+  await page.getByTestId('identity-service-principal-disable').click();
+  await poll(
+    'admin service principal disabled',
+    async () => await page.getByTestId('identity-service-principal-enable').isEnabled().catch(() => false),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+  await page.getByTestId('identity-service-principal-enable').click();
+  await poll(
+    'admin service principal re-enabled',
+    async () => await page.getByTestId('identity-service-principal-disable').isEnabled().catch(() => false),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+}
+
 async function verifyIdentityMappingCrud(page, options, identity, project) {
   const mappingName = `Admin identity CRUD ${Date.now()}`;
   const updatedName = `${mappingName} updated`;
@@ -178,6 +237,13 @@ async function verifyIdentityMappingCrud(page, options, identity, project) {
     'admin identity mapping created',
     async () => await page.getByTestId('identity-mapping-selected-name').textContent().catch(() => ''),
     (value) => value === mappingName,
+    options.connectTimeoutMs,
+    100,
+  );
+  await poll(
+    'admin identity mapping project name rendered',
+    async () => await page.getByTestId('identity-mapping-selected-project-id').textContent().catch(() => ''),
+    (value) => value.includes(project.name),
     options.connectTimeoutMs,
     100,
   );

@@ -14,6 +14,7 @@
     CreateBrowserContextCommand,
     CreateEgressProfileCommand,
     CreateIdentityMappingCommand,
+    CreateServicePrincipalCommand,
     CreateSessionCommand,
     EgressDiagnosticsResource,
     EgressProfileResource,
@@ -21,6 +22,7 @@
     IdentityMappingResource,
     ImportBrowserContextCommand,
     ProjectResource,
+    ServicePrincipalResource,
     SessionResource,
     SessionTemplateResource,
   } from '../api/control-types';
@@ -202,6 +204,33 @@
     } catch (error) {
       const message = errorMessage(error);
       showGlobalMessage('error', 'Identity mapping update failed', message);
+      throw error;
+    }
+  }
+  async function createServicePrincipal(command: CreateServicePrincipalCommand): Promise<ServicePrincipalResource> {
+    try {
+      const servicePrincipal = await controlClient.createServicePrincipal(command);
+      await loadIdentityAccessReview(false);
+      showGlobalMessage('success', 'Service principal created', `${servicePrincipal.name} is now visible in access review.`);
+      return servicePrincipal;
+    } catch (error) {
+      const message = errorMessage(error);
+      showGlobalMessage('error', 'Service principal create failed', message);
+      throw error;
+    }
+  }
+  async function updateServicePrincipal(
+    servicePrincipalId: string,
+    command: CreateServicePrincipalCommand,
+  ): Promise<ServicePrincipalResource> {
+    try {
+      const servicePrincipal = await controlClient.updateServicePrincipal(servicePrincipalId, command);
+      await loadIdentityAccessReview(false);
+      showGlobalMessage('success', 'Service principal updated', `${servicePrincipal.name} is now ${servicePrincipal.state}.`);
+      return servicePrincipal;
+    } catch (error) {
+      const message = errorMessage(error);
+      showGlobalMessage('error', 'Service principal update failed', message);
       throw error;
     }
   }
@@ -702,6 +731,8 @@
       onUpdateEgressProfile={updateEgressProfile}
       onCreateIdentityMapping={createIdentityMapping}
       onUpdateIdentityMapping={updateIdentityMapping}
+      onCreateServicePrincipal={createServicePrincipal}
+      onUpdateServicePrincipal={updateServicePrincipal}
       onRunEgressProfileReachabilityProbe={runEgressProfileReachabilityProbe}
       onCloneBrowserContext={cloneBrowserContext}
       onExportBrowserContext={exportBrowserContext}

@@ -64,6 +64,7 @@ fn test_principal(subject: &str) -> AuthenticatedPrincipal {
         issuer: "https://issuer.example".to_string(),
         display_name: Some(subject.to_string()),
         client_id: None,
+        safe_claims: Default::default(),
     }
 }
 

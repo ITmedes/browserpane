@@ -79,6 +79,7 @@ export type IdentityAccessReviewViewModel = {
 
 export class IdentityAccessReviewViewModelBuilder {
   static build(review: IdentityAccessReviewResponse): IdentityAccessReviewViewModel {
+    const projectNames = projectNameIndex(review.projects);
     return {
       principalTitle: review.principal.display_name ?? review.principal.subject,
       principalSubtitle: `${review.principal.issuer} / ${review.principal.subject}`,
@@ -105,7 +106,7 @@ export class IdentityAccessReviewViewModelBuilder {
         kind: identityMappingKindLabel(mapping.kind),
         issuer: mapping.issuer,
         externalId: mapping.claim_name ? `${mapping.claim_name}=${mapping.external_id}` : mapping.external_id,
-        projectId: shortId(mapping.project_id),
+        projectId: projectLabel(mapping.project_id, projectNames),
         state: mapping.state,
         effective: mapping.effective_for_principal ? 'effective' : 'not effective',
         scopes: mapping.scopes.length > 0 ? mapping.scopes.join(', ') : 'no scopes',
@@ -115,7 +116,7 @@ export class IdentityAccessReviewViewModelBuilder {
         kind: identityMappingKindLabel(signal.kind),
         displayName: signal.display_name ?? signal.external_id,
         issuer: signal.issuer,
-        externalId: signal.external_id,
+        externalId: signal.claim_name ? `${signal.claim_name}=${signal.external_id}` : signal.external_id,
         reason: unmappedReasonLabel(signal.reason),
       })),
       servicePrincipals: review.service_principals.map((servicePrincipal) => ({
@@ -126,7 +127,7 @@ export class IdentityAccessReviewViewModelBuilder {
         state: servicePrincipal.state,
         scopes: servicePrincipal.scopes.length > 0 ? servicePrincipal.scopes.join(', ') : 'no scopes',
         projects: servicePrincipal.allowed_project_ids.length > 0
-          ? servicePrincipal.allowed_project_ids.map(shortId).join(', ')
+          ? servicePrincipal.allowed_project_ids.map((projectId) => projectLabel(projectId, projectNames)).join(', ')
           : 'all projects metadata unset',
         delegatedSummary: `${servicePrincipal.active_delegated_session_count}/${servicePrincipal.delegated_session_count} active`,
         delegatedSessionIds: servicePrincipal.delegated_session_ids.length > 0
@@ -177,9 +178,17 @@ function unmappedReasonLabel(reason: string): string {
       return 'Registered service principal has no active project mapping';
     case 'unregistered_service_principal_without_project_mapping':
       return 'Unregistered service principal has no active project mapping';
+    case 'group_without_project_mapping':
+      return 'Safe group claim has no active project mapping';
+    case 'safe_claim_without_project_mapping':
+      return 'Safe claim value has no active project mapping';
     default:
       return reason.replaceAll('_', ' ');
   }
+}
+
+function projectNameIndex(projects: readonly ProjectResource[]): ReadonlyMap<string, string> {
+  return new Map(projects.map((project) => [project.id, project.name]));
 }
 
 function metric(key: string, label: string, value: number): IdentityMetricRow {
@@ -261,4 +270,9 @@ function formatDateTime(value: string): string {
 
 function shortId(value: string): string {
   return value.length > 13 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+}
+
+function projectLabel(projectId: string, projectNames: ReadonlyMap<string, string>): string {
+  const name = projectNames.get(projectId);
+  return name ? `${name} (${shortId(projectId)})` : shortId(projectId);
 }

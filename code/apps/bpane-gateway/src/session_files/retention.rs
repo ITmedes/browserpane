@@ -118,6 +118,7 @@ mod tests {
             issuer: "issuer".to_string(),
             display_name: Some("Owner".to_string()),
             client_id: None,
+            safe_claims: Default::default(),
         }
     }
 

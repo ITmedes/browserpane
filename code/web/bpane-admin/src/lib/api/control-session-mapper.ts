@@ -450,10 +450,12 @@ function toIdentityMappingReview(value: unknown): IdentityMappingReviewResource 
 function toIdentityUnmappedPrincipalSignal(value: unknown): IdentityUnmappedPrincipalSignalResource {
   const object = expectRecord(value, 'identity unmapped principal signal');
   const displayName = optionalString(object.display_name, 'identity unmapped principal signal display_name');
+  const claimName = optionalString(object.claim_name, 'identity unmapped principal signal claim_name');
   return {
     kind: expectEnum(object.kind, 'identity unmapped principal signal kind', IDENTITY_MAPPING_KINDS),
     issuer: expectString(object.issuer, 'identity unmapped principal signal issuer'),
     external_id: expectString(object.external_id, 'identity unmapped principal signal external_id'),
+    claim_name: claimName ?? null,
     display_name: displayName ?? null,
     reason: expectString(object.reason, 'identity unmapped principal signal reason'),
   };

@@ -34,6 +34,7 @@ impl WorkflowLifecycleInner {
                     issuer: session.owner.issuer.clone(),
                     display_name: session.owner.display_name.clone(),
                     client_id: None,
+                    safe_claims: Default::default(),
                 },
             )
             .map_err(|error| {

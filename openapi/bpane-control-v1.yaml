@@ -81,9 +81,10 @@ paths:
       description: >
         Returns a sanitized owner-scoped access review with the current
         principal, project usage, service-principal registry metadata, explicit
-        identity-to-project mappings, unmapped-principal signals, resource
-        counts, and delegated automation principals visible through the session
-        catalog.
+        identity-to-project mappings, safe group/claim mapping evaluation,
+        unmapped-principal signals, resource counts, and delegated automation
+        principals visible through the session catalog. Raw bearer token claims
+        and credential material are not returned.
       responses:
         '200':
           description: Owner-scoped access review
@@ -6073,6 +6074,7 @@ components:
         - kind
         - issuer
         - external_id
+        - claim_name
         - display_name
         - reason
       properties:
@@ -6082,6 +6084,9 @@ components:
           type: string
         external_id:
           type: string
+        claim_name:
+          type: string
+          nullable: true
         display_name:
           type: string
           nullable: true

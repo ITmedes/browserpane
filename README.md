@@ -355,10 +355,15 @@ principals. Owners can register external OIDC clients through
 service principals to BrowserPane projects through `/api/v1/identity-mappings`,
 use active/disabled state for lifecycle review, and block new automation
 delegation to disabled registered clients while keeping existing session
-metadata inspectable for cleanup. The admin Operations Overlay has a matching
-Identity tab for access-review visibility plus identity-mapping create, edit,
-disable, and re-enable operations, and the operator CLI exposes the same payload through
-`identity me`, `identity access-review`, `service-principal`, and
+metadata inspectable for cleanup. Access review evaluates group and claim
+mappings from a bounded safe OIDC claim set (`groups`, `roles`, `tenant`,
+`tenant_id`, `organization`, `organization_id`, `org_id`, `department`,
+`realm_access.roles`, and `resource_access.<client>.roles`) without returning
+raw bearer-token payloads. The admin Operations Overlay has a matching Identity
+tab for access-review visibility, service-principal create/edit/disable/re-enable
+operations, identity-mapping create/edit/disable/re-enable operations, and
+project-name rendering where visible. The operator CLI exposes the same payload
+through `identity me`, `identity access-review`, `service-principal`, and
 `identity-mapping` commands.
 Network identity metadata lets callers declare locale, language preferences,
 timezone, geolocation, browser identity, user-agent override, and an
@@ -995,7 +1000,9 @@ Admin and browser-harness smokes are also script-backed. Run the focused
 `smoke:admin-session` covers live session join, disconnect, release,
 profile-backed reconnect, stop/reconnect behavior, session-switch disconnect,
 display upload, policy/lifecycle panels, and Identity tab resource counts,
-identity-mapping create/update/disable/re-enable, and delegation lists.
+service-principal create/update/disable/re-enable,
+identity-mapping create/update/disable/re-enable, project-name rendering, and
+delegation lists.
 
 Other useful checks:
 
