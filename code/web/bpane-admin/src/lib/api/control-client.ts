@@ -15,6 +15,7 @@ import type {
   CloneBrowserContextCommand,
   CreateBrowserContextCommand,
   CreateEgressProfileCommand,
+  CreateIdentityMappingCommand,
   CreateProjectCommand,
   CreateServicePrincipalCommand,
   ImportBrowserContextCommand,
@@ -29,6 +30,8 @@ import type {
   FileWorkspaceListResponse,
   FileWorkspaceResource,
   IdentityAccessReviewResponse,
+  IdentityMappingListResponse,
+  IdentityMappingResource,
   IdentityPrincipalResource,
   ProjectListResponse,
   ProjectResource,
@@ -126,6 +129,39 @@ export class ControlClient {
       state: command.state ?? 'active',
     });
     return ControlSessionMapper.toServicePrincipalResource(payload);
+  }
+
+  async listIdentityMappings(): Promise<IdentityMappingListResponse> {
+    const payload = await this.#request('GET', '/api/v1/identity-mappings');
+    return ControlSessionMapper.toIdentityMappingList(payload);
+  }
+
+  async createIdentityMapping(command: CreateIdentityMappingCommand): Promise<IdentityMappingResource> {
+    const payload = await this.#request('POST', '/api/v1/identity-mappings', {
+      ...command,
+      labels: command.labels ?? {},
+      scopes: command.scopes ?? [],
+      state: command.state ?? 'active',
+    });
+    return ControlSessionMapper.toIdentityMappingResource(payload);
+  }
+
+  async getIdentityMapping(identityMappingId: string): Promise<IdentityMappingResource> {
+    const payload = await this.#request('GET', `/api/v1/identity-mappings/${encodeURIComponent(identityMappingId)}`);
+    return ControlSessionMapper.toIdentityMappingResource(payload);
+  }
+
+  async updateIdentityMapping(
+    identityMappingId: string,
+    command: CreateIdentityMappingCommand,
+  ): Promise<IdentityMappingResource> {
+    const payload = await this.#request('PUT', `/api/v1/identity-mappings/${encodeURIComponent(identityMappingId)}`, {
+      ...command,
+      labels: command.labels ?? {},
+      scopes: command.scopes ?? [],
+      state: command.state ?? 'active',
+    });
+    return ControlSessionMapper.toIdentityMappingResource(payload);
   }
 
   async listSessions(filters: SessionListFilters = {}): Promise<SessionListResponse> {
