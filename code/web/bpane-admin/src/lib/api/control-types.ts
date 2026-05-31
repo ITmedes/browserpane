@@ -164,6 +164,7 @@ export type ProjectAdmissionReasonCode =
   | 'owner_scope_unbounded'
   | 'project_quota_available'
   | 'active_session_quota_exceeded'
+  | 'active_workflow_run_quota_exceeded'
   | 'project_archived';
 
 export type ProjectAdmissionDecision = {
@@ -173,6 +174,8 @@ export type ProjectAdmissionDecision = {
   readonly project_id?: string | null;
   readonly active_sessions?: number | null;
   readonly max_active_sessions?: number | null;
+  readonly active_workflow_runs?: number | null;
+  readonly max_active_workflow_runs?: number | null;
   readonly checked_at: string;
 };
 

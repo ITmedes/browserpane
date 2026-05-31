@@ -90,6 +90,13 @@ impl WorkflowRunState {
             Self::Succeeded | Self::Failed | Self::Cancelled | Self::TimedOut
         )
     }
+
+    pub fn consumes_project_active_quota(self) -> bool {
+        matches!(
+            self,
+            Self::Pending | Self::Starting | Self::Running | Self::AwaitingInput
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

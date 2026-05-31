@@ -64,12 +64,19 @@ fn test_registry() -> Arc<SessionRegistry> {
 }
 
 async fn create_workflow_run(store: &SessionStore) -> crate::workflow::StoredWorkflowRun {
+    create_workflow_run_for_project(store, None).await
+}
+
+async fn create_workflow_run_for_project(
+    store: &SessionStore,
+    project_id: Option<Uuid>,
+) -> crate::workflow::StoredWorkflowRun {
     let principal = test_principal();
     let session = store
         .create_session(
             &principal,
             CreateSessionRequest {
-                project_id: None,
+                project_id,
                 template_id: None,
                 browser_context: None,
                 network_identity: None,
@@ -137,6 +144,7 @@ async fn create_workflow_run(store: &SessionStore) -> crate::workflow::StoredWor
                 workflow_definition_id: workflow.id,
                 workflow_definition_version_id: version.id,
                 workflow_version: version.version.clone(),
+                project_id,
                 session_id: session.id,
                 automation_task_id: task.id,
                 source_system: None,

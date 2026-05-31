@@ -18,6 +18,7 @@ impl WorkflowRunRepository<'_> {
                     workflow_definition_id,
                     workflow_definition_version_id,
                     workflow_version,
+                    project_id,
                     session_id,
                     automation_task_id,
                     state,

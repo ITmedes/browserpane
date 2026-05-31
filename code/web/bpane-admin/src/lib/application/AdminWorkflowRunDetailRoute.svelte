@@ -207,6 +207,20 @@
   function workflowHref(workflowId: string): string {
     return `${base}/workflows/${encodeURIComponent(workflowId)}`;
   }
+
+  function projectLabel(run: WorkflowRunResource): string {
+    return run.project?.name ?? run.project_id ?? 'owner scope';
+  }
+
+  function projectAdmissionLabel(run: WorkflowRunResource): string {
+    const admission = run.project_admission;
+    if (!admission) {
+      return 'admission unknown';
+    }
+    const max = admission.max_active_workflow_runs ?? 'unlimited';
+    const active = admission.active_workflow_runs ?? '--';
+    return `${admission.state} | ${admission.reason_code} | ${active}/${max} workflow runs`;
+  }
 </script>
 
 <section class="grid gap-5" data-testid="workflow-run-inspector-detail">
@@ -266,6 +280,8 @@
     <section class="grid gap-3 md:grid-cols-4" aria-label="Workflow run facts">
       {@render Fact('State', run.state, 'workflow-run-detail-state')}
       {@render Fact('Version', run.workflow_version, 'workflow-run-detail-version')}
+      {@render Fact('Project', projectLabel(run), 'workflow-run-detail-project')}
+      {@render Fact('Project admission', run.project_admission?.state ?? '--', 'workflow-run-detail-project-admission-state')}
       {@render Fact('Logs', String(logs.length), 'workflow-run-detail-log-count')}
       {@render Fact('Files', String(files.length), 'workflow-run-detail-file-count')}
     </section>
@@ -276,6 +292,8 @@
           <span><strong>Workflow:</strong> <a class="admin-code-pill text-admin-ink no-underline" href={workflowHref(run.workflow_definition_id)}>{run.workflow_definition_id}</a></span>
           <span><strong>Version id:</strong> <code class="admin-code-pill">{run.workflow_definition_version_id}</code></span>
           <span><strong>Session:</strong> <code class="admin-code-pill" data-testid="workflow-run-detail-session-id">{run.session_id}</code></span>
+          <span><strong>Project:</strong> <span data-testid="workflow-run-detail-project-label">{projectLabel(run)}</span></span>
+          <span><strong>Project admission:</strong> <span data-testid="workflow-run-detail-project-admission">{projectAdmissionLabel(run)}</span></span>
           <span><strong>Automation task:</strong> <code class="admin-code-pill">{run.automation_task_id}</code></span>
           <span><strong>Source:</strong> {run.source_system ?? '--'} {run.source_reference ?? ''}</span>
           <span><strong>Client request:</strong> {run.client_request_id ?? '--'}</span>

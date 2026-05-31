@@ -9,7 +9,9 @@ use tokio::time::sleep;
 use super::*;
 use crate::auth::AuthValidator;
 use crate::session_access::SessionAutomationAccessTokenManager;
-use crate::session_control::PersistedWorkflowRunWorkerAssignment;
+use crate::session_control::{
+    PersistProjectRequest, PersistedWorkflowRunWorkerAssignment, ProjectQuotas, ProjectState,
+};
 
 #[tokio::test]
 async fn launches_worker_and_marks_unfinished_run_failed() {
@@ -265,4 +267,127 @@ async fn queues_waiting_run_when_worker_capacity_is_exhausted() {
     let capture = fs::read_to_string(&capture_file).unwrap();
     assert!(capture.contains(&first_run.id.to_string()));
     assert!(capture.contains(&queued_run.id.to_string()));
+}
+
+#[tokio::test]
+async fn queues_waiting_run_when_project_workflow_quota_is_exhausted() {
+    let temp_dir = tempdir().unwrap();
+    let capture_file = temp_dir.path().join("capture.txt");
+    let script = create_capture_script(&temp_dir, &capture_file);
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "workflow_test_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 4,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let principal = test_principal();
+    let project = store
+        .create_project(
+            &principal,
+            PersistProjectRequest {
+                name: "Support project".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas {
+                    max_active_sessions: None,
+                    max_active_workflow_runs: Some(1),
+                    max_retained_storage_bytes: None,
+                },
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+    let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
+    let automation_access_token_manager = Arc::new(SessionAutomationAccessTokenManager::new(
+        vec![7; 32],
+        Duration::from_secs(300),
+    ));
+    let manager = WorkflowLifecycleManager::new(
+        Some(test_config(script)),
+        auth,
+        automation_access_token_manager,
+        store.clone(),
+        test_session_manager(),
+        test_registry(),
+    )
+    .unwrap();
+
+    let active_run = create_workflow_run_for_project(&store, Some(project.id)).await;
+    store
+        .transition_workflow_run(
+            active_run.id,
+            WorkflowRunTransitionRequest {
+                state: WorkflowRunState::Running,
+                output: None,
+                error: None,
+                artifact_refs: Vec::new(),
+                message: Some("first workflow run is active".to_string()),
+                data: None,
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let queued_run = create_workflow_run_for_project(&store, Some(project.id)).await;
+
+    manager
+        .ensure_run_started("playwright", queued_run.id)
+        .await
+        .unwrap();
+
+    let queued = store
+        .get_workflow_run_by_id(queued_run.id)
+        .await
+        .unwrap()
+        .expect("queued workflow run should exist");
+    assert_eq!(queued.state, WorkflowRunState::Queued);
+    assert!(!capture_file.exists());
+
+    let events = store
+        .list_workflow_run_events_for_owner(&principal, queued_run.id)
+        .await
+        .unwrap();
+    let queued_event = events
+        .iter()
+        .find(|event| event.event_type == "workflow_run.queued")
+        .expect("workflow run should have a queued event");
+    assert_eq!(
+        queued_event
+            .data
+            .as_ref()
+            .and_then(|value| value.pointer("/admission/reason"))
+            .and_then(serde_json::Value::as_str),
+        Some("project_active_workflow_quota_exhausted")
+    );
+
+    store
+        .transition_workflow_run(
+            active_run.id,
+            WorkflowRunTransitionRequest {
+                state: WorkflowRunState::Succeeded,
+                output: Some(serde_json::json!({ "ok": true })),
+                error: None,
+                artifact_refs: Vec::new(),
+                message: Some("first workflow run completed".to_string()),
+                data: None,
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    manager.reconcile_waiting_runs().await.unwrap();
+
+    for _ in 0..200 {
+        if capture_file.exists() {
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    assert!(capture_file.exists());
+    assert!(fs::read_to_string(&capture_file)
+        .unwrap()
+        .contains(&queued_run.id.to_string()));
 }

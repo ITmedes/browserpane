@@ -60,6 +60,55 @@ describe('WorkflowOperationsService', () => {
     expect(client.createDefinition).not.toHaveBeenCalled();
     expect(client.createDefinitionVersion).not.toHaveBeenCalled();
   });
+
+  it('passes the selected session project when invoking a run', async () => {
+    const run = {
+      id: 'run-1',
+      workflow_definition_id: USER_WORKFLOW.id,
+      workflow_definition_version_id: USER_VERSION.id,
+      workflow_version: 'v1',
+      project_id: 'project-1',
+      project: { id: 'project-1', name: 'Support tenant', state: 'active' },
+      state: 'pending',
+      session_id: 'session-1',
+      automation_task_id: 'task-1',
+      artifact_refs: [],
+      produced_files: [],
+      project_admission: {
+        state: 'allowed',
+        reason_code: 'project_quota_available',
+        message: 'Project workflow admission allowed.',
+        project_id: 'project-1',
+        active_workflow_runs: 1,
+        max_active_workflow_runs: 2,
+        checked_at: '2026-05-04T19:00:00Z',
+      },
+      intervention: { pending_request: null },
+      runtime: null,
+      labels: {},
+      events_path: '/api/v1/workflow-runs/run-1/events',
+      logs_path: '/api/v1/workflow-runs/run-1/logs',
+      created_at: '2026-05-04T19:00:00Z',
+      updated_at: '2026-05-04T19:00:00Z',
+    };
+    const client = {
+      createRun: vi.fn().mockResolvedValue(run),
+    } as unknown as WorkflowClient;
+    const service = new WorkflowOperationsService(client);
+
+    await service.invokeRun({
+      sessionId: 'session-1',
+      projectId: 'project-1',
+      workflowId: USER_WORKFLOW.id,
+      version: 'v1',
+      runInput: { task: 'inspect' },
+    });
+
+    expect(client.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      project_id: 'project-1',
+      session: { existing_session_id: 'session-1' },
+    }));
+  });
 });
 
 const SMOKE_WORKFLOW: WorkflowDefinitionResource = {

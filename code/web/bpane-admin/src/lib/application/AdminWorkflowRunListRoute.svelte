@@ -62,6 +62,9 @@
       run.automation_task_id,
       run.workflow_definition_id,
       run.workflow_version,
+      run.project_id ?? '',
+      run.project?.name ?? '',
+      run.project_admission?.reason_code ?? '',
       run.source_system ?? '',
       run.source_reference ?? '',
       run.client_request_id ?? '',
@@ -172,6 +175,9 @@
             </span>
             <span class="truncate text-xs text-admin-ink/58">
               session <span class="font-mono">{run.session_id}</span>
+            </span>
+            <span class="truncate text-xs text-admin-ink/58">
+              project {run.project?.name ?? run.project_id ?? 'owner scope'} | {run.project_admission?.state ?? 'admission unknown'}
             </span>
           </span>
           <span class="grid justify-items-end gap-1 text-xs text-[#c1d0e8]">

@@ -135,6 +135,7 @@ fn workflow_run_request_fingerprint(
     let descriptor = canonicalize_json(serde_json::json!({
         "workflow_id": request.workflow_id,
         "version": request.version,
+        "project_id": request.project_id,
         "session": request.session,
         "input": request.input,
         "source_system": request.source_system,
@@ -154,6 +155,49 @@ fn workflow_run_request_fingerprint(
     Ok(Some(hex::encode(Sha256::digest(bytes))))
 }
 
+async fn validate_workflow_run_project(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    project_id: Option<Uuid>,
+    session_project_id: Option<Uuid>,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let Some(project_id) = project_id else {
+        return Ok(());
+    };
+    if session_project_id != Some(project_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow run project_id {project_id} must match the bound session project_id"
+                ),
+            }),
+        ));
+    }
+    let project = state
+        .session_store
+        .get_project_for_owner(principal, project_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("project {project_id} not found"),
+                }),
+            )
+        })?;
+    if project.state == ProjectState::Archived {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!("project {project_id} is archived"),
+            }),
+        ));
+    }
+    Ok(())
+}
+
 pub(super) async fn create_workflow_run(
     headers: HeaderMap,
     State(state): State<Arc<ApiState>>,
@@ -163,6 +207,7 @@ pub(super) async fn create_workflow_run(
     let CreateWorkflowRunRequest {
         workflow_id,
         version: workflow_version_name,
+        project_id,
         session,
         input,
         source_system,
@@ -175,6 +220,14 @@ pub(super) async fn create_workflow_run(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    if project_id == Some(Uuid::nil()) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "workflow run project_id must not be nil".to_string(),
+            }),
+        ));
+    }
     if let Some(client_request_id) = client_request_id
         .as_deref()
         .filter(|value| !value.is_empty())
@@ -249,8 +302,12 @@ pub(super) async fn create_workflow_run(
         session,
         version.default_session.as_ref(),
         Some(&version.allowed_extension_ids),
+        project_id,
     )
     .await?;
+    let effective_project_id = project_id.or(session.project_id);
+    validate_workflow_run_project(&state, &principal, effective_project_id, session.project_id)
+        .await?;
     let task = state
         .session_store
         .create_automation_task(
@@ -274,6 +331,7 @@ pub(super) async fn create_workflow_run(
                 workflow_definition_id: workflow.id,
                 workflow_definition_version_id: version.id,
                 workflow_version: version.version.clone(),
+                project_id: effective_project_id,
                 session_id: session.id,
                 automation_task_id: task.id,
                 source_system,

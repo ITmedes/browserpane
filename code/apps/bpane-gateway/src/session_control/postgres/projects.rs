@@ -71,6 +71,16 @@ impl PostgresSessionStore {
             .count_active_sessions_for_project(principal, project_id)
             .await
     }
+
+    pub(in crate::session_control) async fn count_active_workflow_runs_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        self.project_repository()
+            .count_active_workflow_runs_for_project(principal, project_id)
+            .await
+    }
 }
 
 impl ProjectRepository<'_> {
@@ -280,6 +290,44 @@ impl ProjectRepository<'_> {
         u32::try_from(count).map_err(|error| {
             SessionStoreError::Backend(format!(
                 "active project session count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
+    async fn count_active_workflow_runs_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                SELECT COUNT(*)::BIGINT AS run_count
+                FROM control_workflow_runs
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                  AND state IN ('pending', 'starting', 'running', 'awaiting_input')
+                "#,
+                &[&principal.subject, &principal.issuer, &project_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to count project active workflow runs: {error}"
+                ))
+            })?;
+        let count = row
+            .as_ref()
+            .map(|row| row.get::<_, i64>("run_count"))
+            .unwrap_or(0);
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "active project workflow run count exceeded u32 range: {error}"
             ))
         })
     }

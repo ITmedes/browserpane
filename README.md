@@ -336,14 +336,16 @@ explicit override, and the API payload preview shows the exact fields that will
 be sent.
 `GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
-Project resources let operators group sessions under an owner-scoped tenant,
-case, customer, or environment boundary. A project carries labels, lifecycle
-state, optional quotas such as `max_active_sessions`, and sanitized usage
-counters. Creating a session with `project_id` records the admission decision on
-the session and enforces active-session quota and archived-project checks before
-runtime launch. Session resources and `/status` include the project summary and
-admission reason so the admin live view, inspector, CLI, and API clients all
-show whether a session was admitted under a project quota or left owner-scoped.
+Project resources let operators group sessions and workflow runs under an
+owner-scoped tenant, case, customer, or environment boundary. A project carries
+labels, lifecycle state, optional quotas such as `max_active_sessions` and
+`max_active_workflow_runs`, and sanitized usage counters. Creating a session or
+workflow run with `project_id` records the admission decision and enforces
+archived-project checks before runtime launch; workflow runs also inherit the
+project from their bound session when the request omits `project_id`. Session
+and workflow-run resources include the project summary and admission reason so
+the admin live view, inspectors, CLI, and API clients all show whether work was
+admitted under project quota, queued by project capacity, or left owner-scoped.
 Identity resources expose a sanitized access-review foundation:
 `GET /api/v1/identity/me` returns the current bearer principal as `user`,
 `service_principal`, or `legacy_dev_token`, while
@@ -847,9 +849,12 @@ Current workflow capabilities:
 - workflow runs with logs, events, outputs, recordings, and produced files
 - workflow runs backed by persisted automation tasks with executor-visible
   state, event, and log APIs
+- project-scoped workflow runs with inherited session projects, project
+  summaries, and `max_active_workflow_runs` admission/queue visibility
 - external correlation fields on runs (`source_system`, `source_reference`, `client_request_id`)
 - safe idempotent run creation for retried upstream requests
-- durable queued/admission state when BrowserPane worker capacity is exhausted
+- durable queued/admission state when BrowserPane worker capacity or project
+  workflow-run quotas are exhausted
 - durable operator intervention state with `submit-input`, `resume`, `reject`, and `cancel`
 - explicit runtime hold/release semantics for paused runs (`live_runtime` vs `profile_restart`)
 - signed outbound workflow lifecycle webhook delivery
@@ -984,6 +989,7 @@ npm run smoke:file-workspaces -- --headless
 npm run smoke:session-files -- --headless
 npm run smoke:mcp-session-endpoints -- --headless
 npm run smoke:recording -- --headless
+npm run smoke:workflow-admission -- --headless
 npm run smoke:workflow-cli -- --headless
 npm run smoke:workflow-credential-injection -- --headless
 npm run smoke:workflow-events -- --headless
@@ -1015,6 +1021,7 @@ cd code/integrations/recording-worker && npm run build
 cd code/integrations/workflow-worker && npm run build
 cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless
 cd code/web/bpane-client && npm run smoke:recording -- --headless
+cd code/web/bpane-client && npm run smoke:workflow-admission -- --headless
 cd code/web/bpane-client && npm run smoke:workflow-cli -- --headless
 cd code/web/bpane-client && npm run smoke:workflow-credential-injection -- --headless
 cd code/web/bpane-client && npm run smoke:workflow-events -- --headless

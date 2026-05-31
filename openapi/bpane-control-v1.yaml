@@ -4216,6 +4216,10 @@ components:
           format: uuid
         version:
           type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
         session:
           allOf:
             - $ref: '#/components/schemas/CreateAutomationTaskSessionRequest'
@@ -4559,6 +4563,8 @@ components:
         - workflow_definition_id
         - workflow_definition_version_id
         - workflow_version
+        - project_id
+        - project
         - source_system
         - source_reference
         - client_request_id
@@ -4576,6 +4582,7 @@ components:
         - produced_files
         - recordings
         - retention
+        - project_admission
         - admission
         - intervention
         - runtime
@@ -4598,6 +4605,14 @@ components:
           format: uuid
         workflow_version:
           type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
         source_system:
           type: string
           nullable: true
@@ -4652,6 +4667,8 @@ components:
             $ref: '#/components/schemas/WorkflowRunRecordingResource'
         retention:
           $ref: '#/components/schemas/WorkflowRunRetentionResource'
+        project_admission:
+          $ref: '#/components/schemas/ProjectAdmissionDecision'
         admission:
           allOf:
             - $ref: '#/components/schemas/WorkflowRunAdmissionResource'
@@ -6144,6 +6161,7 @@ components:
         - owner_scope_unbounded
         - project_quota_available
         - active_session_quota_exceeded
+        - active_workflow_run_quota_exceeded
         - project_archived
     ProjectAdmissionDecision:
       type: object
@@ -6154,6 +6172,8 @@ components:
         - project_id
         - active_sessions
         - max_active_sessions
+        - active_workflow_runs
+        - max_active_workflow_runs
         - checked_at
       properties:
         state:
@@ -6171,6 +6191,14 @@ components:
           minimum: 0
           nullable: true
         max_active_sessions:
+          type: integer
+          minimum: 1
+          nullable: true
+        active_workflow_runs:
+          type: integer
+          minimum: 0
+          nullable: true
+        max_active_workflow_runs:
           type: integer
           minimum: 1
           nullable: true

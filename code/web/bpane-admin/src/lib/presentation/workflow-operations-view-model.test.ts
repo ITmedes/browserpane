@@ -57,6 +57,7 @@ describe('WorkflowOperationsViewModelBuilder', () => {
     expect(viewModel.definitionOptions[0]?.label).toBe('operator-check (v1)');
     expect(viewModel.executorLabel).toBe('manual');
     expect(viewModel.selectedSessionLabel).toBe(SESSION.id);
+    expect(viewModel.baselineProjectLabel).toBe('Support tenant (active)');
     expect(viewModel.runSessionLabel).toBe('--');
     expect(viewModel.canRun).toBe(true);
     expect(viewModel.canCreateBaseline).toBe(false);
@@ -166,6 +167,8 @@ describe('WorkflowOperationsViewModelBuilder', () => {
     expect(viewModel.status).toBe('awaiting_input');
     expect(viewModel.pendingPrompt).toBe('Approve checkout?');
     expect(viewModel.runSessionLabel).toBe(SESSION.id);
+    expect(viewModel.runProjectLabel).toBe('Support tenant (active)');
+    expect(viewModel.projectAdmissionLabel).toBe('allowed · 1/2 runs');
     expect(viewModel.runSessionNote).toBe('Run uses the selected baseline session.');
     expect(viewModel.canReleaseHold).toBe(true);
     expect(viewModel.canSubmitInput).toBe(true);
@@ -176,6 +179,8 @@ describe('WorkflowOperationsViewModelBuilder', () => {
 const SESSION: SessionResource = {
   id: 'session-1',
   state: 'active',
+  project_id: 'project-1',
+  project: { id: 'project-1', name: 'Support tenant', state: 'active' },
   browser_context: { mode: 'fresh', context_id: null },
   owner_mode: 'shared',
   connect: {
@@ -239,6 +244,8 @@ const RUN: WorkflowRunResource = {
   workflow_definition_id: WORKFLOW.id,
   workflow_definition_version_id: VERSION.id,
   workflow_version: 'v1',
+  project_id: 'project-1',
+  project: { id: 'project-1', name: 'Support tenant', state: 'active' },
   state: 'queued',
   session_id: SESSION.id,
   automation_task_id: 'task-1',
@@ -247,6 +254,15 @@ const RUN: WorkflowRunResource = {
   error: null,
   artifact_refs: [],
   produced_files: [],
+  project_admission: {
+    state: 'allowed',
+    reason_code: 'project_quota_available',
+    message: 'Project workflow admission allowed.',
+    project_id: 'project-1',
+    active_workflow_runs: 1,
+    max_active_workflow_runs: 2,
+    checked_at: '2026-05-04T19:03:00Z',
+  },
   intervention: { pending_request: null },
   runtime: null,
   labels: {},

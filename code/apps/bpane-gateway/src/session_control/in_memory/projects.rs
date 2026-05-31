@@ -129,4 +129,28 @@ impl InMemorySessionStore {
             ))
         })
     }
+
+    pub(in crate::session_control) async fn count_active_workflow_runs_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        let count = self
+            .workflow_runs
+            .lock()
+            .await
+            .iter()
+            .filter(|run| {
+                run.project_id == Some(project_id)
+                    && run.owner_subject == principal.subject
+                    && run.owner_issuer == principal.issuer
+                    && run.state.consumes_project_active_quota()
+            })
+            .count();
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "active project workflow run count exceeded u32 range: {error}"
+            ))
+        })
+    }
 }

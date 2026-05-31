@@ -93,13 +93,16 @@ export class WorkflowOperationsService {
 
   async invokeRun(input: {
     readonly sessionId: string;
+    readonly projectId?: string | null;
     readonly workflowId: string;
     readonly version: string;
     readonly runInput: unknown;
   }): Promise<WorkflowRunResource> {
+    const projectFields = input.projectId ? { project_id: input.projectId } : {};
     return await this.workflowClient.createRun({
       workflow_id: input.workflowId,
       version: input.version,
+      ...projectFields,
       session: { existing_session_id: input.sessionId },
       input: input.runInput,
       client_request_id: `bpane-admin-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
