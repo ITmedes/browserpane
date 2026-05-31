@@ -82,7 +82,7 @@ Current support and scope:
 - Shared sessions: collaborative by default, intended for small curated groups rather than broadcast-scale delivery.
 - Owner/viewer mode: optional exclusive-owner mode is supported in the gateway; restricted viewers are read-only.
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
-- Control plane: owner-scoped v1 APIs now cover identity/access-review summaries, projects, sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
+- Control plane: owner-scoped v1 APIs now cover identity/access-review summaries, service principals, projects, sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 
@@ -94,7 +94,7 @@ At a high level, BrowserPane has five responsibilities:
 2. Capture and classify that surface efficiently.
 3. Transport state, input, and media between host and browser.
 4. Render the remote session in a regular web page.
-5. Coordinate durable control-plane resources for projects, sessions,
+5. Coordinate durable control-plane resources for identity, projects, sessions,
    workflows, recordings, files, credentials, extensions, and automation
    ownership.
 
@@ -290,6 +290,10 @@ Canonical contract:
 - `DELETE /api/v1/sessions/{id}`
 - `GET /api/v1/identity/me`
 - `GET /api/v1/identity/access-review`
+- `POST /api/v1/service-principals`
+- `GET /api/v1/service-principals`
+- `GET /api/v1/service-principals/{id}`
+- `PUT /api/v1/service-principals/{id}`
 - `POST /api/v1/browser-contexts`
 - `GET /api/v1/browser-contexts`
 - `GET /api/v1/browser-contexts/{id}`
@@ -339,10 +343,15 @@ show whether a session was admitted under a project quota or left owner-scoped.
 Identity resources expose a sanitized access-review foundation:
 `GET /api/v1/identity/me` returns the current bearer principal as `user`,
 `service_principal`, or `legacy_dev_token`, while
-`GET /api/v1/identity/access-review` returns project usage, owner-scoped
-resource counts, and currently delegated automation principals. The admin
-Operations Overlay has a matching Identity tab, and the operator CLI exposes
-the same payload through `identity me` and `identity access-review`.
+`GET /api/v1/identity/access-review` returns registered service-principal
+metadata, project usage, owner-scoped resource counts, and currently delegated
+automation principals. Owners can register external OIDC clients through
+`/api/v1/service-principals`, use active/disabled state for lifecycle review,
+and block new automation delegation to disabled registered clients while keeping
+existing session metadata inspectable for cleanup. The admin Operations Overlay
+has a matching Identity tab, and the operator CLI exposes the same payload
+through `identity me`, `identity access-review`, and `service-principal`
+commands.
 Network identity metadata lets callers declare locale, language preferences,
 timezone, geolocation, browser identity, user-agent override, and an
 `egress_profile_id` on either a session template or an explicit session create
@@ -567,6 +576,14 @@ Common identity and access-review operations:
 ```bash
 ./scripts/bpane identity me
 ./scripts/bpane identity access-review
+./scripts/bpane service-principal create "MCP bridge" \
+  --client-id bpane-mcp-bridge \
+  --issuer http://localhost:8091/realms/browserpane-dev \
+  --scope session:delegate
+./scripts/bpane service-principal list
+./scripts/bpane service-principal get <service-principal-id>
+./scripts/bpane service-principal update <service-principal-id> --state active
+./scripts/bpane service-principal disable <service-principal-id>
 ```
 
 Common session-template operations:
@@ -745,10 +762,11 @@ destructive cleanup.
 The operator CLI integration smoke is
 `cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless`. It logs in
 through the admin app, creates a session, initializes a CLI profile, exercises
-identity/access-review, project/session-template/browser-context/egress catalog operations,
-session access/status/diagnostics/disconnect/stop/kill/cleanup, and validates
-standalone MCP health, authorize, set-default, doctor, preflight, repair,
-revoke, and clear-default flows.
+identity/access-review, service-principal registry lifecycle,
+project/session-template/browser-context/egress catalog operations, session
+access/status/diagnostics/disconnect/stop/kill/cleanup, and validates standalone
+MCP health, authorize, set-default, doctor, preflight, repair, revoke, and
+clear-default flows.
 
 Current runtime notes:
 

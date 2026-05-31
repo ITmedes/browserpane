@@ -80,8 +80,9 @@ paths:
       operationId: getIdentityAccessReview
       description: >
         Returns a sanitized owner-scoped access review with the current
-        principal, project usage, resource counts, and delegated automation
-        principals visible through the session catalog.
+        principal, project usage, service-principal registry metadata, resource
+        counts, and delegated automation principals visible through the session
+        catalog.
       responses:
         '200':
           description: Owner-scoped access review
@@ -91,6 +92,102 @@ paths:
                 $ref: '#/components/schemas/IdentityAccessReviewResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/service-principals:
+    get:
+      tags: [Identity]
+      summary: List owner-scoped service principals
+      operationId: listServicePrincipals
+      description: >
+        Returns registered external OIDC client metadata for the authenticated
+        owner. Responses are sanitized and never include client secrets, raw
+        token claims, or credential material.
+      responses:
+        '200':
+          description: Owner-scoped service-principal registry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrincipalListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Identity]
+      summary: Register an owner-scoped service principal
+      operationId: createServicePrincipal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertServicePrincipalRequest'
+      responses:
+        '201':
+          description: Service principal registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrincipalResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/service-principals/{service_principal_id}:
+    parameters:
+      - $ref: '#/components/parameters/ServicePrincipalId'
+    get:
+      tags: [Identity]
+      summary: Fetch one owner-scoped service principal
+      operationId: getServicePrincipal
+      responses:
+        '200':
+          description: Service-principal registry entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrincipalResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    put:
+      tags: [Identity]
+      summary: Replace one owner-scoped service principal
+      operationId: updateServicePrincipal
+      description: >
+        Replaces service-principal metadata including lifecycle state. Disabled
+        registered principals cannot be assigned as new automation delegates,
+        but existing session metadata remains visible for cleanup.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertServicePrincipalRequest'
+      responses:
+        '200':
+          description: Service principal updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrincipalResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions:
@@ -2807,6 +2904,13 @@ components:
       schema:
         type: string
         format: uuid
+    ServicePrincipalId:
+      name: service_principal_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     EgressProfileId:
       name: profile_id
       in: path
@@ -5440,6 +5544,117 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectResource'
+    ServicePrincipalState:
+      type: string
+      enum:
+        - active
+        - disabled
+    UpsertServicePrincipalRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - client_id
+        - issuer
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        client_id:
+          type: string
+          description: External OIDC client id.
+        issuer:
+          type: string
+          description: External OIDC issuer that minted tokens for this client.
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          default: {}
+        scopes:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Operator-defined scope metadata for future policy/audit use.
+        allowed_project_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          default: []
+          description: Operator-defined project metadata for future policy/audit use.
+        state:
+          $ref: '#/components/schemas/ServicePrincipalState'
+    ServicePrincipalResource:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - description
+        - client_id
+        - issuer
+        - labels
+        - scopes
+        - allowed_project_ids
+        - state
+        - last_seen_at
+        - last_delegated_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        client_id:
+          type: string
+        issuer:
+          type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        allowed_project_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        state:
+          $ref: '#/components/schemas/ServicePrincipalState'
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_delegated_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ServicePrincipalListResponse:
+      type: object
+      required: [service_principals]
+      properties:
+        service_principals:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServicePrincipalResource'
     IdentityPrincipalType:
       type: string
       enum:
@@ -5473,6 +5688,7 @@ components:
       additionalProperties: false
       required:
         - projects
+        - service_principals
         - sessions
         - active_sessions
         - session_templates
@@ -5489,6 +5705,9 @@ components:
         - delegated_principals
       properties:
         projects:
+          type: integer
+          minimum: 0
+        service_principals:
           type: integer
           minimum: 0
         sessions:
@@ -5540,6 +5759,9 @@ components:
         - client_id
         - issuer
         - display_name
+        - registered
+        - registered_service_principal_id
+        - state
         - session_count
         - active_session_count
         - session_ids
@@ -5550,6 +5772,16 @@ components:
           type: string
         display_name:
           type: string
+          nullable: true
+        registered:
+          type: boolean
+        registered_service_principal_id:
+          type: string
+          format: uuid
+          nullable: true
+        state:
+          allOf:
+            - $ref: '#/components/schemas/ServicePrincipalState'
           nullable: true
         session_count:
           type: integer
@@ -5562,6 +5794,27 @@ components:
           items:
             type: string
             format: uuid
+    IdentityServicePrincipalReviewResource:
+      allOf:
+        - $ref: '#/components/schemas/ServicePrincipalResource'
+        - type: object
+          additionalProperties: false
+          required:
+            - delegated_session_count
+            - active_delegated_session_count
+            - delegated_session_ids
+          properties:
+            delegated_session_count:
+              type: integer
+              minimum: 0
+            active_delegated_session_count:
+              type: integer
+              minimum: 0
+            delegated_session_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
     IdentityAccessReviewResponse:
       type: object
       additionalProperties: false
@@ -5570,6 +5823,7 @@ components:
         - generated_at
         - projects
         - resource_counts
+        - service_principals
         - delegated_principals
       properties:
         principal:
@@ -5583,6 +5837,10 @@ components:
             $ref: '#/components/schemas/ProjectResource'
         resource_counts:
           $ref: '#/components/schemas/IdentityResourceCounts'
+        service_principals:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityServicePrincipalReviewResource'
         delegated_principals:
           type: array
           items:

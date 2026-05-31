@@ -180,6 +180,39 @@ export type ProjectListResponse = {
   readonly projects: readonly ProjectResource[];
 };
 
+export type ServicePrincipalState = 'active' | 'disabled';
+
+export type ServicePrincipalResource = {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly client_id: string;
+  readonly issuer: string;
+  readonly labels: Readonly<Record<string, string>>;
+  readonly scopes: readonly string[];
+  readonly allowed_project_ids: readonly string[];
+  readonly state: ServicePrincipalState;
+  readonly last_seen_at?: string | null;
+  readonly last_delegated_at?: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type ServicePrincipalListResponse = {
+  readonly service_principals: readonly ServicePrincipalResource[];
+};
+
+export type CreateServicePrincipalCommand = {
+  readonly name: string;
+  readonly description?: string | null;
+  readonly client_id: string;
+  readonly issuer: string;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly scopes?: readonly string[];
+  readonly allowed_project_ids?: readonly string[];
+  readonly state?: ServicePrincipalState;
+};
+
 export type IdentityPrincipalType = 'user' | 'service_principal' | 'legacy_dev_token';
 
 export type IdentityPrincipalResource = {
@@ -192,6 +225,7 @@ export type IdentityPrincipalResource = {
 
 export type IdentityResourceCounts = {
   readonly projects: number;
+  readonly service_principals: number;
   readonly sessions: number;
   readonly active_sessions: number;
   readonly session_templates: number;
@@ -212,9 +246,18 @@ export type IdentityDelegatedPrincipalResource = {
   readonly client_id: string;
   readonly issuer: string;
   readonly display_name?: string | null;
+  readonly registered: boolean;
+  readonly registered_service_principal_id?: string | null;
+  readonly state?: ServicePrincipalState | null;
   readonly session_count: number;
   readonly active_session_count: number;
   readonly session_ids: readonly string[];
+};
+
+export type IdentityServicePrincipalReviewResource = ServicePrincipalResource & {
+  readonly delegated_session_count: number;
+  readonly active_delegated_session_count: number;
+  readonly delegated_session_ids: readonly string[];
 };
 
 export type IdentityAccessReviewResponse = {
@@ -222,6 +265,7 @@ export type IdentityAccessReviewResponse = {
   readonly generated_at: string;
   readonly projects: readonly ProjectResource[];
   readonly resource_counts: IdentityResourceCounts;
+  readonly service_principals: readonly IdentityServicePrincipalReviewResource[];
   readonly delegated_principals: readonly IdentityDelegatedPrincipalResource[];
 };
 

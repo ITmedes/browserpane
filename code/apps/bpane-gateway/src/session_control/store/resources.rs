@@ -1,6 +1,136 @@
 use super::*;
 
 impl SessionStore {
+    pub async fn create_service_principal(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistServicePrincipalRequest,
+    ) -> Result<StoredServicePrincipal, SessionStoreError> {
+        validate_service_principal_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_service_principal(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_service_principal(principal, request).await
+            }
+        }
+    }
+
+    pub async fn list_service_principals_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredServicePrincipal>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_service_principals_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_service_principals_for_owner(principal).await
+            }
+        }
+    }
+
+    pub async fn get_service_principal_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredServicePrincipal>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_service_principal_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_service_principal_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn update_service_principal_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistServicePrincipalRequest,
+    ) -> Result<Option<StoredServicePrincipal>, SessionStoreError> {
+        validate_service_principal_request(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .update_service_principal_for_owner(principal, id, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .update_service_principal_for_owner(principal, id, request)
+                    .await
+            }
+        }
+    }
+
+    pub async fn get_service_principal_for_owner_by_external_identity(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        issuer: &str,
+        client_id: &str,
+    ) -> Result<Option<StoredServicePrincipal>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_service_principal_for_owner_by_external_identity(
+                        principal, issuer, client_id,
+                    )
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_service_principal_for_owner_by_external_identity(
+                        principal, issuer, client_id,
+                    )
+                    .await
+            }
+        }
+    }
+
+    pub async fn mark_service_principal_seen_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        issuer: &str,
+        client_id: &str,
+    ) -> Result<Option<StoredServicePrincipal>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .mark_service_principal_seen_for_owner(principal, issuer, client_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .mark_service_principal_seen_for_owner(principal, issuer, client_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn mark_service_principal_delegated_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        issuer: &str,
+        client_id: &str,
+    ) -> Result<Option<StoredServicePrincipal>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .mark_service_principal_delegated_for_owner(principal, issuer, client_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .mark_service_principal_delegated_for_owner(principal, issuer, client_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn create_project(
         &self,
         principal: &AuthenticatedPrincipal,

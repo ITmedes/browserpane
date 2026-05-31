@@ -1088,6 +1088,144 @@ describe('bpane operator CLI', () => {
     });
   });
 
+  it('manages service principals through the CLI', async () => {
+    const createServicePrincipalIo = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ id: 'service-principal-1', name: 'MCP bridge' }, 201),
+      jsonResponse({ service_principals: [{ id: 'service-principal-1' }] }),
+      jsonResponse({ id: 'service-principal-1', name: 'MCP bridge' }),
+      jsonResponse({
+        id: 'service-principal-1',
+        name: 'MCP bridge',
+        description: 'Existing service principal',
+        client_id: 'bpane-mcp-bridge',
+        issuer: 'https://issuer.example',
+        labels: { system: 'mcp' },
+        scopes: ['session:delegate'],
+        allowed_project_ids: ['project-1'],
+        state: 'active',
+      }),
+      jsonResponse({ id: 'service-principal-1', name: 'MCP bridge v2', state: 'active' }),
+      jsonResponse({
+        id: 'service-principal-1',
+        name: 'MCP bridge v2',
+        client_id: 'bpane-mcp-bridge',
+        issuer: 'https://issuer.example',
+        labels: { system: 'mcp', managed: 'true' },
+        scopes: ['session:delegate', 'workflow:run'],
+        allowed_project_ids: ['project-1'],
+        state: 'active',
+      }),
+      jsonResponse({ id: 'service-principal-1', name: 'MCP bridge v2', state: 'disabled' }),
+    );
+
+    const createCode = await runBpaneCli(
+      [
+        'service-principal',
+        'create',
+        'MCP bridge',
+        '--description',
+        'Bridge automation identity',
+        '--client-id',
+        'bpane-mcp-bridge',
+        '--issuer',
+        'https://issuer.example',
+        '--label',
+        'system=mcp',
+        '--scope',
+        'session:delegate',
+        '--allowed-project-id',
+        'project-1',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      createServicePrincipalIo.io,
+      fetchImpl,
+    );
+    expect(createCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(createServicePrincipalIo)).toEqual({ id: 'service-principal-1', name: 'MCP bridge' });
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/service-principals');
+    expect(calls[0].init.method).toBe('POST');
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      name: 'MCP bridge',
+      description: 'Bridge automation identity',
+      client_id: 'bpane-mcp-bridge',
+      issuer: 'https://issuer.example',
+      labels: { system: 'mcp' },
+      scopes: ['session:delegate'],
+      allowed_project_ids: ['project-1'],
+    });
+
+    const listIo = createIo();
+    const listCode = await runBpaneCli(
+      ['service-principal', 'list'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      listIo.io,
+      fetchImpl,
+    );
+    expect(listCode).toBe(EXIT_CODES.ok);
+    expect(parseStdout(listIo)).toEqual({ service_principals: [{ id: 'service-principal-1' }] });
+
+    const getIo = createIo();
+    const getCode = await runBpaneCli(
+      ['service-principal', 'get', 'service/principal with space'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      getIo.io,
+      fetchImpl,
+    );
+    expect(getCode).toBe(EXIT_CODES.ok);
+    expect(calls[2].url).toBe('http://localhost:8080/api/v1/service-principals/service%2Fprincipal%20with%20space');
+
+    const updateIo = createIo();
+    const updateCode = await runBpaneCli(
+      [
+        'service-principal',
+        'update',
+        'service-principal-1',
+        '--name',
+        'MCP bridge v2',
+        '--label',
+        'managed=true',
+        '--scope',
+        'workflow:run',
+      ],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      updateIo.io,
+      fetchImpl,
+    );
+    expect(updateCode).toBe(EXIT_CODES.ok);
+    expect(calls[3].url).toBe('http://localhost:8080/api/v1/service-principals/service-principal-1');
+    expect(calls[4].init.method).toBe('PUT');
+    expect(JSON.parse(calls[4].init.body)).toEqual({
+      name: 'MCP bridge v2',
+      description: 'Existing service principal',
+      client_id: 'bpane-mcp-bridge',
+      issuer: 'https://issuer.example',
+      labels: { system: 'mcp', managed: 'true' },
+      scopes: ['workflow:run'],
+      allowed_project_ids: ['project-1'],
+      state: 'active',
+    });
+
+    const disableIo = createIo();
+    const disableCode = await runBpaneCli(
+      ['service-principal', 'disable', 'service-principal-1'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      disableIo.io,
+      fetchImpl,
+    );
+    expect(disableCode).toBe(EXIT_CODES.ok);
+    expect(calls[6].init.method).toBe('PUT');
+    expect(JSON.parse(calls[6].init.body)).toEqual({
+      name: 'MCP bridge v2',
+      client_id: 'bpane-mcp-bridge',
+      issuer: 'https://issuer.example',
+      labels: { system: 'mcp', managed: 'true' },
+      scopes: ['session:delegate', 'workflow:run'],
+      allowed_project_ids: ['project-1'],
+      state: 'disabled',
+    });
+  });
+
   it('validates project CLI input before fetching', async () => {
     const missingNameIo = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
@@ -1110,6 +1248,41 @@ describe('bpane operator CLI', () => {
     );
     expect(invalidQuotaCode).toBe(EXIT_CODES.usage);
     expect(parseStderr(invalidQuotaIo).error).toContain('--max-active-sessions');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('validates service-principal CLI input before fetching', async () => {
+    const missingNameIo = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
+
+    const missingNameCode = await runBpaneCli(
+      ['service-principal', 'create', '--client-id', 'bpane-mcp-bridge', '--issuer', 'https://issuer.example'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingNameIo.io,
+      fetchImpl,
+    );
+    expect(missingNameCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingNameIo).error).toContain('Service principal create requires');
+
+    const missingClientIo = createIo();
+    const missingClientCode = await runBpaneCli(
+      ['service-principal', 'create', 'MCP bridge', '--issuer', 'https://issuer.example'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingClientIo.io,
+      fetchImpl,
+    );
+    expect(missingClientCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingClientIo).error).toContain('requires --client-id');
+
+    const missingIssuerIo = createIo();
+    const missingIssuerCode = await runBpaneCli(
+      ['service-principal', 'create', 'MCP bridge', '--client-id', 'bpane-mcp-bridge'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      missingIssuerIo.io,
+      fetchImpl,
+    );
+    expect(missingIssuerCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(missingIssuerIo).error).toContain('requires --issuer');
     expect(calls).toHaveLength(0);
   });
 

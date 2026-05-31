@@ -1,5 +1,5 @@
 use super::super::*;
-use super::encoding::row_to_json_string_array;
+use super::encoding::{row_to_json_string_array, row_to_json_uuid_array};
 
 pub(in crate::session_control) fn row_to_stored_browser_context(
     row: &Row,
@@ -101,6 +101,55 @@ pub(in crate::session_control) fn row_to_stored_project(
         labels,
         quotas,
         state,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
+pub(in crate::session_control) fn row_to_stored_service_principal(
+    row: &Row,
+) -> Result<StoredServicePrincipal, SessionStoreError> {
+    let state = row
+        .get::<_, String>("state")
+        .parse::<ServicePrincipalState>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("service principal labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("service principal label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let scopes = row_to_json_string_array(row.get("scopes"), "service principal scopes")?;
+    let allowed_project_ids = row_to_json_uuid_array(
+        row.get("allowed_project_ids"),
+        "service principal allowed_project_ids",
+    )?;
+
+    Ok(StoredServicePrincipal {
+        id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        description: row.get("description"),
+        client_id: row.get("client_id"),
+        issuer: row.get("issuer"),
+        labels,
+        scopes,
+        allowed_project_ids,
+        state,
+        last_seen_at: row.get("last_seen_at"),
+        last_delegated_at: row.get("last_delegated_at"),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     })

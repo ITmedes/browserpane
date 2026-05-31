@@ -24,8 +24,23 @@ export type IdentityDelegationRow = {
   readonly clientId: string;
   readonly issuer: string;
   readonly displayName: string;
+  readonly registration: string;
+  readonly state: string;
   readonly sessionSummary: string;
   readonly sessionIds: string;
+};
+
+export type IdentityServicePrincipalRow = {
+  readonly id: string;
+  readonly name: string;
+  readonly clientId: string;
+  readonly issuer: string;
+  readonly state: string;
+  readonly scopes: string;
+  readonly projects: string;
+  readonly delegatedSummary: string;
+  readonly delegatedSessionIds: string;
+  readonly lastActivity: string;
 };
 
 export type IdentityAccessReviewViewModel = {
@@ -35,6 +50,7 @@ export type IdentityAccessReviewViewModel = {
   readonly generatedAtLabel: string;
   readonly metrics: readonly IdentityMetricRow[];
   readonly projects: readonly IdentityProjectRow[];
+  readonly servicePrincipals: readonly IdentityServicePrincipalRow[];
   readonly delegations: readonly IdentityDelegationRow[];
 };
 
@@ -49,6 +65,7 @@ export class IdentityAccessReviewViewModelBuilder {
         metric('sessions', 'Sessions', review.resource_counts.sessions),
         metric('active-sessions', 'Active sessions', review.resource_counts.active_sessions),
         metric('projects', 'Projects', review.resource_counts.projects),
+        metric('service-principals', 'Service principals', review.resource_counts.service_principals),
         metric('contexts', 'Contexts', review.resource_counts.browser_contexts),
         metric('egress', 'Egress profiles', review.resource_counts.egress_profiles),
         metric('templates', 'Templates', review.resource_counts.session_templates),
@@ -58,10 +75,34 @@ export class IdentityAccessReviewViewModelBuilder {
         metric('delegations', 'Delegations', review.resource_counts.delegated_principals),
       ],
       projects: review.projects.map(projectRow),
+      servicePrincipals: review.service_principals.map((servicePrincipal) => ({
+        id: servicePrincipal.id,
+        name: servicePrincipal.name,
+        clientId: servicePrincipal.client_id,
+        issuer: servicePrincipal.issuer,
+        state: servicePrincipal.state,
+        scopes: servicePrincipal.scopes.length > 0 ? servicePrincipal.scopes.join(', ') : 'no scopes',
+        projects: servicePrincipal.allowed_project_ids.length > 0
+          ? servicePrincipal.allowed_project_ids.map(shortId).join(', ')
+          : 'all projects metadata unset',
+        delegatedSummary: `${servicePrincipal.active_delegated_session_count}/${servicePrincipal.delegated_session_count} active`,
+        delegatedSessionIds: servicePrincipal.delegated_session_ids.length > 0
+          ? servicePrincipal.delegated_session_ids.map(shortId).join(', ')
+          : 'no delegated sessions',
+        lastActivity: servicePrincipal.last_delegated_at
+          ? `delegated ${formatDateTime(servicePrincipal.last_delegated_at)}`
+          : servicePrincipal.last_seen_at
+            ? `seen ${formatDateTime(servicePrincipal.last_seen_at)}`
+            : 'not observed',
+      })),
       delegations: review.delegated_principals.map((delegate) => ({
         clientId: delegate.client_id,
         issuer: delegate.issuer,
         displayName: delegate.display_name ?? delegate.client_id,
+        registration: delegate.registered
+          ? `registered ${delegate.registered_service_principal_id ? shortId(delegate.registered_service_principal_id) : ''}`.trim()
+          : 'unregistered',
+        state: delegate.state ?? 'unregistered',
         sessionSummary: `${delegate.active_session_count}/${delegate.session_count} active`,
         sessionIds: delegate.session_ids.length > 0
           ? delegate.session_ids.map(shortId).join(', ')

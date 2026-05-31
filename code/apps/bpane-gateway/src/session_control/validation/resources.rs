@@ -106,6 +106,62 @@ pub(in crate::session_control) fn validate_project_request(
     Ok(())
 }
 
+pub(in crate::session_control) fn validate_service_principal_request(
+    request: &PersistServicePrincipalRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "service principal name must not be empty".to_string(),
+        ));
+    }
+    if request.client_id.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "service principal client_id must not be empty".to_string(),
+        ));
+    }
+    if request.issuer.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "service principal issuer must not be empty".to_string(),
+        ));
+    }
+    if let Some(description) = &request.description {
+        if description.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "service principal description must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    for (key, value) in &request.labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "service principal label keys must not be empty".to_string(),
+            ));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "service principal label values must not be empty".to_string(),
+            ));
+        }
+    }
+    for scope in &request.scopes {
+        if scope.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "service principal scopes must not contain empty values".to_string(),
+            ));
+        }
+    }
+    if request
+        .allowed_project_ids
+        .iter()
+        .any(|project_id| *project_id == Uuid::nil())
+    {
+        return Err(SessionStoreError::InvalidRequest(
+            "service principal allowed_project_ids must not contain nil UUIDs".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 pub(in crate::session_control) fn validate_credential_binding_request(
     request: &PersistCredentialBindingRequest,
 ) -> Result<(), SessionStoreError> {

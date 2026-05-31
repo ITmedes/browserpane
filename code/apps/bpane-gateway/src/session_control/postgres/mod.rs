@@ -10,6 +10,7 @@ mod file_workspaces;
 mod projects;
 mod recordings;
 mod runtime_assignments;
+mod service_principals;
 mod session_files;
 mod session_templates;
 mod sessions;

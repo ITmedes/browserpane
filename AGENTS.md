@@ -38,6 +38,7 @@ Current product shape:
 - Exclusive browser-owner mode: optional in `bpane-gateway` via `--exclusive-browser-owner`; default is disabled.
 - Viewer cap: configurable in `bpane-gateway` via `--max-viewers`, default `10` for restricted browser viewers.
 - MCP automation: supported via `mcp-bridge` and gateway ownership APIs.
+- Service-principal registry: owner-scoped external OIDC client metadata is supported through `/api/v1/service-principals`; disabled registered principals cannot be assigned as new automation delegates.
 - Browser extensions: owner-approved unpacked extensions are supported for docker-backed sessions and workflow runs; `static_single` does not support session extension sets.
 - Egress traffic logging is proxy-side. BrowserPane should expose sanitized
   session/profile/container correlation metadata, while the configured egress
@@ -67,7 +68,7 @@ Current product shape:
   - WebTransport gateway and shared-session coordinator.
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
-  - `session_control.rs`: versioned session-control store and Postgres integration, including projects with admission quotas, session templates, browser contexts, workflows, credential bindings, file workspaces, and approved extension metadata.
+  - `session_control.rs`: versioned session-control store and Postgres integration, including projects with admission quotas, service principals, session templates, browser contexts, workflows, credential bindings, file workspaces, and approved extension metadata.
   - `browser_contexts/retention.rs`: background cleanup for ready reusable browser contexts whose per-context retention window expired; runtime-backed cleanup skips active writers and removes docker profile volumes through the session manager. Browser context resources can also carry per-context profile storage limits; the API reports over-limit usage and blocks new reusable sessions from contexts whose inspected profile storage exceeds that limit. Inactive reusable contexts can be cloned into new owner-scoped reusable contexts, exported as zip archives, or imported from BrowserPane export archives into new reusable contexts; docker-backed runtimes copy, package, or restore profile volume data when present.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
   - `credential_provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2.

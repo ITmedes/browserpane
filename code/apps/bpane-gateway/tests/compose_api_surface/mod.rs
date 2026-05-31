@@ -6,6 +6,7 @@ pub mod network_identity;
 pub mod ownership_boundaries;
 pub mod projects;
 pub mod recording_artifacts;
+pub mod service_principals;
 pub mod session_churn;
 pub mod session_compatibility;
 pub mod session_templates;

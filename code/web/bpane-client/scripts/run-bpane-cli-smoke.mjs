@@ -38,6 +38,7 @@ async function run() {
   let contextId = '';
   let clonedContextId = '';
   let importedContextId = '';
+  let servicePrincipalId = '';
   let configDir = '';
 
   try {
@@ -95,6 +96,41 @@ async function run() {
     const identity = runBpaneCli(['identity', 'me'], cliEnv);
     if (!identity.subject || !identity.issuer || !['user', 'service_principal', 'legacy_dev_token'].includes(identity.principal_type)) {
       throw new Error(`CLI identity me returned unexpected data: ${JSON.stringify(identity)}`);
+    }
+
+    const servicePrincipal = ensureBridgeServicePrincipal(cliEnv, bridge, runLabel);
+    servicePrincipalId = servicePrincipal.id;
+    if (!servicePrincipalId || servicePrincipal.client_id !== bridge.clientId || servicePrincipal.state !== 'active') {
+      throw new Error(`CLI service-principal ensure returned unexpected data: ${JSON.stringify(servicePrincipal)}`);
+    }
+
+    const listedServicePrincipals = runBpaneCli(['service-principal', 'list'], cliEnv);
+    if (
+      !Array.isArray(listedServicePrincipals.service_principals)
+      || !listedServicePrincipals.service_principals.some((item) => item.id === servicePrincipalId)
+    ) {
+      throw new Error(`CLI service-principal list did not include ${servicePrincipalId}.`);
+    }
+
+    const fetchedServicePrincipal = runBpaneCli(['service-principal', 'get', servicePrincipalId], cliEnv);
+    if (fetchedServicePrincipal.id !== servicePrincipalId || fetchedServicePrincipal.labels?.run_id !== runLabel) {
+      throw new Error(`CLI service-principal get returned unexpected data: ${JSON.stringify(fetchedServicePrincipal)}`);
+    }
+
+    const disabledServicePrincipal = runBpaneCli(['service-principal', 'disable', servicePrincipalId], cliEnv);
+    if (disabledServicePrincipal.state !== 'disabled') {
+      throw new Error(`CLI service-principal disable did not persist disabled state: ${JSON.stringify(disabledServicePrincipal)}`);
+    }
+
+    const enabledServicePrincipal = runBpaneCli([
+      'service-principal',
+      'update',
+      servicePrincipalId,
+      '--state',
+      'active',
+    ], cliEnv);
+    if (enabledServicePrincipal.state !== 'active') {
+      throw new Error(`CLI service-principal update did not re-enable the principal: ${JSON.stringify(enabledServicePrincipal)}`);
     }
 
     const project = runBpaneCli([
@@ -496,10 +532,13 @@ async function run() {
       accessReview.principal?.subject !== identity.subject
       || accessReview.resource_counts?.sessions < 1
       || accessReview.resource_counts?.projects < 1
+      || accessReview.resource_counts?.service_principals < 1
       || !Array.isArray(accessReview.projects)
       || !accessReview.projects.some((item) => item.id === projectId)
+      || !Array.isArray(accessReview.service_principals)
+      || !accessReview.service_principals.some((item) => item.id === servicePrincipalId && item.delegated_session_count >= 1)
       || !Array.isArray(accessReview.delegated_principals)
-      || !accessReview.delegated_principals.some((item) => item.client_id === bridge.clientId)
+      || !accessReview.delegated_principals.some((item) => item.client_id === bridge.clientId && item.registered === true)
     ) {
       throw new Error(`CLI identity access-review returned unexpected data: ${JSON.stringify(accessReview)}`);
     }
@@ -647,6 +686,45 @@ async function loadMcpBridgeConfig(options) {
     throw new Error('Operator CLI smoke requires auth-config mcpBridge metadata.');
   }
   return bridge;
+}
+
+function ensureBridgeServicePrincipal(cliEnv, bridge, runLabel) {
+  const listed = runBpaneCli(['service-principal', 'list'], cliEnv);
+  const existing = listed.service_principals?.find((item) => (
+    item.client_id === bridge.clientId && item.issuer === bridge.issuer
+  ));
+  const args = existing
+    ? [
+        'service-principal',
+        'update',
+        existing.id,
+        '--name',
+        `mcp-bridge-${runLabel}`,
+        '--description',
+        'Operator CLI smoke service principal',
+        '--state',
+        'active',
+      ]
+    : [
+        'service-principal',
+        'create',
+        `mcp-bridge-${runLabel}`,
+        '--description',
+        'Operator CLI smoke service principal',
+        '--client-id',
+        bridge.clientId,
+        '--issuer',
+        bridge.issuer,
+      ];
+  return runBpaneCli([
+    ...args,
+    '--label',
+    'suite=bpane-cli-smoke',
+    '--label',
+    `run_id=${runLabel}`,
+    '--scope',
+    'session:delegate',
+  ], cliEnv);
 }
 
 async function clearMcpBridge(options) {

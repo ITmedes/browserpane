@@ -26,6 +26,7 @@ struct IdentityPrincipalResource {
 #[derive(Debug, Clone, Serialize)]
 struct IdentityResourceCounts {
     projects: usize,
+    service_principals: usize,
     sessions: usize,
     active_sessions: usize,
     session_templates: usize,
@@ -47,9 +48,21 @@ struct IdentityDelegatedPrincipalResource {
     client_id: String,
     issuer: String,
     display_name: Option<String>,
+    registered: bool,
+    registered_service_principal_id: Option<Uuid>,
+    state: Option<ServicePrincipalState>,
     session_count: usize,
     active_session_count: usize,
     session_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct IdentityServicePrincipalReviewResource {
+    #[serde(flatten)]
+    service_principal: ServicePrincipalResource,
+    delegated_session_count: usize,
+    active_delegated_session_count: usize,
+    delegated_session_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,6 +71,7 @@ struct IdentityAccessReviewResponse {
     generated_at: DateTime<Utc>,
     projects: Vec<ProjectResource>,
     resource_counts: IdentityResourceCounts,
+    service_principals: Vec<IdentityServicePrincipalReviewResource>,
     delegated_principals: Vec<IdentityDelegatedPrincipalResource>,
 }
 
@@ -84,6 +98,7 @@ async fn get_current_identity(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    mark_current_service_principal_seen(&state, &principal).await?;
     Ok(Json(identity_principal_resource(&principal)))
 }
 
@@ -94,9 +109,15 @@ async fn get_identity_access_review(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    mark_current_service_principal_seen(&state, &principal).await?;
     let projects = state
         .session_store
         .list_projects_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?;
+    let service_principals = state
+        .session_store
+        .list_service_principals_for_owner(&principal)
         .await
         .map_err(map_session_store_error)?;
     let sessions = state
@@ -156,9 +177,12 @@ async fn get_identity_access_review(
         .iter()
         .filter(|session| session.state.is_runtime_candidate())
         .count();
-    let delegated_principals = delegated_principal_resources(&sessions);
+    let delegated_principals = delegated_principal_resources(&sessions, &service_principals);
+    let service_principal_reviews =
+        service_principal_review_resources(&service_principals, &sessions);
     let resource_counts = IdentityResourceCounts {
         projects: projects.len(),
+        service_principals: service_principals.len(),
         sessions: sessions.len(),
         active_sessions,
         session_templates: session_templates.len(),
@@ -186,8 +210,24 @@ async fn get_identity_access_review(
         generated_at: now,
         projects,
         resource_counts,
+        service_principals: service_principal_reviews,
         delegated_principals,
     }))
+}
+
+async fn mark_current_service_principal_seen(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let Some(client_id) = principal.client_id.as_deref() else {
+        return Ok(());
+    };
+    state
+        .session_store
+        .mark_service_principal_seen_for_owner(principal, &principal.issuer, client_id)
+        .await
+        .map_err(map_session_store_error)?;
+    Ok(())
 }
 
 async fn project_resources(
@@ -239,7 +279,21 @@ fn classify_principal(principal: &AuthenticatedPrincipal) -> IdentityPrincipalTy
 
 fn delegated_principal_resources(
     sessions: &[StoredSession],
+    service_principals: &[StoredServicePrincipal],
 ) -> Vec<IdentityDelegatedPrincipalResource> {
+    let service_principal_index = service_principals
+        .iter()
+        .map(|service_principal| {
+            (
+                DelegatedPrincipalKey {
+                    client_id: service_principal.client_id.clone(),
+                    issuer: service_principal.issuer.clone(),
+                    display_name: None,
+                },
+                service_principal,
+            )
+        })
+        .collect::<HashMap<_, _>>();
     let mut groups: HashMap<DelegatedPrincipalKey, IdentityDelegatedPrincipalResource> =
         HashMap::new();
     for session in sessions {
@@ -257,6 +311,9 @@ fn delegated_principal_resources(
                 client_id: delegate.client_id.clone(),
                 issuer: delegate.issuer.clone(),
                 display_name: delegate.display_name.clone(),
+                registered: false,
+                registered_service_principal_id: None,
+                state: None,
                 session_count: 0,
                 active_session_count: 0,
                 session_ids: Vec::new(),
@@ -270,12 +327,76 @@ fn delegated_principal_resources(
 
     let mut resources = groups.into_values().collect::<Vec<_>>();
     for resource in &mut resources {
+        if let Some(service_principal) = service_principal_index.get(&DelegatedPrincipalKey {
+            client_id: resource.client_id.clone(),
+            issuer: resource.issuer.clone(),
+            display_name: None,
+        }) {
+            resource.registered = true;
+            resource.registered_service_principal_id = Some(service_principal.id);
+            resource.state = Some(service_principal.state);
+        }
         resource.session_ids.sort_unstable();
     }
     resources.sort_by(|left, right| {
         left.client_id
             .cmp(&right.client_id)
             .then(left.issuer.cmp(&right.issuer))
+    });
+    resources
+}
+
+fn service_principal_review_resources(
+    service_principals: &[StoredServicePrincipal],
+    sessions: &[StoredSession],
+) -> Vec<IdentityServicePrincipalReviewResource> {
+    let mut resources = service_principals
+        .iter()
+        .map(|service_principal| {
+            let mut delegated_session_ids = sessions
+                .iter()
+                .filter(|session| {
+                    session
+                        .automation_delegate
+                        .as_ref()
+                        .is_some_and(|delegate| {
+                            delegate.client_id == service_principal.client_id
+                                && delegate.issuer == service_principal.issuer
+                        })
+                })
+                .map(|session| session.id)
+                .collect::<Vec<_>>();
+            delegated_session_ids.sort_unstable();
+            let active_delegated_session_count = sessions
+                .iter()
+                .filter(|session| {
+                    session.state.is_runtime_candidate()
+                        && session
+                            .automation_delegate
+                            .as_ref()
+                            .is_some_and(|delegate| {
+                                delegate.client_id == service_principal.client_id
+                                    && delegate.issuer == service_principal.issuer
+                            })
+                })
+                .count();
+            IdentityServicePrincipalReviewResource {
+                service_principal: service_principal.to_resource(),
+                delegated_session_count: delegated_session_ids.len(),
+                active_delegated_session_count,
+                delegated_session_ids,
+            }
+        })
+        .collect::<Vec<_>>();
+    resources.sort_by(|left, right| {
+        left.service_principal
+            .client_id
+            .cmp(&right.service_principal.client_id)
+            .then(
+                left.service_principal
+                    .issuer
+                    .cmp(&right.service_principal.issuer),
+            )
     });
     resources
 }

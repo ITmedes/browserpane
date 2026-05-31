@@ -109,6 +109,15 @@ pub(in crate::session_control) fn json_string_array(values: &[String]) -> Value 
     )
 }
 
+pub(in crate::session_control) fn json_uuid_array(values: &[Uuid]) -> Value {
+    Value::Array(
+        values
+            .iter()
+            .map(|value| Value::String(value.to_string()))
+            .collect::<Vec<_>>(),
+    )
+}
+
 pub(in crate::session_control) fn row_to_json_string_array(
     value: Value,
     field_name: &str,
@@ -124,6 +133,22 @@ pub(in crate::session_control) fn row_to_json_string_array(
                 .with_context(|| format!("{field_name} entries must be strings"))
                 .map(|entry| entry.to_string())
                 .map_err(|error| SessionStoreError::Backend(error.to_string()))
+        })
+        .collect()
+}
+
+pub(in crate::session_control) fn row_to_json_uuid_array(
+    value: Value,
+    field_name: &str,
+) -> Result<Vec<Uuid>, SessionStoreError> {
+    row_to_json_string_array(value, field_name)?
+        .into_iter()
+        .map(|entry| {
+            entry.parse::<Uuid>().map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "{field_name} entries must be UUID strings: {error}"
+                ))
+            })
         })
         .collect()
 }

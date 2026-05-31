@@ -114,6 +114,7 @@
     browserStatus, selectedSessionId: selectedSession?.id ?? null,
     sessionCount: sessions.length, browserContextCount: browserContexts.length,
     egressProfileCount: egressProfiles.length,
+    servicePrincipalCount: identityAccessReview?.resource_counts.service_principals ?? 0,
     delegatedPrincipalCount: identityAccessReview?.resource_counts.delegated_principals ?? 0,
     fileCount: sessionFileCount, connected: browserConnected,
   }));
@@ -165,7 +166,7 @@
         showGlobalMessage(
           'success',
           'Access review refreshed',
-          `${identityAccessReview.resource_counts.sessions} session${identityAccessReview.resource_counts.sessions === 1 ? '' : 's'} and ${identityAccessReview.resource_counts.delegated_principals} delegated principal${identityAccessReview.resource_counts.delegated_principals === 1 ? '' : 's'} refreshed.`,
+          `${identityAccessReview.resource_counts.sessions} session${identityAccessReview.resource_counts.sessions === 1 ? '' : 's'}, ${identityAccessReview.resource_counts.service_principals} service principal${identityAccessReview.resource_counts.service_principals === 1 ? '' : 's'}, and ${identityAccessReview.resource_counts.delegated_principals} delegated principal${identityAccessReview.resource_counts.delegated_principals === 1 ? '' : 's'} refreshed.`,
         );
       }
     } catch (error) {

@@ -51,6 +51,7 @@ mod identity;
 mod network_identity;
 mod projects;
 mod recordings;
+mod service_principals;
 mod session_files;
 mod session_templates;
 mod sessions;

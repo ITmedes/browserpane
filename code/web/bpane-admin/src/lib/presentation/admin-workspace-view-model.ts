@@ -42,6 +42,7 @@ export class AdminWorkspaceViewModelBuilder {
     readonly browserContextCount: number;
     readonly egressProfileCount: number;
     readonly fileCount: number;
+    readonly servicePrincipalCount: number;
     readonly delegatedPrincipalCount: number;
     readonly connected: boolean;
   }): AdminWorkspaceViewModel {
@@ -58,11 +59,12 @@ export class AdminWorkspaceViewModelBuilder {
           'Disconnect',
           'MCP authorization',
         ], ['visible sessions', 'selected session']),
-        panel('identity', 'Identity', 'Principal and access review', 'Review the signed-in operator and delegated automation access.', `${input.delegatedPrincipalCount} delegates`, true, [
+        panel('identity', 'Identity', 'Principal and access review', 'Review the signed-in operator and delegated automation access.', `${input.servicePrincipalCount} principals / ${input.delegatedPrincipalCount} delegates`, true, [
           'Refresh principal',
+          'Review service principals',
           'Review projects',
           'Inspect delegations',
-        ], ['principal type', 'resource counts', 'delegations']),
+        ], ['principal type', 'resource counts', 'service principals', 'delegations']),
         panel('contexts', 'Contexts', 'Reusable browser profile lifecycle', 'Inspect reusable Chromium state before attaching it to sessions.', `${input.browserContextCount} contexts`, true, [
           'Inspect profile catalog',
           'Copy API examples',

@@ -256,6 +256,18 @@ export async function deleteSession(accessToken, options, sessionId) {
   }
 }
 
+export async function killSession(accessToken, options, sessionId) {
+  const response = await fetch(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/kill`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (response.ok || response.status === 404) {
+    return;
+  }
+  const detail = await response.text().catch(() => '');
+  throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+}
+
 export async function cleanupWorkflowSmokeSessions(accessToken, options, log = () => {}) {
   const response = await waitForWorkflowControlPlane(accessToken, options);
   const sessions = Array.isArray(response.sessions) ? response.sessions : [];
@@ -269,7 +281,7 @@ export async function cleanupWorkflowSmokeSessions(accessToken, options, log = (
     if (sessionState === 'stopped') {
       continue;
     }
-    await deleteSession(accessToken, options, sessionId);
+    await killSession(accessToken, options, sessionId);
     removed += 1;
   }
   if (removed > 0) {
