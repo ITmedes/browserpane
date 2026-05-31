@@ -18,6 +18,28 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
             .await?,
         "identity access-review without bearer",
     )?;
+    assert_unauthorized(
+        harness
+            .get_json_outcome_without_bearer("/api/v1/identity-mappings", HeaderMap::new())
+            .await?,
+        "identity mappings list without bearer",
+    )?;
+    assert_unauthorized(
+        harness
+            .post_json_outcome_without_bearer(
+                "/api/v1/identity-mappings",
+                json!({
+                    "name": "unauthorized mapping",
+                    "kind": "user",
+                    "issuer": "http://localhost:8091/realms/browserpane-dev",
+                    "external_id": "unauthorized",
+                    "project_id": "00000000-0000-0000-0000-000000000001"
+                }),
+                HeaderMap::new(),
+            )
+            .await?,
+        "identity mapping create without bearer",
+    )?;
 
     let identity = harness.get_json("/api/v1/identity/me").await?;
     let subject = identity
@@ -69,6 +91,129 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     let session_id = json_id(&session, "id")?;
 
     let result = async {
+        let invalid_mapping = harness
+            .post_json_outcome(
+                "/api/v1/identity-mappings",
+                json!({
+                    "name": "",
+                    "kind": "user",
+                    "issuer": issuer,
+                    "external_id": subject,
+                    "project_id": project_id
+                }),
+            )
+            .await?;
+        if invalid_mapping.status != StatusCode::BAD_REQUEST {
+            return Err(anyhow!(
+                "invalid identity mapping create returned {} instead of 400: {}",
+                invalid_mapping.status,
+                invalid_mapping.body
+            ));
+        }
+
+        let mapping_body = json!({
+            "name": harness.unique_name("identity-project-mapping"),
+            "description": "Compose e2e identity-to-project mapping",
+            "kind": "user",
+            "issuer": issuer,
+            "external_id": subject,
+            "project_id": project_id,
+            "labels": label_map("identity-mappings"),
+            "scopes": ["session:create"],
+            "state": "active"
+        });
+        let mapping = harness
+            .post_json("/api/v1/identity-mappings", mapping_body.clone())
+            .await?;
+        let mapping_id = json_id(&mapping, "id")?;
+        if mapping["kind"] != json!("user")
+            || mapping["issuer"] != json!(issuer)
+            || mapping["external_id"] != json!(subject)
+            || mapping["project_id"] != json!(project_id)
+            || mapping["state"] != json!("active")
+        {
+            return Err(anyhow!(
+                "identity mapping create returned unexpected resource: {mapping}"
+            ));
+        }
+
+        let duplicate = harness
+            .post_json_outcome("/api/v1/identity-mappings", mapping_body)
+            .await?;
+        if duplicate.status != StatusCode::CONFLICT {
+            return Err(anyhow!(
+                "duplicate identity mapping create returned {} instead of 409: {}",
+                duplicate.status,
+                duplicate.body
+            ));
+        }
+
+        let listed = harness.get_json("/api/v1/identity-mappings").await?;
+        let listed_mappings = json_array(&listed, "identity_mappings")?;
+        if !listed_mappings
+            .iter()
+            .any(|candidate| candidate.get("id") == Some(&json!(mapping_id)))
+        {
+            return Err(anyhow!(
+                "identity mapping list did not include {mapping_id}: {listed}"
+            ));
+        }
+
+        let fetched = harness
+            .get_json(&format!("/api/v1/identity-mappings/{mapping_id}"))
+            .await?;
+        if fetched["id"] != json!(mapping_id)
+            || fetched["labels"]["scope"] != json!("identity-mappings")
+        {
+            return Err(anyhow!(
+                "identity mapping get returned unexpected resource: {fetched}"
+            ));
+        }
+
+        let disabled = harness
+            .put_json(
+                &format!("/api/v1/identity-mappings/{mapping_id}"),
+                json!({
+                    "name": fetched["name"],
+                    "description": "Compose e2e identity mapping disabled",
+                    "kind": "user",
+                    "issuer": issuer,
+                    "external_id": subject,
+                    "project_id": project_id,
+                    "labels": label_map("identity-mappings"),
+                    "scopes": ["session:create"],
+                    "state": "disabled"
+                }),
+            )
+            .await?;
+        if disabled["state"] != json!("disabled") {
+            return Err(anyhow!(
+                "identity mapping disable update did not persist disabled state: {disabled}"
+            ));
+        }
+
+        let enabled = harness
+            .put_json(
+                &format!("/api/v1/identity-mappings/{mapping_id}"),
+                json!({
+                    "name": disabled["name"],
+                    "description": "Compose e2e identity mapping enabled",
+                    "kind": "user",
+                    "issuer": issuer,
+                    "external_id": subject,
+                    "project_id": project_id,
+                    "labels": label_map("identity-mappings"),
+                    "scopes": ["session:create", "workflow:run"],
+                    "state": "active"
+                }),
+            )
+            .await?;
+        if enabled["state"] != json!("active") || enabled["scopes"][1] != json!("workflow:run") {
+            return Err(anyhow!(
+                "identity mapping update did not re-enable mapping with scopes: {enabled}"
+            ));
+        }
+
         let delegated = harness
             .post_json(
                 &format!("/api/v1/sessions/{session_id}/automation-owner"),
@@ -98,6 +243,7 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         assert_count_at_least(&review, "sessions", 1)?;
         assert_count_at_least(&review, "active_sessions", 1)?;
         assert_count_at_least(&review, "delegated_principals", 1)?;
+        assert_count_at_least(&review, "identity_mappings", 1)?;
 
         let projects = json_array(&review, "projects")?;
         let reviewed_project = projects
@@ -111,6 +257,34 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         if reviewed_project["usage"]["active_sessions"] != json!(1) {
             return Err(anyhow!(
                 "identity access review did not count active project usage: {reviewed_project}"
+            ));
+        }
+
+        let identity_mappings = json_array(&review, "identity_mappings")?;
+        let reviewed_mapping = identity_mappings
+            .iter()
+            .find(|candidate| candidate.get("id") == Some(&json!(mapping_id)))
+            .ok_or_else(|| {
+                anyhow!(
+                    "identity access review did not include identity mapping {mapping_id}: {review}"
+                )
+            })?;
+        if reviewed_mapping["effective_for_principal"] != json!(true)
+            || reviewed_mapping["scopes"][1] != json!("workflow:run")
+        {
+            return Err(anyhow!(
+                "identity access review did not mark mapping effective with updated scopes: {reviewed_mapping}"
+            ));
+        }
+
+        let unmapped_principal_signals = json_array(&review, "unmapped_principal_signals")?;
+        if unmapped_principal_signals.iter().any(|candidate| {
+            candidate.get("kind") == Some(&json!("user"))
+                && candidate.get("issuer") == Some(&json!(issuer))
+                && candidate.get("external_id") == Some(&json!(subject))
+        }) {
+            return Err(anyhow!(
+                "identity access review still reported current principal as unmapped: {review}"
             ));
         }
 
