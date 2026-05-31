@@ -314,6 +314,7 @@ pub enum ProjectAdmissionReasonCode {
     OwnerScopeUnbounded,
     ProjectQuotaAvailable,
     ActiveSessionQuotaExceeded,
+    ActiveWorkflowRunQuotaExceeded,
     ProjectArchived,
 }
 
@@ -323,6 +324,7 @@ impl ProjectAdmissionReasonCode {
             Self::OwnerScopeUnbounded => "owner_scope_unbounded",
             Self::ProjectQuotaAvailable => "project_quota_available",
             Self::ActiveSessionQuotaExceeded => "active_session_quota_exceeded",
+            Self::ActiveWorkflowRunQuotaExceeded => "active_workflow_run_quota_exceeded",
             Self::ProjectArchived => "project_archived",
         }
     }
@@ -339,6 +341,10 @@ pub struct ProjectAdmissionDecision {
     pub active_sessions: Option<u32>,
     #[serde(default)]
     pub max_active_sessions: Option<u32>,
+    #[serde(default)]
+    pub active_workflow_runs: Option<u32>,
+    #[serde(default)]
+    pub max_active_workflow_runs: Option<u32>,
     pub checked_at: DateTime<Utc>,
 }
 
@@ -351,6 +357,8 @@ impl ProjectAdmissionDecision {
             project_id: None,
             active_sessions: None,
             max_active_sessions: None,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
             checked_at,
         }
     }
@@ -368,6 +376,27 @@ impl ProjectAdmissionDecision {
             project_id: Some(project_id),
             active_sessions: Some(active_sessions),
             max_active_sessions,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            checked_at,
+        }
+    }
+
+    pub fn workflow_quota_available(
+        project_id: Uuid,
+        active_workflow_runs: u32,
+        max_active_workflow_runs: Option<u32>,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Allowed,
+            reason_code: ProjectAdmissionReasonCode::ProjectQuotaAvailable,
+            message: "Project workflow admission allowed.".to_string(),
+            project_id: Some(project_id),
+            active_sessions: None,
+            max_active_sessions: None,
+            active_workflow_runs: Some(active_workflow_runs),
+            max_active_workflow_runs,
             checked_at,
         }
     }
@@ -387,6 +416,29 @@ impl ProjectAdmissionDecision {
             project_id: Some(project_id),
             active_sessions: Some(active_sessions),
             max_active_sessions,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            checked_at,
+        }
+    }
+
+    pub fn workflow_queued(
+        project_id: Uuid,
+        reason_code: ProjectAdmissionReasonCode,
+        message: String,
+        active_workflow_runs: u32,
+        max_active_workflow_runs: Option<u32>,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Queued,
+            reason_code,
+            message,
+            project_id: Some(project_id),
+            active_sessions: None,
+            max_active_sessions: None,
+            active_workflow_runs: Some(active_workflow_runs),
+            max_active_workflow_runs,
             checked_at,
         }
     }
@@ -698,12 +750,17 @@ impl StoredServicePrincipal {
 }
 
 impl StoredProject {
-    pub fn usage(&self, active_sessions: u32, observed_at: DateTime<Utc>) -> ProjectUsageResource {
+    pub fn usage(
+        &self,
+        active_sessions: u32,
+        active_workflow_runs: u32,
+        observed_at: DateTime<Utc>,
+    ) -> ProjectUsageResource {
         ProjectUsageResource {
             project_id: self.id,
             active_sessions,
             max_active_sessions: self.quotas.max_active_sessions,
-            active_workflow_runs: 0,
+            active_workflow_runs,
             max_active_workflow_runs: self.quotas.max_active_workflow_runs,
             retained_storage_bytes: 0,
             max_retained_storage_bytes: self.quotas.max_retained_storage_bytes,
@@ -711,7 +768,12 @@ impl StoredProject {
         }
     }
 
-    pub fn to_resource(&self, active_sessions: u32, observed_at: DateTime<Utc>) -> ProjectResource {
+    pub fn to_resource(
+        &self,
+        active_sessions: u32,
+        active_workflow_runs: u32,
+        observed_at: DateTime<Utc>,
+    ) -> ProjectResource {
         ProjectResource {
             id: self.id,
             name: self.name.clone(),
@@ -719,7 +781,7 @@ impl StoredProject {
             labels: self.labels.clone(),
             quotas: self.quotas.clone(),
             state: self.state,
-            usage: self.usage(active_sessions, observed_at),
+            usage: self.usage(active_sessions, active_workflow_runs, observed_at),
             created_at: self.created_at,
             updated_at: self.updated_at,
         }

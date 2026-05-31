@@ -274,7 +274,12 @@ async fn project_resources(
             .count_active_sessions_for_project(principal, project.id)
             .await
             .map_err(map_session_store_error)?;
-        resources.push(project.to_resource(active_sessions, Utc::now()));
+        let active_workflow_runs = state
+            .session_store
+            .count_active_workflow_runs_for_project(principal, project.id)
+            .await
+            .map_err(map_session_store_error)?;
+        resources.push(project.to_resource(active_sessions, active_workflow_runs, Utc::now()));
     }
     Ok(resources)
 }

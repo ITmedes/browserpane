@@ -10,6 +10,7 @@ use crate::automation_tasks::{
 };
 use crate::credentials::WorkflowRunCredentialBindingResource;
 use crate::extensions::{AppliedExtension, AppliedExtensionResource};
+use crate::session_control::{ProjectAdmissionDecision, SessionProjectResource};
 
 use super::{
     StoredWorkflowDefinition, StoredWorkflowDefinitionVersion, StoredWorkflowRun,
@@ -126,6 +127,8 @@ pub struct WorkflowRunResource {
     pub workflow_definition_id: Uuid,
     pub workflow_definition_version_id: Uuid,
     pub workflow_version: String,
+    pub project_id: Option<Uuid>,
+    pub project: Option<SessionProjectResource>,
     pub source_system: Option<String>,
     pub source_reference: Option<String>,
     pub client_request_id: Option<String>,
@@ -143,6 +146,7 @@ pub struct WorkflowRunResource {
     pub produced_files: Vec<WorkflowRunProducedFileResource>,
     pub recordings: Vec<WorkflowRunRecordingResource>,
     pub retention: WorkflowRunRetentionResource,
+    pub project_admission: ProjectAdmissionDecision,
     pub admission: Option<WorkflowRunAdmissionResource>,
     pub intervention: WorkflowRunInterventionResource,
     pub runtime: Option<WorkflowRunRuntimeResource>,
@@ -232,6 +236,8 @@ impl StoredWorkflowRun {
         &self,
         recordings: Vec<WorkflowRunRecordingResource>,
         retention: WorkflowRunRetentionResource,
+        project: Option<SessionProjectResource>,
+        project_admission: ProjectAdmissionDecision,
         admission: Option<WorkflowRunAdmissionResource>,
         intervention: WorkflowRunInterventionResource,
         runtime: Option<WorkflowRunRuntimeResource>,
@@ -241,6 +247,8 @@ impl StoredWorkflowRun {
             workflow_definition_id: self.workflow_definition_id,
             workflow_definition_version_id: self.workflow_definition_version_id,
             workflow_version: self.workflow_version.clone(),
+            project_id: self.project_id,
+            project,
             source_system: self.source_system.clone(),
             source_reference: self.source_reference.clone(),
             client_request_id: self.client_request_id.clone(),
@@ -277,6 +285,7 @@ impl StoredWorkflowRun {
                 .collect(),
             recordings,
             retention,
+            project_admission,
             admission,
             intervention,
             runtime,

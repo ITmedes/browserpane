@@ -137,6 +137,7 @@ impl WorkflowRunRepository<'_> {
                         workflow_definition_id,
                         workflow_definition_version_id,
                         workflow_version,
+                        project_id,
                         session_id,
                         automation_task_id,
                         state,
@@ -198,6 +199,7 @@ impl WorkflowRunRepository<'_> {
                     workflow_definition_id,
                     workflow_definition_version_id,
                     workflow_version,
+                    project_id,
                     session_id,
                     automation_task_id,
                     state,
@@ -221,7 +223,7 @@ impl WorkflowRunRepository<'_> {
                     updated_at
                 )
                 VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+                    $1, $2, $3, $4, $5, $6, $23, $7, $8, $9,
                     $10, $11, $12, $13,
                     $14::jsonb, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, NULL, NULL, $20::jsonb, $21::jsonb, NULL, NULL, $22, $22
                 )
@@ -232,6 +234,7 @@ impl WorkflowRunRepository<'_> {
                     workflow_definition_id,
                     workflow_definition_version_id,
                     workflow_version,
+                    project_id,
                     session_id,
                     automation_task_id,
                     state,
@@ -277,6 +280,7 @@ impl WorkflowRunRepository<'_> {
                     &json_string_array(&Vec::new()),
                     &json_labels(&request.labels),
                     &now,
+                    &request.project_id,
                 ],
             )
             .await
@@ -295,6 +299,7 @@ impl WorkflowRunRepository<'_> {
                 "workflow_definition_id": request.workflow_definition_id,
                 "workflow_definition_version_id": request.workflow_definition_version_id,
                 "workflow_version": request.workflow_version,
+                "project_id": request.project_id,
                 "session_id": request.session_id,
                 "automation_task_id": request.automation_task_id,
                 "source_system": request.source_system,

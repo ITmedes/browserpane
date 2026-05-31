@@ -359,6 +359,7 @@ const PROJECT_ADMISSION_REASON_CODES = [
   'owner_scope_unbounded',
   'project_quota_available',
   'active_session_quota_exceeded',
+  'active_workflow_run_quota_exceeded',
   'project_archived',
 ] satisfies readonly ProjectAdmissionReasonCode[];
 const IDENTITY_PRINCIPAL_TYPES = ['user', 'service_principal', 'legacy_dev_token'] satisfies readonly IdentityPrincipalType[];
@@ -642,6 +643,14 @@ function toProjectAdmissionDecision(value: unknown): ProjectAdmissionDecision | 
     max_active_sessions: optionalNumber(
       object.max_active_sessions,
       'project admission max_active_sessions',
+    ) ?? null,
+    active_workflow_runs: optionalNumber(
+      object.active_workflow_runs,
+      'project admission active_workflow_runs',
+    ) ?? null,
+    max_active_workflow_runs: optionalNumber(
+      object.max_active_workflow_runs,
+      'project admission max_active_workflow_runs',
     ) ?? null,
     checked_at: expectString(object.checked_at, 'project admission checked_at'),
   };

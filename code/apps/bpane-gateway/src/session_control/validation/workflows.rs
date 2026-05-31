@@ -108,6 +108,11 @@ pub(in crate::session_control) fn validate_workflow_definition_version_request(
 pub(in crate::session_control) fn validate_workflow_run_request(
     request: &PersistWorkflowRunRequest,
 ) -> Result<(), SessionStoreError> {
+    if request.project_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "workflow run project_id must not be nil".to_string(),
+        ));
+    }
     if request.workflow_version.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "workflow_version must not be empty".to_string(),

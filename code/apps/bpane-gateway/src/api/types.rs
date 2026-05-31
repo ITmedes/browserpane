@@ -265,6 +265,8 @@ pub(super) struct CreateWorkflowRunRequest {
     pub(super) workflow_id: Uuid,
     pub(super) version: String,
     #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
+    #[serde(default)]
     pub(super) session: Option<AutomationTaskSessionRequest>,
     #[serde(default)]
     pub(super) input: Option<Value>,

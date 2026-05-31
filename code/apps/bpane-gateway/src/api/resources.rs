@@ -568,6 +568,8 @@ pub(super) async fn build_workflow_run_resource(
         .collect::<Vec<_>>();
     let events = workflow_run_event_resources(state, run).await?;
     let admission = derive_workflow_run_admission_resource(run.state, &events);
+    let project = workflow_run_project_resource(state, run).await?;
+    let project_admission = workflow_run_project_admission_resource(state, run).await?;
     let intervention = derive_workflow_run_intervention_resource(run.state, &events);
     let session_state = state
         .session_store
@@ -579,9 +581,98 @@ pub(super) async fn build_workflow_run_resource(
     Ok(run.to_resource(
         recordings,
         workflow_run_retention_resource(state, run),
+        project,
+        project_admission,
         admission,
         intervention,
         runtime,
+    ))
+}
+
+async fn workflow_run_project_resource(
+    state: &ApiState,
+    run: &StoredWorkflowRun,
+) -> Result<Option<SessionProjectResource>, (StatusCode, Json<ErrorResponse>)> {
+    let Some(project_id) = run.project_id else {
+        return Ok(None);
+    };
+    let owner = AuthenticatedPrincipal {
+        subject: run.owner_subject.clone(),
+        issuer: run.owner_issuer.clone(),
+        display_name: None,
+        client_id: None,
+        safe_claims: Default::default(),
+    };
+    Ok(state
+        .session_store
+        .get_project_for_owner(&owner, project_id)
+        .await
+        .map_err(map_session_store_error)?
+        .map(|project| project.to_session_project_resource()))
+}
+
+async fn workflow_run_project_admission_resource(
+    state: &ApiState,
+    run: &StoredWorkflowRun,
+) -> Result<ProjectAdmissionDecision, (StatusCode, Json<ErrorResponse>)> {
+    let now = Utc::now();
+    let Some(project_id) = run.project_id else {
+        return Ok(ProjectAdmissionDecision::owner_scope_unbounded(now));
+    };
+    let owner = AuthenticatedPrincipal {
+        subject: run.owner_subject.clone(),
+        issuer: run.owner_issuer.clone(),
+        display_name: None,
+        client_id: None,
+        safe_claims: Default::default(),
+    };
+    let Some(project) = state
+        .session_store
+        .get_project_for_owner(&owner, project_id)
+        .await
+        .map_err(map_session_store_error)?
+    else {
+        return Ok(ProjectAdmissionDecision::workflow_queued(
+            project_id,
+            ProjectAdmissionReasonCode::ProjectArchived,
+            format!("project {project_id} is no longer visible"),
+            0,
+            None,
+            now,
+        ));
+    };
+    let active_workflow_runs = state
+        .session_store
+        .count_active_workflow_runs_for_project(&owner, project_id)
+        .await
+        .map_err(map_session_store_error)?;
+    let max_active_workflow_runs = project.quotas.max_active_workflow_runs;
+    let active_competing_workflow_runs = if run.state.consumes_project_active_quota() {
+        active_workflow_runs.saturating_sub(1)
+    } else {
+        active_workflow_runs
+    };
+    if max_active_workflow_runs
+        .map(|max| active_competing_workflow_runs >= max)
+        .unwrap_or(false)
+    {
+        return Ok(ProjectAdmissionDecision::workflow_queued(
+            project_id,
+            ProjectAdmissionReasonCode::ActiveWorkflowRunQuotaExceeded,
+            format!(
+                "project {project_id} active workflow run quota is exhausted ({active_competing_workflow_runs}/{})",
+                max_active_workflow_runs.unwrap_or_default()
+            ),
+            active_competing_workflow_runs,
+            max_active_workflow_runs,
+            now,
+        ));
+    }
+    Ok(ProjectAdmissionDecision::workflow_quota_available(
+        project_id,
+        active_workflow_runs,
+        project.quotas.max_active_workflow_runs,
+        now,
     ))
 }
 

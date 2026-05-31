@@ -451,6 +451,7 @@ pub(super) async fn resolve_task_session_binding(
     session: Option<AutomationTaskSessionRequest>,
     default_session: Option<&Value>,
     allowed_extension_ids: Option<&[String]>,
+    required_project_id: Option<Uuid>,
 ) -> Result<(StoredSession, AutomationTaskSessionSource), (StatusCode, Json<ErrorResponse>)> {
     match session {
         Some(AutomationTaskSessionRequest {
@@ -477,12 +478,15 @@ pub(super) async fn resolve_task_session_binding(
                     &visible.extensions,
                 )?;
             }
+            validate_task_session_project(&visible, required_project_id)?;
             Ok((visible, AutomationTaskSessionSource::ExistingSession))
         }
         Some(AutomationTaskSessionRequest {
             existing_session_id: None,
             create_session: Some(create_session_request),
         }) => {
+            let create_session_request =
+                apply_task_session_project(create_session_request, required_project_id)?;
             let create_session_request =
                 resolve_session_template_defaults(state, principal, create_session_request).await?;
             let owner_mode = resolve_owner_mode(state, create_session_request.owner_mode)?;
@@ -527,6 +531,8 @@ pub(super) async fn resolve_task_session_binding(
                 )
             })?;
             let create_session_request =
+                apply_task_session_project(create_session_request, required_project_id)?;
+            let create_session_request =
                 resolve_session_template_defaults(state, principal, create_session_request).await?;
             let owner_mode = resolve_owner_mode(state, create_session_request.owner_mode)?;
             let created = create_owned_session(
@@ -540,6 +546,50 @@ pub(super) async fn resolve_task_session_binding(
             Ok((created, AutomationTaskSessionSource::CreatedSession))
         }
     }
+}
+
+fn validate_task_session_project(
+    session: &StoredSession,
+    required_project_id: Option<Uuid>,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let Some(project_id) = required_project_id else {
+        return Ok(());
+    };
+    if session.project_id != Some(project_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow run project_id {project_id} must match the bound session project_id"
+                ),
+            }),
+        ));
+    }
+    Ok(())
+}
+
+fn apply_task_session_project(
+    mut request: CreateSessionRequest,
+    required_project_id: Option<Uuid>,
+) -> Result<CreateSessionRequest, (StatusCode, Json<ErrorResponse>)> {
+    let Some(project_id) = required_project_id else {
+        return Ok(request);
+    };
+    if let Some(existing_project_id) = request.project_id {
+        if existing_project_id != project_id {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow run project_id {project_id} must match create_session.project_id {existing_project_id}"
+                    ),
+                }),
+            ));
+        }
+    } else {
+        request.project_id = Some(project_id);
+    }
+    Ok(request)
 }
 
 pub(super) fn resolve_owner_mode(

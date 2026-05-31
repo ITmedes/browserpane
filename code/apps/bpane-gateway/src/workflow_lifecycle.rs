@@ -12,8 +12,8 @@ use crate::auth::AuthValidator;
 use crate::auth::AuthenticatedPrincipal;
 use crate::session_access::SessionAutomationAccessTokenManager;
 use crate::session_control::{
-    PersistedWorkflowRunWorkerAssignment, SessionLifecycleState, SessionStore, SessionStoreError,
-    WorkflowRunWorkerAssignmentStatus,
+    PersistedWorkflowRunWorkerAssignment, ProjectState, SessionLifecycleState, SessionStore,
+    SessionStoreError, WorkflowRunWorkerAssignmentStatus,
 };
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
