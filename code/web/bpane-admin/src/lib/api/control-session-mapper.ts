@@ -17,10 +17,16 @@ import type {
   EgressTrafficObservationMode,
   IdentityAccessReviewResponse,
   IdentityDelegatedPrincipalResource,
+  IdentityMappingKind,
+  IdentityMappingListResponse,
+  IdentityMappingResource,
+  IdentityMappingReviewResource,
+  IdentityMappingState,
   IdentityPrincipalResource,
   IdentityPrincipalType,
   IdentityResourceCounts,
   IdentityServicePrincipalReviewResource,
+  IdentityUnmappedPrincipalSignalResource,
   ProjectAdmissionDecision,
   ProjectAdmissionReasonCode,
   ProjectAdmissionState,
@@ -70,6 +76,8 @@ export class ControlSessionMapper {
   static toIdentityAccessReview(payload: unknown): IdentityAccessReviewResponse {
     const object = expectRecord(payload, 'identity access review');
     const projects = object.projects;
+    const identityMappings = object.identity_mappings;
+    const unmappedPrincipalSignals = object.unmapped_principal_signals;
     const servicePrincipals = object.service_principals;
     const delegatedPrincipals = object.delegated_principals;
     if (!Array.isArray(projects)) {
@@ -77,6 +85,12 @@ export class ControlSessionMapper {
     }
     if (!Array.isArray(servicePrincipals)) {
       throw new Error('identity access review must contain a service_principals array');
+    }
+    if (!Array.isArray(identityMappings)) {
+      throw new Error('identity access review must contain an identity_mappings array');
+    }
+    if (!Array.isArray(unmappedPrincipalSignals)) {
+      throw new Error('identity access review must contain an unmapped_principal_signals array');
     }
     if (!Array.isArray(delegatedPrincipals)) {
       throw new Error('identity access review must contain a delegated_principals array');
@@ -86,9 +100,26 @@ export class ControlSessionMapper {
       generated_at: expectString(object.generated_at, 'identity access review generated_at'),
       projects: projects.map((project) => this.toProjectResource(project)),
       resource_counts: toIdentityResourceCounts(object.resource_counts),
+      identity_mappings: identityMappings.map((mapping) => toIdentityMappingReview(mapping)),
+      unmapped_principal_signals: unmappedPrincipalSignals.map((signal) => toIdentityUnmappedPrincipalSignal(signal)),
       service_principals: servicePrincipals.map((servicePrincipal) => toIdentityServicePrincipalReview(servicePrincipal)),
       delegated_principals: delegatedPrincipals.map((delegate) => toIdentityDelegatedPrincipal(delegate)),
     };
+  }
+
+  static toIdentityMappingList(payload: unknown): IdentityMappingListResponse {
+    const object = expectRecord(payload, 'identity mapping list response');
+    const mappings = object.identity_mappings;
+    if (!Array.isArray(mappings)) {
+      throw new Error('identity mapping list response must contain an identity_mappings array');
+    }
+    return {
+      identity_mappings: mappings.map((mapping) => this.toIdentityMappingResource(mapping)),
+    };
+  }
+
+  static toIdentityMappingResource(payload: unknown): IdentityMappingResource {
+    return toIdentityMappingResource(payload);
   }
 
   static toServicePrincipalList(payload: unknown): ServicePrincipalListResponse {
@@ -331,6 +362,8 @@ const PROJECT_ADMISSION_REASON_CODES = [
   'project_archived',
 ] satisfies readonly ProjectAdmissionReasonCode[];
 const IDENTITY_PRINCIPAL_TYPES = ['user', 'service_principal', 'legacy_dev_token'] satisfies readonly IdentityPrincipalType[];
+const IDENTITY_MAPPING_KINDS = ['user', 'group', 'claim', 'service_principal'] satisfies readonly IdentityMappingKind[];
+const IDENTITY_MAPPING_STATES = ['active', 'disabled'] satisfies readonly IdentityMappingState[];
 const SERVICE_PRINCIPAL_STATES = ['active', 'disabled'] satisfies readonly ServicePrincipalState[];
 const EGRESS_PROFILE_STATES = ['ready', 'disabled'] satisfies readonly EgressProfileState[];
 const EGRESS_TRAFFIC_OBSERVATION_MODES = ['metadata_only', 'tls_intercept'] satisfies readonly EgressTrafficObservationMode[];
@@ -385,6 +418,7 @@ function toIdentityResourceCounts(value: unknown): IdentityResourceCounts {
   return {
     projects: expectNumber(object.projects, 'identity resource counts projects'),
     service_principals: expectNumber(object.service_principals, 'identity resource counts service_principals'),
+    identity_mappings: expectNumber(object.identity_mappings, 'identity resource counts identity_mappings'),
     sessions: expectNumber(object.sessions, 'identity resource counts sessions'),
     active_sessions: expectNumber(object.active_sessions, 'identity resource counts active_sessions'),
     session_templates: expectNumber(object.session_templates, 'identity resource counts session_templates'),
@@ -399,6 +433,29 @@ function toIdentityResourceCounts(value: unknown): IdentityResourceCounts {
     active_automation_tasks: expectNumber(object.active_automation_tasks, 'identity resource counts active_automation_tasks'),
     extension_definitions: expectNumber(object.extension_definitions, 'identity resource counts extension_definitions'),
     delegated_principals: expectNumber(object.delegated_principals, 'identity resource counts delegated_principals'),
+  };
+}
+
+function toIdentityMappingReview(value: unknown): IdentityMappingReviewResource {
+  const object = expectRecord(value, 'identity mapping review');
+  return {
+    ...toIdentityMappingResource(object),
+    effective_for_principal: expectBoolean(
+      object.effective_for_principal,
+      'identity mapping review effective_for_principal',
+    ),
+  };
+}
+
+function toIdentityUnmappedPrincipalSignal(value: unknown): IdentityUnmappedPrincipalSignalResource {
+  const object = expectRecord(value, 'identity unmapped principal signal');
+  const displayName = optionalString(object.display_name, 'identity unmapped principal signal display_name');
+  return {
+    kind: expectEnum(object.kind, 'identity unmapped principal signal kind', IDENTITY_MAPPING_KINDS),
+    issuer: expectString(object.issuer, 'identity unmapped principal signal issuer'),
+    external_id: expectString(object.external_id, 'identity unmapped principal signal external_id'),
+    display_name: displayName ?? null,
+    reason: expectString(object.reason, 'identity unmapped principal signal reason'),
   };
 }
 
@@ -441,6 +498,31 @@ function toIdentityServicePrincipalReview(value: unknown): IdentityServicePrinci
       object.delegated_session_ids ?? [],
       'identity service principal review delegated_session_ids',
     ),
+  };
+}
+
+function toIdentityMappingResource(value: unknown): IdentityMappingResource {
+  const object = expectRecord(value, 'identity mapping resource');
+  const description = optionalString(object.description, 'identity mapping description');
+  const claimName = optionalString(object.claim_name, 'identity mapping claim_name');
+  const servicePrincipalId = optionalString(object.service_principal_id, 'identity mapping service_principal_id');
+  const lastSeenAt = optionalString(object.last_seen_at, 'identity mapping last_seen_at');
+  return {
+    id: expectString(object.id, 'identity mapping id'),
+    name: expectString(object.name, 'identity mapping name'),
+    description: description ?? null,
+    kind: expectEnum(object.kind, 'identity mapping kind', IDENTITY_MAPPING_KINDS),
+    issuer: expectString(object.issuer, 'identity mapping issuer'),
+    external_id: expectString(object.external_id, 'identity mapping external_id'),
+    claim_name: claimName ?? null,
+    service_principal_id: servicePrincipalId ?? null,
+    project_id: expectString(object.project_id, 'identity mapping project_id'),
+    labels: expectStringRecord(object.labels ?? {}, 'identity mapping labels'),
+    scopes: toStringArray(object.scopes ?? [], 'identity mapping scopes'),
+    state: expectEnum(object.state, 'identity mapping state', IDENTITY_MAPPING_STATES),
+    last_seen_at: lastSeenAt ?? null,
+    created_at: expectString(object.created_at, 'identity mapping created_at'),
+    updated_at: expectString(object.updated_at, 'identity mapping updated_at'),
   };
 }
 

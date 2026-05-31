@@ -17,8 +17,9 @@ pub(super) use resources::{
     validate_browser_context_request, validate_credential_binding_request,
     validate_egress_profile_request, validate_extension_definition_request,
     validate_extension_version_request, validate_file_workspace_file_request,
-    validate_file_workspace_request, validate_project_request, validate_service_principal_request,
-    validate_session_file_binding_request, validate_session_file_request,
+    validate_file_workspace_request, validate_identity_mapping_request, validate_project_request,
+    validate_service_principal_request, validate_session_file_binding_request,
+    validate_session_file_request,
 };
 pub(super) use sessions::{
     validate_automation_delegate_request, validate_create_request,

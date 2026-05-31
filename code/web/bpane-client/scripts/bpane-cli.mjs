@@ -34,6 +34,7 @@ const KNOWN_OPTIONS = new Set([
   'description',
   'dry-run',
   'egress-profile-id',
+  'external-id',
   'extension-id',
   'fail-on-issues',
   'geolocation-accuracy-meters',
@@ -46,6 +47,7 @@ const KNOWN_OPTIONS = new Set([
   'integration-json',
   'integration',
   'issuer',
+  'kind',
   'label',
   'language',
   'limit',
@@ -71,12 +73,14 @@ const KNOWN_OPTIONS = new Set([
   'proxy-credential-binding-id',
   'proxy-url',
   'persistence-mode',
+  'claim-name',
   'recording-mode',
   'recording-retention-sec',
   'retention-sec',
   'save-token',
   'set-default',
   'scope',
+  'service-principal-id',
   'runtime-state',
   'state',
   'template-id',
@@ -112,6 +116,11 @@ function usageText() {
     '  bpane service-principal get <service-principal-id> [options]',
     '  bpane service-principal update <service-principal-id> [options]',
     '  bpane service-principal disable <service-principal-id> [options]',
+    '  bpane identity-mapping create [mapping-name] [options]',
+    '  bpane identity-mapping list [options]',
+    '  bpane identity-mapping get <identity-mapping-id> [options]',
+    '  bpane identity-mapping update <identity-mapping-id> [options]',
+    '  bpane identity-mapping disable <identity-mapping-id> [options]',
     '  bpane session create [options]',
     '  bpane session list [options]',
     '  bpane session get <session-id> [options]',
@@ -204,6 +213,10 @@ function usageText() {
     '  --description <text>      Resource description for create/update commands.',
     '  --client-id <id>          External service-principal client id.',
     '  --issuer <url>            External service-principal issuer.',
+    '  --kind <kind>             Identity mapping kind: user, group, claim, or service_principal.',
+    '  --external-id <id>        External user/group/claim value or service-principal client id.',
+    '  --claim-name <name>       Claim name for claim identity mappings.',
+    '  --service-principal-id <id> Registered service principal id for service-principal mappings.',
     '  --scope <name>            Repeatable service-principal scope metadata.',
     '  --allowed-project-id <id> Repeatable service-principal project metadata.',
     '  --max-active-sessions <count> Project active-session quota.',
@@ -550,6 +563,14 @@ function requiredServicePrincipalId(positionals, commandLabel) {
     throw new CliError('USAGE', `Usage: bpane ${commandLabel} <service-principal-id>`, EXIT_CODES.usage);
   }
   return servicePrincipalId;
+}
+
+function requiredIdentityMappingId(positionals, commandLabel) {
+  const identityMappingId = positionals[2];
+  if (!identityMappingId || positionals.length > 3) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <identity-mapping-id>`, EXIT_CODES.usage);
+  }
+  return identityMappingId;
 }
 
 function requiredBrowserContextId(positionals, commandLabel) {
@@ -1311,6 +1332,146 @@ function buildServicePrincipalUpdateRequest(existingServicePrincipal, options, f
     body.allowed_project_ids = existingServicePrincipal.allowed_project_ids;
   }
   const state = forcedState ?? getOption(options, 'state') ?? existingServicePrincipal?.state;
+  if (state) {
+    body.state = state;
+  }
+  return body;
+}
+
+function buildIdentityMappingRequest(options, fallbackName = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? fallbackName;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Identity mapping create requires --name or a positional mapping name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const kind = getOption(options, 'kind');
+  if (!kind) {
+    throw new CliError('USAGE', 'Identity mapping create/update requires --kind.', EXIT_CODES.usage);
+  }
+  const issuer = getOption(options, 'issuer') ?? getOption(options, 'mcp-issuer');
+  if (!issuer) {
+    throw new CliError('USAGE', 'Identity mapping create/update requires --issuer.', EXIT_CODES.usage);
+  }
+  const externalId = getOption(options, 'external-id') ?? getOption(options, 'client-id') ?? getOption(options, 'mcp-client-id');
+  if (!externalId) {
+    throw new CliError('USAGE', 'Identity mapping create/update requires --external-id.', EXIT_CODES.usage);
+  }
+  const projectId = getOption(options, 'project-id');
+  if (!projectId) {
+    throw new CliError('USAGE', 'Identity mapping create/update requires --project-id.', EXIT_CODES.usage);
+  }
+
+  const body = {
+    name,
+    kind,
+    issuer,
+    external_id: externalId,
+    project_id: projectId,
+  };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  }
+  const claimName = getOption(options, 'claim-name');
+  if (claimName !== null) {
+    body.claim_name = claimName;
+  }
+  const servicePrincipalId = getOption(options, 'service-principal-id');
+  if (servicePrincipalId !== null) {
+    body.service_principal_id = servicePrincipalId;
+  }
+  const labels = parseKeyValueOptions(options, 'label');
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+  const scopes = getOptions(options, 'scope').filter((scope) => scope !== '');
+  if (scopes.length) {
+    body.scopes = scopes;
+  }
+  const state = getOption(options, 'state');
+  if (state) {
+    body.state = state;
+  }
+  return body;
+}
+
+function buildIdentityMappingUpdateRequest(existingMapping, options, forcedState = null) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? existingMapping?.name;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Identity mapping update requires --name when the existing response has no name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const kind = getOption(options, 'kind') ?? existingMapping?.kind;
+  const issuer = getOption(options, 'issuer') ?? getOption(options, 'mcp-issuer') ?? existingMapping?.issuer;
+  const externalId =
+    getOption(options, 'external-id')
+    ?? getOption(options, 'client-id')
+    ?? getOption(options, 'mcp-client-id')
+    ?? existingMapping?.external_id;
+  const projectId = getOption(options, 'project-id') ?? existingMapping?.project_id;
+  if (!kind || !issuer || !externalId || !projectId) {
+    throw new CliError(
+      'USAGE',
+      'Identity mapping update requires kind, issuer, external_id, and project_id.',
+      EXIT_CODES.usage,
+    );
+  }
+
+  const body = {
+    name,
+    kind,
+    issuer,
+    external_id: externalId,
+    project_id: projectId,
+  };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  } else if (existingMapping?.description != null) {
+    body.description = existingMapping.description;
+  }
+  const claimName = getOption(options, 'claim-name');
+  if (claimName !== null) {
+    body.claim_name = claimName;
+  } else if (existingMapping?.claim_name != null) {
+    body.claim_name = existingMapping.claim_name;
+  }
+  const servicePrincipalId = getOption(options, 'service-principal-id');
+  if (servicePrincipalId !== null) {
+    body.service_principal_id = servicePrincipalId;
+  } else if (existingMapping?.service_principal_id != null) {
+    body.service_principal_id = existingMapping.service_principal_id;
+  }
+  const labels = {
+    ...(isObjectRecord(existingMapping?.labels) ? existingMapping.labels : {}),
+    ...parseKeyValueOptions(options, 'label'),
+  };
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+  const scopes = getOptions(options, 'scope');
+  if (scopes.length) {
+    body.scopes = scopes.filter((scope) => scope !== '');
+  } else if (Array.isArray(existingMapping?.scopes)) {
+    body.scopes = existingMapping.scopes;
+  }
+  const state = forcedState ?? getOption(options, 'state') ?? existingMapping?.state;
   if (state) {
     body.state = state;
   }
@@ -2350,6 +2511,53 @@ async function handleServicePrincipalCommand(config, positionals, options) {
   );
 }
 
+async function handleIdentityMappingCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length <= 3) {
+    return await requestGateway(config, '/api/v1/identity-mappings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildIdentityMappingRequest(options, positionals[2] ?? null)),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/identity-mappings');
+  }
+  if (action === 'get') {
+    const identityMappingId = requiredIdentityMappingId(positionals, 'identity-mapping get');
+    return await requestGateway(config, `/api/v1/identity-mappings/${encodeURIComponent(identityMappingId)}`);
+  }
+  if (action === 'update') {
+    const identityMappingId = requiredIdentityMappingId(positionals, 'identity-mapping update');
+    const existingMapping = await requestGateway(
+      config,
+      `/api/v1/identity-mappings/${encodeURIComponent(identityMappingId)}`,
+    );
+    return await requestGateway(config, `/api/v1/identity-mappings/${encodeURIComponent(identityMappingId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildIdentityMappingUpdateRequest(existingMapping, options)),
+    });
+  }
+  if (action === 'disable') {
+    const identityMappingId = requiredIdentityMappingId(positionals, 'identity-mapping disable');
+    const existingMapping = await requestGateway(
+      config,
+      `/api/v1/identity-mappings/${encodeURIComponent(identityMappingId)}`,
+    );
+    return await requestGateway(config, `/api/v1/identity-mappings/${encodeURIComponent(identityMappingId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildIdentityMappingUpdateRequest(existingMapping, options, 'disabled')),
+    });
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown identity-mapping command: ${action ?? ''}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
 async function handleEgressProfileCommand(config, positionals, options) {
   const action = positionals[1];
   if (action === 'create' && positionals.length <= 3) {
@@ -2737,6 +2945,9 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     } else if (scope === 'service-principal') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleServicePrincipalCommand(config, positionals, options);
+    } else if (scope === 'identity-mapping') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleIdentityMappingCommand(config, positionals, options);
     } else if (scope === 'egress-profile') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleEgressProfileCommand(config, positionals, options);

@@ -24,7 +24,7 @@
 <section class="grid min-w-0 gap-4" aria-label="Identity access review" data-testid="identity-access-review-panel">
   <div class="flex min-w-0 flex-wrap items-center justify-between gap-2">
     <p class="m-0 text-sm leading-normal text-admin-ink/68">
-      Review the authenticated principal, owner-scoped resource counts, registered service principals, and delegated automation access.
+      Review the authenticated principal, owner-scoped resource counts, identity mappings, unmapped signals, and delegated automation access.
     </p>
     <button
       class="admin-button-ghost inline-flex items-center gap-2"
@@ -165,6 +165,66 @@
         </div>
       {/if}
     </section>
+
+    <section class="grid min-w-0 gap-2" aria-label="Identity project mappings" data-testid="identity-mapping-list">
+      <div class="flex items-center justify-between gap-2">
+        <p class="admin-eyebrow m-0">Identity mappings</p>
+        <span class="text-xs font-bold text-admin-ink/58">{viewModel.mappings.length}</span>
+      </div>
+      {#if viewModel.mappings.length === 0}
+        <AdminMessage variant="empty" message="No identity-to-project mappings are configured." compact={true} />
+      {:else}
+        <div class="grid gap-2">
+          {#each viewModel.mappings as mapping (mapping.id)}
+            <article class="rounded-[12px] border border-[#90a6cc]/16 bg-admin-panel/62 p-3">
+              <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                <div class="min-w-0">
+                  <strong class="block truncate text-sm font-extrabold text-admin-ink">{mapping.name}</strong>
+                  <p class="m-0 min-w-0 text-xs font-semibold leading-normal text-admin-ink/58 [overflow-wrap:anywhere]">
+                    {mapping.kind} / {mapping.externalId}
+                  </p>
+                </div>
+                <span class={`w-fit rounded-lg px-2 py-1 text-xs font-bold ${
+                  mapping.state === 'active'
+                    ? 'bg-admin-leaf/12 text-admin-leaf'
+                    : 'bg-admin-danger/12 text-admin-danger'
+                }`}>
+                  {mapping.state}
+                </span>
+              </div>
+              <div class="mt-3 grid grid-cols-3 gap-2 max-[760px]:grid-cols-1">
+                <span class="text-xs font-bold text-admin-ink/58">Project <strong class="block text-admin-ink">{mapping.projectId}</strong></span>
+                <span class="text-xs font-bold text-admin-ink/58">Principal <strong class="block text-admin-ink">{mapping.effective}</strong></span>
+                <span class="text-xs font-bold text-admin-ink/58">Scopes <strong class="block text-admin-ink">{mapping.scopes}</strong></span>
+              </div>
+              <p class="mt-2 mb-0 min-w-0 text-xs font-semibold text-admin-ink/54 [overflow-wrap:anywhere]">
+                {mapping.issuer}
+              </p>
+            </article>
+          {/each}
+        </div>
+      {/if}
+    </section>
+
+    {#if viewModel.unmappedSignals.length > 0}
+      <section class="grid min-w-0 gap-2" aria-label="Unmapped identity signals" data-testid="identity-unmapped-signal-list">
+        <div class="flex items-center justify-between gap-2">
+          <p class="admin-eyebrow m-0">Unmapped signals</p>
+          <span class="text-xs font-bold text-admin-ink/58">{viewModel.unmappedSignals.length}</span>
+        </div>
+        <div class="grid gap-2">
+          {#each viewModel.unmappedSignals as signal (signal.key)}
+            <article class="rounded-[12px] border border-admin-warm/24 bg-admin-warm/10 p-3">
+              <strong class="block truncate text-sm font-extrabold text-admin-ink">{signal.displayName}</strong>
+              <p class="m-0 min-w-0 text-xs font-semibold leading-normal text-admin-ink/58 [overflow-wrap:anywhere]">
+                {signal.kind} / {signal.externalId} / {signal.issuer}
+              </p>
+              <p class="mt-2 mb-0 text-xs font-bold text-admin-ink/72">{signal.reason}</p>
+            </article>
+          {/each}
+        </div>
+      </section>
+    {/if}
 
     <section class="grid min-w-0 gap-2" aria-label="Delegated automation access" data-testid="identity-delegation-list">
       <div class="flex items-center justify-between gap-2">

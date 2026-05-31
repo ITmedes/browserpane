@@ -153,6 +153,24 @@ const SERVICE_PRINCIPAL = {
   updated_at: '2026-05-29T10:00:00Z',
 };
 
+const IDENTITY_MAPPING = {
+  id: '019df8ec-a5e2-7b00-a14b-173e70c39f7e',
+  name: 'Demo project access',
+  description: null,
+  kind: 'user',
+  issuer: 'http://localhost:8091/realms/browserpane',
+  external_id: 'demo',
+  claim_name: null,
+  service_principal_id: null,
+  project_id: PROJECT.id,
+  labels: { team: 'support' },
+  scopes: ['session:create'],
+  state: 'active',
+  last_seen_at: null,
+  created_at: '2026-05-29T09:00:00Z',
+  updated_at: '2026-05-29T10:00:00Z',
+};
+
 const ACCESS_REVIEW = {
   principal: IDENTITY_PRINCIPAL,
   generated_at: '2026-05-29T10:00:00Z',
@@ -160,6 +178,7 @@ const ACCESS_REVIEW = {
   resource_counts: {
     projects: 1,
     service_principals: 1,
+    identity_mappings: 1,
     sessions: 2,
     active_sessions: 1,
     session_templates: 1,
@@ -175,6 +194,13 @@ const ACCESS_REVIEW = {
     extension_definitions: 0,
     delegated_principals: 1,
   },
+  identity_mappings: [
+    {
+      ...IDENTITY_MAPPING,
+      effective_for_principal: true,
+    },
+  ],
+  unmapped_principal_signals: [],
   service_principals: [
     {
       ...SERVICE_PRINCIPAL,
@@ -304,9 +330,16 @@ describe('ControlClient', () => {
       resource_counts: {
         projects: 1,
         service_principals: 1,
+        identity_mappings: 1,
         sessions: 2,
         delegated_principals: 1,
       },
+      identity_mappings: [
+        {
+          id: IDENTITY_MAPPING.id,
+          effective_for_principal: true,
+        },
+      ],
       service_principals: [
         {
           id: SERVICE_PRINCIPAL.id,
