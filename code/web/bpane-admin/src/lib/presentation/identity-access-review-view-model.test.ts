@@ -133,6 +133,7 @@ describe('IdentityAccessReviewViewModelBuilder', () => {
       name: 'BrowserPane MCP bridge',
       state: 'active',
       scopes: 'session:delegate',
+      projects: 'Support tenant (project-1)',
       delegatedSummary: '1/1 active',
       delegatedSessionIds: '019df4d2...82f6',
     });
@@ -140,7 +141,7 @@ describe('IdentityAccessReviewViewModelBuilder', () => {
       name: 'Demo project access',
       kind: 'User',
       externalId: 'demo',
-      projectId: 'project-1',
+      projectId: 'Support tenant (project-1)',
       effective: 'effective',
       scopes: 'session:create',
     });

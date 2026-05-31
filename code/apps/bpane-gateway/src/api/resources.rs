@@ -359,6 +359,7 @@ fn session_owner_principal(stored: &StoredSession) -> AuthenticatedPrincipal {
         issuer: stored.owner.issuer.clone(),
         display_name: stored.owner.display_name.clone(),
         client_id: None,
+        safe_claims: Default::default(),
     }
 }
 

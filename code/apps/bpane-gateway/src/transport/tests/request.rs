@@ -118,6 +118,7 @@ async fn validate_request_path_accepts_valid_session_ticket() {
         issuer: "issuer".to_string(),
         display_name: Some("demo".to_string()),
         client_id: None,
+        safe_claims: Default::default(),
     };
     let session = store
         .create_session(&principal, empty_request(), SessionOwnerMode::Collaborative)
@@ -237,6 +238,7 @@ async fn validate_request_path_rejects_session_not_visible() {
         issuer: principal.issuer.clone(),
         display_name: None,
         client_id: None,
+        safe_claims: Default::default(),
     };
     let session = store
         .create_session(

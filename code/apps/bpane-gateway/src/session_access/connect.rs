@@ -135,6 +135,7 @@ mod tests {
             issuer: "issuer".to_string(),
             display_name: Some(subject.to_string()),
             client_id: None,
+            safe_claims: Default::default(),
         }
     }
 

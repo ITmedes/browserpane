@@ -79,13 +79,14 @@ const MAPPING: IdentityMappingResource = {
 
 describe('identity mapping catalog helpers', () => {
   it('builds searchable rows from access-review mappings', () => {
-    const rows = identityMappingRows([{ ...MAPPING, effective_for_principal: true }], 'mcp');
+    const rows = identityMappingRows([{ ...MAPPING, effective_for_principal: true }], 'mcp', [PROJECT]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       id: MAPPING.id,
       kind: 'Service principal',
       externalIdentity: 'bpane-mcp-bridge',
+      projectId: 'Acme support (019df811...7f19)',
       effective: 'effective',
     });
   });
