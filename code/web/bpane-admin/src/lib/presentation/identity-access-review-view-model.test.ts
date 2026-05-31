@@ -154,4 +154,91 @@ describe('IdentityAccessReviewViewModelBuilder', () => {
       sessionIds: '019df4d2...82f6',
     });
   });
+
+  it('formats safe group and claim mapping review state', () => {
+    const review: IdentityAccessReviewResponse = {
+      ...REVIEW,
+      resource_counts: {
+        ...REVIEW.resource_counts,
+        identity_mappings: 2,
+      },
+      identity_mappings: [
+        {
+          ...REVIEW.identity_mappings[0]!,
+          id: '019df4d2-f4f7-7b00-9e0c-79683b1c82a1',
+          name: 'Acme support group',
+          kind: 'group',
+          external_id: 'customer-acme-support',
+          scopes: ['session:create', 'session:delegate'],
+          effective_for_principal: true,
+        },
+        {
+          ...REVIEW.identity_mappings[0]!,
+          id: '019df4d2-f4f7-7b00-9e0c-79683b1c82a2',
+          name: 'Acme tenant claim',
+          kind: 'claim',
+          claim_name: 'tenant',
+          external_id: 'acme',
+          state: 'disabled',
+          scopes: [],
+          effective_for_principal: false,
+        },
+      ],
+      unmapped_principal_signals: [
+        {
+          kind: 'group',
+          issuer: REVIEW.principal.issuer,
+          external_id: 'customer-beta-support',
+          claim_name: 'groups',
+          display_name: null,
+          reason: 'group_without_project_mapping',
+        },
+        {
+          kind: 'claim',
+          issuer: REVIEW.principal.issuer,
+          external_id: 'beta',
+          claim_name: 'tenant',
+          display_name: null,
+          reason: 'safe_claim_without_project_mapping',
+        },
+      ],
+    };
+
+    const viewModel = IdentityAccessReviewViewModelBuilder.build(review);
+
+    expect(viewModel.mappings).toMatchObject([
+      {
+        name: 'Acme support group',
+        kind: 'Group',
+        externalId: 'customer-acme-support',
+        projectId: 'Support tenant (project-1)',
+        state: 'active',
+        effective: 'effective',
+        scopes: 'session:create, session:delegate',
+      },
+      {
+        name: 'Acme tenant claim',
+        kind: 'Claim',
+        externalId: 'tenant=acme',
+        projectId: 'Support tenant (project-1)',
+        state: 'disabled',
+        effective: 'not effective',
+        scopes: 'no scopes',
+      },
+    ]);
+    expect(viewModel.unmappedSignals).toMatchObject([
+      {
+        key: `group:${REVIEW.principal.issuer}:groups:customer-beta-support`,
+        kind: 'Group',
+        externalId: 'groups=customer-beta-support',
+        reason: 'Safe group claim has no active project mapping',
+      },
+      {
+        key: `claim:${REVIEW.principal.issuer}:tenant:beta`,
+        kind: 'Claim',
+        externalId: 'tenant=beta',
+        reason: 'Safe claim value has no active project mapping',
+      },
+    ]);
+  });
 });

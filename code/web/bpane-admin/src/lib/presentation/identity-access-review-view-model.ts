@@ -112,7 +112,7 @@ export class IdentityAccessReviewViewModelBuilder {
         scopes: mapping.scopes.length > 0 ? mapping.scopes.join(', ') : 'no scopes',
       })),
       unmappedSignals: review.unmapped_principal_signals.map((signal) => ({
-        key: `${signal.kind}:${signal.issuer}:${signal.external_id}`,
+        key: `${signal.kind}:${signal.issuer}:${signal.claim_name ?? ''}:${signal.external_id}`,
         kind: identityMappingKindLabel(signal.kind),
         displayName: signal.display_name ?? signal.external_id,
         issuer: signal.issuer,
