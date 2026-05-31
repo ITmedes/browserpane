@@ -26,6 +26,7 @@ pub(in crate::api) async fn load_session_owner_principal(
         issuer: session.owner.issuer,
         display_name: session.owner.display_name,
         client_id: None,
+        safe_claims: Default::default(),
     })
 }
 
@@ -213,6 +214,7 @@ pub(in crate::api) async fn authorize_runtime_access_principal_with_automation_a
                 issuer: claims.issuer,
                 display_name: None,
                 client_id: claims.client_id,
+                safe_claims: Default::default(),
             })
         }
     }

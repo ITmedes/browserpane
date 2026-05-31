@@ -349,6 +349,7 @@ impl DockerRuntimeManager {
             issuer: session.owner.issuer,
             display_name: session.owner.display_name,
             client_id: None,
+            safe_claims: Default::default(),
         };
         match store
             .mark_browser_context_used_for_owner(&principal, context_id)

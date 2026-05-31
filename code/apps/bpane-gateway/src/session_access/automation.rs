@@ -143,6 +143,7 @@ mod tests {
             issuer: "issuer".to_string(),
             display_name: Some(subject.to_string()),
             client_id: Some("bpane-mcp-bridge".to_string()),
+            safe_claims: Default::default(),
         }
     }
 

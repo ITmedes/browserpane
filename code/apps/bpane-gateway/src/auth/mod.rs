@@ -27,6 +27,31 @@ pub struct AuthenticatedPrincipal {
     pub issuer: String,
     pub display_name: Option<String>,
     pub client_id: Option<String>,
+    pub safe_claims: AuthenticatedPrincipalClaims,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AuthenticatedPrincipalClaims {
+    pub groups: Vec<String>,
+    pub claims: Vec<AuthenticatedPrincipalClaimValue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthenticatedPrincipalClaimValue {
+    pub name: String,
+    pub value: String,
+}
+
+impl AuthenticatedPrincipalClaims {
+    pub fn has_group(&self, expected: &str) -> bool {
+        self.groups.iter().any(|group| group == expected)
+    }
+
+    pub fn has_claim_value(&self, claim_name: &str, expected: &str) -> bool {
+        self.claims
+            .iter()
+            .any(|claim| claim.name == claim_name && claim.value == expected)
+    }
 }
 
 #[derive(Clone)]

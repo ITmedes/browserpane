@@ -41,15 +41,17 @@ export type IdentityMappingCatalogRow = {
 export function identityMappingRows(
   mappings: readonly (IdentityMappingResource & { readonly effective_for_principal?: boolean })[],
   search: string,
+  projects: readonly ProjectResource[] = [],
 ): readonly IdentityMappingCatalogRow[] {
   const needle = search.trim().toLowerCase();
+  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
   return mappings
     .map((mapping) => ({
       id: mapping.id,
       name: mapping.name,
       kind: identityMappingKindLabel(mapping.kind),
       externalIdentity: mapping.claim_name ? `${mapping.claim_name}=${mapping.external_id}` : mapping.external_id,
-      projectId: shortId(mapping.project_id),
+      projectId: projectLabel(mapping.project_id, projectNames),
       state: mapping.state,
       effective: mapping.effective_for_principal ? 'effective' : 'not effective',
       scopes: mapping.scopes.length > 0 ? mapping.scopes.join(', ') : 'no scopes',
@@ -239,4 +241,9 @@ function splitList(value: string): string[] {
 
 function shortId(value: string): string {
   return value.length > 13 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+}
+
+function projectLabel(projectId: string, projectNames: ReadonlyMap<string, string>): string {
+  const name = projectNames.get(projectId);
+  return name ? `${name} (${shortId(projectId)})` : shortId(projectId);
 }
