@@ -1,6 +1,121 @@
 use super::*;
 
 impl SessionStore {
+    pub async fn create_identity_mapping(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: PersistIdentityMappingRequest,
+    ) -> Result<StoredIdentityMapping, SessionStoreError> {
+        validate_identity_mapping_request(&request)?;
+        self.validate_identity_mapping_references(principal, &request)
+            .await?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.create_identity_mapping(principal, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.create_identity_mapping(principal, request).await
+            }
+        }
+    }
+
+    pub async fn list_identity_mappings_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+    ) -> Result<Vec<StoredIdentityMapping>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.list_identity_mappings_for_owner(principal).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.list_identity_mappings_for_owner(principal).await
+            }
+        }
+    }
+
+    pub async fn get_identity_mapping_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredIdentityMapping>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.get_identity_mapping_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.get_identity_mapping_for_owner(principal, id).await
+            }
+        }
+    }
+
+    pub async fn update_identity_mapping_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        request: PersistIdentityMappingRequest,
+    ) -> Result<Option<StoredIdentityMapping>, SessionStoreError> {
+        validate_identity_mapping_request(&request)?;
+        self.validate_identity_mapping_references(principal, &request)
+            .await?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .update_identity_mapping_for_owner(principal, id, request)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .update_identity_mapping_for_owner(principal, id, request)
+                    .await
+            }
+        }
+    }
+
+    async fn validate_identity_mapping_references(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: &PersistIdentityMappingRequest,
+    ) -> Result<(), SessionStoreError> {
+        let project = self
+            .get_project_for_owner(principal, request.project_id)
+            .await?
+            .ok_or_else(|| {
+                SessionStoreError::NotFound(format!(
+                    "project {} not found for identity mapping",
+                    request.project_id
+                ))
+            })?;
+        if project.state == ProjectState::Archived {
+            return Err(SessionStoreError::InvalidRequest(format!(
+                "project {} is archived and cannot be used for identity mappings",
+                request.project_id
+            )));
+        }
+
+        if let Some(service_principal_id) = request.service_principal_id {
+            let service_principal = self
+                .get_service_principal_for_owner(principal, service_principal_id)
+                .await?
+                .ok_or_else(|| {
+                    SessionStoreError::NotFound(format!(
+                        "service principal {service_principal_id} not found for identity mapping"
+                    ))
+                })?;
+            if request.kind != IdentityMappingKind::ServicePrincipal {
+                return Ok(());
+            }
+            if service_principal.issuer != request.issuer
+                || service_principal.client_id != request.external_id
+            {
+                return Err(SessionStoreError::InvalidRequest(format!(
+                    "identity mapping external identity must match service principal {}",
+                    service_principal_id
+                )));
+            }
+        }
+        Ok(())
+    }
+
     pub async fn create_service_principal(
         &self,
         principal: &AuthenticatedPrincipal,

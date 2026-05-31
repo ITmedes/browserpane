@@ -14,6 +14,7 @@ const REVIEW: IdentityAccessReviewResponse = {
   resource_counts: {
     projects: 1,
     service_principals: 1,
+    identity_mappings: 1,
     sessions: 2,
     active_sessions: 1,
     session_templates: 1,
@@ -55,6 +56,27 @@ const REVIEW: IdentityAccessReviewResponse = {
       updated_at: '2026-05-29T10:00:00Z',
     },
   ],
+  identity_mappings: [
+    {
+      id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f8',
+      name: 'Demo project access',
+      description: null,
+      kind: 'user',
+      issuer: 'http://localhost:8091/realms/browserpane',
+      external_id: 'demo',
+      claim_name: null,
+      service_principal_id: null,
+      project_id: 'project-1',
+      labels: {},
+      scopes: ['session:create'],
+      state: 'active',
+      last_seen_at: null,
+      effective_for_principal: true,
+      created_at: '2026-05-29T09:00:00Z',
+      updated_at: '2026-05-29T10:00:00Z',
+    },
+  ],
+  unmapped_principal_signals: [],
   service_principals: [
     {
       id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f7',
@@ -113,6 +135,14 @@ describe('IdentityAccessReviewViewModelBuilder', () => {
       scopes: 'session:delegate',
       delegatedSummary: '1/1 active',
       delegatedSessionIds: '019df4d2...82f6',
+    });
+    expect(viewModel.mappings[0]).toMatchObject({
+      name: 'Demo project access',
+      kind: 'User',
+      externalId: 'demo',
+      projectId: 'project-1',
+      effective: 'effective',
+      scopes: 'session:create',
     });
     expect(viewModel.delegations[0]).toMatchObject({
       clientId: 'bpane-mcp-bridge',

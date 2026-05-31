@@ -43,6 +43,27 @@ export type IdentityServicePrincipalRow = {
   readonly lastActivity: string;
 };
 
+export type IdentityMappingRow = {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly issuer: string;
+  readonly externalId: string;
+  readonly projectId: string;
+  readonly state: string;
+  readonly effective: string;
+  readonly scopes: string;
+};
+
+export type IdentityUnmappedSignalRow = {
+  readonly key: string;
+  readonly kind: string;
+  readonly displayName: string;
+  readonly issuer: string;
+  readonly externalId: string;
+  readonly reason: string;
+};
+
 export type IdentityAccessReviewViewModel = {
   readonly principalTitle: string;
   readonly principalSubtitle: string;
@@ -50,6 +71,8 @@ export type IdentityAccessReviewViewModel = {
   readonly generatedAtLabel: string;
   readonly metrics: readonly IdentityMetricRow[];
   readonly projects: readonly IdentityProjectRow[];
+  readonly mappings: readonly IdentityMappingRow[];
+  readonly unmappedSignals: readonly IdentityUnmappedSignalRow[];
   readonly servicePrincipals: readonly IdentityServicePrincipalRow[];
   readonly delegations: readonly IdentityDelegationRow[];
 };
@@ -66,6 +89,7 @@ export class IdentityAccessReviewViewModelBuilder {
         metric('active-sessions', 'Active sessions', review.resource_counts.active_sessions),
         metric('projects', 'Projects', review.resource_counts.projects),
         metric('service-principals', 'Service principals', review.resource_counts.service_principals),
+        metric('identity-mappings', 'Identity mappings', review.resource_counts.identity_mappings),
         metric('contexts', 'Contexts', review.resource_counts.browser_contexts),
         metric('egress', 'Egress profiles', review.resource_counts.egress_profiles),
         metric('templates', 'Templates', review.resource_counts.session_templates),
@@ -75,6 +99,25 @@ export class IdentityAccessReviewViewModelBuilder {
         metric('delegations', 'Delegations', review.resource_counts.delegated_principals),
       ],
       projects: review.projects.map(projectRow),
+      mappings: review.identity_mappings.map((mapping) => ({
+        id: mapping.id,
+        name: mapping.name,
+        kind: identityMappingKindLabel(mapping.kind),
+        issuer: mapping.issuer,
+        externalId: mapping.claim_name ? `${mapping.claim_name}=${mapping.external_id}` : mapping.external_id,
+        projectId: shortId(mapping.project_id),
+        state: mapping.state,
+        effective: mapping.effective_for_principal ? 'effective' : 'not effective',
+        scopes: mapping.scopes.length > 0 ? mapping.scopes.join(', ') : 'no scopes',
+      })),
+      unmappedSignals: review.unmapped_principal_signals.map((signal) => ({
+        key: `${signal.kind}:${signal.issuer}:${signal.external_id}`,
+        kind: identityMappingKindLabel(signal.kind),
+        displayName: signal.display_name ?? signal.external_id,
+        issuer: signal.issuer,
+        externalId: signal.external_id,
+        reason: unmappedReasonLabel(signal.reason),
+      })),
       servicePrincipals: review.service_principals.map((servicePrincipal) => ({
         id: servicePrincipal.id,
         name: servicePrincipal.name,
@@ -109,6 +152,33 @@ export class IdentityAccessReviewViewModelBuilder {
           : 'no sessions',
       })),
     };
+  }
+}
+
+function identityMappingKindLabel(kind: string): string {
+  switch (kind) {
+    case 'service_principal':
+      return 'Service principal';
+    case 'group':
+      return 'Group';
+    case 'claim':
+      return 'Claim';
+    case 'user':
+    default:
+      return 'User';
+  }
+}
+
+function unmappedReasonLabel(reason: string): string {
+  switch (reason) {
+    case 'current_principal_without_project_mapping':
+      return 'Current principal has no active project mapping';
+    case 'registered_service_principal_without_project_mapping':
+      return 'Registered service principal has no active project mapping';
+    case 'unregistered_service_principal_without_project_mapping':
+      return 'Unregistered service principal has no active project mapping';
+    default:
+      return reason.replaceAll('_', ' ');
   }
 }
 

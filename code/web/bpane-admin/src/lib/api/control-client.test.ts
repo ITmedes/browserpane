@@ -153,6 +153,24 @@ const SERVICE_PRINCIPAL = {
   updated_at: '2026-05-29T10:00:00Z',
 };
 
+const IDENTITY_MAPPING = {
+  id: '019df8ec-a5e2-7b00-a14b-173e70c39f7e',
+  name: 'Demo project access',
+  description: null,
+  kind: 'user',
+  issuer: 'http://localhost:8091/realms/browserpane',
+  external_id: 'demo',
+  claim_name: null,
+  service_principal_id: null,
+  project_id: PROJECT.id,
+  labels: { team: 'support' },
+  scopes: ['session:create'],
+  state: 'active',
+  last_seen_at: null,
+  created_at: '2026-05-29T09:00:00Z',
+  updated_at: '2026-05-29T10:00:00Z',
+};
+
 const ACCESS_REVIEW = {
   principal: IDENTITY_PRINCIPAL,
   generated_at: '2026-05-29T10:00:00Z',
@@ -160,6 +178,7 @@ const ACCESS_REVIEW = {
   resource_counts: {
     projects: 1,
     service_principals: 1,
+    identity_mappings: 1,
     sessions: 2,
     active_sessions: 1,
     session_templates: 1,
@@ -175,6 +194,13 @@ const ACCESS_REVIEW = {
     extension_definitions: 0,
     delegated_principals: 1,
   },
+  identity_mappings: [
+    {
+      ...IDENTITY_MAPPING,
+      effective_for_principal: true,
+    },
+  ],
+  unmapped_principal_signals: [],
   service_principals: [
     {
       ...SERVICE_PRINCIPAL,
@@ -304,9 +330,16 @@ describe('ControlClient', () => {
       resource_counts: {
         projects: 1,
         service_principals: 1,
+        identity_mappings: 1,
         sessions: 2,
         delegated_principals: 1,
       },
+      identity_mappings: [
+        {
+          id: IDENTITY_MAPPING.id,
+          effective_for_principal: true,
+        },
+      ],
       service_principals: [
         {
           id: SERVICE_PRINCIPAL.id,
@@ -410,6 +443,93 @@ describe('ControlClient', () => {
           labels: {},
           scopes: [],
           allowed_project_ids: [],
+        }),
+      }),
+    );
+  });
+
+  it('manages identity mapping resources with bearer auth', async () => {
+    const responses = [
+      IDENTITY_MAPPING,
+      { identity_mappings: [IDENTITY_MAPPING] },
+      IDENTITY_MAPPING,
+      { ...IDENTITY_MAPPING, name: 'Demo project access v2', state: 'disabled' },
+    ];
+    const fetchImpl = vi.fn<FetchLike>(async () => new Response(JSON.stringify(responses.shift()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const created = await client.createIdentityMapping({
+      name: 'Demo project access',
+      description: 'Maps demo user to support tenant',
+      kind: 'user',
+      issuer: 'http://localhost:8091/realms/browserpane',
+      external_id: 'demo',
+      project_id: PROJECT.id,
+      labels: { team: 'support' },
+      scopes: ['session:create'],
+    });
+    const listed = await client.listIdentityMappings();
+    await client.getIdentityMapping('identity/mapping with space');
+    await client.updateIdentityMapping(IDENTITY_MAPPING.id, {
+      name: 'Demo project access v2',
+      kind: 'user',
+      issuer: 'http://localhost:8091/realms/browserpane',
+      external_id: 'demo',
+      project_id: PROJECT.id,
+      state: 'disabled',
+    });
+
+    expect(created.id).toBe(IDENTITY_MAPPING.id);
+    expect(listed.identity_mappings).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      new URL('http://localhost:8932/api/v1/identity-mappings'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Demo project access',
+          description: 'Maps demo user to support tenant',
+          kind: 'user',
+          issuer: 'http://localhost:8091/realms/browserpane',
+          external_id: 'demo',
+          project_id: PROJECT.id,
+          labels: { team: 'support' },
+          scopes: ['session:create'],
+          state: 'active',
+        }),
+      }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      new URL('http://localhost:8932/api/v1/identity-mappings'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      new URL('http://localhost:8932/api/v1/identity-mappings/identity%2Fmapping%20with%20space'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      4,
+      new URL(`http://localhost:8932/api/v1/identity-mappings/${IDENTITY_MAPPING.id}`),
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          name: 'Demo project access v2',
+          kind: 'user',
+          issuer: 'http://localhost:8091/realms/browserpane',
+          external_id: 'demo',
+          project_id: PROJECT.id,
+          state: 'disabled',
+          labels: {},
+          scopes: [],
         }),
       }),
     );

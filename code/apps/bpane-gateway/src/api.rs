@@ -39,10 +39,12 @@ use crate::session_control::{
     BrowserContextListResponse, BrowserContextPersistenceMode, BrowserContextResource,
     BrowserContextState, CompleteSessionRecordingRequest, CreateSessionRequest,
     EgressDiagnosticsResource, EgressProfileListResponse, EgressProfileResource,
-    EgressProfileState, FailSessionRecordingRequest, PersistBrowserContextRequest,
-    PersistCompletedSessionRecordingRequest, PersistEgressDiagnosticsProbeResult,
-    PersistEgressProfileReachabilityProbeResult, PersistEgressProfileRequest,
-    PersistProjectRequest, PersistServicePrincipalRequest, PersistSessionFileBindingRequest,
+    EgressProfileState, FailSessionRecordingRequest, IdentityMappingKind,
+    IdentityMappingListResponse, IdentityMappingResource, IdentityMappingState,
+    PersistBrowserContextRequest, PersistCompletedSessionRecordingRequest,
+    PersistEgressDiagnosticsProbeResult, PersistEgressProfileReachabilityProbeResult,
+    PersistEgressProfileRequest, PersistIdentityMappingRequest, PersistProjectRequest,
+    PersistServicePrincipalRequest, PersistSessionFileBindingRequest,
     PersistSessionTemplateRequest, ProjectAdmissionDecision, ProjectListResponse, ProjectResource,
     ProjectUsageResource, ServicePrincipalListResponse, ServicePrincipalResource,
     ServicePrincipalState, SessionBrowserContextMode, SessionEffectiveEgress,
@@ -51,8 +53,8 @@ use crate::session_control::{
     SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
     SessionRecordingTerminationReason, SessionResource, SessionStore, SessionStoreError,
     SessionTemplateDefaults, SessionTemplateListResponse, SessionTemplateResource,
-    SetAutomationDelegateRequest, StoredBrowserContext, StoredEgressProfile, StoredProject,
-    StoredServicePrincipal, StoredSession, StoredSessionRecording,
+    SetAutomationDelegateRequest, StoredBrowserContext, StoredEgressProfile, StoredIdentityMapping,
+    StoredProject, StoredServicePrincipal, StoredSession, StoredSessionRecording,
 };
 use crate::session_files::{
     SessionFileBindingListResponse, SessionFileBindingResource, SessionFileListResponse,
@@ -99,6 +101,7 @@ mod extensions;
 mod file_workspaces;
 mod http_helpers;
 mod identity;
+mod identity_mappings;
 mod projects;
 mod recordings;
 mod resources;

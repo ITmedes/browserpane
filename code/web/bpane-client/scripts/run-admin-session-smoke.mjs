@@ -110,6 +110,12 @@ async function verifyBrowserPolicyPanel(page) {
 }
 
 async function verifyIdentityPanel(page, options) {
+  const accessToken = await getAdminAccessToken(page);
+  const identity = await fetchJson(`${apiOrigin(options)}/api/v1/identity/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const project = await createIdentityCrudProject(accessToken, options);
+
   await openAdminTab(page, 'identity');
   await page.getByTestId('identity-principal-type').waitFor({
     state: 'visible',
@@ -132,7 +138,77 @@ async function verifyIdentityPanel(page, options) {
   );
   await page.getByTestId('identity-project-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await page.getByTestId('identity-service-principal-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await page.getByTestId('identity-mapping-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  await verifyIdentityMappingCrud(page, options, identity, project);
+  const mappingCount = Number(await page.getByTestId('identity-resource-identity-mappings').textContent());
+  if (!Number.isFinite(mappingCount) || mappingCount < 0) {
+    throw new Error(`Expected identity mapping count to be numeric, got ${mappingCount}`);
+  }
   await page.getByTestId('identity-delegation-list').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+}
+
+async function createIdentityCrudProject(accessToken, options) {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/projects`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: `admin-identity-crud-${Date.now()}`,
+      labels: { suite: 'admin-session-identity-crud-smoke' },
+    }),
+  });
+}
+
+async function verifyIdentityMappingCrud(page, options, identity, project) {
+  const mappingName = `Admin identity CRUD ${Date.now()}`;
+  const updatedName = `${mappingName} updated`;
+
+  await page.getByTestId('identity-mapping-new').click();
+  await page.getByTestId('identity-mapping-name').fill(mappingName);
+  await page.getByTestId('identity-mapping-kind').selectOption('user');
+  await page.getByTestId('identity-mapping-issuer').fill(identity.issuer);
+  await page.getByTestId('identity-mapping-external-id').fill(identity.subject);
+  await page.getByTestId('identity-mapping-project-id').selectOption(project.id);
+  await page.getByTestId('identity-mapping-scopes').fill('session:create\nsession:delegate');
+  await page.getByTestId('identity-mapping-labels').fill('suite=admin-session-identity-crud-smoke');
+  await page.getByTestId('identity-mapping-save').click();
+  await poll(
+    'admin identity mapping created',
+    async () => await page.getByTestId('identity-mapping-selected-name').textContent().catch(() => ''),
+    (value) => value === mappingName,
+    options.connectTimeoutMs,
+    100,
+  );
+
+  await page.getByTestId('identity-mapping-edit').click();
+  await page.getByTestId('identity-mapping-name').fill(updatedName);
+  await page.getByTestId('identity-mapping-save').click();
+  await poll(
+    'admin identity mapping updated',
+    async () => await page.getByTestId('identity-mapping-selected-name').textContent().catch(() => ''),
+    (value) => value === updatedName,
+    options.connectTimeoutMs,
+    100,
+  );
+
+  await page.getByTestId('identity-mapping-disable').click();
+  await poll(
+    'admin identity mapping disabled',
+    async () => await page.getByTestId('identity-mapping-enable').isEnabled().catch(() => false),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+  await page.getByTestId('identity-mapping-enable').click();
+  await poll(
+    'admin identity mapping re-enabled',
+    async () => await page.getByTestId('identity-mapping-disable').isEnabled().catch(() => false),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
 }
 
 async function verifyRemainingPanels(page) {

@@ -19,6 +19,7 @@ pub(crate) fn build_api_router(state: Arc<ApiState>) -> Router {
         .merge(browser_contexts::browser_context_routes())
         .merge(extensions::extension_routes())
         .merge(identity::identity_routes())
+        .merge(identity_mappings::identity_mapping_routes())
         .merge(projects::project_routes())
         .merge(service_principals::service_principal_routes())
         .merge(egress_profiles::egress_profile_routes())

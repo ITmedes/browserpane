@@ -155,6 +155,57 @@ pub(in crate::session_control) fn row_to_stored_service_principal(
     })
 }
 
+pub(in crate::session_control) fn row_to_stored_identity_mapping(
+    row: &Row,
+) -> Result<StoredIdentityMapping, SessionStoreError> {
+    let kind = row
+        .get::<_, String>("mapping_kind")
+        .parse::<IdentityMappingKind>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let state = row
+        .get::<_, String>("state")
+        .parse::<IdentityMappingState>()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
+    let labels_value: Value = row.get("labels");
+    let labels = labels_value
+        .as_object()
+        .context("identity mapping labels column must be a JSON object")
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                value
+                    .as_str()
+                    .context("identity mapping label values must be strings")
+                    .map_err(|error| SessionStoreError::Backend(error.to_string()))?
+                    .to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let scopes = row_to_json_string_array(row.get("scopes"), "identity mapping scopes")?;
+
+    Ok(StoredIdentityMapping {
+        id: row.get("id"),
+        owner_subject: row.get("owner_subject"),
+        owner_issuer: row.get("owner_issuer"),
+        name: row.get("name"),
+        description: row.get("description"),
+        kind,
+        issuer: row.get("issuer"),
+        external_id: row.get("external_id"),
+        claim_name: row.get("claim_name"),
+        service_principal_id: row.get("service_principal_id"),
+        project_id: row.get("project_id"),
+        labels,
+        scopes,
+        state,
+        last_seen_at: row.get("last_seen_at"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
 pub(in crate::session_control) fn row_to_stored_credential_binding(
     row: &Row,
 ) -> Result<StoredCredentialBinding, SessionStoreError> {

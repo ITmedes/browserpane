@@ -27,6 +27,7 @@ struct IdentityPrincipalResource {
 struct IdentityResourceCounts {
     projects: usize,
     service_principals: usize,
+    identity_mappings: usize,
     sessions: usize,
     active_sessions: usize,
     session_templates: usize,
@@ -66,11 +67,29 @@ struct IdentityServicePrincipalReviewResource {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct IdentityMappingReviewResource {
+    #[serde(flatten)]
+    mapping: IdentityMappingResource,
+    effective_for_principal: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct IdentityUnmappedPrincipalSignalResource {
+    kind: IdentityMappingKind,
+    issuer: String,
+    external_id: String,
+    display_name: Option<String>,
+    reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct IdentityAccessReviewResponse {
     principal: IdentityPrincipalResource,
     generated_at: DateTime<Utc>,
     projects: Vec<ProjectResource>,
     resource_counts: IdentityResourceCounts,
+    identity_mappings: Vec<IdentityMappingReviewResource>,
+    unmapped_principal_signals: Vec<IdentityUnmappedPrincipalSignalResource>,
     service_principals: Vec<IdentityServicePrincipalReviewResource>,
     delegated_principals: Vec<IdentityDelegatedPrincipalResource>,
 }
@@ -118,6 +137,11 @@ async fn get_identity_access_review(
     let service_principals = state
         .session_store
         .list_service_principals_for_owner(&principal)
+        .await
+        .map_err(map_session_store_error)?;
+    let identity_mappings = state
+        .session_store
+        .list_identity_mappings_for_owner(&principal)
         .await
         .map_err(map_session_store_error)?;
     let sessions = state
@@ -180,9 +204,14 @@ async fn get_identity_access_review(
     let delegated_principals = delegated_principal_resources(&sessions, &service_principals);
     let service_principal_reviews =
         service_principal_review_resources(&service_principals, &sessions);
+    let identity_mapping_reviews =
+        identity_mapping_review_resources(&principal, &identity_mappings);
+    let unmapped_principal_signals =
+        unmapped_principal_signals(&principal, &delegated_principals, &identity_mappings);
     let resource_counts = IdentityResourceCounts {
         projects: projects.len(),
         service_principals: service_principals.len(),
+        identity_mappings: identity_mappings.len(),
         sessions: sessions.len(),
         active_sessions,
         session_templates: session_templates.len(),
@@ -210,6 +239,8 @@ async fn get_identity_access_review(
         generated_at: now,
         projects,
         resource_counts,
+        identity_mappings: identity_mapping_reviews,
+        unmapped_principal_signals,
         service_principals: service_principal_reviews,
         delegated_principals,
     }))
@@ -344,6 +375,97 @@ fn delegated_principal_resources(
             .then(left.issuer.cmp(&right.issuer))
     });
     resources
+}
+
+fn identity_mapping_review_resources(
+    principal: &AuthenticatedPrincipal,
+    mappings: &[StoredIdentityMapping],
+) -> Vec<IdentityMappingReviewResource> {
+    let mut resources = mappings
+        .iter()
+        .map(|mapping| IdentityMappingReviewResource {
+            mapping: mapping.to_resource(),
+            effective_for_principal: identity_mapping_effective_for_principal(principal, mapping),
+        })
+        .collect::<Vec<_>>();
+    resources.sort_by(|left, right| {
+        right
+            .effective_for_principal
+            .cmp(&left.effective_for_principal)
+            .then(left.mapping.kind.as_str().cmp(right.mapping.kind.as_str()))
+            .then(left.mapping.external_id.cmp(&right.mapping.external_id))
+            .then(left.mapping.project_id.cmp(&right.mapping.project_id))
+    });
+    resources
+}
+
+fn identity_mapping_effective_for_principal(
+    principal: &AuthenticatedPrincipal,
+    mapping: &StoredIdentityMapping,
+) -> bool {
+    if mapping.state != IdentityMappingState::Active || mapping.issuer != principal.issuer {
+        return false;
+    }
+    match mapping.kind {
+        IdentityMappingKind::User => mapping.external_id == principal.subject,
+        IdentityMappingKind::ServicePrincipal => principal
+            .client_id
+            .as_deref()
+            .is_some_and(|client_id| mapping.external_id == client_id),
+        IdentityMappingKind::Group | IdentityMappingKind::Claim => false,
+    }
+}
+
+fn unmapped_principal_signals(
+    principal: &AuthenticatedPrincipal,
+    delegated_principals: &[IdentityDelegatedPrincipalResource],
+    mappings: &[StoredIdentityMapping],
+) -> Vec<IdentityUnmappedPrincipalSignalResource> {
+    let mut signals = Vec::new();
+    if !mappings.iter().any(|mapping| {
+        mapping.state == IdentityMappingState::Active
+            && mapping.kind == IdentityMappingKind::User
+            && mapping.issuer == principal.issuer
+            && mapping.external_id == principal.subject
+    }) {
+        signals.push(IdentityUnmappedPrincipalSignalResource {
+            kind: IdentityMappingKind::User,
+            issuer: principal.issuer.clone(),
+            external_id: principal.subject.clone(),
+            display_name: principal.display_name.clone(),
+            reason: "current_principal_without_project_mapping".to_string(),
+        });
+    }
+
+    for delegated_principal in delegated_principals {
+        let has_active_mapping = mappings.iter().any(|mapping| {
+            mapping.state == IdentityMappingState::Active
+                && mapping.kind == IdentityMappingKind::ServicePrincipal
+                && mapping.issuer == delegated_principal.issuer
+                && mapping.external_id == delegated_principal.client_id
+        });
+        if !has_active_mapping {
+            signals.push(IdentityUnmappedPrincipalSignalResource {
+                kind: IdentityMappingKind::ServicePrincipal,
+                issuer: delegated_principal.issuer.clone(),
+                external_id: delegated_principal.client_id.clone(),
+                display_name: delegated_principal.display_name.clone(),
+                reason: if delegated_principal.registered {
+                    "registered_service_principal_without_project_mapping".to_string()
+                } else {
+                    "unregistered_service_principal_without_project_mapping".to_string()
+                },
+            });
+        }
+    }
+    signals.sort_by(|left, right| {
+        left.kind
+            .as_str()
+            .cmp(right.kind.as_str())
+            .then(left.external_id.cmp(&right.external_id))
+            .then(left.issuer.cmp(&right.issuer))
+    });
+    signals
 }
 
 fn service_principal_review_resources(
