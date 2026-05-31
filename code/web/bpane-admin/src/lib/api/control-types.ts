@@ -202,6 +202,46 @@ export type ServicePrincipalListResponse = {
   readonly service_principals: readonly ServicePrincipalResource[];
 };
 
+export type IdentityMappingKind = 'user' | 'group' | 'claim' | 'service_principal';
+
+export type IdentityMappingState = 'active' | 'disabled';
+
+export type IdentityMappingResource = {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly kind: IdentityMappingKind;
+  readonly issuer: string;
+  readonly external_id: string;
+  readonly claim_name?: string | null;
+  readonly service_principal_id?: string | null;
+  readonly project_id: string;
+  readonly labels: Readonly<Record<string, string>>;
+  readonly scopes: readonly string[];
+  readonly state: IdentityMappingState;
+  readonly last_seen_at?: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type IdentityMappingListResponse = {
+  readonly identity_mappings: readonly IdentityMappingResource[];
+};
+
+export type CreateIdentityMappingCommand = {
+  readonly name: string;
+  readonly description?: string | null;
+  readonly kind: IdentityMappingKind;
+  readonly issuer: string;
+  readonly external_id: string;
+  readonly claim_name?: string | null;
+  readonly service_principal_id?: string | null;
+  readonly project_id: string;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly scopes?: readonly string[];
+  readonly state?: IdentityMappingState;
+};
+
 export type CreateServicePrincipalCommand = {
   readonly name: string;
   readonly description?: string | null;
@@ -226,6 +266,7 @@ export type IdentityPrincipalResource = {
 export type IdentityResourceCounts = {
   readonly projects: number;
   readonly service_principals: number;
+  readonly identity_mappings: number;
   readonly sessions: number;
   readonly active_sessions: number;
   readonly session_templates: number;
@@ -260,11 +301,25 @@ export type IdentityServicePrincipalReviewResource = ServicePrincipalResource & 
   readonly delegated_session_ids: readonly string[];
 };
 
+export type IdentityMappingReviewResource = IdentityMappingResource & {
+  readonly effective_for_principal: boolean;
+};
+
+export type IdentityUnmappedPrincipalSignalResource = {
+  readonly kind: IdentityMappingKind;
+  readonly issuer: string;
+  readonly external_id: string;
+  readonly display_name?: string | null;
+  readonly reason: string;
+};
+
 export type IdentityAccessReviewResponse = {
   readonly principal: IdentityPrincipalResource;
   readonly generated_at: string;
   readonly projects: readonly ProjectResource[];
   readonly resource_counts: IdentityResourceCounts;
+  readonly identity_mappings: readonly IdentityMappingReviewResource[];
+  readonly unmapped_principal_signals: readonly IdentityUnmappedPrincipalSignalResource[];
   readonly service_principals: readonly IdentityServicePrincipalReviewResource[];
   readonly delegated_principals: readonly IdentityDelegatedPrincipalResource[];
 };

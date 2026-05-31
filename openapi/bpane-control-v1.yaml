@@ -80,7 +80,8 @@ paths:
       operationId: getIdentityAccessReview
       description: >
         Returns a sanitized owner-scoped access review with the current
-        principal, project usage, service-principal registry metadata, resource
+        principal, project usage, service-principal registry metadata, explicit
+        identity-to-project mappings, unmapped-principal signals, resource
         counts, and delegated automation principals visible through the session
         catalog.
       responses:
@@ -180,6 +181,103 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServicePrincipalResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/identity-mappings:
+    get:
+      tags: [Identity]
+      summary: List owner-scoped identity-to-project mappings
+      operationId: listIdentityMappings
+      description: >
+        Returns explicit mappings from external users, groups, claims, or
+        registered service principals to BrowserPane projects. Responses are
+        sanitized and never include raw token claims or credential material.
+      responses:
+        '200':
+          description: Owner-scoped identity mapping registry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMappingListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    post:
+      tags: [Identity]
+      summary: Create an owner-scoped identity-to-project mapping
+      operationId: createIdentityMapping
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertIdentityMappingRequest'
+      responses:
+        '201':
+          description: Identity mapping created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMappingResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/identity-mappings/{identity_mapping_id}:
+    parameters:
+      - $ref: '#/components/parameters/IdentityMappingId'
+    get:
+      tags: [Identity]
+      summary: Fetch one owner-scoped identity mapping
+      operationId: getIdentityMapping
+      responses:
+        '200':
+          description: Identity mapping resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMappingResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+    put:
+      tags: [Identity]
+      summary: Replace one owner-scoped identity mapping
+      operationId: updateIdentityMapping
+      description: >
+        Replaces identity mapping metadata including lifecycle state. Disabled
+        mappings remain visible for review but are not treated as effective.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertIdentityMappingRequest'
+      responses:
+        '200':
+          description: Identity mapping updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMappingResource'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2906,6 +3004,13 @@ components:
         format: uuid
     ServicePrincipalId:
       name: service_principal_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdentityMappingId:
+      name: identity_mapping_id
       in: path
       required: true
       schema:
@@ -5655,6 +5760,138 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ServicePrincipalResource'
+    IdentityMappingKind:
+      type: string
+      enum:
+        - user
+        - group
+        - claim
+        - service_principal
+    IdentityMappingState:
+      type: string
+      enum:
+        - active
+        - disabled
+    UpsertIdentityMappingRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - kind
+        - issuer
+        - external_id
+        - project_id
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        kind:
+          $ref: '#/components/schemas/IdentityMappingKind'
+        issuer:
+          type: string
+          description: External OIDC issuer or identity authority.
+        external_id:
+          type: string
+          description: External user subject, group id, claim value, or service-principal client id.
+        claim_name:
+          type: string
+          nullable: true
+          description: Required for claim mappings and omitted for other mapping kinds.
+        service_principal_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required for service_principal mappings and must match issuer/external_id.
+        project_id:
+          type: string
+          format: uuid
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          default: {}
+        scopes:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Operator-defined intended scopes for future policy/audit use.
+        state:
+          $ref: '#/components/schemas/IdentityMappingState'
+    IdentityMappingResource:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - description
+        - kind
+        - issuer
+        - external_id
+        - claim_name
+        - service_principal_id
+        - project_id
+        - labels
+        - scopes
+        - state
+        - last_seen_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        kind:
+          $ref: '#/components/schemas/IdentityMappingKind'
+        issuer:
+          type: string
+        external_id:
+          type: string
+        claim_name:
+          type: string
+          nullable: true
+        service_principal_id:
+          type: string
+          format: uuid
+          nullable: true
+        project_id:
+          type: string
+          format: uuid
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        state:
+          $ref: '#/components/schemas/IdentityMappingState'
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    IdentityMappingListResponse:
+      type: object
+      required: [identity_mappings]
+      properties:
+        identity_mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityMappingResource'
     IdentityPrincipalType:
       type: string
       enum:
@@ -5689,6 +5926,7 @@ components:
       required:
         - projects
         - service_principals
+        - identity_mappings
         - sessions
         - active_sessions
         - session_templates
@@ -5708,6 +5946,9 @@ components:
           type: integer
           minimum: 0
         service_principals:
+          type: integer
+          minimum: 0
+        identity_mappings:
           type: integer
           minimum: 0
         sessions:
@@ -5815,6 +6056,37 @@ components:
               items:
                 type: string
                 format: uuid
+    IdentityMappingReviewResource:
+      allOf:
+        - $ref: '#/components/schemas/IdentityMappingResource'
+        - type: object
+          additionalProperties: false
+          required:
+            - effective_for_principal
+          properties:
+            effective_for_principal:
+              type: boolean
+    IdentityUnmappedPrincipalSignalResource:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - issuer
+        - external_id
+        - display_name
+        - reason
+      properties:
+        kind:
+          $ref: '#/components/schemas/IdentityMappingKind'
+        issuer:
+          type: string
+        external_id:
+          type: string
+        display_name:
+          type: string
+          nullable: true
+        reason:
+          type: string
     IdentityAccessReviewResponse:
       type: object
       additionalProperties: false
@@ -5823,6 +6095,8 @@ components:
         - generated_at
         - projects
         - resource_counts
+        - identity_mappings
+        - unmapped_principal_signals
         - service_principals
         - delegated_principals
       properties:
@@ -5837,6 +6111,14 @@ components:
             $ref: '#/components/schemas/ProjectResource'
         resource_counts:
           $ref: '#/components/schemas/IdentityResourceCounts'
+        identity_mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityMappingReviewResource'
+        unmapped_principal_signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityUnmappedPrincipalSignalResource'
         service_principals:
           type: array
           items:

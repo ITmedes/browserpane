@@ -13,10 +13,12 @@
     CloneBrowserContextCommand,
     CreateBrowserContextCommand,
     CreateEgressProfileCommand,
+    CreateIdentityMappingCommand,
     CreateSessionCommand,
     EgressDiagnosticsResource,
     EgressProfileResource,
     IdentityAccessReviewResponse,
+    IdentityMappingResource,
     ImportBrowserContextCommand,
     ProjectResource,
     SessionResource,
@@ -174,6 +176,33 @@
       showGlobalMessage('warning', 'Access review unavailable', identityAccessReviewError);
     } finally {
       identityAccessReviewLoading = false;
+    }
+  }
+  async function createIdentityMapping(command: CreateIdentityMappingCommand): Promise<IdentityMappingResource> {
+    try {
+      const mapping = await controlClient.createIdentityMapping(command);
+      await loadIdentityAccessReview(false);
+      showGlobalMessage('success', 'Identity mapping created', `${mapping.name} is now visible in access review.`);
+      return mapping;
+    } catch (error) {
+      const message = errorMessage(error);
+      showGlobalMessage('error', 'Identity mapping create failed', message);
+      throw error;
+    }
+  }
+  async function updateIdentityMapping(
+    mappingId: string,
+    command: CreateIdentityMappingCommand,
+  ): Promise<IdentityMappingResource> {
+    try {
+      const mapping = await controlClient.updateIdentityMapping(mappingId, command);
+      await loadIdentityAccessReview(false);
+      showGlobalMessage('success', 'Identity mapping updated', `${mapping.name} is now ${mapping.state}.`);
+      return mapping;
+    } catch (error) {
+      const message = errorMessage(error);
+      showGlobalMessage('error', 'Identity mapping update failed', message);
+      throw error;
     }
   }
   async function loadProjects(showFeedback = false): Promise<void> {
@@ -671,6 +700,8 @@
       onCreateBrowserContext={createBrowserContext}
       onCreateEgressProfile={createEgressProfile}
       onUpdateEgressProfile={updateEgressProfile}
+      onCreateIdentityMapping={createIdentityMapping}
+      onUpdateIdentityMapping={updateIdentityMapping}
       onRunEgressProfileReachabilityProbe={runEgressProfileReachabilityProbe}
       onCloneBrowserContext={cloneBrowserContext}
       onExportBrowserContext={exportBrowserContext}

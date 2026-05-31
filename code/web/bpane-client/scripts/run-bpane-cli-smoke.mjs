@@ -39,6 +39,8 @@ async function run() {
   let clonedContextId = '';
   let importedContextId = '';
   let servicePrincipalId = '';
+  let identityMappingId = '';
+  let servicePrincipalMappingId = '';
   let configDir = '';
 
   try {
@@ -168,6 +170,100 @@ async function run() {
     const projectUsage = runBpaneCli(['project', 'usage', projectId], cliEnv);
     if (projectUsage.project_id !== projectId || projectUsage.active_sessions !== 0) {
       throw new Error(`CLI project usage returned unexpected data: ${JSON.stringify(projectUsage)}`);
+    }
+
+    const identityMapping = runBpaneCli([
+      'identity-mapping',
+      'create',
+      `operator-user-${runLabel}`,
+      '--description',
+      'Operator CLI smoke identity mapping',
+      '--kind',
+      'user',
+      '--issuer',
+      identity.issuer,
+      '--external-id',
+      identity.subject,
+      '--project-id',
+      projectId,
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--label',
+      `run_id=${runLabel}`,
+      '--scope',
+      'session:create',
+    ], cliEnv);
+    identityMappingId = identityMapping.id;
+    if (
+      !identityMappingId
+      || identityMapping.kind !== 'user'
+      || identityMapping.external_id !== identity.subject
+      || identityMapping.project_id !== projectId
+      || identityMapping.state !== 'active'
+    ) {
+      throw new Error(`CLI identity-mapping create returned unexpected data: ${JSON.stringify(identityMapping)}`);
+    }
+
+    const listedIdentityMappings = runBpaneCli(['identity-mapping', 'list'], cliEnv);
+    if (
+      !Array.isArray(listedIdentityMappings.identity_mappings)
+      || !listedIdentityMappings.identity_mappings.some((item) => item.id === identityMappingId)
+    ) {
+      throw new Error(`CLI identity-mapping list did not include ${identityMappingId}.`);
+    }
+
+    const fetchedIdentityMapping = runBpaneCli(['identity-mapping', 'get', identityMappingId], cliEnv);
+    if (fetchedIdentityMapping.id !== identityMappingId || fetchedIdentityMapping.labels?.run_id !== runLabel) {
+      throw new Error(`CLI identity-mapping get returned unexpected data: ${JSON.stringify(fetchedIdentityMapping)}`);
+    }
+
+    const disabledIdentityMapping = runBpaneCli(['identity-mapping', 'disable', identityMappingId], cliEnv);
+    if (disabledIdentityMapping.state !== 'disabled') {
+      throw new Error(`CLI identity-mapping disable did not persist disabled state: ${JSON.stringify(disabledIdentityMapping)}`);
+    }
+
+    const enabledIdentityMapping = runBpaneCli([
+      'identity-mapping',
+      'update',
+      identityMappingId,
+      '--state',
+      'active',
+    ], cliEnv);
+    if (enabledIdentityMapping.state !== 'active') {
+      throw new Error(`CLI identity-mapping update did not re-enable the mapping: ${JSON.stringify(enabledIdentityMapping)}`);
+    }
+
+    const servicePrincipalMapping = runBpaneCli([
+      'identity-mapping',
+      'create',
+      `mcp-bridge-${runLabel}`,
+      '--description',
+      'Operator CLI smoke service-principal project mapping',
+      '--kind',
+      'service_principal',
+      '--issuer',
+      bridge.issuer,
+      '--external-id',
+      bridge.clientId,
+      '--service-principal-id',
+      servicePrincipalId,
+      '--project-id',
+      projectId,
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--label',
+      `run_id=${runLabel}`,
+      '--scope',
+      'session:delegate',
+    ], cliEnv);
+    servicePrincipalMappingId = servicePrincipalMapping.id;
+    if (
+      !servicePrincipalMappingId
+      || servicePrincipalMapping.kind !== 'service_principal'
+      || servicePrincipalMapping.service_principal_id !== servicePrincipalId
+      || servicePrincipalMapping.external_id !== bridge.clientId
+    ) {
+      throw new Error(`CLI service-principal identity mapping returned unexpected data: ${JSON.stringify(servicePrincipalMapping)}`);
     }
 
     const egressProfile = runBpaneCli([
@@ -533,10 +629,15 @@ async function run() {
       || accessReview.resource_counts?.sessions < 1
       || accessReview.resource_counts?.projects < 1
       || accessReview.resource_counts?.service_principals < 1
+      || accessReview.resource_counts?.identity_mappings < 2
       || !Array.isArray(accessReview.projects)
       || !accessReview.projects.some((item) => item.id === projectId)
       || !Array.isArray(accessReview.service_principals)
       || !accessReview.service_principals.some((item) => item.id === servicePrincipalId && item.delegated_session_count >= 1)
+      || !Array.isArray(accessReview.identity_mappings)
+      || !accessReview.identity_mappings.some((item) => item.id === identityMappingId && item.effective_for_principal === true)
+      || !accessReview.identity_mappings.some((item) => item.id === servicePrincipalMappingId)
+      || !Array.isArray(accessReview.unmapped_principal_signals)
       || !Array.isArray(accessReview.delegated_principals)
       || !accessReview.delegated_principals.some((item) => item.client_id === bridge.clientId && item.registered === true)
     ) {

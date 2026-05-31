@@ -19,10 +19,12 @@
     CloneBrowserContextCommand,
     CreateBrowserContextCommand,
     CreateEgressProfileCommand,
+    CreateIdentityMappingCommand,
     CreateSessionCommand,
     EgressDiagnosticsResource,
     EgressProfileResource,
     IdentityAccessReviewResponse,
+    IdentityMappingResource,
     ImportBrowserContextCommand,
     ProjectResource,
     SessionResource,
@@ -98,6 +100,8 @@
     readonly onCreateBrowserContext?: (command: CreateBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onCreateEgressProfile?: (command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void>;
     readonly onUpdateEgressProfile?: (profileId: string, command: CreateEgressProfileCommand) => Promise<EgressProfileResource | void>;
+    readonly onCreateIdentityMapping?: (command: CreateIdentityMappingCommand) => Promise<IdentityMappingResource | void>;
+    readonly onUpdateIdentityMapping?: (mappingId: string, command: CreateIdentityMappingCommand) => Promise<IdentityMappingResource | void>;
     readonly onRunEgressProfileReachabilityProbe?: (profileId: string) => Promise<EgressDiagnosticsResource | void>;
     readonly onCloneBrowserContext?: (contextId: string, command: CloneBrowserContextCommand) => Promise<BrowserContextResource | void>;
     readonly onExportBrowserContext?: (contextId: string) => Promise<void>;
@@ -265,6 +269,8 @@
           loading={props.identityAccessReviewLoading ?? false}
           error={props.identityAccessReviewError ?? null}
           onRefresh={() => void props.onRefreshIdentityAccessReview(true)}
+          onCreateMapping={props.onCreateIdentityMapping}
+          onUpdateMapping={props.onUpdateIdentityMapping}
         />
       {:else if activePanel.id === 'lifecycle'}
         <SessionLifecycleSurface

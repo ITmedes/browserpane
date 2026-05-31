@@ -162,6 +162,109 @@ pub(in crate::session_control) fn validate_service_principal_request(
     Ok(())
 }
 
+pub(in crate::session_control) fn validate_identity_mapping_request(
+    request: &PersistIdentityMappingRequest,
+) -> Result<(), SessionStoreError> {
+    if request.name.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "identity mapping name must not be empty".to_string(),
+        ));
+    }
+    if request.issuer.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "identity mapping issuer must not be empty".to_string(),
+        ));
+    }
+    if request.external_id.trim().is_empty() {
+        return Err(SessionStoreError::InvalidRequest(
+            "identity mapping external_id must not be empty".to_string(),
+        ));
+    }
+    if request.project_id == Uuid::nil() {
+        return Err(SessionStoreError::InvalidRequest(
+            "identity mapping project_id must not be nil".to_string(),
+        ));
+    }
+    if let Some(description) = &request.description {
+        if description.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "identity mapping description must not be empty when provided".to_string(),
+            ));
+        }
+    }
+    for (key, value) in &request.labels {
+        if key.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "identity mapping label keys must not be empty".to_string(),
+            ));
+        }
+        if value.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "identity mapping label values must not be empty".to_string(),
+            ));
+        }
+    }
+    for scope in &request.scopes {
+        if scope.trim().is_empty() {
+            return Err(SessionStoreError::InvalidRequest(
+                "identity mapping scopes must not contain empty values".to_string(),
+            ));
+        }
+    }
+    match request.kind {
+        IdentityMappingKind::Claim => {
+            if request
+                .claim_name
+                .as_ref()
+                .is_none_or(|claim_name| claim_name.trim().is_empty())
+            {
+                return Err(SessionStoreError::InvalidRequest(
+                    "identity mapping claim_name is required for claim mappings".to_string(),
+                ));
+            }
+            if request.service_principal_id.is_some() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "identity mapping service_principal_id is not valid for claim mappings"
+                        .to_string(),
+                ));
+            }
+        }
+        IdentityMappingKind::ServicePrincipal => {
+            if request.service_principal_id.is_none() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "identity mapping service_principal_id is required for service_principal mappings"
+                        .to_string(),
+                ));
+            }
+            if request.claim_name.is_some() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "identity mapping claim_name is not valid for service_principal mappings"
+                        .to_string(),
+                ));
+            }
+        }
+        IdentityMappingKind::User | IdentityMappingKind::Group => {
+            if request.claim_name.is_some() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "identity mapping claim_name is only valid for claim mappings".to_string(),
+                ));
+            }
+            if request.service_principal_id.is_some() {
+                return Err(SessionStoreError::InvalidRequest(
+                    "identity mapping service_principal_id is only valid for service_principal mappings"
+                        .to_string(),
+                ));
+            }
+        }
+    }
+    if request.service_principal_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "identity mapping service_principal_id must not be nil when provided".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 pub(in crate::session_control) fn validate_credential_binding_request(
     request: &PersistCredentialBindingRequest,
 ) -> Result<(), SessionStoreError> {

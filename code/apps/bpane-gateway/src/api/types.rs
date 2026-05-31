@@ -23,11 +23,11 @@ use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectT
 use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig,
     EgressDiagnosticsResource, EgressProfileState, EgressProxyConfig,
-    EgressTrafficObservationConfig, ProjectAdmissionDecision, ProjectQuotas, ProjectState,
-    ServicePrincipalState, SessionConnectInfo, SessionEffectiveEgress, SessionLifecycleState,
-    SessionNetworkIdentity, SessionOwnerMode, SessionProjectResource, SessionRecordingFormat,
-    SessionRecordingMode, SessionResource, SessionStatusSummary, SessionStore,
-    SessionTemplateDefaults,
+    EgressTrafficObservationConfig, IdentityMappingKind, IdentityMappingState,
+    ProjectAdmissionDecision, ProjectQuotas, ProjectState, ServicePrincipalState,
+    SessionConnectInfo, SessionEffectiveEgress, SessionLifecycleState, SessionNetworkIdentity,
+    SessionOwnerMode, SessionProjectResource, SessionRecordingFormat, SessionRecordingMode,
+    SessionResource, SessionStatusSummary, SessionStore, SessionTemplateDefaults,
 };
 use crate::session_files::SessionFileBindingMode;
 use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
@@ -351,6 +351,31 @@ pub(super) struct UpsertServicePrincipalRequest {
 
 fn default_service_principal_state() -> ServicePrincipalState {
     ServicePrincipalState::Active
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpsertIdentityMappingRequest {
+    pub(super) name: String,
+    #[serde(default)]
+    pub(super) description: Option<String>,
+    pub(super) kind: IdentityMappingKind,
+    pub(super) issuer: String,
+    pub(super) external_id: String,
+    #[serde(default)]
+    pub(super) claim_name: Option<String>,
+    #[serde(default)]
+    pub(super) service_principal_id: Option<Uuid>,
+    pub(super) project_id: Uuid,
+    #[serde(default)]
+    pub(super) labels: HashMap<String, String>,
+    #[serde(default)]
+    pub(super) scopes: Vec<String>,
+    #[serde(default = "default_identity_mapping_state")]
+    pub(super) state: IdentityMappingState,
+}
+
+fn default_identity_mapping_state() -> IdentityMappingState {
+    IdentityMappingState::Active
 }
 
 #[derive(Deserialize)]
