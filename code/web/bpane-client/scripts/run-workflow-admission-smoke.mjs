@@ -400,6 +400,11 @@ async function main() {
     };
     console.log(JSON.stringify(summary, null, 2));
   } finally {
+    if (accessToken) {
+      await cleanupWorkflowSmokeSessions(accessToken, options, log).catch((error) => {
+        log(`Cleanup skipped after workflow admission smoke: ${error}`);
+      });
+    }
     if (context) {
       await context.close().catch(() => {});
     }
