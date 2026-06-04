@@ -951,12 +951,24 @@ cd code/web/bpane-client
 export BPANE_API_URL=http://localhost:8932
 export BPANE_ACCESS_TOKEN=<owner bearer token>
 npm run workflow:cli -- workflow list
+npm run workflow:cli -- workflow run create \
+  --workflow-id <workflow-id> \
+  --version v1 \
+  --project-id <project-id> \
+  --create-session \
+  --input-json '{"target_url":"http://web:8080/test-embed.html"}' \
+  --client-request-id <stable-run-key> \
+  --summary
 npm run workflow:cli -- workflow run get <run-id>
+npm run workflow:cli -- workflow run get <run-id> --summary
 npm run workflow:cli -- workflow run cancel <run-id>
-npm run workflow:cli -- workflow run resume <run-id> --comment "approved"
+npm run workflow:cli -- workflow run resume <run-id> --body-json '{"comment":"approved"}'
 ```
 
-The CLI is intentionally thin. It wraps the existing owner-scoped v1 workflow routes rather than introducing a second control-plane contract.
+The CLI is intentionally thin. It wraps the existing owner-scoped v1 workflow
+routes rather than introducing a second control-plane contract. Use
+`--body-json` / `--body-file` for the full API payload, or the ergonomic
+`workflow run create` flags for the common project-scoped local test path.
 
 ### Build, Unit Tests, And Local Smokes
 
