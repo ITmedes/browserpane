@@ -156,6 +156,7 @@ fn derive_session_runtime_state(
         SessionLifecycleState::Released => SessionRuntimeState::Released,
         SessionLifecycleState::Stopping => SessionRuntimeState::Stopping,
         SessionLifecycleState::Starting => SessionRuntimeState::Starting,
+        SessionLifecycleState::Queued => SessionRuntimeState::NotStarted,
         SessionLifecycleState::Pending => match runtime_assignment {
             Some(SessionRuntimeAssignmentStatus::Starting) => SessionRuntimeState::Starting,
             Some(SessionRuntimeAssignmentStatus::Ready) => SessionRuntimeState::Running,

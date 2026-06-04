@@ -28,6 +28,7 @@ const PROJECT: ProjectResource = {
   usage: {
     project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
     active_sessions: 0,
+    queued_sessions: 0,
     active_workflow_runs: 0,
     retained_storage_bytes: 0,
     observed_at: '2026-05-31T10:00:00Z',

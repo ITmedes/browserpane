@@ -132,6 +132,30 @@ impl InMemorySessionStore {
         })
     }
 
+    pub(in crate::session_control) async fn count_queued_sessions_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        let count = self
+            .sessions
+            .lock()
+            .await
+            .iter()
+            .filter(|session| {
+                session.project_id == Some(project_id)
+                    && session.owner.subject == principal.subject
+                    && session.owner.issuer == principal.issuer
+                    && session.state == SessionLifecycleState::Queued
+            })
+            .count();
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "queued project session count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
     pub(in crate::session_control) async fn count_active_workflow_runs_for_project(
         &self,
         principal: &AuthenticatedPrincipal,

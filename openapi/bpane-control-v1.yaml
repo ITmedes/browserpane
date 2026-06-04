@@ -3185,6 +3185,7 @@ components:
       enum:
         - pending
         - starting
+        - queued
         - ready
         - active
         - idle
@@ -5570,6 +5571,7 @@ components:
       required:
         - project_id
         - active_sessions
+        - queued_sessions
         - max_active_sessions
         - active_workflow_runs
         - max_active_workflow_runs
@@ -5581,6 +5583,9 @@ components:
           type: string
           format: uuid
         active_sessions:
+          type: integer
+          minimum: 0
+        queued_sessions:
           type: integer
           minimum: 0
         max_active_sessions:

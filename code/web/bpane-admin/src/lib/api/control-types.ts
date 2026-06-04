@@ -137,6 +137,7 @@ export type ProjectPolicy = {
 export type ProjectUsageResource = {
   readonly project_id: string;
   readonly active_sessions: number;
+  readonly queued_sessions: number;
   readonly max_active_sessions?: number | null;
   readonly active_workflow_runs: number;
   readonly max_active_workflow_runs?: number | null;

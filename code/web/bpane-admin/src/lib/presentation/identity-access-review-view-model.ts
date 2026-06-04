@@ -16,6 +16,7 @@ export type IdentityProjectRow = {
   readonly name: string;
   readonly state: string;
   readonly activeSessions: string;
+  readonly queuedSessions: string;
   readonly activeWorkflowRuns: string;
   readonly retainedStorage: string;
   readonly policy: string;
@@ -222,6 +223,7 @@ function projectRow(project: ProjectResource): IdentityProjectRow {
       project.usage.active_sessions,
       project.usage.max_active_sessions,
     ),
+    queuedSessions: String(project.usage.queued_sessions),
     activeWorkflowRuns: quotaLabel(
       project.usage.active_workflow_runs,
       project.usage.max_active_workflow_runs,

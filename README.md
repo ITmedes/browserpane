@@ -343,15 +343,19 @@ labels, lifecycle state, optional quotas such as `max_active_sessions`,
 bindings for allowed session templates and egress profiles, and sanitized usage
 counters. Creating a session or workflow run with `project_id` records the
 admission decision and enforces archived-project checks plus template/egress
-allow-lists before runtime launch; workflow runs also inherit the project from
-their bound session when the request omits `project_id`. Project retained
+allow-lists before runtime launch. Project-scoped sessions that exceed
+`max_active_sessions` are persisted as visible `queued` session resources with
+`active_session_quota_exceeded` admission metadata and are promoted when
+capacity opens; workflow runs also inherit the project from their bound session
+when the request omits `project_id`. Project retained
 storage usage currently counts workflow produced files, completed recording
 artifacts, and uploaded/downloaded session files that are already linked to the
 project, and the gateway rejects new retained artifacts that would exceed the
-project storage quota. Session and workflow-run resources include the project
-summary and admission reason so the admin live view, inspectors, CLI, and API
-clients all show whether work was admitted under project quota, queued by
-project capacity, rejected by project policy, or left owner-scoped.
+project storage quota. Project usage includes active and queued session counts.
+Session and workflow-run resources include the project summary and admission
+reason so the admin live view, inspectors, CLI, and API clients all show
+whether work was admitted under project quota, queued by project capacity,
+rejected by project policy, or left owner-scoped.
 Identity resources expose a sanitized access-review foundation:
 `GET /api/v1/identity/me` returns the current bearer principal as `user`,
 `service_principal`, or `legacy_dev_token`, while
@@ -864,8 +868,8 @@ Current workflow capabilities:
   recording artifacts, and session files
 - external correlation fields on runs (`source_system`, `source_reference`, `client_request_id`)
 - safe idempotent run creation for retried upstream requests
-- durable queued/admission state when BrowserPane worker capacity or project
-  workflow-run quotas are exhausted
+- durable queued/admission state when BrowserPane worker capacity, project
+  session quotas, or project workflow-run quotas are exhausted
 - durable operator intervention state with `submit-input`, `resume`, `reject`, and `cancel`
 - explicit runtime hold/release semantics for paused runs (`live_runtime` vs `profile_restart`)
 - signed outbound workflow lifecycle webhook delivery

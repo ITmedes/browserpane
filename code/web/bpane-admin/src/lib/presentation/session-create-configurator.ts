@@ -488,6 +488,7 @@ export function projectOptionLabel(project: ProjectResource): string {
   const signals = [
     project.state,
     `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
+    project.usage.queued_sessions > 0 ? `queued=${project.usage.queued_sessions}` : null,
     project.usage.max_active_workflow_runs !== null && project.usage.max_active_workflow_runs !== undefined
       ? `workflows=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`
       : null,
@@ -508,6 +509,7 @@ export function projectUsageSummary(project: ProjectResource | null | undefined)
   const facts = [
     `state=${project.state}`,
     `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
+    `queued_sessions=${project.usage.queued_sessions}`,
     `workflow_runs=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`,
     `storage=${usageFraction(project.usage.retained_storage_bytes, project.usage.max_retained_storage_bytes)}`,
     `policy=${projectPolicySummary(project)}`,
