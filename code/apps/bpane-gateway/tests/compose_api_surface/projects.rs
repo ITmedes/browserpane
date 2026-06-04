@@ -369,5 +369,141 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         ));
     }
 
+    exercise_retained_storage_quota(harness).await?;
+
+    Ok(())
+}
+
+async fn exercise_retained_storage_quota(harness: &ComposeHarness) -> Result<()> {
+    let project_name = harness.unique_name("compose-project-storage");
+    let project = harness
+        .post_json(
+            "/api/v1/projects",
+            json!({
+                "name": project_name,
+                "description": "Compose e2e storage quota project",
+                "labels": label_map("projects-storage"),
+                "quotas": {
+                    "max_retained_storage_bytes": 10
+                }
+            }),
+        )
+        .await?;
+    let project_id = json_id(&project, "id")?;
+    if project["usage"]["retained_storage_bytes"] != json!(0)
+        || project["usage"]["max_retained_storage_bytes"] != json!(10)
+    {
+        return Err(anyhow!(
+            "storage project create returned unexpected usage: {project}"
+        ));
+    }
+
+    let session = harness
+        .post_json(
+            "/api/v1/sessions",
+            json!({
+                "project_id": project_id,
+                "recording": {
+                    "mode": "manual",
+                    "format": "webm"
+                },
+                "labels": label_map("projects-storage")
+            }),
+        )
+        .await?;
+    let session_id = json_id(&session, "id")?;
+
+    let first_recording = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/recordings"),
+            json!({}),
+        )
+        .await?;
+    let first_recording_id = json_id(&first_recording, "id")?;
+    let first_artifact =
+        harness.create_compose_visible_file("project-recording.webm", b"12345678")?;
+    let completed = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/recordings/{first_recording_id}/complete"),
+            json!({
+                "source_path": first_artifact.container_path,
+                "mime_type": "video/webm",
+                "bytes": 8,
+                "duration_ms": 1000
+            }),
+        )
+        .await?;
+    if completed["state"] != json!("ready") || completed["bytes"] != json!(8) {
+        return Err(anyhow!(
+            "storage project recording did not complete as expected: {completed}"
+        ));
+    }
+
+    let usage = harness
+        .get_json(&format!("/api/v1/projects/{project_id}/usage"))
+        .await?;
+    if usage["retained_storage_bytes"] != json!(8) {
+        return Err(anyhow!(
+            "project retained storage did not count recording bytes: {usage}"
+        ));
+    }
+
+    let second_recording = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/recordings"),
+            json!({}),
+        )
+        .await?;
+    let second_recording_id = json_id(&second_recording, "id")?;
+    let second_artifact =
+        harness.create_compose_visible_file("project-recording-over.webm", b"123")?;
+    let rejected = harness
+        .post_json_outcome(
+            &format!("/api/v1/sessions/{session_id}/recordings/{second_recording_id}/complete"),
+            json!({
+                "source_path": second_artifact.container_path,
+                "mime_type": "video/webm",
+                "bytes": 3,
+                "duration_ms": 250
+            }),
+        )
+        .await?;
+    if rejected.status != StatusCode::CONFLICT
+        || !rejected.body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("retained_storage_quota_exceeded")
+    {
+        return Err(anyhow!(
+            "project retained-storage quota rejection returned unexpected result {}: {}",
+            rejected.status,
+            rejected.body
+        ));
+    }
+
+    let failed_recording = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/recordings/{second_recording_id}/fail"),
+            json!({
+                "error": "compose retained-storage quota rejection cleanup",
+                "termination_reason": "worker_exit"
+            }),
+        )
+        .await?;
+    if failed_recording["state"] != json!("failed") {
+        return Err(anyhow!(
+            "storage project rejected recording cleanup did not fail recording: {failed_recording}"
+        ));
+    }
+
+    let stopped = harness
+        .delete_json(&format!("/api/v1/sessions/{session_id}"))
+        .await?;
+    if stopped["state"] != json!("stopped") {
+        return Err(anyhow!(
+            "storage project session cleanup did not stop the session"
+        ));
+    }
+
     Ok(())
 }

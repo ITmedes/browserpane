@@ -159,5 +159,15 @@ async fn project_resource(
         .count_active_workflow_runs_for_project(principal, project.id)
         .await
         .map_err(map_session_store_error)?;
-    Ok(project.to_resource(active_sessions, active_workflow_runs, Utc::now()))
+    let retained_storage_bytes = state
+        .session_store
+        .sum_retained_storage_bytes_for_project(principal, project.id)
+        .await
+        .map_err(map_session_store_error)?;
+    Ok(project.to_resource(
+        active_sessions,
+        active_workflow_runs,
+        retained_storage_bytes,
+        Utc::now(),
+    ))
 }

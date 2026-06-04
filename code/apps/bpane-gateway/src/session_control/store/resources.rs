@@ -338,6 +338,25 @@ impl SessionStore {
         }
     }
 
+    pub async fn sum_retained_storage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u64, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .sum_retained_storage_bytes_for_project(principal, project_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .sum_retained_storage_bytes_for_project(principal, project_id)
+                    .await
+            }
+        }
+    }
+
     pub fn validate_browser_context_request(
         request: &PersistBrowserContextRequest,
     ) -> Result<(), SessionStoreError> {

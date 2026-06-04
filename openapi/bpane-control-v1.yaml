@@ -5549,6 +5549,7 @@ components:
           format: int64
           minimum: 1
           nullable: true
+          description: Maximum retained bytes for project-linked workflow produced files, completed recording artifacts, and session files. Null means unbounded.
     ProjectPolicy:
       type: object
       additionalProperties: false
@@ -5597,11 +5598,13 @@ components:
           type: integer
           format: int64
           minimum: 0
+          description: Retained bytes currently counted from project-linked workflow produced files, completed recording artifacts, and session files.
         max_retained_storage_bytes:
           type: integer
           format: int64
           minimum: 1
           nullable: true
+          description: Configured retained-storage quota for the currently counted project artifact classes. Null means unbounded.
         observed_at:
           type: string
           format: date-time

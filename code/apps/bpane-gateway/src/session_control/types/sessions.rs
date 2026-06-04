@@ -769,6 +769,7 @@ impl StoredProject {
         &self,
         active_sessions: u32,
         active_workflow_runs: u32,
+        retained_storage_bytes: u64,
         observed_at: DateTime<Utc>,
     ) -> ProjectUsageResource {
         ProjectUsageResource {
@@ -777,7 +778,7 @@ impl StoredProject {
             max_active_sessions: self.quotas.max_active_sessions,
             active_workflow_runs,
             max_active_workflow_runs: self.quotas.max_active_workflow_runs,
-            retained_storage_bytes: 0,
+            retained_storage_bytes,
             max_retained_storage_bytes: self.quotas.max_retained_storage_bytes,
             observed_at,
         }
@@ -787,6 +788,7 @@ impl StoredProject {
         &self,
         active_sessions: u32,
         active_workflow_runs: u32,
+        retained_storage_bytes: u64,
         observed_at: DateTime<Utc>,
     ) -> ProjectResource {
         ProjectResource {
@@ -797,7 +799,12 @@ impl StoredProject {
             quotas: self.quotas.clone(),
             policy: self.policy.clone(),
             state: self.state,
-            usage: self.usage(active_sessions, active_workflow_runs, observed_at),
+            usage: self.usage(
+                active_sessions,
+                active_workflow_runs,
+                retained_storage_bytes,
+                observed_at,
+            ),
             created_at: self.created_at,
             updated_at: self.updated_at,
         }

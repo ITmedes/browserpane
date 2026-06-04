@@ -296,7 +296,7 @@ service.
   - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, optional proxy-auth credential binding reference, bypass, custom CA, and traffic-observation metadata
   - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
-  - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress allow-lists, and project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted
+  - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress allow-lists, project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, and session files
   - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Proxy authentication is secret-backed through owner-scoped credential bindings and is materialized only as a session-local runtime auth file.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
@@ -543,6 +543,10 @@ The workflow layer sits on top of the owner-scoped session APIs.
   quotas with visible queued admission metadata
 - workflow-created sessions pass through the same project template/egress
   policy binding checks as direct session creates before runtime launch
+- project retained-storage usage includes workflow produced files, completed
+  recording artifacts, and uploaded/downloaded session files linked through the
+  project session or run; broader workspace and reusable-context storage
+  ownership remains a follow-up
 - run resources expose `admission`, `intervention`, and `runtime` subresources so external systems can reason about backpressure, operator handoff, and resume mode
 - runs can bind reusable file workspace inputs, Vault-backed credential bindings, and approved extensions
 - the current execution model is Playwright-first, but the control-plane contract is executor-oriented rather than CDP-specific
@@ -834,11 +838,12 @@ more custom code and therefore more surface area for bugs.
 
 - **Production operations are still limited.** The gateway now has a durable
   owner-scoped control plane, project-scoped active-session admission,
+  project-scoped workflow-run admission and partial retained-storage quotas,
   docker-backed runtime assignments, and profile-backed reconnect/release
   semantics. It is still not an HA production control plane: project queueing,
-  cross-resource project quotas, backup/restore, zero-downtime upgrades,
-  multi-node runtime scheduling, and full enterprise governance remain future
-  work.
+  remaining cross-resource project quotas, backup/restore, zero-downtime
+  upgrades, multi-node runtime scheduling, and full enterprise governance remain
+  future work.
 
 - **No end-to-end testing of the visual pipeline.** The protocol has unit tests
   and integration tests for framing. The tile compositor has unit tests. But

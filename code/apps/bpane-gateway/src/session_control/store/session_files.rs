@@ -6,6 +6,19 @@ impl SessionStore {
         request: PersistSessionFileRequest,
     ) -> Result<StoredSessionFile, SessionStoreError> {
         validate_session_file_request(&request)?;
+        if let Some(session) = self.get_session_by_id(request.session_id).await? {
+            if let Some(project_id) = session.project_id {
+                let owner = AuthenticatedPrincipal {
+                    subject: session.owner.subject,
+                    issuer: session.owner.issuer,
+                    display_name: session.owner.display_name,
+                    client_id: None,
+                    safe_claims: Default::default(),
+                };
+                self.enforce_project_retained_storage_quota(&owner, project_id, request.byte_count)
+                    .await?;
+            }
+        }
         match &self.backend {
             SessionStoreBackend::InMemory(store) => store.record_session_file(request).await,
             SessionStoreBackend::Postgres(store) => store.record_session_file(request).await,

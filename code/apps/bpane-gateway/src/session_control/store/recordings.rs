@@ -132,6 +132,36 @@ impl SessionStore {
         request: PersistCompletedSessionRecordingRequest,
     ) -> Result<Option<StoredSessionRecording>, SessionStoreError> {
         validate_persist_completed_recording_request(&request)?;
+        if let Some(session) = self.get_session_by_id(session_id).await? {
+            if let Some(project_id) = session.project_id {
+                if self
+                    .get_recording_for_session(session_id, recording_id)
+                    .await?
+                    .is_some_and(|recording| recording.state.is_active())
+                {
+                    let owner = AuthenticatedPrincipal {
+                        subject: session.owner.subject,
+                        issuer: session.owner.issuer,
+                        display_name: session.owner.display_name,
+                        client_id: None,
+                        safe_claims: Default::default(),
+                    };
+                    if let Some(bytes) = request.bytes {
+                        self.enforce_project_retained_storage_quota(&owner, project_id, bytes)
+                            .await?;
+                    } else if self
+                        .get_project_for_owner(&owner, project_id)
+                        .await?
+                        .and_then(|project| project.quotas.max_retained_storage_bytes)
+                        .is_some()
+                    {
+                        return Err(SessionStoreError::InvalidRequest(format!(
+                            "retained_storage_byte_count_required: project {project_id} has a retained storage quota, so recording completion must include bytes"
+                        )));
+                    }
+                }
+            }
+        }
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store
