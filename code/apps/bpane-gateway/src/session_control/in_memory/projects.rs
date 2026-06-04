@@ -156,6 +156,29 @@ impl InMemorySessionStore {
         })
     }
 
+    pub(in crate::session_control) async fn count_session_creations_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        let count = self
+            .sessions
+            .lock()
+            .await
+            .iter()
+            .filter(|session| {
+                session.project_id == Some(project_id)
+                    && session.owner.subject == principal.subject
+                    && session.owner.issuer == principal.issuer
+            })
+            .count();
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "project session creation count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
     pub(in crate::session_control) async fn count_active_workflow_runs_for_project(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -178,6 +201,79 @@ impl InMemorySessionStore {
                 "active project workflow run count exceeded u32 range: {error}"
             ))
         })
+    }
+
+    pub(in crate::session_control) async fn sum_runtime_usage_ms_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+        observed_at: DateTime<Utc>,
+    ) -> Result<u64, SessionStoreError> {
+        self.sessions
+            .lock()
+            .await
+            .iter()
+            .filter(|session| {
+                session.project_id == Some(project_id)
+                    && session.owner.subject == principal.subject
+                    && session.owner.issuer == principal.issuer
+            })
+            .try_fold(0_u64, |total, session| {
+                let live_runtime_ms = if session.state.is_runtime_candidate() {
+                    session
+                        .runtime_started_at
+                        .map(|started_at| {
+                            observed_at
+                                .signed_duration_since(started_at)
+                                .num_milliseconds()
+                                .max(0) as u64
+                        })
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
+                total
+                    .checked_add(session.runtime_usage_ms)
+                    .and_then(|value| value.checked_add(live_runtime_ms))
+                    .ok_or_else(|| {
+                        SessionStoreError::Backend(
+                            "project runtime usage milliseconds exceeded u64 range".to_string(),
+                        )
+                    })
+            })
+    }
+
+    pub(in crate::session_control) async fn sum_egress_usage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<(u64, u64), SessionStoreError> {
+        self.sessions
+            .lock()
+            .await
+            .iter()
+            .filter(|session| {
+                session.project_id == Some(project_id)
+                    && session.owner.subject == principal.subject
+                    && session.owner.issuer == principal.issuer
+            })
+            .try_fold((0_u64, 0_u64), |(rx_total, tx_total), session| {
+                let rx_total = rx_total
+                    .checked_add(session.egress_rx_bytes)
+                    .ok_or_else(|| {
+                        SessionStoreError::Backend(
+                            "project egress receive byte count exceeded u64 range".to_string(),
+                        )
+                    })?;
+                let tx_total = tx_total
+                    .checked_add(session.egress_tx_bytes)
+                    .ok_or_else(|| {
+                        SessionStoreError::Backend(
+                            "project egress transmit byte count exceeded u64 range".to_string(),
+                        )
+                    })?;
+                Ok((rx_total, tx_total))
+            })
     }
 
     pub(in crate::session_control) async fn sum_retained_storage_bytes_for_project(

@@ -117,9 +117,14 @@ const PROJECT = {
     project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
     active_sessions: 1,
     queued_sessions: 0,
+    session_creations: 7,
     max_active_sessions: 2,
     active_workflow_runs: 1,
     max_active_workflow_runs: 4,
+    runtime_usage_ms: 7200000,
+    egress_rx_bytes: 1048576,
+    egress_tx_bytes: 1048576,
+    egress_total_bytes: 2097152,
     retained_storage_bytes: 268435456,
     max_retained_storage_bytes: 1073741824,
     observed_at: '2026-05-04T18:50:00Z',
@@ -263,9 +268,9 @@ describe('session create configurator', () => {
       owner_mode: 'collaborative',
     });
     expect(validation.preview).toContain('"project_id"');
-    expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, workflows=1/4, templates=1, egress=1)');
+    expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, created=7, workflows=1/4, runtime=2h, egress_bytes=2MiB, templates=1, egress=1)');
     expect(projectUsageSummary(PROJECT)).toBe(
-      'state=active | sessions=1/2 | queued_sessions=0 | workflow_runs=1/4 | storage=268435456/1073741824 | policy=1 templates,1 egress profiles | labels=tenant=support',
+      'state=active | sessions=1/2 | queued_sessions=0 | created_sessions=7 | workflow_runs=1/4 | runtime=2h | egress_bytes=2MiB | storage=268435456/1073741824 | policy=1 templates,1 egress profiles | labels=tenant=support',
     );
   });
 

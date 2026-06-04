@@ -30,6 +30,10 @@ const SESSION_COLUMNS: &str = r#"
     created_at,
     updated_at,
     queued_at,
+    runtime_started_at,
+    runtime_usage_ms,
+    egress_rx_bytes,
+    egress_tx_bytes,
     runtime_released_at,
     stopped_at
 "#;

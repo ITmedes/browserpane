@@ -149,6 +149,7 @@ async fn project_resource(
     principal: &AuthenticatedPrincipal,
     project: &StoredProject,
 ) -> Result<ProjectResource, (StatusCode, Json<ErrorResponse>)> {
+    let observed_at = Utc::now();
     let active_sessions = state
         .session_store
         .count_active_sessions_for_project(principal, project.id)
@@ -159,9 +160,24 @@ async fn project_resource(
         .count_queued_sessions_for_project(principal, project.id)
         .await
         .map_err(map_session_store_error)?;
+    let session_creations = state
+        .session_store
+        .count_session_creations_for_project(principal, project.id)
+        .await
+        .map_err(map_session_store_error)?;
     let active_workflow_runs = state
         .session_store
         .count_active_workflow_runs_for_project(principal, project.id)
+        .await
+        .map_err(map_session_store_error)?;
+    let runtime_usage_ms = state
+        .session_store
+        .sum_runtime_usage_ms_for_project(principal, project.id, observed_at)
+        .await
+        .map_err(map_session_store_error)?;
+    let (egress_rx_bytes, egress_tx_bytes) = state
+        .session_store
+        .sum_egress_usage_bytes_for_project(principal, project.id)
         .await
         .map_err(map_session_store_error)?;
     let retained_storage_bytes = state
@@ -172,8 +188,12 @@ async fn project_resource(
     Ok(project.to_resource(
         active_sessions,
         queued_sessions,
+        session_creations,
         active_workflow_runs,
+        runtime_usage_ms,
+        egress_rx_bytes,
+        egress_tx_bytes,
         retained_storage_bytes,
-        Utc::now(),
+        observed_at,
     ))
 }

@@ -614,6 +614,10 @@ function toProjectUsage(value: unknown): ProjectUsageResource {
       object.queued_sessions,
       'project usage queued_sessions',
     ) ?? 0,
+    session_creations: optionalNumber(
+      object.session_creations,
+      'project usage session_creations',
+    ) ?? 0,
     max_active_sessions: optionalNumber(
       object.max_active_sessions,
       'project usage max_active_sessions',
@@ -626,6 +630,22 @@ function toProjectUsage(value: unknown): ProjectUsageResource {
       object.max_active_workflow_runs,
       'project usage max_active_workflow_runs',
     ) ?? null,
+    runtime_usage_ms: optionalNumber(
+      object.runtime_usage_ms,
+      'project usage runtime_usage_ms',
+    ) ?? 0,
+    egress_rx_bytes: optionalNumber(
+      object.egress_rx_bytes,
+      'project usage egress_rx_bytes',
+    ) ?? 0,
+    egress_tx_bytes: optionalNumber(
+      object.egress_tx_bytes,
+      'project usage egress_tx_bytes',
+    ) ?? 0,
+    egress_total_bytes: optionalNumber(
+      object.egress_total_bytes,
+      'project usage egress_total_bytes',
+    ) ?? 0,
     retained_storage_bytes: expectNumber(
       object.retained_storage_bytes,
       'project usage retained_storage_bytes',

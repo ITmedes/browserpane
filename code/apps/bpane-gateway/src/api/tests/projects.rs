@@ -56,7 +56,13 @@ async fn manages_projects_and_reports_usage() {
     assert_eq!(project["name"], "support");
     assert_eq!(project["state"], "active");
     assert_eq!(project["usage"]["active_sessions"], 0);
+    assert_eq!(project["usage"]["queued_sessions"], 0);
+    assert_eq!(project["usage"]["session_creations"], 0);
     assert_eq!(project["usage"]["max_active_sessions"], 1);
+    assert_eq!(project["usage"]["runtime_usage_ms"], 0);
+    assert_eq!(project["usage"]["egress_rx_bytes"], 0);
+    assert_eq!(project["usage"]["egress_tx_bytes"], 0);
+    assert_eq!(project["usage"]["egress_total_bytes"], 0);
     assert_eq!(project["usage"]["retained_storage_bytes"], 0);
     assert_eq!(project["usage"]["max_retained_storage_bytes"], 1048576);
 
@@ -117,6 +123,10 @@ async fn manages_projects_and_reports_usage() {
     let usage = response_json(usage).await;
     assert_eq!(usage["project_id"], project_id);
     assert_eq!(usage["active_sessions"], 0);
+    assert_eq!(usage["queued_sessions"], 0);
+    assert_eq!(usage["session_creations"], 0);
+    assert_eq!(usage["runtime_usage_ms"], 0);
+    assert_eq!(usage["egress_total_bytes"], 0);
     assert_eq!(usage["retained_storage_bytes"], 0);
 }
 
@@ -675,6 +685,11 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
     .await;
     assert_eq!(usage["active_sessions"], 1);
     assert_eq!(usage["queued_sessions"], 1);
+    assert_eq!(usage["session_creations"], 2);
+    assert!(usage["runtime_usage_ms"].as_u64().is_some());
+    assert_eq!(usage["egress_rx_bytes"], 0);
+    assert_eq!(usage["egress_tx_bytes"], 0);
+    assert_eq!(usage["egress_total_bytes"], 0);
 
     let stopped = app
         .clone()

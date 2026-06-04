@@ -378,6 +378,10 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         created_at: now,
         updated_at: now,
         queued_at: None,
+        runtime_started_at: Some(now),
+        runtime_usage_ms: 0,
+        egress_rx_bytes: 0,
+        egress_tx_bytes: 0,
         runtime_released_at: None,
         stopped_at: None,
     };

@@ -52,6 +52,23 @@ async fn in_memory_store_reports_and_enforces_project_retained_storage() {
         )
         .await
         .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+
+    let session_creations = store
+        .count_session_creations_for_project(&owner, project.id)
+        .await
+        .unwrap();
+    assert_eq!(session_creations, 1);
+    let runtime_usage_ms = store
+        .sum_runtime_usage_ms_for_project(&owner, project.id, Utc::now())
+        .await
+        .unwrap();
+    assert!(runtime_usage_ms > 0);
+    let egress_usage_bytes = store
+        .sum_egress_usage_bytes_for_project(&owner, project.id)
+        .await
+        .unwrap();
+    assert_eq!(egress_usage_bytes, (0, 0));
 
     store
         .record_session_file(PersistSessionFileRequest {

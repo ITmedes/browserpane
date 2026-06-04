@@ -349,11 +349,14 @@ allow-lists before runtime launch. Project-scoped sessions that exceed
 current dispatch blocker, and an explicit queued-session cancel operation.
 Queued sessions are promoted when capacity opens; workflow runs also inherit
 the project from their bound session when the request omits `project_id`.
-Project retained
-storage usage currently counts workflow produced files, completed recording
-artifacts, and uploaded/downloaded session files that are already linked to the
-project, and the gateway rejects new retained artifacts that would exceed the
-project storage quota. Project usage includes active and queued session counts.
+Project usage includes active and queued session counts, total session
+creations, live-plus-finalized browser runtime milliseconds, sanitized egress
+receive/transmit byte counters, and retained storage. Retained storage currently
+counts workflow produced files, completed recording artifacts, and
+uploaded/downloaded session files that are already linked to the project, and
+the gateway rejects new retained artifacts that would exceed the project storage
+quota. Egress byte counters are intentionally metadata-only until an attached
+proxy or secure web gateway reports authoritative traffic totals.
 Session and workflow-run resources include the project summary and admission
 reason so the admin live view, inspectors, CLI, and API clients all show
 whether work was admitted under project quota, queued by project capacity,
