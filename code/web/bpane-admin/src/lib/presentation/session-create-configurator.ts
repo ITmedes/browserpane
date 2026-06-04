@@ -489,9 +489,12 @@ export function projectOptionLabel(project: ProjectResource): string {
     project.state,
     `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
     project.usage.queued_sessions > 0 ? `queued=${project.usage.queued_sessions}` : null,
+    project.usage.session_creations > 0 ? `created=${project.usage.session_creations}` : null,
     project.usage.max_active_workflow_runs !== null && project.usage.max_active_workflow_runs !== undefined
       ? `workflows=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`
       : null,
+    project.usage.runtime_usage_ms > 0 ? `runtime=${formatDurationMs(project.usage.runtime_usage_ms)}` : null,
+    project.usage.egress_total_bytes > 0 ? `egress_bytes=${formatBytes(project.usage.egress_total_bytes)}` : null,
     project.policy.allowed_session_template_ids.length > 0
       ? `templates=${project.policy.allowed_session_template_ids.length}`
       : null,
@@ -510,7 +513,10 @@ export function projectUsageSummary(project: ProjectResource | null | undefined)
     `state=${project.state}`,
     `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
     `queued_sessions=${project.usage.queued_sessions}`,
+    `created_sessions=${project.usage.session_creations}`,
     `workflow_runs=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`,
+    `runtime=${formatDurationMs(project.usage.runtime_usage_ms)}`,
+    `egress_bytes=${formatBytes(project.usage.egress_total_bytes)}`,
     `storage=${usageFraction(project.usage.retained_storage_bytes, project.usage.max_retained_storage_bytes)}`,
     `policy=${projectPolicySummary(project)}`,
   ];
@@ -629,6 +635,9 @@ function parseMaxProfileStorageMb(value: string, errors: string[]): number | und
 }
 
 function formatBytes(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0B';
+  }
   if (value % (1024 * 1024 * 1024) === 0) {
     const gib = value / (1024 * 1024 * 1024);
     return `${gib}GiB`;
@@ -656,6 +665,26 @@ function formatDuration(seconds: number): string {
   if (seconds % 3600 === 0) {
     const hours = seconds / 3600;
     return `${hours}h`;
+  }
+  return `${seconds}s`;
+}
+
+function formatDurationMs(milliseconds: number): string {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    return '0s';
+  }
+  const seconds = Math.floor(milliseconds / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  if (seconds % 86400 === 0) {
+    return `${seconds / 86400}d`;
+  }
+  if (seconds % 3600 === 0) {
+    return `${seconds / 3600}h`;
+  }
+  if (seconds % 60 === 0) {
+    return `${seconds / 60}m`;
   }
   return `${seconds}s`;
 }

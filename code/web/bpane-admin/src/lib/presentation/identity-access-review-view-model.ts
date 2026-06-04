@@ -17,7 +17,10 @@ export type IdentityProjectRow = {
   readonly state: string;
   readonly activeSessions: string;
   readonly queuedSessions: string;
+  readonly sessionCreations: string;
   readonly activeWorkflowRuns: string;
+  readonly runtimeUsage: string;
+  readonly egressUsage: string;
   readonly retainedStorage: string;
   readonly policy: string;
 };
@@ -224,10 +227,13 @@ function projectRow(project: ProjectResource): IdentityProjectRow {
       project.usage.max_active_sessions,
     ),
     queuedSessions: String(project.usage.queued_sessions),
+    sessionCreations: String(project.usage.session_creations),
     activeWorkflowRuns: quotaLabel(
       project.usage.active_workflow_runs,
       project.usage.max_active_workflow_runs,
     ),
+    runtimeUsage: formatDurationMs(project.usage.runtime_usage_ms),
+    egressUsage: formatBytes(project.usage.egress_total_bytes),
     retainedStorage: storageLabel(
       project.usage.retained_storage_bytes,
       project.usage.max_retained_storage_bytes,
@@ -270,6 +276,26 @@ function formatBytes(value: number): string {
     unitIndex += 1;
   }
   return `${next >= 10 || unitIndex === 0 ? next.toFixed(0) : next.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function formatDurationMs(milliseconds: number): string {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    return '0s';
+  }
+  const seconds = Math.floor(milliseconds / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  if (seconds % 86400 === 0) {
+    return `${seconds / 86400}d`;
+  }
+  if (seconds % 3600 === 0) {
+    return `${seconds / 3600}h`;
+  }
+  if (seconds % 60 === 0) {
+    return `${seconds / 60}m`;
+  }
+  return `${seconds}s`;
 }
 
 function formatDateTime(value: string): string {

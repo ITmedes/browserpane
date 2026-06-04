@@ -118,6 +118,11 @@ impl SessionRepository<'_> {
         } else {
             None
         };
+        let runtime_started_at = if lifecycle_state.is_runtime_candidate() {
+            Some(now)
+        } else {
+            None
+        };
         let labels_value = json_labels(&request.labels);
         let extensions_value = json_applied_extensions(&request.extensions)?;
         let recording_value = json_recording_policy(&request.recording)?;
@@ -157,11 +162,15 @@ impl SessionRepository<'_> {
                 runtime_binding,
                 created_at,
                 updated_at,
-                queued_at
+                queued_at,
+                runtime_started_at,
+                runtime_usage_ms,
+                egress_rx_bytes,
+                egress_tx_bytes
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, $14, $15,
-                $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $21, $22
+                $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $21, $22, $23, 0, 0, 0
             )
             RETURNING
                 {SESSION_COLUMNS}
@@ -193,6 +202,7 @@ impl SessionRepository<'_> {
                     &self.store.config.runtime_binding,
                     &now,
                     &queued_at,
+                    &runtime_started_at,
                 ],
             )
             .await
@@ -298,6 +308,7 @@ impl SessionRepository<'_> {
                             admission = $2::jsonb,
                             updated_at = $3,
                             queued_at = NULL,
+                            runtime_started_at = $3,
                             runtime_released_at = NULL,
                             stopped_at = NULL
                         WHERE id = $1
@@ -347,6 +358,11 @@ impl SessionRepository<'_> {
                 state = 'stopped',
                 updated_at = NOW(),
                 queued_at = NULL,
+                runtime_usage_ms = runtime_usage_ms + CASE
+                    WHEN runtime_started_at IS NULL THEN 0
+                    ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - runtime_started_at)) * 1000))::BIGINT
+                END,
+                runtime_started_at = NULL,
                 stopped_at = COALESCE(stopped_at, NOW())
             WHERE id = $1
               AND owner_subject = $2
@@ -385,6 +401,7 @@ impl SessionRepository<'_> {
                 state = 'stopped',
                 updated_at = NOW(),
                 queued_at = NULL,
+                runtime_started_at = NULL,
                 stopped_at = COALESCE(stopped_at, NOW())
             WHERE id = $1
               AND owner_subject = $2
@@ -436,6 +453,11 @@ impl SessionRepository<'_> {
                 state = 'released',
                 updated_at = NOW(),
                 queued_at = NULL,
+                runtime_usage_ms = runtime_usage_ms + CASE
+                    WHEN runtime_started_at IS NULL THEN 0
+                    ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - runtime_started_at)) * 1000))::BIGINT
+                END,
+                runtime_started_at = NULL,
                 runtime_released_at = NOW(),
                 stopped_at = NULL
             WHERE id = $1
@@ -509,6 +531,11 @@ impl SessionRepository<'_> {
                 state = 'stopped',
                 updated_at = NOW(),
                 queued_at = NULL,
+                runtime_usage_ms = runtime_usage_ms + CASE
+                    WHEN runtime_started_at IS NULL THEN 0
+                    ELSE GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - runtime_started_at)) * 1000))::BIGINT
+                END,
+                runtime_started_at = NULL,
                 stopped_at = COALESCE(stopped_at, NOW())
             WHERE id = $1
               AND state IN ('ready', 'idle')
@@ -647,7 +674,8 @@ impl SessionRepository<'_> {
                             state = 'queued',
                             admission = $2::jsonb,
                             updated_at = $3,
-                            queued_at = $3
+                            queued_at = $3,
+                            runtime_started_at = NULL
                         WHERE id = $1
                         RETURNING
                             {SESSION_COLUMNS}
@@ -691,6 +719,7 @@ impl SessionRepository<'_> {
                 admission = COALESCE($2::jsonb, admission),
                 updated_at = NOW(),
                 queued_at = NULL,
+                runtime_started_at = NOW(),
                 runtime_released_at = COALESCE(stopped_at, runtime_released_at, NOW()),
                 stopped_at = NULL
             WHERE id = $1

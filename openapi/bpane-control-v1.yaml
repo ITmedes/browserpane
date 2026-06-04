@@ -5638,9 +5638,14 @@ components:
         - project_id
         - active_sessions
         - queued_sessions
+        - session_creations
         - max_active_sessions
         - active_workflow_runs
         - max_active_workflow_runs
+        - runtime_usage_ms
+        - egress_rx_bytes
+        - egress_tx_bytes
+        - egress_total_bytes
         - retained_storage_bytes
         - max_retained_storage_bytes
         - observed_at
@@ -5654,6 +5659,9 @@ components:
         queued_sessions:
           type: integer
           minimum: 0
+        session_creations:
+          type: integer
+          minimum: 0
         max_active_sessions:
           type: integer
           minimum: 1
@@ -5665,6 +5673,26 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        runtime_usage_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Aggregated browser runtime duration for sessions in this project. Live sessions include elapsed runtime through observed_at.
+        egress_rx_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Sanitized receive byte counter reported by egress observers for sessions in this project.
+        egress_tx_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Sanitized transmit byte counter reported by egress observers for sessions in this project.
+        egress_total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Sum of egress_rx_bytes and egress_tx_bytes.
         retained_storage_bytes:
           type: integer
           format: int64

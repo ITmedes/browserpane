@@ -338,6 +338,25 @@ impl SessionStore {
         }
     }
 
+    pub async fn count_session_creations_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .count_session_creations_for_project(principal, project_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .count_session_creations_for_project(principal, project_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn count_active_workflow_runs_for_project(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -352,6 +371,45 @@ impl SessionStore {
             SessionStoreBackend::Postgres(store) => {
                 store
                     .count_active_workflow_runs_for_project(principal, project_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn sum_runtime_usage_ms_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+        observed_at: DateTime<Utc>,
+    ) -> Result<u64, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .sum_runtime_usage_ms_for_project(principal, project_id, observed_at)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .sum_runtime_usage_ms_for_project(principal, project_id, observed_at)
+                    .await
+            }
+        }
+    }
+
+    pub async fn sum_egress_usage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<(u64, u64), SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .sum_egress_usage_bytes_for_project(principal, project_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .sum_egress_usage_bytes_for_project(principal, project_id)
                     .await
             }
         }

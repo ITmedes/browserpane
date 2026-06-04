@@ -479,7 +479,10 @@
               <div class="mt-3 grid grid-cols-4 gap-2 max-[900px]:grid-cols-2 max-[760px]:grid-cols-1">
                 <span class="text-xs font-bold text-admin-ink/58">Sessions <strong class="block text-admin-ink">{project.activeSessions}</strong></span>
                 <span class="text-xs font-bold text-admin-ink/58">Queued <strong class="block text-admin-ink">{project.queuedSessions}</strong></span>
+                <span class="text-xs font-bold text-admin-ink/58">Created <strong class="block text-admin-ink">{project.sessionCreations}</strong></span>
                 <span class="text-xs font-bold text-admin-ink/58">Workflows <strong class="block text-admin-ink">{project.activeWorkflowRuns}</strong></span>
+                <span class="text-xs font-bold text-admin-ink/58">Runtime <strong class="block text-admin-ink">{project.runtimeUsage}</strong></span>
+                <span class="text-xs font-bold text-admin-ink/58">Egress <strong class="block text-admin-ink">{project.egressUsage}</strong></span>
                 <span class="text-xs font-bold text-admin-ink/58">Storage <strong class="block text-admin-ink">{project.retainedStorage}</strong></span>
                 <span class="text-xs font-bold text-admin-ink/58">Policy <strong class="block text-admin-ink">{project.policy}</strong></span>
               </div>

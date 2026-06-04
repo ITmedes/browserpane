@@ -138,9 +138,14 @@ export type ProjectUsageResource = {
   readonly project_id: string;
   readonly active_sessions: number;
   readonly queued_sessions: number;
+  readonly session_creations: number;
   readonly max_active_sessions?: number | null;
   readonly active_workflow_runs: number;
   readonly max_active_workflow_runs?: number | null;
+  readonly runtime_usage_ms: number;
+  readonly egress_rx_bytes: number;
+  readonly egress_tx_bytes: number;
+  readonly egress_total_bytes: number;
   readonly retained_storage_bytes: number;
   readonly max_retained_storage_bytes?: number | null;
   readonly observed_at: string;

@@ -118,9 +118,15 @@ const PROJECT = {
   usage: {
     project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
     active_sessions: 1,
+    queued_sessions: 0,
+    session_creations: 5,
     max_active_sessions: 2,
     active_workflow_runs: 1,
     max_active_workflow_runs: 4,
+    runtime_usage_ms: 3600000,
+    egress_rx_bytes: 1024,
+    egress_tx_bytes: 2048,
+    egress_total_bytes: 3072,
     retained_storage_bytes: 268435456,
     max_retained_storage_bytes: 1073741824,
     observed_at: '2026-05-04T18:50:00Z',
@@ -608,7 +614,10 @@ describe('ControlClient', () => {
       name: 'Support tenant',
       usage: {
         active_sessions: 1,
+        session_creations: 5,
         max_active_sessions: 2,
+        runtime_usage_ms: 3600000,
+        egress_total_bytes: 3072,
       },
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(

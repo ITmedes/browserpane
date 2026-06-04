@@ -108,9 +108,21 @@ fn promote_queued_project_sessions(
         );
         session.updated_at = now;
         session.queued_at = None;
+        session.runtime_started_at = Some(now);
         session.runtime_released_at = None;
         session.stopped_at = None;
     }
+}
+
+fn finalize_runtime_usage(session: &mut StoredSession, now: chrono::DateTime<Utc>) {
+    let Some(started_at) = session.runtime_started_at.take() else {
+        return;
+    };
+    let elapsed_ms = now
+        .signed_duration_since(started_at)
+        .num_milliseconds()
+        .max(0) as u64;
+    session.runtime_usage_ms = session.runtime_usage_ms.saturating_add(elapsed_ms);
 }
 
 impl InMemorySessionStore {
@@ -225,6 +237,11 @@ impl InMemorySessionStore {
         } else {
             None
         };
+        let runtime_started_at = if lifecycle_state.is_runtime_candidate() {
+            Some(now)
+        } else {
+            None
+        };
         let session = StoredSession {
             id: Uuid::now_v7(),
             state: lifecycle_state,
@@ -252,6 +269,10 @@ impl InMemorySessionStore {
             created_at: now,
             updated_at: now,
             queued_at,
+            runtime_started_at,
+            runtime_usage_ms: 0,
+            egress_rx_bytes: 0,
+            egress_tx_bytes: 0,
             runtime_released_at: None,
             stopped_at: None,
         };
@@ -341,9 +362,12 @@ impl InMemorySessionStore {
         };
 
         if session.state != SessionLifecycleState::Stopped {
+            let now = Utc::now();
+            finalize_runtime_usage(session, now);
             session.state = SessionLifecycleState::Stopped;
-            session.updated_at = Utc::now();
+            session.updated_at = now;
             session.queued_at = None;
+            session.runtime_started_at = None;
             session.stopped_at = Some(session.updated_at);
         }
 
@@ -382,6 +406,7 @@ impl InMemorySessionStore {
         session.state = SessionLifecycleState::Stopped;
         session.updated_at = Utc::now();
         session.queued_at = None;
+        session.runtime_started_at = None;
         session.stopped_at = Some(session.updated_at);
         Ok(Some(session.clone()))
     }
@@ -413,9 +438,12 @@ impl InMemorySessionStore {
             )));
         }
 
+        let now = Utc::now();
+        finalize_runtime_usage(session, now);
         session.state = SessionLifecycleState::Released;
-        session.updated_at = Utc::now();
+        session.updated_at = now;
         session.queued_at = None;
+        session.runtime_started_at = None;
         session.runtime_released_at = Some(session.updated_at);
         session.stopped_at = None;
         let released = session.clone();
@@ -468,9 +496,12 @@ impl InMemorySessionStore {
             return Ok(Some(session.clone()));
         }
 
+        let now = Utc::now();
+        finalize_runtime_usage(session, now);
         session.state = SessionLifecycleState::Stopped;
-        session.updated_at = Utc::now();
+        session.updated_at = now;
         session.queued_at = None;
+        session.runtime_started_at = None;
         session.stopped_at = Some(session.updated_at);
         let stopped = session.clone();
         let now = Utc::now();
@@ -554,6 +585,7 @@ impl InMemorySessionStore {
                     );
                     session.updated_at = now;
                     session.queued_at = Some(now);
+                    session.runtime_started_at = None;
                     return Ok(Some(session.clone()));
                 }
             }
@@ -575,6 +607,7 @@ impl InMemorySessionStore {
         session.state = SessionLifecycleState::Ready;
         session.updated_at = Utc::now();
         session.queued_at = None;
+        session.runtime_started_at = Some(session.updated_at);
         session.stopped_at = None;
         if let Some(admission) = project_admission {
             session.admission = admission;
