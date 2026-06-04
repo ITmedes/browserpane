@@ -405,6 +405,18 @@ async fn validate_session_browser_context(
             }),
         ));
     }
+    if let Some(context_project_id) = context.project_id {
+        if request.project_id != Some(context_project_id) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "browser context {context_id} belongs to project {context_project_id} and requires a matching session project_id"
+                    ),
+                }),
+            ));
+        }
+    }
     Ok(Some(context))
 }
 

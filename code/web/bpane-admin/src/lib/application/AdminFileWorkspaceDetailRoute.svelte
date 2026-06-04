@@ -144,6 +144,16 @@
     return value ? new Date(value).toLocaleString() : 'not refreshed';
   }
 
+  function workspaceProjectLabel(value: FileWorkspaceResource): string {
+    if (value.project?.name) {
+      return `${value.project.name} (${value.project.state})`;
+    }
+    if (value.project_id) {
+      return value.project_id;
+    }
+    return 'Owner scope';
+  }
+
   function errorMessage(value: unknown, fallback: string): string {
     return value instanceof Error ? value.message : fallback;
   }
@@ -196,6 +206,7 @@
         <div class="grid gap-2 text-sm text-admin-ink/72 md:grid-cols-2">
           <span class="[overflow-wrap:anywhere]"><strong>Workspace id:</strong> <code class="admin-code-pill">{workspace.id}</code></span>
           <span><strong>Files:</strong> {files.length}</span>
+          <span><strong>Project:</strong> {workspaceProjectLabel(workspace)}</span>
           <span><strong>Description:</strong> {workspace.description ?? 'No description available.'}</span>
           <span><strong>Updated:</strong> {formatDate(workspace.updated_at)}</span>
         </div>

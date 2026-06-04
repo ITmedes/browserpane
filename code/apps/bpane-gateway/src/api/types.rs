@@ -94,6 +94,7 @@ pub(super) const BROWSER_CONTEXT_LABELS_HEADER: &str = "x-bpane-browser-context-
 pub(super) const BROWSER_CONTEXT_MAX_PROFILE_STORAGE_BYTES_HEADER: &str =
     "x-bpane-browser-context-max-profile-storage-bytes";
 pub(super) const BROWSER_CONTEXT_NAME_HEADER: &str = "x-bpane-browser-context-name";
+pub(super) const BROWSER_CONTEXT_PROJECT_ID_HEADER: &str = "x-bpane-browser-context-project-id";
 pub(super) const BROWSER_CONTEXT_RETENTION_SEC_HEADER: &str =
     "x-bpane-browser-context-retention-sec";
 pub(super) const FILE_WORKSPACE_FILE_NAME_HEADER: &str = "x-bpane-file-name";
@@ -301,6 +302,8 @@ pub(super) struct WorkflowRunProducedFileListResponse {
 pub(super) struct CreateFileWorkspaceRequest {
     pub(super) name: String,
     #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
+    #[serde(default)]
     pub(super) description: Option<String>,
     #[serde(default)]
     pub(super) labels: HashMap<String, String>,
@@ -425,6 +428,8 @@ pub(super) struct RunEgressProfileReachabilityProbeRequest {
 pub(super) struct CreateBrowserContextRequest {
     pub(super) name: String,
     #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
+    #[serde(default)]
     pub(super) description: Option<String>,
     #[serde(default)]
     pub(super) labels: HashMap<String, String>,
@@ -439,6 +444,8 @@ pub(super) struct CreateBrowserContextRequest {
 #[derive(Deserialize)]
 pub(super) struct CloneBrowserContextRequest {
     pub(super) name: String,
+    #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
     #[serde(default)]
     pub(super) description: Option<String>,
     #[serde(default)]

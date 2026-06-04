@@ -6,6 +6,7 @@ export type BrowserContextCatalogRowViewModel = {
   readonly shortId: string;
   readonly name: string;
   readonly description: string;
+  readonly project: string;
   readonly labels: string;
   readonly persistence: string;
   readonly state: string;
@@ -143,6 +144,7 @@ function toRow(context: BrowserContextResource, usage: ContextUsage): BrowserCon
     shortId: shortId(context.id),
     name: context.name,
     description: context.description ?? 'No description available.',
+    project: projectSummary(context),
     labels: labelSummary(context.labels),
     persistence: context.persistence_mode,
     state: context.state,
@@ -220,6 +222,7 @@ function rowMatches(row: BrowserContextCatalogRowViewModel, normalized: string):
     row.shortId,
     row.name,
     row.description,
+    row.project,
     row.labels,
     row.persistence,
     row.state,
@@ -229,6 +232,16 @@ function rowMatches(row: BrowserContextCatalogRowViewModel, normalized: string):
     row.profileStorageLimitSummary,
     row.retentionSummary,
   ].some((value) => value.toLowerCase().includes(normalized));
+}
+
+function projectSummary(context: BrowserContextResource): string {
+  if (context.project?.name) {
+    return `${context.project.name} (${context.project.state})`;
+  }
+  if (context.project_id) {
+    return `Project ${shortId(context.project_id)}`;
+  }
+  return 'Owner scope';
 }
 
 function labelSummary(labels: Readonly<Record<string, string>>): string {

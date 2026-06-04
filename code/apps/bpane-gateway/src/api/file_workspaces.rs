@@ -37,10 +37,8 @@ async fn list_file_workspaces(
         .session_store
         .list_file_workspaces_for_owner(&principal)
         .await
-        .map_err(map_session_store_error)?
-        .into_iter()
-        .map(|workspace| workspace.to_resource())
-        .collect();
+        .map_err(map_session_store_error)?;
+    let workspaces = file_workspace_resources(&state, &principal, workspaces).await?;
     Ok(Json(FileWorkspaceListResponse { workspaces }))
 }
 
@@ -57,6 +55,7 @@ async fn create_file_workspace(
         .create_file_workspace(
             &principal,
             PersistFileWorkspaceRequest {
+                project_id: request.project_id,
                 name: request.name,
                 description: request.description,
                 labels: request.labels,
@@ -64,7 +63,10 @@ async fn create_file_workspace(
         )
         .await
         .map_err(map_session_store_error)?;
-    Ok((StatusCode::CREATED, Json(workspace.to_resource())))
+    Ok((
+        StatusCode::CREATED,
+        Json(file_workspace_resource(&state, &principal, workspace).await?),
+    ))
 }
 
 async fn get_file_workspace(
@@ -72,8 +74,13 @@ async fn get_file_workspace(
     Path(workspace_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<FileWorkspaceResource>, (StatusCode, Json<ErrorResponse>)> {
-    let workspace = authorize_file_workspace_request(&headers, &state, workspace_id).await?;
-    Ok(Json(workspace.to_resource()))
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workspace = load_file_workspace(&state, &principal, workspace_id).await?;
+    Ok(Json(
+        file_workspace_resource(&state, &principal, workspace).await?,
+    ))
 }
 
 async fn list_file_workspace_files(
@@ -283,17 +290,14 @@ async fn delete_file_workspace_file(
     Ok(Json(deleted.to_resource()))
 }
 
-async fn authorize_file_workspace_request(
-    headers: &HeaderMap,
+async fn load_file_workspace(
     state: &ApiState,
+    principal: &AuthenticatedPrincipal,
     workspace_id: Uuid,
 ) -> Result<crate::workspaces::StoredFileWorkspace, (StatusCode, Json<ErrorResponse>)> {
-    let principal = authorize_api_request(headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
     state
         .session_store
-        .get_file_workspace_for_owner(&principal, workspace_id)
+        .get_file_workspace_for_owner(principal, workspace_id)
         .await
         .map_err(map_session_store_error)?
         .ok_or_else(|| {
@@ -304,6 +308,45 @@ async fn authorize_file_workspace_request(
                 }),
             )
         })
+}
+
+async fn file_workspace_resources(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    workspaces: Vec<crate::workspaces::StoredFileWorkspace>,
+) -> Result<Vec<FileWorkspaceResource>, (StatusCode, Json<ErrorResponse>)> {
+    let mut resources = Vec::with_capacity(workspaces.len());
+    for workspace in workspaces {
+        resources.push(file_workspace_resource(state, principal, workspace).await?);
+    }
+    Ok(resources)
+}
+
+async fn file_workspace_resource(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    workspace: crate::workspaces::StoredFileWorkspace,
+) -> Result<FileWorkspaceResource, (StatusCode, Json<ErrorResponse>)> {
+    let mut resource = workspace.to_resource();
+    resource.project =
+        file_workspace_project_summary(state, principal, resource.project_id).await?;
+    Ok(resource)
+}
+
+async fn file_workspace_project_summary(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    project_id: Option<Uuid>,
+) -> Result<Option<SessionProjectResource>, (StatusCode, Json<ErrorResponse>)> {
+    let Some(project_id) = project_id else {
+        return Ok(None);
+    };
+    Ok(state
+        .session_store
+        .get_project_for_owner(principal, project_id)
+        .await
+        .map_err(map_session_store_error)?
+        .map(|project| project.to_session_project_resource()))
 }
 
 async fn authorize_file_workspace_file_request(

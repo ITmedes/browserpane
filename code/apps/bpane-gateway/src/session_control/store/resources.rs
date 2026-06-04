@@ -446,6 +446,8 @@ impl SessionStore {
         request: PersistBrowserContextRequest,
     ) -> Result<StoredBrowserContext, SessionStoreError> {
         validate_browser_context_request(&request)?;
+        self.validate_optional_project_reference(principal, request.project_id, "browser context")
+            .await?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.create_browser_context(principal, request).await
@@ -757,6 +759,8 @@ impl SessionStore {
         request: PersistFileWorkspaceRequest,
     ) -> Result<StoredFileWorkspace, SessionStoreError> {
         validate_file_workspace_request(&request)?;
+        self.validate_optional_project_reference(principal, request.project_id, "file workspace")
+            .await?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.create_file_workspace(principal, request).await
@@ -765,6 +769,31 @@ impl SessionStore {
                 store.create_file_workspace(principal, request).await
             }
         }
+    }
+
+    async fn validate_optional_project_reference(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Option<Uuid>,
+        resource_name: &str,
+    ) -> Result<(), SessionStoreError> {
+        let Some(project_id) = project_id else {
+            return Ok(());
+        };
+        let project = self
+            .get_project_for_owner(principal, project_id)
+            .await?
+            .ok_or_else(|| {
+                SessionStoreError::NotFound(format!(
+                    "project {project_id} not found for {resource_name}"
+                ))
+            })?;
+        if project.state == ProjectState::Archived {
+            return Err(SessionStoreError::InvalidRequest(format!(
+                "project {project_id} is archived and cannot be used for {resource_name}"
+            )));
+        }
+        Ok(())
     }
 
     pub async fn create_credential_binding(
@@ -955,6 +984,19 @@ impl SessionStore {
         request: PersistFileWorkspaceFileRequest,
     ) -> Result<StoredFileWorkspaceFile, SessionStoreError> {
         validate_file_workspace_file_request(&request)?;
+        if let Some(workspace) = self
+            .get_file_workspace_for_owner(principal, request.workspace_id)
+            .await?
+        {
+            if let Some(project_id) = workspace.project_id {
+                self.enforce_project_retained_storage_quota(
+                    principal,
+                    project_id,
+                    request.byte_count,
+                )
+                .await?;
+            }
+        }
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store

@@ -12,6 +12,7 @@ describe('BrowserContextViewModelBuilder', () => {
 
     expect(viewModel.readyCount).toBe(1);
     expect(viewModel.selectedContext?.name).toBe('Support profile');
+    expect(viewModel.selectedContext?.project).toBe('Owner scope');
     expect(viewModel.selectedContext?.sessionSummary).toBe('1 visible session, 1 active runtime');
     expect(viewModel.selectedContext?.profileStorageSummary).toBe('unknown');
     expect(viewModel.selectedContext?.profileStorageLimitSummary).toBe('no storage limit');
@@ -81,6 +82,24 @@ describe('BrowserContextViewModelBuilder', () => {
     expect(viewModel.rows.map((row) => row.id)).toEqual([CONTEXT.id]);
     expect(viewModel.totalCount).toBe(2);
     expect(viewModel.deletedCount).toBe(1);
+  });
+
+  it('surfaces project-scoped context ownership', () => {
+    const viewModel = BrowserContextViewModelBuilder.catalog({
+      contexts: [{
+        ...CONTEXT,
+        project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+        project: {
+          id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+          name: 'Support tenant',
+          state: 'active',
+        },
+      }],
+      search: 'support tenant',
+    });
+
+    expect(viewModel.rows).toHaveLength(1);
+    expect(viewModel.selectedContext?.project).toBe('Support tenant (active)');
   });
 });
 

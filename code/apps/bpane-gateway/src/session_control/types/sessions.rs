@@ -537,7 +537,7 @@ pub struct ProjectResource {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionProjectResource {
     pub id: Uuid,
     pub name: String,
@@ -1497,6 +1497,7 @@ pub struct SessionBrowserContextResource {
 #[derive(Debug, Clone)]
 pub struct PersistBrowserContextRequest {
     pub id: Option<Uuid>,
+    pub project_id: Option<Uuid>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
@@ -1508,6 +1509,7 @@ pub struct PersistBrowserContextRequest {
 #[derive(Debug, Clone)]
 pub struct StoredBrowserContext {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
     pub owner_subject: String,
     pub owner_issuer: String,
     pub name: String,
@@ -1532,6 +1534,8 @@ pub struct BrowserContextRetentionCandidate {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BrowserContextResource {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
+    pub project: Option<SessionProjectResource>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
@@ -1893,6 +1897,8 @@ impl StoredBrowserContext {
     pub fn to_resource(&self) -> BrowserContextResource {
         BrowserContextResource {
             id: self.id,
+            project_id: self.project_id,
+            project: None,
             name: self.name.clone(),
             description: self.description.clone(),
             labels: self.labels.clone(),

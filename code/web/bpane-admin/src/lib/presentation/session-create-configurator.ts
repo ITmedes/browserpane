@@ -91,6 +91,8 @@ type MutableCreateSessionCommand = {
 };
 
 export type BrowserContextCreateFormState = {
+  readonly projectId?: string;
+  readonly projects?: readonly ProjectResource[];
   readonly name: string;
   readonly labels: string;
   readonly retentionDays?: string;
@@ -159,6 +161,11 @@ export function validateSessionCreateForm(
         errors.push('Selected reusable browser context must be ready.');
       } else if (browserContext && browserContext.persistence_mode !== 'reusable') {
         errors.push('Selected browser context is not reusable.');
+      } else if (
+        browserContext?.project_id
+        && browserContext.project_id !== projectId
+      ) {
+        errors.push('Selected reusable browser context belongs to a different project.');
       } else {
         command.browser_context = {
           mode: 'reusable',
@@ -334,6 +341,15 @@ export function validateBrowserContextCreateForm(
   if (!name) {
     errors.push('Browser context name is required.');
   }
+  const projectId = (state.projectId ?? '').trim();
+  if (projectId) {
+    const project = state.projects?.find((entry) => entry.id === projectId) ?? null;
+    if (state.projects && state.projects.length > 0 && !project) {
+      errors.push('Selected project is not available.');
+    } else if (project?.state === 'archived') {
+      errors.push('Selected project is archived.');
+    }
+  }
   const labels = parseSessionCreateLabels(state.labels, errors);
   const retentionSec = parseRetentionDays(state.retentionDays ?? '', errors);
   const maxProfileStorageBytes = parseMaxProfileStorageMb(state.maxProfileStorageMb ?? '', errors);
@@ -341,6 +357,7 @@ export function validateBrowserContextCreateForm(
     command: errors.length === 0
       ? {
           name,
+          ...(projectId ? { project_id: projectId } : {}),
           labels,
           persistence_mode: 'reusable',
           ...(retentionSec !== undefined ? { retention_sec: retentionSec } : {}),
@@ -560,7 +577,12 @@ export function isLocalTlsInterceptorEgressPreset(profile: EgressProfileResource
 
 export function browserContextOptionLabel(context: BrowserContextResource): string {
   const stateSuffix = context.state === 'ready' ? '' : `, ${context.state}`;
-  return `${context.name} (${shortId(context.id)}${stateSuffix})`;
+  const projectSuffix = context.project?.name
+    ? `, project=${context.project.name}`
+    : context.project_id
+      ? `, project=${shortId(context.project_id)}`
+      : '';
+  return `${context.name} (${shortId(context.id)}${stateSuffix}${projectSuffix})`;
 }
 
 export function sessionBrowserContextSummary(
@@ -579,6 +601,11 @@ export function sessionBrowserContextSummary(
   const facts = [
     `state=${context.state}`,
     `persistence=${context.persistence_mode}`,
+    context.project?.name
+      ? `project=${context.project.name}`
+      : context.project_id
+        ? `project=${shortId(context.project_id)}`
+        : 'owner-scoped',
     context.last_used_at ? `last_used=${context.last_used_at}` : 'never used',
   ];
   const labels = Object.entries(context.labels).sort(([left], [right]) => left.localeCompare(right));

@@ -293,9 +293,6 @@ pub(super) async fn create_workflow_run(
         credential_binding_ids,
     )
     .await?;
-    let workspace_inputs =
-        resolve_workflow_run_workspace_inputs(&state, &principal, &version, workspace_inputs)
-            .await?;
     let (session, session_source) = resolve_task_session_binding(
         &state,
         &principal,
@@ -308,6 +305,14 @@ pub(super) async fn create_workflow_run(
     let effective_project_id = project_id.or(session.project_id);
     validate_workflow_run_project(&state, &principal, effective_project_id, session.project_id)
         .await?;
+    let workspace_inputs = resolve_workflow_run_workspace_inputs(
+        &state,
+        &principal,
+        &version,
+        effective_project_id,
+        workspace_inputs,
+    )
+    .await?;
     let task = state
         .session_store
         .create_automation_task(

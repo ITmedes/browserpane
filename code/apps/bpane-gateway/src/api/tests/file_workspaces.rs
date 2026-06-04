@@ -3,6 +3,28 @@ use super::*;
 #[tokio::test]
 async fn creates_lists_uploads_downloads_and_deletes_file_workspace_content() {
     let (app, token) = test_router();
+    let project = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "finance-project",
+                            "quotas": { "max_retained_storage_bytes": 1024 }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = project["id"].as_str().unwrap().to_string();
 
     let create_workspace_response = app
         .clone()
@@ -14,6 +36,7 @@ async fn creates_lists_uploads_downloads_and_deletes_file_workspace_content() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
+                        "project_id": project_id,
                         "name": "finance-reports",
                         "description": "Shared workflow outputs",
                         "labels": {
@@ -30,6 +53,9 @@ async fn creates_lists_uploads_downloads_and_deletes_file_workspace_content() {
     let workspace = response_json(create_workspace_response).await;
     let workspace_id = workspace["id"].as_str().unwrap().to_string();
     assert_eq!(workspace["name"], "finance-reports");
+    assert_eq!(workspace["project_id"], project_id);
+    assert_eq!(workspace["project"]["id"], project_id);
+    assert_eq!(workspace["project"]["name"], "finance-project");
     assert_eq!(workspace["description"], "Shared workflow outputs");
     assert_eq!(workspace["labels"]["suite"], "contract");
     assert_eq!(
@@ -120,6 +146,42 @@ async fn creates_lists_uploads_downloads_and_deletes_file_workspace_content() {
     assert_eq!(files["files"].as_array().unwrap().len(), 1);
     assert_eq!(files["files"][0]["id"], file_id);
 
+    let project_usage = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/projects/{project_id}/usage"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(project_usage["retained_storage_bytes"], file_bytes.len());
+
+    let over_quota_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/file-workspaces/{workspace_id}/files"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/octet-stream")
+                .header("x-bpane-file-name", "too-large.bin")
+                .body(Body::from(vec![b'x'; 1010]))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(over_quota_response.status(), StatusCode::CONFLICT);
+    let over_quota = response_json(over_quota_response).await;
+    assert!(over_quota["error"]
+        .as_str()
+        .unwrap()
+        .contains("retained_storage_quota_exceeded"));
+
     let get_file_response = app
         .clone()
         .oneshot(
@@ -185,6 +247,7 @@ async fn creates_lists_uploads_downloads_and_deletes_file_workspace_content() {
     assert_eq!(deleted["id"], file_id);
 
     let final_list_response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri(format!("/api/v1/file-workspaces/{workspace_id}/files"))
@@ -197,4 +260,19 @@ async fn creates_lists_uploads_downloads_and_deletes_file_workspace_content() {
     assert_eq!(final_list_response.status(), StatusCode::OK);
     let final_files = response_json(final_list_response).await;
     assert!(final_files["files"].as_array().unwrap().is_empty());
+
+    let final_project_usage = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/projects/{project_id}/usage"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(final_project_usage["retained_storage_bytes"], 0);
 }

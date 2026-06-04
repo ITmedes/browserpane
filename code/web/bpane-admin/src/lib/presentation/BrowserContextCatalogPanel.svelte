@@ -312,7 +312,7 @@
               </span>
               <span class="truncate font-mono text-xs text-admin-ink/54">{row.shortId}</span>
               <span class="truncate text-xs text-admin-ink/58">
-                {row.persistence} | {row.sessionSummary} | {row.labels}
+                {row.persistence} | {row.project} | {row.sessionSummary} | {row.labels}
               </span>
             </span>
           </button>
@@ -338,6 +338,7 @@
           <p class="m-0 text-sm leading-normal text-admin-ink/66">{context.description}</p>
 
           <div class="grid min-w-0 grid-cols-2 gap-2 text-xs text-admin-ink/70">
+            {@render Fact('Project', context.project, 'browser-context-detail-project')}
             {@render Fact('Persistence', context.persistence, 'browser-context-detail-persistence')}
             {@render Fact('References', context.sessionSummary, 'browser-context-detail-references')}
             {@render Fact('Active writer', context.activeRuntimeSummary, 'browser-context-detail-active-writer')}

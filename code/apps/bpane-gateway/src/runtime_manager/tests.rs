@@ -863,6 +863,7 @@ async fn docker_runtime_rejects_parallel_writer_for_reusable_browser_context() {
             &principal,
             PersistBrowserContextRequest {
                 id: None,
+                project_id: None,
                 name: "authenticated".to_string(),
                 description: None,
                 labels: HashMap::new(),

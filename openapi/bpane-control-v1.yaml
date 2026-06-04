@@ -422,7 +422,7 @@ paths:
     post:
       tags: [Browser Contexts]
       summary: Import a BrowserPane browser context export archive
-      description: Creates a new owner-scoped reusable context from an export zip. The import never overwrites an existing context; target metadata is provided by headers and omitted metadata defaults to the archive manifest.
+      description: Creates a new reusable context from an export zip. The import never overwrites an existing context; target metadata is provided by headers and omitted metadata defaults to the archive manifest. Project scope is applied only when `x-bpane-browser-context-project-id` is provided.
       operationId: importBrowserContext
       parameters:
         - name: x-bpane-browser-context-name
@@ -435,6 +435,12 @@ paths:
           required: false
           schema:
             type: string
+        - name: x-bpane-browser-context-project-id
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
         - name: x-bpane-browser-context-labels
           in: header
           required: false
@@ -3762,6 +3768,10 @@ components:
       properties:
         name:
           type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
         description:
           type: string
           nullable: true
@@ -3773,6 +3783,8 @@ components:
       type: object
       required:
         - id
+        - project_id
+        - project
         - name
         - description
         - labels
@@ -3783,6 +3795,14 @@ components:
         id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
         name:
           type: string
         description:
@@ -5448,6 +5468,10 @@ components:
       properties:
         name:
           type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
         description:
           type: string
           nullable: true
@@ -5476,6 +5500,11 @@ components:
       properties:
         name:
           type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional project scope for the clone. When omitted, the source context project scope is inherited.
         description:
           type: string
           nullable: true
@@ -5497,6 +5526,8 @@ components:
       type: object
       required:
         - id
+        - project_id
+        - project
         - name
         - description
         - labels
@@ -5514,6 +5545,14 @@ components:
         id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
         name:
           type: string
         description:

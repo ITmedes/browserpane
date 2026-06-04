@@ -575,9 +575,15 @@ impl ProjectRepository<'_> {
                         SELECT SUM(COALESCE((produced_file.value->>'byte_count')::BIGINT, 0))
                         FROM control_workflow_runs run
                         CROSS JOIN LATERAL jsonb_array_elements(run.produced_files) AS produced_file(value)
+                        LEFT JOIN control_file_workspaces workspace
+                          ON workspace.id = (produced_file.value->>'workspace_id')::UUID
                         WHERE run.owner_subject = $1
                           AND run.owner_issuer = $2
                           AND run.project_id = $3
+                          AND (
+                            workspace.project_id IS NULL
+                            OR workspace.project_id <> $3
+                          )
                     ), 0)
                     + COALESCE((
                         SELECT SUM(recording.byte_count)
@@ -596,6 +602,14 @@ impl ProjectRepository<'_> {
                         WHERE session.owner_subject = $1
                           AND session.owner_issuer = $2
                           AND session.project_id = $3
+                    ), 0)
+                    + COALESCE((
+                        SELECT SUM(file.byte_count)
+                        FROM control_file_workspace_files file
+                        INNER JOIN control_file_workspaces workspace ON workspace.id = file.workspace_id
+                        WHERE workspace.owner_subject = $1
+                          AND workspace.owner_issuer = $2
+                          AND workspace.project_id = $3
                     ), 0)
                 )::BIGINT AS retained_storage_bytes
                 "#,

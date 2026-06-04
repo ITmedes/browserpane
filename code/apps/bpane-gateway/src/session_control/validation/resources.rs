@@ -10,6 +10,11 @@ pub(in crate::session_control) fn validate_browser_context_request(
             "browser context id must not be nil when provided".to_string(),
         ));
     }
+    if request.project_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "browser context project_id must not be nil when provided".to_string(),
+        ));
+    }
     if request.name.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "browser context name must not be empty".to_string(),
@@ -563,6 +568,11 @@ pub(in crate::session_control) fn validate_extension_version_request(
 pub(in crate::session_control) fn validate_file_workspace_request(
     request: &PersistFileWorkspaceRequest,
 ) -> Result<(), SessionStoreError> {
+    if request.project_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "file workspace project_id must not be nil when provided".to_string(),
+        ));
+    }
     if request.name.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "file workspace name must not be empty".to_string(),

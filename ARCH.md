@@ -277,12 +277,12 @@ service.
   - `GET /api/v1/sessions` — list owner-scoped sessions, with catalog filters for template id, lifecycle/runtime state, labels, integration context, limit, and offset
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
   - `DELETE /api/v1/sessions/{id}` — safe-stop one owner-scoped session resource
-  - `POST /api/v1/browser-contexts` — create an owner-scoped browser context catalog entry
-  - `GET /api/v1/browser-contexts` — list owner-scoped browser contexts with visible-session, active-runtime, optional profile-storage, storage-limit, and retention-expiry summary
-  - `GET /api/v1/browser-contexts/{id}` — fetch one browser context with visible-session, active-runtime, optional profile-storage, storage-limit, and retention-expiry summary
-  - `POST /api/v1/browser-contexts/{id}/clone` — clone an inactive reusable context into a new owner-scoped reusable context; docker-backed runtimes copy profile volume data when present
+  - `POST /api/v1/browser-contexts` — create an owner-scoped or project-owned browser context catalog entry
+  - `GET /api/v1/browser-contexts` — list owner-scoped browser contexts with optional project summary, visible-session, active-runtime, optional profile-storage, storage-limit, and retention-expiry summary
+  - `GET /api/v1/browser-contexts/{id}` — fetch one browser context with optional project summary, visible-session, active-runtime, optional profile-storage, storage-limit, and retention-expiry summary
+  - `POST /api/v1/browser-contexts/{id}/clone` — clone an inactive reusable context into a new owner-scoped or project-owned reusable context; docker-backed runtimes copy profile volume data when present
   - `GET /api/v1/browser-contexts/{id}/export` — download an inactive reusable context as a zip archive with manifest and optional docker-backed profile payload
-  - `POST /api/v1/browser-contexts/import` — import a BrowserPane export archive into a new owner-scoped reusable context; docker-backed runtimes restore `profile.tar.gz` when present
+  - `POST /api/v1/browser-contexts/import` — import a BrowserPane export archive into a new owner-scoped or project-owned reusable context; docker-backed runtimes restore `profile.tar.gz` when present
   - `DELETE /api/v1/browser-contexts/{id}` — delete one browser context; docker-backed runtimes remove the context profile volume and reject active writers
   - `POST /api/v1/session-templates` — create a reusable owner-scoped session template
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
@@ -296,7 +296,7 @@ service.
   - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, optional proxy-auth credential binding reference, bypass, custom CA, and traffic-observation metadata
   - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
-  - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress allow-lists, project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, project usage reports session creations, live-plus-finalized browser runtime milliseconds, sanitized egress receive/transmit byte totals, and retained storage, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, and session files
+  - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress allow-lists, project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, project usage reports session creations, live-plus-finalized browser runtime milliseconds, sanitized egress receive/transmit byte totals, and retained storage, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, session files, and files retained in project-owned file workspaces
   - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Proxy authentication is secret-backed through owner-scoped credential bindings and is materialized only as a session-local runtime auth file.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
@@ -487,7 +487,7 @@ The default dev stack no longer uses a shared token file.
 - the admin console discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
-- after login, the admin console lists owner-scoped `/api/v1/sessions`, projects, session templates, egress profiles, browser contexts, and the current `/api/v1/identity/access-review`; it lets the user join an existing session, start a new one with optional project, template, network-identity, egress-profile, and reusable-context bindings, inspect project/admission metadata on live rows and session detail views, inspect the current principal, resource counts, project usage, registered service principals, identity-to-project mappings, unmapped principal signals, and delegated automation principals in the Identity tab, create/edit/disable/re-enable service principals and identity-to-project mappings from that tab, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
+- after login, the admin console lists owner-scoped `/api/v1/sessions`, projects, session templates, egress profiles, browser contexts, file workspaces, and the current `/api/v1/identity/access-review`; it lets the user join an existing session, start a new one with optional project, template, network-identity, egress-profile, and reusable-context bindings, create project-owned reusable contexts and file workspaces where needed, inspect project/admission metadata on live rows and session detail views, inspect the current principal, resource counts, project usage, registered service principals, identity-to-project mappings, unmapped principal signals, and delegated automation principals in the Identity tab, create/edit/disable/re-enable service principals and identity-to-project mappings from that tab, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
 - docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
 - browser-context retention cleanup is metadata-driven per context and removes expired reusable profile data only when the runtime manager confirms there is no active writer
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
@@ -548,9 +548,11 @@ The workflow layer sits on top of the owner-scoped session APIs.
 - workflow-created sessions pass through the same project template/egress
   policy binding checks as direct session creates before runtime launch
 - project retained-storage usage includes workflow produced files, completed
-  recording artifacts, and uploaded/downloaded session files linked through the
-  project session or run; broader workspace and reusable-context storage
-  ownership remains a follow-up
+  recording artifacts, uploaded/downloaded session files linked through the
+  project session or run, and files retained in project-owned file workspaces;
+  workflow outputs stored in a workspace owned by the same project are counted
+  once through the workspace. Reusable-context profile bytes remain governed by
+  per-context storage limits rather than project retained-storage quotas.
 - project usage also reports total session creations, live-plus-finalized
   browser runtime milliseconds, and sanitized egress receive/transmit byte
   counters; proxy-side observers remain responsible for URL/status/timing logs
@@ -846,7 +848,9 @@ more custom code and therefore more surface area for bugs.
 
 - **Production operations are still limited.** The gateway now has a durable
   owner-scoped control plane, project-scoped active-session admission,
-  project-scoped workflow-run admission and partial retained-storage quotas,
+  project-scoped workflow-run admission and retained-storage quotas across
+  workflow outputs, recordings, session files, and project-owned workspace
+  files,
   docker-backed runtime assignments, and profile-backed reconnect/release
   semantics. It is still not an HA production control plane: project queueing,
   remaining cross-resource project quotas, backup/restore, zero-downtime

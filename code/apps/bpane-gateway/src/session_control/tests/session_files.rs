@@ -27,6 +27,7 @@ async fn create_workspace_file(
         .create_file_workspace(
             owner,
             PersistFileWorkspaceRequest {
+                project_id: None,
                 name: "inputs".to_string(),
                 description: None,
                 labels: HashMap::new(),

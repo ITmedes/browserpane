@@ -352,11 +352,13 @@ the project from their bound session when the request omits `project_id`.
 Project usage includes active and queued session counts, total session
 creations, live-plus-finalized browser runtime milliseconds, sanitized egress
 receive/transmit byte counters, and retained storage. Retained storage currently
-counts workflow produced files, completed recording artifacts, and
-uploaded/downloaded session files that are already linked to the project, and
-the gateway rejects new retained artifacts that would exceed the project storage
-quota. Egress byte counters are intentionally metadata-only until an attached
-proxy or secure web gateway reports authoritative traffic totals.
+counts workflow produced files, completed recording artifacts,
+uploaded/downloaded session files, and files retained in project-owned file
+workspaces; workflow outputs stored in a workspace owned by the same project are
+counted once through the workspace. The gateway rejects new retained artifacts
+that would exceed the project storage quota. Egress byte counters are
+intentionally metadata-only until an attached proxy or secure web gateway
+reports authoritative traffic totals.
 Session and workflow-run resources include the project summary and admission
 reason so the admin live view, inspectors, CLI, and API clients all show
 whether work was admitted under project quota, queued by project capacity,
@@ -417,9 +419,12 @@ owner-visible credential binding through the configured secret provider at
 runtime launch and writes only a session-local proxy-auth file; credentials are
 not embedded in proxy URLs, API responses, CLI output, Docker labels, or normal
 logs.
-Browser context resources let callers name owner-scoped Chromium profile
-contexts and bind new sessions with `browser_context.mode=reusable` plus a
-`context_id`. Docker-backed runtimes materialize reusable contexts as a
+Browser context resources let callers name owner-scoped or project-owned
+Chromium profile contexts and bind new sessions with
+`browser_context.mode=reusable` plus a `context_id`. Project-owned contexts can
+only be reused by sessions in the same project; owner-scoped contexts remain
+available to owner-scoped and project-scoped sessions. Docker-backed runtimes
+materialize reusable contexts as a
 context-scoped Chromium profile volume mounted at the normal profile path,
 while uploads, downloads, and session-file mounts remain tied to the concrete
 session. Only one active runtime writer may use a reusable context at a time;
@@ -450,8 +455,10 @@ Inactive reusable contexts can also be exported with
 `profile.tar.gz`.
 BrowserPane export archives can be imported as new reusable contexts with
 `POST /api/v1/browser-contexts/import` using `application/zip` plus
-`x-bpane-browser-context-name`. Omitted metadata defaults to the archive
-manifest, and imports never overwrite an existing context.
+`x-bpane-browser-context-name`; callers can set
+`x-bpane-browser-context-project-id` to import directly into a project. Omitted
+metadata defaults to the archive manifest, and imports never overwrite an
+existing context.
 Deleting a reusable context refuses active runtime writers and, for
 docker-backed runtimes, removes the context-scoped Chromium profile volume when
 no active writer exists. The admin create-session configurator can create
@@ -769,10 +776,10 @@ cd code/web/bpane-client && npm run smoke:admin-egress-profiles -- --headless
 Common browser-context operations:
 
 ```bash
-./scripts/bpane browser-context create support-profile --label team=support --retention-sec 604800 --max-profile-storage-bytes 536870912
-./scripts/bpane browser-context clone <context-id> support-profile-sandbox --label copy=sandbox
+./scripts/bpane browser-context create support-profile --project-id <project-id> --label team=support --retention-sec 604800 --max-profile-storage-bytes 536870912
+./scripts/bpane browser-context clone <context-id> support-profile-sandbox --project-id <project-id> --label copy=sandbox
 ./scripts/bpane browser-context export <context-id> --output support-profile.zip
-./scripts/bpane browser-context import --input support-profile.zip --name support-profile-restored --label restored=true
+./scripts/bpane browser-context import --input support-profile.zip --name support-profile-restored --project-id <project-id> --label restored=true
 ./scripts/bpane browser-context list
 ./scripts/bpane browser-context get <context-id>
 ./scripts/bpane browser-context delete <context-id>
@@ -870,7 +877,7 @@ Current workflow capabilities:
 - project-scoped workflow runs with inherited session projects, project
   summaries, and `max_active_workflow_runs` admission/queue visibility
 - project retained-storage accounting/enforcement for workflow produced files,
-  recording artifacts, and session files
+  recording artifacts, session files, and project-owned file workspace files
 - external correlation fields on runs (`source_system`, `source_reference`, `client_request_id`)
 - safe idempotent run creation for retried upstream requests
 - durable queued/admission state when BrowserPane worker capacity, project

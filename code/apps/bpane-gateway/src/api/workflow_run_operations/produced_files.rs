@@ -89,7 +89,7 @@ async fn upload_workflow_run_produced_file(
             }),
         ));
     }
-    let _workspace = state
+    let workspace = state
         .session_store
         .get_file_workspace_for_owner(&owner, workspace_id)
         .await
@@ -102,6 +102,7 @@ async fn upload_workflow_run_produced_file(
                 }),
             )
         })?;
+    validate_produced_file_workspace_project_scope(run.project_id, &workspace)?;
     let file_name = required_header_string(&headers, FILE_WORKSPACE_FILE_NAME_HEADER)?;
     let provenance =
         parse_optional_json_object_header(&headers, FILE_WORKSPACE_FILE_PROVENANCE_HEADER)?;
@@ -225,6 +226,27 @@ async fn upload_workflow_run_produced_file(
                 run.id
             ),
             created_at: persisted_file.created_at,
+        }),
+    ))
+}
+
+fn validate_produced_file_workspace_project_scope(
+    project_id: Option<Uuid>,
+    workspace: &crate::workspaces::StoredFileWorkspace,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let Some(workspace_project_id) = workspace.project_id else {
+        return Ok(());
+    };
+    if project_id == Some(workspace_project_id) {
+        return Ok(());
+    }
+    Err((
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse {
+            error: format!(
+                "file workspace {} belongs to project {} and cannot receive workflow produced files without a matching workflow run project_id",
+                workspace.id, workspace_project_id
+            ),
         }),
     ))
 }
