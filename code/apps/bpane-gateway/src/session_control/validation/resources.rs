@@ -110,8 +110,7 @@ pub(in crate::session_control) fn validate_project_request(
         .any(|template_id| template_id.trim().is_empty())
     {
         return Err(SessionStoreError::InvalidRequest(
-            "project policy.allowed_session_template_ids must not contain empty values"
-                .to_string(),
+            "project policy.allowed_session_template_ids must not contain empty values".to_string(),
         ));
     }
     if request
@@ -121,8 +120,7 @@ pub(in crate::session_control) fn validate_project_request(
         .any(|profile_id| *profile_id == Uuid::nil())
     {
         return Err(SessionStoreError::InvalidRequest(
-            "project policy.allowed_egress_profile_ids must not contain nil UUIDs"
-                .to_string(),
+            "project policy.allowed_egress_profile_ids must not contain nil UUIDs".to_string(),
         ));
     }
     Ok(())
