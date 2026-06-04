@@ -107,6 +107,24 @@ fn project_admission_conflict(decision: ProjectAdmissionDecision) -> SessionStor
     ))
 }
 
+fn validate_project_retained_storage_quota(
+    project_id: Uuid,
+    retained_storage_bytes: u64,
+    incoming_bytes: u64,
+    max_retained_storage_bytes: u64,
+) -> Result<(), SessionStoreError> {
+    let projected_storage_bytes = retained_storage_bytes
+        .checked_add(incoming_bytes)
+        .unwrap_or(u64::MAX);
+    if projected_storage_bytes <= max_retained_storage_bytes {
+        return Ok(());
+    }
+
+    Err(SessionStoreError::Conflict(format!(
+        "retained_storage_quota_exceeded: project {project_id} retained storage quota would be exceeded ({projected_storage_bytes}/{max_retained_storage_bytes} bytes)"
+    )))
+}
+
 fn validate_project_session_policy(
     project: &StoredProject,
     request: &CreateSessionRequest,

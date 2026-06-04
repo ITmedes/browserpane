@@ -338,13 +338,17 @@ be sent.
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
 Project resources let operators group sessions and workflow runs under an
 owner-scoped tenant, case, customer, or environment boundary. A project carries
-labels, lifecycle state, optional quotas such as `max_active_sessions` and
-`max_active_workflow_runs`, first policy bindings for allowed session templates
-and egress profiles, and sanitized usage counters. Creating a session or
-workflow run with `project_id` records the admission decision and enforces
-archived-project checks plus template/egress allow-lists before runtime launch;
-workflow runs also inherit the project from their bound session when the request
-omits `project_id`. Session and workflow-run resources include the project
+labels, lifecycle state, optional quotas such as `max_active_sessions`,
+`max_active_workflow_runs`, and `max_retained_storage_bytes`, first policy
+bindings for allowed session templates and egress profiles, and sanitized usage
+counters. Creating a session or workflow run with `project_id` records the
+admission decision and enforces archived-project checks plus template/egress
+allow-lists before runtime launch; workflow runs also inherit the project from
+their bound session when the request omits `project_id`. Project retained
+storage usage currently counts workflow produced files, completed recording
+artifacts, and uploaded/downloaded session files that are already linked to the
+project, and the gateway rejects new retained artifacts that would exceed the
+project storage quota. Session and workflow-run resources include the project
 summary and admission reason so the admin live view, inspectors, CLI, and API
 clients all show whether work was admitted under project quota, queued by
 project capacity, rejected by project policy, or left owner-scoped.
@@ -856,6 +860,8 @@ Current workflow capabilities:
   state, event, and log APIs
 - project-scoped workflow runs with inherited session projects, project
   summaries, and `max_active_workflow_runs` admission/queue visibility
+- project retained-storage accounting/enforcement for workflow produced files,
+  recording artifacts, and session files
 - external correlation fields on runs (`source_system`, `source_reference`, `client_request_id`)
 - safe idempotent run creation for retried upstream requests
 - durable queued/admission state when BrowserPane worker capacity or project

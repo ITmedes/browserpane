@@ -57,6 +57,8 @@ async fn manages_projects_and_reports_usage() {
     assert_eq!(project["state"], "active");
     assert_eq!(project["usage"]["active_sessions"], 0);
     assert_eq!(project["usage"]["max_active_sessions"], 1);
+    assert_eq!(project["usage"]["retained_storage_bytes"], 0);
+    assert_eq!(project["usage"]["max_retained_storage_bytes"], 1048576);
 
     let list = app
         .clone()
@@ -115,6 +117,196 @@ async fn manages_projects_and_reports_usage() {
     let usage = response_json(usage).await;
     assert_eq!(usage["project_id"], project_id);
     assert_eq!(usage["active_sessions"], 0);
+    assert_eq!(usage["retained_storage_bytes"], 0);
+}
+
+#[tokio::test]
+async fn project_usage_counts_recording_bytes_and_rejects_over_quota_completion() {
+    let (app, token) = test_router();
+
+    let project = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "recording-storage",
+                            "quotas": { "max_retained_storage_bytes": 10 }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = project["id"].as_str().unwrap().to_string();
+
+    let session = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "project_id": project_id,
+                            "recording": { "mode": "manual", "format": "webm" }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+
+    let first_recording = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let first_recording_id = first_recording["id"].as_str().unwrap().to_string();
+
+    let missing_bytes_dir = tempfile::tempdir().unwrap();
+    let missing_bytes_path = missing_bytes_dir.path().join("missing-bytes.webm");
+    fs::write(&missing_bytes_path, b"abc").unwrap();
+    let missing_bytes = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{first_recording_id}/complete"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "source_path": missing_bytes_path.to_string_lossy(),
+                        "mime_type": "video/webm"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_bytes.status(), StatusCode::BAD_REQUEST);
+    let missing_bytes = response_json(missing_bytes).await;
+    assert!(missing_bytes["error"]
+        .as_str()
+        .unwrap()
+        .contains("retained_storage_byte_count_required"));
+
+    let first_dir = tempfile::tempdir().unwrap();
+    let first_path = first_dir.path().join("first.webm");
+    fs::write(&first_path, b"12345678").unwrap();
+    let completed = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{first_recording_id}/complete"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "source_path": first_path.to_string_lossy(),
+                        "mime_type": "video/webm",
+                        "bytes": 8,
+                        "duration_ms": 1000
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(completed.status(), StatusCode::OK);
+
+    let usage = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/projects/{project_id}/usage"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(usage["retained_storage_bytes"], 8);
+    assert_eq!(usage["max_retained_storage_bytes"], 10);
+
+    let second_recording = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let second_recording_id = second_recording["id"].as_str().unwrap().to_string();
+    let second_dir = tempfile::tempdir().unwrap();
+    let second_path = second_dir.path().join("second.webm");
+    fs::write(&second_path, b"123").unwrap();
+    let rejected = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{second_recording_id}/complete"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "source_path": second_path.to_string_lossy(),
+                        "mime_type": "video/webm",
+                        "bytes": 3,
+                        "duration_ms": 250
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::CONFLICT);
+    let rejected = response_json(rejected).await;
+    assert!(rejected["error"]
+        .as_str()
+        .unwrap()
+        .contains("retained_storage_quota_exceeded"));
 }
 
 #[tokio::test]

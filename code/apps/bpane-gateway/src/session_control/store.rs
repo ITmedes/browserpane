@@ -107,4 +107,30 @@ impl SessionStore {
             backend: SessionStoreBackend::Postgres(Arc::new(store)),
         })
     }
+
+    pub(crate) async fn enforce_project_retained_storage_quota(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+        incoming_bytes: u64,
+    ) -> Result<(), SessionStoreError> {
+        let project = self
+            .get_project_for_owner(principal, project_id)
+            .await?
+            .ok_or_else(|| {
+                SessionStoreError::NotFound(format!("project {project_id} not found"))
+            })?;
+        let Some(max_retained_storage_bytes) = project.quotas.max_retained_storage_bytes else {
+            return Ok(());
+        };
+        let retained_storage_bytes = self
+            .sum_retained_storage_bytes_for_project(principal, project_id)
+            .await?;
+        validate_project_retained_storage_quota(
+            project_id,
+            retained_storage_bytes,
+            incoming_bytes,
+            max_retained_storage_bytes,
+        )
+    }
 }

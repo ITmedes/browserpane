@@ -82,6 +82,16 @@ impl PostgresSessionStore {
             .count_active_workflow_runs_for_project(principal, project_id)
             .await
     }
+
+    pub(in crate::session_control) async fn sum_retained_storage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u64, SessionStoreError> {
+        self.project_repository()
+            .sum_retained_storage_bytes_for_project(principal, project_id)
+            .await
+    }
 }
 
 impl ProjectRepository<'_> {
@@ -339,6 +349,63 @@ impl ProjectRepository<'_> {
         u32::try_from(count).map_err(|error| {
             SessionStoreError::Backend(format!(
                 "active project workflow run count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
+    async fn sum_retained_storage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u64, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_one(
+                r#"
+                SELECT (
+                    COALESCE((
+                        SELECT SUM(COALESCE((produced_file.value->>'byte_count')::BIGINT, 0))
+                        FROM control_workflow_runs run
+                        CROSS JOIN LATERAL jsonb_array_elements(run.produced_files) AS produced_file(value)
+                        WHERE run.owner_subject = $1
+                          AND run.owner_issuer = $2
+                          AND run.project_id = $3
+                    ), 0)
+                    + COALESCE((
+                        SELECT SUM(recording.byte_count)
+                        FROM control_session_recordings recording
+                        INNER JOIN control_sessions session ON session.id = recording.session_id
+                        WHERE session.owner_subject = $1
+                          AND session.owner_issuer = $2
+                          AND session.project_id = $3
+                          AND recording.artifact_path IS NOT NULL
+                          AND recording.byte_count IS NOT NULL
+                    ), 0)
+                    + COALESCE((
+                        SELECT SUM(file.byte_count)
+                        FROM control_session_files file
+                        INNER JOIN control_sessions session ON session.id = file.session_id
+                        WHERE session.owner_subject = $1
+                          AND session.owner_issuer = $2
+                          AND session.project_id = $3
+                    ), 0)
+                )::BIGINT AS retained_storage_bytes
+                "#,
+                &[&principal.subject, &principal.issuer, &project_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to sum project retained storage bytes: {error}"
+                ))
+            })?;
+        let retained_storage_bytes = row.get::<_, i64>("retained_storage_bytes");
+        u64::try_from(retained_storage_bytes).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "project retained storage byte count exceeded u64 range: {error}"
             ))
         })
     }

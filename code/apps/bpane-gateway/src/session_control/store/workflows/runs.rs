@@ -226,6 +226,29 @@ impl SessionStore {
         request: PersistWorkflowRunProducedFileRequest,
     ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
         validate_workflow_run_produced_file_request(&request)?;
+        if let Some(run) = self.get_workflow_run_by_id(id).await? {
+            if !run
+                .produced_files
+                .iter()
+                .any(|file| file.file_id == request.file_id)
+            {
+                if let Some(project_id) = run.project_id {
+                    let owner = AuthenticatedPrincipal {
+                        subject: run.owner_subject,
+                        issuer: run.owner_issuer,
+                        display_name: None,
+                        client_id: None,
+                        safe_claims: Default::default(),
+                    };
+                    self.enforce_project_retained_storage_quota(
+                        &owner,
+                        project_id,
+                        request.byte_count,
+                    )
+                    .await?;
+                }
+            }
+        }
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.append_workflow_run_produced_file(id, request).await

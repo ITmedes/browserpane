@@ -155,4 +155,74 @@ impl InMemorySessionStore {
             ))
         })
     }
+
+    pub(in crate::session_control) async fn sum_retained_storage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u64, SessionStoreError> {
+        let project_session_ids = self
+            .sessions
+            .lock()
+            .await
+            .iter()
+            .filter(|session| {
+                session.project_id == Some(project_id)
+                    && session.owner.subject == principal.subject
+                    && session.owner.issuer == principal.issuer
+            })
+            .map(|session| session.id)
+            .collect::<std::collections::HashSet<_>>();
+
+        let workflow_bytes = self
+            .workflow_runs
+            .lock()
+            .await
+            .iter()
+            .filter(|run| {
+                run.project_id == Some(project_id)
+                    && run.owner_subject == principal.subject
+                    && run.owner_issuer == principal.issuer
+            })
+            .flat_map(|run| run.produced_files.iter().map(|file| file.byte_count))
+            .try_fold(0_u64, checked_retained_storage_add)?;
+
+        let recording_bytes = self
+            .recordings
+            .lock()
+            .await
+            .iter()
+            .filter(|recording| {
+                project_session_ids.contains(&recording.session_id)
+                    && recording.artifact_ref.is_some()
+            })
+            .filter_map(|recording| recording.bytes)
+            .try_fold(0_u64, checked_retained_storage_add)?;
+
+        let session_file_bytes = self
+            .session_files
+            .lock()
+            .await
+            .iter()
+            .filter(|file| project_session_ids.contains(&file.session_id))
+            .map(|file| file.byte_count)
+            .try_fold(0_u64, checked_retained_storage_add)?;
+
+        workflow_bytes
+            .checked_add(recording_bytes)
+            .and_then(|total| total.checked_add(session_file_bytes))
+            .ok_or_else(|| {
+                SessionStoreError::Backend(
+                    "project retained storage byte count exceeded u64 range".to_string(),
+                )
+            })
+    }
+}
+
+fn checked_retained_storage_add(left: u64, right: u64) -> Result<u64, SessionStoreError> {
+    left.checked_add(right).ok_or_else(|| {
+        SessionStoreError::Backend(
+            "project retained storage byte count exceeded u64 range".to_string(),
+        )
+    })
 }
