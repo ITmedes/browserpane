@@ -268,3 +268,67 @@ fn project_usage_reports_soft_budget_alerts() {
             && alert.limit_value == 100
     }));
 }
+
+#[tokio::test]
+async fn in_memory_store_blocks_session_creation_when_budget_enforcement_is_enabled() {
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "docker_runtime_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 4,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = principal("owner");
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "blocking-budget".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas {
+                    max_active_sessions: None,
+                    max_active_workflow_runs: None,
+                    max_retained_storage_bytes: None,
+                    max_session_creations: Some(1),
+                    max_runtime_usage_ms: Some(60_000),
+                    max_egress_total_bytes: Some(1_048_576),
+                },
+                policy: ProjectPolicy {
+                    allowed_session_template_ids: Vec::new(),
+                    allowed_egress_profile_ids: Vec::new(),
+                    usage_budget_enforcement: ProjectUsageBudgetEnforcement::BlockSessionCreation,
+                },
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+
+    store
+        .create_session(
+            &owner,
+            project_session_request(project.id),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+
+    let rejected = store
+        .create_session(
+            &owner,
+            project_session_request(project.id),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(rejected, SessionStoreError::Conflict(message) if message.contains("session_creation_budget_exceeded"))
+    );
+
+    let session_creations = store
+        .count_session_creations_for_project(&owner, project.id)
+        .await
+        .unwrap();
+    assert_eq!(session_creations, 1);
+}

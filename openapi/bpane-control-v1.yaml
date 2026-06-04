@@ -5688,6 +5688,14 @@ components:
           items:
             type: string
             format: uuid
+        usage_budget_enforcement:
+          $ref: '#/components/schemas/ProjectUsageBudgetEnforcement'
+    ProjectUsageBudgetEnforcement:
+      type: string
+      description: Warning-only keeps project usage budgets advisory. Block-session-creation rejects new project sessions after the project reaches max_session_creations; runtime and egress budgets remain advisory.
+      enum:
+        - warning_only
+        - block_session_creation
     ProjectUsageResource:
       type: object
       required:
@@ -6397,6 +6405,7 @@ components:
         - owner_scope_unbounded
         - project_quota_available
         - active_session_quota_exceeded
+        - session_creation_budget_exceeded
         - active_workflow_run_quota_exceeded
         - project_archived
         - session_template_not_allowed
@@ -6412,6 +6421,8 @@ components:
         - max_active_sessions
         - active_workflow_runs
         - max_active_workflow_runs
+        - session_creations
+        - max_session_creations
         - checked_at
       properties:
         state:
@@ -6437,6 +6448,14 @@ components:
           minimum: 0
           nullable: true
         max_active_workflow_runs:
+          type: integer
+          minimum: 1
+          nullable: true
+        session_creations:
+          type: integer
+          minimum: 0
+          nullable: true
+        max_session_creations:
           type: integer
           minimum: 1
           nullable: true

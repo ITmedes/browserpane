@@ -309,12 +309,22 @@ pub struct ProjectQuotas {
     pub max_egress_total_bytes: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectUsageBudgetEnforcement {
+    #[default]
+    WarningOnly,
+    BlockSessionCreation,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectPolicy {
     #[serde(default)]
     pub allowed_session_template_ids: Vec<String>,
     #[serde(default)]
     pub allowed_egress_profile_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub usage_budget_enforcement: ProjectUsageBudgetEnforcement,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -331,6 +341,7 @@ pub enum ProjectAdmissionReasonCode {
     OwnerScopeUnbounded,
     ProjectQuotaAvailable,
     ActiveSessionQuotaExceeded,
+    SessionCreationBudgetExceeded,
     ActiveWorkflowRunQuotaExceeded,
     ProjectArchived,
     SessionTemplateNotAllowed,
@@ -343,6 +354,7 @@ impl ProjectAdmissionReasonCode {
             Self::OwnerScopeUnbounded => "owner_scope_unbounded",
             Self::ProjectQuotaAvailable => "project_quota_available",
             Self::ActiveSessionQuotaExceeded => "active_session_quota_exceeded",
+            Self::SessionCreationBudgetExceeded => "session_creation_budget_exceeded",
             Self::ActiveWorkflowRunQuotaExceeded => "active_workflow_run_quota_exceeded",
             Self::ProjectArchived => "project_archived",
             Self::SessionTemplateNotAllowed => "session_template_not_allowed",
@@ -366,6 +378,10 @@ pub struct ProjectAdmissionDecision {
     pub active_workflow_runs: Option<u32>,
     #[serde(default)]
     pub max_active_workflow_runs: Option<u32>,
+    #[serde(default)]
+    pub session_creations: Option<u32>,
+    #[serde(default)]
+    pub max_session_creations: Option<u32>,
     pub checked_at: DateTime<Utc>,
 }
 
@@ -380,6 +396,8 @@ impl ProjectAdmissionDecision {
             max_active_sessions: None,
             active_workflow_runs: None,
             max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
             checked_at,
         }
     }
@@ -399,6 +417,8 @@ impl ProjectAdmissionDecision {
             max_active_sessions,
             active_workflow_runs: None,
             max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
             checked_at,
         }
     }
@@ -418,6 +438,8 @@ impl ProjectAdmissionDecision {
             max_active_sessions: None,
             active_workflow_runs: Some(active_workflow_runs),
             max_active_workflow_runs,
+            session_creations: None,
+            max_session_creations: None,
             checked_at,
         }
     }
@@ -439,6 +461,31 @@ impl ProjectAdmissionDecision {
             max_active_sessions,
             active_workflow_runs: None,
             max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
+            checked_at,
+        }
+    }
+
+    pub fn session_creation_budget_rejected(
+        project_id: Uuid,
+        session_creations: u32,
+        max_session_creations: u32,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Rejected,
+            reason_code: ProjectAdmissionReasonCode::SessionCreationBudgetExceeded,
+            message: format!(
+                "Project session creation budget is exhausted ({session_creations}/{max_session_creations})."
+            ),
+            project_id: Some(project_id),
+            active_sessions: None,
+            max_active_sessions: None,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            session_creations: Some(session_creations),
+            max_session_creations: Some(max_session_creations),
             checked_at,
         }
     }
@@ -460,6 +507,8 @@ impl ProjectAdmissionDecision {
             max_active_sessions: None,
             active_workflow_runs: Some(active_workflow_runs),
             max_active_workflow_runs,
+            session_creations: None,
+            max_session_creations: None,
             checked_at,
         }
     }
@@ -481,6 +530,8 @@ impl ProjectAdmissionDecision {
             max_active_sessions,
             active_workflow_runs: None,
             max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
             checked_at,
         }
     }

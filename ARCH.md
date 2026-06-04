@@ -288,7 +288,7 @@ service.
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
   - `GET /api/v1/session-templates/{id}` — fetch one session template
   - `PUT /api/v1/session-templates/{id}` — replace a session template and increment its version
-  - `POST /api/v1/projects` — create an owner-scoped project with labels, state, quota metadata, warning-first usage budgets, template/egress policy bindings, and usage counters
+  - `POST /api/v1/projects` — create an owner-scoped project with labels, state, quota metadata, usage-budget enforcement mode, template/egress policy bindings, and usage counters
   - `GET /api/v1/projects` — list owner-scoped projects with sanitized usage summaries
   - `GET /api/v1/projects/{id}` — fetch one project
   - `PUT /api/v1/projects/{id}` — replace one project, including quota metadata, policy bindings, and lifecycle state
@@ -296,7 +296,7 @@ service.
   - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, optional proxy-auth credential binding reference, bypass, custom CA, and traffic-observation metadata
   - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
-  - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress allow-lists, project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, project usage reports session creations, live-plus-finalized browser runtime milliseconds, sanitized egress receive/transmit byte totals, retained storage, and warning-first usage alerts, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, session files, and files retained in project-owned file workspaces
+  - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress allow-lists and can reject new sessions when `usage_budget_enforcement=block_session_creation` and `max_session_creations` is exhausted, project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, project usage reports session creations, live-plus-finalized browser runtime milliseconds, sanitized egress receive/transmit byte totals, retained storage, and usage alerts, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, session files, and files retained in project-owned file workspaces
   - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Proxy authentication is secret-backed through owner-scoped credential bindings and is materialized only as a session-local runtime auth file.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
@@ -555,10 +555,11 @@ The workflow layer sits on top of the owner-scoped session APIs.
   per-context storage limits rather than project retained-storage quotas.
 - project usage also reports total session creations, live-plus-finalized
   browser runtime milliseconds, and sanitized egress receive/transmit byte
-  counters; optional soft budgets emit usage alerts at 80% and 100% of the
-  configured session-creation, runtime, or metadata-only egress-byte budget;
-  proxy-side observers remain responsible for URL/status/timing logs and future
-  authoritative traffic totals
+  counters; optional budgets emit usage alerts at 80% and 100%, and project
+  policy can opt into blocking new session creation once `max_session_creations`
+  is exhausted; runtime and metadata-only egress-byte budgets remain advisory,
+  and proxy-side observers remain responsible for URL/status/timing logs and
+  future authoritative traffic totals
 - run resources expose `admission`, `intervention`, and `runtime` subresources so external systems can reason about backpressure, operator handoff, and resume mode
 - runs can bind reusable file workspace inputs, Vault-backed credential bindings, and approved extensions
 - the current execution model is Playwright-first, but the control-plane contract is executor-oriented rather than CDP-specific
@@ -852,7 +853,8 @@ more custom code and therefore more surface area for bugs.
   owner-scoped control plane, project-scoped active-session admission,
   project-scoped workflow-run admission and retained-storage quotas across
   workflow outputs, recordings, session files, and project-owned workspace
-  files, warning-first project usage budgets,
+  files, warning-first project usage budgets plus opt-in session-creation budget
+  blocking,
   docker-backed runtime assignments, and profile-backed reconnect/release
   semantics. It is still not an HA production control plane: hard cross-resource
   project quotas, windowed rate limits, backup/restore, zero-downtime

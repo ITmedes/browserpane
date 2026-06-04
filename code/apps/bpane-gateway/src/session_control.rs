@@ -203,5 +203,32 @@ fn validate_project_session_policy(
     Ok(())
 }
 
+fn validate_project_session_creation_budget(
+    project: &StoredProject,
+    session_creations: u32,
+    checked_at: DateTime<Utc>,
+) -> Result<(), SessionStoreError> {
+    if project.policy.usage_budget_enforcement
+        != ProjectUsageBudgetEnforcement::BlockSessionCreation
+    {
+        return Ok(());
+    }
+    let Some(max_session_creations) = project.quotas.max_session_creations else {
+        return Ok(());
+    };
+    if session_creations < max_session_creations {
+        return Ok(());
+    }
+
+    Err(project_admission_conflict(
+        ProjectAdmissionDecision::session_creation_budget_rejected(
+            project.id,
+            session_creations,
+            max_session_creations,
+            checked_at,
+        ),
+    ))
+}
+
 #[cfg(test)]
 mod tests;

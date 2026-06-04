@@ -38,6 +38,7 @@ import type {
   ProjectUsageAlertMetric,
   ProjectUsageAlertResource,
   ProjectUsageAlertState,
+  ProjectUsageBudgetEnforcement,
   ProjectUsageResource,
   ServicePrincipalListResponse,
   ServicePrincipalResource,
@@ -365,6 +366,10 @@ const BROWSER_CONTEXT_STATES = ['ready', 'deleted'] satisfies readonly BrowserCo
 const BROWSER_CONTEXT_PERSISTENCE_MODES = ['reusable', 'ephemeral'] satisfies readonly BrowserContextPersistenceMode[];
 const SESSION_BROWSER_CONTEXT_MODES = ['fresh', 'ephemeral', 'reusable'] satisfies readonly SessionBrowserContextMode[];
 const PROJECT_STATES = ['active', 'archived'] satisfies readonly ProjectState[];
+const PROJECT_USAGE_BUDGET_ENFORCEMENT = [
+  'warning_only',
+  'block_session_creation',
+] satisfies readonly ProjectUsageBudgetEnforcement[];
 const PROJECT_ADMISSION_STATES = ['allowed', 'queued', 'rejected'] satisfies readonly ProjectAdmissionState[];
 const PROJECT_USAGE_ALERT_METRICS = [
   'session_creations',
@@ -376,6 +381,7 @@ const PROJECT_ADMISSION_REASON_CODES = [
   'owner_scope_unbounded',
   'project_quota_available',
   'active_session_quota_exceeded',
+  'session_creation_budget_exceeded',
   'active_workflow_run_quota_exceeded',
   'project_archived',
   'session_template_not_allowed',
@@ -625,6 +631,11 @@ function toProjectPolicy(value: unknown): ProjectPolicy {
       object.allowed_egress_profile_ids ?? [],
       'project policy allowed_egress_profile_ids',
     ),
+    usage_budget_enforcement: expectEnum(
+      object.usage_budget_enforcement ?? 'warning_only',
+      'project policy usage_budget_enforcement',
+      PROJECT_USAGE_BUDGET_ENFORCEMENT,
+    ),
   };
 }
 
@@ -769,6 +780,14 @@ function toProjectAdmissionDecision(value: unknown): ProjectAdmissionDecision | 
     max_active_workflow_runs: optionalNumber(
       object.max_active_workflow_runs,
       'project admission max_active_workflow_runs',
+    ) ?? null,
+    session_creations: optionalNumber(
+      object.session_creations,
+      'project admission session_creations',
+    ) ?? null,
+    max_session_creations: optionalNumber(
+      object.max_session_creations,
+      'project admission max_session_creations',
     ) ?? null,
     checked_at: expectString(object.checked_at, 'project admission checked_at'),
   };
