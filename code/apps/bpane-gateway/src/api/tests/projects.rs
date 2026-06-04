@@ -310,6 +310,211 @@ async fn project_usage_counts_recording_bytes_and_rejects_over_quota_completion(
 }
 
 #[tokio::test]
+async fn project_storage_quota_rejects_workflow_produced_file_uploads() {
+    let (app, token) = test_router();
+
+    let project = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "workflow-storage",
+                            "quotas": { "max_retained_storage_bytes": 10 }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = project["id"].as_str().unwrap().to_string();
+
+    let workspace = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/file-workspaces")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "name": "workflow-storage-output" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workspace_id = workspace["id"].as_str().unwrap().to_string();
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "workflow-storage"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/storage.ts",
+                        "allowed_file_workspace_ids": [workspace_id]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let create_run = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "project_id": project_id,
+                        "session": {
+                            "create_session": {
+                                "project_id": project_id
+                            }
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_run.status(), StatusCode::CREATED);
+    let run = response_json(create_run).await;
+    let run_id = run["id"].as_str().unwrap().to_string();
+    assert_eq!(run["project_id"], project_id);
+
+    let first_upload = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflow-runs/{run_id}/produced-files"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .header("x-bpane-workflow-workspace-id", &workspace_id)
+                .header("x-bpane-file-name", "result.json")
+                .body(Body::from(b"12345678".to_vec()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first_upload.status(), StatusCode::CREATED);
+
+    let usage = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/projects/{project_id}/usage"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(usage["retained_storage_bytes"], 8);
+
+    let rejected_upload = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflow-runs/{run_id}/produced-files"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .header("x-bpane-workflow-workspace-id", &workspace_id)
+                .header("x-bpane-file-name", "too-large.json")
+                .body(Body::from(b"123".to_vec()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_upload.status(), StatusCode::CONFLICT);
+    let rejected_upload = response_json(rejected_upload).await;
+    assert!(rejected_upload["error"]
+        .as_str()
+        .unwrap()
+        .contains("retained_storage_quota_exceeded"));
+
+    let produced_files = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/workflow-runs/{run_id}/produced-files"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(produced_files["files"].as_array().unwrap().len(), 1);
+
+    let workspace_files = response_json(
+        app.oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/file-workspaces/{workspace_id}/files"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(workspace_files["files"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn applies_project_admission_to_sessions_and_template_defaults() {
     let (app, token) = test_router_with_docker_pool().await;
 

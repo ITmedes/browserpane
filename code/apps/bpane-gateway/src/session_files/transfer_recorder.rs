@@ -223,12 +223,16 @@ fn sanitize_transfer_name(input: &str, fallback: &str) -> String {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::fs;
     use std::sync::Arc;
 
     use tempfile::tempdir;
 
     use crate::auth::AuthenticatedPrincipal;
-    use crate::session_control::{CreateSessionRequest, SessionOwnerMode, SessionRecordingPolicy};
+    use crate::session_control::{
+        CreateSessionRequest, PersistProjectRequest, ProjectPolicy, ProjectQuotas, ProjectState,
+        SessionOwnerMode, SessionRecordingPolicy,
+    };
 
     use super::*;
 
@@ -325,6 +329,113 @@ mod tests {
             file_store.read(&files[0].artifact_ref).await.unwrap(),
             b"hello world"
         );
+    }
+
+    #[tokio::test]
+    async fn recorder_rejects_over_quota_project_upload_and_cleans_artifact() {
+        let store = SessionStore::in_memory();
+        let owner = AuthenticatedPrincipal {
+            subject: "owner".to_string(),
+            issuer: "issuer".to_string(),
+            display_name: None,
+            client_id: None,
+            safe_claims: Default::default(),
+        };
+        let project = store
+            .create_project(
+                &owner,
+                PersistProjectRequest {
+                    name: "file-quota".to_string(),
+                    description: None,
+                    labels: HashMap::new(),
+                    quotas: ProjectQuotas {
+                        max_active_sessions: None,
+                        max_active_workflow_runs: None,
+                        max_retained_storage_bytes: Some(4),
+                    },
+                    policy: ProjectPolicy::default(),
+                    state: ProjectState::Active,
+                },
+            )
+            .await
+            .unwrap();
+        let session = store
+            .create_session(
+                &owner,
+                CreateSessionRequest {
+                    project_id: Some(project.id),
+                    recording: SessionRecordingPolicy::default(),
+                    ..CreateSessionRequest::default()
+                },
+                SessionOwnerMode::Collaborative,
+            )
+            .await
+            .unwrap();
+        let temp = tempdir().unwrap();
+        let file_store_root = temp.path().join("files");
+        let file_store = Arc::new(WorkspaceFileStore::local_fs(file_store_root.clone()));
+        let recorder = SessionFileRecorder::new(
+            session.id,
+            SessionFileSource::BrowserUpload,
+            store.clone(),
+            file_store,
+        );
+        let mut active = HashMap::new();
+
+        recorder
+            .observe_frame(
+                &mut active,
+                &FileMessage::header(
+                    9,
+                    fixed_string::<256>("too-large.txt"),
+                    5,
+                    fixed_string::<64>("text/plain"),
+                )
+                .to_frame(ChannelId::FileUp),
+            )
+            .await
+            .unwrap();
+        recorder
+            .observe_frame(
+                &mut active,
+                &FileMessage::chunk(9, 0, b"12345".to_vec()).to_frame(ChannelId::FileUp),
+            )
+            .await
+            .unwrap();
+        let error = recorder
+            .observe_frame(
+                &mut active,
+                &FileMessage::complete(9).to_frame(ChannelId::FileUp),
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("retained_storage_quota_exceeded"));
+
+        let files = store
+            .list_session_files_for_session(session.id)
+            .await
+            .unwrap();
+        assert!(files.is_empty());
+        assert_eq!(count_files(&file_store_root), 0);
+    }
+
+    fn count_files(path: &std::path::Path) -> usize {
+        let Ok(entries) = fs::read_dir(path) else {
+            return 0;
+        };
+        entries
+            .filter_map(Result::ok)
+            .map(|entry| {
+                let path = entry.path();
+                if path.is_dir() {
+                    count_files(&path)
+                } else {
+                    1
+                }
+            })
+            .sum()
     }
 
     fn fixed_string<const N: usize>(input: &str) -> [u8; N] {
