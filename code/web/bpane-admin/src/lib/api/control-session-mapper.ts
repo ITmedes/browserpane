@@ -382,6 +382,7 @@ const PROJECT_ADMISSION_REASON_CODES = [
   'project_quota_available',
   'active_session_quota_exceeded',
   'session_creation_budget_exceeded',
+  'session_creation_rate_exceeded',
   'active_workflow_run_quota_exceeded',
   'project_archived',
   'session_template_not_allowed',
@@ -607,6 +608,14 @@ function toProjectQuotas(value: unknown): ProjectQuotas {
       object.max_session_creations,
       'project quotas max_session_creations',
     ) ?? null,
+    max_session_creations_per_window: optionalNumber(
+      object.max_session_creations_per_window,
+      'project quotas max_session_creations_per_window',
+    ) ?? null,
+    session_creation_window_sec: optionalNumber(
+      object.session_creation_window_sec,
+      'project quotas session_creation_window_sec',
+    ) ?? null,
     max_runtime_usage_ms: optionalNumber(
       object.max_runtime_usage_ms,
       'project quotas max_runtime_usage_ms',
@@ -788,6 +797,18 @@ function toProjectAdmissionDecision(value: unknown): ProjectAdmissionDecision | 
     max_session_creations: optionalNumber(
       object.max_session_creations,
       'project admission max_session_creations',
+    ) ?? null,
+    session_creations_in_window: optionalNumber(
+      object.session_creations_in_window,
+      'project admission session_creations_in_window',
+    ) ?? null,
+    max_session_creations_per_window: optionalNumber(
+      object.max_session_creations_per_window,
+      'project admission max_session_creations_per_window',
+    ) ?? null,
+    session_creation_window_sec: optionalNumber(
+      object.session_creation_window_sec,
+      'project admission session_creation_window_sec',
     ) ?? null,
     checked_at: expectString(object.checked_at, 'project admission checked_at'),
   };

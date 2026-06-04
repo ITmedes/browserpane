@@ -458,11 +458,24 @@ function admissionLabel(admission: SessionResource['admission'] | SessionStatus[
   if (!admission) {
     return 'No admission decision';
   }
-  const usage = admission.active_sessions !== null
-    && admission.active_sessions !== undefined
-    ? ` ${admission.active_sessions}/${admission.max_active_sessions ?? 'unlimited'}`
-    : '';
+  const usage = admissionUsageLabel(admission);
   return `${admission.state} | ${admission.reason_code}${usage}`;
+}
+
+function admissionUsageLabel(
+  admission: NonNullable<SessionResource['admission'] | SessionStatus['admission']>,
+): string {
+  if (admission.active_sessions !== null && admission.active_sessions !== undefined) {
+    return ` ${admission.active_sessions}/${admission.max_active_sessions ?? 'unlimited'}`;
+  }
+  if (admission.session_creations !== null && admission.session_creations !== undefined) {
+    return ` ${admission.session_creations}/${admission.max_session_creations ?? 'unlimited'}`;
+  }
+  if (admission.session_creations_in_window !== null && admission.session_creations_in_window !== undefined) {
+    const windowSec = admission.session_creation_window_sec ?? 'window';
+    return ` ${admission.session_creations_in_window}/${admission.max_session_creations_per_window ?? 'unlimited'} per ${windowSec}s`;
+  }
+  return '';
 }
 
 function browserContextLabel(

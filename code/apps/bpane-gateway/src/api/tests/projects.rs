@@ -43,6 +43,8 @@ async fn manages_projects_and_reports_usage() {
                             "max_active_workflow_runs": 2,
                             "max_retained_storage_bytes": 1048576,
                             "max_session_creations": 1,
+                            "max_session_creations_per_window": 2,
+                            "session_creation_window_sec": 3600,
                             "max_runtime_usage_ms": 60000,
                             "max_egress_total_bytes": 10485760
                         }
@@ -63,6 +65,8 @@ async fn manages_projects_and_reports_usage() {
     assert_eq!(project["usage"]["session_creations"], 0);
     assert_eq!(project["usage"]["max_active_sessions"], 1);
     assert_eq!(project["usage"]["max_session_creations"], 1);
+    assert_eq!(project["quotas"]["max_session_creations_per_window"], 2);
+    assert_eq!(project["quotas"]["session_creation_window_sec"], 3600);
     assert_eq!(project["usage"]["runtime_usage_ms"], 0);
     assert_eq!(project["usage"]["max_runtime_usage_ms"], 60000);
     assert_eq!(project["usage"]["egress_rx_bytes"], 0);
@@ -320,11 +324,99 @@ async fn project_budget_enforcement_blocks_session_creation_when_enabled() {
 }
 
 #[tokio::test]
+async fn project_rate_limit_enforcement_blocks_session_creation_when_enabled() {
+    let (app, token) = test_router_with_docker_pool().await;
+
+    let project = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "rate-limited-project",
+                            "quotas": {
+                                "max_session_creations_per_window": 1,
+                                "session_creation_window_sec": 3600
+                            },
+                            "policy": {
+                                "usage_budget_enforcement": "block_session_creation"
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = project["id"].as_str().unwrap().to_string();
+
+    let created_session = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created_session.status(), StatusCode::CREATED);
+
+    let rejected_session = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_session.status(), StatusCode::CONFLICT);
+    let rejection = String::from_utf8(
+        axum::body::to_bytes(rejected_session.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(rejection.contains("session_creation_rate_exceeded"));
+    assert!(rejection.contains("1/1"));
+    assert!(rejection.contains("3600s"));
+}
+
+#[tokio::test]
 async fn rejects_zero_project_usage_budget_quotas() {
     let (app, token) = test_router_with_docker_pool().await;
 
     for quotas in [
         json!({ "max_session_creations": 0 }),
+        json!({ "max_session_creations_per_window": 0, "session_creation_window_sec": 3600 }),
+        json!({ "max_session_creations_per_window": 1, "session_creation_window_sec": 0 }),
+        json!({ "max_session_creations_per_window": 1 }),
+        json!({ "session_creation_window_sec": 3600 }),
         json!({ "max_runtime_usage_ms": 0 }),
         json!({ "max_egress_total_bytes": 0 }),
     ] {

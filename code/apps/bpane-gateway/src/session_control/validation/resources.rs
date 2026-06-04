@@ -114,6 +114,30 @@ pub(in crate::session_control) fn validate_project_request(
                 .to_string(),
         ));
     }
+    match (
+        request.quotas.max_session_creations_per_window,
+        request.quotas.session_creation_window_sec,
+    ) {
+        (Some(0), _) => {
+            return Err(SessionStoreError::InvalidRequest(
+                "project quotas.max_session_creations_per_window must be greater than zero when provided"
+                    .to_string(),
+            ));
+        }
+        (_, Some(0)) => {
+            return Err(SessionStoreError::InvalidRequest(
+                "project quotas.session_creation_window_sec must be greater than zero when provided"
+                    .to_string(),
+            ));
+        }
+        (Some(_), Some(_)) | (None, None) => {}
+        (Some(_), None) | (None, Some(_)) => {
+            return Err(SessionStoreError::InvalidRequest(
+                "project quotas.max_session_creations_per_window and session_creation_window_sec must be provided together"
+                    .to_string(),
+            ));
+        }
+    }
     if request.quotas.max_runtime_usage_ms == Some(0) {
         return Err(SessionStoreError::InvalidRequest(
             "project quotas.max_runtime_usage_ms must be greater than zero when provided"

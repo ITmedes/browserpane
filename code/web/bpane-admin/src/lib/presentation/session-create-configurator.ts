@@ -507,6 +507,7 @@ export function projectOptionLabel(project: ProjectResource): string {
     `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
     project.usage.queued_sessions > 0 ? `queued=${project.usage.queued_sessions}` : null,
     project.usage.session_creations > 0 ? `created=${project.usage.session_creations}` : null,
+    sessionCreationRateLabel(project) ? `rate=${sessionCreationRateLabel(project)}` : null,
     project.usage.max_active_workflow_runs !== null && project.usage.max_active_workflow_runs !== undefined
       ? `workflows=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`
       : null,
@@ -532,13 +533,14 @@ export function projectUsageSummary(project: ProjectResource | null | undefined)
     `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
     `queued_sessions=${project.usage.queued_sessions}`,
     `created_sessions=${project.usage.session_creations}`,
+    sessionCreationRateLabel(project) ? `session_rate=${sessionCreationRateLabel(project)}` : null,
     `workflow_runs=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`,
     `runtime=${formatDurationMs(project.usage.runtime_usage_ms)}`,
     `egress_bytes=${formatBytes(project.usage.egress_total_bytes)}`,
     `storage=${usageFraction(project.usage.retained_storage_bytes, project.usage.max_retained_storage_bytes)}`,
     `alerts=${projectUsageAlertsSummary(project)}`,
     `policy=${projectPolicySummary(project)}`,
-  ];
+  ].filter(Boolean);
   const labels = Object.entries(project.labels).sort(([left], [right]) => left.localeCompare(right));
   if (labels.length > 0) {
     facts.push(`labels=${labels.map(([key, value]) => `${key}=${value}`).join(',')}`);
@@ -570,6 +572,15 @@ function projectUsageAlertsSummary(project: ProjectResource): string {
     exceeded > 0 ? `${exceeded} exceeded` : null,
     approaching > 0 ? `${approaching} warning${approaching === 1 ? '' : 's'}` : null,
   ].filter(Boolean).join(', ');
+}
+
+function sessionCreationRateLabel(project: ProjectResource): string | null {
+  const maxPerWindow = project.quotas.max_session_creations_per_window;
+  const windowSec = project.quotas.session_creation_window_sec;
+  if (maxPerWindow === null || maxPerWindow === undefined || windowSec === null || windowSec === undefined) {
+    return null;
+  }
+  return `${maxPerWindow}/${formatDuration(windowSec)}`;
 }
 
 export function egressProfileKind(profile: EgressProfileResource): 'tls_interceptor' | 'proxy' | 'other' {

@@ -69,6 +69,17 @@ impl SessionRepository<'_> {
                 )
                 .await?;
             validate_project_session_creation_budget(&project, session_creations, now)?;
+            if let Some(window_started_at) = project_session_creation_window_start(&project, now) {
+                let session_creations_in_window = self
+                    .count_session_creations_for_project_since_in_transaction(
+                        &transaction,
+                        principal,
+                        project_id,
+                        window_started_at,
+                    )
+                    .await?;
+                validate_project_session_creation_rate(&project, session_creations_in_window, now)?;
+            }
             if let Some(max_active_sessions) = project.quotas.max_active_sessions {
                 if active_project_sessions >= max_active_sessions {
                     (

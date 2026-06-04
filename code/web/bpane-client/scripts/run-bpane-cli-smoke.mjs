@@ -153,6 +153,10 @@ async function run() {
       '1073741824',
       '--max-session-creations',
       '25',
+      '--max-session-creations-per-window',
+      '10',
+      '--session-creation-window-sec',
+      '3600',
       '--max-runtime-usage-ms',
       '86400000',
       '--max-egress-total-bytes',
@@ -163,6 +167,8 @@ async function run() {
       !projectId
       || project.quotas?.max_active_sessions !== 3
       || project.quotas?.max_session_creations !== 25
+      || project.quotas?.max_session_creations_per_window !== 10
+      || project.quotas?.session_creation_window_sec !== 3600
       || project.quotas?.max_runtime_usage_ms !== 86400000
       || project.quotas?.max_egress_total_bytes !== 1073741824
       || project.state !== 'active'

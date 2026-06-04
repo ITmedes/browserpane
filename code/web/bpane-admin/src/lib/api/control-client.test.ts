@@ -114,6 +114,8 @@ const PROJECT = {
     max_active_workflow_runs: 4,
     max_retained_storage_bytes: 1073741824,
     max_session_creations: 5,
+    max_session_creations_per_window: 2,
+    session_creation_window_sec: 3600,
   },
   state: 'active',
   usage: {
@@ -612,6 +614,8 @@ describe('ControlClient', () => {
         max_active_sessions: 2,
         max_active_workflow_runs: 4,
         max_retained_storage_bytes: 1073741824,
+        max_session_creations_per_window: 2,
+        session_creation_window_sec: 3600,
       },
     });
     await client.getProject('project/with space');
@@ -652,6 +656,8 @@ describe('ControlClient', () => {
             max_active_sessions: 2,
             max_active_workflow_runs: 4,
             max_retained_storage_bytes: 1073741824,
+            max_session_creations_per_window: 2,
+            session_creation_window_sec: 3600,
           },
           policy: {},
           state: 'active',

@@ -211,6 +211,8 @@ async fn in_memory_store_queues_project_sessions_and_promotes_after_stop() {
                     max_active_workflow_runs: None,
                     max_retained_storage_bytes: None,
                     max_session_creations: None,
+                    max_session_creations_per_window: None,
+                    session_creation_window_sec: None,
                     max_runtime_usage_ms: None,
                     max_egress_total_bytes: None,
                 },

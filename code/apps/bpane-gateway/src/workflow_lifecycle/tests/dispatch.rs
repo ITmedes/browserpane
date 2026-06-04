@@ -295,6 +295,8 @@ async fn queues_waiting_run_when_project_workflow_quota_is_exhausted() {
                     max_active_workflow_runs: Some(1),
                     max_retained_storage_bytes: None,
                     max_session_creations: None,
+                    max_session_creations_per_window: None,
+                    session_creation_window_sec: None,
                     max_runtime_usage_ms: None,
                     max_egress_total_bytes: None,
                 },

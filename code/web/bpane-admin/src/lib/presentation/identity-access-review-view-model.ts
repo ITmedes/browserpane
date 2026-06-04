@@ -228,7 +228,7 @@ function projectRow(project: ProjectResource): IdentityProjectRow {
       project.usage.max_active_sessions,
     ),
     queuedSessions: String(project.usage.queued_sessions),
-    sessionCreations: String(project.usage.session_creations),
+    sessionCreations: sessionCreationLabel(project),
     activeWorkflowRuns: quotaLabel(
       project.usage.active_workflow_runs,
       project.usage.max_active_workflow_runs,
@@ -274,11 +274,42 @@ function quotaLabel(current: number, limit: number | null | undefined): string {
   return limit === null || limit === undefined ? `${current}` : `${current}/${limit}`;
 }
 
+function sessionCreationLabel(project: ProjectResource): string {
+  const cumulative = quotaLabel(
+    project.usage.session_creations,
+    project.usage.max_session_creations,
+  );
+  const rate = sessionCreationRateLabel(project);
+  return rate ? `${cumulative}, ${rate}` : cumulative;
+}
+
+function sessionCreationRateLabel(project: ProjectResource): string | null {
+  const maxPerWindow = project.quotas.max_session_creations_per_window;
+  const windowSec = project.quotas.session_creation_window_sec;
+  if (maxPerWindow === null || maxPerWindow === undefined || windowSec === null || windowSec === undefined) {
+    return null;
+  }
+  return `${maxPerWindow} / ${formatDurationSeconds(windowSec)}`;
+}
+
 function storageLabel(current: number, limit: number | null | undefined): string {
   const currentLabel = formatBytes(current);
   return limit === null || limit === undefined
     ? currentLabel
     : `${currentLabel} / ${formatBytes(limit)}`;
+}
+
+function formatDurationSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '0s';
+  }
+  if (seconds % 3600 === 0) {
+    return `${seconds / 3600}h`;
+  }
+  if (seconds % 60 === 0) {
+    return `${seconds / 60}m`;
+  }
+  return `${seconds}s`;
 }
 
 function formatBytes(value: number): string {

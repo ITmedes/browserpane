@@ -65,6 +65,7 @@ const KNOWN_OPTIONS = new Set([
   'max-retained-storage-bytes',
   'max-runtime-usage-ms',
   'max-session-creations',
+  'max-session-creations-per-window',
   'name',
   'older-than-sec',
   'offset',
@@ -83,6 +84,7 @@ const KNOWN_OPTIONS = new Set([
   'recording-retention-sec',
   'retention-sec',
   'save-token',
+  'session-creation-window-sec',
   'usage-budget-enforcement',
   'set-default',
   'scope',
@@ -233,6 +235,8 @@ function usageText() {
     '  --max-active-workflow-runs <count> Project active workflow-run quota.',
     '  --max-retained-storage-bytes <bytes> Project retained-storage quota.',
     '  --max-session-creations <count> Project soft budget for created sessions.',
+    '  --max-session-creations-per-window <count> Project rolling session-creation limit.',
+    '  --session-creation-window-sec <sec> Project session-creation rolling window.',
     '  --max-runtime-usage-ms <ms> Project soft budget for browser runtime milliseconds.',
     '  --max-egress-total-bytes <bytes> Project soft metadata budget for egress bytes.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
@@ -1145,6 +1149,14 @@ function buildProjectQuotas(options, existingQuotas = null) {
   const maxSessionCreations = parseIntegerOption(options, 'max-session-creations');
   if (maxSessionCreations !== null) {
     quotas.max_session_creations = maxSessionCreations;
+  }
+  const maxSessionCreationsPerWindow = parseIntegerOption(options, 'max-session-creations-per-window');
+  if (maxSessionCreationsPerWindow !== null) {
+    quotas.max_session_creations_per_window = maxSessionCreationsPerWindow;
+  }
+  const sessionCreationWindowSec = parseIntegerOption(options, 'session-creation-window-sec');
+  if (sessionCreationWindowSec !== null) {
+    quotas.session_creation_window_sec = sessionCreationWindowSec;
   }
   const maxRuntimeUsageMs = parseIntegerOption(options, 'max-runtime-usage-ms');
   if (maxRuntimeUsageMs !== null) {
