@@ -24,7 +24,7 @@ use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig,
     EgressDiagnosticsResource, EgressProfileState, EgressProxyConfig,
     EgressTrafficObservationConfig, IdentityMappingKind, IdentityMappingState,
-    ProjectAdmissionDecision, ProjectQuotas, ProjectState, ServicePrincipalState,
+    ProjectAdmissionDecision, ProjectPolicy, ProjectQuotas, ProjectState, ServicePrincipalState,
     SessionConnectInfo, SessionEffectiveEgress, SessionLifecycleState, SessionNetworkIdentity,
     SessionOwnerMode, SessionProjectResource, SessionRecordingFormat, SessionRecordingMode,
     SessionResource, SessionStatusSummary, SessionStore, SessionTemplateDefaults,
@@ -326,6 +326,8 @@ pub(super) struct UpsertProjectRequest {
     pub(super) labels: HashMap<String, String>,
     #[serde(default)]
     pub(super) quotas: ProjectQuotas,
+    #[serde(default)]
+    pub(super) policy: ProjectPolicy,
     #[serde(default = "default_project_state")]
     pub(super) state: ProjectState,
 }

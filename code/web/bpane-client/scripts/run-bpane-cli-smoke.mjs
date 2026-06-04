@@ -399,6 +399,22 @@ async function run() {
       throw new Error(`CLI session-template update did not increment the template version: ${JSON.stringify(updatedTemplate)}`);
     }
 
+    const policyProject = runBpaneCli([
+      'project',
+      'update',
+      projectId,
+      '--allowed-session-template-id',
+      templateId,
+      '--allowed-egress-profile-id',
+      egressProfileId,
+    ], cliEnv);
+    if (
+      policyProject.policy?.allowed_session_template_ids?.[0] !== templateId
+      || policyProject.policy?.allowed_egress_profile_ids?.[0] !== egressProfileId
+    ) {
+      throw new Error(`CLI project update did not persist project policy bindings: ${JSON.stringify(policyProject)}`);
+    }
+
     const browserContext = runBpaneCli([
       'browser-context',
       'create',

@@ -18,6 +18,10 @@ const PROJECT: ProjectResource = {
   description: null,
   labels: {},
   quotas: {},
+  policy: {
+    allowed_session_template_ids: [],
+    allowed_egress_profile_ids: [],
+  },
   state: 'active',
   usage: {
     project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',

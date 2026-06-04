@@ -491,6 +491,12 @@ export function projectOptionLabel(project: ProjectResource): string {
     project.usage.max_active_workflow_runs !== null && project.usage.max_active_workflow_runs !== undefined
       ? `workflows=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`
       : null,
+    project.policy.allowed_session_template_ids.length > 0
+      ? `templates=${project.policy.allowed_session_template_ids.length}`
+      : null,
+    project.policy.allowed_egress_profile_ids.length > 0
+      ? `egress=${project.policy.allowed_egress_profile_ids.length}`
+      : null,
   ].filter(Boolean);
   return `${project.name} (${signals.join(', ')})`;
 }
@@ -504,12 +510,24 @@ export function projectUsageSummary(project: ProjectResource | null | undefined)
     `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
     `workflow_runs=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`,
     `storage=${usageFraction(project.usage.retained_storage_bytes, project.usage.max_retained_storage_bytes)}`,
+    `policy=${projectPolicySummary(project)}`,
   ];
   const labels = Object.entries(project.labels).sort(([left], [right]) => left.localeCompare(right));
   if (labels.length > 0) {
     facts.push(`labels=${labels.map(([key, value]) => `${key}=${value}`).join(',')}`);
   }
   return facts.join(' | ');
+}
+
+function projectPolicySummary(project: ProjectResource): string {
+  const facts = [];
+  if (project.policy.allowed_session_template_ids.length > 0) {
+    facts.push(`${project.policy.allowed_session_template_ids.length} templates`);
+  }
+  if (project.policy.allowed_egress_profile_ids.length > 0) {
+    facts.push(`${project.policy.allowed_egress_profile_ids.length} egress profiles`);
+  }
+  return facts.length > 0 ? facts.join(',') : 'unrestricted';
 }
 
 export function egressProfileKind(profile: EgressProfileResource): 'tls_interceptor' | 'proxy' | 'other' {

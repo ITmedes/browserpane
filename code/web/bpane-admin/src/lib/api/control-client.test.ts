@@ -586,6 +586,7 @@ describe('ControlClient', () => {
             max_active_workflow_runs: 4,
             max_retained_storage_bytes: 1073741824,
           },
+          policy: {},
           state: 'active',
         }),
       }),
@@ -605,6 +606,7 @@ describe('ControlClient', () => {
           state: 'archived',
           labels: {},
           quotas: {},
+          policy: {},
         }),
       }),
     );

@@ -300,6 +300,14 @@ pub struct ProjectQuotas {
     pub max_retained_storage_bytes: Option<u64>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectPolicy {
+    #[serde(default)]
+    pub allowed_session_template_ids: Vec<String>,
+    #[serde(default)]
+    pub allowed_egress_profile_ids: Vec<Uuid>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectAdmissionState {
@@ -316,6 +324,8 @@ pub enum ProjectAdmissionReasonCode {
     ActiveSessionQuotaExceeded,
     ActiveWorkflowRunQuotaExceeded,
     ProjectArchived,
+    SessionTemplateNotAllowed,
+    EgressProfileNotAllowed,
 }
 
 impl ProjectAdmissionReasonCode {
@@ -326,6 +336,8 @@ impl ProjectAdmissionReasonCode {
             Self::ActiveSessionQuotaExceeded => "active_session_quota_exceeded",
             Self::ActiveWorkflowRunQuotaExceeded => "active_workflow_run_quota_exceeded",
             Self::ProjectArchived => "project_archived",
+            Self::SessionTemplateNotAllowed => "session_template_not_allowed",
+            Self::EgressProfileNotAllowed => "egress_profile_not_allowed",
         }
     }
 }
@@ -450,6 +462,7 @@ pub struct PersistProjectRequest {
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
     pub quotas: ProjectQuotas,
+    pub policy: ProjectPolicy,
     pub state: ProjectState,
 }
 
@@ -462,6 +475,7 @@ pub struct StoredProject {
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
     pub quotas: ProjectQuotas,
+    pub policy: ProjectPolicy,
     pub state: ProjectState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -486,6 +500,7 @@ pub struct ProjectResource {
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
     pub quotas: ProjectQuotas,
+    pub policy: ProjectPolicy,
     pub state: ProjectState,
     pub usage: ProjectUsageResource,
     pub created_at: DateTime<Utc>,
@@ -780,6 +795,7 @@ impl StoredProject {
             description: self.description.clone(),
             labels: self.labels.clone(),
             quotas: self.quotas.clone(),
+            policy: self.policy.clone(),
             state: self.state,
             usage: self.usage(active_sessions, active_workflow_runs, observed_at),
             created_at: self.created_at,

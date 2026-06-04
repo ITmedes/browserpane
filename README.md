@@ -339,13 +339,15 @@ be sent.
 Project resources let operators group sessions and workflow runs under an
 owner-scoped tenant, case, customer, or environment boundary. A project carries
 labels, lifecycle state, optional quotas such as `max_active_sessions` and
-`max_active_workflow_runs`, and sanitized usage counters. Creating a session or
+`max_active_workflow_runs`, first policy bindings for allowed session templates
+and egress profiles, and sanitized usage counters. Creating a session or
 workflow run with `project_id` records the admission decision and enforces
-archived-project checks before runtime launch; workflow runs also inherit the
-project from their bound session when the request omits `project_id`. Session
-and workflow-run resources include the project summary and admission reason so
-the admin live view, inspectors, CLI, and API clients all show whether work was
-admitted under project quota, queued by project capacity, or left owner-scoped.
+archived-project checks plus template/egress allow-lists before runtime launch;
+workflow runs also inherit the project from their bound session when the request
+omits `project_id`. Session and workflow-run resources include the project
+summary and admission reason so the admin live view, inspectors, CLI, and API
+clients all show whether work was admitted under project quota, queued by
+project capacity, rejected by project policy, or left owner-scoped.
 Identity resources expose a sanitized access-review foundation:
 `GET /api/v1/identity/me` returns the current bearer principal as `user`,
 `service_principal`, or `legacy_dev_token`, while
@@ -639,6 +641,9 @@ Common project operations:
 ./scripts/bpane project get <project-id>
 ./scripts/bpane project usage <project-id>
 ./scripts/bpane project update <project-id> --name support-tenant --max-active-sessions 5
+./scripts/bpane project update <project-id> \
+  --allowed-session-template-id <template-id> \
+  --allowed-egress-profile-id <egress-profile-id>
 ./scripts/bpane project archive <project-id>
 ./scripts/bpane session-template create tenant-debug-session --project-id <project-id> --default-label purpose=debug
 ```

@@ -8,6 +8,7 @@ const PROJECT_COLUMNS: &str = r#"
     description,
     labels,
     quotas,
+    policy,
     state,
     created_at,
     updated_at
@@ -93,6 +94,9 @@ impl ProjectRepository<'_> {
         let quotas_value = serde_json::to_value(&request.quotas).map_err(|error| {
             SessionStoreError::Backend(format!("failed to encode project quotas: {error}"))
         })?;
+        let policy_value = serde_json::to_value(&request.policy).map_err(|error| {
+            SessionStoreError::Backend(format!("failed to encode project policy: {error}"))
+        })?;
         let query = format!(
             r#"
             INSERT INTO control_projects (
@@ -103,11 +107,12 @@ impl ProjectRepository<'_> {
                 description,
                 labels,
                 quotas,
+                policy,
                 state,
                 created_at,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $9)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10, $10)
             RETURNING
                 {PROJECT_COLUMNS}
             "#
@@ -127,6 +132,7 @@ impl ProjectRepository<'_> {
                     &request.description,
                     &json_labels(&request.labels),
                     &quotas_value,
+                    &policy_value,
                     &request.state.as_str(),
                     &now,
                 ],
@@ -208,6 +214,9 @@ impl ProjectRepository<'_> {
         let quotas_value = serde_json::to_value(&request.quotas).map_err(|error| {
             SessionStoreError::Backend(format!("failed to encode project quotas: {error}"))
         })?;
+        let policy_value = serde_json::to_value(&request.policy).map_err(|error| {
+            SessionStoreError::Backend(format!("failed to encode project policy: {error}"))
+        })?;
         let query = format!(
             r#"
             UPDATE control_projects
@@ -216,7 +225,8 @@ impl ProjectRepository<'_> {
                 description = $5,
                 labels = $6::jsonb,
                 quotas = $7::jsonb,
-                state = $8,
+                policy = $8::jsonb,
+                state = $9,
                 updated_at = NOW()
             WHERE id = $1
               AND owner_subject = $2
@@ -240,6 +250,7 @@ impl ProjectRepository<'_> {
                     &request.description,
                     &json_labels(&request.labels),
                     &quotas_value,
+                    &policy_value,
                     &request.state.as_str(),
                 ],
             )

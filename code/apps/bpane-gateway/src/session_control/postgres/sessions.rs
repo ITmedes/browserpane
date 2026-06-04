@@ -206,6 +206,7 @@ impl SessionRepository<'_> {
                 description,
                 labels,
                 quotas,
+                policy,
                 state,
                 created_at,
                 updated_at

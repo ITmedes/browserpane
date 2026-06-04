@@ -41,6 +41,10 @@ const REVIEW: IdentityAccessReviewResponse = {
         max_active_workflow_runs: 4,
         max_retained_storage_bytes: 1048576,
       },
+      policy: {
+        allowed_session_template_ids: ['template-1'],
+        allowed_egress_profile_ids: [],
+      },
       state: 'active',
       usage: {
         project_id: 'project-1',
@@ -128,6 +132,7 @@ describe('IdentityAccessReviewViewModelBuilder', () => {
       activeSessions: '1/3',
       activeWorkflowRuns: '2/4',
       retainedStorage: '512 KiB / 1.0 MiB',
+      policy: '1 templates',
     });
     expect(viewModel.servicePrincipals[0]).toMatchObject({
       name: 'BrowserPane MCP bridge',
