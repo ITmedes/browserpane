@@ -313,3 +313,202 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
         .unwrap()
         .contains("project_archived"));
 }
+
+#[tokio::test]
+async fn enforces_project_template_and_egress_policy_for_sessions() {
+    let (app, token) = test_router_with_docker_pool().await;
+
+    let allowed_template = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/session-templates")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "name": "tenant-debug-template" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let allowed_template_id = allowed_template["id"].as_str().unwrap().to_string();
+
+    let disallowed_template = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/session-templates")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "name": "generic-debug-template" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let disallowed_template_id = disallowed_template["id"].as_str().unwrap().to_string();
+
+    let allowed_profile = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/egress-profiles")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "approved-egress",
+                            "proxy": { "url": "https://proxy.example:8443" }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let allowed_profile_id = allowed_profile["id"].as_str().unwrap().to_string();
+
+    let disallowed_profile = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/egress-profiles")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "generic-egress",
+                            "proxy": { "url": "https://other-proxy.example:8443" }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let disallowed_profile_id = disallowed_profile["id"].as_str().unwrap().to_string();
+
+    let project = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "tenant-policy",
+                            "policy": {
+                                "allowed_session_template_ids": [allowed_template_id],
+                                "allowed_egress_profile_ids": [allowed_profile_id]
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = project["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        project["policy"]["allowed_session_template_ids"][0],
+        allowed_template_id
+    );
+    assert_eq!(
+        project["policy"]["allowed_egress_profile_ids"][0],
+        allowed_profile_id
+    );
+
+    let allowed = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "template_id": allowed_template_id,
+                        "network_identity": { "egress_profile_id": allowed_profile_id }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(allowed.status(), StatusCode::CREATED);
+
+    let rejected_template = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "template_id": disallowed_template_id,
+                        "network_identity": { "egress_profile_id": allowed_profile_id }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_template.status(), StatusCode::CONFLICT);
+    let rejected_template = response_json(rejected_template).await;
+    assert!(rejected_template["error"]
+        .as_str()
+        .unwrap()
+        .contains("session_template_not_allowed"));
+
+    let rejected_egress = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "template_id": allowed_template_id,
+                        "network_identity": { "egress_profile_id": disallowed_profile_id }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_egress.status(), StatusCode::CONFLICT);
+    let rejected_egress = response_json(rejected_egress).await;
+    assert!(rejected_egress["error"]
+        .as_str()
+        .unwrap()
+        .contains("egress_profile_not_allowed"));
+}

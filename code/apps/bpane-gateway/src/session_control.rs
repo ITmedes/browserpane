@@ -99,5 +99,91 @@ fn task_visible_to_principal(session: &StoredSession, principal: &AuthenticatedP
     session.owner.subject == principal.subject && session.owner.issuer == principal.issuer
 }
 
+fn project_admission_conflict(decision: ProjectAdmissionDecision) -> SessionStoreError {
+    SessionStoreError::Conflict(format!(
+        "project admission rejected: {}: {}",
+        decision.reason_code.as_str(),
+        decision.message
+    ))
+}
+
+fn validate_project_session_policy(
+    project: &StoredProject,
+    request: &CreateSessionRequest,
+    active_project_sessions: u32,
+    checked_at: DateTime<Utc>,
+) -> Result<(), SessionStoreError> {
+    if !project.policy.allowed_session_template_ids.is_empty() {
+        let template_id = request.template_id.as_deref();
+        let allowed = template_id.is_some_and(|template_id| {
+            project
+                .policy
+                .allowed_session_template_ids
+                .iter()
+                .any(|allowed_id| allowed_id == template_id)
+        });
+        if !allowed {
+            let message = match template_id {
+                Some(template_id) => format!(
+                    "project {} does not allow session template {}",
+                    project.id, template_id
+                ),
+                None => format!(
+                    "project {} requires one of the allowed session templates",
+                    project.id
+                ),
+            };
+            return Err(project_admission_conflict(
+                ProjectAdmissionDecision::rejected(
+                    project.id,
+                    ProjectAdmissionReasonCode::SessionTemplateNotAllowed,
+                    message,
+                    active_project_sessions,
+                    project.quotas.max_active_sessions,
+                    checked_at,
+                ),
+            ));
+        }
+    }
+
+    if !project.policy.allowed_egress_profile_ids.is_empty() {
+        let egress_profile_id = request
+            .network_identity
+            .as_ref()
+            .and_then(|identity| identity.egress_profile_id);
+        let allowed = egress_profile_id.is_some_and(|profile_id| {
+            project
+                .policy
+                .allowed_egress_profile_ids
+                .iter()
+                .any(|allowed_id| *allowed_id == profile_id)
+        });
+        if !allowed {
+            let message = match egress_profile_id {
+                Some(profile_id) => format!(
+                    "project {} does not allow egress profile {}",
+                    project.id, profile_id
+                ),
+                None => format!(
+                    "project {} requires one of the allowed egress profiles",
+                    project.id
+                ),
+            };
+            return Err(project_admission_conflict(
+                ProjectAdmissionDecision::rejected(
+                    project.id,
+                    ProjectAdmissionReasonCode::EgressProfileNotAllowed,
+                    message,
+                    active_project_sessions,
+                    project.quotas.max_active_sessions,
+                    checked_at,
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests;

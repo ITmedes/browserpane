@@ -26,6 +26,7 @@ impl InMemorySessionStore {
             description: request.description,
             labels: request.labels,
             quotas: request.quotas,
+            policy: request.policy,
             state: request.state,
             created_at: now,
             updated_at: now,
@@ -101,6 +102,7 @@ impl InMemorySessionStore {
         project.description = request.description;
         project.labels = request.labels;
         project.quotas = request.quotas;
+        project.policy = request.policy;
         project.state = request.state;
         project.updated_at = Utc::now();
         Ok(Some(project.clone()))

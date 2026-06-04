@@ -31,6 +31,7 @@ import type {
   ProjectAdmissionReasonCode,
   ProjectAdmissionState,
   ProjectListResponse,
+  ProjectPolicy,
   ProjectQuotas,
   ProjectResource,
   ProjectState,
@@ -157,6 +158,7 @@ export class ControlSessionMapper {
       description: description ?? null,
       labels: expectStringRecord(object.labels ?? {}, 'project labels'),
       quotas: toProjectQuotas(object.quotas),
+      policy: toProjectPolicy(object.policy),
       state: expectEnum(object.state, 'project state', PROJECT_STATES),
       usage: toProjectUsage(object.usage),
       created_at: expectString(object.created_at, 'project created_at'),
@@ -361,6 +363,8 @@ const PROJECT_ADMISSION_REASON_CODES = [
   'active_session_quota_exceeded',
   'active_workflow_run_quota_exceeded',
   'project_archived',
+  'session_template_not_allowed',
+  'egress_profile_not_allowed',
 ] satisfies readonly ProjectAdmissionReasonCode[];
 const IDENTITY_PRINCIPAL_TYPES = ['user', 'service_principal', 'legacy_dev_token'] satisfies readonly IdentityPrincipalType[];
 const IDENTITY_MAPPING_KINDS = ['user', 'group', 'claim', 'service_principal'] satisfies readonly IdentityMappingKind[];
@@ -578,6 +582,22 @@ function toProjectQuotas(value: unknown): ProjectQuotas {
       object.max_retained_storage_bytes,
       'project quotas max_retained_storage_bytes',
     ) ?? null,
+  };
+}
+
+function toProjectPolicy(value: unknown): ProjectPolicy {
+  const object = value === undefined || value === null
+    ? {}
+    : expectRecord(value, 'project policy');
+  return {
+    allowed_session_template_ids: toStringArray(
+      object.allowed_session_template_ids ?? [],
+      'project policy allowed_session_template_ids',
+    ),
+    allowed_egress_profile_ids: toStringArray(
+      object.allowed_egress_profile_ids ?? [],
+      'project policy allowed_egress_profile_ids',
+    ),
   };
 }
 

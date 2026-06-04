@@ -16,7 +16,9 @@ export const EXIT_CODES = Object.freeze({
 
 const KNOWN_OPTIONS = new Set([
   'access-token',
+  'allowed-egress-profile-id',
   'api-url',
+  'allowed-session-template-id',
   'base-url',
   'body-json',
   'browser-context-id',
@@ -218,8 +220,10 @@ function usageText() {
     '  --claim-name <name>       Claim name for claim identity mappings.',
     '  --service-principal-id <id> Registered service principal id for service-principal mappings.',
     '  --scope <name>            Repeatable service-principal scope metadata.',
-    '  --allowed-project-id <id> Repeatable service-principal project metadata.',
-    '  --max-active-sessions <count> Project active-session quota.',
+  '  --allowed-project-id <id> Repeatable service-principal project metadata.',
+  '  --allowed-session-template-id <id> Repeatable project policy template allow-list entry.',
+  '  --allowed-egress-profile-id <id> Repeatable project policy egress-profile allow-list entry.',
+  '  --max-active-sessions <count> Project active-session quota.',
     '  --max-active-workflow-runs <count> Project active workflow-run quota.',
     '  --max-retained-storage-bytes <bytes> Project retained-storage quota.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
@@ -1132,6 +1136,19 @@ function buildProjectQuotas(options, existingQuotas = null) {
   return quotas;
 }
 
+function buildProjectPolicy(options, existingPolicy = null) {
+  const policy = isObjectRecord(existingPolicy) ? { ...existingPolicy } : {};
+  const templateIds = getOptions(options, 'allowed-session-template-id');
+  if (templateIds.length) {
+    policy.allowed_session_template_ids = templateIds.filter((templateId) => templateId !== '');
+  }
+  const egressProfileIds = getOptions(options, 'allowed-egress-profile-id');
+  if (egressProfileIds.length) {
+    policy.allowed_egress_profile_ids = egressProfileIds.filter((profileId) => profileId !== '');
+  }
+  return policy;
+}
+
 function buildProjectRequest(options, fallbackName = null) {
   const rawBody = parseJsonOption(options, 'body-json');
   if (rawBody !== null) {
@@ -1158,6 +1175,10 @@ function buildProjectRequest(options, fallbackName = null) {
   const quotas = buildProjectQuotas(options);
   if (Object.keys(quotas).length) {
     body.quotas = quotas;
+  }
+  const policy = buildProjectPolicy(options);
+  if (Object.keys(policy).length) {
+    body.policy = policy;
   }
   const state = getOption(options, 'state');
   if (state) {
@@ -1197,6 +1218,10 @@ function buildProjectUpdateRequest(existingProject, options, forcedState = null)
   const quotas = buildProjectQuotas(options, existingProject?.quotas ?? null);
   if (Object.keys(quotas).length) {
     body.quotas = quotas;
+  }
+  const policy = buildProjectPolicy(options, existingProject?.policy ?? null);
+  if (Object.keys(policy).length) {
+    body.policy = policy;
   }
   const state = forcedState ?? getOption(options, 'state') ?? existingProject?.state;
   if (state) {

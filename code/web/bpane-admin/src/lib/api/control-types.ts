@@ -129,6 +129,11 @@ export type ProjectQuotas = {
   readonly max_retained_storage_bytes?: number | null;
 };
 
+export type ProjectPolicy = {
+  readonly allowed_session_template_ids: readonly string[];
+  readonly allowed_egress_profile_ids: readonly string[];
+};
+
 export type ProjectUsageResource = {
   readonly project_id: string;
   readonly active_sessions: number;
@@ -146,6 +151,7 @@ export type ProjectResource = {
   readonly description?: string | null;
   readonly labels: Readonly<Record<string, string>>;
   readonly quotas: ProjectQuotas;
+  readonly policy: ProjectPolicy;
   readonly state: ProjectState;
   readonly usage: ProjectUsageResource;
   readonly created_at: string;
@@ -165,7 +171,9 @@ export type ProjectAdmissionReasonCode =
   | 'project_quota_available'
   | 'active_session_quota_exceeded'
   | 'active_workflow_run_quota_exceeded'
-  | 'project_archived';
+  | 'project_archived'
+  | 'session_template_not_allowed'
+  | 'egress_profile_not_allowed';
 
 export type ProjectAdmissionDecision = {
   readonly state: ProjectAdmissionState;
@@ -333,6 +341,7 @@ export type CreateProjectCommand = {
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly quotas?: ProjectQuotas;
+  readonly policy?: ProjectPolicy;
   readonly state?: ProjectState;
 };
 

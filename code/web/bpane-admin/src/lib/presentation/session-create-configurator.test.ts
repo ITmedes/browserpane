@@ -108,6 +108,10 @@ const PROJECT = {
     max_active_workflow_runs: 4,
     max_retained_storage_bytes: 1073741824,
   },
+  policy: {
+    allowed_session_template_ids: ['template-1'],
+    allowed_egress_profile_ids: ['egress-1'],
+  },
   state: 'active',
   usage: {
     project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
@@ -258,9 +262,9 @@ describe('session create configurator', () => {
       owner_mode: 'collaborative',
     });
     expect(validation.preview).toContain('"project_id"');
-    expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, workflows=1/4)');
+    expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, workflows=1/4, templates=1, egress=1)');
     expect(projectUsageSummary(PROJECT)).toBe(
-      'state=active | sessions=1/2 | workflow_runs=1/4 | storage=268435456/1073741824 | labels=tenant=support',
+      'state=active | sessions=1/2 | workflow_runs=1/4 | storage=268435456/1073741824 | policy=1 templates,1 egress profiles | labels=tenant=support',
     );
   });
 

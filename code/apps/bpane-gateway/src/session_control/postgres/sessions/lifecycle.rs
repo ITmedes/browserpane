@@ -21,7 +21,6 @@ impl SessionRepository<'_> {
             });
         }
 
-        let viewport = request.viewport.unwrap_or_default();
         let now = Utc::now();
         let admission = if let Some(project_id) = request.project_id {
             let project = self
@@ -52,6 +51,7 @@ impl SessionRepository<'_> {
                     decision.message
                 )));
             }
+            validate_project_session_policy(&project, &request, active_project_sessions, now)?;
             if let Some(max_active_sessions) = project.quotas.max_active_sessions {
                 if active_project_sessions >= max_active_sessions {
                     let decision = ProjectAdmissionDecision::rejected(
@@ -95,6 +95,7 @@ impl SessionRepository<'_> {
             ))
         })?;
         let browser_context = request.browser_context.clone().unwrap_or_default();
+        let viewport = request.viewport.unwrap_or_default();
         let session_id = Uuid::now_v7();
         let insert_query = format!(
             r#"

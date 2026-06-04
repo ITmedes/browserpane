@@ -91,6 +91,9 @@ pub(in crate::session_control) fn row_to_stored_project(
     let quotas = serde_json::from_value::<ProjectQuotas>(row.get("quotas")).map_err(|error| {
         SessionStoreError::Backend(format!("failed to decode project quotas: {error}"))
     })?;
+    let policy = serde_json::from_value::<ProjectPolicy>(row.get("policy")).map_err(|error| {
+        SessionStoreError::Backend(format!("failed to decode project policy: {error}"))
+    })?;
 
     Ok(StoredProject {
         id: row.get("id"),
@@ -100,6 +103,7 @@ pub(in crate::session_control) fn row_to_stored_project(
         description: row.get("description"),
         labels,
         quotas,
+        policy,
         state,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),

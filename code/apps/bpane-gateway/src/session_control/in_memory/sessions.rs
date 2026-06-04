@@ -73,6 +73,7 @@ impl InMemorySessionStore {
                     decision.message
                 )));
             }
+            validate_project_session_policy(&project, &request, active_project_sessions, now)?;
             if let Some(max_active_sessions) = project.quotas.max_active_sessions {
                 if active_project_sessions >= max_active_sessions {
                     let decision = ProjectAdmissionDecision::rejected(

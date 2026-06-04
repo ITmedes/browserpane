@@ -107,6 +107,7 @@ fn persist_project_request(request: UpsertProjectRequest) -> PersistProjectReque
         description: request.description,
         labels: request.labels,
         quotas: request.quotas,
+        policy: request.policy,
         state: request.state,
     }
 }

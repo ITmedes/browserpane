@@ -5549,6 +5549,21 @@ components:
           format: int64
           minimum: 1
           nullable: true
+    ProjectPolicy:
+      type: object
+      additionalProperties: false
+      properties:
+        allowed_session_template_ids:
+          type: array
+          description: Empty or omitted means templates are unrestricted for this project.
+          items:
+            type: string
+        allowed_egress_profile_ids:
+          type: array
+          description: Empty or omitted means egress profiles are unrestricted for this project.
+          items:
+            type: string
+            format: uuid
     ProjectUsageResource:
       type: object
       required:
@@ -5606,6 +5621,8 @@ components:
             type: string
         quotas:
           $ref: '#/components/schemas/ProjectQuotas'
+        policy:
+          $ref: '#/components/schemas/ProjectPolicy'
         state:
           $ref: '#/components/schemas/ProjectState'
     ProjectResource:
@@ -5616,6 +5633,7 @@ components:
         - description
         - labels
         - quotas
+        - policy
         - state
         - usage
         - created_at
@@ -5635,6 +5653,8 @@ components:
             type: string
         quotas:
           $ref: '#/components/schemas/ProjectQuotas'
+        policy:
+          $ref: '#/components/schemas/ProjectPolicy'
         state:
           $ref: '#/components/schemas/ProjectState'
         usage:
@@ -6163,6 +6183,8 @@ components:
         - active_session_quota_exceeded
         - active_workflow_run_quota_exceeded
         - project_archived
+        - session_template_not_allowed
+        - egress_profile_not_allowed
     ProjectAdmissionDecision:
       type: object
       required:

@@ -18,6 +18,7 @@ export type IdentityProjectRow = {
   readonly activeSessions: string;
   readonly activeWorkflowRuns: string;
   readonly retainedStorage: string;
+  readonly policy: string;
 };
 
 export type IdentityDelegationRow = {
@@ -229,7 +230,19 @@ function projectRow(project: ProjectResource): IdentityProjectRow {
       project.usage.retained_storage_bytes,
       project.usage.max_retained_storage_bytes,
     ),
+    policy: policyLabel(project),
   };
+}
+
+function policyLabel(project: ProjectResource): string {
+  const facts = [];
+  if (project.policy.allowed_session_template_ids.length > 0) {
+    facts.push(`${project.policy.allowed_session_template_ids.length} templates`);
+  }
+  if (project.policy.allowed_egress_profile_ids.length > 0) {
+    facts.push(`${project.policy.allowed_egress_profile_ids.length} egress profiles`);
+  }
+  return facts.length > 0 ? facts.join(', ') : 'Unrestricted';
 }
 
 function quotaLabel(current: number, limit: number | null | undefined): string {

@@ -179,6 +179,7 @@ export class ControlClient {
       ...command,
       labels: command.labels ?? {},
       quotas: command.quotas ?? {},
+      policy: command.policy ?? {},
       state: command.state ?? 'active',
     });
     return ControlSessionMapper.toProjectResource(payload);
@@ -194,6 +195,7 @@ export class ControlClient {
       ...command,
       labels: command.labels ?? {},
       quotas: command.quotas ?? {},
+      policy: command.policy ?? {},
       state: command.state ?? 'active',
     });
     return ControlSessionMapper.toProjectResource(payload);

@@ -10,7 +10,8 @@ use super::*;
 use crate::auth::AuthValidator;
 use crate::session_access::SessionAutomationAccessTokenManager;
 use crate::session_control::{
-    PersistProjectRequest, PersistedWorkflowRunWorkerAssignment, ProjectQuotas, ProjectState,
+    PersistProjectRequest, PersistedWorkflowRunWorkerAssignment, ProjectPolicy, ProjectQuotas,
+    ProjectState,
 };
 
 #[tokio::test]
@@ -294,6 +295,7 @@ async fn queues_waiting_run_when_project_workflow_quota_is_exhausted() {
                     max_active_workflow_runs: Some(1),
                     max_retained_storage_bytes: None,
                 },
+                policy: ProjectPolicy::default(),
                 state: ProjectState::Active,
             },
         )
