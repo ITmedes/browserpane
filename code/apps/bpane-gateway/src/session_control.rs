@@ -230,5 +230,44 @@ fn validate_project_session_creation_budget(
     ))
 }
 
+fn project_session_creation_window_start(
+    project: &StoredProject,
+    checked_at: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    let window_sec = project.quotas.session_creation_window_sec?;
+    Some(checked_at - ChronoDuration::seconds(i64::from(window_sec)))
+}
+
+fn validate_project_session_creation_rate(
+    project: &StoredProject,
+    session_creations_in_window: u32,
+    checked_at: DateTime<Utc>,
+) -> Result<(), SessionStoreError> {
+    if project.policy.usage_budget_enforcement
+        != ProjectUsageBudgetEnforcement::BlockSessionCreation
+    {
+        return Ok(());
+    }
+    let (Some(max_session_creations_per_window), Some(session_creation_window_sec)) = (
+        project.quotas.max_session_creations_per_window,
+        project.quotas.session_creation_window_sec,
+    ) else {
+        return Ok(());
+    };
+    if session_creations_in_window < max_session_creations_per_window {
+        return Ok(());
+    }
+
+    Err(project_admission_conflict(
+        ProjectAdmissionDecision::session_creation_rate_rejected(
+            project.id,
+            session_creations_in_window,
+            max_session_creations_per_window,
+            session_creation_window_sec,
+            checked_at,
+        ),
+    ))
+}
+
 #[cfg(test)]
 mod tests;

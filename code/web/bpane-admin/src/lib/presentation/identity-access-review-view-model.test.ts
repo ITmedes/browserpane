@@ -41,6 +41,8 @@ const REVIEW: IdentityAccessReviewResponse = {
         max_active_workflow_runs: 4,
         max_retained_storage_bytes: 1048576,
         max_session_creations: 8,
+        max_session_creations_per_window: 2,
+        session_creation_window_sec: 3600,
       },
       policy: {
         allowed_session_template_ids: ['template-1'],
@@ -150,7 +152,7 @@ describe('IdentityAccessReviewViewModelBuilder', () => {
       name: 'Support tenant',
       activeSessions: '1/3',
       queuedSessions: '2',
-      sessionCreations: '9',
+      sessionCreations: '9/8, 2 / 1h',
       activeWorkflowRuns: '2/4',
       runtimeUsage: '90m',
       egressUsage: '2.0 MiB',

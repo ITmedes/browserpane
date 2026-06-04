@@ -308,4 +308,45 @@ impl SessionRepository<'_> {
             ))
         })
     }
+
+    async fn count_session_creations_for_project_since_in_transaction(
+        &self,
+        transaction: &Transaction<'_>,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+        window_started_at: DateTime<Utc>,
+    ) -> Result<u32, SessionStoreError> {
+        let row = transaction
+            .query_opt(
+                r#"
+                SELECT COUNT(*)::BIGINT AS session_count
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                  AND created_at >= $4
+                "#,
+                &[
+                    &principal.subject,
+                    &principal.issuer,
+                    &project_id,
+                    &window_started_at,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to count project session creations in rate window for admission: {error}"
+                ))
+            })?;
+        let count = row
+            .as_ref()
+            .map(|row| row.get::<_, i64>("session_count"))
+            .unwrap_or(0);
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "project session creation rate-window count exceeded u32 range: {error}"
+            ))
+        })
+    }
 }

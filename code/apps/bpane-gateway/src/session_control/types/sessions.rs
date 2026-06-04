@@ -304,6 +304,10 @@ pub struct ProjectQuotas {
     #[serde(default)]
     pub max_session_creations: Option<u32>,
     #[serde(default)]
+    pub max_session_creations_per_window: Option<u32>,
+    #[serde(default)]
+    pub session_creation_window_sec: Option<u32>,
+    #[serde(default)]
     pub max_runtime_usage_ms: Option<u64>,
     #[serde(default)]
     pub max_egress_total_bytes: Option<u64>,
@@ -342,6 +346,7 @@ pub enum ProjectAdmissionReasonCode {
     ProjectQuotaAvailable,
     ActiveSessionQuotaExceeded,
     SessionCreationBudgetExceeded,
+    SessionCreationRateExceeded,
     ActiveWorkflowRunQuotaExceeded,
     ProjectArchived,
     SessionTemplateNotAllowed,
@@ -355,6 +360,7 @@ impl ProjectAdmissionReasonCode {
             Self::ProjectQuotaAvailable => "project_quota_available",
             Self::ActiveSessionQuotaExceeded => "active_session_quota_exceeded",
             Self::SessionCreationBudgetExceeded => "session_creation_budget_exceeded",
+            Self::SessionCreationRateExceeded => "session_creation_rate_exceeded",
             Self::ActiveWorkflowRunQuotaExceeded => "active_workflow_run_quota_exceeded",
             Self::ProjectArchived => "project_archived",
             Self::SessionTemplateNotAllowed => "session_template_not_allowed",
@@ -382,6 +388,12 @@ pub struct ProjectAdmissionDecision {
     pub session_creations: Option<u32>,
     #[serde(default)]
     pub max_session_creations: Option<u32>,
+    #[serde(default)]
+    pub session_creations_in_window: Option<u32>,
+    #[serde(default)]
+    pub max_session_creations_per_window: Option<u32>,
+    #[serde(default)]
+    pub session_creation_window_sec: Option<u32>,
     pub checked_at: DateTime<Utc>,
 }
 
@@ -398,6 +410,9 @@ impl ProjectAdmissionDecision {
             max_active_workflow_runs: None,
             session_creations: None,
             max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
             checked_at,
         }
     }
@@ -419,6 +434,9 @@ impl ProjectAdmissionDecision {
             max_active_workflow_runs: None,
             session_creations: None,
             max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
             checked_at,
         }
     }
@@ -440,6 +458,9 @@ impl ProjectAdmissionDecision {
             max_active_workflow_runs,
             session_creations: None,
             max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
             checked_at,
         }
     }
@@ -463,6 +484,9 @@ impl ProjectAdmissionDecision {
             max_active_workflow_runs: None,
             session_creations: None,
             max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
             checked_at,
         }
     }
@@ -486,6 +510,36 @@ impl ProjectAdmissionDecision {
             max_active_workflow_runs: None,
             session_creations: Some(session_creations),
             max_session_creations: Some(max_session_creations),
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
+            checked_at,
+        }
+    }
+
+    pub fn session_creation_rate_rejected(
+        project_id: Uuid,
+        session_creations_in_window: u32,
+        max_session_creations_per_window: u32,
+        session_creation_window_sec: u32,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Rejected,
+            reason_code: ProjectAdmissionReasonCode::SessionCreationRateExceeded,
+            message: format!(
+                "Project session creation rate limit is exhausted ({session_creations_in_window}/{max_session_creations_per_window} in {session_creation_window_sec}s)."
+            ),
+            project_id: Some(project_id),
+            active_sessions: None,
+            max_active_sessions: None,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
+            session_creations_in_window: Some(session_creations_in_window),
+            max_session_creations_per_window: Some(max_session_creations_per_window),
+            session_creation_window_sec: Some(session_creation_window_sec),
             checked_at,
         }
     }
@@ -509,6 +563,9 @@ impl ProjectAdmissionDecision {
             max_active_workflow_runs,
             session_creations: None,
             max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
             checked_at,
         }
     }
@@ -532,6 +589,9 @@ impl ProjectAdmissionDecision {
             max_active_workflow_runs: None,
             session_creations: None,
             max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
             checked_at,
         }
     }

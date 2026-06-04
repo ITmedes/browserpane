@@ -5660,7 +5660,17 @@ components:
           type: integer
           minimum: 1
           nullable: true
-          description: Soft budget for total created sessions in the project. Crossing this budget emits usage alerts but does not reject requests.
+          description: Budget for total created sessions in the project. Crossing this budget emits usage alerts; with usage_budget_enforcement=block_session_creation, new project sessions are rejected once the budget is exhausted.
+        max_session_creations_per_window:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Rolling-window session creation limit. Must be provided together with session_creation_window_sec. With usage_budget_enforcement=block_session_creation, new project sessions are rejected when the project already created this many sessions in the current window.
+        session_creation_window_sec:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Rolling-window duration in seconds for max_session_creations_per_window. Must be provided together with max_session_creations_per_window.
         max_runtime_usage_ms:
           type: integer
           format: int64
@@ -5692,7 +5702,7 @@ components:
           $ref: '#/components/schemas/ProjectUsageBudgetEnforcement'
     ProjectUsageBudgetEnforcement:
       type: string
-      description: Warning-only keeps project usage budgets advisory. Block-session-creation rejects new project sessions after the project reaches max_session_creations; runtime and egress budgets remain advisory.
+      description: Warning-only keeps project usage budgets advisory. Block-session-creation rejects new project sessions after the project reaches max_session_creations or exhausts max_session_creations_per_window in the configured window; runtime and egress budgets remain advisory.
       enum:
         - warning_only
         - block_session_creation
@@ -6406,6 +6416,7 @@ components:
         - project_quota_available
         - active_session_quota_exceeded
         - session_creation_budget_exceeded
+        - session_creation_rate_exceeded
         - active_workflow_run_quota_exceeded
         - project_archived
         - session_template_not_allowed
@@ -6423,6 +6434,9 @@ components:
         - max_active_workflow_runs
         - session_creations
         - max_session_creations
+        - session_creations_in_window
+        - max_session_creations_per_window
+        - session_creation_window_sec
         - checked_at
       properties:
         state:
@@ -6456,6 +6470,18 @@ components:
           minimum: 0
           nullable: true
         max_session_creations:
+          type: integer
+          minimum: 1
+          nullable: true
+        session_creations_in_window:
+          type: integer
+          minimum: 0
+          nullable: true
+        max_session_creations_per_window:
+          type: integer
+          minimum: 1
+          nullable: true
+        session_creation_window_sec:
           type: integer
           minimum: 1
           nullable: true

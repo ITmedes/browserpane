@@ -353,6 +353,8 @@ mod tests {
                         max_active_workflow_runs: None,
                         max_retained_storage_bytes: Some(4),
                         max_session_creations: None,
+                        max_session_creations_per_window: None,
+                        session_creation_window_sec: None,
                         max_runtime_usage_ms: None,
                         max_egress_total_bytes: None,
                     },
