@@ -21,6 +21,24 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
             invalid.body
         ));
     }
+    let invalid_policy = harness
+        .post_json_outcome(
+            "/api/v1/projects",
+            json!({
+                "name": "invalid-project-policy",
+                "policy": {
+                    "allowed_session_template_ids": [" "]
+                }
+            }),
+        )
+        .await?;
+    if invalid_policy.status != StatusCode::BAD_REQUEST {
+        return Err(anyhow!(
+            "invalid project policy create returned {} instead of 400: {}",
+            invalid_policy.status,
+            invalid_policy.body
+        ));
+    }
 
     let project_name = harness.unique_name("compose-project");
     let project = harness
@@ -42,11 +60,37 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     if project["state"] != json!("active")
         || project["usage"]["active_sessions"] != json!(0)
         || project["usage"]["max_active_sessions"] != json!(1)
+        || project["policy"]["allowed_session_template_ids"] != json!([])
+        || project["policy"]["allowed_egress_profile_ids"] != json!([])
     {
         return Err(anyhow!(
             "project create returned unexpected resource: {project}"
         ));
     }
+
+    let allowed_profile = harness
+        .post_json(
+            "/api/v1/egress-profiles",
+            json!({
+                "name": harness.unique_name("compose-project-egress-allowed"),
+                "description": "Compose e2e project policy allowed egress",
+                "labels": label_map("projects"),
+                "proxy": { "url": "https://proxy.example:8443" }
+            }),
+        )
+        .await?;
+    let allowed_profile_id = json_id(&allowed_profile, "id")?;
+    let disallowed_profile = harness
+        .post_json(
+            "/api/v1/egress-profiles",
+            json!({
+                "name": harness.unique_name("compose-project-egress-denied"),
+                "description": "Compose e2e project policy denied egress",
+                "labels": label_map("projects")
+            }),
+        )
+        .await?;
+    let disallowed_profile_id = json_id(&disallowed_profile, "id")?;
 
     let listed = harness.get_json("/api/v1/projects").await?;
     let listed_projects = json_array(&listed, "projects")?;
@@ -78,6 +122,9 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
                 "name": template_name,
                 "defaults": {
                     "project_id": project_id,
+                    "network_identity": {
+                        "egress_profile_id": allowed_profile_id
+                    },
                     "labels": {
                         "team": "support"
                     }
@@ -89,6 +136,94 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     if template["defaults"]["project_id"] != json!(project_id) {
         return Err(anyhow!(
             "project template default was not persisted: {template}"
+        ));
+    }
+
+    let disallowed_template = harness
+        .post_json(
+            "/api/v1/session-templates",
+            json!({
+                "name": harness.unique_name("compose-project-template-denied"),
+                "defaults": {
+                    "project_id": project_id,
+                    "network_identity": {
+                        "egress_profile_id": allowed_profile_id
+                    }
+                }
+            }),
+        )
+        .await?;
+    let disallowed_template_id = json_id(&disallowed_template, "id")?;
+
+    let policy_project = harness
+        .put_json(
+            &format!("/api/v1/projects/{project_id}"),
+            json!({
+                "name": project_name,
+                "description": "Compose e2e project with policy",
+                "labels": label_map("projects"),
+                "quotas": {
+                    "max_active_sessions": 1,
+                    "max_active_workflow_runs": 2,
+                    "max_retained_storage_bytes": 1048576
+                },
+                "policy": {
+                    "allowed_session_template_ids": [template_id],
+                    "allowed_egress_profile_ids": [allowed_profile_id]
+                }
+            }),
+        )
+        .await?;
+    if policy_project["policy"]["allowed_session_template_ids"][0] != json!(template_id)
+        || policy_project["policy"]["allowed_egress_profile_ids"][0] != json!(allowed_profile_id)
+    {
+        return Err(anyhow!(
+            "project policy update did not persist allow-lists: {policy_project}"
+        ));
+    }
+
+    let template_policy_rejected = harness
+        .post_json_outcome(
+            "/api/v1/sessions",
+            json!({
+                "template_id": disallowed_template_id
+            }),
+        )
+        .await?;
+    if template_policy_rejected.status != StatusCode::CONFLICT
+        || !template_policy_rejected.body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("session_template_not_allowed")
+    {
+        return Err(anyhow!(
+            "project template policy rejection returned unexpected result {}: {}",
+            template_policy_rejected.status,
+            template_policy_rejected.body
+        ));
+    }
+
+    let egress_policy_rejected = harness
+        .post_json_outcome(
+            "/api/v1/sessions",
+            json!({
+                "template_id": template_id,
+                "network_identity": {
+                    "egress_profile_id": disallowed_profile_id
+                }
+            }),
+        )
+        .await?;
+    if egress_policy_rejected.status != StatusCode::CONFLICT
+        || !egress_policy_rejected.body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("egress_profile_not_allowed")
+    {
+        return Err(anyhow!(
+            "project egress policy rejection returned unexpected result {}: {}",
+            egress_policy_rejected.status,
+            egress_policy_rejected.body
         ));
     }
 
@@ -130,7 +265,7 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .post_json_outcome(
             "/api/v1/sessions",
             json!({
-                "project_id": project_id
+                "template_id": template_id
             }),
         )
         .await?;
@@ -169,7 +304,7 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .post_json(
             "/api/v1/sessions",
             json!({
-                "project_id": project_id,
+                "template_id": template_id,
                 "labels": {
                     "run_id": run_id,
                     "retry": "true"
