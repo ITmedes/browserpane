@@ -24,6 +24,22 @@ fn active_project_session_count(
         .count() as u32
 }
 
+fn project_session_creation_count(
+    sessions: &[StoredSession],
+    owner_subject: &str,
+    owner_issuer: &str,
+    project_id: Uuid,
+) -> u32 {
+    sessions
+        .iter()
+        .filter(|session| {
+            session.project_id == Some(project_id)
+                && session.owner.subject == owner_subject
+                && session.owner.issuer == owner_issuer
+        })
+        .count() as u32
+}
+
 fn queued_session_admission(
     project_id: Uuid,
     active_sessions: u32,
@@ -185,6 +201,13 @@ impl InMemorySessionStore {
                 )));
             }
             validate_project_session_policy(&project, &request, active_project_sessions, now)?;
+            let session_creations = project_session_creation_count(
+                &sessions,
+                &principal.subject,
+                &principal.issuer,
+                project_id,
+            );
+            validate_project_session_creation_budget(&project, session_creations, now)?;
             if let Some(max_active_sessions) = project.quotas.max_active_sessions {
                 if active_project_sessions >= max_active_sessions {
                     (

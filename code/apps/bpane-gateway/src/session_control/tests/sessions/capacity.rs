@@ -102,6 +102,7 @@ async fn in_memory_store_enforces_project_template_policy() {
                 policy: ProjectPolicy {
                     allowed_session_template_ids: vec!["allowed-template".to_string()],
                     allowed_egress_profile_ids: Vec::new(),
+                    usage_budget_enforcement: ProjectUsageBudgetEnforcement::WarningOnly,
                 },
                 state: ProjectState::Active,
             },
@@ -154,6 +155,7 @@ async fn in_memory_store_enforces_project_egress_policy() {
                 policy: ProjectPolicy {
                     allowed_session_template_ids: Vec::new(),
                     allowed_egress_profile_ids: vec![allowed_profile_id],
+                    usage_budget_enforcement: ProjectUsageBudgetEnforcement::WarningOnly,
                 },
                 state: ProjectState::Active,
             },

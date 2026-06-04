@@ -83,6 +83,7 @@ const KNOWN_OPTIONS = new Set([
   'recording-retention-sec',
   'retention-sec',
   'save-token',
+  'usage-budget-enforcement',
   'set-default',
   'scope',
   'service-principal-id',
@@ -227,6 +228,7 @@ function usageText() {
     '  --allowed-project-id <id> Repeatable service-principal project metadata.',
     '  --allowed-session-template-id <id> Repeatable project policy template allow-list entry.',
     '  --allowed-egress-profile-id <id> Repeatable project policy egress-profile allow-list entry.',
+    '  --usage-budget-enforcement <mode> Project budget mode: warning_only or block_session_creation.',
     '  --max-active-sessions <count> Project active-session quota.',
     '  --max-active-workflow-runs <count> Project active workflow-run quota.',
     '  --max-retained-storage-bytes <bytes> Project retained-storage quota.',
@@ -1164,6 +1166,10 @@ function buildProjectPolicy(options, existingPolicy = null) {
   const egressProfileIds = getOptions(options, 'allowed-egress-profile-id');
   if (egressProfileIds.length) {
     policy.allowed_egress_profile_ids = egressProfileIds.filter((profileId) => profileId !== '');
+  }
+  const usageBudgetEnforcement = getOption(options, 'usage-budget-enforcement');
+  if (usageBudgetEnforcement !== null) {
+    policy.usage_budget_enforcement = usageBudgetEnforcement;
   }
   return policy;
 }

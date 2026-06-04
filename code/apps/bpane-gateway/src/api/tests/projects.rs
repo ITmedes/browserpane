@@ -215,6 +215,111 @@ async fn project_usage_reports_soft_budget_alerts_through_api() {
 }
 
 #[tokio::test]
+async fn project_budget_enforcement_blocks_session_creation_when_enabled() {
+    let (app, token) = test_router_with_docker_pool().await;
+
+    let project = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "blocking-budget",
+                            "quotas": {
+                                "max_session_creations": 1,
+                                "max_runtime_usage_ms": 60000,
+                                "max_egress_total_bytes": 10485760
+                            },
+                            "policy": {
+                                "usage_budget_enforcement": "block_session_creation"
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = project["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        project["policy"]["usage_budget_enforcement"],
+        "block_session_creation"
+    );
+
+    let created_session = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created_session.status(), StatusCode::CREATED);
+
+    let rejected_session = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_session.status(), StatusCode::CONFLICT);
+    let rejection = String::from_utf8(
+        axum::body::to_bytes(rejected_session.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(rejection.contains("session_creation_budget_exceeded"));
+    assert!(rejection.contains("1/1"));
+
+    let usage = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/projects/{project_id}/usage"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(usage["session_creations"], 1);
+    assert_eq!(usage["alerts"][0]["metric"], "session_creations");
+    assert_eq!(usage["alerts"][0]["state"], "exceeded");
+}
+
+#[tokio::test]
 async fn rejects_zero_project_usage_budget_quotas() {
     let (app, token) = test_router_with_docker_pool().await;
 

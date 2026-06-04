@@ -342,8 +342,8 @@ labels, lifecycle state, optional quotas such as `max_active_sessions`,
 `max_active_workflow_runs`, `max_retained_storage_bytes`,
 `max_session_creations`, `max_runtime_usage_ms`, and
 `max_egress_total_bytes`, first policy bindings for allowed session templates
-and egress profiles, and sanitized usage counters. Creating a session or
-workflow run with `project_id` records the
+and egress profiles, a `usage_budget_enforcement` mode, and sanitized usage
+counters. Creating a session or workflow run with `project_id` records the
 admission decision and enforces archived-project checks plus template/egress
 allow-lists before runtime launch. Project-scoped sessions that exceed
 `max_active_sessions` are persisted as visible `queued` session resources with
@@ -362,7 +362,10 @@ that would exceed the project storage quota. Egress byte counters are
 intentionally metadata-only until an attached proxy or secure web gateway
 reports authoritative traffic totals. Session-creation, runtime, and egress
 byte budgets are warning-first: the usage resource emits `alerts` at 80% and
-100% of the configured budget, but those alerts do not reject new work.
+100% of the configured budget. Projects can opt into
+`usage_budget_enforcement=block_session_creation` to reject new project
+sessions after `max_session_creations` is reached; runtime and egress budgets
+remain advisory until enforcement and proxy ingestion are authoritative.
 Session and workflow-run resources include the project summary and admission
 reason so the admin live view, inspectors, CLI, and API clients all show
 whether work was admitted under project quota, queued by project capacity,
@@ -663,11 +666,12 @@ Common project operations:
   --max-retained-storage-bytes 1073741824 \
   --max-session-creations 25 \
   --max-runtime-usage-ms 86400000 \
-  --max-egress-total-bytes 10737418240
+  --max-egress-total-bytes 10737418240 \
+  --usage-budget-enforcement warning_only
 ./scripts/bpane project list
 ./scripts/bpane project get <project-id>
 ./scripts/bpane project usage <project-id>
-./scripts/bpane project update <project-id> --name support-tenant --max-active-sessions 5 --max-session-creations 50
+./scripts/bpane project update <project-id> --name support-tenant --max-active-sessions 5 --max-session-creations 50 --usage-budget-enforcement block_session_creation
 ./scripts/bpane project update <project-id> \
   --allowed-session-template-id <template-id> \
   --allowed-egress-profile-id <egress-profile-id>

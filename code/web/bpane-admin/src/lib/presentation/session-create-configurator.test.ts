@@ -111,6 +111,7 @@ const PROJECT = {
   policy: {
     allowed_session_template_ids: ['template-1'],
     allowed_egress_profile_ids: ['egress-1'],
+    usage_budget_enforcement: 'warning_only',
   },
   state: 'active',
   usage: {

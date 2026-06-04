@@ -123,6 +123,8 @@ export type SessionEffectiveEgress = {
 
 export type ProjectState = 'active' | 'archived';
 
+export type ProjectUsageBudgetEnforcement = 'warning_only' | 'block_session_creation';
+
 export type ProjectQuotas = {
   readonly max_active_sessions?: number | null;
   readonly max_active_workflow_runs?: number | null;
@@ -135,6 +137,7 @@ export type ProjectQuotas = {
 export type ProjectPolicy = {
   readonly allowed_session_template_ids: readonly string[];
   readonly allowed_egress_profile_ids: readonly string[];
+  readonly usage_budget_enforcement: ProjectUsageBudgetEnforcement;
 };
 
 export type ProjectUsageResource = {
@@ -196,6 +199,7 @@ export type ProjectAdmissionReasonCode =
   | 'owner_scope_unbounded'
   | 'project_quota_available'
   | 'active_session_quota_exceeded'
+  | 'session_creation_budget_exceeded'
   | 'active_workflow_run_quota_exceeded'
   | 'project_archived'
   | 'session_template_not_allowed'
@@ -210,6 +214,8 @@ export type ProjectAdmissionDecision = {
   readonly max_active_sessions?: number | null;
   readonly active_workflow_runs?: number | null;
   readonly max_active_workflow_runs?: number | null;
+  readonly session_creations?: number | null;
+  readonly max_session_creations?: number | null;
   readonly checked_at: string;
 };
 

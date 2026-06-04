@@ -264,6 +264,9 @@ function policyLabel(project: ProjectResource): string {
   if (project.policy.allowed_egress_profile_ids.length > 0) {
     facts.push(`${project.policy.allowed_egress_profile_ids.length} egress profiles`);
   }
+  if (project.policy.usage_budget_enforcement === 'block_session_creation') {
+    facts.push('budget blocks session creation');
+  }
   return facts.length > 0 ? facts.join(', ') : 'Unrestricted';
 }
 

@@ -45,6 +45,7 @@ const REVIEW: IdentityAccessReviewResponse = {
       policy: {
         allowed_session_template_ids: ['template-1'],
         allowed_egress_profile_ids: [],
+        usage_budget_enforcement: 'block_session_creation',
       },
       state: 'active',
       usage: {
@@ -155,7 +156,7 @@ describe('IdentityAccessReviewViewModelBuilder', () => {
       egressUsage: '2.0 MiB',
       retainedStorage: '512 KiB / 1.0 MiB',
       alerts: '1 exceeded',
-      policy: '1 templates',
+      policy: '1 templates, budget blocks session creation',
     });
     expect(viewModel.servicePrincipals[0]).toMatchObject({
       name: 'BrowserPane MCP bridge',

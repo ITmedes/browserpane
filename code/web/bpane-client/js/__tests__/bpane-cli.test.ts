@@ -962,6 +962,11 @@ describe('bpane operator CLI', () => {
           max_runtime_usage_ms: 3600000,
           max_egress_total_bytes: 10485760,
         },
+        policy: {
+          allowed_session_template_ids: [],
+          allowed_egress_profile_ids: [],
+          usage_budget_enforcement: 'warning_only',
+        },
         state: 'active',
       }),
       jsonResponse({ id: 'project-1', name: 'support-tenant-v2', state: 'active' }),
@@ -1006,6 +1011,8 @@ describe('bpane operator CLI', () => {
         '3600000',
         '--max-egress-total-bytes',
         '10485760',
+        '--usage-budget-enforcement',
+        'block_session_creation',
       ],
       { BPANE_ACCESS_TOKEN: 'token-1' },
       createProjectIo.io,
@@ -1026,6 +1033,9 @@ describe('bpane operator CLI', () => {
         max_session_creations: 10,
         max_runtime_usage_ms: 3600000,
         max_egress_total_bytes: 10485760,
+      },
+      policy: {
+        usage_budget_enforcement: 'block_session_creation',
       },
     });
 
@@ -1081,6 +1091,11 @@ describe('bpane operator CLI', () => {
         max_session_creations: 10,
         max_runtime_usage_ms: 3600000,
         max_egress_total_bytes: 10485760,
+      },
+      policy: {
+        allowed_session_template_ids: [],
+        allowed_egress_profile_ids: [],
+        usage_budget_enforcement: 'warning_only',
       },
       state: 'active',
     });
