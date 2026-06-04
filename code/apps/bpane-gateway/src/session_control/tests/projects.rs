@@ -37,6 +37,9 @@ async fn in_memory_store_reports_and_enforces_project_retained_storage() {
                     max_active_sessions: None,
                     max_active_workflow_runs: None,
                     max_retained_storage_bytes: Some(40),
+                    max_session_creations: None,
+                    max_runtime_usage_ms: None,
+                    max_egress_total_bytes: None,
                 },
                 policy: ProjectPolicy::default(),
                 state: ProjectState::Active,
@@ -214,4 +217,54 @@ async fn in_memory_store_reports_and_enforces_project_retained_storage() {
         SessionStoreError::Conflict(message)
             if message.contains("retained_storage_quota_exceeded")
     ));
+}
+
+#[test]
+fn project_usage_reports_soft_budget_alerts() {
+    let now = Utc::now();
+    let project = StoredProject {
+        id: Uuid::now_v7(),
+        owner_subject: "owner".to_string(),
+        owner_issuer: "issuer".to_string(),
+        name: "budgeted-project".to_string(),
+        description: None,
+        labels: HashMap::new(),
+        quotas: ProjectQuotas {
+            max_active_sessions: None,
+            max_active_workflow_runs: None,
+            max_retained_storage_bytes: None,
+            max_session_creations: Some(1),
+            max_runtime_usage_ms: Some(10),
+            max_egress_total_bytes: Some(100),
+        },
+        policy: ProjectPolicy::default(),
+        state: ProjectState::Active,
+        created_at: now,
+        updated_at: now,
+    };
+
+    let usage = project.usage(0, 0, 1, 0, 8, 40, 40, 0, now);
+
+    assert_eq!(usage.max_session_creations, Some(1));
+    assert_eq!(usage.max_runtime_usage_ms, Some(10));
+    assert_eq!(usage.max_egress_total_bytes, Some(100));
+    assert_eq!(usage.alerts.len(), 3);
+    assert!(usage.alerts.iter().any(|alert| {
+        alert.metric == ProjectUsageAlertMetric::SessionCreations
+            && alert.state == ProjectUsageAlertState::Exceeded
+            && alert.current_value == 1
+            && alert.limit_value == 1
+    }));
+    assert!(usage.alerts.iter().any(|alert| {
+        alert.metric == ProjectUsageAlertMetric::RuntimeUsageMs
+            && alert.state == ProjectUsageAlertState::ApproachingLimit
+            && alert.current_value == 8
+            && alert.limit_value == 10
+    }));
+    assert!(usage.alerts.iter().any(|alert| {
+        alert.metric == ProjectUsageAlertMetric::EgressTotalBytes
+            && alert.state == ProjectUsageAlertState::ApproachingLimit
+            && alert.current_value == 80
+            && alert.limit_value == 100
+    }));
 }

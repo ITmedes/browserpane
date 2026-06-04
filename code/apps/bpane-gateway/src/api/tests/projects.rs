@@ -41,7 +41,10 @@ async fn manages_projects_and_reports_usage() {
                         "quotas": {
                             "max_active_sessions": 1,
                             "max_active_workflow_runs": 2,
-                            "max_retained_storage_bytes": 1048576
+                            "max_retained_storage_bytes": 1048576,
+                            "max_session_creations": 1,
+                            "max_runtime_usage_ms": 60000,
+                            "max_egress_total_bytes": 10485760
                         }
                     })
                     .to_string(),
@@ -59,12 +62,16 @@ async fn manages_projects_and_reports_usage() {
     assert_eq!(project["usage"]["queued_sessions"], 0);
     assert_eq!(project["usage"]["session_creations"], 0);
     assert_eq!(project["usage"]["max_active_sessions"], 1);
+    assert_eq!(project["usage"]["max_session_creations"], 1);
     assert_eq!(project["usage"]["runtime_usage_ms"], 0);
+    assert_eq!(project["usage"]["max_runtime_usage_ms"], 60000);
     assert_eq!(project["usage"]["egress_rx_bytes"], 0);
     assert_eq!(project["usage"]["egress_tx_bytes"], 0);
     assert_eq!(project["usage"]["egress_total_bytes"], 0);
+    assert_eq!(project["usage"]["max_egress_total_bytes"], 10485760);
     assert_eq!(project["usage"]["retained_storage_bytes"], 0);
     assert_eq!(project["usage"]["max_retained_storage_bytes"], 1048576);
+    assert!(project["usage"]["alerts"].as_array().unwrap().is_empty());
 
     let list = app
         .clone()
@@ -128,6 +135,115 @@ async fn manages_projects_and_reports_usage() {
     assert_eq!(usage["runtime_usage_ms"], 0);
     assert_eq!(usage["egress_total_bytes"], 0);
     assert_eq!(usage["retained_storage_bytes"], 0);
+}
+
+#[tokio::test]
+async fn project_usage_reports_soft_budget_alerts_through_api() {
+    let (app, token) = test_router_with_docker_pool().await;
+
+    let project = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "budget-alerts",
+                            "quotas": {
+                                "max_session_creations": 1,
+                                "max_runtime_usage_ms": 60000,
+                                "max_egress_total_bytes": 10485760
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = project["id"].as_str().unwrap().to_string();
+    assert!(project["usage"]["alerts"].as_array().unwrap().is_empty());
+
+    let created_session = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created_session.status(), StatusCode::CREATED);
+
+    let usage = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/projects/{project_id}/usage"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(usage["session_creations"], 1);
+    assert_eq!(usage["max_session_creations"], 1);
+    assert_eq!(usage["max_runtime_usage_ms"], 60000);
+    assert_eq!(usage["max_egress_total_bytes"], 10485760);
+    assert_eq!(usage["alerts"].as_array().unwrap().len(), 1);
+    assert_eq!(usage["alerts"][0]["metric"], "session_creations");
+    assert_eq!(usage["alerts"][0]["state"], "exceeded");
+    assert_eq!(usage["alerts"][0]["current_value"], 1);
+    assert_eq!(usage["alerts"][0]["limit_value"], 1);
+    assert_eq!(usage["alerts"][0]["threshold_percent"], 100);
+}
+
+#[tokio::test]
+async fn rejects_zero_project_usage_budget_quotas() {
+    let (app, token) = test_router_with_docker_pool().await;
+
+    for quotas in [
+        json!({ "max_session_creations": 0 }),
+        json!({ "max_runtime_usage_ms": 0 }),
+        json!({ "max_egress_total_bytes": 0 }),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "invalid-budget",
+                            "quotas": quotas
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
 }
 
 #[tokio::test]

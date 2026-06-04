@@ -22,6 +22,7 @@ export type IdentityProjectRow = {
   readonly runtimeUsage: string;
   readonly egressUsage: string;
   readonly retainedStorage: string;
+  readonly alerts: string;
   readonly policy: string;
 };
 
@@ -238,8 +239,21 @@ function projectRow(project: ProjectResource): IdentityProjectRow {
       project.usage.retained_storage_bytes,
       project.usage.max_retained_storage_bytes,
     ),
+    alerts: usageAlertsLabel(project),
     policy: policyLabel(project),
   };
+}
+
+function usageAlertsLabel(project: ProjectResource): string {
+  if (project.usage.alerts.length === 0) {
+    return 'none';
+  }
+  const exceeded = project.usage.alerts.filter((alert) => alert.state === 'exceeded').length;
+  const approaching = project.usage.alerts.length - exceeded;
+  return [
+    exceeded > 0 ? `${exceeded} exceeded` : null,
+    approaching > 0 ? `${approaching} warning${approaching === 1 ? '' : 's'}` : null,
+  ].filter(Boolean).join(', ');
 }
 
 function policyLabel(project: ProjectResource): string {

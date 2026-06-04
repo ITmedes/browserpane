@@ -484,6 +484,7 @@
                 <span class="text-xs font-bold text-admin-ink/58">Runtime <strong class="block text-admin-ink">{project.runtimeUsage}</strong></span>
                 <span class="text-xs font-bold text-admin-ink/58">Egress <strong class="block text-admin-ink">{project.egressUsage}</strong></span>
                 <span class="text-xs font-bold text-admin-ink/58">Storage <strong class="block text-admin-ink">{project.retainedStorage}</strong></span>
+                <span class="text-xs font-bold text-admin-ink/58">Alerts <strong class="block text-admin-ink" data-testid="identity-project-alerts">{project.alerts}</strong></span>
                 <span class="text-xs font-bold text-admin-ink/58">Policy <strong class="block text-admin-ink">{project.policy}</strong></span>
               </div>
             </article>

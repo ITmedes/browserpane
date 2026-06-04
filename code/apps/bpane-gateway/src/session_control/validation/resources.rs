@@ -108,6 +108,24 @@ pub(in crate::session_control) fn validate_project_request(
                 .to_string(),
         ));
     }
+    if request.quotas.max_session_creations == Some(0) {
+        return Err(SessionStoreError::InvalidRequest(
+            "project quotas.max_session_creations must be greater than zero when provided"
+                .to_string(),
+        ));
+    }
+    if request.quotas.max_runtime_usage_ms == Some(0) {
+        return Err(SessionStoreError::InvalidRequest(
+            "project quotas.max_runtime_usage_ms must be greater than zero when provided"
+                .to_string(),
+        ));
+    }
+    if request.quotas.max_egress_total_bytes == Some(0) {
+        return Err(SessionStoreError::InvalidRequest(
+            "project quotas.max_egress_total_bytes must be greater than zero when provided"
+                .to_string(),
+        ));
+    }
     if request
         .policy
         .allowed_session_template_ids

@@ -301,6 +301,12 @@ pub struct ProjectQuotas {
     pub max_active_workflow_runs: Option<u32>,
     #[serde(default)]
     pub max_retained_storage_bytes: Option<u64>,
+    #[serde(default)]
+    pub max_session_creations: Option<u32>,
+    #[serde(default)]
+    pub max_runtime_usage_ms: Option<u64>,
+    #[serde(default)]
+    pub max_egress_total_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -511,16 +517,45 @@ pub struct ProjectUsageResource {
     pub active_sessions: u32,
     pub queued_sessions: u32,
     pub session_creations: u32,
+    pub max_session_creations: Option<u32>,
     pub max_active_sessions: Option<u32>,
     pub active_workflow_runs: u32,
     pub max_active_workflow_runs: Option<u32>,
     pub runtime_usage_ms: u64,
+    pub max_runtime_usage_ms: Option<u64>,
     pub egress_rx_bytes: u64,
     pub egress_tx_bytes: u64,
     pub egress_total_bytes: u64,
+    pub max_egress_total_bytes: Option<u64>,
     pub retained_storage_bytes: u64,
     pub max_retained_storage_bytes: Option<u64>,
+    pub alerts: Vec<ProjectUsageAlertResource>,
     pub observed_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectUsageAlertMetric {
+    SessionCreations,
+    RuntimeUsageMs,
+    EgressTotalBytes,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectUsageAlertState {
+    ApproachingLimit,
+    Exceeded,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProjectUsageAlertResource {
+    pub metric: ProjectUsageAlertMetric,
+    pub state: ProjectUsageAlertState,
+    pub current_value: u64,
+    pub limit_value: u64,
+    pub threshold_percent: u8,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -795,6 +830,8 @@ impl StoredServicePrincipal {
 }
 
 impl StoredProject {
+    const USAGE_ALERT_THRESHOLD_PERCENT: u8 = 80;
+
     pub fn usage(
         &self,
         active_sessions: u32,
@@ -808,22 +845,58 @@ impl StoredProject {
         observed_at: DateTime<Utc>,
     ) -> ProjectUsageResource {
         let egress_total_bytes = egress_rx_bytes.saturating_add(egress_tx_bytes);
+        let alerts = self.usage_alerts(session_creations, runtime_usage_ms, egress_total_bytes);
         ProjectUsageResource {
             project_id: self.id,
             active_sessions,
             queued_sessions,
             session_creations,
+            max_session_creations: self.quotas.max_session_creations,
             max_active_sessions: self.quotas.max_active_sessions,
             active_workflow_runs,
             max_active_workflow_runs: self.quotas.max_active_workflow_runs,
             runtime_usage_ms,
+            max_runtime_usage_ms: self.quotas.max_runtime_usage_ms,
             egress_rx_bytes,
             egress_tx_bytes,
             egress_total_bytes,
+            max_egress_total_bytes: self.quotas.max_egress_total_bytes,
             retained_storage_bytes,
             max_retained_storage_bytes: self.quotas.max_retained_storage_bytes,
+            alerts,
             observed_at,
         }
+    }
+
+    fn usage_alerts(
+        &self,
+        session_creations: u32,
+        runtime_usage_ms: u64,
+        egress_total_bytes: u64,
+    ) -> Vec<ProjectUsageAlertResource> {
+        let mut alerts = Vec::new();
+        push_usage_alert(
+            &mut alerts,
+            ProjectUsageAlertMetric::SessionCreations,
+            u64::from(session_creations),
+            self.quotas.max_session_creations.map(u64::from),
+            "Project session creation count",
+        );
+        push_usage_alert(
+            &mut alerts,
+            ProjectUsageAlertMetric::RuntimeUsageMs,
+            runtime_usage_ms,
+            self.quotas.max_runtime_usage_ms,
+            "Project browser runtime usage",
+        );
+        push_usage_alert(
+            &mut alerts,
+            ProjectUsageAlertMetric::EgressTotalBytes,
+            egress_total_bytes,
+            self.quotas.max_egress_total_bytes,
+            "Project metadata-only egress byte counter",
+        );
+        alerts
     }
 
     pub fn to_resource(
@@ -869,6 +942,50 @@ impl StoredProject {
             state: self.state,
         }
     }
+}
+
+fn push_usage_alert(
+    alerts: &mut Vec<ProjectUsageAlertResource>,
+    metric: ProjectUsageAlertMetric,
+    current_value: u64,
+    limit_value: Option<u64>,
+    label: &str,
+) {
+    let Some(limit_value) = limit_value else {
+        return;
+    };
+    if limit_value == 0 {
+        return;
+    }
+    let threshold = u64::from(StoredProject::USAGE_ALERT_THRESHOLD_PERCENT);
+    let state = if current_value >= limit_value {
+        ProjectUsageAlertState::Exceeded
+    } else if u128::from(current_value) * 100 >= u128::from(limit_value) * u128::from(threshold) {
+        ProjectUsageAlertState::ApproachingLimit
+    } else {
+        return;
+    };
+    let message = match state {
+        ProjectUsageAlertState::ApproachingLimit => {
+            format!("{label} has reached at least {threshold}% of the configured soft budget.")
+        }
+        ProjectUsageAlertState::Exceeded => {
+            format!("{label} exceeded the configured soft budget.")
+        }
+    };
+    alerts.push(ProjectUsageAlertResource {
+        metric,
+        state,
+        current_value,
+        limit_value,
+        threshold_percent: match state {
+            ProjectUsageAlertState::ApproachingLimit => {
+                StoredProject::USAGE_ALERT_THRESHOLD_PERCENT
+            }
+            ProjectUsageAlertState::Exceeded => 100,
+        },
+        message,
+    });
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

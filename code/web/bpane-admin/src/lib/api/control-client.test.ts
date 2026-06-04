@@ -113,6 +113,7 @@ const PROJECT = {
     max_active_sessions: 2,
     max_active_workflow_runs: 4,
     max_retained_storage_bytes: 1073741824,
+    max_session_creations: 5,
   },
   state: 'active',
   usage: {
@@ -120,6 +121,7 @@ const PROJECT = {
     active_sessions: 1,
     queued_sessions: 0,
     session_creations: 5,
+    max_session_creations: 5,
     max_active_sessions: 2,
     active_workflow_runs: 1,
     max_active_workflow_runs: 4,
@@ -129,6 +131,16 @@ const PROJECT = {
     egress_total_bytes: 3072,
     retained_storage_bytes: 268435456,
     max_retained_storage_bytes: 1073741824,
+    alerts: [
+      {
+        metric: 'session_creations',
+        state: 'exceeded',
+        current_value: 5,
+        limit_value: 5,
+        threshold_percent: 100,
+        message: 'Project session creation count exceeded the configured soft budget.',
+      },
+    ],
     observed_at: '2026-05-04T18:50:00Z',
   },
   created_at: '2026-05-04T18:50:00Z',
@@ -615,9 +627,16 @@ describe('ControlClient', () => {
       usage: {
         active_sessions: 1,
         session_creations: 5,
+        max_session_creations: 5,
         max_active_sessions: 2,
         runtime_usage_ms: 3600000,
         egress_total_bytes: 3072,
+        alerts: [
+          expect.objectContaining({
+            metric: 'session_creations',
+            state: 'exceeded',
+          }),
+        ],
       },
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(

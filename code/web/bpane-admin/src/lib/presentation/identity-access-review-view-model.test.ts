@@ -40,6 +40,7 @@ const REVIEW: IdentityAccessReviewResponse = {
         max_active_sessions: 3,
         max_active_workflow_runs: 4,
         max_retained_storage_bytes: 1048576,
+        max_session_creations: 8,
       },
       policy: {
         allowed_session_template_ids: ['template-1'],
@@ -51,6 +52,7 @@ const REVIEW: IdentityAccessReviewResponse = {
         active_sessions: 1,
         queued_sessions: 2,
         session_creations: 9,
+        max_session_creations: 8,
         max_active_sessions: 3,
         active_workflow_runs: 2,
         max_active_workflow_runs: 4,
@@ -60,6 +62,16 @@ const REVIEW: IdentityAccessReviewResponse = {
         egress_total_bytes: 2097152,
         retained_storage_bytes: 524288,
         max_retained_storage_bytes: 1048576,
+        alerts: [
+          {
+            metric: 'session_creations',
+            state: 'exceeded',
+            current_value: 9,
+            limit_value: 8,
+            threshold_percent: 100,
+            message: 'Project session creation count exceeded the configured soft budget.',
+          },
+        ],
         observed_at: '2026-05-29T10:00:00Z',
       },
       created_at: '2026-05-29T09:00:00Z',
@@ -142,6 +154,7 @@ describe('IdentityAccessReviewViewModelBuilder', () => {
       runtimeUsage: '90m',
       egressUsage: '2.0 MiB',
       retainedStorage: '512 KiB / 1.0 MiB',
+      alerts: '1 exceeded',
       policy: '1 templates',
     });
     expect(viewModel.servicePrincipals[0]).toMatchObject({
