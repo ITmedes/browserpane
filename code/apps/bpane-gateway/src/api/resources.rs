@@ -371,6 +371,7 @@ pub(super) async fn session_resource(
 ) -> Result<SessionResource, SessionStoreError> {
     let status = session_status_summary(state, stored).await?;
     let project = session_project_resource(state, stored).await?;
+    let queue = session_queue_info(state, stored).await?;
     let effective_egress = session_effective_egress(state, stored).await?;
     let egress_diagnostics = session_egress_diagnostics(state, stored).await?;
     Ok(stored.to_resource(
@@ -381,6 +382,7 @@ pub(super) async fn session_resource(
             .describe_session_runtime(stored.id)
             .into(),
         status,
+        queue,
         state_override,
         effective_egress,
         egress_diagnostics,
@@ -400,6 +402,80 @@ pub(super) async fn session_project_resource(
         .get_project_for_owner(&owner, project_id)
         .await?
         .map(|project| project.to_session_project_resource()))
+}
+
+async fn session_queue_info(
+    state: &ApiState,
+    stored: &StoredSession,
+) -> Result<Option<SessionQueueInfo>, SessionStoreError> {
+    if stored.state != SessionLifecycleState::Queued {
+        return Ok(None);
+    }
+    let Some(project_id) = stored.project_id else {
+        return Ok(None);
+    };
+    let owner = session_owner_principal(stored);
+    let Some(project) = state
+        .session_store
+        .get_project_for_owner(&owner, project_id)
+        .await?
+    else {
+        return Ok(None);
+    };
+    let active_sessions = state
+        .session_store
+        .count_active_sessions_for_project(&owner, project_id)
+        .await?;
+    let queued_sessions = state
+        .session_store
+        .count_queued_sessions_for_project(&owner, project_id)
+        .await?;
+    let mut queued = state
+        .session_store
+        .list_sessions_for_owner(&owner)
+        .await?
+        .into_iter()
+        .filter(|session| {
+            session.project_id == Some(project_id) && session.state == SessionLifecycleState::Queued
+        })
+        .collect::<Vec<_>>();
+    queued.sort_by(|left, right| {
+        let left_queued_at = left.queued_at.unwrap_or(left.created_at);
+        let right_queued_at = right.queued_at.unwrap_or(right.created_at);
+        left_queued_at
+            .cmp(&right_queued_at)
+            .then_with(|| left.created_at.cmp(&right.created_at))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let position = queued
+        .iter()
+        .position(|session| session.id == stored.id)
+        .map(|index| index.saturating_add(1) as u32)
+        .unwrap_or(1);
+    let queued_at = stored.queued_at.unwrap_or(stored.created_at);
+    let queued_for_ms = Utc::now()
+        .signed_duration_since(queued_at)
+        .num_milliseconds()
+        .max(0) as u64;
+    let max_active_sessions = project.quotas.max_active_sessions;
+    let dispatch_blocker = if position > 1 {
+        "earlier_queued_session"
+    } else if max_active_sessions.is_some_and(|max| active_sessions >= max) {
+        "project_active_session_quota"
+    } else {
+        "runtime_capacity"
+    };
+
+    Ok(Some(SessionQueueInfo {
+        queued_at,
+        queued_for_ms,
+        position,
+        active_sessions,
+        queued_sessions,
+        max_active_sessions,
+        dispatch_blocker: dispatch_blocker.to_string(),
+        cancellable: true,
+    }))
 }
 
 pub(super) async fn session_effective_egress(

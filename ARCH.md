@@ -543,7 +543,8 @@ The workflow layer sits on top of the owner-scoped session APIs.
   quotas with visible queued admission metadata
 - project-scoped session creation persists visible `queued` session resources
   when `max_active_sessions` is exhausted; queued sessions carry stable
-  project-admission metadata and are promoted to `ready` when capacity opens
+  project-admission metadata plus queue position/age/blocker details, can be
+  cancelled before admission, and are promoted to `ready` when capacity opens
 - workflow-created sessions pass through the same project template/egress
   policy binding checks as direct session creates before runtime launch
 - project retained-storage usage includes workflow produced files, completed

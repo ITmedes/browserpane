@@ -1865,25 +1865,29 @@ describe('bpane operator CLI', () => {
     });
   });
 
-  it('mints access, automation access, and disconnects all session clients', async () => {
+  it('mints access, automation access, cancels queue, and disconnects all session clients', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(
       jsonResponse({ token_type: 'session_connect_ticket' }),
       jsonResponse({ token_type: 'session_automation_access_token' }),
+      jsonResponse({ state: 'stopped' }),
       jsonResponse({ state: 'idle' }),
     );
 
     const env = { BPANE_ACCESS_TOKEN: 'token-1' };
     const accessCode = await runBpaneCli(['session', 'access-token', 'session-1'], env, io.io, fetchImpl);
     const automationCode = await runBpaneCli(['session', 'automation-access', 'session-1'], env, io.io, fetchImpl);
+    const cancelCode = await runBpaneCli(['session', 'cancel', 'session-1'], env, io.io, fetchImpl);
     const disconnectCode = await runBpaneCli(['session', 'disconnect-all', 'session-1'], env, io.io, fetchImpl);
 
     expect(accessCode).toBe(EXIT_CODES.ok);
     expect(automationCode).toBe(EXIT_CODES.ok);
+    expect(cancelCode).toBe(EXIT_CODES.ok);
     expect(disconnectCode).toBe(EXIT_CODES.ok);
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([
       ['http://localhost:8080/api/v1/sessions/session-1/access-tokens', 'POST'],
       ['http://localhost:8080/api/v1/sessions/session-1/automation-access', 'POST'],
+      ['http://localhost:8080/api/v1/sessions/session-1/cancel', 'POST'],
       ['http://localhost:8080/api/v1/sessions/session-1/connections/disconnect-all', 'POST'],
     ]);
   });

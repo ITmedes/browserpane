@@ -554,8 +554,10 @@ mod tests {
                     idle_deadline: None,
                 },
             },
+            queue: None,
             created_at: now,
             updated_at: now,
+            queued_at: None,
             runtime_released_at: None,
             stopped_at: None,
         }

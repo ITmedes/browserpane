@@ -377,6 +377,7 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         recording: SessionRecordingPolicy::default(),
         created_at: now,
         updated_at: now,
+        queued_at: None,
         runtime_released_at: None,
         stopped_at: None,
     };

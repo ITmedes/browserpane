@@ -367,6 +367,11 @@ export class ControlClient {
     return ControlSessionMapper.toSessionResource(payload);
   }
 
+  async cancelQueuedSession(sessionId: string): Promise<SessionResource> {
+    const payload = await this.#request('POST', `/api/v1/sessions/${encodeURIComponent(sessionId)}/cancel`);
+    return ControlSessionMapper.toSessionResource(payload);
+  }
+
   async killSession(sessionId: string): Promise<SessionResource> {
     const payload = await this.#request('POST', `/api/v1/sessions/${encodeURIComponent(sessionId)}/kill`);
     return ControlSessionMapper.toSessionResource(payload);

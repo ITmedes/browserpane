@@ -2829,6 +2829,32 @@ paths:
                 $ref: '#/components/schemas/SessionStopConflictResponse'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Sessions]
+      summary: Cancel a queued session resource before it is admitted
+      operationId: cancelQueuedSession
+      responses:
+        '200':
+          description: Queued session cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Session is not queued and cannot be cancelled through the queue operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/release:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -5335,6 +5361,46 @@ components:
           $ref: '#/components/schemas/SessionStopEligibility'
         idle:
           $ref: '#/components/schemas/SessionIdleStatus'
+    SessionQueueInfo:
+      type: object
+      required:
+        - queued_at
+        - queued_for_ms
+        - position
+        - active_sessions
+        - queued_sessions
+        - max_active_sessions
+        - dispatch_blocker
+        - cancellable
+      properties:
+        queued_at:
+          type: string
+          format: date-time
+        queued_for_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        position:
+          type: integer
+          minimum: 1
+        active_sessions:
+          type: integer
+          minimum: 0
+        queued_sessions:
+          type: integer
+          minimum: 0
+        max_active_sessions:
+          type: integer
+          minimum: 1
+          nullable: true
+        dispatch_blocker:
+          type: string
+          enum:
+            - project_active_session_quota
+            - earlier_queued_session
+            - runtime_capacity
+        cancellable:
+          type: boolean
     BrowserContextState:
       type: string
       enum:
@@ -6697,8 +6763,10 @@ components:
         - connect
         - runtime
         - status
+        - queue
         - created_at
         - updated_at
+        - queued_at
         - runtime_released_at
         - stopped_at
       properties:
@@ -6764,12 +6832,20 @@ components:
           $ref: '#/components/schemas/SessionRuntimeInfo'
         status:
           $ref: '#/components/schemas/SessionStatusSummary'
+        queue:
+          allOf:
+            - $ref: '#/components/schemas/SessionQueueInfo'
+          nullable: true
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+        queued_at:
+          type: string
+          format: date-time
+          nullable: true
         runtime_released_at:
           type: string
           format: date-time

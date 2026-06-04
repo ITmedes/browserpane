@@ -50,6 +50,7 @@ import type {
   SessionListResponse,
   SessionNetworkIdentity,
   SessionProjectResource,
+  SessionQueueInfo,
   SessionResource,
   SessionRuntimeInfo,
   SessionStatusSummary,
@@ -293,6 +294,7 @@ export class ControlSessionMapper {
     const object = expectRecord(payload, 'session resource');
     const templateId = optionalString(object.template_id, 'session resource template_id');
     const stoppedAt = optionalString(object.stopped_at, 'session resource stopped_at');
+    const queuedAt = optionalString(object.queued_at, 'session resource queued_at');
     const runtimeReleasedAt = optionalString(
       object.runtime_released_at,
       'session resource runtime_released_at',
@@ -318,8 +320,10 @@ export class ControlSessionMapper {
       connect: toConnectInfo(object.connect),
       runtime: toRuntimeInfo(object.runtime),
       status: toStatusSummary(object.status),
+      queue: toSessionQueueInfo(object.queue) ?? null,
       created_at: expectString(object.created_at, 'session resource created_at'),
       updated_at: expectString(object.updated_at, 'session resource updated_at'),
+      ...(queuedAt !== undefined ? { queued_at: queuedAt } : {}),
       ...(runtimeReleasedAt !== undefined ? { runtime_released_at: runtimeReleasedAt } : {}),
       ...(stoppedAt !== undefined ? { stopped_at: stoppedAt } : {}),
     };
@@ -1117,6 +1121,26 @@ function toStatusSummary(value: unknown): SessionStatusSummary {
     presence_state: expectString(object.presence_state, 'session status presence_state'),
     connection_counts: toConnectionCounts(object.connection_counts),
     stop_eligibility: toStopEligibility(object.stop_eligibility),
+  };
+}
+
+function toSessionQueueInfo(value: unknown): SessionQueueInfo | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const object = expectRecord(value, 'session resource queue');
+  return {
+    queued_at: expectString(object.queued_at, 'session queue queued_at'),
+    queued_for_ms: expectNumber(object.queued_for_ms, 'session queue queued_for_ms'),
+    position: expectNumber(object.position, 'session queue position'),
+    active_sessions: expectNumber(object.active_sessions, 'session queue active_sessions'),
+    queued_sessions: expectNumber(object.queued_sessions, 'session queue queued_sessions'),
+    max_active_sessions: optionalNumber(
+      object.max_active_sessions,
+      'session queue max_active_sessions',
+    ) ?? null,
+    dispatch_blocker: expectString(object.dispatch_blocker, 'session queue dispatch_blocker'),
+    cancellable: expectBoolean(object.cancellable, 'session queue cancellable'),
   };
 }
 

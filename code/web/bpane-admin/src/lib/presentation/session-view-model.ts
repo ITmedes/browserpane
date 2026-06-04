@@ -67,6 +67,7 @@ export type SessionDetailPanelViewModel = {
   readonly statusHint: string | null;
   readonly canRefresh: boolean;
   readonly canStop: boolean;
+  readonly canCancelQueue: boolean;
   readonly canKill: boolean;
   readonly canRelease: boolean;
   readonly canDisconnectAll: boolean;
@@ -116,6 +117,7 @@ export class SessionViewModelBuilder {
         statusHint: null,
         canRefresh: false,
         canStop: false,
+        canCancelQueue: false,
         canKill: false,
         canRelease: false,
         canDisconnectAll: false,
@@ -130,6 +132,8 @@ export class SessionViewModelBuilder {
     const connectionCount = status?.connection_counts.total_clients
       ?? session.status.connection_counts.total_clients;
     const hasLiveClients = input.connected || connectionCount > 0;
+    const queue = session.queue ?? null;
+    const isQueued = session.state === 'queued';
     return {
       title: session.id,
       facts: [
@@ -185,6 +189,17 @@ export class SessionViewModelBuilder {
         { label: 'transport', value: session.connect.compatibility_mode },
         { label: 'created', value: session.created_at },
         { label: 'updated', value: session.updated_at },
+        ...(queue ? [
+          { label: 'queued', value: queue.queued_at, testId: 'session-queued-at' },
+          { label: 'queue age', value: durationLabel(queue.queued_for_ms), testId: 'session-queue-age' },
+          {
+            label: 'queue position',
+            value: `${queue.position}/${queue.queued_sessions}`,
+            testId: 'session-queue-position',
+          },
+          { label: 'queue blocker', value: queue.dispatch_blocker, testId: 'session-queue-blocker' },
+        ] : []),
+        ...(session.queued_at && !queue ? [{ label: 'queued', value: session.queued_at, testId: 'session-queued-at' }] : []),
         ...(session.runtime_released_at ? [{ label: 'runtime released', value: session.runtime_released_at }] : []),
         ...(session.stopped_at ? [{ label: 'stopped', value: session.stopped_at }] : []),
         ...statusFacts(status),
@@ -198,14 +213,31 @@ export class SessionViewModelBuilder {
       hint: resolveHint(hasLiveClients, stopEligibility),
       statusHint: status ? null : 'Live status is loaded from the session status API.',
       canRefresh: !input.loading,
-      canStop: !input.loading && !hasLiveClients && stopEligibility.allowed,
-      canKill: !input.loading && !hasLiveClients,
-      canRelease: !input.loading && !hasLiveClients && stopEligibility.allowed && !['released', 'stopped'].includes(session.state),
+      canStop: !input.loading && !isQueued && !hasLiveClients && stopEligibility.allowed,
+      canCancelQueue: !input.loading && isQueued && (queue?.cancellable ?? true),
+      canKill: !input.loading && !isQueued && !hasLiveClients,
+      canRelease: !input.loading && !isQueued && !hasLiveClients && stopEligibility.allowed && !['released', 'stopped'].includes(session.state),
       canDisconnectAll: !input.loading && (status?.connections.length ?? 0) > 0,
       loading: input.loading,
       error: input.error,
     };
   }
+}
+
+function durationLabel(milliseconds: number): string {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    return '0s';
+  }
+  const seconds = Math.floor(milliseconds / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ${seconds % 60}s`;
+  }
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
 }
 
 function toListItem(
