@@ -127,6 +127,7 @@ const PROJECT = {
     egress_total_bytes: 2097152,
     retained_storage_bytes: 268435456,
     max_retained_storage_bytes: 1073741824,
+    alerts: [],
     observed_at: '2026-05-04T18:50:00Z',
   },
   created_at: '2026-05-04T18:50:00Z',
@@ -270,8 +271,35 @@ describe('session create configurator', () => {
     expect(validation.preview).toContain('"project_id"');
     expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, created=7, workflows=1/4, runtime=2h, egress_bytes=2MiB, templates=1, egress=1)');
     expect(projectUsageSummary(PROJECT)).toBe(
-      'state=active | sessions=1/2 | queued_sessions=0 | created_sessions=7 | workflow_runs=1/4 | runtime=2h | egress_bytes=2MiB | storage=268435456/1073741824 | policy=1 templates,1 egress profiles | labels=tenant=support',
+      'state=active | sessions=1/2 | queued_sessions=0 | created_sessions=7 | workflow_runs=1/4 | runtime=2h | egress_bytes=2MiB | storage=268435456/1073741824 | alerts=none | policy=1 templates,1 egress profiles | labels=tenant=support',
     );
+
+    const alertedProject = {
+      ...PROJECT,
+      usage: {
+        ...PROJECT.usage,
+        alerts: [
+          {
+            metric: 'session_creations',
+            state: 'exceeded',
+            current_value: 25,
+            limit_value: 25,
+            threshold_percent: 100,
+            message: 'Created sessions exceeded the configured soft budget.',
+          },
+          {
+            metric: 'runtime_usage_ms',
+            state: 'approaching_limit',
+            current_value: 80000,
+            limit_value: 100000,
+            threshold_percent: 80,
+            message: 'Browser runtime has reached at least 80% of the configured soft budget.',
+          },
+        ],
+      },
+    } as const;
+    expect(projectOptionLabel(alertedProject)).toContain('alerts=1 exceeded, 1 warning');
+    expect(projectUsageSummary(alertedProject)).toContain('alerts=1 exceeded, 1 warning');
   });
 
   it('rejects unavailable or archived project selections', () => {

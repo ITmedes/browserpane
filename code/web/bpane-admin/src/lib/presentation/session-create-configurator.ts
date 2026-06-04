@@ -512,6 +512,7 @@ export function projectOptionLabel(project: ProjectResource): string {
       : null,
     project.usage.runtime_usage_ms > 0 ? `runtime=${formatDurationMs(project.usage.runtime_usage_ms)}` : null,
     project.usage.egress_total_bytes > 0 ? `egress_bytes=${formatBytes(project.usage.egress_total_bytes)}` : null,
+    project.usage.alerts.length > 0 ? `alerts=${projectUsageAlertsSummary(project)}` : null,
     project.policy.allowed_session_template_ids.length > 0
       ? `templates=${project.policy.allowed_session_template_ids.length}`
       : null,
@@ -535,6 +536,7 @@ export function projectUsageSummary(project: ProjectResource | null | undefined)
     `runtime=${formatDurationMs(project.usage.runtime_usage_ms)}`,
     `egress_bytes=${formatBytes(project.usage.egress_total_bytes)}`,
     `storage=${usageFraction(project.usage.retained_storage_bytes, project.usage.max_retained_storage_bytes)}`,
+    `alerts=${projectUsageAlertsSummary(project)}`,
     `policy=${projectPolicySummary(project)}`,
   ];
   const labels = Object.entries(project.labels).sort(([left], [right]) => left.localeCompare(right));
@@ -553,6 +555,18 @@ function projectPolicySummary(project: ProjectResource): string {
     facts.push(`${project.policy.allowed_egress_profile_ids.length} egress profiles`);
   }
   return facts.length > 0 ? facts.join(',') : 'unrestricted';
+}
+
+function projectUsageAlertsSummary(project: ProjectResource): string {
+  if (project.usage.alerts.length === 0) {
+    return 'none';
+  }
+  const exceeded = project.usage.alerts.filter((alert) => alert.state === 'exceeded').length;
+  const approaching = project.usage.alerts.length - exceeded;
+  return [
+    exceeded > 0 ? `${exceeded} exceeded` : null,
+    approaching > 0 ? `${approaching} warning${approaching === 1 ? '' : 's'}` : null,
+  ].filter(Boolean).join(', ');
 }
 
 export function egressProfileKind(profile: EgressProfileResource): 'tls_interceptor' | 'proxy' | 'other' {

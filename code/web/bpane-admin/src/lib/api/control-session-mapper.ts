@@ -35,6 +35,9 @@ import type {
   ProjectQuotas,
   ProjectResource,
   ProjectState,
+  ProjectUsageAlertMetric,
+  ProjectUsageAlertResource,
+  ProjectUsageAlertState,
   ProjectUsageResource,
   ServicePrincipalListResponse,
   ServicePrincipalResource,
@@ -363,6 +366,12 @@ const BROWSER_CONTEXT_PERSISTENCE_MODES = ['reusable', 'ephemeral'] satisfies re
 const SESSION_BROWSER_CONTEXT_MODES = ['fresh', 'ephemeral', 'reusable'] satisfies readonly SessionBrowserContextMode[];
 const PROJECT_STATES = ['active', 'archived'] satisfies readonly ProjectState[];
 const PROJECT_ADMISSION_STATES = ['allowed', 'queued', 'rejected'] satisfies readonly ProjectAdmissionState[];
+const PROJECT_USAGE_ALERT_METRICS = [
+  'session_creations',
+  'runtime_usage_ms',
+  'egress_total_bytes',
+] satisfies readonly ProjectUsageAlertMetric[];
+const PROJECT_USAGE_ALERT_STATES = ['approaching_limit', 'exceeded'] satisfies readonly ProjectUsageAlertState[];
 const PROJECT_ADMISSION_REASON_CODES = [
   'owner_scope_unbounded',
   'project_quota_available',
@@ -588,6 +597,18 @@ function toProjectQuotas(value: unknown): ProjectQuotas {
       object.max_retained_storage_bytes,
       'project quotas max_retained_storage_bytes',
     ) ?? null,
+    max_session_creations: optionalNumber(
+      object.max_session_creations,
+      'project quotas max_session_creations',
+    ) ?? null,
+    max_runtime_usage_ms: optionalNumber(
+      object.max_runtime_usage_ms,
+      'project quotas max_runtime_usage_ms',
+    ) ?? null,
+    max_egress_total_bytes: optionalNumber(
+      object.max_egress_total_bytes,
+      'project quotas max_egress_total_bytes',
+    ) ?? null,
   };
 }
 
@@ -620,6 +641,10 @@ function toProjectUsage(value: unknown): ProjectUsageResource {
       object.session_creations,
       'project usage session_creations',
     ) ?? 0,
+    max_session_creations: optionalNumber(
+      object.max_session_creations,
+      'project usage max_session_creations',
+    ) ?? null,
     max_active_sessions: optionalNumber(
       object.max_active_sessions,
       'project usage max_active_sessions',
@@ -636,6 +661,10 @@ function toProjectUsage(value: unknown): ProjectUsageResource {
       object.runtime_usage_ms,
       'project usage runtime_usage_ms',
     ) ?? 0,
+    max_runtime_usage_ms: optionalNumber(
+      object.max_runtime_usage_ms,
+      'project usage max_runtime_usage_ms',
+    ) ?? null,
     egress_rx_bytes: optionalNumber(
       object.egress_rx_bytes,
       'project usage egress_rx_bytes',
@@ -648,6 +677,10 @@ function toProjectUsage(value: unknown): ProjectUsageResource {
       object.egress_total_bytes,
       'project usage egress_total_bytes',
     ) ?? 0,
+    max_egress_total_bytes: optionalNumber(
+      object.max_egress_total_bytes,
+      'project usage max_egress_total_bytes',
+    ) ?? null,
     retained_storage_bytes: expectNumber(
       object.retained_storage_bytes,
       'project usage retained_storage_bytes',
@@ -656,8 +689,43 @@ function toProjectUsage(value: unknown): ProjectUsageResource {
       object.max_retained_storage_bytes,
       'project usage max_retained_storage_bytes',
     ) ?? null,
+    alerts: toProjectUsageAlerts(object.alerts ?? []),
     observed_at: expectString(object.observed_at, 'project usage observed_at'),
   };
+}
+
+function toProjectUsageAlerts(value: unknown): readonly ProjectUsageAlertResource[] {
+  if (!Array.isArray(value)) {
+    throw new Error('project usage alerts must be an array');
+  }
+  return value.map((entry, index) => {
+    const object = expectRecord(entry, `project usage alerts[${index}]`);
+    return {
+      metric: expectEnum(
+        object.metric,
+        `project usage alerts[${index}].metric`,
+        PROJECT_USAGE_ALERT_METRICS,
+      ),
+      state: expectEnum(
+        object.state,
+        `project usage alerts[${index}].state`,
+        PROJECT_USAGE_ALERT_STATES,
+      ),
+      current_value: expectNumber(
+        object.current_value,
+        `project usage alerts[${index}].current_value`,
+      ),
+      limit_value: expectNumber(
+        object.limit_value,
+        `project usage alerts[${index}].limit_value`,
+      ),
+      threshold_percent: expectNumber(
+        object.threshold_percent,
+        `project usage alerts[${index}].threshold_percent`,
+      ),
+      message: expectString(object.message, `project usage alerts[${index}].message`),
+    };
+  });
 }
 
 function toSessionProjectResource(value: unknown): SessionProjectResource | null | undefined {

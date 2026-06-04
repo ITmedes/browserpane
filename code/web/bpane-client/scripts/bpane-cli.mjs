@@ -61,7 +61,10 @@ const KNOWN_OPTIONS = new Set([
   'max-profile-storage-bytes',
   'max-active-sessions',
   'max-active-workflow-runs',
+  'max-egress-total-bytes',
   'max-retained-storage-bytes',
+  'max-runtime-usage-ms',
+  'max-session-creations',
   'name',
   'older-than-sec',
   'offset',
@@ -221,17 +224,20 @@ function usageText() {
     '  --claim-name <name>       Claim name for claim identity mappings.',
     '  --service-principal-id <id> Registered service principal id for service-principal mappings.',
     '  --scope <name>            Repeatable service-principal scope metadata.',
-  '  --allowed-project-id <id> Repeatable service-principal project metadata.',
-  '  --allowed-session-template-id <id> Repeatable project policy template allow-list entry.',
-  '  --allowed-egress-profile-id <id> Repeatable project policy egress-profile allow-list entry.',
-  '  --max-active-sessions <count> Project active-session quota.',
+    '  --allowed-project-id <id> Repeatable service-principal project metadata.',
+    '  --allowed-session-template-id <id> Repeatable project policy template allow-list entry.',
+    '  --allowed-egress-profile-id <id> Repeatable project policy egress-profile allow-list entry.',
+    '  --max-active-sessions <count> Project active-session quota.',
     '  --max-active-workflow-runs <count> Project active workflow-run quota.',
     '  --max-retained-storage-bytes <bytes> Project retained-storage quota.',
+    '  --max-session-creations <count> Project soft budget for created sessions.',
+    '  --max-runtime-usage-ms <ms> Project soft budget for browser runtime milliseconds.',
+    '  --max-egress-total-bytes <bytes> Project soft metadata budget for egress bytes.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
     '  --retention-sec <sec>     Browser context retention window in seconds.',
-  '  --max-profile-storage-bytes <bytes> Browser context profile storage limit in bytes.',
-  '  --input <path>            File path for binary import/upload commands.',
-  '  --output <path>           File path for binary export/download commands.',
+    '  --max-profile-storage-bytes <bytes> Browser context profile storage limit in bytes.',
+    '  --input <path>            File path for binary import/upload commands.',
+    '  --output <path>           File path for binary export/download commands.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
@@ -1133,6 +1139,18 @@ function buildProjectQuotas(options, existingQuotas = null) {
   const maxRetainedStorageBytes = parseIntegerOption(options, 'max-retained-storage-bytes');
   if (maxRetainedStorageBytes !== null) {
     quotas.max_retained_storage_bytes = maxRetainedStorageBytes;
+  }
+  const maxSessionCreations = parseIntegerOption(options, 'max-session-creations');
+  if (maxSessionCreations !== null) {
+    quotas.max_session_creations = maxSessionCreations;
+  }
+  const maxRuntimeUsageMs = parseIntegerOption(options, 'max-runtime-usage-ms');
+  if (maxRuntimeUsageMs !== null) {
+    quotas.max_runtime_usage_ms = maxRuntimeUsageMs;
+  }
+  const maxEgressTotalBytes = parseIntegerOption(options, 'max-egress-total-bytes');
+  if (maxEgressTotalBytes !== null) {
+    quotas.max_egress_total_bytes = maxEgressTotalBytes;
   }
   return quotas;
 }

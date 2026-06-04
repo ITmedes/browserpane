@@ -5655,7 +5655,24 @@ components:
           format: int64
           minimum: 1
           nullable: true
-          description: Maximum retained bytes for project-linked workflow produced files, completed recording artifacts, and session files. Null means unbounded.
+          description: Maximum retained bytes for project-linked workflow produced files, completed recording artifacts, session files, and project-owned file workspace files. Null means unbounded.
+        max_session_creations:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Soft budget for total created sessions in the project. Crossing this budget emits usage alerts but does not reject requests.
+        max_runtime_usage_ms:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+          description: Soft budget for aggregated browser runtime milliseconds. Crossing this budget emits usage alerts but does not reject requests.
+        max_egress_total_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+          description: Soft metadata budget for sanitized egress byte counters. Crossing this budget emits usage alerts but does not reject requests.
     ProjectPolicy:
       type: object
       additionalProperties: false
@@ -5678,15 +5695,19 @@ components:
         - active_sessions
         - queued_sessions
         - session_creations
+        - max_session_creations
         - max_active_sessions
         - active_workflow_runs
         - max_active_workflow_runs
         - runtime_usage_ms
+        - max_runtime_usage_ms
         - egress_rx_bytes
         - egress_tx_bytes
         - egress_total_bytes
+        - max_egress_total_bytes
         - retained_storage_bytes
         - max_retained_storage_bytes
+        - alerts
         - observed_at
       properties:
         project_id:
@@ -5701,6 +5722,10 @@ components:
         session_creations:
           type: integer
           minimum: 0
+        max_session_creations:
+          type: integer
+          minimum: 1
+          nullable: true
         max_active_sessions:
           type: integer
           minimum: 1
@@ -5717,6 +5742,11 @@ components:
           format: int64
           minimum: 0
           description: Aggregated browser runtime duration for sessions in this project. Live sessions include elapsed runtime through observed_at.
+        max_runtime_usage_ms:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
         egress_rx_bytes:
           type: integer
           format: int64
@@ -5732,20 +5762,65 @@ components:
           format: int64
           minimum: 0
           description: Sum of egress_rx_bytes and egress_tx_bytes.
+        max_egress_total_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
         retained_storage_bytes:
           type: integer
           format: int64
           minimum: 0
-          description: Retained bytes currently counted from project-linked workflow produced files, completed recording artifacts, and session files.
+          description: Retained bytes currently counted from project-linked workflow produced files, completed recording artifacts, session files, and project-owned file workspace files.
         max_retained_storage_bytes:
           type: integer
           format: int64
           minimum: 1
           nullable: true
           description: Configured retained-storage quota for the currently counted project artifact classes. Null means unbounded.
+        alerts:
+          type: array
+          description: Warning-first usage budget signals derived from configured soft budgets. Alerts do not imply request rejection.
+          items:
+            $ref: '#/components/schemas/ProjectUsageAlertResource'
         observed_at:
           type: string
           format: date-time
+    ProjectUsageAlertResource:
+      type: object
+      required:
+        - metric
+        - state
+        - current_value
+        - limit_value
+        - threshold_percent
+        - message
+      properties:
+        metric:
+          type: string
+          enum:
+            - session_creations
+            - runtime_usage_ms
+            - egress_total_bytes
+        state:
+          type: string
+          enum:
+            - approaching_limit
+            - exceeded
+        current_value:
+          type: integer
+          format: int64
+          minimum: 0
+        limit_value:
+          type: integer
+          format: int64
+          minimum: 1
+        threshold_percent:
+          type: integer
+          minimum: 1
+          maximum: 100
+        message:
+          type: string
     UpsertProjectRequest:
       type: object
       additionalProperties: false

@@ -127,6 +127,9 @@ export type ProjectQuotas = {
   readonly max_active_sessions?: number | null;
   readonly max_active_workflow_runs?: number | null;
   readonly max_retained_storage_bytes?: number | null;
+  readonly max_session_creations?: number | null;
+  readonly max_runtime_usage_ms?: number | null;
+  readonly max_egress_total_bytes?: number | null;
 };
 
 export type ProjectPolicy = {
@@ -139,16 +142,33 @@ export type ProjectUsageResource = {
   readonly active_sessions: number;
   readonly queued_sessions: number;
   readonly session_creations: number;
+  readonly max_session_creations?: number | null;
   readonly max_active_sessions?: number | null;
   readonly active_workflow_runs: number;
   readonly max_active_workflow_runs?: number | null;
   readonly runtime_usage_ms: number;
+  readonly max_runtime_usage_ms?: number | null;
   readonly egress_rx_bytes: number;
   readonly egress_tx_bytes: number;
   readonly egress_total_bytes: number;
+  readonly max_egress_total_bytes?: number | null;
   readonly retained_storage_bytes: number;
   readonly max_retained_storage_bytes?: number | null;
+  readonly alerts: readonly ProjectUsageAlertResource[];
   readonly observed_at: string;
+};
+
+export type ProjectUsageAlertMetric = 'session_creations' | 'runtime_usage_ms' | 'egress_total_bytes';
+
+export type ProjectUsageAlertState = 'approaching_limit' | 'exceeded';
+
+export type ProjectUsageAlertResource = {
+  readonly metric: ProjectUsageAlertMetric;
+  readonly state: ProjectUsageAlertState;
+  readonly current_value: number;
+  readonly limit_value: number;
+  readonly threshold_percent: number;
+  readonly message: string;
 };
 
 export type ProjectResource = {

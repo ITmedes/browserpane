@@ -151,9 +151,22 @@ async function run() {
       '4',
       '--max-retained-storage-bytes',
       '1073741824',
+      '--max-session-creations',
+      '25',
+      '--max-runtime-usage-ms',
+      '86400000',
+      '--max-egress-total-bytes',
+      '1073741824',
     ], cliEnv);
     projectId = project.id;
-    if (!projectId || project.quotas?.max_active_sessions !== 3 || project.state !== 'active') {
+    if (
+      !projectId
+      || project.quotas?.max_active_sessions !== 3
+      || project.quotas?.max_session_creations !== 25
+      || project.quotas?.max_runtime_usage_ms !== 86400000
+      || project.quotas?.max_egress_total_bytes !== 1073741824
+      || project.state !== 'active'
+    ) {
       throw new Error(`CLI project create returned an invalid project: ${JSON.stringify(project)}`);
     }
 
@@ -168,7 +181,11 @@ async function run() {
     }
 
     const projectUsage = runBpaneCli(['project', 'usage', projectId], cliEnv);
-    if (projectUsage.project_id !== projectId || projectUsage.active_sessions !== 0) {
+    if (
+      projectUsage.project_id !== projectId
+      || projectUsage.active_sessions !== 0
+      || !Array.isArray(projectUsage.alerts)
+    ) {
       throw new Error(`CLI project usage returned unexpected data: ${JSON.stringify(projectUsage)}`);
     }
 

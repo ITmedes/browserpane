@@ -34,6 +34,7 @@ const PROJECT: ProjectResource = {
     egress_tx_bytes: 0,
     egress_total_bytes: 0,
     retained_storage_bytes: 0,
+    alerts: [],
     observed_at: '2026-05-31T10:00:00Z',
   },
   created_at: '2026-05-31T10:00:00Z',
