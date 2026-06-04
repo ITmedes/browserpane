@@ -12,6 +12,7 @@ function printUsage() {
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow version create <workflow-id> --body-json <json>',
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow version get <workflow-id> <version>',
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow run create --body-json <json>',
+    '  node scripts/workflow-cli.mjs [--api-url URL] workflow run create --workflow-id <id> [--version <version>] [--project-id <id>] [--create-session|--session-id <id>] [--input-json <json>] [--label key=value] [--summary]',
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow run get <run-id>',
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow run wait <run-id> [--target-state <state>]',
     '  node scripts/workflow-cli.mjs [--api-url URL] workflow run logs <run-id>',
@@ -28,6 +29,18 @@ function printUsage() {
     '  --api-url <url>          Gateway base URL. Falls back to BPANE_API_URL or http://localhost:8932.',
     '  --body-json <json>       Inline JSON request body.',
     '  --body-file <path>       JSON request body file.',
+    '  --workflow-id <id>       Workflow definition id for ergonomic run create.',
+    '  --version <version>      Workflow version for ergonomic run create. Default v1.',
+    '  --project-id <id>        Project id for ergonomic run create.',
+    '  --session-id <id>        Existing session id for ergonomic run create.',
+    '  --create-session         Create a new session for ergonomic run create.',
+    '  --input-json <json>      Inline workflow run input object.',
+    '  --input-file <path>      Workflow run input object file.',
+    '  --label key=value        Add a workflow run label. Repeatable.',
+    '  --source-system <value>  External source system for the run.',
+    '  --source-reference <ref> External source reference for the run.',
+    '  --client-request-id <id> Stable idempotency key for run create.',
+    '  --summary                Print compact workflow-run summary JSON.',
     '  --output <path>          Output file path for download-produced-file.',
     '  --timeout-ms <ms>        Wait timeout. Default 60000.',
     '  --interval-ms <ms>       Wait poll interval. Default 1000.',
@@ -81,6 +94,14 @@ function getOption(options, name, fallback = null) {
   return values[values.length - 1];
 }
 
+function getOptions(options, name) {
+  return options.get(name) ?? [];
+}
+
+function hasOption(options, name) {
+  return options.has(name);
+}
+
 function requireOption(options, name) {
   const value = getOption(options, name, null);
   if (value === null || value === '') {
@@ -93,23 +114,137 @@ function normalizeApiUrl(value) {
   return value.replace(/\/+$/u, '');
 }
 
-async function readJsonBody(options) {
-  const bodyJson = getOption(options, 'body-json', null);
-  const bodyFile = getOption(options, 'body-file', null);
-  if (bodyJson && bodyFile) {
-    fail('Use only one of --body-json or --body-file.');
+function parseJsonOption(options, jsonName, fileName, requiredLabel = null) {
+  const inlineJson = getOption(options, jsonName, null);
+  const filePath = getOption(options, fileName, null);
+  if (inlineJson && filePath) {
+    fail(`Use only one of --${jsonName} or --${fileName}.`);
   }
-  if (!bodyJson && !bodyFile) {
-    fail('This command requires --body-json or --body-file.');
+  if (!inlineJson && !filePath) {
+    if (requiredLabel) {
+      fail(`Missing ${requiredLabel}. Pass --${jsonName} or --${fileName}.`);
+    }
+    return undefined;
+  }
+  return { inlineJson, filePath };
+}
+
+async function readJsonOption(options, jsonName, fileName, requiredLabel = null) {
+  const source = parseJsonOption(options, jsonName, fileName, requiredLabel);
+  if (!source) {
+    return undefined;
   }
   try {
-    if (bodyJson) {
-      return JSON.parse(bodyJson);
+    if (source.inlineJson) {
+      return JSON.parse(source.inlineJson);
     }
-    return JSON.parse(await fs.readFile(bodyFile, 'utf8'));
+    return JSON.parse(await fs.readFile(source.filePath, 'utf8'));
   } catch (error) {
-    fail(`Failed to parse request body JSON: ${error instanceof Error ? error.message : String(error)}`);
+    fail(`Failed to parse --${source.inlineJson ? jsonName : fileName}: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+async function readJsonBody(options) {
+  return await readJsonOption(options, 'body-json', 'body-file', 'request body JSON');
+}
+
+function parseLabelMap(options) {
+  const labels = {};
+  for (const label of getOptions(options, 'label')) {
+    const separator = label.indexOf('=');
+    if (separator <= 0) {
+      fail(`Invalid --label value ${label}. Expected key=value.`);
+    }
+    const key = label.slice(0, separator).trim();
+    const value = label.slice(separator + 1);
+    if (!key) {
+      fail(`Invalid --label value ${label}. Label key must not be empty.`);
+    }
+    labels[key] = value;
+  }
+  return Object.keys(labels).length ? labels : undefined;
+}
+
+async function buildWorkflowRunCreateBody(options) {
+  const hasRawBody = hasOption(options, 'body-json') || hasOption(options, 'body-file');
+  const body = hasRawBody ? await readJsonBody(options) : {};
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    fail('Workflow run create body must be a JSON object.');
+  }
+
+  const workflowId = getOption(options, 'workflow-id', null);
+  if (workflowId) {
+    body.workflow_id = workflowId;
+  }
+  if (!body.workflow_id) {
+    fail('workflow run create requires --workflow-id or body.workflow_id.');
+  }
+
+  const version = getOption(options, 'version', null);
+  if (version) {
+    body.version = version;
+  } else if (!body.version) {
+    body.version = 'v1';
+  }
+
+  const projectId = getOption(options, 'project-id', null);
+  if (projectId) {
+    body.project_id = projectId;
+  }
+
+  const sourceSystem = getOption(options, 'source-system', null);
+  if (sourceSystem) {
+    body.source_system = sourceSystem;
+  }
+  const sourceReference = getOption(options, 'source-reference', null);
+  if (sourceReference) {
+    body.source_reference = sourceReference;
+  }
+  const clientRequestId = getOption(options, 'client-request-id', null);
+  if (clientRequestId) {
+    body.client_request_id = clientRequestId;
+  }
+
+  const input = await readJsonOption(options, 'input-json', 'input-file');
+  if (input !== undefined) {
+    body.input = input;
+  }
+
+  const labels = parseLabelMap(options);
+  if (labels) {
+    body.labels = {
+      ...(body.labels && typeof body.labels === 'object' && !Array.isArray(body.labels)
+        ? body.labels
+        : {}),
+      ...labels,
+    };
+  }
+
+  const sessionId = getOption(options, 'session-id', null);
+  const createSession = hasOption(options, 'create-session');
+  if (sessionId && createSession) {
+    fail('Use only one of --session-id or --create-session.');
+  }
+  if (sessionId) {
+    body.session = { existing_session_id: sessionId };
+  } else if (createSession) {
+    const createSessionBody =
+      body.session && typeof body.session === 'object' && !Array.isArray(body.session) && body.session.create_session
+        ? body.session.create_session
+        : {};
+    body.session = {
+      create_session: {
+        ...(typeof createSessionBody === 'object' && !Array.isArray(createSessionBody)
+          ? createSessionBody
+          : {}),
+      },
+    };
+    if (projectId && body.session.create_session.project_id === undefined) {
+      body.session.create_session.project_id = projectId;
+    }
+  }
+
+  return body;
 }
 
 function buildHeaders(accessToken, extraHeaders = {}) {
@@ -177,6 +312,35 @@ async function waitForRun(baseUrl, accessToken, runId, options) {
 
 function printJson(value) {
   console.log(JSON.stringify(value, null, 2));
+}
+
+function projectLabel(run) {
+  if (run?.project && typeof run.project.name === 'string' && run.project.name.trim()) {
+    return run.project.name;
+  }
+  return run?.project_id ?? null;
+}
+
+function workflowRunSummary(run) {
+  return {
+    id: run?.id ?? null,
+    state: run?.state ?? null,
+    workflow_id: run?.workflow_id ?? run?.workflow_definition_id ?? null,
+    workflow_version: run?.workflow_version ?? null,
+    session_id: run?.session_id ?? null,
+    project_id: run?.project_id ?? null,
+    project: projectLabel(run),
+    project_admission_state: run?.project_admission?.state ?? null,
+    project_admission_reason_code: run?.project_admission?.reason_code ?? null,
+    admission_reason: run?.admission?.reason ?? null,
+    client_request_id: run?.client_request_id ?? null,
+    source_system: run?.source_system ?? null,
+    source_reference: run?.source_reference ?? null,
+  };
+}
+
+function printWorkflowRun(value, options) {
+  printJson(hasOption(options, 'summary') ? workflowRunSummary(value) : value);
 }
 
 async function main() {
@@ -269,12 +433,13 @@ async function main() {
 
   if (subScope === 'run') {
     if (action === 'create' && !extra) {
-      const body = await readJsonBody(options);
-      printJson(
+      const body = await buildWorkflowRunCreateBody(options);
+      printWorkflowRun(
         await requestJson(baseUrl, accessToken, '/api/v1/workflow-runs', {
           method: 'POST',
           body: JSON.stringify(body),
         }),
+        options,
       );
       return;
     }
@@ -285,18 +450,19 @@ async function main() {
     }
 
     if (action === 'get') {
-      printJson(
+      printWorkflowRun(
         await requestJson(
           baseUrl,
           accessToken,
           `/api/v1/workflow-runs/${encodeURIComponent(runId)}`,
         ),
+        options,
       );
       return;
     }
 
     if (action === 'wait') {
-      printJson(await waitForRun(baseUrl, accessToken, runId, options));
+      printWorkflowRun(await waitForRun(baseUrl, accessToken, runId, options), options);
       return;
     }
 
