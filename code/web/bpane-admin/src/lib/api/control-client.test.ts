@@ -306,6 +306,45 @@ describe('ControlClient', () => {
     );
   });
 
+  it('maps queued session metadata from the session list', async () => {
+    const queuedAt = '2026-05-04T19:02:00Z';
+    const fetchImpl = jsonFetch({
+      sessions: [{
+        ...SESSION,
+        state: 'queued',
+        queued_at: queuedAt,
+        queue: {
+          queued_at: queuedAt,
+          queued_for_ms: 125000,
+          position: 2,
+          active_sessions: 1,
+          queued_sessions: 3,
+          max_active_sessions: 1,
+          dispatch_blocker: 'earlier_queued_session',
+          cancellable: true,
+        },
+      }],
+    });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const response = await client.listSessions();
+
+    expect(response.sessions[0]?.state).toBe('queued');
+    expect(response.sessions[0]?.queued_at).toBe(queuedAt);
+    expect(response.sessions[0]?.queue).toMatchObject({
+      queued_at: queuedAt,
+      queued_for_ms: 125000,
+      position: 2,
+      queued_sessions: 3,
+      dispatch_blocker: 'earlier_queued_session',
+      cancellable: true,
+    });
+  });
+
   it('loads identity and access-review resources with bearer auth', async () => {
     const responses = [IDENTITY_PRINCIPAL, ACCESS_REVIEW];
     const fetchImpl = vi.fn<FetchLike>(async () => new Response(JSON.stringify(responses.shift()), {
@@ -1079,10 +1118,15 @@ describe('ControlClient', () => {
     });
 
     await client.stopSession('session/with/slash');
+    await client.cancelQueuedSession('session/with/slash');
     await client.releaseSessionRuntime('session/with/slash');
 
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('http://localhost:8932/api/v1/sessions/session%2Fwith%2Fslash/stop'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/sessions/session%2Fwith%2Fslash/cancel'),
       expect.objectContaining({ method: 'POST' }),
     );
     expect(fetchImpl).toHaveBeenCalledWith(

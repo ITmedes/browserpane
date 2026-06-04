@@ -373,6 +373,66 @@ describe('SessionViewModelBuilder', () => {
     expect(viewModel.hint).toContain('Disconnect');
   });
 
+  it('surfaces queue details and the queued-session cancel action', () => {
+    const queuedAt = '2026-05-04T19:02:00Z';
+    const queuedSession: SessionResource = {
+      ...SESSION,
+      state: 'queued',
+      queued_at: queuedAt,
+      queue: {
+        queued_at: queuedAt,
+        queued_for_ms: 125000,
+        position: 2,
+        active_sessions: 1,
+        queued_sessions: 3,
+        max_active_sessions: 1,
+        dispatch_blocker: 'earlier_queued_session',
+        cancellable: true,
+      },
+      status: {
+        ...SESSION.status,
+        runtime_state: 'queued',
+        presence_state: 'disconnected',
+        connection_counts: {
+          interactive_clients: 0,
+          owner_clients: 0,
+          viewer_clients: 0,
+          recorder_clients: 0,
+          automation_clients: 0,
+          total_clients: 0,
+        },
+        stop_eligibility: { allowed: true, blockers: [] },
+      },
+    };
+
+    const viewModel = SessionViewModelBuilder.detail({
+      session: queuedSession,
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(viewModel.facts).toContainEqual({
+      label: 'queue age',
+      value: '2m 5s',
+      testId: 'session-queue-age',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'queue position',
+      value: '2/3',
+      testId: 'session-queue-position',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'queue blocker',
+      value: 'earlier_queued_session',
+      testId: 'session-queue-blocker',
+    });
+    expect(viewModel.canCancelQueue).toBe(true);
+    expect(viewModel.canStop).toBe(false);
+    expect(viewModel.canKill).toBe(false);
+    expect(viewModel.canRelease).toBe(false);
+  });
+
   it('exposes runtime release only for disconnected runtime candidates', () => {
     const releasableSession: SessionResource = {
       ...SESSION,

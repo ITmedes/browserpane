@@ -489,6 +489,17 @@ export type SessionStatusSummary = {
   readonly stop_eligibility: SessionStopEligibility;
 };
 
+export type SessionQueueInfo = {
+  readonly queued_at: string;
+  readonly queued_for_ms: number;
+  readonly position: number;
+  readonly active_sessions: number;
+  readonly queued_sessions: number;
+  readonly max_active_sessions?: number | null;
+  readonly dispatch_blocker: string;
+  readonly cancellable: boolean;
+};
+
 export type SessionResource = {
   readonly id: string;
   readonly state: string;
@@ -509,8 +520,10 @@ export type SessionResource = {
   readonly connect: SessionConnectInfo;
   readonly runtime: SessionRuntimeInfo;
   readonly status: SessionStatusSummary;
+  readonly queue?: SessionQueueInfo | null;
   readonly created_at: string;
   readonly updated_at: string;
+  readonly queued_at?: string | null;
   readonly runtime_released_at?: string | null;
   readonly stopped_at?: string | null;
 };

@@ -113,6 +113,11 @@ impl SessionRepository<'_> {
         let admission_value = serde_json::to_value(&admission).map_err(|error| {
             SessionStoreError::Backend(format!("failed to encode session admission: {error}"))
         })?;
+        let queued_at = if lifecycle_state == SessionLifecycleState::Queued {
+            Some(now)
+        } else {
+            None
+        };
         let labels_value = json_labels(&request.labels);
         let extensions_value = json_applied_extensions(&request.extensions)?;
         let recording_value = json_recording_policy(&request.recording)?;
@@ -151,11 +156,12 @@ impl SessionRepository<'_> {
                 recording,
                 runtime_binding,
                 created_at,
-                updated_at
+                updated_at,
+                queued_at
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, $14, $15,
-                $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $21
+                $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $21, $22
             )
             RETURNING
                 {SESSION_COLUMNS}
@@ -186,6 +192,7 @@ impl SessionRepository<'_> {
                     &recording_value,
                     &self.store.config.runtime_binding,
                     &now,
+                    &queued_at,
                 ],
             )
             .await
@@ -290,6 +297,7 @@ impl SessionRepository<'_> {
                             state = 'ready',
                             admission = $2::jsonb,
                             updated_at = $3,
+                            queued_at = NULL,
                             runtime_released_at = NULL,
                             stopped_at = NULL
                         WHERE id = $1
@@ -338,6 +346,7 @@ impl SessionRepository<'_> {
             SET
                 state = 'stopped',
                 updated_at = NOW(),
+                queued_at = NULL,
                 stopped_at = COALESCE(stopped_at, NOW())
             WHERE id = $1
               AND owner_subject = $2
@@ -362,6 +371,40 @@ impl SessionRepository<'_> {
             self.promote_queued_project_sessions().await?;
         }
         Ok(stopped)
+    }
+
+    pub(in crate::session_control) async fn cancel_queued_session_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let update_query = format!(
+            r#"
+            UPDATE control_sessions
+            SET
+                state = 'stopped',
+                updated_at = NOW(),
+                queued_at = NULL,
+                stopped_at = COALESCE(stopped_at, NOW())
+            WHERE id = $1
+              AND owner_subject = $2
+              AND owner_issuer = $3
+              AND state = 'queued'
+            RETURNING
+                {SESSION_COLUMNS}
+            "#
+        );
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(&update_query, &[&id, &principal.subject, &principal.issuer])
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("failed to cancel queued session: {error}"))
+            })?;
+        row.as_ref().map(row_to_stored_session).transpose()
     }
 
     pub(in crate::session_control) async fn release_session_runtime_for_owner(
@@ -392,6 +435,7 @@ impl SessionRepository<'_> {
             SET
                 state = 'released',
                 updated_at = NOW(),
+                queued_at = NULL,
                 runtime_released_at = NOW(),
                 stopped_at = NULL
             WHERE id = $1
@@ -464,6 +508,7 @@ impl SessionRepository<'_> {
             SET
                 state = 'stopped',
                 updated_at = NOW(),
+                queued_at = NULL,
                 stopped_at = COALESCE(stopped_at, NOW())
             WHERE id = $1
               AND state IN ('ready', 'idle')
@@ -601,7 +646,8 @@ impl SessionRepository<'_> {
                         SET
                             state = 'queued',
                             admission = $2::jsonb,
-                            updated_at = $3
+                            updated_at = $3,
+                            queued_at = $3
                         WHERE id = $1
                         RETURNING
                             {SESSION_COLUMNS}
@@ -644,6 +690,7 @@ impl SessionRepository<'_> {
                 state = 'ready',
                 admission = COALESCE($2::jsonb, admission),
                 updated_at = NOW(),
+                queued_at = NULL,
                 runtime_released_at = COALESCE(stopped_at, runtime_released_at, NOW()),
                 stopped_at = NULL
             WHERE id = $1

@@ -1620,6 +1620,18 @@ pub struct SessionStatusSummary {
     pub idle: SessionIdleStatus,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionQueueInfo {
+    pub queued_at: DateTime<Utc>,
+    pub queued_for_ms: u64,
+    pub position: u32,
+    pub active_sessions: u32,
+    pub queued_sessions: u32,
+    pub max_active_sessions: Option<u32>,
+    pub dispatch_blocker: String,
+    pub cancellable: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SessionResource {
     pub id: Uuid,
@@ -1645,8 +1657,10 @@ pub struct SessionResource {
     pub connect: SessionConnectInfo,
     pub runtime: SessionRuntimeInfo,
     pub status: SessionStatusSummary,
+    pub queue: Option<SessionQueueInfo>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub queued_at: Option<DateTime<Utc>>,
     pub runtime_released_at: Option<DateTime<Utc>>,
     pub stopped_at: Option<DateTime<Utc>>,
 }
@@ -1787,6 +1801,7 @@ pub struct StoredSession {
     pub recording: crate::session_control::SessionRecordingPolicy,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub queued_at: Option<DateTime<Utc>>,
     pub runtime_released_at: Option<DateTime<Utc>>,
     pub stopped_at: Option<DateTime<Utc>>,
 }
@@ -1798,6 +1813,7 @@ impl StoredSession {
         project: Option<SessionProjectResource>,
         runtime: SessionRuntimeInfo,
         status: SessionStatusSummary,
+        queue: Option<SessionQueueInfo>,
         state_override: Option<SessionLifecycleState>,
         effective_egress: SessionEffectiveEgress,
         egress_diagnostics: EgressDiagnosticsResource,
@@ -1836,8 +1852,10 @@ impl StoredSession {
             },
             runtime,
             status,
+            queue,
             created_at: self.created_at,
             updated_at: self.updated_at,
+            queued_at: self.queued_at,
             runtime_released_at: self.runtime_released_at,
             stopped_at: self.stopped_at,
         }

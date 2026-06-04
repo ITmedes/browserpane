@@ -69,6 +69,10 @@ pub(super) fn session_operation_routes() -> Router<Arc<ApiState>> {
             post(stop::stop_session),
         )
         .route(
+            "/api/v1/sessions/{session_id}/cancel",
+            post(stop::cancel_queued_session),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/mcp-owner",
             post(mcp::set_session_mcp_owner).delete(mcp::clear_session_mcp_owner),
         )

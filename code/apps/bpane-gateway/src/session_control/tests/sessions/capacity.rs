@@ -236,6 +236,7 @@ async fn in_memory_store_queues_project_sessions_and_promotes_after_stop() {
         .await
         .unwrap();
     assert_eq!(queued.state, SessionLifecycleState::Queued);
+    assert!(queued.queued_at.is_some());
     assert_eq!(queued.admission.state, ProjectAdmissionState::Queued);
     assert_eq!(
         queued.admission.reason_code,
@@ -268,6 +269,7 @@ async fn in_memory_store_queues_project_sessions_and_promotes_after_stop() {
         .unwrap()
         .unwrap();
     assert_eq!(promoted.state, SessionLifecycleState::Ready);
+    assert!(promoted.queued_at.is_none());
     assert_eq!(promoted.admission.state, ProjectAdmissionState::Allowed);
     assert_eq!(promoted.admission.active_sessions, Some(1));
     assert_eq!(
@@ -276,6 +278,47 @@ async fn in_memory_store_queues_project_sessions_and_promotes_after_stop() {
             .await
             .unwrap(),
         0
+    );
+
+    let queued_again = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    let queued_tail = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    assert_eq!(queued_again.state, SessionLifecycleState::Queued);
+    assert_eq!(queued_tail.state, SessionLifecycleState::Queued);
+
+    let cancelled = store
+        .cancel_queued_session_for_owner(&owner, queued_again.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(cancelled.state, SessionLifecycleState::Stopped);
+    assert!(cancelled.queued_at.is_none());
+
+    let still_queued = store
+        .get_session_for_owner(&owner, queued_tail.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(still_queued.state, SessionLifecycleState::Queued);
+    assert_eq!(
+        store
+            .count_queued_sessions_for_project(&owner, project.id)
+            .await
+            .unwrap(),
+        1
     );
 }
 

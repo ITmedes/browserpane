@@ -345,9 +345,11 @@ counters. Creating a session or workflow run with `project_id` records the
 admission decision and enforces archived-project checks plus template/egress
 allow-lists before runtime launch. Project-scoped sessions that exceed
 `max_active_sessions` are persisted as visible `queued` session resources with
-`active_session_quota_exceeded` admission metadata and are promoted when
-capacity opens; workflow runs also inherit the project from their bound session
-when the request omits `project_id`. Project retained
+`active_session_quota_exceeded` admission metadata, queue position, queue age,
+current dispatch blocker, and an explicit queued-session cancel operation.
+Queued sessions are promoted when capacity opens; workflow runs also inherit
+the project from their bound session when the request omits `project_id`.
+Project retained
 storage usage currently counts workflow produced files, completed recording
 artifacts, and uploaded/downloaded session files that are already linked to the
 project, and the gateway rejects new retained artifacts that would exceed the
@@ -870,6 +872,8 @@ Current workflow capabilities:
 - safe idempotent run creation for retried upstream requests
 - durable queued/admission state when BrowserPane worker capacity, project
   session quotas, or project workflow-run quotas are exhausted
+- queued session controls expose queue position/age/blocker metadata and allow
+  queued sessions to be cancelled before runtime admission
 - durable operator intervention state with `submit-input`, `resume`, `reject`, and `cancel`
 - explicit runtime hold/release semantics for paused runs (`live_runtime` vs `profile_restart`)
 - signed outbound workflow lifecycle webhook delivery

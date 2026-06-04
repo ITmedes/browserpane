@@ -627,6 +627,17 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
         queued["admission"]["reason_code"],
         "active_session_quota_exceeded"
     );
+    assert_eq!(queued["queue"]["position"], 1);
+    assert_eq!(queued["queue"]["active_sessions"], 1);
+    assert_eq!(queued["queue"]["queued_sessions"], 1);
+    assert_eq!(queued["queue"]["max_active_sessions"], 1);
+    assert_eq!(
+        queued["queue"]["dispatch_blocker"],
+        "project_active_session_quota"
+    );
+    assert_eq!(queued["queue"]["cancellable"], true);
+    assert!(queued["queued_at"].as_str().is_some());
+    assert_eq!(queued["queued_at"], queued["queue"]["queued_at"]);
 
     let queued_token = app
         .clone()
@@ -695,6 +706,8 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
     assert_eq!(promoted["state"], "ready");
     assert_eq!(promoted["admission"]["state"], "allowed");
     assert_eq!(promoted["admission"]["active_sessions"], 1);
+    assert!(promoted["queue"].is_null());
+    assert!(promoted["queued_at"].is_null());
 
     let queued_again = app
         .clone()
@@ -711,7 +724,84 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
         .unwrap();
     assert_eq!(queued_again.status(), StatusCode::CREATED);
     let queued_again = response_json(queued_again).await;
+    let queued_again_session_id = queued_again["id"].as_str().unwrap().to_string();
     assert_eq!(queued_again["state"], "queued");
+    assert_eq!(queued_again["queue"]["position"], 1);
+
+    let queued_tail = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "project_id": project_id }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(queued_tail.status(), StatusCode::CREATED);
+    let queued_tail = response_json(queued_tail).await;
+    let queued_tail_session_id = queued_tail["id"].as_str().unwrap().to_string();
+    assert_eq!(queued_tail["state"], "queued");
+    assert_eq!(queued_tail["queue"]["position"], 2);
+    assert_eq!(
+        queued_tail["queue"]["dispatch_blocker"],
+        "earlier_queued_session"
+    );
+
+    let cancelled = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/sessions/{queued_again_session_id}/cancel"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(cancelled["state"], "stopped");
+    assert!(cancelled["queue"].is_null());
+    assert!(cancelled["queued_at"].is_null());
+
+    let still_queued = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/sessions/{queued_tail_session_id}"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(still_queued["state"], "queued");
+    assert_eq!(still_queued["queue"]["position"], 1);
+    assert_eq!(
+        still_queued["queue"]["dispatch_blocker"],
+        "project_active_session_quota"
+    );
+
+    let cancel_ready = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{queued_session_id}/cancel"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cancel_ready.status(), StatusCode::CONFLICT);
 
     let archived = app
         .clone()

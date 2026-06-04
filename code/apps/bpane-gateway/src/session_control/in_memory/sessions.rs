@@ -107,6 +107,7 @@ fn promote_queued_project_sessions(
             now,
         );
         session.updated_at = now;
+        session.queued_at = None;
         session.runtime_released_at = None;
         session.stopped_at = None;
     }
@@ -219,6 +220,11 @@ impl InMemorySessionStore {
             });
         }
         let browser_context = request.browser_context.unwrap_or_default();
+        let queued_at = if lifecycle_state == SessionLifecycleState::Queued {
+            Some(now)
+        } else {
+            None
+        };
         let session = StoredSession {
             id: Uuid::now_v7(),
             state: lifecycle_state,
@@ -245,6 +251,7 @@ impl InMemorySessionStore {
             recording: request.recording,
             created_at: now,
             updated_at: now,
+            queued_at,
             runtime_released_at: None,
             stopped_at: None,
         };
@@ -336,6 +343,7 @@ impl InMemorySessionStore {
         if session.state != SessionLifecycleState::Stopped {
             session.state = SessionLifecycleState::Stopped;
             session.updated_at = Utc::now();
+            session.queued_at = None;
             session.stopped_at = Some(session.updated_at);
         }
 
@@ -350,6 +358,32 @@ impl InMemorySessionStore {
         );
 
         Ok(Some(stopped))
+    }
+
+    pub(in crate::session_control) async fn cancel_queued_session_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| {
+            session.id == id
+                && session.owner.subject == principal.subject
+                && session.owner.issuer == principal.issuer
+        }) else {
+            return Ok(None);
+        };
+        if session.state != SessionLifecycleState::Queued {
+            return Err(SessionStoreError::Conflict(format!(
+                "session {id} is not queued"
+            )));
+        }
+
+        session.state = SessionLifecycleState::Stopped;
+        session.updated_at = Utc::now();
+        session.queued_at = None;
+        session.stopped_at = Some(session.updated_at);
+        Ok(Some(session.clone()))
     }
 
     pub(in crate::session_control) async fn release_session_runtime_for_owner(
@@ -381,6 +415,7 @@ impl InMemorySessionStore {
 
         session.state = SessionLifecycleState::Released;
         session.updated_at = Utc::now();
+        session.queued_at = None;
         session.runtime_released_at = Some(session.updated_at);
         session.stopped_at = None;
         let released = session.clone();
@@ -435,6 +470,7 @@ impl InMemorySessionStore {
 
         session.state = SessionLifecycleState::Stopped;
         session.updated_at = Utc::now();
+        session.queued_at = None;
         session.stopped_at = Some(session.updated_at);
         let stopped = session.clone();
         let now = Utc::now();
@@ -517,6 +553,7 @@ impl InMemorySessionStore {
                         now,
                     );
                     session.updated_at = now;
+                    session.queued_at = Some(now);
                     return Ok(Some(session.clone()));
                 }
             }
@@ -537,6 +574,7 @@ impl InMemorySessionStore {
         }
         session.state = SessionLifecycleState::Ready;
         session.updated_at = Utc::now();
+        session.queued_at = None;
         session.stopped_at = None;
         if let Some(admission) = project_admission {
             session.admission = admission;
