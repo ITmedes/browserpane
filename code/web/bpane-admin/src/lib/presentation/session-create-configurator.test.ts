@@ -116,6 +116,7 @@ const PROJECT = {
   usage: {
     project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
     active_sessions: 1,
+    queued_sessions: 0,
     max_active_sessions: 2,
     active_workflow_runs: 1,
     max_active_workflow_runs: 4,
@@ -264,7 +265,7 @@ describe('session create configurator', () => {
     expect(validation.preview).toContain('"project_id"');
     expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, workflows=1/4, templates=1, egress=1)');
     expect(projectUsageSummary(PROJECT)).toBe(
-      'state=active | sessions=1/2 | workflow_runs=1/4 | storage=268435456/1073741824 | policy=1 templates,1 egress profiles | labels=tenant=support',
+      'state=active | sessions=1/2 | queued_sessions=0 | workflow_runs=1/4 | storage=268435456/1073741824 | policy=1 templates,1 egress profiles | labels=tenant=support',
     );
   });
 

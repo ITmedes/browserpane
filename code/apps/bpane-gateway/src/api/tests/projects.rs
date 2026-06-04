@@ -605,7 +605,7 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
     assert_eq!(status["project"]["id"], project_id);
     assert_eq!(status["admission"]["state"], "allowed");
 
-    let rejected = app
+    let queued = app
         .clone()
         .oneshot(
             Request::builder()
@@ -618,12 +618,36 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
         )
         .await
         .unwrap();
-    assert_eq!(rejected.status(), StatusCode::CONFLICT);
-    let rejected = response_json(rejected).await;
-    assert!(rejected["error"]
+    assert_eq!(queued.status(), StatusCode::CREATED);
+    let queued = response_json(queued).await;
+    let queued_session_id = queued["id"].as_str().unwrap().to_string();
+    assert_eq!(queued["state"], "queued");
+    assert_eq!(queued["admission"]["state"], "queued");
+    assert_eq!(
+        queued["admission"]["reason_code"],
+        "active_session_quota_exceeded"
+    );
+
+    let queued_token = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{queued_session_id}/access-tokens"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(queued_token.status(), StatusCode::CONFLICT);
+    let queued_token = response_json(queued_token).await;
+    assert!(queued_token["error"]
         .as_str()
         .unwrap()
-        .contains("active_session_quota_exceeded"));
+        .contains("not connectable in state queued"));
 
     let usage = response_json(
         app.clone()
@@ -639,6 +663,7 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
     )
     .await;
     assert_eq!(usage["active_sessions"], 1);
+    assert_eq!(usage["queued_sessions"], 1);
 
     let stopped = app
         .clone()
@@ -654,7 +679,24 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
         .unwrap();
     assert_eq!(stopped.status(), StatusCode::OK);
 
-    let second = app
+    let promoted = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/sessions/{queued_session_id}"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(promoted["state"], "ready");
+    assert_eq!(promoted["admission"]["state"], "allowed");
+    assert_eq!(promoted["admission"]["active_sessions"], 1);
+
+    let queued_again = app
         .clone()
         .oneshot(
             Request::builder()
@@ -667,7 +709,9 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
         )
         .await
         .unwrap();
-    assert_eq!(second.status(), StatusCode::CREATED);
+    assert_eq!(queued_again.status(), StatusCode::CREATED);
+    let queued_again = response_json(queued_again).await;
+    assert_eq!(queued_again["state"], "queued");
 
     let archived = app
         .clone()

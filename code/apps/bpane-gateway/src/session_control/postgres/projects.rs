@@ -73,6 +73,16 @@ impl PostgresSessionStore {
             .await
     }
 
+    pub(in crate::session_control) async fn count_queued_sessions_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        self.project_repository()
+            .count_queued_sessions_for_project(principal, project_id)
+            .await
+    }
+
     pub(in crate::session_control) async fn count_active_workflow_runs_for_project(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -311,6 +321,44 @@ impl ProjectRepository<'_> {
         u32::try_from(count).map_err(|error| {
             SessionStoreError::Backend(format!(
                 "active project session count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
+    async fn count_queued_sessions_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                SELECT COUNT(*)::BIGINT AS session_count
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                  AND state = 'queued'
+                "#,
+                &[&principal.subject, &principal.issuer, &project_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to count project queued sessions: {error}"
+                ))
+            })?;
+        let count = row
+            .as_ref()
+            .map(|row| row.get::<_, i64>("session_count"))
+            .unwrap_or(0);
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "queued project session count exceeded u32 range: {error}"
             ))
         })
     }

@@ -281,7 +281,7 @@
             onchange={() => void loadSessions(false)}
           >
             <option value="">Any state</option>
-            {#each ['pending', 'starting', 'ready', 'active', 'idle', 'released', 'stopping', 'stopped', 'failed', 'expired'] as state}
+            {#each ['pending', 'starting', 'queued', 'ready', 'active', 'idle', 'released', 'stopping', 'stopped', 'failed', 'expired'] as state}
               <option value={state}>{state}</option>
             {/each}
           </select>

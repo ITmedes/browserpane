@@ -606,6 +606,10 @@ function toProjectUsage(value: unknown): ProjectUsageResource {
   return {
     project_id: expectString(object.project_id, 'project usage project_id'),
     active_sessions: expectNumber(object.active_sessions, 'project usage active_sessions'),
+    queued_sessions: optionalNumber(
+      object.queued_sessions,
+      'project usage queued_sessions',
+    ) ?? 0,
     max_active_sessions: optionalNumber(
       object.max_active_sessions,
       'project usage max_active_sessions',

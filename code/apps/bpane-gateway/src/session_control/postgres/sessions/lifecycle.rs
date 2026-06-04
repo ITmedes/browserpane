@@ -1,5 +1,23 @@
 use super::*;
 
+fn queued_session_admission(
+    project_id: Uuid,
+    active_sessions: u32,
+    max_active_sessions: u32,
+    now: chrono::DateTime<Utc>,
+) -> ProjectAdmissionDecision {
+    ProjectAdmissionDecision::session_queued(
+        project_id,
+        ProjectAdmissionReasonCode::ActiveSessionQuotaExceeded,
+        format!(
+            "project {project_id} active session quota is exhausted ({active_sessions}/{max_active_sessions}); session queued until capacity is available"
+        ),
+        active_sessions,
+        Some(max_active_sessions),
+        now,
+    )
+}
+
 impl SessionRepository<'_> {
     pub(in crate::session_control) async fn create_session(
         &self,
@@ -12,17 +30,8 @@ impl SessionRepository<'_> {
             SessionStoreError::Backend(format!("failed to start transaction: {error}"))
         })?;
 
-        let active_runtime_candidates = self
-            .count_active_runtime_candidates_in_transaction(&transaction)
-            .await?;
-        if active_runtime_candidates >= self.store.config.max_runtime_candidates as i64 {
-            return Err(SessionStoreError::ActiveSessionConflict {
-                max_runtime_sessions: self.store.config.max_runtime_candidates,
-            });
-        }
-
         let now = Utc::now();
-        let admission = if let Some(project_id) = request.project_id {
+        let (admission, lifecycle_state) = if let Some(project_id) = request.project_id {
             let project = self
                 .load_project_for_owner_in_transaction(&transaction, principal, project_id)
                 .await?
@@ -54,32 +63,53 @@ impl SessionRepository<'_> {
             validate_project_session_policy(&project, &request, active_project_sessions, now)?;
             if let Some(max_active_sessions) = project.quotas.max_active_sessions {
                 if active_project_sessions >= max_active_sessions {
-                    let decision = ProjectAdmissionDecision::rejected(
-                        project_id,
-                        ProjectAdmissionReasonCode::ActiveSessionQuotaExceeded,
-                        format!(
-                            "project {project_id} active session quota is exhausted ({active_project_sessions}/{max_active_sessions})"
+                    (
+                        queued_session_admission(
+                            project_id,
+                            active_project_sessions,
+                            max_active_sessions,
+                            now,
                         ),
-                        active_project_sessions,
-                        Some(max_active_sessions),
-                        now,
-                    );
-                    return Err(SessionStoreError::Conflict(format!(
-                        "project admission rejected: {}: {}",
-                        decision.reason_code.as_str(),
-                        decision.message
-                    )));
+                        SessionLifecycleState::Queued,
+                    )
+                } else {
+                    (
+                        ProjectAdmissionDecision::project_quota_available(
+                            project_id,
+                            active_project_sessions.saturating_add(1),
+                            project.quotas.max_active_sessions,
+                            now,
+                        ),
+                        SessionLifecycleState::Ready,
+                    )
                 }
+            } else {
+                (
+                    ProjectAdmissionDecision::project_quota_available(
+                        project_id,
+                        active_project_sessions.saturating_add(1),
+                        project.quotas.max_active_sessions,
+                        now,
+                    ),
+                    SessionLifecycleState::Ready,
+                )
             }
-            ProjectAdmissionDecision::project_quota_available(
-                project_id,
-                active_project_sessions.saturating_add(1),
-                project.quotas.max_active_sessions,
-                now,
-            )
         } else {
-            ProjectAdmissionDecision::owner_scope_unbounded(now)
+            (
+                ProjectAdmissionDecision::owner_scope_unbounded(now),
+                SessionLifecycleState::Ready,
+            )
         };
+        if lifecycle_state.is_runtime_candidate() {
+            let active_runtime_candidates = self
+                .count_active_runtime_candidates_in_transaction(&transaction)
+                .await?;
+            if active_runtime_candidates >= self.store.config.max_runtime_candidates as i64 {
+                return Err(SessionStoreError::ActiveSessionConflict {
+                    max_runtime_sessions: self.store.config.max_runtime_candidates,
+                });
+            }
+        }
         let admission_value = serde_json::to_value(&admission).map_err(|error| {
             SessionStoreError::Backend(format!("failed to encode session admission: {error}"))
         })?;
@@ -139,7 +169,7 @@ impl SessionRepository<'_> {
                     &principal.subject,
                     &principal.issuer,
                     &principal.display_name,
-                    &SessionLifecycleState::Ready.as_str(),
+                    &lifecycle_state.as_str(),
                     &request.project_id,
                     &admission_value,
                     &request.template_id,
@@ -168,6 +198,133 @@ impl SessionRepository<'_> {
         })?;
 
         row_to_stored_session(&row)
+    }
+
+    async fn promote_queued_project_sessions_in_transaction(
+        &self,
+        transaction: &Transaction<'_>,
+    ) -> Result<(), SessionStoreError> {
+        loop {
+            let active_runtime_candidates = self
+                .count_active_runtime_candidates_in_transaction(transaction)
+                .await?;
+            if active_runtime_candidates >= self.store.config.max_runtime_candidates as i64 {
+                break;
+            }
+
+            let query = format!(
+                r#"
+                SELECT
+                    {SESSION_COLUMNS}
+                FROM control_sessions
+                WHERE runtime_binding = $1
+                  AND state = 'queued'
+                ORDER BY created_at ASC
+                FOR UPDATE
+                "#
+            );
+            let rows = transaction
+                .query(&query, &[&self.store.config.runtime_binding])
+                .await
+                .map_err(|error| {
+                    SessionStoreError::Backend(format!(
+                        "failed to load queued sessions for admission promotion: {error}"
+                    ))
+                })?;
+            let mut promoted = false;
+            for row in rows {
+                let queued = row_to_stored_session(&row)?;
+                let Some(project_id) = queued.project_id else {
+                    continue;
+                };
+                let principal = AuthenticatedPrincipal {
+                    subject: queued.owner.subject.clone(),
+                    issuer: queued.owner.issuer.clone(),
+                    display_name: queued.owner.display_name.clone(),
+                    client_id: None,
+                    safe_claims: Default::default(),
+                };
+                let Some(project) = self
+                    .load_project_for_owner_in_transaction(transaction, &principal, project_id)
+                    .await?
+                else {
+                    continue;
+                };
+                if project.state == ProjectState::Archived {
+                    continue;
+                }
+                let active_project_sessions = self
+                    .count_active_sessions_for_project_in_transaction(
+                        transaction,
+                        &principal,
+                        project_id,
+                    )
+                    .await?;
+                if project
+                    .quotas
+                    .max_active_sessions
+                    .is_some_and(|max_active_sessions| {
+                        active_project_sessions >= max_active_sessions
+                    })
+                {
+                    continue;
+                }
+
+                let now = Utc::now();
+                let admission = ProjectAdmissionDecision::project_quota_available(
+                    project_id,
+                    active_project_sessions.saturating_add(1),
+                    project.quotas.max_active_sessions,
+                    now,
+                );
+                let admission_value = serde_json::to_value(&admission).map_err(|error| {
+                    SessionStoreError::Backend(format!(
+                        "failed to encode promoted session admission: {error}"
+                    ))
+                })?;
+                transaction
+                    .execute(
+                        r#"
+                        UPDATE control_sessions
+                        SET
+                            state = 'ready',
+                            admission = $2::jsonb,
+                            updated_at = $3,
+                            runtime_released_at = NULL,
+                            stopped_at = NULL
+                        WHERE id = $1
+                          AND state = 'queued'
+                        "#,
+                        &[&queued.id, &admission_value, &now],
+                    )
+                    .await
+                    .map_err(|error| {
+                        SessionStoreError::Backend(format!(
+                            "failed to promote queued session admission: {error}"
+                        ))
+                    })?;
+                promoted = true;
+                break;
+            }
+
+            if !promoted {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn promote_queued_project_sessions(&self) -> Result<(), SessionStoreError> {
+        let mut client = self.store.db.client().await?;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+        self.promote_queued_project_sessions_in_transaction(&transaction)
+            .await?;
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })
     }
 
     pub(in crate::session_control) async fn stop_session_for_owner(
@@ -200,7 +357,11 @@ impl SessionRepository<'_> {
                 SessionStoreError::Backend(format!("failed to stop session: {error}"))
             })?;
 
-        row.as_ref().map(row_to_stored_session).transpose()
+        let stopped = row.as_ref().map(row_to_stored_session).transpose()?;
+        if stopped.is_some() {
+            self.promote_queued_project_sessions().await?;
+        }
+        Ok(stopped)
     }
 
     pub(in crate::session_control) async fn release_session_runtime_for_owner(
@@ -251,7 +412,11 @@ impl SessionRepository<'_> {
                 SessionStoreError::Backend(format!("failed to release session runtime: {error}"))
             })?;
 
-        row.as_ref().map(row_to_stored_session).transpose()
+        let released = row.as_ref().map(row_to_stored_session).transpose()?;
+        if released.is_some() {
+            self.promote_queued_project_sessions().await?;
+        }
+        Ok(released)
     }
 
     pub(in crate::session_control) async fn mark_session_state(
@@ -282,7 +447,11 @@ impl SessionRepository<'_> {
                 SessionStoreError::Backend(format!("failed to update session state: {error}"))
             })?;
 
-        row.as_ref().map(row_to_stored_session).transpose()
+        let stopped = row.as_ref().map(row_to_stored_session).transpose()?;
+        if stopped.is_some() {
+            self.promote_queued_project_sessions().await?;
+        }
+        Ok(stopped)
     }
 
     pub(in crate::session_control) async fn stop_session_if_idle(
@@ -350,6 +519,23 @@ impl SessionRepository<'_> {
         };
 
         let current = row_to_stored_session(&current_row)?;
+        if current.state == SessionLifecycleState::Queued {
+            self.promote_queued_project_sessions_in_transaction(&transaction)
+                .await?;
+            let refreshed_row =
+                transaction
+                    .query_one(&load_query, &[&id])
+                    .await
+                    .map_err(|error| {
+                        SessionStoreError::Backend(format!(
+                            "failed to reload queued session after admission promotion: {error}"
+                        ))
+                    })?;
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return row_to_stored_session(&refreshed_row).map(Some);
+        }
         if current.state != SessionLifecycleState::Released
             && current.state != SessionLifecycleState::Stopped
         {
@@ -367,11 +553,96 @@ impl SessionRepository<'_> {
             });
         }
 
+        let mut admission_value = None;
+        if let Some(project_id) = current.project_id {
+            let principal = AuthenticatedPrincipal {
+                subject: current.owner.subject.clone(),
+                issuer: current.owner.issuer.clone(),
+                display_name: current.owner.display_name.clone(),
+                client_id: None,
+                safe_claims: Default::default(),
+            };
+            let project = self
+                .load_project_for_owner_in_transaction(&transaction, &principal, project_id)
+                .await?
+                .ok_or_else(|| {
+                    SessionStoreError::NotFound(format!("project {project_id} not found"))
+                })?;
+            if project.state == ProjectState::Archived {
+                return Err(SessionStoreError::Conflict(format!(
+                    "project admission rejected: {}: project {project_id} is archived",
+                    ProjectAdmissionReasonCode::ProjectArchived.as_str()
+                )));
+            }
+            let active_project_sessions = self
+                .count_active_sessions_for_project_in_transaction(
+                    &transaction,
+                    &principal,
+                    project_id,
+                )
+                .await?;
+            if let Some(max_active_sessions) = project.quotas.max_active_sessions {
+                if active_project_sessions >= max_active_sessions {
+                    let now = Utc::now();
+                    let admission = queued_session_admission(
+                        project_id,
+                        active_project_sessions,
+                        max_active_sessions,
+                        now,
+                    );
+                    let admission_value = serde_json::to_value(&admission).map_err(|error| {
+                        SessionStoreError::Backend(format!(
+                            "failed to encode queued reconnect admission: {error}"
+                        ))
+                    })?;
+                    let queue_query = format!(
+                        r#"
+                        UPDATE control_sessions
+                        SET
+                            state = 'queued',
+                            admission = $2::jsonb,
+                            updated_at = $3
+                        WHERE id = $1
+                        RETURNING
+                            {SESSION_COLUMNS}
+                        "#
+                    );
+                    let row = transaction
+                        .query_one(&queue_query, &[&id, &admission_value, &now])
+                        .await
+                        .map_err(|error| {
+                            SessionStoreError::Backend(format!(
+                                "failed to queue session reconnect: {error}"
+                            ))
+                        })?;
+                    transaction.commit().await.map_err(|error| {
+                        SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+                    })?;
+                    return row_to_stored_session(&row).map(Some);
+                }
+            }
+            let now = Utc::now();
+            admission_value = Some(
+                serde_json::to_value(ProjectAdmissionDecision::project_quota_available(
+                    project_id,
+                    active_project_sessions.saturating_add(1),
+                    project.quotas.max_active_sessions,
+                    now,
+                ))
+                .map_err(|error| {
+                    SessionStoreError::Backend(format!(
+                        "failed to encode reconnect admission: {error}"
+                    ))
+                })?,
+            );
+        }
+
         let update_query = format!(
             r#"
             UPDATE control_sessions
             SET
                 state = 'ready',
+                admission = COALESCE($2::jsonb, admission),
                 updated_at = NOW(),
                 runtime_released_at = COALESCE(stopped_at, runtime_released_at, NOW()),
                 stopped_at = NULL
@@ -381,7 +652,7 @@ impl SessionRepository<'_> {
             "#
         );
         let row = transaction
-            .query_one(&update_query, &[&id])
+            .query_one(&update_query, &[&id, &admission_value])
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!(

@@ -17,6 +17,7 @@ const DEFAULT_VIEWPORT_HEIGHT: u16 = 900;
 pub enum SessionLifecycleState {
     Pending,
     Starting,
+    Queued,
     Ready,
     Active,
     Idle,
@@ -32,6 +33,7 @@ impl SessionLifecycleState {
         match self {
             Self::Pending => "pending",
             Self::Starting => "starting",
+            Self::Queued => "queued",
             Self::Ready => "ready",
             Self::Active => "active",
             Self::Idle => "idle",
@@ -58,6 +60,7 @@ impl FromStr for SessionLifecycleState {
         match value {
             "pending" => Ok(Self::Pending),
             "starting" => Ok(Self::Starting),
+            "queued" => Ok(Self::Queued),
             "ready" => Ok(Self::Ready),
             "active" => Ok(Self::Active),
             "idle" => Ok(Self::Idle),
@@ -454,6 +457,27 @@ impl ProjectAdmissionDecision {
             checked_at,
         }
     }
+
+    pub fn session_queued(
+        project_id: Uuid,
+        reason_code: ProjectAdmissionReasonCode,
+        message: String,
+        active_sessions: u32,
+        max_active_sessions: Option<u32>,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Queued,
+            reason_code,
+            message,
+            project_id: Some(project_id),
+            active_sessions: Some(active_sessions),
+            max_active_sessions,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            checked_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -485,6 +509,7 @@ pub struct StoredProject {
 pub struct ProjectUsageResource {
     pub project_id: Uuid,
     pub active_sessions: u32,
+    pub queued_sessions: u32,
     pub max_active_sessions: Option<u32>,
     pub active_workflow_runs: u32,
     pub max_active_workflow_runs: Option<u32>,
@@ -768,6 +793,7 @@ impl StoredProject {
     pub fn usage(
         &self,
         active_sessions: u32,
+        queued_sessions: u32,
         active_workflow_runs: u32,
         retained_storage_bytes: u64,
         observed_at: DateTime<Utc>,
@@ -775,6 +801,7 @@ impl StoredProject {
         ProjectUsageResource {
             project_id: self.id,
             active_sessions,
+            queued_sessions,
             max_active_sessions: self.quotas.max_active_sessions,
             active_workflow_runs,
             max_active_workflow_runs: self.quotas.max_active_workflow_runs,
@@ -787,6 +814,7 @@ impl StoredProject {
     pub fn to_resource(
         &self,
         active_sessions: u32,
+        queued_sessions: u32,
         active_workflow_runs: u32,
         retained_storage_bytes: u64,
         observed_at: DateTime<Utc>,
@@ -801,6 +829,7 @@ impl StoredProject {
             state: self.state,
             usage: self.usage(
                 active_sessions,
+                queued_sessions,
                 active_workflow_runs,
                 retained_storage_bytes,
                 observed_at,

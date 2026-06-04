@@ -319,6 +319,25 @@ impl SessionStore {
         }
     }
 
+    pub async fn count_queued_sessions_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .count_queued_sessions_for_project(principal, project_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .count_queued_sessions_for_project(principal, project_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn count_active_workflow_runs_for_project(
         &self,
         principal: &AuthenticatedPrincipal,

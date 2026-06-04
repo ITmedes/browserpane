@@ -188,6 +188,98 @@ async fn in_memory_store_enforces_project_egress_policy() {
 }
 
 #[tokio::test]
+async fn in_memory_store_queues_project_sessions_and_promotes_after_stop() {
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "docker_runtime_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 3,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = principal("owner");
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "Queued sessions".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas {
+                    max_active_sessions: Some(1),
+                    max_active_workflow_runs: None,
+                    max_retained_storage_bytes: None,
+                },
+                policy: ProjectPolicy::default(),
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+
+    let active = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    assert_eq!(active.state, SessionLifecycleState::Ready);
+    assert_eq!(active.admission.state, ProjectAdmissionState::Allowed);
+
+    let queued = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    assert_eq!(queued.state, SessionLifecycleState::Queued);
+    assert_eq!(queued.admission.state, ProjectAdmissionState::Queued);
+    assert_eq!(
+        queued.admission.reason_code,
+        ProjectAdmissionReasonCode::ActiveSessionQuotaExceeded
+    );
+    assert_eq!(
+        store
+            .count_queued_sessions_for_project(&owner, project.id)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let still_queued = store
+        .prepare_session_for_connect(queued.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(still_queued.state, SessionLifecycleState::Queued);
+
+    store
+        .stop_session_for_owner(&owner, active.id)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let promoted = store
+        .get_session_for_owner(&owner, queued.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(promoted.state, SessionLifecycleState::Ready);
+    assert_eq!(promoted.admission.state, ProjectAdmissionState::Allowed);
+    assert_eq!(promoted.admission.active_sessions, Some(1));
+    assert_eq!(
+        store
+            .count_queued_sessions_for_project(&owner, project.id)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
 async fn in_memory_store_respects_runtime_pool_capacity() {
     let store = SessionStore::in_memory_with_config(SessionManagerProfile {
         runtime_binding: "docker_runtime_pool".to_string(),

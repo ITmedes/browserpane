@@ -49,6 +49,7 @@ const REVIEW: IdentityAccessReviewResponse = {
       usage: {
         project_id: 'project-1',
         active_sessions: 1,
+        queued_sessions: 2,
         max_active_sessions: 3,
         active_workflow_runs: 2,
         max_active_workflow_runs: 4,
@@ -130,6 +131,7 @@ describe('IdentityAccessReviewViewModelBuilder', () => {
     expect(viewModel.projects[0]).toMatchObject({
       name: 'Support tenant',
       activeSessions: '1/3',
+      queuedSessions: '2',
       activeWorkflowRuns: '2/4',
       retainedStorage: '512 KiB / 1.0 MiB',
       policy: '1 templates',
