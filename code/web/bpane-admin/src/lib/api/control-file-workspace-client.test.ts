@@ -3,6 +3,12 @@ import { ControlClient, type FetchLike } from './control-client';
 
 const WORKSPACE = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
+  project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+  project: {
+    id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+    name: 'Support tenant',
+    state: 'active',
+  },
   name: 'Admin inputs',
   description: 'Reusable smoke inputs',
   labels: { suite: 'admin' },
@@ -51,6 +57,7 @@ describe('ControlClient file workspaces and session file bindings', () => {
 
     const created = await client.createFileWorkspace({
       name: 'Admin inputs',
+      project_id: WORKSPACE.project_id,
       description: 'Reusable smoke inputs',
       labels: { suite: 'admin' },
     });
@@ -65,6 +72,7 @@ describe('ControlClient file workspaces and session file bindings', () => {
         method: 'POST',
         body: JSON.stringify({
           name: 'Admin inputs',
+          project_id: WORKSPACE.project_id,
           description: 'Reusable smoke inputs',
           labels: { suite: 'admin' },
         }),

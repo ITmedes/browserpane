@@ -294,6 +294,18 @@ impl InMemorySessionStore {
             .map(|session| session.id)
             .collect::<std::collections::HashSet<_>>();
 
+        let workspace_project_by_id = self
+            .file_workspaces
+            .lock()
+            .await
+            .iter()
+            .filter(|workspace| {
+                workspace.owner_subject == principal.subject
+                    && workspace.owner_issuer == principal.issuer
+            })
+            .map(|workspace| (workspace.id, workspace.project_id))
+            .collect::<std::collections::HashMap<_, _>>();
+
         let workflow_bytes = self
             .workflow_runs
             .lock()
@@ -304,7 +316,19 @@ impl InMemorySessionStore {
                     && run.owner_subject == principal.subject
                     && run.owner_issuer == principal.issuer
             })
-            .flat_map(|run| run.produced_files.iter().map(|file| file.byte_count))
+            .flat_map(|run| {
+                let workspace_project_by_id = workspace_project_by_id.clone();
+                run.produced_files
+                    .iter()
+                    .filter(move |file| {
+                        workspace_project_by_id
+                            .get(&file.workspace_id)
+                            .copied()
+                            .flatten()
+                            != Some(project_id)
+                    })
+                    .map(|file| file.byte_count)
+            })
             .try_fold(0_u64, checked_retained_storage_add)?;
 
         let recording_bytes = self
@@ -328,9 +352,32 @@ impl InMemorySessionStore {
             .map(|file| file.byte_count)
             .try_fold(0_u64, checked_retained_storage_add)?;
 
+        let workspace_project_ids = self
+            .file_workspaces
+            .lock()
+            .await
+            .iter()
+            .filter(|workspace| {
+                workspace.project_id == Some(project_id)
+                    && workspace.owner_subject == principal.subject
+                    && workspace.owner_issuer == principal.issuer
+            })
+            .map(|workspace| workspace.id)
+            .collect::<std::collections::HashSet<_>>();
+
+        let file_workspace_bytes = self
+            .file_workspace_files
+            .lock()
+            .await
+            .iter()
+            .filter(|file| workspace_project_ids.contains(&file.workspace_id))
+            .map(|file| file.byte_count)
+            .try_fold(0_u64, checked_retained_storage_add)?;
+
         workflow_bytes
             .checked_add(recording_bytes)
             .and_then(|total| total.checked_add(session_file_bytes))
+            .and_then(|total| total.checked_add(file_workspace_bytes))
             .ok_or_else(|| {
                 SessionStoreError::Backend(
                     "project retained storage byte count exceeded u64 range".to_string(),

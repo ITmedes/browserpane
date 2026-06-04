@@ -400,6 +400,8 @@ export type SessionBrowserContextCommand = {
 
 export type BrowserContextResource = {
   readonly id: string;
+  readonly project_id?: string | null;
+  readonly project?: SessionProjectResource | null;
   readonly name: string;
   readonly description?: string | null;
   readonly labels: Readonly<Record<string, string>>;
@@ -429,6 +431,7 @@ export type BrowserContextListResponse = {
 
 export type CreateBrowserContextCommand = {
   readonly name: string;
+  readonly project_id?: string | null;
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly persistence_mode?: BrowserContextPersistenceMode;
@@ -438,6 +441,7 @@ export type CreateBrowserContextCommand = {
 
 export type CloneBrowserContextCommand = {
   readonly name: string;
+  readonly project_id?: string | null;
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly retention_sec?: number | null;
@@ -447,6 +451,7 @@ export type CloneBrowserContextCommand = {
 export type ImportBrowserContextCommand = {
   readonly name: string;
   readonly archive: BodyInit;
+  readonly project_id?: string | null;
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly retention_sec?: number | null;
@@ -618,6 +623,8 @@ export type SessionFileListResponse = {
 
 export type FileWorkspaceResource = {
   readonly id: string;
+  readonly project_id?: string | null;
+  readonly project?: SessionProjectResource | null;
   readonly name: string;
   readonly description?: string | null;
   readonly labels: Readonly<Record<string, string>>;
@@ -632,6 +639,7 @@ export type FileWorkspaceListResponse = {
 
 export type CreateFileWorkspaceCommand = {
   readonly name: string;
+  readonly project_id?: string | null;
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
 };

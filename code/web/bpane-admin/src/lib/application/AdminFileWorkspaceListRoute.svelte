@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import type { ControlClient } from '../api/control-client';
-  import type { FileWorkspaceResource } from '../api/control-types';
+  import type { FileWorkspaceResource, ProjectResource } from '../api/control-types';
   import AdminMessage from '../presentation/AdminMessage.svelte';
   import type { AdminMessageFeedback } from '../presentation/admin-message-types';
   import { FileWorkspaceViewModelBuilder } from '../presentation/file-workspace-view-model';
@@ -14,12 +14,16 @@
 
   let { controlClient }: AdminFileWorkspaceListRouteProps = $props();
   let workspaces = $state<readonly FileWorkspaceResource[]>([]);
+  let projects = $state<readonly ProjectResource[]>([]);
   let fileCounts = $state<Readonly<Record<string, number | null>>>({});
   let loading = $state(false);
+  let projectsLoading = $state(false);
   let creating = $state(false);
   let error = $state<string | null>(null);
+  let projectError = $state<string | null>(null);
   let actionFeedback = $state<AdminMessageFeedback | null>(null);
   let search = $state('');
+  let projectId = $state('');
   let name = $state('');
   let description = $state('');
   let labels = $state('purpose=admin-input');
@@ -29,6 +33,7 @@
 
   onMount(() => {
     void loadWorkspaces(false);
+    void loadProjects();
   });
 
   async function loadWorkspaces(showFeedback = true): Promise<void> {
@@ -62,6 +67,18 @@
     fileCounts = Object.fromEntries(entries);
   }
 
+  async function loadProjects(): Promise<void> {
+    projectsLoading = true;
+    projectError = null;
+    try {
+      projects = (await controlClient.listProjects()).projects;
+    } catch (loadError) {
+      projectError = errorMessage(loadError, 'Unexpected project catalog error');
+    } finally {
+      projectsLoading = false;
+    }
+  }
+
   async function createWorkspace(): Promise<void> {
     const trimmedName = name.trim();
     actionFeedback = null;
@@ -74,6 +91,7 @@
     try {
       const created = await controlClient.createFileWorkspace({
         name: trimmedName,
+        project_id: projectId || null,
         description: description.trim() || null,
         labels: parseLabels(labels),
       });
@@ -100,6 +118,10 @@
       return 'files unavailable';
     }
     return count === 1 ? '1 file' : `${count} files`;
+  }
+
+  function projectLabel(project: ProjectResource): string {
+    return `${project.name} (${project.state})`;
   }
 
   function parseLabels(value: string): Readonly<Record<string, string>> {
@@ -179,12 +201,28 @@
       </div>
     </div>
     <form
-      class="mt-4 grid gap-3 lg:grid-cols-[minmax(180px,1fr)_minmax(220px,1.2fr)_minmax(180px,1fr)_auto]"
+      class="mt-4 grid gap-3 lg:grid-cols-[minmax(160px,0.8fr)_minmax(180px,1fr)_minmax(220px,1.2fr)_minmax(180px,1fr)_auto]"
       onsubmit={(event) => {
         event.preventDefault();
         void createWorkspace();
       }}
     >
+      <label class="grid gap-1 text-sm font-bold text-admin-ink/72">
+        Project
+        <select
+          class="min-h-11 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45"
+          data-testid="file-workspace-create-project"
+          bind:value={projectId}
+          disabled={creating || loading || projectsLoading}
+        >
+          <option value="">Owner scope</option>
+          {#each projects as project}
+            <option value={project.id} disabled={project.state === 'archived'}>
+              {projectLabel(project)}
+            </option>
+          {/each}
+        </select>
+      </label>
       <label class="grid gap-1 text-sm font-bold text-admin-ink/72">
         Name
         <input
@@ -221,6 +259,16 @@
         {creating ? 'Creating...' : 'Create'}
       </button>
     </form>
+    {#if projectError}
+      <div class="mt-3">
+        <AdminMessage
+          variant="warning"
+          title="Project catalog unavailable"
+          message={projectError}
+          compact={true}
+        />
+      </div>
+    {/if}
   </section>
 
   {#if actionFeedback}
@@ -262,7 +310,7 @@
           <span class="grid min-w-0 gap-1">
             <strong class="truncate text-base" data-testid="file-workspace-row-title" title={row.name}>{row.name}</strong>
             <span class="line-clamp-2 text-sm text-admin-ink/66">{row.description}</span>
-            <span class="truncate text-xs text-admin-ink/54">{row.labels}</span>
+            <span class="truncate text-xs text-admin-ink/54">{row.project} | {row.labels}</span>
           </span>
           <span class="grid min-w-0 gap-1 text-xs text-admin-ink/62">
             <span><strong class="text-admin-ink/78">Files:</strong> {fileCountLabel(row.id)}</span>

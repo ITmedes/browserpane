@@ -5,8 +5,11 @@ use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::session_control::SessionProjectResource;
+
 #[derive(Debug, Clone)]
 pub struct PersistFileWorkspaceRequest {
+    pub project_id: Option<Uuid>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
@@ -27,6 +30,7 @@ pub struct PersistFileWorkspaceFileRequest {
 #[derive(Debug, Clone)]
 pub struct StoredFileWorkspace {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
     pub owner_subject: String,
     pub owner_issuer: String,
     pub name: String,
@@ -53,6 +57,8 @@ pub struct StoredFileWorkspaceFile {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct FileWorkspaceResource {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
+    pub project: Option<SessionProjectResource>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
@@ -89,6 +95,8 @@ impl StoredFileWorkspace {
     pub fn to_resource(&self) -> FileWorkspaceResource {
         FileWorkspaceResource {
             id: self.id,
+            project_id: self.project_id,
+            project: None,
             name: self.name.clone(),
             description: self.description.clone(),
             labels: self.labels.clone(),

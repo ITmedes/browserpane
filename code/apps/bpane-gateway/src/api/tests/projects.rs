@@ -525,6 +525,175 @@ async fn project_storage_quota_rejects_workflow_produced_file_uploads() {
 }
 
 #[tokio::test]
+async fn workflow_run_rejects_workspace_inputs_from_other_projects() {
+    let (app, token) = test_router();
+
+    let project_a = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "name": "project-a" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_a_id = project_a["id"].as_str().unwrap().to_string();
+    let project_b = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "name": "project-b" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_b_id = project_b["id"].as_str().unwrap().to_string();
+
+    let session = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "project_id": project_a_id }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+
+    let workspace = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/file-workspaces")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "project_id": project_b_id,
+                            "name": "project-b-inputs"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workspace_id = workspace["id"].as_str().unwrap().to_string();
+    let input_file = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/file-workspaces/{workspace_id}/files"))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "text/plain")
+                    .header("x-bpane-file-name", "input.txt")
+                    .body(Body::from(b"input".to_vec()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let file_id = input_file["id"].as_str().unwrap().to_string();
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "name": "projected-workflow" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/projected.ts",
+                        "allowed_file_workspace_ids": [workspace_id]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let rejected_run = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "project_id": project_a_id,
+                        "session": { "existing_session_id": session_id },
+                        "workspace_inputs": [{
+                            "workspace_id": workspace_id,
+                            "file_id": file_id
+                        }]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_run.status(), StatusCode::BAD_REQUEST);
+    let rejected_run = response_json(rejected_run).await;
+    assert!(rejected_run["error"]
+        .as_str()
+        .unwrap()
+        .contains("without a matching workflow run project_id"));
+}
+
+#[tokio::test]
 async fn applies_project_admission_to_sessions_and_template_defaults() {
     let (app, token) = test_router_with_docker_pool().await;
 

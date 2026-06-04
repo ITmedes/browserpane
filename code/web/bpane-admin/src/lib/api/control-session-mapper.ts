@@ -245,6 +245,8 @@ export class ControlSessionMapper {
     const usage = toBrowserContextUsage(object.usage);
     return {
       id: expectString(object.id, 'browser context id'),
+      project_id: optionalString(object.project_id, 'browser context project_id') ?? null,
+      project: toSessionProjectResource(object.project) ?? null,
       name: expectString(object.name, 'browser context name'),
       description: description ?? null,
       labels: expectStringRecord(object.labels ?? {}, 'browser context labels'),

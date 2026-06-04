@@ -9,6 +9,7 @@ pub(super) async fn resolve_workflow_run_workspace_inputs(
     state: &Arc<ApiState>,
     principal: &AuthenticatedPrincipal,
     version: &StoredWorkflowDefinitionVersion,
+    project_id: Option<Uuid>,
     requests: Vec<CreateWorkflowRunWorkspaceInputRequest>,
 ) -> Result<Vec<WorkflowRunWorkspaceInput>, (StatusCode, Json<ErrorResponse>)> {
     if requests.is_empty() {
@@ -46,6 +47,25 @@ pub(super) async fn resolve_workflow_run_workspace_inputs(
                 }),
             ));
         }
+
+        let workspace = state
+            .session_store
+            .get_file_workspace_for_owner(principal, request.workspace_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("file workspace {} not found", request.workspace_id),
+                    }),
+                )
+            })?;
+        validate_workflow_workspace_project_scope(
+            "workflow run workspace input",
+            project_id,
+            &workspace,
+        )?;
 
         let file = state
             .session_store
@@ -92,6 +112,28 @@ pub(super) async fn resolve_workflow_run_workspace_inputs(
     }
 
     Ok(inputs)
+}
+
+fn validate_workflow_workspace_project_scope(
+    usage: &str,
+    project_id: Option<Uuid>,
+    workspace: &crate::workspaces::StoredFileWorkspace,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let Some(workspace_project_id) = workspace.project_id else {
+        return Ok(());
+    };
+    if project_id == Some(workspace_project_id) {
+        return Ok(());
+    }
+    Err((
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse {
+            error: format!(
+                "file workspace {} belongs to project {} and cannot be used for {usage} without a matching workflow run project_id",
+                workspace.id, workspace_project_id
+            ),
+        }),
+    ))
 }
 
 fn normalize_workflow_run_workspace_input_mount_path(

@@ -240,12 +240,18 @@ impl SessionStore {
                         client_id: None,
                         safe_claims: Default::default(),
                     };
-                    self.enforce_project_retained_storage_quota(
-                        &owner,
-                        project_id,
-                        request.byte_count,
-                    )
-                    .await?;
+                    let workspace_project_id = self
+                        .get_file_workspace_for_owner(&owner, request.workspace_id)
+                        .await?
+                        .and_then(|workspace| workspace.project_id);
+                    if workspace_project_id != Some(project_id) {
+                        self.enforce_project_retained_storage_quota(
+                            &owner,
+                            project_id,
+                            request.byte_count,
+                        )
+                        .await?;
+                    }
                 }
             }
         }

@@ -611,6 +611,8 @@ describe('bpane operator CLI', () => {
         'support-profile',
         '--description',
         'Support profile',
+        '--project-id',
+        'project-1',
         '--label',
         'team=support',
         '--retention-sec',
@@ -628,6 +630,7 @@ describe('bpane operator CLI', () => {
     expect(calls[0].init.method).toBe('POST');
     expect(JSON.parse(calls[0].init.body)).toEqual({
       name: 'support-profile',
+      project_id: 'project-1',
       description: 'Support profile',
       labels: { team: 'support' },
       retention_sec: 604800,
@@ -641,6 +644,8 @@ describe('bpane operator CLI', () => {
         'clone',
         'context-1',
         'support-profile-copy',
+        '--project-id',
+        'project-1',
         '--label',
         'copy=sandbox',
       ],
@@ -654,6 +659,7 @@ describe('bpane operator CLI', () => {
     expect(calls[1].init.method).toBe('POST');
     expect(JSON.parse(calls[1].init.body)).toEqual({
       name: 'support-profile-copy',
+      project_id: 'project-1',
       labels: { copy: 'sandbox' },
     });
 
@@ -703,6 +709,8 @@ describe('bpane operator CLI', () => {
         exportPath,
         '--name',
         'support-profile-import',
+        '--project-id',
+        'project-1',
         '--label',
         'imported=true',
         '--retention-sec',
@@ -737,6 +745,7 @@ describe('bpane operator CLI', () => {
     expect(calls[5].init.headers).toMatchObject({
       'Content-Type': 'application/zip',
       'x-bpane-browser-context-name': 'support-profile-import',
+      'x-bpane-browser-context-project-id': 'project-1',
       'x-bpane-browser-context-labels': JSON.stringify({ imported: 'true' }),
       'x-bpane-browser-context-retention-sec': '43200',
     });

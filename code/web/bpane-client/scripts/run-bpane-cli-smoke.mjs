@@ -421,6 +421,8 @@ async function run() {
       `support-profile-${runLabel}`,
       '--description',
       'Operator CLI smoke context',
+      '--project-id',
+      projectId,
       '--label',
       'suite=bpane-cli-smoke',
       '--retention-sec',
@@ -435,6 +437,7 @@ async function run() {
       || browserContext.retention_sec !== 604800
       || browserContext.max_profile_storage_bytes !== 67108864
       || !browserContext.retention_expires_at
+      || browserContext.project_id !== projectId
       || browserContext.state !== 'ready'
     ) {
       throw new Error(`CLI browser-context create returned an invalid context: ${JSON.stringify(browserContext)}`);
@@ -475,6 +478,8 @@ async function run() {
       exportPath,
       '--name',
       `support-profile-import-${runLabel}`,
+      '--project-id',
+      projectId,
       '--label',
       'suite=bpane-cli-smoke',
       '--label',
@@ -487,6 +492,7 @@ async function run() {
       || importedContext.name !== `support-profile-import-${runLabel}`
       || importedContext.labels?.imported !== 'true'
       || importedContext.persistence_mode !== 'reusable'
+      || importedContext.project_id !== projectId
     ) {
       throw new Error(`CLI browser-context import returned an invalid context: ${JSON.stringify(importedContext)}`);
     }
@@ -498,6 +504,8 @@ async function run() {
       `support-profile-copy-${runLabel}`,
       '--description',
       'Operator CLI smoke context clone',
+      '--project-id',
+      projectId,
       '--label',
       'suite=bpane-cli-smoke',
       '--label',
@@ -510,6 +518,7 @@ async function run() {
       || clonedContext.name !== `support-profile-copy-${runLabel}`
       || clonedContext.labels?.copy !== 'sandbox'
       || clonedContext.persistence_mode !== 'reusable'
+      || clonedContext.project_id !== projectId
     ) {
       throw new Error(`CLI browser-context clone returned an invalid context: ${JSON.stringify(clonedContext)}`);
     }

@@ -32,6 +32,7 @@ pub(in crate::session_control) fn row_to_stored_browser_context(
 
     Ok(StoredBrowserContext {
         id: row.get("id"),
+        project_id: row.get("project_id"),
         owner_subject: row.get("owner_subject"),
         owner_issuer: row.get("owner_issuer"),
         name: row.get("name"),
@@ -417,6 +418,7 @@ pub(in crate::session_control) fn row_to_stored_file_workspace(
 
     Ok(StoredFileWorkspace {
         id: row.get("id"),
+        project_id: row.get("project_id"),
         owner_subject: row.get("owner_subject"),
         owner_issuer: row.get("owner_issuer"),
         name: row.get("name"),

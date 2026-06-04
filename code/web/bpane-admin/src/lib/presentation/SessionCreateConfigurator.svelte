@@ -111,6 +111,8 @@
   const reusableBrowserContexts = $derived(browserContexts.filter((context) => context.persistence_mode === 'reusable'));
   const selectedBrowserContext = $derived(reusableBrowserContexts.find((context) => context.id === browserContextId) ?? null);
   const browserContextCreateValidation = $derived(validateBrowserContextCreateForm({
+    projectId,
+    projects,
     name: browserContextName,
     labels: browserContextLabels,
     retentionDays: browserContextRetentionDays,
@@ -453,7 +455,10 @@
             >
               <option value="">Select reusable context</option>
               {#each reusableBrowserContexts as context}
-                <option value={context.id} disabled={context.state !== 'ready'}>
+                <option
+                  value={context.id}
+                  disabled={context.state !== 'ready' || Boolean(context.project_id && context.project_id !== projectId)}
+                >
                   {browserContextOptionLabel(context)}
                 </option>
               {/each}

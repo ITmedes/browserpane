@@ -2,6 +2,7 @@ use super::*;
 
 const BROWSER_CONTEXT_COLUMNS: &str = r#"
     id,
+    project_id,
     owner_subject,
     owner_issuer,
     name,
@@ -96,6 +97,7 @@ impl BrowserContextRepository<'_> {
             r#"
             INSERT INTO control_browser_contexts (
                 id,
+                project_id,
                 owner_subject,
                 owner_issuer,
                 name,
@@ -108,7 +110,7 @@ impl BrowserContextRepository<'_> {
                 created_at,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, 'ready', $10, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, 'ready', $11, $11)
             RETURNING
                 {BROWSER_CONTEXT_COLUMNS}
             "#
@@ -132,6 +134,7 @@ impl BrowserContextRepository<'_> {
                 &query,
                 &[
                     &request.id.unwrap_or_else(Uuid::now_v7),
+                    &request.project_id,
                     &principal.subject,
                     &principal.issuer,
                     &request.name,

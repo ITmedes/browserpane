@@ -299,6 +299,9 @@ export class ControlClient {
     const headers: Record<string, string> = {
       'x-bpane-browser-context-name': command.name,
     };
+    if (command.project_id !== undefined && command.project_id !== null) {
+      headers['x-bpane-browser-context-project-id'] = command.project_id;
+    }
     if (command.description !== undefined && command.description !== null) {
       headers['x-bpane-browser-context-description'] = command.description;
     }

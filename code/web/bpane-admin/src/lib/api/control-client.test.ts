@@ -695,6 +695,7 @@ describe('ControlClient', () => {
 
     const created = await client.createBrowserContext({
       name: 'Support profile',
+      project_id: PROJECT.id,
       labels: { team: 'support' },
       retention_sec: 86400,
       max_profile_storage_bytes: 1048576,
@@ -707,6 +708,7 @@ describe('ControlClient', () => {
     const exported = await client.exportBrowserContext(BROWSER_CONTEXT.id);
     await client.importBrowserContext({
       name: 'Support profile imported',
+      project_id: PROJECT.id,
       archive: new Blob(['PKbrowser-context-export'], { type: 'application/zip' }),
       labels: { imported: 'true' },
       retention_sec: 43200,
@@ -737,6 +739,7 @@ describe('ControlClient', () => {
         method: 'POST',
         body: JSON.stringify({
           name: 'Support profile',
+          project_id: PROJECT.id,
           labels: { team: 'support' },
           retention_sec: 86400,
           max_profile_storage_bytes: 1048576,
@@ -776,6 +779,7 @@ describe('ControlClient', () => {
           accept: 'application/json',
           'content-type': 'application/zip',
           'x-bpane-browser-context-name': 'Support profile imported',
+          'x-bpane-browser-context-project-id': PROJECT.id,
           'x-bpane-browser-context-labels': JSON.stringify({ imported: 'true' }),
           'x-bpane-browser-context-retention-sec': '43200',
         }),

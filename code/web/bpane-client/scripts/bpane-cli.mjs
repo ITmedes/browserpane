@@ -189,7 +189,7 @@ function usageText() {
     '  --state <state>           Repeatable cleanup state filter. Default: stopped.',
     '  --runtime-state <state>   Repeatable session runtime-state filter.',
     '  --template-id <id>        Session template id for create/list filters.',
-    '  --project-id <id>         Project id for session create/template defaults.',
+    '  --project-id <id>         Project id for session create/template defaults and project-owned resource creates.',
     '  --browser-context-id <id> Browser context id for reusable session creation.',
     '  --browser-context-mode <mode> Browser context mode: fresh, ephemeral, reusable.',
     '  --locale <tag>            Session locale, for example de-DE.',
@@ -1762,6 +1762,10 @@ function buildBrowserContextRequest(options, fallbackName = null, commandLabel =
     );
   }
   const body = { name };
+  const projectId = getOption(options, 'project-id');
+  if (projectId) {
+    body.project_id = projectId;
+  }
   const description = getOption(options, 'description');
   if (description !== null) {
     body.description = description;
@@ -2709,6 +2713,10 @@ async function handleBrowserContextCommand(config, positionals, options) {
       'Content-Type': 'application/zip',
       'x-bpane-browser-context-name': name,
     };
+    const projectId = getOption(options, 'project-id');
+    if (projectId) {
+      headers['x-bpane-browser-context-project-id'] = projectId;
+    }
     const description = getOption(options, 'description');
     if (description !== null) {
       headers['x-bpane-browser-context-description'] = description;

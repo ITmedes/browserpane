@@ -384,8 +384,37 @@ describe('session create configurator', () => {
     expect(invalidMode.errors).toContain('Browser context id can only be set for reusable mode.');
   });
 
+  it('rejects reusable browser contexts scoped to a different project', () => {
+    const projectContext = {
+      ...BROWSER_CONTEXT,
+      project_id: PROJECT.id,
+      project: {
+        id: PROJECT.id,
+        name: PROJECT.name,
+        state: PROJECT.state,
+      },
+    } as const;
+
+    const validation = validateSessionCreateForm({
+      projectId: '',
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      browserContextMode: 'reusable',
+      browserContextId: projectContext.id,
+      browserContexts: [projectContext],
+      projects: [PROJECT],
+    });
+
+    expect(validation.command).toBeNull();
+    expect(validation.errors).toContain('Selected reusable browser context belongs to a different project.');
+  });
+
   it('validates browser context quick-create requests', () => {
     const valid = validateBrowserContextCreateForm({
+      projectId: PROJECT.id,
+      projects: [PROJECT],
       name: 'Support profile',
       labels: 'team=support, suite=admin',
       retentionDays: '7',
@@ -400,6 +429,7 @@ describe('session create configurator', () => {
 
     expect(valid.command).toEqual({
       name: 'Support profile',
+      project_id: PROJECT.id,
       labels: { team: 'support', suite: 'admin' },
       persistence_mode: 'reusable',
       retention_sec: 604800,
@@ -417,7 +447,7 @@ describe('session create configurator', () => {
   it('summarizes browser context catalog choices for the UI', () => {
     expect(browserContextOptionLabel(BROWSER_CONTEXT)).toBe('Support profile (019df7be...4a72)');
     expect(sessionBrowserContextSummary('reusable', BROWSER_CONTEXT)).toBe(
-      'state=ready | persistence=reusable | never used | labels=team=support | retention=2d | storage_limit=256MiB',
+      'state=ready | persistence=reusable | owner-scoped | never used | labels=team=support | retention=2d | storage_limit=256MiB',
     );
     expect(sessionBrowserContextSummary('fresh', null)).toContain('fresh persisted browser profile');
   });
