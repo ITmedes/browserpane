@@ -22,6 +22,7 @@ export type SessionListItemViewModel = {
   readonly project: string;
   readonly projectId: string | null;
   readonly admission: string;
+  readonly capabilities: string;
   readonly browserContext: string;
   readonly browserContextId: string | null;
   readonly networkIdentity: string;
@@ -149,6 +150,11 @@ export class SessionViewModelBuilder {
           testId: 'session-admission',
         },
         {
+          label: 'capabilities',
+          value: capabilityLabel(session),
+          testId: 'session-capabilities',
+        },
+        {
           label: 'template',
           value: templateLabel(session, templateLookup),
           testId: 'session-template',
@@ -258,6 +264,7 @@ function toListItem(
     project: projectLabel(session),
     projectId: session.project_id ?? null,
     admission: admissionLabel(session.admission),
+    capabilities: capabilityLabel(session),
     browserContext: browserContextLabel(session, browserContexts),
     browserContextId: session.browser_context?.context_id ?? null,
     networkIdentity: networkIdentityLabel(session.network_identity),
@@ -318,6 +325,23 @@ function resolveHint(connected: boolean, stopEligibility: SessionStopEligibility
 
 function yesNo(value: boolean): string {
   return value ? 'yes' : 'no';
+}
+
+function capabilityLabel(session: SessionResource): string {
+  const blocked = [];
+  if (!session.capabilities.file_transfer) {
+    blocked.push('file transfer blocked');
+  }
+  if (!session.capabilities.clipboard) {
+    blocked.push('clipboard blocked');
+  }
+  if (!session.capabilities.microphone) {
+    blocked.push('mic blocked');
+  }
+  if (!session.capabilities.camera) {
+    blocked.push('camera blocked');
+  }
+  return blocked.length > 0 ? blocked.join(', ') : 'full';
 }
 
 function mcpDelegationLabel(session: SessionResource): string {

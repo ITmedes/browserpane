@@ -40,6 +40,10 @@ Current product shape:
 - MCP automation: supported via `mcp-bridge` and gateway ownership APIs.
 - Service-principal registry: owner-scoped external OIDC client metadata is supported through `/api/v1/service-principals`; disabled registered principals cannot be assigned as new automation delegates.
 - Browser extensions: owner-approved unpacked extensions are supported for docker-backed sessions and workflow runs; `static_single` does not support session extension sets.
+- Project policies can restrict live browser uploads/downloads, session-file
+  bindings, and manual recording starts for project-scoped sessions. Session
+  resources expose `capabilities.file_transfer=false` when a project disables
+  either live browser upload or live browser download transfer.
 - Egress traffic logging is proxy-side. BrowserPane should expose sanitized
   session/profile/container correlation metadata, while the configured egress
   proxy or secure web gateway owns outbound URL/status/timing and full traffic

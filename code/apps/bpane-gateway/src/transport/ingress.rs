@@ -20,6 +20,7 @@ pub(super) fn spawn_browser_to_agent_task(
     mut recv_stream: RecvStream,
     to_host: mpsc::Sender<Frame>,
     file_recorder: SessionFileRecorder,
+    allow_browser_uploads: bool,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut buf = vec![0u8; 64 * 1024];
@@ -63,6 +64,10 @@ pub(super) fn spawn_browser_to_agent_task(
                                 }
 
                                 if !is_owner && !viewer_can_forward_frame(&frame) {
+                                    continue;
+                                }
+
+                                if frame.channel == ChannelId::FileUp && !allow_browser_uploads {
                                     continue;
                                 }
 

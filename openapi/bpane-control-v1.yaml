@@ -5765,6 +5765,22 @@ components:
           items:
             type: string
             format: uuid
+        allow_browser_uploads:
+          type: boolean
+          default: true
+          description: When false, project sessions reject browser upload transfers and clear the live file-transfer capability.
+        allow_browser_downloads:
+          type: boolean
+          default: true
+          description: When false, project sessions reject browser download transfers and clear the live file-transfer capability.
+        allow_session_file_bindings:
+          type: boolean
+          default: true
+          description: When false, owners cannot attach workspace files as session-file bindings for project sessions.
+        allow_manual_recordings:
+          type: boolean
+          default: true
+          description: When false, owners cannot start ad-hoc/manual recordings for project sessions. Always-on recording policy remains an explicit session setting.
         usage_budget_enforcement:
           $ref: '#/components/schemas/ProjectUsageBudgetEnforcement'
     ProjectUsageBudgetEnforcement:

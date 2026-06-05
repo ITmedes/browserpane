@@ -529,6 +529,10 @@ export function projectOptionLabel(project: ProjectResource): string {
     project.policy.allowed_browser_context_ids.length > 0
       ? `contexts=${project.policy.allowed_browser_context_ids.length}`
       : null,
+    !project.policy.allow_browser_uploads ? 'blocks_uploads' : null,
+    !project.policy.allow_browser_downloads ? 'blocks_downloads' : null,
+    !project.policy.allow_session_file_bindings ? 'blocks_file_bindings' : null,
+    !project.policy.allow_manual_recordings ? 'blocks_manual_recording' : null,
   ].filter(Boolean);
   return `${project.name} (${signals.join(', ')})`;
 }
@@ -570,6 +574,18 @@ function projectPolicySummary(project: ProjectResource): string {
   }
   if (project.policy.allowed_browser_context_ids.length > 0) {
     facts.push(`${project.policy.allowed_browser_context_ids.length} contexts`);
+  }
+  if (!project.policy.allow_browser_uploads) {
+    facts.push('blocks uploads');
+  }
+  if (!project.policy.allow_browser_downloads) {
+    facts.push('blocks downloads');
+  }
+  if (!project.policy.allow_session_file_bindings) {
+    facts.push('blocks file bindings');
+  }
+  if (!project.policy.allow_manual_recordings) {
+    facts.push('blocks manual recording');
   }
   if (project.policy.usage_budget_enforcement === 'block_session_creation') {
     facts.push('budget blocks session creation');

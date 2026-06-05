@@ -51,11 +51,13 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
         recording_lifecycle,
     } = context;
     let routed_session_id = connect_request.session_id;
+    let file_transfer_policy = connect_request.file_transfer_policy;
     let (client_handle, hub) = registry
         .join_with_role(
             routed_session_id,
             &agent_socket_path,
             connect_request.client_role,
+            file_transfer_policy.allow_browser_downloads,
         )
         .await?;
     let client_id = client_handle.client_id;
@@ -90,6 +92,7 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
         &initial_frames,
         joined_as_owner,
         initial_access_state,
+        file_transfer_policy,
         session_id,
         client_id,
     )
@@ -105,6 +108,7 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
             send_stream: send_stream.clone(),
             connection: connection.clone(),
             dgram_stats: dgram_stats.clone(),
+            allow_browser_downloads: file_transfer_policy.allow_browser_downloads,
         },
         from_host,
     );
@@ -121,6 +125,7 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
             session_store.clone(),
             workspace_file_store,
         ),
+        file_transfer_policy.allow_browser_uploads,
     );
 
     let direct_control_task =

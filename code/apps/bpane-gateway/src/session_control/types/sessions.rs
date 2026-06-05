@@ -386,7 +386,11 @@ pub enum ProjectUsageBudgetEnforcement {
     BlockSessionCreation,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+fn project_policy_allow_default() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectPolicy {
     #[serde(default)]
     pub allowed_session_template_ids: Vec<String>,
@@ -396,8 +400,32 @@ pub struct ProjectPolicy {
     pub allowed_extension_ids: Vec<Uuid>,
     #[serde(default)]
     pub allowed_browser_context_ids: Vec<Uuid>,
+    #[serde(default = "project_policy_allow_default")]
+    pub allow_browser_uploads: bool,
+    #[serde(default = "project_policy_allow_default")]
+    pub allow_browser_downloads: bool,
+    #[serde(default = "project_policy_allow_default")]
+    pub allow_session_file_bindings: bool,
+    #[serde(default = "project_policy_allow_default")]
+    pub allow_manual_recordings: bool,
     #[serde(default)]
     pub usage_budget_enforcement: ProjectUsageBudgetEnforcement,
+}
+
+impl Default for ProjectPolicy {
+    fn default() -> Self {
+        Self {
+            allowed_session_template_ids: Vec::new(),
+            allowed_egress_profile_ids: Vec::new(),
+            allowed_extension_ids: Vec::new(),
+            allowed_browser_context_ids: Vec::new(),
+            allow_browser_uploads: true,
+            allow_browser_downloads: true,
+            allow_session_file_bindings: true,
+            allow_manual_recordings: true,
+            usage_budget_enforcement: ProjectUsageBudgetEnforcement::WarningOnly,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2199,6 +2227,7 @@ impl StoredSession {
         &self,
         public_gateway_url: &str,
         project: Option<SessionProjectResource>,
+        capabilities: SessionCapabilities,
         runtime: SessionRuntimeInfo,
         status: SessionStatusSummary,
         queue: Option<SessionQueueInfo>,
@@ -2219,7 +2248,7 @@ impl StoredSession {
             egress_diagnostics,
             owner_mode: self.owner_mode,
             viewport: self.viewport.clone(),
-            capabilities: SessionCapabilities::default(),
+            capabilities,
             owner: self.owner.clone(),
             automation_delegate: self.automation_delegate.clone(),
             idle_timeout_sec: self.idle_timeout_sec,

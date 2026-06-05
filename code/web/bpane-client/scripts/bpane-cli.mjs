@@ -19,6 +19,10 @@ const KNOWN_OPTIONS = new Set([
   'allowed-browser-context-id',
   'allowed-egress-profile-id',
   'allowed-extension-id',
+  'allow-browser-downloads',
+  'allow-browser-uploads',
+  'allow-manual-recordings',
+  'allow-session-file-bindings',
   'api-url',
   'allowed-session-template-id',
   'base-url',
@@ -245,6 +249,10 @@ function usageText() {
     '  --allowed-egress-profile-id <id> Repeatable project policy egress-profile allow-list entry.',
     '  --allowed-extension-id <id> Repeatable project policy extension-definition allow-list entry.',
     '  --allowed-browser-context-id <id> Repeatable project policy reusable browser-context allow-list entry.',
+    '  --allow-browser-uploads <bool> Project policy switch for browser upload transfers.',
+    '  --allow-browser-downloads <bool> Project policy switch for browser download transfers.',
+    '  --allow-session-file-bindings <bool> Project policy switch for session workspace-file bindings.',
+    '  --allow-manual-recordings <bool> Project policy switch for ad-hoc/manual recording starts.',
     '  --usage-budget-enforcement <mode> Project budget mode: warning_only or block_session_creation.',
     '  --max-active-sessions <count> Project active-session quota.',
     '  --max-active-workflow-runs <count> Project active workflow-run quota.',
@@ -332,6 +340,21 @@ function getOptions(options, name) {
 function optionEnabled(options, name) {
   const value = getOption(options, name, 'false');
   return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
+}
+
+function parseBooleanOption(options, name) {
+  const raw = getOption(options, name);
+  if (raw === null || raw === '') {
+    return null;
+  }
+  const normalized = String(raw).toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+  throw new CliError('USAGE', `--${name} must be true or false.`, EXIT_CODES.usage);
 }
 
 function parseJsonOption(options, name) {
@@ -1201,6 +1224,22 @@ function buildProjectPolicy(options, existingPolicy = null) {
   const browserContextIds = getOptions(options, 'allowed-browser-context-id');
   if (browserContextIds.length) {
     policy.allowed_browser_context_ids = browserContextIds.filter((contextId) => contextId !== '');
+  }
+  const allowBrowserUploads = parseBooleanOption(options, 'allow-browser-uploads');
+  if (allowBrowserUploads !== null) {
+    policy.allow_browser_uploads = allowBrowserUploads;
+  }
+  const allowBrowserDownloads = parseBooleanOption(options, 'allow-browser-downloads');
+  if (allowBrowserDownloads !== null) {
+    policy.allow_browser_downloads = allowBrowserDownloads;
+  }
+  const allowSessionFileBindings = parseBooleanOption(options, 'allow-session-file-bindings');
+  if (allowSessionFileBindings !== null) {
+    policy.allow_session_file_bindings = allowSessionFileBindings;
+  }
+  const allowManualRecordings = parseBooleanOption(options, 'allow-manual-recordings');
+  if (allowManualRecordings !== null) {
+    policy.allow_manual_recordings = allowManualRecordings;
   }
   const usageBudgetEnforcement = getOption(options, 'usage-budget-enforcement');
   if (usageBudgetEnforcement !== null) {

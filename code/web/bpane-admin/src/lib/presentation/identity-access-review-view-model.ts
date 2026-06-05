@@ -270,6 +270,18 @@ function policyLabel(project: ProjectResource): string {
   if (project.policy.allowed_browser_context_ids.length > 0) {
     facts.push(`${project.policy.allowed_browser_context_ids.length} contexts`);
   }
+  if (!project.policy.allow_browser_uploads) {
+    facts.push('blocks uploads');
+  }
+  if (!project.policy.allow_browser_downloads) {
+    facts.push('blocks downloads');
+  }
+  if (!project.policy.allow_session_file_bindings) {
+    facts.push('blocks file bindings');
+  }
+  if (!project.policy.allow_manual_recordings) {
+    facts.push('blocks manual recording');
+  }
   if (project.policy.usage_budget_enforcement === 'block_session_creation') {
     facts.push('budget blocks session creation');
   }

@@ -409,11 +409,8 @@ async fn in_memory_store_blocks_session_creation_when_budget_enforcement_is_enab
                     max_egress_total_bytes: Some(1_048_576),
                 },
                 policy: ProjectPolicy {
-                    allowed_session_template_ids: Vec::new(),
-                    allowed_egress_profile_ids: Vec::new(),
                     usage_budget_enforcement: ProjectUsageBudgetEnforcement::BlockSessionCreation,
-                    allowed_extension_ids: Vec::new(),
-                    allowed_browser_context_ids: Vec::new(),
+                    ..ProjectPolicy::default()
                 },
                 state: ProjectState::Active,
             },
@@ -477,11 +474,8 @@ async fn in_memory_store_blocks_session_creation_when_rate_limit_is_exhausted() 
                     max_egress_total_bytes: None,
                 },
                 policy: ProjectPolicy {
-                    allowed_session_template_ids: Vec::new(),
-                    allowed_egress_profile_ids: Vec::new(),
                     usage_budget_enforcement: ProjectUsageBudgetEnforcement::BlockSessionCreation,
-                    allowed_extension_ids: Vec::new(),
-                    allowed_browser_context_ids: Vec::new(),
+                    ..ProjectPolicy::default()
                 },
                 state: ProjectState::Active,
             },
@@ -604,11 +598,8 @@ async fn in_memory_store_blocks_session_creation_when_runtime_budget_is_exhauste
                     max_egress_total_bytes: None,
                 },
                 policy: ProjectPolicy {
-                    allowed_session_template_ids: Vec::new(),
-                    allowed_egress_profile_ids: Vec::new(),
                     usage_budget_enforcement: ProjectUsageBudgetEnforcement::BlockSessionCreation,
-                    allowed_extension_ids: Vec::new(),
-                    allowed_browser_context_ids: Vec::new(),
+                    ..ProjectPolicy::default()
                 },
                 state: ProjectState::Active,
             },

@@ -22,6 +22,7 @@ pub(super) struct EgressTaskContext {
     pub send_stream: Arc<Mutex<SendStream>>,
     pub connection: Connection,
     pub dgram_stats: Arc<DatagramStats>,
+    pub allow_browser_downloads: bool,
 }
 
 pub(super) fn spawn_agent_to_browser_task(
@@ -34,6 +35,10 @@ pub(super) fn spawn_agent_to_browser_task(
                 Ok(frame) => {
                     let is_owner = ctx.hub.is_browser_owner(ctx.client_id);
                     if !is_owner && !viewer_can_receive_frame(&frame) {
+                        continue;
+                    }
+
+                    if frame.channel == ChannelId::FileDown && !ctx.allow_browser_downloads {
                         continue;
                     }
 
