@@ -1257,6 +1257,235 @@ async fn workflow_run_rejects_workspace_inputs_from_other_projects() {
 }
 
 #[tokio::test]
+async fn file_workspace_project_policy_allows_only_approved_workflow_inputs() {
+    let (app, token) = test_router();
+
+    let allowed_workspace = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/file-workspaces")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "name": "allowed-inputs" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let allowed_workspace_id = allowed_workspace["id"].as_str().unwrap().to_string();
+    let allowed_file = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "/api/v1/file-workspaces/{allowed_workspace_id}/files"
+                    ))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "text/plain")
+                    .header("x-bpane-file-name", "allowed.txt")
+                    .body(Body::from(b"allowed".to_vec()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let allowed_file_id = allowed_file["id"].as_str().unwrap().to_string();
+
+    let disallowed_workspace = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/file-workspaces")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "name": "disallowed-inputs" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let disallowed_workspace_id = disallowed_workspace["id"].as_str().unwrap().to_string();
+    let disallowed_file = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "/api/v1/file-workspaces/{disallowed_workspace_id}/files"
+                    ))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "text/plain")
+                    .header("x-bpane-file-name", "disallowed.txt")
+                    .body(Body::from(b"disallowed".to_vec()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let disallowed_file_id = disallowed_file["id"].as_str().unwrap().to_string();
+
+    let project = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "workspace-policy",
+                            "policy": {
+                                "allowed_file_workspace_ids": [allowed_workspace_id]
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = project["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        project["policy"]["allowed_file_workspace_ids"][0],
+        allowed_workspace_id
+    );
+
+    let session = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "project_id": project_id }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "name": "workspace-policy" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/workspace-policy.ts",
+                        "allowed_file_workspace_ids": [allowed_workspace_id, disallowed_workspace_id]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let allowed_run = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "project_id": project_id,
+                        "session": { "existing_session_id": session_id },
+                        "workspace_inputs": [{
+                            "workspace_id": allowed_workspace_id,
+                            "file_id": allowed_file_id
+                        }]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(allowed_run.status(), StatusCode::CREATED);
+    let allowed_run = response_json(allowed_run).await;
+    assert_eq!(
+        allowed_run["workspace_inputs"][0]["workspace_id"],
+        allowed_workspace_id
+    );
+
+    let rejected_run = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "project_id": project_id,
+                        "session": { "existing_session_id": session_id },
+                        "workspace_inputs": [{
+                            "workspace_id": disallowed_workspace_id,
+                            "file_id": disallowed_file_id
+                        }]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_run.status(), StatusCode::CONFLICT);
+    let rejected_run = response_json(rejected_run).await;
+    assert!(rejected_run["error"]
+        .as_str()
+        .unwrap()
+        .contains("file_workspace_not_allowed"));
+}
+
+#[tokio::test]
 async fn applies_project_admission_to_sessions_and_template_defaults() {
     let (app, token) = test_router_with_docker_pool().await;
 

@@ -400,6 +400,8 @@ pub struct ProjectPolicy {
     pub allowed_extension_ids: Vec<Uuid>,
     #[serde(default)]
     pub allowed_browser_context_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub allowed_file_workspace_ids: Vec<Uuid>,
     #[serde(default = "project_policy_allow_default")]
     pub allow_browser_uploads: bool,
     #[serde(default = "project_policy_allow_default")]
@@ -419,6 +421,7 @@ impl Default for ProjectPolicy {
             allowed_egress_profile_ids: Vec::new(),
             allowed_extension_ids: Vec::new(),
             allowed_browser_context_ids: Vec::new(),
+            allowed_file_workspace_ids: Vec::new(),
             allow_browser_uploads: true,
             allow_browser_downloads: true,
             allow_session_file_bindings: true,
@@ -451,6 +454,7 @@ pub enum ProjectAdmissionReasonCode {
     EgressProfileNotAllowed,
     ExtensionNotAllowed,
     BrowserContextNotAllowed,
+    FileWorkspaceNotAllowed,
 }
 
 impl ProjectAdmissionReasonCode {
@@ -468,6 +472,7 @@ impl ProjectAdmissionReasonCode {
             Self::EgressProfileNotAllowed => "egress_profile_not_allowed",
             Self::ExtensionNotAllowed => "extension_not_allowed",
             Self::BrowserContextNotAllowed => "browser_context_not_allowed",
+            Self::FileWorkspaceNotAllowed => "file_workspace_not_allowed",
         }
     }
 }

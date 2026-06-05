@@ -190,6 +190,16 @@ pub(in crate::session_control) fn validate_project_request(
             "project policy.allowed_browser_context_ids must not contain nil UUIDs".to_string(),
         ));
     }
+    if request
+        .policy
+        .allowed_file_workspace_ids
+        .iter()
+        .any(|workspace_id| *workspace_id == Uuid::nil())
+    {
+        return Err(SessionStoreError::InvalidRequest(
+            "project policy.allowed_file_workspace_ids must not contain nil UUIDs".to_string(),
+        ));
+    }
     Ok(())
 }
 

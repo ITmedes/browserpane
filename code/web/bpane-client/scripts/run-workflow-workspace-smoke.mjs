@@ -283,7 +283,7 @@ export default async function run({
   };
 }
 
-async function createWorkspace(accessToken, options) {
+async function createWorkspace(accessToken, options, name = 'workflow-workspace-smoke') {
   return await fetchJson(`${options.pageUrl}/api/v1/file-workspaces`, {
     method: 'POST',
     headers: {
@@ -291,10 +291,47 @@ async function createWorkspace(accessToken, options) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      name: 'workflow-workspace-smoke',
+      name,
       description: 'Reusable workspace inputs for workflow smoke',
       labels: {
         suite: 'workflow-workspace-smoke',
+      },
+    }),
+  });
+}
+
+async function createProject(accessToken, options, allowedWorkspaceId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/projects`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'workflow-workspace-smoke-project',
+      description: 'Project policy for workflow workspace smoke',
+      labels: {
+        suite: 'workflow-workspace-smoke',
+      },
+      policy: {
+        allowed_file_workspace_ids: [allowedWorkspaceId],
+      },
+    }),
+  });
+}
+
+async function createProjectSession(accessToken, options, projectId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/sessions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      project_id: projectId,
+      labels: {
+        suite: 'workflow-workspace-smoke',
+        origin: 'project-file-workspace-policy',
       },
     }),
   });
@@ -329,7 +366,8 @@ async function createWorkflow(accessToken, options) {
   });
 }
 
-async function createWorkflowVersion(accessToken, options, workflowId, source, workspaceId) {
+async function createWorkflowVersion(accessToken, options, workflowId, source, workspaceIds) {
+  const allowedWorkspaceIds = Array.isArray(workspaceIds) ? workspaceIds : [workspaceIds];
   return await fetchJson(`${options.pageUrl}/api/v1/workflows/${workflowId}/versions`, {
     method: 'POST',
     headers: {
@@ -364,33 +402,70 @@ async function createWorkflowVersion(accessToken, options, workflowId, source, w
           origin: 'workflow-workspace-smoke',
         },
       },
-      allowed_file_workspace_ids: [workspaceId],
+      allowed_file_workspace_ids: allowedWorkspaceIds,
     }),
   });
 }
 
-async function createWorkflowRun(accessToken, options, workflowId, workspaceId, fileId) {
+function workflowRunBody(workflowId, workspaceId, fileId, runOptions = {}) {
+  const body = {
+    workflow_id: workflowId,
+    version: 'v1',
+    workspace_inputs: [
+      {
+        workspace_id: workspaceId,
+        file_id: fileId,
+        mount_path: 'inputs/monthly-report.csv',
+      },
+    ],
+    labels: {
+      suite: 'workflow-workspace-smoke',
+    },
+  };
+  if (runOptions.projectId) {
+    body.project_id = runOptions.projectId;
+  }
+  if (runOptions.sessionId) {
+    body.session = { existing_session_id: runOptions.sessionId };
+  }
+  return body;
+}
+
+async function createWorkflowRun(accessToken, options, workflowId, workspaceId, fileId, runOptions = {}) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      workflow_id: workflowId,
-      version: 'v1',
-      workspace_inputs: [
-        {
-          workspace_id: workspaceId,
-          file_id: fileId,
-          mount_path: 'inputs/monthly-report.csv',
-        },
-      ],
-      labels: {
-        suite: 'workflow-workspace-smoke',
-      },
-    }),
+    body: JSON.stringify(workflowRunBody(workflowId, workspaceId, fileId, runOptions)),
   });
+}
+
+async function expectRejectedWorkflowRun(accessToken, options, workflowId, workspaceId, fileId, runOptions = {}) {
+  const response = await fetch(`${options.pageUrl}/api/v1/workflow-runs`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(workflowRunBody(workflowId, workspaceId, fileId, runOptions)),
+  });
+  if (response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(`Expected workflow run rejection, got HTTP ${response.status}: ${JSON.stringify(body)}`);
+  }
+  const text = await response.text();
+  let body = { error: text };
+  try {
+    body = text ? JSON.parse(text) : { error: '' };
+  } catch {
+    // Keep the raw error text when the gateway returns a non-JSON response.
+  }
+  return {
+    status: response.status,
+    body,
+  };
 }
 
 async function fetchWorkflowRun(accessToken, options, runId) {
@@ -486,12 +561,19 @@ async function main() {
     }
 
     log('Preparing reusable workspace input file');
-    const workspace = await createWorkspace(accessToken, options);
+    const workspace = await createWorkspace(accessToken, options, 'workflow-workspace-smoke-allowed');
     const uploadedFile = await uploadWorkspaceFile(
       accessToken,
       options,
       workspace.id,
       Buffer.from('month,total\n2026-03,42\n', 'utf8'),
+    );
+    const disallowedWorkspace = await createWorkspace(accessToken, options, 'workflow-workspace-smoke-disallowed');
+    const disallowedFile = await uploadWorkspaceFile(
+      accessToken,
+      options,
+      disallowedWorkspace.id,
+      Buffer.from('month,total\n2026-04,99\n', 'utf8'),
     );
 
     log('Preparing local git-backed workflow source');
@@ -507,24 +589,53 @@ async function main() {
       options,
       workflow.id,
       localWorkflowSource,
-      workspace.id,
+      [workspace.id, disallowedWorkspace.id],
     );
     if (version.source?.resolved_commit !== localWorkflowSource.commit) {
       throw new Error('Workflow version did not pin the expected local git commit.');
     }
 
-    log('Creating workflow run with a workspace input');
+    log('Validating project file-workspace policy rejection');
+    const project = await createProject(accessToken, options, workspace.id);
+    if (project.policy?.allowed_file_workspace_ids?.[0] !== workspace.id) {
+      throw new Error(`Project did not persist the allowed workspace policy: ${JSON.stringify(project)}`);
+    }
+    const projectSession = await createProjectSession(accessToken, options, project.id);
+    createdSessionId = projectSession.id ?? '';
+    if (!createdSessionId) {
+      throw new Error('Project session creation did not return an id.');
+    }
+    const rejectedRun = await expectRejectedWorkflowRun(
+      accessToken,
+      options,
+      workflow.id,
+      disallowedWorkspace.id,
+      disallowedFile.id,
+      { projectId: project.id, sessionId: createdSessionId },
+    );
+    if (
+      rejectedRun.status !== 409 ||
+      !String(rejectedRun.body?.error ?? '').includes('file_workspace_not_allowed')
+    ) {
+      throw new Error(`Unexpected project workspace policy rejection: ${JSON.stringify(rejectedRun)}`);
+    }
+
+    log('Creating project workflow run with an allowed workspace input');
     const createdRun = await createWorkflowRun(
       accessToken,
       options,
       workflow.id,
       workspace.id,
       uploadedFile.id,
+      { projectId: project.id, sessionId: createdSessionId },
     );
     const runId = createdRun.id;
-    createdSessionId = createdRun.session_id ?? '';
+    createdSessionId = createdRun.session_id ?? createdSessionId;
     if (!runId || !createdSessionId) {
       throw new Error('Workflow run creation did not return run and session ids.');
+    }
+    if (createdRun.project_id !== project.id) {
+      throw new Error(`Workflow run did not inherit the expected project: ${JSON.stringify(createdRun)}`);
     }
 
     const initialRun = await poll(
@@ -614,7 +725,9 @@ async function main() {
       workflowId: workflow.id,
       workflowVersion: version.version,
       workflowSourceCommit: version.source?.resolved_commit ?? null,
+      projectId: project.id,
       workspaceId: workspace.id,
+      rejectedWorkspaceId: disallowedWorkspace.id,
       workspaceFileId: uploadedFile.id,
       runId,
       state: succeededRun.state,

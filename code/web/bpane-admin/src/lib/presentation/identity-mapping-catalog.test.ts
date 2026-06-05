@@ -25,6 +25,7 @@ const PROJECT: ProjectResource = {
     allowed_egress_profile_ids: [],
     allowed_extension_ids: [],
     allowed_browser_context_ids: [],
+    allowed_file_workspace_ids: [],
     allow_browser_uploads: true,
     allow_browser_downloads: true,
     allow_session_file_bindings: true,
