@@ -219,6 +219,173 @@ async fn project_usage_reports_soft_budget_alerts_through_api() {
 }
 
 #[tokio::test]
+async fn session_egress_usage_reports_roll_up_to_project_usage() {
+    let (app, token) = test_router_with_docker_pool().await;
+
+    let project = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "egress-rollup",
+                            "quotas": {
+                                "max_egress_total_bytes": 100
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = project["id"].as_str().unwrap().to_string();
+    let session = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "project_id": project_id }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+
+    let no_op = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/egress-usage"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(no_op.status(), StatusCode::BAD_REQUEST);
+
+    let invalid_observer = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/egress-usage"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "rx_bytes_delta": 1,
+                        "observer_id": "https://proxy.example"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_observer.status(), StatusCode::BAD_REQUEST);
+
+    let report = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/egress-usage"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "rx_bytes_delta": 40,
+                        "tx_bytes_delta": 30,
+                        "source_kind": "proxy",
+                        "observer_id": "local-squid:3128",
+                        "observed_at": "2026-06-05T10:00:00Z"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(report.status(), StatusCode::OK);
+    let report = response_json(report).await;
+    assert_eq!(report["session_id"], session_id);
+    assert_eq!(report["project_id"], project_id);
+    assert_eq!(report["egress_rx_bytes"], 40);
+    assert_eq!(report["egress_tx_bytes"], 30);
+    assert_eq!(report["egress_total_bytes"], 70);
+    assert_eq!(report["rx_bytes_delta"], 40);
+    assert_eq!(report["tx_bytes_delta"], 30);
+    assert_eq!(report["source_kind"], "proxy");
+    assert_eq!(report["observer_id"], "local-squid:3128");
+    assert_eq!(report["observed_at"], "2026-06-05T10:00:00Z");
+    assert!(report["recorded_at"].is_string());
+
+    let second_report = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/egress-usage"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "rx_bytes_delta": 20,
+                        "tx_bytes_delta": 20,
+                        "source_kind": "tls_interceptor",
+                        "observer_id": "mitmproxy"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second_report.status(), StatusCode::OK);
+    let second_report = response_json(second_report).await;
+    assert_eq!(second_report["egress_rx_bytes"], 60);
+    assert_eq!(second_report["egress_tx_bytes"], 50);
+    assert_eq!(second_report["source_kind"], "tls_interceptor");
+
+    let usage = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/projects/{project_id}/usage"))
+                    .header("authorization", bearer(&token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(usage["egress_rx_bytes"], 60);
+    assert_eq!(usage["egress_tx_bytes"], 50);
+    assert_eq!(usage["egress_total_bytes"], 110);
+    assert_eq!(usage["alerts"].as_array().unwrap().len(), 1);
+    assert_eq!(usage["alerts"][0]["metric"], "egress_total_bytes");
+    assert_eq!(usage["alerts"][0]["state"], "exceeded");
+    assert_eq!(usage["alerts"][0]["current_value"], 110);
+    assert_eq!(usage["alerts"][0]["limit_value"], 100);
+}
+
+#[tokio::test]
 async fn project_budget_enforcement_blocks_session_creation_when_enabled() {
     let (app, token) = test_router_with_docker_pool().await;
 

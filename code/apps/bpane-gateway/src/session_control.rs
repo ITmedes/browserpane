@@ -79,6 +79,8 @@ use workflow_run_policy::*;
 pub use store::*;
 pub use types::*;
 
+const SESSION_EGRESS_USAGE_COUNTER_LIMIT: u64 = i64::MAX as u64;
+
 fn session_visible_to_principal(
     session: &StoredSession,
     principal: &AuthenticatedPrincipal,
@@ -123,6 +125,25 @@ fn validate_project_retained_storage_quota(
     Err(SessionStoreError::Conflict(format!(
         "retained_storage_quota_exceeded: project {project_id} retained storage quota would be exceeded ({projected_storage_bytes}/{max_retained_storage_bytes} bytes)"
     )))
+}
+
+fn checked_session_egress_usage_bytes(
+    session_id: Uuid,
+    current: u64,
+    delta: u64,
+    label: &str,
+) -> Result<u64, SessionStoreError> {
+    let total = current.checked_add(delta).ok_or_else(|| {
+        SessionStoreError::Backend(format!(
+            "session_egress_usage_counter_exceeded: session {session_id} {label} egress usage counter exceeded u64 range"
+        ))
+    })?;
+    if total > SESSION_EGRESS_USAGE_COUNTER_LIMIT {
+        return Err(SessionStoreError::Backend(format!(
+            "session_egress_usage_counter_exceeded: session {session_id} {label} egress usage counter would exceed storage limit"
+        )));
+    }
+    Ok(total)
 }
 
 fn validate_project_session_policy(

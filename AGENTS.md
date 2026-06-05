@@ -42,7 +42,11 @@ Current product shape:
 - Browser extensions: owner-approved unpacked extensions are supported for docker-backed sessions and workflow runs; `static_single` does not support session extension sets.
 - Egress traffic logging is proxy-side. BrowserPane should expose sanitized
   session/profile/container correlation metadata, while the configured egress
-  proxy or secure web gateway owns outbound URL/status/bytes/timing logs.
+  proxy or secure web gateway owns outbound URL/status/timing and full traffic
+  logs. BrowserPane can ingest sanitized per-session receive/transmit byte
+  deltas for project usage and alerting, but must not ingest requested URLs,
+  headers, proxy credentials, payload contents, decrypted traffic, or raw CA
+  material.
   Session and egress-profile resources expose sanitized egress diagnostics so
   operators can distinguish configuration-only proof, runtime launch metadata,
   and active browser probe evidence without exposing requested URLs, proxy
@@ -87,7 +91,7 @@ Current product shape:
   - `workflow_retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. Local compose defaults to `docker_pool` for browser-session testing. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `runtime_manager/docker/container.rs`: docker runtime launch argument materialization, including safe egress observer labels, startup audit logs for correlating proxy access logs back to BrowserPane sessions, and TLS-interception CA bundle materialization for docker-backed runtimes.
-  - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, `mcp-owner`, and `egress-diagnostics` routes.
+  - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, `mcp-owner`, `egress-diagnostics`, and `egress-usage` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`

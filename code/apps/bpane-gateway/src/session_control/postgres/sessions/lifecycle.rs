@@ -548,6 +548,89 @@ impl SessionRepository<'_> {
         Ok(stopped)
     }
 
+    pub(in crate::session_control) async fn record_session_egress_usage(
+        &self,
+        id: Uuid,
+        request: ReportSessionEgressUsageRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut client = self.store.db.client().await?;
+        let transaction = client.build_transaction().start().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to start transaction: {error}"))
+        })?;
+
+        let load_query = format!(
+            r#"
+            SELECT
+                {SESSION_COLUMNS}
+            FROM control_sessions
+            WHERE id = $1
+            FOR UPDATE
+            "#
+        );
+        let current_row = transaction
+            .query_opt(&load_query, &[&id])
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to lock session for egress usage report: {error}"
+                ))
+            })?;
+        let Some(current_row) = current_row else {
+            transaction.commit().await.map_err(|error| {
+                SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+            })?;
+            return Ok(None);
+        };
+        let current = row_to_stored_session(&current_row)?;
+        let egress_rx_bytes = checked_session_egress_usage_bytes(
+            id,
+            current.egress_rx_bytes,
+            request.rx_bytes_delta,
+            "rx",
+        )?;
+        let egress_tx_bytes = checked_session_egress_usage_bytes(
+            id,
+            current.egress_tx_bytes,
+            request.tx_bytes_delta,
+            "tx",
+        )?;
+        let now = Utc::now();
+        let update_query = format!(
+            r#"
+            UPDATE control_sessions
+            SET
+                egress_rx_bytes = $2,
+                egress_tx_bytes = $3,
+                updated_at = $4
+            WHERE id = $1
+            RETURNING
+                {SESSION_COLUMNS}
+            "#
+        );
+        let row = transaction
+            .query_one(
+                &update_query,
+                &[
+                    &id,
+                    &(egress_rx_bytes as i64),
+                    &(egress_tx_bytes as i64),
+                    &now,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to update session egress usage counters: {error}"
+                ))
+            })?;
+
+        transaction.commit().await.map_err(|error| {
+            SessionStoreError::Backend(format!("failed to commit transaction: {error}"))
+        })?;
+
+        row_to_stored_session(&row).map(Some)
+    }
+
     pub(in crate::session_control) async fn stop_session_if_idle(
         &self,
         id: Uuid,

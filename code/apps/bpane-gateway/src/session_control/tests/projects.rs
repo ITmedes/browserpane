@@ -23,6 +23,114 @@ fn project_session_request(project_id: Uuid) -> CreateSessionRequest {
 }
 
 #[tokio::test]
+async fn in_memory_store_records_session_egress_usage_for_project_rollup() {
+    let store = SessionStore::in_memory();
+    let owner = principal("owner");
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "support-egress".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas {
+                    max_active_sessions: None,
+                    max_active_workflow_runs: None,
+                    max_retained_storage_bytes: None,
+                    max_session_creations: None,
+                    max_session_creations_per_window: None,
+                    session_creation_window_sec: None,
+                    max_runtime_usage_ms: None,
+                    max_egress_total_bytes: Some(100),
+                },
+                policy: ProjectPolicy::default(),
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+    let session = store
+        .create_session(
+            &owner,
+            project_session_request(project.id),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+
+    let invalid = store
+        .record_session_egress_usage(
+            session.id,
+            ReportSessionEgressUsageRequest {
+                observer_id: Some("https://proxy.example".to_string()),
+                ..ReportSessionEgressUsageRequest::default()
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(invalid, SessionStoreError::InvalidRequest(_)));
+
+    let updated = store
+        .record_session_egress_usage(
+            session.id,
+            ReportSessionEgressUsageRequest {
+                rx_bytes_delta: 40,
+                tx_bytes_delta: 30,
+                source_kind: SessionEgressUsageSourceKind::Proxy,
+                observer_id: Some("local-squid:3128".to_string()),
+                observed_at: None,
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(updated.egress_rx_bytes, 40);
+    assert_eq!(updated.egress_tx_bytes, 30);
+
+    let updated = store
+        .record_session_egress_usage(
+            session.id,
+            ReportSessionEgressUsageRequest {
+                rx_bytes_delta: 20,
+                tx_bytes_delta: 20,
+                source_kind: SessionEgressUsageSourceKind::TlsInterceptor,
+                observer_id: Some("mitmproxy".to_string()),
+                observed_at: Some(Utc::now()),
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(updated.egress_rx_bytes, 60);
+    assert_eq!(updated.egress_tx_bytes, 50);
+
+    let (egress_rx_bytes, egress_tx_bytes) = store
+        .sum_egress_usage_bytes_for_project(&owner, project.id)
+        .await
+        .unwrap();
+    assert_eq!((egress_rx_bytes, egress_tx_bytes), (60, 50));
+
+    let usage = project.usage(
+        1,
+        0,
+        1,
+        0,
+        0,
+        egress_rx_bytes,
+        egress_tx_bytes,
+        0,
+        Utc::now(),
+    );
+    assert_eq!(usage.egress_total_bytes, 110);
+    assert_eq!(usage.alerts.len(), 1);
+    assert_eq!(
+        usage.alerts[0].metric,
+        ProjectUsageAlertMetric::EgressTotalBytes
+    );
+    assert_eq!(usage.alerts[0].state, ProjectUsageAlertState::Exceeded);
+}
+
+#[tokio::test]
 async fn in_memory_store_reports_and_enforces_project_retained_storage() {
     let store = SessionStore::in_memory();
     let owner = principal("owner");
