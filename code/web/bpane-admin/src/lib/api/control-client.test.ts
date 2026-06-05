@@ -268,6 +268,12 @@ const TEMPLATE = {
 
 const EGRESS_PROFILE = {
   id: '019df7be-6222-7b00-8c86-9e1f3f8d4a73',
+  project_id: '019df7be-6c94-752f-bfd0-ff1d9bc539e8',
+  project: {
+    id: '019df7be-6c94-752f-bfd0-ff1d9bc539e8',
+    name: 'EU Support',
+    state: 'active',
+  },
   name: 'EU support egress',
   description: 'Approved support outbound path',
   labels: { region: 'eu' },
@@ -873,6 +879,7 @@ describe('ControlClient', () => {
 
     const created = await client.createEgressProfile({
       name: 'EU support egress',
+      project_id: EGRESS_PROFILE.project_id,
       labels: { region: 'eu' },
       proxy: { url: 'https://proxy.example:8443' },
       bypass_rules: ['localhost', '*.internal.example'],
@@ -894,6 +901,7 @@ describe('ControlClient', () => {
 
     expect(created).toMatchObject({
       id: EGRESS_PROFILE.id,
+      project_id: EGRESS_PROFILE.project_id,
       name: 'EU support egress',
       effective: {
         proxy_configured: true,
@@ -912,6 +920,7 @@ describe('ControlClient', () => {
         method: 'POST',
         body: JSON.stringify({
           name: 'EU support egress',
+          project_id: EGRESS_PROFILE.project_id,
           labels: { region: 'eu' },
           proxy: { url: 'https://proxy.example:8443' },
           bypass_rules: ['localhost', '*.internal.example'],

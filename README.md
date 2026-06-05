@@ -348,10 +348,11 @@ egress profiles, approved extensions, and reusable browser contexts, a
 `usage_budget_enforcement` mode, and sanitized usage counters. Creating a
 session or workflow run with `project_id` records the admission decision and
 enforces archived-project checks plus template, egress, extension, and
-reusable-context allow-lists before runtime launch. Credential bindings can be
-owner-scoped or assigned to a project; project-scoped workflow runs and sessions
-may only use a project-bound credential binding from the same project, while
-owner-scoped bindings remain available to the owner. Project-scoped sessions
+reusable-context allow-lists before runtime launch. Credential bindings and
+egress profiles can be owner-scoped or assigned to a project; project-scoped
+sessions may use owner-scoped egress profiles or profiles from the same project,
+and may only use project-bound proxy credential bindings from that same project.
+Owner-scoped bindings remain available to the owner. Project-scoped sessions
 that exceed
 `max_active_sessions` are persisted as visible `queued` session resources with
 `active_session_quota_exceeded` admission metadata, queue position, queue age,
@@ -414,11 +415,12 @@ profile or browser probe. Egress-profile probes perform a real proxy request
 and, when a proxy credential binding is configured, resolve the binding only for
 that probe so operators can see whether proxy authentication succeeds or is
 rejected. When a session consumes an egress profile with proxy authentication,
-the gateway also checks that any project-scoped credential binding belongs to
-the same project as the session. The active browser probe runs only against an
-already-ready session runtime and stores sanitized public-IP, TLS issuer, and
-failure summary fields; diagnostics do not store requested URLs, headers, proxy
-credentials, CA material, or decrypted traffic. Egress observers can report sanitized
+the gateway also checks that any project-scoped egress profile and credential
+binding belong to the same project as the session. The active browser probe runs
+only against an already-ready session runtime and stores sanitized public-IP,
+TLS issuer, and failure summary fields; diagnostics do not store requested URLs,
+headers, proxy credentials, CA material, or decrypted traffic. Egress observers
+can report sanitized
 per-session receive/transmit byte deltas through
 `/api/v1/sessions/{id}/egress-usage`; project usage rolls those counters up for
 budget alerts while detailed URL, status, timing, credential, payload, and
@@ -704,6 +706,7 @@ Common egress-profile operations:
 ```bash
 ./scripts/bpane egress-profile create eu-support-egress \
   --description "Approved support outbound path" \
+  --project-id <project-id> \
   --label region=eu \
   --proxy-url https://proxy.example:8443 \
   --proxy-credential-binding-id <credential-binding-id> \

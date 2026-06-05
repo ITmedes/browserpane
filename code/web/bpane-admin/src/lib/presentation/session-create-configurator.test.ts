@@ -208,6 +208,22 @@ describe('session create configurator', () => {
       'Latitude must be between -90 and 90.',
       'Geolocation accuracy must be greater than zero.',
     ]);
+
+    const projectScopedValidation = validateSessionCreateForm({
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      projectId: 'project-b',
+      egressProfileId: EGRESS_PROFILE.id,
+      egressProfiles: [{
+        ...EGRESS_PROFILE,
+        project_id: 'project-a',
+        project: { id: 'project-a', name: 'Project A', state: 'active' },
+      }],
+    });
+    expect(projectScopedValidation.command).toBeNull();
+    expect(projectScopedValidation.errors).toContain('Selected egress profile belongs to a different project.');
   });
 
   it('rejects unsupported owner modes and invalid idle timeout values', () => {
@@ -536,7 +552,7 @@ describe('session create configurator', () => {
       browser_identity: null,
       egress_profile_id: EGRESS_PROFILE.id,
     }, [EGRESS_PROFILE])).toBe('locale=de-DE | languages=de-DE | timezone=Europe/Berlin | egress=EU support egress');
-    expect(egressProfileOptionLabel(EGRESS_PROFILE)).toBe('EU support egress (ready, proxy, TLS inspect, log sink, custom CA, 2 bypass)');
+    expect(egressProfileOptionLabel(EGRESS_PROFILE)).toBe('EU support egress (ready, proxy, TLS inspect, log sink, custom CA, 2 bypass, owner scoped)');
     expect(egressProfileKind(EGRESS_PROFILE)).toBe('tls_interceptor');
     expect(egressProfileKind({
       ...EGRESS_PROFILE,

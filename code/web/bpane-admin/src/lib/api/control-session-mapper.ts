@@ -199,6 +199,8 @@ export class ControlSessionMapper {
     const description = optionalString(object.description, 'egress profile description');
     return {
       id: expectString(object.id, 'egress profile id'),
+      project_id: optionalString(object.project_id, 'egress profile project_id') ?? null,
+      project: toSessionProjectResource(object.project) ?? null,
       name: expectString(object.name, 'egress profile name'),
       description: description ?? null,
       labels: expectStringRecord(object.labels ?? {}, 'egress profile labels'),

@@ -6,6 +6,7 @@ import type {
 } from '../api/control-types';
 
 export type EgressProfileFormInput = {
+  readonly projectId: string;
   readonly name: string;
   readonly description: string;
   readonly labels: string;
@@ -33,6 +34,7 @@ export type EgressProfileCatalogRow = {
   readonly proofLevel: string;
   readonly kind: 'proxy' | 'tls' | 'direct';
   readonly badges: readonly string[];
+  readonly projectLabel: string;
   readonly updatedAt: string;
 };
 
@@ -55,6 +57,7 @@ export function egressProfileRows(
           ? 'proxy' as const
           : 'direct' as const,
       badges: egressProfileBadges(profile),
+      projectLabel: egressProfileProjectLabel(profile),
       updatedAt: profile.updated_at,
     }))
     .filter((row) => {
@@ -69,6 +72,7 @@ export function egressProfileRows(
         row.health,
         row.proofLevel,
         row.kind,
+        row.projectLabel,
         ...row.badges,
       ].some((value) => value.toLowerCase().includes(needle));
     });
@@ -76,6 +80,7 @@ export function egressProfileRows(
 
 export function emptyEgressProfileForm(): EgressProfileFormInput {
   return {
+    projectId: '',
     name: '',
     description: '',
     labels: '',
@@ -96,6 +101,7 @@ export function formFromEgressProfile(
   options: { readonly clone?: boolean } = {},
 ): EgressProfileFormInput {
   return {
+    projectId: profile.project_id ?? '',
     name: options.clone ? `${profile.name}-copy` : profile.name,
     description: profile.description ?? '',
     labels: Object.entries(profile.labels)
@@ -115,6 +121,7 @@ export function formFromEgressProfile(
 
 export function buildEgressProfileCommand(input: EgressProfileFormInput): EgressProfileCommandResult {
   const name = input.name.trim();
+  const projectId = input.projectId.trim();
   if (!name) {
     return { ok: false, error: 'Profile name is required.' };
   }
@@ -159,6 +166,7 @@ export function buildEgressProfileCommand(input: EgressProfileFormInput): Egress
       }
     : null;
   const command: CreateEgressProfileCommand = {
+    ...(projectId ? { project_id: projectId } : {}),
     name,
     ...(description ? { description } : {}),
     labels: labels.value,
@@ -187,6 +195,7 @@ export function commandFromEgressProfile(
   state: EgressProfileState = profile.state,
 ): CreateEgressProfileCommand {
   return {
+    ...(profile.project_id ? { project_id: profile.project_id } : {}),
     name: profile.name,
     ...(profile.description ? { description: profile.description } : {}),
     labels: profile.labels,
@@ -205,6 +214,7 @@ export function egressProfileBadges(profile: EgressProfileResource): readonly st
     profile.effective.tls_interception_enabled ? 'TLS inspect' : null,
     profile.effective.custom_ca_configured ? 'custom CA' : null,
     profile.effective.sensitive_log_sink_configured ? 'log sink' : null,
+    profile.project_id ? 'project scoped' : 'owner scoped',
     profile.state === 'disabled' ? 'disabled' : null,
     profile.diagnostics.health !== 'ready' ? `health ${profile.diagnostics.health}` : null,
     profile.diagnostics.proof_level === 'active_probe'
@@ -213,6 +223,10 @@ export function egressProfileBadges(profile: EgressProfileResource): readonly st
         ? 'runtime proof'
         : 'config proof',
   ].filter((value): value is string => Boolean(value));
+}
+
+export function egressProfileProjectLabel(profile: EgressProfileResource): string {
+  return profile.project?.name ?? profile.project_id ?? 'Owner scoped';
 }
 
 function parseLabels(value: string): { readonly ok: true; readonly value: Record<string, string> } | { readonly ok: false; readonly error: string } {

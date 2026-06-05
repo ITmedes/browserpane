@@ -607,6 +607,8 @@ impl SessionStore {
         request: PersistEgressProfileRequest,
     ) -> Result<StoredEgressProfile, SessionStoreError> {
         validate_egress_profile_request(&request)?;
+        self.validate_optional_project_reference(principal, request.project_id, "egress profile")
+            .await?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.create_egress_profile(principal, request).await
@@ -653,6 +655,8 @@ impl SessionStore {
         request: PersistEgressProfileRequest,
     ) -> Result<Option<StoredEgressProfile>, SessionStoreError> {
         validate_egress_profile_request(&request)?;
+        self.validate_optional_project_reference(principal, request.project_id, "egress profile")
+            .await?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store

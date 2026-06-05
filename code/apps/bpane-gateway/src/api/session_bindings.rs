@@ -1,3 +1,5 @@
+use crate::session_control::validate_egress_profile_project_scope;
+
 use super::*;
 
 fn validate_session_extensions_allowed(
@@ -354,6 +356,8 @@ async fn validate_session_egress_profile(
             }),
         ));
     }
+    validate_egress_profile_project_scope(request.project_id, profile.id, profile.project_id)
+        .map_err(map_session_store_error)?;
     Ok(Some(profile))
 }
 

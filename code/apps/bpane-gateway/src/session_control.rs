@@ -170,6 +170,27 @@ pub(crate) fn validate_credential_binding_project_scope(
     }))
 }
 
+pub(crate) fn validate_egress_profile_project_scope(
+    project_id: Option<Uuid>,
+    profile_id: Uuid,
+    profile_project_id: Option<Uuid>,
+) -> Result<(), SessionStoreError> {
+    let Some(profile_project_id) = profile_project_id else {
+        return Ok(());
+    };
+    if project_id == Some(profile_project_id) {
+        return Ok(());
+    }
+    Err(SessionStoreError::Conflict(match project_id {
+        Some(project_id) => format!(
+            "egress_profile_project_scope_mismatch: egress profile {profile_id} belongs to project {profile_project_id} and cannot be used by session project {project_id}"
+        ),
+        None => format!(
+            "egress_profile_project_scope_mismatch: egress profile {profile_id} belongs to project {profile_project_id} and cannot be used by owner-scoped session"
+        ),
+    }))
+}
+
 fn validate_project_session_policy(
     project: &StoredProject,
     request: &CreateSessionRequest,

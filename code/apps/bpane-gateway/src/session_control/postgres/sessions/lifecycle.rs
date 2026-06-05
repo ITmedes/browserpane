@@ -35,7 +35,7 @@ impl SessionRepository<'_> {
         let Some(profile_row) = transaction
             .query_opt(
                 r#"
-                SELECT proxy
+                SELECT project_id, proxy
                 FROM control_egress_profiles
                 WHERE id = $1
                   AND owner_subject = $2
@@ -52,6 +52,12 @@ impl SessionRepository<'_> {
         else {
             return Ok(());
         };
+        let profile_project_id = profile_row.get("project_id");
+        validate_egress_profile_project_scope(
+            request.project_id,
+            egress_profile_id,
+            profile_project_id,
+        )?;
         let proxy = profile_row
             .get::<_, Option<Value>>("proxy")
             .map(serde_json::from_value::<EgressProxyConfig>)

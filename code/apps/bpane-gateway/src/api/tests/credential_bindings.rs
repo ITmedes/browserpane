@@ -253,8 +253,39 @@ async fn credential_binding_project_scope_enforces_workflow_runs_and_egress_sess
         &token,
         "project-a-auth-proxy",
         &project_a_binding_id,
+        Some(&project_a_id),
     )
     .await;
+    let rejected_profile_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_b_id,
+                        "name": "project-b-wrong-auth-proxy",
+                        "proxy": {
+                            "url": "http://127.0.0.1:3128",
+                            "credential_binding_id": project_a_binding_id
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_profile_response.status(), StatusCode::CONFLICT);
+    let rejected_profile = response_json(rejected_profile_response).await;
+    assert!(rejected_profile["error"]
+        .as_str()
+        .unwrap()
+        .contains("credential_binding_project_scope_mismatch"));
+
     let accepted_session_response = app
         .clone()
         .oneshot(
@@ -318,7 +349,7 @@ async fn credential_binding_project_scope_enforces_workflow_runs_and_egress_sess
     assert!(rejected_session["error"]
         .as_str()
         .unwrap()
-        .contains("credential_binding_project_scope_mismatch"));
+        .contains("egress_profile_project_scope_mismatch"));
 
     let accepted_run_response = app
         .clone()
@@ -599,7 +630,18 @@ async fn create_credential_test_egress_profile(
     token: &str,
     name: &str,
     credential_binding_id: &str,
+    project_id: Option<&str>,
 ) -> String {
+    let mut body = json!({
+        "name": name,
+        "proxy": {
+            "url": "http://127.0.0.1:3128",
+            "credential_binding_id": credential_binding_id
+        }
+    });
+    if let Some(project_id) = project_id {
+        body["project_id"] = json!(project_id);
+    }
     let response = app
         .clone()
         .oneshot(
@@ -608,16 +650,7 @@ async fn create_credential_test_egress_profile(
                 .uri("/api/v1/egress-profiles")
                 .header("authorization", bearer(token))
                 .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "name": name,
-                        "proxy": {
-                            "url": "http://127.0.0.1:3128",
-                            "credential_binding_id": credential_binding_id
-                        }
-                    })
-                    .to_string(),
-                ))
+                .body(Body::from(body.to_string()))
                 .unwrap(),
         )
         .await

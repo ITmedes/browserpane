@@ -534,6 +534,7 @@ pub(in crate::session_control) fn row_to_stored_egress_profile(
 
     Ok(StoredEgressProfile {
         id: row.get("id"),
+        project_id: row.get("project_id"),
         owner_subject: row.get("owner_subject"),
         owner_issuer: row.get("owner_issuer"),
         name: row.get("name"),
