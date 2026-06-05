@@ -7,13 +7,14 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use super::policy::adapt_frame_for_client;
+use super::policy::{adapt_frame_for_client_with_file_policy, SessionFileTransportPolicy};
 
 pub(super) async fn send_initial_frames<S>(
     send_stream: &Arc<Mutex<S>>,
     initial_frames: &[Arc<Frame>],
     joined_as_owner: bool,
     initial_access_state: Option<ControlMessage>,
+    file_policy: SessionFileTransportPolicy,
     session_id: u64,
     client_id: u64,
 ) -> anyhow::Result<()>
@@ -23,7 +24,8 @@ where
     let mut stream = send_stream.lock().await;
 
     for frame in initial_frames {
-        let encoded = adapt_frame_for_client(frame, joined_as_owner).encode();
+        let encoded =
+            adapt_frame_for_client_with_file_policy(frame, joined_as_owner, file_policy).encode();
         stream
             .write_all(&encoded)
             .await
@@ -54,6 +56,7 @@ mod tests {
     use tokio::io::{duplex, AsyncReadExt};
     use tokio::sync::Mutex;
 
+    use super::super::policy::SessionFileTransportPolicy;
     use super::send_initial_frames;
 
     #[tokio::test]
@@ -81,6 +84,7 @@ mod tests {
                 width: 1280,
                 height: 720,
             }),
+            SessionFileTransportPolicy::default(),
             7,
             11,
         )
@@ -134,6 +138,7 @@ mod tests {
                 width: 1440,
                 height: 900,
             }),
+            SessionFileTransportPolicy::default(),
             8,
             13,
         )
@@ -177,9 +182,17 @@ mod tests {
             .to_frame(),
         )];
 
-        send_initial_frames(&send_stream, &initial_frames, true, None, 3, 5)
-            .await
-            .unwrap();
+        send_initial_frames(
+            &send_stream,
+            &initial_frames,
+            true,
+            None,
+            SessionFileTransportPolicy::default(),
+            3,
+            5,
+        )
+        .await
+        .unwrap();
 
         let mut buf = vec![0u8; 512];
         let n = reader.read(&mut buf).await.unwrap();
@@ -194,6 +207,45 @@ mod tests {
                 flags: SessionFlags::FILE_TRANSFER | SessionFlags::CAMERA,
             }
         );
+        assert!(decoder.next_frame().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn owner_session_ready_clears_file_transfer_when_policy_disables_uploads() {
+        let (writer, mut reader) = duplex(4096);
+        let send_stream = Arc::new(Mutex::new(writer));
+        let initial_frames = vec![Arc::new(
+            ControlMessage::SessionReady {
+                version: 1,
+                flags: SessionFlags::FILE_TRANSFER | SessionFlags::CAMERA,
+            }
+            .to_frame(),
+        )];
+
+        send_initial_frames(
+            &send_stream,
+            &initial_frames,
+            true,
+            None,
+            SessionFileTransportPolicy {
+                allow_browser_uploads: false,
+                allow_browser_downloads: true,
+            },
+            3,
+            5,
+        )
+        .await
+        .unwrap();
+
+        let mut buf = vec![0u8; 512];
+        let n = reader.read(&mut buf).await.unwrap();
+        let mut decoder = FrameDecoder::new();
+        decoder.push(&buf[..n]).unwrap();
+
+        let ready = decoder.next_frame().unwrap().unwrap();
+        assert_eq!(ready.payload[0], 0x03);
+        assert_eq!(ready.payload[2] & SessionFlags::FILE_TRANSFER.bits(), 0);
+        assert_ne!(ready.payload[2] & SessionFlags::CAMERA.bits(), 0);
         assert!(decoder.next_frame().unwrap().is_none());
     }
 }

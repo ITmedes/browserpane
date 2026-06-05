@@ -86,6 +86,7 @@
         {@render Fact('State', viewModel.selectedSession.lifecycle, 'session-selected-state')}
         {@render Fact('Project', viewModel.selectedSession.project, 'session-selected-project')}
         {@render Fact('Admission', viewModel.selectedSession.admission, 'session-selected-admission')}
+        {@render Fact('Capabilities', viewModel.selectedSession.capabilities, 'session-selected-capabilities')}
         {@render Fact('Template', viewModel.selectedSession.template, 'session-selected-template')}
         {@render Fact('Context', viewModel.selectedSession.browserContext, 'session-selected-browser-context')}
         {@render Fact('Network', viewModel.selectedSession.networkIdentity, 'session-selected-network-identity')}

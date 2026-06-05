@@ -86,6 +86,15 @@ const SESSION: SessionResource = {
   },
   egress_diagnostics: EGRESS_DIAGNOSTICS,
   owner_mode: 'shared',
+  capabilities: {
+    browser_input: true,
+    clipboard: true,
+    audio: true,
+    microphone: true,
+    camera: true,
+    file_transfer: true,
+    resize: true,
+  },
   idle_timeout_sec: 1800,
   labels: { case: '1234', purpose: 'import-repro' },
   integration_context: { ticket: 'INC-1234' },
@@ -250,6 +259,7 @@ describe('SessionViewModelBuilder', () => {
       project: 'Support tenant (019df811...7f19)',
       projectId: SESSION.project_id,
       admission: 'allowed | project_quota_available 1/2',
+      capabilities: 'full',
       template: 'Support triage (019df5c8...21c0)',
       templateId: TEMPLATE.id,
       browserContext: 'Support profile (019df7be...4a72)',
@@ -264,6 +274,7 @@ describe('SessionViewModelBuilder', () => {
       ownerMode: 'shared',
       runtimeBinding: 'docker_runtime_pool',
       canJoin: true,
+      capabilities: 'full',
     });
   });
 
@@ -306,6 +317,11 @@ describe('SessionViewModelBuilder', () => {
       label: 'admission',
       value: 'allowed | project_quota_available 1/2',
       testId: 'session-admission',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'capabilities',
+      value: 'full',
+      testId: 'session-capabilities',
     });
     expect(viewModel.facts).toContainEqual({
       label: 'template',
@@ -374,6 +390,38 @@ describe('SessionViewModelBuilder', () => {
       label: 'admission',
       value: 'rejected | session_creation_rate_exceeded 1/1 per 3600s',
       testId: 'session-admission',
+    });
+  });
+
+  it('surfaces project policy restricted session capabilities', () => {
+    const restrictedSession: SessionResource = {
+      ...SESSION,
+      capabilities: {
+        ...SESSION.capabilities,
+        file_transfer: false,
+      },
+    };
+
+    const list = SessionViewModelBuilder.list({
+      sessions: [restrictedSession],
+      browserContexts: [BROWSER_CONTEXT],
+      selectedSessionId: restrictedSession.id,
+      authenticated: true,
+      loading: false,
+      error: null,
+    });
+    const detail = SessionViewModelBuilder.detail({
+      session: restrictedSession,
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(list.selectedSession?.capabilities).toBe('file transfer blocked');
+    expect(detail.facts).toContainEqual({
+      label: 'capabilities',
+      value: 'file transfer blocked',
+      testId: 'session-capabilities',
     });
   });
 

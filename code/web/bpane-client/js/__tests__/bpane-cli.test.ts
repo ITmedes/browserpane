@@ -1086,6 +1086,14 @@ describe('bpane operator CLI', () => {
         'extension-1',
         '--allowed-browser-context-id',
         'context-1',
+        '--allow-browser-uploads',
+        'false',
+        '--allow-browser-downloads',
+        'true',
+        '--allow-session-file-bindings',
+        'false',
+        '--allow-manual-recordings',
+        'false',
         '--usage-budget-enforcement',
         'block_session_creation',
       ],
@@ -1116,6 +1124,10 @@ describe('bpane operator CLI', () => {
         allowed_egress_profile_ids: ['egress-1'],
         allowed_extension_ids: ['extension-1'],
         allowed_browser_context_ids: ['context-1'],
+        allow_browser_uploads: false,
+        allow_browser_downloads: true,
+        allow_session_file_bindings: false,
+        allow_manual_recordings: false,
         usage_budget_enforcement: 'block_session_creation',
       },
     });
@@ -1373,6 +1385,16 @@ describe('bpane operator CLI', () => {
     );
     expect(invalidQuotaCode).toBe(EXIT_CODES.usage);
     expect(parseStderr(invalidQuotaIo).error).toContain('--max-active-sessions');
+
+    const invalidPolicyBooleanIo = createIo();
+    const invalidPolicyBooleanCode = await runBpaneCli(
+      ['project', 'create', 'support-tenant', '--allow-browser-uploads', 'maybe'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      invalidPolicyBooleanIo.io,
+      fetchImpl,
+    );
+    expect(invalidPolicyBooleanCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(invalidPolicyBooleanIo).error).toContain('--allow-browser-uploads');
     expect(calls).toHaveLength(0);
   });
 

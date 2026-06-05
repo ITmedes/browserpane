@@ -345,10 +345,15 @@ labels, lifecycle state, optional quotas such as `max_active_sessions`,
 `session_creation_window_sec`, `max_runtime_usage_ms`, and
 `max_egress_total_bytes`, policy bindings for allowed session templates,
 egress profiles, approved extensions, and reusable browser contexts, a
-`usage_budget_enforcement` mode, and sanitized usage counters. Creating a
+`usage_budget_enforcement` mode, browser upload/download, session-file binding,
+and manual-recording policy switches, and sanitized usage counters. Creating a
 session or workflow run with `project_id` records the admission decision and
 enforces archived-project checks plus template, egress, extension, and
-reusable-context allow-lists before runtime launch. Credential bindings and
+reusable-context allow-lists before runtime launch. Project policy can also
+reject browser upload/download transfers, session-file binding creation, and
+ad-hoc manual recording starts for project sessions. Session resources expose
+`capabilities.file_transfer=false` when the project disables either browser
+upload or browser download transfer. Credential bindings and
 egress profiles can be owner-scoped or assigned to a project; project-scoped
 sessions may use owner-scoped egress profiles or profiles from the same project,
 and may only use project-bound proxy credential bindings from that same project.
@@ -531,6 +536,10 @@ Bindings snapshot workspace-file metadata, enforce relative mount paths, reject
 duplicate active mount paths per session, and allow session automation access to
 read/list bound file resources. The file-inspection/download APIs are available
 today; browser-container mount materialization is a separate runtime concern.
+For project sessions, `allow_session_file_bindings=false` rejects new
+session-file bindings. `allow_browser_uploads=false` and
+`allow_browser_downloads=false` reject live browser transfer sources from the
+corresponding direction and surface the session as file-transfer restricted.
 
 Session resources and status responses now expose a richer lifecycle model:
 
@@ -687,11 +696,15 @@ Common project operations:
   --session-creation-window-sec 3600 \
   --max-runtime-usage-ms 86400000 \
   --max-egress-total-bytes 10737418240 \
+  --allow-browser-uploads true \
+  --allow-browser-downloads true \
+  --allow-session-file-bindings true \
+  --allow-manual-recordings true \
   --usage-budget-enforcement warning_only
 ./scripts/bpane project list
 ./scripts/bpane project get <project-id>
 ./scripts/bpane project usage <project-id>
-./scripts/bpane project update <project-id> --name support-tenant --max-active-sessions 5 --max-session-creations 50 --max-session-creations-per-window 10 --session-creation-window-sec 3600 --usage-budget-enforcement block_session_creation
+./scripts/bpane project update <project-id> --name support-tenant --max-active-sessions 5 --max-session-creations 50 --max-session-creations-per-window 10 --session-creation-window-sec 3600 --allow-session-file-bindings false --allow-manual-recordings false --usage-budget-enforcement block_session_creation
 ./scripts/bpane project update <project-id> \
   --allowed-session-template-id <template-id> \
   --allowed-egress-profile-id <egress-profile-id> \
@@ -884,6 +897,9 @@ BrowserPane session recording is now a control-plane feature rather than only a 
 - Recordings can be downloaded from the admin recording library, the legacy dev
   harness where applicable, or through the v1 API.
 - Playback/export is modeled separately from raw recording segments, so multi-segment sessions stay explicit.
+- Project policy can set `allow_manual_recordings=false` to block ad-hoc manual
+  recording starts for project sessions. Always-on session recording remains an
+  explicit session/template recording policy.
 
 Primary routes:
 

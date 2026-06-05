@@ -127,24 +127,28 @@ impl SessionRegistry {
         &self,
         session_id: Uuid,
         agent_socket_path: &str,
+        record_browser_downloads: bool,
     ) -> anyhow::Result<(Arc<SessionHub>, bool)> {
         if let Some(hub) = self.lookup_live_hub(session_id).await {
             return Ok((hub, false));
         }
 
-        let file_recorder = self
-            .session_file_recording
-            .lock()
-            .await
-            .as_ref()
-            .map(|config| {
-                SessionFileRecorder::new(
-                    session_id,
-                    SessionFileSource::BrowserDownload,
-                    config.session_store.clone(),
-                    config.workspace_file_store.clone(),
-                )
-            });
+        let file_recorder = if record_browser_downloads {
+            self.session_file_recording
+                .lock()
+                .await
+                .as_ref()
+                .map(|config| {
+                    SessionFileRecorder::new(
+                        session_id,
+                        SessionFileSource::BrowserDownload,
+                        config.session_store.clone(),
+                        config.workspace_file_store.clone(),
+                    )
+                })
+        } else {
+            None
+        };
         let new_hub = if let Some(file_recorder) = file_recorder {
             Arc::new(
                 SessionHub::new_with_file_recorder(
@@ -174,9 +178,10 @@ impl SessionRegistry {
         session_id: Uuid,
         agent_socket_path: &str,
         client_role: BrowserClientRole,
+        record_browser_downloads: bool,
     ) -> anyhow::Result<(ClientHandle, Arc<SessionHub>)> {
         let (hub, created) = self
-            .get_or_create_hub(session_id, agent_socket_path)
+            .get_or_create_hub(session_id, agent_socket_path, record_browser_downloads)
             .await?;
         let handle = hub
             .subscribe_with_role(client_role)
@@ -211,6 +216,7 @@ impl SessionRegistry {
             session_id,
             agent_socket_path,
             BrowserClientRole::Interactive,
+            true,
         )
         .await
     }
@@ -226,7 +232,7 @@ impl SessionRegistry {
         agent_socket_path: &str,
     ) -> anyhow::Result<Arc<SessionHub>> {
         let (hub, _) = self
-            .get_or_create_hub(session_id, agent_socket_path)
+            .get_or_create_hub(session_id, agent_socket_path, true)
             .await?;
         Ok(hub)
     }

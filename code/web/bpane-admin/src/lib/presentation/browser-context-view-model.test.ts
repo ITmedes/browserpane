@@ -136,6 +136,15 @@ const SESSION: SessionResource = {
     context_id: CONTEXT.id,
   },
   owner_mode: 'collaborative',
+  capabilities: {
+    browser_input: true,
+    clipboard: true,
+    audio: true,
+    microphone: true,
+    camera: true,
+    file_transfer: true,
+    resize: true,
+  },
   labels: {},
   integration_context: null,
   connect: {

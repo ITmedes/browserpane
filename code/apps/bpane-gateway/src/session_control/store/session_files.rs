@@ -7,6 +7,8 @@ impl SessionStore {
     ) -> Result<StoredSessionFile, SessionStoreError> {
         validate_session_file_request(&request)?;
         if let Some(session) = self.get_session_by_id(request.session_id).await? {
+            let policy = session_project_policy(self, &session).await?;
+            validate_project_session_file_source_policy(&session, policy.as_ref(), request.source)?;
             if let Some(project_id) = session.project_id {
                 let owner = AuthenticatedPrincipal {
                     subject: session.owner.subject,
@@ -102,6 +104,14 @@ impl SessionStore {
         mut request: PersistSessionFileBindingRequest,
     ) -> Result<StoredSessionFileBinding, SessionStoreError> {
         validate_session_file_binding_request(&mut request)?;
+        let session = self
+            .get_session_for_owner(principal, request.session_id)
+            .await?
+            .ok_or_else(|| {
+                SessionStoreError::NotFound(format!("session {} not found", request.session_id))
+            })?;
+        let policy = session_project_policy(self, &session).await?;
+        validate_project_session_file_binding_policy(&session, policy.as_ref())?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store

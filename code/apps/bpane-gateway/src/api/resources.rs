@@ -371,12 +371,15 @@ pub(super) async fn session_resource(
 ) -> Result<SessionResource, SessionStoreError> {
     let status = session_status_summary(state, stored).await?;
     let project = session_project_resource(state, stored).await?;
+    let project_policy = session_project_policy(&state.session_store, stored).await?;
+    let capabilities = session_capabilities_for_policy(project_policy.as_ref());
     let queue = session_queue_info(state, stored).await?;
     let effective_egress = session_effective_egress(state, stored).await?;
     let egress_diagnostics = session_egress_diagnostics(state, stored).await?;
     Ok(stored.to_resource(
         &state.public_gateway_url,
         project,
+        capabilities,
         state
             .session_manager
             .describe_session_runtime(stored.id)
@@ -387,6 +390,14 @@ pub(super) async fn session_resource(
         effective_egress,
         egress_diagnostics,
     ))
+}
+
+fn session_capabilities_for_policy(project_policy: Option<&ProjectPolicy>) -> SessionCapabilities {
+    let mut capabilities = SessionCapabilities::default();
+    if let Some(policy) = project_policy {
+        capabilities.file_transfer = policy.allow_browser_uploads && policy.allow_browser_downloads;
+    }
+    capabilities
 }
 
 pub(super) async fn session_project_resource(

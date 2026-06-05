@@ -183,6 +183,15 @@ const SESSION: SessionResource = {
   project: { id: 'project-1', name: 'Support tenant', state: 'active' },
   browser_context: { mode: 'fresh', context_id: null },
   owner_mode: 'shared',
+  capabilities: {
+    browser_input: true,
+    clipboard: true,
+    audio: true,
+    microphone: true,
+    camera: true,
+    file_transfer: true,
+    resize: true,
+  },
   connect: {
     gateway_url: 'https://localhost:4433',
     transport_path: '/session',

@@ -320,6 +320,7 @@ export class ControlSessionMapper {
       effective_egress: toSessionEffectiveEgress(object.effective_egress),
       egress_diagnostics: toEgressDiagnosticsResource(object.egress_diagnostics),
       owner_mode: expectString(object.owner_mode, 'session resource owner_mode'),
+      capabilities: toSessionCapabilities(object.capabilities),
       viewport: toOptionalViewport(object.viewport, 'session resource viewport') ?? null,
       idle_timeout_sec: optionalNumber(object.idle_timeout_sec, 'session resource idle_timeout_sec') ?? null,
       labels: expectStringRecord(object.labels ?? {}, 'session resource labels'),
@@ -653,6 +654,22 @@ function toProjectPolicy(value: unknown): ProjectPolicy {
       object.allowed_browser_context_ids ?? [],
       'project policy allowed_browser_context_ids',
     ),
+    allow_browser_uploads: expectBoolean(
+      object.allow_browser_uploads ?? true,
+      'project policy allow_browser_uploads',
+    ),
+    allow_browser_downloads: expectBoolean(
+      object.allow_browser_downloads ?? true,
+      'project policy allow_browser_downloads',
+    ),
+    allow_session_file_bindings: expectBoolean(
+      object.allow_session_file_bindings ?? true,
+      'project policy allow_session_file_bindings',
+    ),
+    allow_manual_recordings: expectBoolean(
+      object.allow_manual_recordings ?? true,
+      'project policy allow_manual_recordings',
+    ),
     usage_budget_enforcement: expectEnum(
       object.usage_budget_enforcement ?? 'warning_only',
       'project policy usage_budget_enforcement',
@@ -759,6 +776,21 @@ function toProjectUsageAlerts(value: unknown): readonly ProjectUsageAlertResourc
       message: expectString(object.message, `project usage alerts[${index}].message`),
     };
   });
+}
+
+function toSessionCapabilities(value: unknown): SessionResource['capabilities'] {
+  const object = value === undefined || value === null
+    ? {}
+    : expectRecord(value, 'session capabilities');
+  return {
+    browser_input: expectBoolean(object.browser_input ?? true, 'session capabilities browser_input'),
+    clipboard: expectBoolean(object.clipboard ?? true, 'session capabilities clipboard'),
+    audio: expectBoolean(object.audio ?? true, 'session capabilities audio'),
+    microphone: expectBoolean(object.microphone ?? true, 'session capabilities microphone'),
+    camera: expectBoolean(object.camera ?? true, 'session capabilities camera'),
+    file_transfer: expectBoolean(object.file_transfer ?? true, 'session capabilities file_transfer'),
+    resize: expectBoolean(object.resize ?? true, 'session capabilities resize'),
+  };
 }
 
 function toSessionProjectResource(value: unknown): SessionProjectResource | null | undefined {

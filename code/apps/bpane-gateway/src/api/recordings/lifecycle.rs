@@ -24,6 +24,11 @@ pub(super) async fn create_session_recording(
     State(state): State<Arc<ApiState>>,
 ) -> Result<(StatusCode, Json<SessionRecordingResource>), (StatusCode, Json<ErrorResponse>)> {
     let session = authorize_runtime_session_request(&headers, &state, session_id).await?;
+    let policy = session_project_policy(&state.session_store, &session)
+        .await
+        .map_err(map_session_store_error)?;
+    validate_project_manual_recording_policy(&session, policy.as_ref())
+        .map_err(map_session_store_error)?;
     if session.recording.mode == SessionRecordingMode::Disabled {
         return Err((
             StatusCode::CONFLICT,

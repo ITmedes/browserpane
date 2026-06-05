@@ -141,6 +141,10 @@ export type ProjectPolicy = {
   readonly allowed_egress_profile_ids: readonly string[];
   readonly allowed_extension_ids: readonly string[];
   readonly allowed_browser_context_ids: readonly string[];
+  readonly allow_browser_uploads: boolean;
+  readonly allow_browser_downloads: boolean;
+  readonly allow_session_file_bindings: boolean;
+  readonly allow_manual_recordings: boolean;
   readonly usage_budget_enforcement: ProjectUsageBudgetEnforcement;
 };
 
@@ -533,6 +537,16 @@ export type SessionConnectionCounts = {
   readonly total_clients: number;
 };
 
+export type SessionCapabilities = {
+  readonly browser_input: boolean;
+  readonly clipboard: boolean;
+  readonly audio: boolean;
+  readonly microphone: boolean;
+  readonly camera: boolean;
+  readonly file_transfer: boolean;
+  readonly resize: boolean;
+};
+
 export type SessionStatusSummary = {
   readonly runtime_state: string;
   readonly runtime_resume_mode: string;
@@ -564,6 +578,7 @@ export type SessionResource = {
   readonly effective_egress?: SessionEffectiveEgress;
   readonly egress_diagnostics?: EgressDiagnosticsResource;
   readonly owner_mode: string;
+  readonly capabilities: SessionCapabilities;
   readonly viewport?: SessionViewport | null;
   readonly idle_timeout_sec?: number | null;
   readonly labels?: Readonly<Record<string, string>>;

@@ -191,6 +191,88 @@ pub(crate) fn validate_egress_profile_project_scope(
     }))
 }
 
+fn owner_principal_for_session(session: &StoredSession) -> AuthenticatedPrincipal {
+    AuthenticatedPrincipal {
+        subject: session.owner.subject.clone(),
+        issuer: session.owner.issuer.clone(),
+        display_name: session.owner.display_name.clone(),
+        client_id: None,
+        safe_claims: Default::default(),
+    }
+}
+
+pub(crate) async fn session_project_policy(
+    session_store: &SessionStore,
+    session: &StoredSession,
+) -> Result<Option<ProjectPolicy>, SessionStoreError> {
+    let Some(project_id) = session.project_id else {
+        return Ok(None);
+    };
+    let owner = owner_principal_for_session(session);
+    Ok(session_store
+        .get_project_for_owner(&owner, project_id)
+        .await?
+        .map(|project| project.policy))
+}
+
+pub(crate) fn validate_project_session_file_source_policy(
+    session: &StoredSession,
+    policy: Option<&ProjectPolicy>,
+    source: SessionFileSource,
+) -> Result<(), SessionStoreError> {
+    let Some(policy) = policy else {
+        return Ok(());
+    };
+    let Some(project_id) = session.project_id else {
+        return Ok(());
+    };
+    let (allowed, reason) = match source {
+        SessionFileSource::BrowserUpload => {
+            (policy.allow_browser_uploads, "browser_upload_not_allowed")
+        }
+        SessionFileSource::BrowserDownload => (
+            policy.allow_browser_downloads,
+            "browser_download_not_allowed",
+        ),
+    };
+    if allowed {
+        return Ok(());
+    }
+    Err(SessionStoreError::Conflict(format!(
+        "{reason}: project {project_id} policy does not allow {source:?} session file transfers"
+    )))
+}
+
+pub(crate) fn validate_project_session_file_binding_policy(
+    session: &StoredSession,
+    policy: Option<&ProjectPolicy>,
+) -> Result<(), SessionStoreError> {
+    if policy.is_none_or(|policy| policy.allow_session_file_bindings) {
+        return Ok(());
+    }
+    let Some(project_id) = session.project_id else {
+        return Ok(());
+    };
+    Err(SessionStoreError::Conflict(format!(
+        "session_file_binding_not_allowed: project {project_id} policy does not allow session file bindings"
+    )))
+}
+
+pub(crate) fn validate_project_manual_recording_policy(
+    session: &StoredSession,
+    policy: Option<&ProjectPolicy>,
+) -> Result<(), SessionStoreError> {
+    if policy.is_none_or(|policy| policy.allow_manual_recordings) {
+        return Ok(());
+    }
+    let Some(project_id) = session.project_id else {
+        return Ok(());
+    };
+    Err(SessionStoreError::Conflict(format!(
+        "manual_recording_not_allowed: project {project_id} policy does not allow manual recording starts"
+    )))
+}
+
 fn validate_project_session_policy(
     project: &StoredProject,
     request: &CreateSessionRequest,

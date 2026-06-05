@@ -437,12 +437,18 @@ async function run() {
       templateId,
       '--allowed-egress-profile-id',
       egressProfileId,
+      '--allow-session-file-bindings',
+      'false',
+      '--allow-manual-recordings',
+      'false',
       '--usage-budget-enforcement',
       'block_session_creation',
     ], cliEnv);
     if (
       policyProject.policy?.allowed_session_template_ids?.[0] !== templateId
       || policyProject.policy?.allowed_egress_profile_ids?.[0] !== egressProfileId
+      || policyProject.policy?.allow_session_file_bindings !== false
+      || policyProject.policy?.allow_manual_recordings !== false
       || policyProject.policy?.usage_budget_enforcement !== 'block_session_creation'
     ) {
       throw new Error(`CLI project update did not persist project policy bindings: ${JSON.stringify(policyProject)}`);
