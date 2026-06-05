@@ -477,6 +477,8 @@ fn default_session_file_binding_mode() -> SessionFileBindingMode {
 
 #[derive(Deserialize)]
 pub(super) struct CreateCredentialBindingRequest {
+    #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
     pub(super) name: String,
     pub(super) provider: CredentialBindingProvider,
     #[serde(default)]

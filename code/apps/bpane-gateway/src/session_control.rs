@@ -146,6 +146,30 @@ fn checked_session_egress_usage_bytes(
     Ok(total)
 }
 
+pub(crate) fn validate_credential_binding_project_scope(
+    project_id: Option<Uuid>,
+    binding_id: Uuid,
+    binding_project_id: Option<Uuid>,
+    consumer: &str,
+) -> Result<(), SessionStoreError> {
+    let Some(binding_project_id) = binding_project_id else {
+        return Ok(());
+    };
+    if project_id == Some(binding_project_id) {
+        return Ok(());
+    }
+    Err(SessionStoreError::Conflict(match project_id {
+        Some(project_id) => format!(
+            "credential_binding_project_scope_mismatch: credential binding {} belongs to project {binding_project_id} and cannot be used by {consumer} project {project_id}",
+            binding_id
+        ),
+        None => format!(
+            "credential_binding_project_scope_mismatch: credential binding {} belongs to project {binding_project_id} and cannot be used by owner-scoped {consumer}",
+            binding_id
+        ),
+    }))
+}
+
 fn validate_project_session_policy(
     project: &StoredProject,
     request: &CreateSessionRequest,

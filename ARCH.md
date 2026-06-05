@@ -297,7 +297,7 @@ service.
   - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
   - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress/extension/reusable-context allow-lists and can reject new sessions when `usage_budget_enforcement=block_session_creation` and either `max_session_creations`, the rolling `max_session_creations_per_window` budget, or `max_runtime_usage_ms` is exhausted, project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, project usage reports session creations, live-plus-finalized browser runtime milliseconds, sanitized egress receive/transmit byte totals, retained storage, and usage alerts, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, session files, and files retained in project-owned file workspaces
-  - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Proxy authentication is secret-backed through owner-scoped credential bindings and is materialized only as a session-local runtime auth file.
+  - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Proxy authentication is secret-backed through owner-scoped or project-scoped credential bindings, project-bound bindings are only usable by sessions in the same project, and proxy credentials are materialized only as a session-local runtime auth file.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
   - `POST /api/v1/sessions/{id}/release` — release the live runtime while preserving the session resource and profile
@@ -459,7 +459,7 @@ On-demand executor launched and supervised by the gateway for workflow runs.
 
 - Downloads the workflow run, pinned source snapshot, and workspace inputs from the gateway
 - Mints or adopts session automation access for the run's backing session
-- Resolves Vault-backed credential bindings through gateway-owned APIs
+- Resolves Vault-backed credential bindings through gateway-owned APIs; project-bound bindings are only consumable by runs in the same project
 - Exposes worker runtime helpers to the workflow entrypoint:
   - `credentials.load(...)`
   - `credentials.apply(...)`
@@ -563,7 +563,7 @@ The workflow layer sits on top of the owner-scoped session APIs.
   and proxy-side observers remain responsible for URL/status/timing logs and
   future authoritative traffic totals
 - run resources expose `admission`, `intervention`, and `runtime` subresources so external systems can reason about backpressure, operator handoff, and resume mode
-- runs can bind reusable file workspace inputs, Vault-backed credential bindings, and approved extensions
+- runs can bind reusable file workspace inputs, Vault-backed credential bindings, and approved extensions; project-bound credential bindings are rejected when a run belongs to another project
 - the current execution model is Playwright-first, but the control-plane contract is executor-oriented rather than CDP-specific
 - the gateway persists run logs, events, outputs, produced files, linked recordings, and retention metadata
 - owner actions now include durable `submit-input`, `resume`, `reject`, and `cancel` transitions on workflow runs

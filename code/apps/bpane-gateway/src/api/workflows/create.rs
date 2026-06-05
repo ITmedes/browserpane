@@ -2,6 +2,7 @@ use super::super::workflow_files::{
     prepare_workflow_run_source_snapshot, resolve_workflow_run_workspace_inputs,
 };
 use super::super::*;
+use crate::session_control::validate_credential_binding_project_scope;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 
@@ -9,6 +10,7 @@ async fn resolve_workflow_run_credential_bindings(
     state: &Arc<ApiState>,
     principal: &AuthenticatedPrincipal,
     version: &StoredWorkflowDefinitionVersion,
+    project_id: Option<Uuid>,
     requested_ids: Vec<Uuid>,
 ) -> Result<Vec<WorkflowRunCredentialBinding>, (StatusCode, Json<ErrorResponse>)> {
     if requested_ids.is_empty() {
@@ -67,6 +69,13 @@ async fn resolve_workflow_run_credential_bindings(
                     }),
                 )
             })?;
+        validate_credential_binding_project_scope(
+            project_id,
+            binding.id,
+            binding.project_id,
+            "workflow run",
+        )
+        .map_err(map_session_store_error)?;
         bindings.push(binding.to_workflow_run_binding());
     }
     Ok(bindings)
@@ -284,15 +293,22 @@ pub(super) async fn create_workflow_run(
                 }),
             )
         })?;
+    let prevalidated_credential_bindings = if project_id.is_some() {
+        Some(
+            resolve_workflow_run_credential_bindings(
+                &state,
+                &principal,
+                &version,
+                project_id,
+                credential_binding_ids.clone(),
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     let source_snapshot =
         prepare_workflow_run_source_snapshot(&state, &principal, &workflow, &version).await?;
-    let credential_bindings = resolve_workflow_run_credential_bindings(
-        &state,
-        &principal,
-        &version,
-        credential_binding_ids,
-    )
-    .await?;
     let (session, session_source) = resolve_task_session_binding(
         &state,
         &principal,
@@ -305,6 +321,19 @@ pub(super) async fn create_workflow_run(
     let effective_project_id = project_id.or(session.project_id);
     validate_workflow_run_project(&state, &principal, effective_project_id, session.project_id)
         .await?;
+    let credential_bindings = match prevalidated_credential_bindings {
+        Some(bindings) => bindings,
+        None => {
+            resolve_workflow_run_credential_bindings(
+                &state,
+                &principal,
+                &version,
+                effective_project_id,
+                credential_binding_ids,
+            )
+            .await?
+        }
+    };
     let workspace_inputs = resolve_workflow_run_workspace_inputs(
         &state,
         &principal,

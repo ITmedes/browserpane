@@ -802,6 +802,12 @@ impl SessionStore {
         request: PersistCredentialBindingRequest,
     ) -> Result<StoredCredentialBinding, SessionStoreError> {
         validate_credential_binding_request(&request)?;
+        self.validate_optional_project_reference(
+            principal,
+            request.project_id,
+            "credential binding",
+        )
+        .await?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.create_credential_binding(principal, request).await

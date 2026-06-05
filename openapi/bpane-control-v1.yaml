@@ -3603,6 +3603,14 @@ components:
         - provider
         - injection_mode
       properties:
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Optional project that owns this credential binding. Project-scoped
+            workflow runs and sessions may only consume bindings from the same
+            project; omitted bindings remain owner-scoped.
         name:
           type: string
         provider:
@@ -3636,6 +3644,8 @@ components:
       type: object
       required:
         - id
+        - project_id
+        - project
         - name
         - provider
         - external_ref
@@ -3650,6 +3660,14 @@ components:
         id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
         name:
           type: string
         provider:
@@ -4473,6 +4491,7 @@ components:
       type: object
       required:
         - id
+        - project_id
         - name
         - provider
         - namespace
@@ -4484,6 +4503,10 @@ components:
         id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
         name:
           type: string
         provider:

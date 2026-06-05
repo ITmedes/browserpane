@@ -348,7 +348,10 @@ egress profiles, approved extensions, and reusable browser contexts, a
 `usage_budget_enforcement` mode, and sanitized usage counters. Creating a
 session or workflow run with `project_id` records the admission decision and
 enforces archived-project checks plus template, egress, extension, and
-reusable-context allow-lists before runtime launch. Project-scoped sessions
+reusable-context allow-lists before runtime launch. Credential bindings can be
+owner-scoped or assigned to a project; project-scoped workflow runs and sessions
+may only use a project-bound credential binding from the same project, while
+owner-scoped bindings remain available to the owner. Project-scoped sessions
 that exceed
 `max_active_sessions` are persisted as visible `queued` session resources with
 `active_session_quota_exceeded` admission metadata, queue position, queue age,
@@ -410,10 +413,12 @@ configuration-only evidence, runtime launch metadata, and the latest active
 profile or browser probe. Egress-profile probes perform a real proxy request
 and, when a proxy credential binding is configured, resolve the binding only for
 that probe so operators can see whether proxy authentication succeeds or is
-rejected. The active browser probe runs only against an already-ready session
-runtime and stores sanitized public-IP, TLS issuer, and failure summary fields;
-diagnostics do not store requested URLs, headers, proxy credentials, CA
-material, or decrypted traffic. Egress observers can report sanitized
+rejected. When a session consumes an egress profile with proxy authentication,
+the gateway also checks that any project-scoped credential binding belongs to
+the same project as the session. The active browser probe runs only against an
+already-ready session runtime and stores sanitized public-IP, TLS issuer, and
+failure summary fields; diagnostics do not store requested URLs, headers, proxy
+credentials, CA material, or decrypted traffic. Egress observers can report sanitized
 per-session receive/transmit byte deltas through
 `/api/v1/sessions/{id}/egress-usage`; project usage rolls those counters up for
 budget alerts while detailed URL, status, timing, credential, payload, and
@@ -433,8 +438,9 @@ references into the session data volume and install them into Chromium's NSS
 trust store before launch; non-file CA providers remain a provider-integration
 follow-up. If `proxy.credential_binding_id` is set, the gateway resolves the
 owner-visible credential binding through the configured secret provider at
-runtime launch and writes only a session-local proxy-auth file; credentials are
-not embedded in proxy URLs, API responses, CLI output, Docker labels, or normal
+runtime launch and writes only a session-local proxy-auth file; project-bound
+bindings are limited to sessions in the same project. Credentials are not
+embedded in proxy URLs, API responses, CLI output, Docker labels, or normal
 logs.
 Browser context resources let callers name owner-scoped or project-owned
 Chromium profile contexts and bind new sessions with
@@ -987,7 +993,7 @@ Typical local workflow path:
 2. Create or reconnect a browser session from the admin console
 3. Create reusable inputs as needed:
    - file workspace for reusable input/output files
-   - credential binding for Vault-backed secrets
+   - credential binding for Vault-backed secrets, optionally assigned to the same project as the workflow/session that will consume it
    - approved extension if the workflow needs a Chromium extension
 4. Create a workflow definition and a pinned version that points at a git-backed Playwright entrypoint
 5. Start a workflow run from the workflow panel, the CLI, or the raw v1 API

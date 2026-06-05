@@ -588,6 +588,7 @@ async fn docker_runtime_resolves_secret_backed_proxy_auth_for_launch() {
             &principal,
             PersistCredentialBindingRequest {
                 id: binding_id,
+                project_id: None,
                 name: "support-proxy-auth".to_string(),
                 provider: CredentialBindingProvider::VaultKvV2,
                 external_ref: "test/proxy-auth".to_string(),

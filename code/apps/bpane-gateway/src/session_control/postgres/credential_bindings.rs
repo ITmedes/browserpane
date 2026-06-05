@@ -66,6 +66,7 @@ impl CredentialBindingRepository<'_> {
                 r#"
                 INSERT INTO control_credential_bindings (
                     id,
+                    project_id,
                     owner_subject,
                     owner_issuer,
                     name,
@@ -79,9 +80,10 @@ impl CredentialBindingRepository<'_> {
                     created_at,
                     updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11::jsonb, $12, $12)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12::jsonb, $13, $13)
                 RETURNING
                     id,
+                    project_id,
                     owner_subject,
                     owner_issuer,
                     name,
@@ -97,6 +99,7 @@ impl CredentialBindingRepository<'_> {
                 "#,
                 &[
                     &request.id,
+                    &request.project_id,
                     &principal.subject,
                     &principal.issuer,
                     &request.name,
@@ -130,6 +133,7 @@ impl CredentialBindingRepository<'_> {
                 r#"
                 SELECT
                     id,
+                    project_id,
                     owner_subject,
                     owner_issuer,
                     name,
@@ -170,6 +174,7 @@ impl CredentialBindingRepository<'_> {
                 r#"
                 SELECT
                     id,
+                    project_id,
                     owner_subject,
                     owner_issuer,
                     name,

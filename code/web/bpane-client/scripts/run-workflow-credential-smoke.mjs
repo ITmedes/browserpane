@@ -275,7 +275,24 @@ async function createLocalWorkflowRepo() {
   };
 }
 
-async function createCredentialBinding(accessToken, options) {
+async function createProject(accessToken, options) {
+  return await fetchJson(`${options.pageUrl}/api/v1/projects`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: `workflow-credential-smoke-${Date.now()}`,
+      description: 'Project-scoped workflow credential smoke boundary',
+      labels: {
+        suite: 'workflow-credential-smoke',
+      },
+    }),
+  });
+}
+
+async function createCredentialBinding(accessToken, options, projectId) {
   return await fetchJson(`${options.pageUrl}/api/v1/credential-bindings`, {
     method: 'POST',
     headers: {
@@ -283,6 +300,7 @@ async function createCredentialBinding(accessToken, options) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
+      project_id: projectId,
       name: 'demo-login',
       provider: 'vault_kv_v2',
       namespace: 'smoke',
@@ -343,7 +361,7 @@ async function createWorkflowVersion(accessToken, options, workflowId, source, c
   });
 }
 
-async function createWorkflowRun(accessToken, options, workflowId, credentialBindingId) {
+async function createWorkflowRun(accessToken, options, workflowId, credentialBindingId, projectId) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs`, {
     method: 'POST',
     headers: {
@@ -353,6 +371,7 @@ async function createWorkflowRun(accessToken, options, workflowId, credentialBin
     body: JSON.stringify({
       workflow_id: workflowId,
       version: 'v1',
+      project_id: projectId,
       credential_binding_ids: [credentialBindingId],
       labels: {
         suite: 'workflow-credential-smoke',
@@ -462,11 +481,18 @@ async function main() {
     log('Building workflow-worker image');
     buildWorkflowWorkerImage();
 
-    log('Creating credential binding');
-    const credentialBinding = await createCredentialBinding(accessToken, options);
+    log('Creating project-scoped credential binding');
+    const project = await createProject(accessToken, options);
+    if (!project?.id) {
+      throw new Error('Project creation did not return an id.');
+    }
+    const credentialBinding = await createCredentialBinding(accessToken, options, project.id);
     const credentialBindingId = credentialBinding.id;
     if (!credentialBindingId) {
       throw new Error('Credential binding creation did not return an id.');
+    }
+    if (credentialBinding.project_id !== project.id || credentialBinding.project?.id !== project.id) {
+      throw new Error('Credential binding did not expose the expected project scope.');
     }
 
     log('Creating workflow definition and immutable version');
@@ -488,6 +514,7 @@ async function main() {
       options,
       workflow.id,
       credentialBindingId,
+      project.id,
     );
     const runId = createdRun.id;
     createdSessionId = createdRun.session_id ?? '';
@@ -504,6 +531,9 @@ async function main() {
     const attachedBinding = initialRun.credential_bindings?.[0];
     if (!attachedBinding?.resolve_path) {
       throw new Error('Workflow run did not expose a credential binding resolve path.');
+    }
+    if (initialRun.project_id !== project.id || attachedBinding.project_id !== project.id) {
+      throw new Error('Workflow run did not preserve the expected project-scoped credential metadata.');
     }
 
     const automationAccess = await issueAutomationAccess(accessToken, options, createdSessionId);
