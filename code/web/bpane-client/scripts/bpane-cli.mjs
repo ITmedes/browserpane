@@ -16,7 +16,9 @@ export const EXIT_CODES = Object.freeze({
 
 const KNOWN_OPTIONS = new Set([
   'access-token',
+  'allowed-browser-context-id',
   'allowed-egress-profile-id',
+  'allowed-extension-id',
   'api-url',
   'allowed-session-template-id',
   'base-url',
@@ -230,6 +232,8 @@ function usageText() {
     '  --allowed-project-id <id> Repeatable service-principal project metadata.',
     '  --allowed-session-template-id <id> Repeatable project policy template allow-list entry.',
     '  --allowed-egress-profile-id <id> Repeatable project policy egress-profile allow-list entry.',
+    '  --allowed-extension-id <id> Repeatable project policy extension-definition allow-list entry.',
+    '  --allowed-browser-context-id <id> Repeatable project policy reusable browser-context allow-list entry.',
     '  --usage-budget-enforcement <mode> Project budget mode: warning_only or block_session_creation.',
     '  --max-active-sessions <count> Project active-session quota.',
     '  --max-active-workflow-runs <count> Project active workflow-run quota.',
@@ -1178,6 +1182,14 @@ function buildProjectPolicy(options, existingPolicy = null) {
   const egressProfileIds = getOptions(options, 'allowed-egress-profile-id');
   if (egressProfileIds.length) {
     policy.allowed_egress_profile_ids = egressProfileIds.filter((profileId) => profileId !== '');
+  }
+  const extensionIds = getOptions(options, 'allowed-extension-id');
+  if (extensionIds.length) {
+    policy.allowed_extension_ids = extensionIds.filter((extensionId) => extensionId !== '');
+  }
+  const browserContextIds = getOptions(options, 'allowed-browser-context-id');
+  if (browserContextIds.length) {
+    policy.allowed_browser_context_ids = browserContextIds.filter((contextId) => contextId !== '');
   }
   const usageBudgetEnforcement = getOption(options, 'usage-budget-enforcement');
   if (usageBudgetEnforcement !== null) {

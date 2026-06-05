@@ -200,6 +200,73 @@ fn validate_project_session_policy(
         }
     }
 
+    if !project.policy.allowed_extension_ids.is_empty() {
+        for extension_id in request.extension_ids.iter().chain(
+            request
+                .extensions
+                .iter()
+                .map(|extension| &extension.extension_id),
+        ) {
+            let allowed = project
+                .policy
+                .allowed_extension_ids
+                .iter()
+                .any(|allowed_id| allowed_id == extension_id);
+            if !allowed {
+                return Err(project_admission_conflict(
+                    ProjectAdmissionDecision::rejected(
+                        project.id,
+                        ProjectAdmissionReasonCode::ExtensionNotAllowed,
+                        format!(
+                            "project {} does not allow extension {}",
+                            project.id, extension_id
+                        ),
+                        active_project_sessions,
+                        project.quotas.max_active_sessions,
+                        checked_at,
+                    ),
+                ));
+            }
+        }
+    }
+
+    if !project.policy.allowed_browser_context_ids.is_empty() {
+        if let Some(browser_context) = &request.browser_context {
+            if browser_context.mode == SessionBrowserContextMode::Reusable {
+                let context_id = browser_context.context_id;
+                let allowed = context_id.is_some_and(|context_id| {
+                    project
+                        .policy
+                        .allowed_browser_context_ids
+                        .iter()
+                        .any(|allowed_id| *allowed_id == context_id)
+                });
+                if !allowed {
+                    let message = match context_id {
+                        Some(context_id) => format!(
+                            "project {} does not allow browser context {}",
+                            project.id, context_id
+                        ),
+                        None => format!(
+                            "project {} requires one of the allowed reusable browser contexts",
+                            project.id
+                        ),
+                    };
+                    return Err(project_admission_conflict(
+                        ProjectAdmissionDecision::rejected(
+                            project.id,
+                            ProjectAdmissionReasonCode::BrowserContextNotAllowed,
+                            message,
+                            active_project_sessions,
+                            project.quotas.max_active_sessions,
+                            checked_at,
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 

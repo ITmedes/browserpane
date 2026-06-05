@@ -967,6 +967,8 @@ describe('bpane operator CLI', () => {
         policy: {
           allowed_session_template_ids: [],
           allowed_egress_profile_ids: [],
+          allowed_extension_ids: [],
+          allowed_browser_context_ids: [],
           usage_budget_enforcement: 'warning_only',
         },
         state: 'active',
@@ -1017,6 +1019,14 @@ describe('bpane operator CLI', () => {
         '3600000',
         '--max-egress-total-bytes',
         '10485760',
+        '--allowed-session-template-id',
+        'template-1',
+        '--allowed-egress-profile-id',
+        'egress-1',
+        '--allowed-extension-id',
+        'extension-1',
+        '--allowed-browser-context-id',
+        'context-1',
         '--usage-budget-enforcement',
         'block_session_creation',
       ],
@@ -1043,6 +1053,10 @@ describe('bpane operator CLI', () => {
         max_egress_total_bytes: 10485760,
       },
       policy: {
+        allowed_session_template_ids: ['template-1'],
+        allowed_egress_profile_ids: ['egress-1'],
+        allowed_extension_ids: ['extension-1'],
+        allowed_browser_context_ids: ['context-1'],
         usage_budget_enforcement: 'block_session_creation',
       },
     });
@@ -1105,6 +1119,8 @@ describe('bpane operator CLI', () => {
       policy: {
         allowed_session_template_ids: [],
         allowed_egress_profile_ids: [],
+        allowed_extension_ids: [],
+        allowed_browser_context_ids: [],
         usage_budget_enforcement: 'warning_only',
       },
       state: 'active',

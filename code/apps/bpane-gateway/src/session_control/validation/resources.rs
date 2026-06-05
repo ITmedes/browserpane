@@ -170,6 +170,26 @@ pub(in crate::session_control) fn validate_project_request(
             "project policy.allowed_egress_profile_ids must not contain nil UUIDs".to_string(),
         ));
     }
+    if request
+        .policy
+        .allowed_extension_ids
+        .iter()
+        .any(|extension_id| *extension_id == Uuid::nil())
+    {
+        return Err(SessionStoreError::InvalidRequest(
+            "project policy.allowed_extension_ids must not contain nil UUIDs".to_string(),
+        ));
+    }
+    if request
+        .policy
+        .allowed_browser_context_ids
+        .iter()
+        .any(|context_id| *context_id == Uuid::nil())
+    {
+        return Err(SessionStoreError::InvalidRequest(
+            "project policy.allowed_browser_context_ids must not contain nil UUIDs".to_string(),
+        ));
+    }
     Ok(())
 }
 

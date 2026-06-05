@@ -264,6 +264,12 @@ function policyLabel(project: ProjectResource): string {
   if (project.policy.allowed_egress_profile_ids.length > 0) {
     facts.push(`${project.policy.allowed_egress_profile_ids.length} egress profiles`);
   }
+  if (project.policy.allowed_extension_ids.length > 0) {
+    facts.push(`${project.policy.allowed_extension_ids.length} extensions`);
+  }
+  if (project.policy.allowed_browser_context_ids.length > 0) {
+    facts.push(`${project.policy.allowed_browser_context_ids.length} contexts`);
+  }
   if (project.policy.usage_budget_enforcement === 'block_session_creation') {
     facts.push('budget blocks session creation');
   }

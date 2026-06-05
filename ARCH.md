@@ -288,7 +288,7 @@ service.
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
   - `GET /api/v1/session-templates/{id}` — fetch one session template
   - `PUT /api/v1/session-templates/{id}` — replace a session template and increment its version
-  - `POST /api/v1/projects` — create an owner-scoped project with labels, state, quota metadata, usage-budget enforcement mode, template/egress policy bindings, and usage counters
+  - `POST /api/v1/projects` — create an owner-scoped project with labels, state, quota metadata, usage-budget enforcement mode, template/egress/extension/reusable-context policy bindings, and usage counters
   - `GET /api/v1/projects` — list owner-scoped projects with sanitized usage summaries
   - `GET /api/v1/projects/{id}` — fetch one project
   - `PUT /api/v1/projects/{id}` — replace one project, including quota metadata, policy bindings, and lifecycle state
@@ -296,7 +296,7 @@ service.
   - `POST /api/v1/egress-profiles` — create an owner-scoped egress profile with sanitized proxy, optional proxy-auth credential binding reference, bypass, custom CA, and traffic-observation metadata
   - `GET /api/v1/egress-profiles` — list owner-scoped egress profiles
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
-  - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress allow-lists and can reject new sessions when `usage_budget_enforcement=block_session_creation` and either `max_session_creations`, the rolling `max_session_creations_per_window` budget, or `max_runtime_usage_ms` is exhausted, project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, project usage reports session creations, live-plus-finalized browser runtime milliseconds, sanitized egress receive/transmit byte totals, retained storage, and usage alerts, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, session files, and files retained in project-owned file workspaces
+  - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress/extension/reusable-context allow-lists and can reject new sessions when `usage_budget_enforcement=block_session_creation` and either `max_session_creations`, the rolling `max_session_creations_per_window` budget, or `max_runtime_usage_ms` is exhausted, project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, project usage reports session creations, live-plus-finalized browser runtime milliseconds, sanitized egress receive/transmit byte totals, retained storage, and usage alerts, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, session files, and files retained in project-owned file workspaces
   - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Proxy authentication is secret-backed through owner-scoped credential bindings and is materialized only as a session-local runtime auth file.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
@@ -859,9 +859,9 @@ more custom code and therefore more surface area for bugs.
   blocking,
   docker-backed runtime assignments, and profile-backed reconnect/release
   semantics. It is still not an HA production control plane: hard cross-resource
-  project quotas, windowed rate limits, backup/restore, zero-downtime
-  upgrades, multi-node runtime scheduling, and full enterprise governance remain
-  future work.
+  project quotas, proxy-side egress usage ingestion, backup/restore,
+  zero-downtime upgrades, multi-node runtime scheduling, and full enterprise
+  governance remain future work.
 
 - **No end-to-end testing of the visual pipeline.** The protocol has unit tests
   and integration tests for framing. The tile compositor has unit tests. But

@@ -23,6 +23,8 @@ const PROJECT: ProjectResource = {
   policy: {
     allowed_session_template_ids: [],
     allowed_egress_profile_ids: [],
+    allowed_extension_ids: [],
+    allowed_browser_context_ids: [],
     usage_budget_enforcement: 'warning_only',
   },
   state: 'active',
