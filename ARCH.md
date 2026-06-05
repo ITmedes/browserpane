@@ -297,7 +297,7 @@ service.
   - `GET /api/v1/egress-profiles` — list owner-visible egress profiles with optional project summaries
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
   - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress/extension/reusable-context allow-lists and can reject new sessions when `usage_budget_enforcement=block_session_creation` and either `max_session_creations`, the rolling `max_session_creations_per_window` budget, or `max_runtime_usage_ms` is exhausted; project policy can also block live browser uploads/downloads, session-file bindings, and manual recording starts for project sessions, with session capabilities reflecting file-transfer restrictions; project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, project usage reports session creations, live-plus-finalized browser runtime milliseconds, sanitized egress receive/transmit byte totals, retained storage, and usage alerts, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, session files, and files retained in project-owned file workspaces
-  - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Egress profiles and proxy authentication bindings can be owner-scoped or project-scoped; project-bound profiles and bindings are only usable by sessions in the same project, and proxy credentials are materialized only as a session-local runtime auth file.
+  - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. Egress usage ingestion accepts sanitized byte deltas through session-scoped APIs, and the local egress-observer fixture includes a Squid-log reporter that joins docker runtime labels to proxy client IPs without sending URLs, status, timing, payload, credentials, CA material, or decrypted traffic to BrowserPane. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Egress profiles and proxy authentication bindings can be owner-scoped or project-scoped; project-bound profiles and bindings are only usable by sessions in the same project, and proxy credentials are materialized only as a session-local runtime auth file.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
   - `POST /api/v1/sessions/{id}/release` — release the live runtime while preserving the session resource and profile
@@ -588,11 +588,11 @@ The supported local operator CLI lives in
   proxy-auth credential binding with `--proxy-credential-binding-id`.
 - `deploy/examples/egress-observer` provides local Squid forward-proxy
   examples for metadata-only access-log observation, session/container IP
-  correlation, and authenticated proxy validation, plus a mitmproxy
-  TLS-intercept fixture for local inspection checks with an explicit custom CA
-  and sensitive-log sink. On localhost, the admin app auto-creates
-  owner-scoped local presets for the unauthenticated proxy and TLS-intercept
-  variants.
+  correlation, authenticated proxy validation, and sanitized egress-usage
+  reporting, plus a mitmproxy TLS-intercept fixture for local inspection checks
+  with an explicit custom CA and sensitive-log sink. On localhost, the admin app
+  auto-creates owner-scoped local presets for the unauthenticated proxy and
+  TLS-intercept variants.
 - MCP commands cover health, authorize, revoke, set-default, clear-default,
   doctor, preflight, and repair.
 - `mcp repair` applies missing automation delegation and bridge default-session

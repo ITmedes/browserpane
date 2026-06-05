@@ -435,7 +435,8 @@ web gateway. BrowserPane emits safe correlation metadata instead: docker-backed
 runtime containers carry `browserpane.session_id` and egress-profile labels,
 and the gateway logs a sanitized runtime startup event that joins the session,
 runtime container, and egress profile. A runnable local Squid access-log example
-is available in `deploy/examples/egress-observer`.
+and sanitized usage reporter are available in
+`deploy/examples/egress-observer`.
 Egress profiles default to `traffic_observation.mode=metadata_only`. Full HTTPS
 inspection must be explicit with `mode=tls_intercept`, and the API requires a
 proxy, custom CA reference, and `sensitive_log_sink_ref` so operators do not
@@ -767,9 +768,29 @@ docker compose -f deploy/examples/egress-observer/compose.yml up --build
   --proxy-url http://bpane-egress-observer:3128 \
   --bypass-rule localhost \
   --bypass-rule 127.0.0.1
-docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-proxy
 deploy/examples/egress-observer/correlate-session-ip.sh
+BPANE_ACCESS_TOKEN=<owner-token> \
+  node deploy/examples/egress-observer/egress-usage-reporter.mjs \
+  --since 10m \
+  --dry-run
 ```
+
+Tail the raw proxy logs in a separate terminal when you need URL/status/timing
+debug evidence:
+
+```bash
+docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-proxy
+```
+
+The reporter reads the example Squid logs and BrowserPane docker runtime labels,
+then calls `/api/v1/sessions/{id}/egress-usage` with sanitized byte deltas when
+run without `--dry-run`. Dry-run output is sanitized and does not advance the
+local watermark. BrowserPane does not receive proxy URLs, response status,
+headers, timing, payload, credentials, CA material, or decrypted traffic. The
+example Squid log format provides response/tunnel bytes, so the local reporter
+maps that value to `rx_bytes_delta`; production collectors that need transmit
+byte counters should calculate those in the proxy or secure-web-gateway layer
+and call the same API.
 
 The same compose file also starts an authenticated Squid fixture at
 `bpane-egress-auth-observer:3130` with local test credentials
