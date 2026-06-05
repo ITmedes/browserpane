@@ -261,33 +261,48 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         ));
     }
 
-    let rejected = harness
-        .post_json_outcome(
+    let queued = harness
+        .post_json(
             "/api/v1/sessions",
             json!({
                 "template_id": template_id
             }),
         )
         .await?;
-    if rejected.status != StatusCode::CONFLICT
-        || !rejected.body["error"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("active_session_quota_exceeded")
+    let queued_session_id = json_id(&queued, "id")?;
+    if queued["state"] != json!("queued")
+        || queued["admission"]["state"] != json!("queued")
+        || queued["admission"]["reason_code"] != json!("active_session_quota_exceeded")
+        || queued["queue"]["position"] != json!(1)
+        || queued["queue"]["dispatch_blocker"] != json!("project_active_session_quota")
+        || queued["queue"]["cancellable"] != json!(true)
     {
         return Err(anyhow!(
-            "project quota rejection returned unexpected result {}: {}",
-            rejected.status,
-            rejected.body
+            "project quota exhaustion did not create expected queued session: {queued}"
         ));
     }
 
     let usage = harness
         .get_json(&format!("/api/v1/projects/{project_id}/usage"))
         .await?;
-    if usage["active_sessions"] != json!(1) {
+    if usage["active_sessions"] != json!(1) || usage["queued_sessions"] != json!(1) {
         return Err(anyhow!(
-            "project usage did not count the active session: {usage}"
+            "project usage did not count the active and queued sessions: {usage}"
+        ));
+    }
+
+    let cancelled = harness
+        .post_json(
+            &format!("/api/v1/sessions/{queued_session_id}/cancel"),
+            json!({}),
+        )
+        .await?;
+    if cancelled["state"] != json!("stopped")
+        || !cancelled["queued_at"].is_null()
+        || !cancelled["queue"].is_null()
+    {
+        return Err(anyhow!(
+            "queued project session cancellation did not persist: {cancelled}"
         ));
     }
 
