@@ -113,6 +113,8 @@ const PROJECT = {
   policy: {
     allowed_session_template_ids: ['template-1'],
     allowed_egress_profile_ids: ['egress-1'],
+    allowed_extension_ids: ['extension-1'],
+    allowed_browser_context_ids: ['context-1'],
     usage_budget_enforcement: 'warning_only',
   },
   state: 'active',
@@ -272,9 +274,9 @@ describe('session create configurator', () => {
       owner_mode: 'collaborative',
     });
     expect(validation.preview).toContain('"project_id"');
-    expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, created=7, rate=3/1h, workflows=1/4, runtime=2h, egress_bytes=2MiB, templates=1, egress=1)');
+    expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, created=7, rate=3/1h, workflows=1/4, runtime=2h, egress_bytes=2MiB, templates=1, egress=1, extensions=1, contexts=1)');
     expect(projectUsageSummary(PROJECT)).toBe(
-      'state=active | sessions=1/2 | queued_sessions=0 | created_sessions=7 | session_rate=3/1h | workflow_runs=1/4 | runtime=2h | egress_bytes=2MiB | storage=268435456/1073741824 | alerts=none | policy=1 templates,1 egress profiles | labels=tenant=support',
+      'state=active | sessions=1/2 | queued_sessions=0 | created_sessions=7 | session_rate=3/1h | workflow_runs=1/4 | runtime=2h | egress_bytes=2MiB | storage=268435456/1073741824 | alerts=none | policy=1 templates,1 egress profiles,1 extensions,1 contexts | labels=tenant=support',
     );
 
     const alertedProject = {

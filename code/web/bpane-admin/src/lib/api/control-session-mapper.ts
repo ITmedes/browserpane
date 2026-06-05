@@ -388,6 +388,8 @@ const PROJECT_ADMISSION_REASON_CODES = [
   'project_archived',
   'session_template_not_allowed',
   'egress_profile_not_allowed',
+  'extension_not_allowed',
+  'browser_context_not_allowed',
 ] satisfies readonly ProjectAdmissionReasonCode[];
 const IDENTITY_PRINCIPAL_TYPES = ['user', 'service_principal', 'legacy_dev_token'] satisfies readonly IdentityPrincipalType[];
 const IDENTITY_MAPPING_KINDS = ['user', 'group', 'claim', 'service_principal'] satisfies readonly IdentityMappingKind[];
@@ -640,6 +642,14 @@ function toProjectPolicy(value: unknown): ProjectPolicy {
     allowed_egress_profile_ids: toStringArray(
       object.allowed_egress_profile_ids ?? [],
       'project policy allowed_egress_profile_ids',
+    ),
+    allowed_extension_ids: toStringArray(
+      object.allowed_extension_ids ?? [],
+      'project policy allowed_extension_ids',
+    ),
+    allowed_browser_context_ids: toStringArray(
+      object.allowed_browser_context_ids ?? [],
+      'project policy allowed_browser_context_ids',
     ),
     usage_budget_enforcement: expectEnum(
       object.usage_budget_enforcement ?? 'warning_only',

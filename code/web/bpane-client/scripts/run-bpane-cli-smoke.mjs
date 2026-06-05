@@ -479,6 +479,22 @@ async function run() {
       throw new Error(`CLI browser-context get returned unexpected context data: ${JSON.stringify(fetchedContext)}`);
     }
 
+    const contextPolicyProject = runBpaneCli([
+      'project',
+      'update',
+      projectId,
+      '--allowed-browser-context-id',
+      contextId,
+    ], cliEnv);
+    if (
+      contextPolicyProject.policy?.allowed_session_template_ids?.[0] !== templateId
+      || contextPolicyProject.policy?.allowed_egress_profile_ids?.[0] !== egressProfileId
+      || contextPolicyProject.policy?.allowed_browser_context_ids?.[0] !== contextId
+      || contextPolicyProject.policy?.usage_budget_enforcement !== 'block_session_creation'
+    ) {
+      throw new Error(`CLI project update did not persist browser-context policy binding: ${JSON.stringify(contextPolicyProject)}`);
+    }
+
     const exportPath = path.join(configDir, 'browser-context-export.zip');
     const exportedContext = runBpaneCli([
       'browser-context',

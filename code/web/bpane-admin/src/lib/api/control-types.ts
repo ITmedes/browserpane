@@ -139,6 +139,8 @@ export type ProjectQuotas = {
 export type ProjectPolicy = {
   readonly allowed_session_template_ids: readonly string[];
   readonly allowed_egress_profile_ids: readonly string[];
+  readonly allowed_extension_ids: readonly string[];
+  readonly allowed_browser_context_ids: readonly string[];
   readonly usage_budget_enforcement: ProjectUsageBudgetEnforcement;
 };
 
@@ -207,7 +209,9 @@ export type ProjectAdmissionReasonCode =
   | 'active_workflow_run_quota_exceeded'
   | 'project_archived'
   | 'session_template_not_allowed'
-  | 'egress_profile_not_allowed';
+  | 'egress_profile_not_allowed'
+  | 'extension_not_allowed'
+  | 'browser_context_not_allowed';
 
 export type ProjectAdmissionDecision = {
   readonly state: ProjectAdmissionState;

@@ -1426,7 +1426,7 @@ async fn applies_project_admission_to_sessions_and_template_defaults() {
 }
 
 #[tokio::test]
-async fn enforces_project_template_and_egress_policy_for_sessions() {
+async fn enforces_project_resource_policy_for_sessions() {
     let (app, token) = test_router_with_docker_pool().await;
 
     let allowed_template = response_json(
@@ -1513,6 +1513,138 @@ async fn enforces_project_template_and_egress_policy_for_sessions() {
     .await;
     let disallowed_profile_id = disallowed_profile["id"].as_str().unwrap().to_string();
 
+    let allowed_extension = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/extensions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "approved-project-extension"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let allowed_extension_id = allowed_extension["id"].as_str().unwrap().to_string();
+    let allowed_extension_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/extensions/{allowed_extension_id}/versions"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "1.0.0",
+                        "install_path": "/home/bpane/project-extension"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(allowed_extension_version.status(), StatusCode::CREATED);
+
+    let disallowed_extension = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/extensions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "generic-project-extension"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let disallowed_extension_id = disallowed_extension["id"].as_str().unwrap().to_string();
+    let disallowed_extension_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/extensions/{disallowed_extension_id}/versions"
+                ))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "1.0.0",
+                        "install_path": "/home/bpane/generic-extension"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(disallowed_extension_version.status(), StatusCode::CREATED);
+
+    let allowed_context = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/browser-contexts")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "approved-project-context"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let allowed_context_id = allowed_context["id"].as_str().unwrap().to_string();
+
+    let disallowed_context = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/browser-contexts")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "generic-project-context"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let disallowed_context_id = disallowed_context["id"].as_str().unwrap().to_string();
+
     let project = response_json(
         app.clone()
             .oneshot(
@@ -1526,7 +1658,9 @@ async fn enforces_project_template_and_egress_policy_for_sessions() {
                             "name": "tenant-policy",
                             "policy": {
                                 "allowed_session_template_ids": [allowed_template_id],
-                                "allowed_egress_profile_ids": [allowed_profile_id]
+                                "allowed_egress_profile_ids": [allowed_profile_id],
+                                "allowed_extension_ids": [allowed_extension_id],
+                                "allowed_browser_context_ids": [allowed_context_id]
                             }
                         })
                         .to_string(),
@@ -1546,6 +1680,14 @@ async fn enforces_project_template_and_egress_policy_for_sessions() {
         project["policy"]["allowed_egress_profile_ids"][0],
         allowed_profile_id
     );
+    assert_eq!(
+        project["policy"]["allowed_extension_ids"][0],
+        allowed_extension_id
+    );
+    assert_eq!(
+        project["policy"]["allowed_browser_context_ids"][0],
+        allowed_context_id
+    );
 
     let allowed = app
         .clone()
@@ -1559,7 +1701,12 @@ async fn enforces_project_template_and_egress_policy_for_sessions() {
                     json!({
                         "project_id": project_id,
                         "template_id": allowed_template_id,
-                        "network_identity": { "egress_profile_id": allowed_profile_id }
+                        "network_identity": { "egress_profile_id": allowed_profile_id },
+                        "extension_ids": [allowed_extension_id],
+                        "browser_context": {
+                            "mode": "reusable",
+                            "context_id": allowed_context_id
+                        }
                     })
                     .to_string(),
                 ))
@@ -1622,4 +1769,63 @@ async fn enforces_project_template_and_egress_policy_for_sessions() {
         .as_str()
         .unwrap()
         .contains("egress_profile_not_allowed"));
+
+    let rejected_extension = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "template_id": allowed_template_id,
+                        "network_identity": { "egress_profile_id": allowed_profile_id },
+                        "extension_ids": [disallowed_extension_id]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_extension.status(), StatusCode::CONFLICT);
+    let rejected_extension = response_json(rejected_extension).await;
+    assert!(rejected_extension["error"]
+        .as_str()
+        .unwrap()
+        .contains("extension_not_allowed"));
+
+    let rejected_context = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "template_id": allowed_template_id,
+                        "network_identity": { "egress_profile_id": allowed_profile_id },
+                        "browser_context": {
+                            "mode": "reusable",
+                            "context_id": disallowed_context_id
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected_context.status(), StatusCode::CONFLICT);
+    let rejected_context = response_json(rejected_context).await;
+    assert!(rejected_context["error"]
+        .as_str()
+        .unwrap()
+        .contains("browser_context_not_allowed"));
 }

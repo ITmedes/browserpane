@@ -328,6 +328,10 @@ pub struct ProjectPolicy {
     #[serde(default)]
     pub allowed_egress_profile_ids: Vec<Uuid>,
     #[serde(default)]
+    pub allowed_extension_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub allowed_browser_context_ids: Vec<Uuid>,
+    #[serde(default)]
     pub usage_budget_enforcement: ProjectUsageBudgetEnforcement,
 }
 
@@ -352,6 +356,8 @@ pub enum ProjectAdmissionReasonCode {
     ProjectArchived,
     SessionTemplateNotAllowed,
     EgressProfileNotAllowed,
+    ExtensionNotAllowed,
+    BrowserContextNotAllowed,
 }
 
 impl ProjectAdmissionReasonCode {
@@ -367,6 +373,8 @@ impl ProjectAdmissionReasonCode {
             Self::ProjectArchived => "project_archived",
             Self::SessionTemplateNotAllowed => "session_template_not_allowed",
             Self::EgressProfileNotAllowed => "egress_profile_not_allowed",
+            Self::ExtensionNotAllowed => "extension_not_allowed",
+            Self::BrowserContextNotAllowed => "browser_context_not_allowed",
         }
     }
 }

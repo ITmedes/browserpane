@@ -342,11 +342,13 @@ labels, lifecycle state, optional quotas such as `max_active_sessions`,
 `max_active_workflow_runs`, `max_retained_storage_bytes`,
 `max_session_creations`, `max_session_creations_per_window` with
 `session_creation_window_sec`, `max_runtime_usage_ms`, and
-`max_egress_total_bytes`, first policy bindings for allowed session templates
-and egress profiles, a `usage_budget_enforcement` mode, and sanitized usage
-counters. Creating a session or workflow run with `project_id` records the
-admission decision and enforces archived-project checks plus template/egress
-allow-lists before runtime launch. Project-scoped sessions that exceed
+`max_egress_total_bytes`, policy bindings for allowed session templates,
+egress profiles, approved extensions, and reusable browser contexts, a
+`usage_budget_enforcement` mode, and sanitized usage counters. Creating a
+session or workflow run with `project_id` records the admission decision and
+enforces archived-project checks plus template, egress, extension, and
+reusable-context allow-lists before runtime launch. Project-scoped sessions
+that exceed
 `max_active_sessions` are persisted as visible `queued` session resources with
 `active_session_quota_exceeded` admission metadata, queue position, queue age,
 current dispatch blocker, and an explicit queued-session cancel operation.
@@ -679,7 +681,9 @@ Common project operations:
 ./scripts/bpane project update <project-id> --name support-tenant --max-active-sessions 5 --max-session-creations 50 --max-session-creations-per-window 10 --session-creation-window-sec 3600 --usage-budget-enforcement block_session_creation
 ./scripts/bpane project update <project-id> \
   --allowed-session-template-id <template-id> \
-  --allowed-egress-profile-id <egress-profile-id>
+  --allowed-egress-profile-id <egress-profile-id> \
+  --allowed-extension-id <extension-id> \
+  --allowed-browser-context-id <browser-context-id>
 ./scripts/bpane project archive <project-id>
 ./scripts/bpane session-template create tenant-debug-session --project-id <project-id> --default-label purpose=debug
 ```
