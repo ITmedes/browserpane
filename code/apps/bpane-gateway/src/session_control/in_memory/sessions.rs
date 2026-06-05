@@ -58,6 +58,45 @@ fn project_session_creation_count_since(
         .count() as u32
 }
 
+fn project_runtime_usage_ms(
+    sessions: &[StoredSession],
+    owner_subject: &str,
+    owner_issuer: &str,
+    project_id: Uuid,
+    observed_at: chrono::DateTime<Utc>,
+) -> Result<u64, SessionStoreError> {
+    sessions
+        .iter()
+        .filter(|session| {
+            session.project_id == Some(project_id)
+                && session.owner.subject == owner_subject
+                && session.owner.issuer == owner_issuer
+        })
+        .try_fold(0_u64, |total, session| {
+            let live_runtime_ms = if session.state.is_runtime_candidate() {
+                session
+                    .runtime_started_at
+                    .map(|started_at| {
+                        observed_at
+                            .signed_duration_since(started_at)
+                            .num_milliseconds()
+                            .max(0) as u64
+                    })
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+            total
+                .checked_add(session.runtime_usage_ms)
+                .and_then(|value| value.checked_add(live_runtime_ms))
+                .ok_or_else(|| {
+                    SessionStoreError::Backend(
+                        "project runtime usage milliseconds exceeded u64 range".to_string(),
+                    )
+                })
+        })
+}
+
 fn queued_session_admission(
     project_id: Uuid,
     active_sessions: u32,
@@ -236,6 +275,14 @@ impl InMemorySessionStore {
                 );
                 validate_project_session_creation_rate(&project, session_creations_in_window, now)?;
             }
+            let runtime_usage_ms = project_runtime_usage_ms(
+                &sessions,
+                &principal.subject,
+                &principal.issuer,
+                project_id,
+                now,
+            )?;
+            validate_project_runtime_usage_budget(&project, runtime_usage_ms, now)?;
             if let Some(max_active_sessions) = project.quotas.max_active_sessions {
                 if active_project_sessions >= max_active_sessions {
                     (

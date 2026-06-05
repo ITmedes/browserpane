@@ -475,6 +475,9 @@ function admissionUsageLabel(
     const windowSec = admission.session_creation_window_sec ?? 'window';
     return ` ${admission.session_creations_in_window}/${admission.max_session_creations_per_window ?? 'unlimited'} per ${windowSec}s`;
   }
+  if (admission.runtime_usage_ms !== null && admission.runtime_usage_ms !== undefined) {
+    return ` ${admission.runtime_usage_ms}/${admission.max_runtime_usage_ms ?? 'unlimited'}ms`;
+  }
   return '';
 }
 

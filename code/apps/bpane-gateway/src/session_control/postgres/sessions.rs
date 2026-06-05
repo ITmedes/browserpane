@@ -349,4 +349,52 @@ impl SessionRepository<'_> {
             ))
         })
     }
+
+    async fn sum_runtime_usage_ms_for_project_in_transaction(
+        &self,
+        transaction: &Transaction<'_>,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+        observed_at: DateTime<Utc>,
+    ) -> Result<u64, SessionStoreError> {
+        let row = transaction
+            .query_one(
+                r#"
+                SELECT COALESCE(SUM(
+                    runtime_usage_ms
+                    + CASE
+                        WHEN runtime_started_at IS NOT NULL
+                         AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
+                            THEN GREATEST(
+                                0,
+                                FLOOR(EXTRACT(EPOCH FROM ($4::timestamptz - runtime_started_at)) * 1000)
+                            )::BIGINT
+                        ELSE 0
+                    END
+                ), 0)::BIGINT AS runtime_usage_ms
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                "#,
+                &[
+                    &principal.subject,
+                    &principal.issuer,
+                    &project_id,
+                    &observed_at,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to sum project runtime usage milliseconds for admission: {error}"
+                ))
+            })?;
+        let runtime_usage_ms = row.get::<_, i64>("runtime_usage_ms");
+        u64::try_from(runtime_usage_ms).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "project runtime usage milliseconds exceeded u64 range: {error}"
+            ))
+        })
+    }
 }

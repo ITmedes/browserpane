@@ -203,6 +203,7 @@ export type ProjectAdmissionReasonCode =
   | 'active_session_quota_exceeded'
   | 'session_creation_budget_exceeded'
   | 'session_creation_rate_exceeded'
+  | 'runtime_usage_budget_exceeded'
   | 'active_workflow_run_quota_exceeded'
   | 'project_archived'
   | 'session_template_not_allowed'
@@ -222,6 +223,8 @@ export type ProjectAdmissionDecision = {
   readonly session_creations_in_window?: number | null;
   readonly max_session_creations_per_window?: number | null;
   readonly session_creation_window_sec?: number | null;
+  readonly runtime_usage_ms?: number | null;
+  readonly max_runtime_usage_ms?: number | null;
   readonly checked_at: string;
 };
 

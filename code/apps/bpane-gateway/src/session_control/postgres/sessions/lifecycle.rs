@@ -80,6 +80,15 @@ impl SessionRepository<'_> {
                     .await?;
                 validate_project_session_creation_rate(&project, session_creations_in_window, now)?;
             }
+            let runtime_usage_ms = self
+                .sum_runtime_usage_ms_for_project_in_transaction(
+                    &transaction,
+                    principal,
+                    project_id,
+                    now,
+                )
+                .await?;
+            validate_project_runtime_usage_budget(&project, runtime_usage_ms, now)?;
             if let Some(max_active_sessions) = project.quotas.max_active_sessions {
                 if active_project_sessions >= max_active_sessions {
                     (

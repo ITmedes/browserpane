@@ -269,5 +269,32 @@ fn validate_project_session_creation_rate(
     ))
 }
 
+fn validate_project_runtime_usage_budget(
+    project: &StoredProject,
+    runtime_usage_ms: u64,
+    checked_at: DateTime<Utc>,
+) -> Result<(), SessionStoreError> {
+    if project.policy.usage_budget_enforcement
+        != ProjectUsageBudgetEnforcement::BlockSessionCreation
+    {
+        return Ok(());
+    }
+    let Some(max_runtime_usage_ms) = project.quotas.max_runtime_usage_ms else {
+        return Ok(());
+    };
+    if runtime_usage_ms < max_runtime_usage_ms {
+        return Ok(());
+    }
+
+    Err(project_admission_conflict(
+        ProjectAdmissionDecision::runtime_usage_budget_rejected(
+            project.id,
+            runtime_usage_ms,
+            max_runtime_usage_ms,
+            checked_at,
+        ),
+    ))
+}
+
 #[cfg(test)]
 mod tests;
