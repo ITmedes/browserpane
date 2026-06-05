@@ -213,6 +213,31 @@ impl InMemorySessionStore {
         Ok(session)
     }
 
+    pub(in crate::session_control) async fn record_session_egress_usage(
+        &self,
+        id: Uuid,
+        request: ReportSessionEgressUsageRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| session.id == id) else {
+            return Ok(None);
+        };
+        session.egress_rx_bytes = checked_session_egress_usage_bytes(
+            id,
+            session.egress_rx_bytes,
+            request.rx_bytes_delta,
+            "rx",
+        )?;
+        session.egress_tx_bytes = checked_session_egress_usage_bytes(
+            id,
+            session.egress_tx_bytes,
+            request.tx_bytes_delta,
+            "tx",
+        )?;
+        session.updated_at = Utc::now();
+        Ok(Some(session.clone()))
+    }
+
     pub(in crate::session_control) async fn create_session(
         &self,
         principal: &AuthenticatedPrincipal,

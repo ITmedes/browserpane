@@ -108,6 +108,38 @@ pub(in crate::session_control) fn validate_session_template_request(
     Ok(())
 }
 
+pub(in crate::session_control) fn validate_session_egress_usage_report(
+    request: &ReportSessionEgressUsageRequest,
+) -> Result<(), SessionStoreError> {
+    if request.rx_bytes_delta == 0 && request.tx_bytes_delta == 0 {
+        return Err(SessionStoreError::InvalidRequest(
+            "at least one of rx_bytes_delta or tx_bytes_delta must be greater than zero"
+                .to_string(),
+        ));
+    }
+    if let Some(observer_id) = &request.observer_id {
+        validate_egress_usage_observer_id(observer_id)?;
+    }
+    Ok(())
+}
+
+fn validate_egress_usage_observer_id(observer_id: &str) -> Result<(), SessionStoreError> {
+    if observer_id.trim().is_empty() || observer_id.len() > 128 {
+        return Err(SessionStoreError::InvalidRequest(
+            "observer_id must be non-empty and at most 128 characters when provided".to_string(),
+        ));
+    }
+    let valid = observer_id
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | ':'));
+    if !valid {
+        return Err(SessionStoreError::InvalidRequest(
+            "observer_id may only contain ASCII letters, digits, '.', '_', '-', or ':'".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_template_defaults(defaults: &SessionTemplateDefaults) -> Result<(), SessionStoreError> {
     let request = CreateSessionRequest {
         project_id: defaults.project_id,

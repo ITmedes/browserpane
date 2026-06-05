@@ -2763,6 +2763,38 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/egress-usage:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Session Runtime]
+      summary: Report sanitized session egress usage counters
+      description: Accepts sanitized receive/transmit byte deltas and optional observer correlation metadata from an egress proxy, TLS interceptor, secure web gateway, or custom observer. BrowserPane stores only counters and sanitized correlation fields; URL, header, credential, status, timing, payload, and decrypted traffic logs remain owned by the configured observer.
+      operationId: reportSessionEgressUsage
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportSessionEgressUsageRequest'
+      responses:
+        '200':
+          description: Updated sanitized session egress usage counters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEgressUsageResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/connections/{connection_id}/disconnect:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -6805,6 +6837,106 @@ components:
           minimum: 250
           maximum: 30000
           default: 8000
+    SessionEgressUsageSourceKind:
+      type: string
+      description: Sanitized observer class that reported the egress usage counter delta.
+      enum:
+        - proxy
+        - tls_interceptor
+        - secure_web_gateway
+        - custom
+    ReportSessionEgressUsageRequest:
+      type: object
+      description: Sanitized session egress usage counter delta. Do not include URLs, headers, credentials, response status, timing, payload bytes, or decrypted traffic contents.
+      properties:
+        rx_bytes_delta:
+          type: integer
+          format: int64
+          minimum: 0
+          default: 0
+          description: Sanitized received byte delta observed for this session.
+        tx_bytes_delta:
+          type: integer
+          format: int64
+          minimum: 0
+          default: 0
+          description: Sanitized transmitted byte delta observed for this session.
+        source_kind:
+          allOf:
+            - $ref: '#/components/schemas/SessionEgressUsageSourceKind'
+          default: proxy
+        observer_id:
+          type: string
+          maxLength: 128
+          nullable: true
+          pattern: '^[A-Za-z0-9._:-]+$'
+          description: Sanitized observer identifier, such as a proxy instance id or local observer name.
+        observed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Observer timestamp. Defaults to the gateway receipt time when omitted.
+    SessionEgressUsageResource:
+      type: object
+      required:
+        - session_id
+        - project_id
+        - egress_profile_id
+        - egress_rx_bytes
+        - egress_tx_bytes
+        - egress_total_bytes
+        - rx_bytes_delta
+        - tx_bytes_delta
+        - source_kind
+        - observer_id
+        - observed_at
+        - recorded_at
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        egress_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        egress_rx_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Accumulated sanitized received byte counter for the session.
+        egress_tx_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Accumulated sanitized transmitted byte counter for the session.
+        egress_total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Sum of egress_rx_bytes and egress_tx_bytes.
+        rx_bytes_delta:
+          type: integer
+          format: int64
+          minimum: 0
+        tx_bytes_delta:
+          type: integer
+          format: int64
+          minimum: 0
+        source_kind:
+          $ref: '#/components/schemas/SessionEgressUsageSourceKind'
+        observer_id:
+          type: string
+          nullable: true
+        observed_at:
+          type: string
+          format: date-time
+        recorded_at:
+          type: string
+          format: date-time
     RunEgressProfileReachabilityProbeRequest:
       type: object
       properties:

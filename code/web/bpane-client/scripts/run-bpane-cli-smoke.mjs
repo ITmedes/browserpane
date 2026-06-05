@@ -648,6 +648,38 @@ async function run() {
       throw new Error('CLI session automation-access did not mint automation access.');
     }
 
+    const sessionEgressUsage = runBpaneCli([
+      'session',
+      'egress-usage',
+      'report',
+      sessionId,
+      '--rx-bytes-delta',
+      '4096',
+      '--tx-bytes-delta',
+      '2048',
+      '--egress-usage-source-kind',
+      'proxy',
+      '--observer-id',
+      'cli-smoke-proxy',
+    ], cliEnv);
+    if (
+      sessionEgressUsage.session_id !== sessionId
+      || sessionEgressUsage.egress_rx_bytes < 4096
+      || sessionEgressUsage.egress_tx_bytes < 2048
+      || sessionEgressUsage.egress_total_bytes < 6144
+    ) {
+      throw new Error(`CLI session egress-usage report returned unexpected data: ${JSON.stringify(sessionEgressUsage)}`);
+    }
+
+    const projectUsageAfterEgress = runBpaneCli(['project', 'usage', projectId], cliEnv);
+    if (
+      projectUsageAfterEgress.egress_rx_bytes < 4096
+      || projectUsageAfterEgress.egress_tx_bytes < 2048
+      || projectUsageAfterEgress.egress_total_bytes < 6144
+    ) {
+      throw new Error(`CLI project usage did not include session egress usage: ${JSON.stringify(projectUsageAfterEgress)}`);
+    }
+
     const sessionEgressDiagnostics = runBpaneCli(['session', 'egress-diagnostics', sessionId], cliEnv);
     if (
       sessionEgressDiagnostics.profile_id !== egressProfileId

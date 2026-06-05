@@ -321,6 +321,7 @@ Canonical contract:
 - `GET /api/v1/egress-profiles/{id}/diagnostics`
 - `GET /api/v1/sessions/{id}/egress-diagnostics`
 - `POST /api/v1/sessions/{id}/egress-diagnostics`
+- `POST /api/v1/sessions/{id}/egress-usage`
 
 These endpoints are bearer-protected, owner-scoped, and stored in Postgres. The
 full contract is in the OpenAPI file; the route lists below call out the
@@ -412,7 +413,11 @@ that probe so operators can see whether proxy authentication succeeds or is
 rejected. The active browser probe runs only against an already-ready session
 runtime and stores sanitized public-IP, TLS issuer, and failure summary fields;
 diagnostics do not store requested URLs, headers, proxy credentials, CA
-material, or decrypted traffic.
+material, or decrypted traffic. Egress observers can report sanitized
+per-session receive/transmit byte deltas through
+`/api/v1/sessions/{id}/egress-usage`; project usage rolls those counters up for
+budget alerts while detailed URL, status, timing, credential, payload, and
+decrypted traffic logs remain in the configured proxy or secure web gateway.
 Egress-side communication tracking belongs at the configured proxy or secure
 web gateway. BrowserPane emits safe correlation metadata instead: docker-backed
 runtime containers carry `browserpane.session_id` and egress-profile labels,
@@ -707,6 +712,11 @@ Common egress-profile operations:
 ./scripts/bpane egress-profile disable <egress-profile-id>
 ./scripts/bpane session egress-diagnostics <session-id>
 ./scripts/bpane session egress-diagnostics probe <session-id>
+./scripts/bpane session egress-usage report <session-id> \
+  --rx-bytes-delta 4096 \
+  --tx-bytes-delta 2048 \
+  --egress-usage-source-kind proxy \
+  --observer-id local-squid
 ```
 
 Omit `--proxy-credential-binding-id` for proxies that do not require

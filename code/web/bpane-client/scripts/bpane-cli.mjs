@@ -85,6 +85,7 @@ const KNOWN_OPTIONS = new Set([
   'recording-mode',
   'recording-retention-sec',
   'retention-sec',
+  'rx-bytes-delta',
   'save-token',
   'session-creation-window-sec',
   'usage-budget-enforcement',
@@ -97,6 +98,10 @@ const KNOWN_OPTIONS = new Set([
   'token',
   'timezone',
   'traffic-observation-mode',
+  'tx-bytes-delta',
+  'egress-usage-source-kind',
+  'observer-id',
+  'observed-at',
   'sensitive-log-sink-name',
   'sensitive-log-sink-ref',
   'user-agent',
@@ -137,6 +142,7 @@ function usageText() {
     '  bpane session status <session-id> [options]',
     '  bpane session egress-diagnostics <session-id> [options]',
     '  bpane session egress-diagnostics probe <session-id> [options]',
+    '  bpane session egress-usage report <session-id> [options]',
     '  bpane session access-token <session-id> [options]',
     '  bpane session automation-access <session-id> [options]',
     '  bpane session disconnect-all <session-id> [options]',
@@ -220,6 +226,11 @@ function usageText() {
     '  --probe-public-ip-url <url>  Public-IP endpoint for session egress probe.',
     '  --probe-tls-url <url>        HTTPS endpoint for TLS issuer probe.',
     '  --probe-timeout-ms <ms>      Session egress probe timeout. Requires an already-ready runtime.',
+    '  --rx-bytes-delta <bytes>     Sanitized received byte delta for session egress usage.',
+    '  --tx-bytes-delta <bytes>     Sanitized transmitted byte delta for session egress usage.',
+    '  --egress-usage-source-kind <kind> Egress usage source: proxy, tls_interceptor, secure_web_gateway, or custom.',
+    '  --observer-id <id>        Sanitized observer id for egress usage reports.',
+    '  --observed-at <timestamp> Observer timestamp for egress usage reports.',
     '  --name <name>             Resource name for create/update commands.',
     '  --description <text>      Resource description for create/update commands.',
     '  --client-id <id>          External service-principal client id.',
@@ -1782,6 +1793,40 @@ function buildEgressDiagnosticsProbeRequest(options) {
   return body;
 }
 
+function buildSessionEgressUsageReport(options) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+  const rxBytesDelta = parseNonNegativeIntegerOption(options, 'rx-bytes-delta') ?? 0;
+  const txBytesDelta = parseNonNegativeIntegerOption(options, 'tx-bytes-delta') ?? 0;
+  if (rxBytesDelta === 0 && txBytesDelta === 0) {
+    throw new CliError(
+      'USAGE',
+      'At least one of --rx-bytes-delta or --tx-bytes-delta must be greater than zero.',
+      EXIT_CODES.usage,
+    );
+  }
+
+  const body = {
+    rx_bytes_delta: rxBytesDelta,
+    tx_bytes_delta: txBytesDelta,
+  };
+  const sourceKind = getOption(options, 'egress-usage-source-kind');
+  if (sourceKind !== null) {
+    body.source_kind = sourceKind;
+  }
+  const observerId = getOption(options, 'observer-id');
+  if (observerId !== null) {
+    body.observer_id = observerId;
+  }
+  const observedAt = getOption(options, 'observed-at');
+  if (observedAt !== null) {
+    body.observed_at = observedAt;
+  }
+  return body;
+}
+
 function buildEgressProfileReachabilityProbeRequest(options) {
   const rawBody = parseJsonOption(options, 'body-json');
   if (rawBody !== null) {
@@ -2411,6 +2456,25 @@ async function handleSessionCommand(config, positionals, options) {
     return await requestGateway(
       config,
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`,
+    );
+  }
+  if (action === 'egress-usage') {
+    if (positionals[2] !== 'report') {
+      throw new CliError(
+        'USAGE',
+        'Usage: bpane session egress-usage report <session-id>',
+        EXIT_CODES.usage,
+      );
+    }
+    const sessionId = requiredNestedSessionId(positionals, 'session egress-usage report');
+    return await requestGateway(
+      config,
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-usage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildSessionEgressUsageReport(options)),
+      },
     );
   }
   if (action === 'access-token') {

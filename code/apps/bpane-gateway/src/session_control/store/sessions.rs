@@ -123,6 +123,22 @@ impl SessionStore {
         }
     }
 
+    pub async fn record_session_egress_usage(
+        &self,
+        id: Uuid,
+        request: ReportSessionEgressUsageRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        validate_session_egress_usage_report(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.record_session_egress_usage(id, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.record_session_egress_usage(id, request).await
+            }
+        }
+    }
+
     pub async fn get_runtime_candidate_session(
         &self,
     ) -> Result<Option<StoredSession>, SessionStoreError> {

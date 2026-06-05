@@ -265,6 +265,71 @@ pub struct SessionNetworkIdentity {
     pub egress_profile_id: Option<Uuid>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionEgressUsageSourceKind {
+    #[default]
+    Proxy,
+    TlsInterceptor,
+    SecureWebGateway,
+    Custom,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ReportSessionEgressUsageRequest {
+    #[serde(default)]
+    pub rx_bytes_delta: u64,
+    #[serde(default)]
+    pub tx_bytes_delta: u64,
+    #[serde(default)]
+    pub source_kind: SessionEgressUsageSourceKind,
+    #[serde(default)]
+    pub observer_id: Option<String>,
+    #[serde(default)]
+    pub observed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionEgressUsageResource {
+    pub session_id: Uuid,
+    pub project_id: Option<Uuid>,
+    pub egress_profile_id: Option<Uuid>,
+    pub egress_rx_bytes: u64,
+    pub egress_tx_bytes: u64,
+    pub egress_total_bytes: u64,
+    pub rx_bytes_delta: u64,
+    pub tx_bytes_delta: u64,
+    pub source_kind: SessionEgressUsageSourceKind,
+    pub observer_id: Option<String>,
+    pub observed_at: DateTime<Utc>,
+    pub recorded_at: DateTime<Utc>,
+}
+
+impl SessionEgressUsageResource {
+    pub fn from_report(
+        session: &StoredSession,
+        request: &ReportSessionEgressUsageRequest,
+        recorded_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            session_id: session.id,
+            project_id: session.project_id,
+            egress_profile_id: session.network_identity.egress_profile_id,
+            egress_rx_bytes: session.egress_rx_bytes,
+            egress_tx_bytes: session.egress_tx_bytes,
+            egress_total_bytes: session
+                .egress_rx_bytes
+                .saturating_add(session.egress_tx_bytes),
+            rx_bytes_delta: request.rx_bytes_delta,
+            tx_bytes_delta: request.tx_bytes_delta,
+            source_kind: request.source_kind,
+            observer_id: request.observer_id.clone(),
+            observed_at: request.observed_at.unwrap_or(recorded_at),
+            recorded_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectState {

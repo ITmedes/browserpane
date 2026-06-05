@@ -23,7 +23,7 @@ pub(super) use resources::{
 };
 pub(super) use sessions::{
     validate_automation_delegate_request, validate_create_request,
-    validate_session_template_request,
+    validate_session_egress_usage_report, validate_session_template_request,
 };
 pub(super) use workflows::{
     validate_workflow_definition_request, validate_workflow_definition_version_request,

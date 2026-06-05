@@ -158,6 +158,16 @@ impl PostgresSessionStore {
             .await
     }
 
+    pub(in crate::session_control) async fn record_session_egress_usage(
+        &self,
+        id: Uuid,
+        request: ReportSessionEgressUsageRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .record_session_egress_usage(id, request)
+            .await
+    }
+
     pub(in crate::session_control) async fn set_automation_delegate_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,

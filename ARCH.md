@@ -583,9 +583,9 @@ The supported local operator CLI lives in
 - Commands cover profile inspection/init, identity me/access-review, service-principal create/list/get/update/disable, identity-mapping create/list/get/update/disable, project create/list/get/usage/update/archive,
   egress-profile create/list/get, session create/list/get/status with project
   and network-identity options, access-ticket and automation-access minting,
-  connection disconnect, stop, kill, and bounded cleanup. Egress-profile
-  create/update commands can attach a proxy-auth credential binding with
-  `--proxy-credential-binding-id`.
+  sanitized egress-usage counter reports, connection disconnect, stop, kill,
+  and bounded cleanup. Egress-profile create/update commands can attach a
+  proxy-auth credential binding with `--proxy-credential-binding-id`.
 - `deploy/examples/egress-observer` provides local Squid forward-proxy
   examples for metadata-only access-log observation, session/container IP
   correlation, and authenticated proxy validation, plus a mitmproxy

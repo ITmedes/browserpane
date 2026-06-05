@@ -503,6 +503,65 @@ describe('bpane operator CLI', () => {
     });
   });
 
+  it('reports sanitized session egress usage by id', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ egress_total_bytes: 6144 }));
+
+    const code = await runBpaneCli(
+      [
+        'session',
+        'egress-usage',
+        'report',
+        'session/with space',
+        '--rx-bytes-delta',
+        '4096',
+        '--tx-bytes-delta',
+        '2048',
+        '--egress-usage-source-kind',
+        'proxy',
+        '--observer-id',
+        'local-squid:3128',
+        '--observed-at',
+        '2026-06-05T10:00:00Z',
+      ],
+      { BPANE_BASE_URL: 'http://localhost:8080', BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toEqual({ egress_total_bytes: 6144 });
+    expect(calls[0].init.method).toBe('POST');
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/sessions/session%2Fwith%20space/egress-usage');
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      rx_bytes_delta: 4096,
+      tx_bytes_delta: 2048,
+      source_kind: 'proxy',
+      observer_id: 'local-squid:3128',
+      observed_at: '2026-06-05T10:00:00Z',
+    });
+  });
+
+  it('rejects no-op session egress usage reports', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
+
+    const code = await runBpaneCli(
+      ['session', 'egress-usage', 'report', 'session-1'],
+      { BPANE_BASE_URL: 'http://localhost:8080', BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.usage);
+    expect(calls).toHaveLength(0);
+    expect(parseStderr(io)).toMatchObject({
+      ok: false,
+      code: 'USAGE',
+      error: 'At least one of --rx-bytes-delta or --tx-bytes-delta must be greater than zero.',
+    });
+  });
+
   it('creates a session with structured CLI options', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'session-1' }));
