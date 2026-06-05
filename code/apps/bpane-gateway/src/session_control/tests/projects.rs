@@ -404,3 +404,129 @@ async fn in_memory_store_blocks_session_creation_when_rate_limit_is_exhausted() 
         .unwrap();
     assert_eq!(session_creations, 1);
 }
+
+#[tokio::test]
+async fn in_memory_store_keeps_runtime_budget_advisory_when_warning_only() {
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "docker_runtime_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 4,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = principal("owner");
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "runtime-warning-project".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas {
+                    max_active_sessions: None,
+                    max_active_workflow_runs: None,
+                    max_retained_storage_bytes: None,
+                    max_session_creations: None,
+                    max_session_creations_per_window: None,
+                    session_creation_window_sec: None,
+                    max_runtime_usage_ms: Some(1),
+                    max_egress_total_bytes: None,
+                },
+                policy: ProjectPolicy::default(),
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+
+    store
+        .create_session(
+            &owner,
+            project_session_request(project.id),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    let runtime_usage_ms = store
+        .sum_runtime_usage_ms_for_project(&owner, project.id, Utc::now())
+        .await
+        .unwrap();
+    assert!(runtime_usage_ms >= 1);
+
+    store
+        .create_session(
+            &owner,
+            project_session_request(project.id),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn in_memory_store_blocks_session_creation_when_runtime_budget_is_exhausted() {
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "docker_runtime_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 4,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = principal("owner");
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "runtime-blocking-project".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas {
+                    max_active_sessions: None,
+                    max_active_workflow_runs: None,
+                    max_retained_storage_bytes: None,
+                    max_session_creations: None,
+                    max_session_creations_per_window: None,
+                    session_creation_window_sec: None,
+                    max_runtime_usage_ms: Some(1),
+                    max_egress_total_bytes: None,
+                },
+                policy: ProjectPolicy {
+                    allowed_session_template_ids: Vec::new(),
+                    allowed_egress_profile_ids: Vec::new(),
+                    usage_budget_enforcement: ProjectUsageBudgetEnforcement::BlockSessionCreation,
+                },
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+
+    store
+        .create_session(
+            &owner,
+            project_session_request(project.id),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+
+    let rejected = store
+        .create_session(
+            &owner,
+            project_session_request(project.id),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(rejected, SessionStoreError::Conflict(message) if message.contains("runtime_usage_budget_exceeded"))
+    );
+
+    let session_creations = store
+        .count_session_creations_for_project(&owner, project.id)
+        .await
+        .unwrap();
+    assert_eq!(session_creations, 1);
+}

@@ -362,13 +362,13 @@ counted once through the workspace. The gateway rejects new retained artifacts
 that would exceed the project storage quota. Egress byte counters are
 intentionally metadata-only until an attached proxy or secure web gateway
 reports authoritative traffic totals. Session-creation, runtime, and egress
-byte budgets are warning-first: the usage resource emits `alerts` at 80% and
-100% of the configured budget. Projects can opt into
-`usage_budget_enforcement=block_session_creation` to reject new project
-sessions after `max_session_creations` is reached or the rolling
-`max_session_creations_per_window` budget is exhausted; runtime and egress
-budgets remain advisory until enforcement and proxy ingestion are
-authoritative.
+byte budgets emit `alerts` at 80% and 100% of the configured budget. Projects
+can opt into `usage_budget_enforcement=block_session_creation` to reject new
+project sessions after `max_session_creations` is reached, the rolling
+`max_session_creations_per_window` budget is exhausted, or
+`max_runtime_usage_ms` has already been consumed. Existing sessions are not
+stopped by runtime-budget admission. Egress budgets remain advisory until
+proxy ingestion is authoritative.
 Session and workflow-run resources include the project summary and admission
 reason so the admin live view, inspectors, CLI, and API clients all show
 whether work was admitted under project quota, queued by project capacity,

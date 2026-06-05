@@ -377,6 +377,33 @@ describe('SessionViewModelBuilder', () => {
     });
   });
 
+  it('shows project runtime budget admission context in details', () => {
+    const viewModel = SessionViewModelBuilder.detail({
+      session: {
+        ...SESSION,
+        admission: {
+          state: 'rejected',
+          reason_code: 'runtime_usage_budget_exceeded',
+          message: 'Project browser runtime budget is exhausted.',
+          project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+          runtime_usage_ms: 60_000,
+          max_runtime_usage_ms: 60_000,
+          checked_at: '2026-05-04T19:00:00Z',
+        },
+      },
+      browserContexts: [BROWSER_CONTEXT],
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(viewModel.facts).toContainEqual({
+      label: 'admission',
+      value: 'rejected | runtime_usage_budget_exceeded 60000/60000ms',
+      testId: 'session-admission',
+    });
+  });
+
   it('disables lifecycle actions when remote status reports live clients', () => {
     const viewModel = SessionViewModelBuilder.detail({
       session: {

@@ -383,6 +383,7 @@ const PROJECT_ADMISSION_REASON_CODES = [
   'active_session_quota_exceeded',
   'session_creation_budget_exceeded',
   'session_creation_rate_exceeded',
+  'runtime_usage_budget_exceeded',
   'active_workflow_run_quota_exceeded',
   'project_archived',
   'session_template_not_allowed',
@@ -809,6 +810,14 @@ function toProjectAdmissionDecision(value: unknown): ProjectAdmissionDecision | 
     session_creation_window_sec: optionalNumber(
       object.session_creation_window_sec,
       'project admission session_creation_window_sec',
+    ) ?? null,
+    runtime_usage_ms: optionalNumber(
+      object.runtime_usage_ms,
+      'project admission runtime_usage_ms',
+    ) ?? null,
+    max_runtime_usage_ms: optionalNumber(
+      object.max_runtime_usage_ms,
+      'project admission max_runtime_usage_ms',
     ) ?? null,
     checked_at: expectString(object.checked_at, 'project admission checked_at'),
   };

@@ -5676,7 +5676,7 @@ components:
           format: int64
           minimum: 1
           nullable: true
-          description: Soft budget for aggregated browser runtime milliseconds. Crossing this budget emits usage alerts but does not reject requests.
+          description: Budget for aggregated finalized plus live browser runtime milliseconds. Crossing this budget emits usage alerts; with usage_budget_enforcement=block_session_creation, new project sessions are rejected once the budget is exhausted.
         max_egress_total_bytes:
           type: integer
           format: int64
@@ -5702,7 +5702,7 @@ components:
           $ref: '#/components/schemas/ProjectUsageBudgetEnforcement'
     ProjectUsageBudgetEnforcement:
       type: string
-      description: Warning-only keeps project usage budgets advisory. Block-session-creation rejects new project sessions after the project reaches max_session_creations or exhausts max_session_creations_per_window in the configured window; runtime and egress budgets remain advisory.
+      description: Warning-only keeps project usage budgets advisory. Block-session-creation rejects new project sessions after the project reaches max_session_creations, exhausts max_session_creations_per_window in the configured window, or reaches max_runtime_usage_ms; egress budgets remain advisory.
       enum:
         - warning_only
         - block_session_creation
@@ -6417,6 +6417,7 @@ components:
         - active_session_quota_exceeded
         - session_creation_budget_exceeded
         - session_creation_rate_exceeded
+        - runtime_usage_budget_exceeded
         - active_workflow_run_quota_exceeded
         - project_archived
         - session_template_not_allowed
@@ -6437,6 +6438,8 @@ components:
         - session_creations_in_window
         - max_session_creations_per_window
         - session_creation_window_sec
+        - runtime_usage_ms
+        - max_runtime_usage_ms
         - checked_at
       properties:
         state:
@@ -6483,6 +6486,16 @@ components:
           nullable: true
         session_creation_window_sec:
           type: integer
+          minimum: 1
+          nullable: true
+        runtime_usage_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        max_runtime_usage_ms:
+          type: integer
+          format: int64
           minimum: 1
           nullable: true
         checked_at:

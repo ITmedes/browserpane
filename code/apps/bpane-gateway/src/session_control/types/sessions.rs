@@ -347,6 +347,7 @@ pub enum ProjectAdmissionReasonCode {
     ActiveSessionQuotaExceeded,
     SessionCreationBudgetExceeded,
     SessionCreationRateExceeded,
+    RuntimeUsageBudgetExceeded,
     ActiveWorkflowRunQuotaExceeded,
     ProjectArchived,
     SessionTemplateNotAllowed,
@@ -361,6 +362,7 @@ impl ProjectAdmissionReasonCode {
             Self::ActiveSessionQuotaExceeded => "active_session_quota_exceeded",
             Self::SessionCreationBudgetExceeded => "session_creation_budget_exceeded",
             Self::SessionCreationRateExceeded => "session_creation_rate_exceeded",
+            Self::RuntimeUsageBudgetExceeded => "runtime_usage_budget_exceeded",
             Self::ActiveWorkflowRunQuotaExceeded => "active_workflow_run_quota_exceeded",
             Self::ProjectArchived => "project_archived",
             Self::SessionTemplateNotAllowed => "session_template_not_allowed",
@@ -394,6 +396,10 @@ pub struct ProjectAdmissionDecision {
     pub max_session_creations_per_window: Option<u32>,
     #[serde(default)]
     pub session_creation_window_sec: Option<u32>,
+    #[serde(default)]
+    pub runtime_usage_ms: Option<u64>,
+    #[serde(default)]
+    pub max_runtime_usage_ms: Option<u64>,
     pub checked_at: DateTime<Utc>,
 }
 
@@ -413,6 +419,8 @@ impl ProjectAdmissionDecision {
             session_creations_in_window: None,
             max_session_creations_per_window: None,
             session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
             checked_at,
         }
     }
@@ -437,6 +445,8 @@ impl ProjectAdmissionDecision {
             session_creations_in_window: None,
             max_session_creations_per_window: None,
             session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
             checked_at,
         }
     }
@@ -461,6 +471,8 @@ impl ProjectAdmissionDecision {
             session_creations_in_window: None,
             max_session_creations_per_window: None,
             session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
             checked_at,
         }
     }
@@ -487,6 +499,8 @@ impl ProjectAdmissionDecision {
             session_creations_in_window: None,
             max_session_creations_per_window: None,
             session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
             checked_at,
         }
     }
@@ -513,6 +527,8 @@ impl ProjectAdmissionDecision {
             session_creations_in_window: None,
             max_session_creations_per_window: None,
             session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
             checked_at,
         }
     }
@@ -540,6 +556,36 @@ impl ProjectAdmissionDecision {
             session_creations_in_window: Some(session_creations_in_window),
             max_session_creations_per_window: Some(max_session_creations_per_window),
             session_creation_window_sec: Some(session_creation_window_sec),
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
+            checked_at,
+        }
+    }
+
+    pub fn runtime_usage_budget_rejected(
+        project_id: Uuid,
+        runtime_usage_ms: u64,
+        max_runtime_usage_ms: u64,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Rejected,
+            reason_code: ProjectAdmissionReasonCode::RuntimeUsageBudgetExceeded,
+            message: format!(
+                "Project browser runtime budget is exhausted ({runtime_usage_ms}/{max_runtime_usage_ms} ms)."
+            ),
+            project_id: Some(project_id),
+            active_sessions: None,
+            max_active_sessions: None,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
+            runtime_usage_ms: Some(runtime_usage_ms),
+            max_runtime_usage_ms: Some(max_runtime_usage_ms),
             checked_at,
         }
     }
@@ -566,6 +612,8 @@ impl ProjectAdmissionDecision {
             session_creations_in_window: None,
             max_session_creations_per_window: None,
             session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
             checked_at,
         }
     }
@@ -592,6 +640,8 @@ impl ProjectAdmissionDecision {
             session_creations_in_window: None,
             max_session_creations_per_window: None,
             session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
             checked_at,
         }
     }
