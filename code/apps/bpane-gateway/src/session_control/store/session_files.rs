@@ -112,6 +112,12 @@ impl SessionStore {
             })?;
         let policy = session_project_policy(self, &session).await?;
         validate_project_session_file_binding_policy(&session, policy.as_ref())?;
+        validate_project_file_workspace_policy(
+            session.project_id,
+            policy.as_ref(),
+            request.workspace_id,
+            "session file binding",
+        )?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store

@@ -141,6 +141,7 @@ export type ProjectPolicy = {
   readonly allowed_egress_profile_ids: readonly string[];
   readonly allowed_extension_ids: readonly string[];
   readonly allowed_browser_context_ids: readonly string[];
+  readonly allowed_file_workspace_ids: readonly string[];
   readonly allow_browser_uploads: boolean;
   readonly allow_browser_downloads: boolean;
   readonly allow_session_file_bindings: boolean;

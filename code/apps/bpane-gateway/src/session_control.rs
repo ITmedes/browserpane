@@ -258,6 +258,32 @@ pub(crate) fn validate_project_session_file_binding_policy(
     )))
 }
 
+pub(crate) fn validate_project_file_workspace_policy(
+    project_id: Option<Uuid>,
+    policy: Option<&ProjectPolicy>,
+    workspace_id: Uuid,
+    usage: &str,
+) -> Result<(), SessionStoreError> {
+    let Some(project_id) = project_id else {
+        return Ok(());
+    };
+    let Some(policy) = policy else {
+        return Ok(());
+    };
+    if policy.allowed_file_workspace_ids.is_empty()
+        || policy
+            .allowed_file_workspace_ids
+            .iter()
+            .any(|allowed_id| *allowed_id == workspace_id)
+    {
+        return Ok(());
+    }
+    Err(SessionStoreError::Conflict(format!(
+        "{}: project {project_id} does not allow file workspace {workspace_id} for {usage}",
+        ProjectAdmissionReasonCode::FileWorkspaceNotAllowed.as_str()
+    )))
+}
+
 pub(crate) fn validate_project_manual_recording_policy(
     session: &StoredSession,
     policy: Option<&ProjectPolicy>,

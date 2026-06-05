@@ -4,6 +4,9 @@ use std::path::{Component, Path as FsPath};
 use axum::response::Response;
 
 use super::*;
+use crate::session_control::{
+    validate_project_file_workspace_policy, ProjectPolicy, SessionStoreError,
+};
 
 pub(super) async fn resolve_workflow_run_workspace_inputs(
     state: &Arc<ApiState>,
@@ -32,6 +35,10 @@ pub(super) async fn resolve_workflow_run_workspace_inputs(
             }),
         ));
     }
+
+    let project_policy = load_project_policy_for_workspace_inputs(state, principal, project_id)
+        .await
+        .map_err(map_session_store_error)?;
 
     let mut mount_paths = HashSet::new();
     let mut inputs = Vec::with_capacity(requests.len());
@@ -66,6 +73,13 @@ pub(super) async fn resolve_workflow_run_workspace_inputs(
             project_id,
             &workspace,
         )?;
+        validate_project_file_workspace_policy(
+            project_id,
+            project_policy.as_ref(),
+            request.workspace_id,
+            "workflow run workspace input",
+        )
+        .map_err(map_session_store_error)?;
 
         let file = state
             .session_store
@@ -112,6 +126,22 @@ pub(super) async fn resolve_workflow_run_workspace_inputs(
     }
 
     Ok(inputs)
+}
+
+async fn load_project_policy_for_workspace_inputs(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    project_id: Option<Uuid>,
+) -> Result<Option<ProjectPolicy>, SessionStoreError> {
+    let Some(project_id) = project_id else {
+        return Ok(None);
+    };
+    let project = state
+        .session_store
+        .get_project_for_owner(principal, project_id)
+        .await?
+        .ok_or_else(|| SessionStoreError::NotFound(format!("project {project_id} not found")))?;
+    Ok(Some(project.policy))
 }
 
 fn validate_workflow_workspace_project_scope(

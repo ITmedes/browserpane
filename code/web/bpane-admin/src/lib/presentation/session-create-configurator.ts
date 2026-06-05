@@ -529,6 +529,9 @@ export function projectOptionLabel(project: ProjectResource): string {
     project.policy.allowed_browser_context_ids.length > 0
       ? `contexts=${project.policy.allowed_browser_context_ids.length}`
       : null,
+    project.policy.allowed_file_workspace_ids.length > 0
+      ? `workspaces=${project.policy.allowed_file_workspace_ids.length}`
+      : null,
     !project.policy.allow_browser_uploads ? 'blocks_uploads' : null,
     !project.policy.allow_browser_downloads ? 'blocks_downloads' : null,
     !project.policy.allow_session_file_bindings ? 'blocks_file_bindings' : null,
@@ -574,6 +577,9 @@ function projectPolicySummary(project: ProjectResource): string {
   }
   if (project.policy.allowed_browser_context_ids.length > 0) {
     facts.push(`${project.policy.allowed_browser_context_ids.length} contexts`);
+  }
+  if (project.policy.allowed_file_workspace_ids.length > 0) {
+    facts.push(`${project.policy.allowed_file_workspace_ids.length} workspaces`);
   }
   if (!project.policy.allow_browser_uploads) {
     facts.push('blocks uploads');

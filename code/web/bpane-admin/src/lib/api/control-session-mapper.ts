@@ -654,6 +654,10 @@ function toProjectPolicy(value: unknown): ProjectPolicy {
       object.allowed_browser_context_ids ?? [],
       'project policy allowed_browser_context_ids',
     ),
+    allowed_file_workspace_ids: toStringArray(
+      object.allowed_file_workspace_ids ?? [],
+      'project policy allowed_file_workspace_ids',
+    ),
     allow_browser_uploads: expectBoolean(
       object.allow_browser_uploads ?? true,
       'project policy allow_browser_uploads',

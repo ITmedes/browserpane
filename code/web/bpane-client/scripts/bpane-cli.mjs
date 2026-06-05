@@ -19,6 +19,7 @@ const KNOWN_OPTIONS = new Set([
   'allowed-browser-context-id',
   'allowed-egress-profile-id',
   'allowed-extension-id',
+  'allowed-file-workspace-id',
   'allow-browser-downloads',
   'allow-browser-uploads',
   'allow-manual-recordings',
@@ -249,6 +250,7 @@ function usageText() {
     '  --allowed-egress-profile-id <id> Repeatable project policy egress-profile allow-list entry.',
     '  --allowed-extension-id <id> Repeatable project policy extension-definition allow-list entry.',
     '  --allowed-browser-context-id <id> Repeatable project policy reusable browser-context allow-list entry.',
+    '  --allowed-file-workspace-id <id> Repeatable project policy file-workspace allow-list entry.',
     '  --allow-browser-uploads <bool> Project policy switch for browser upload transfers.',
     '  --allow-browser-downloads <bool> Project policy switch for browser download transfers.',
     '  --allow-session-file-bindings <bool> Project policy switch for session workspace-file bindings.',
@@ -1224,6 +1226,10 @@ function buildProjectPolicy(options, existingPolicy = null) {
   const browserContextIds = getOptions(options, 'allowed-browser-context-id');
   if (browserContextIds.length) {
     policy.allowed_browser_context_ids = browserContextIds.filter((contextId) => contextId !== '');
+  }
+  const fileWorkspaceIds = getOptions(options, 'allowed-file-workspace-id');
+  if (fileWorkspaceIds.length) {
+    policy.allowed_file_workspace_ids = fileWorkspaceIds.filter((workspaceId) => workspaceId !== '');
   }
   const allowBrowserUploads = parseBooleanOption(options, 'allow-browser-uploads');
   if (allowBrowserUploads !== null) {

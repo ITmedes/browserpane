@@ -348,10 +348,10 @@ egress profiles, approved extensions, and reusable browser contexts, a
 `usage_budget_enforcement` mode, browser upload/download, session-file binding,
 and manual-recording policy switches, and sanitized usage counters. Creating a
 session or workflow run with `project_id` records the admission decision and
-enforces archived-project checks plus template, egress, extension, and
-reusable-context allow-lists before runtime launch. Project policy can also
-reject browser upload/download transfers, session-file binding creation, and
-ad-hoc manual recording starts for project sessions. Session resources expose
+enforces archived-project checks plus template, egress, extension,
+reusable-context, and file-workspace allow-lists before runtime launch. Project
+policy can also reject browser upload/download transfers, session-file binding
+creation, and ad-hoc manual recording starts for project sessions. Session resources expose
 `capabilities.file_transfer=false` when the project disables either browser
 upload or browser download transfer. Credential bindings and
 egress profiles can be owner-scoped or assigned to a project; project-scoped
@@ -710,7 +710,8 @@ Common project operations:
   --allowed-session-template-id <template-id> \
   --allowed-egress-profile-id <egress-profile-id> \
   --allowed-extension-id <extension-id> \
-  --allowed-browser-context-id <browser-context-id>
+  --allowed-browser-context-id <browser-context-id> \
+  --allowed-file-workspace-id <workspace-id>
 ./scripts/bpane project archive <project-id>
 ./scripts/bpane session-template create tenant-debug-session --project-id <project-id> --default-label purpose=debug
 ```

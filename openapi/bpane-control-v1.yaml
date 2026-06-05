@@ -5765,6 +5765,12 @@ components:
           items:
             type: string
             format: uuid
+        allowed_file_workspace_ids:
+          type: array
+          description: Empty or omitted means file workspaces are unrestricted for this project. When configured, project workflow runs and session-file bindings may only consume listed workspace ids.
+          items:
+            type: string
+            format: uuid
         allow_browser_uploads:
           type: boolean
           default: true

@@ -270,6 +270,9 @@ function policyLabel(project: ProjectResource): string {
   if (project.policy.allowed_browser_context_ids.length > 0) {
     facts.push(`${project.policy.allowed_browser_context_ids.length} contexts`);
   }
+  if (project.policy.allowed_file_workspace_ids.length > 0) {
+    facts.push(`${project.policy.allowed_file_workspace_ids.length} workspaces`);
+  }
   if (!project.policy.allow_browser_uploads) {
     facts.push('blocks uploads');
   }
