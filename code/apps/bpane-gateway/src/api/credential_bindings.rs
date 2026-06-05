@@ -46,11 +46,13 @@ async fn list_credential_bindings(
         .list_credential_bindings_for_owner(&principal)
         .await
         .map_err(map_session_store_error)?
-        .into_iter()
-        .map(|binding| binding.to_resource())
-        .collect();
+        .into_iter();
+    let mut resources = Vec::new();
+    for binding in credential_bindings {
+        resources.push(credential_binding_resource(&state, &principal, binding).await?);
+    }
     Ok(Json(CredentialBindingListResponse {
-        credential_bindings,
+        credential_bindings: resources,
     }))
 }
 
@@ -89,6 +91,7 @@ async fn create_credential_binding(
             &principal,
             PersistCredentialBindingRequest {
                 id: binding_id,
+                project_id: request.project_id,
                 name: request.name,
                 provider: request.provider,
                 external_ref: stored_secret.external_ref,
@@ -101,7 +104,10 @@ async fn create_credential_binding(
         )
         .await
         .map_err(map_session_store_error)?;
-    Ok((StatusCode::CREATED, Json(binding.to_resource())))
+    Ok((
+        StatusCode::CREATED,
+        Json(credential_binding_resource(&state, &principal, binding).await?),
+    ))
 }
 
 async fn get_credential_binding(
@@ -125,7 +131,36 @@ async fn get_credential_binding(
                 }),
             )
         })?;
-    Ok(Json(binding.to_resource()))
+    Ok(Json(
+        credential_binding_resource(&state, &principal, binding).await?,
+    ))
+}
+
+async fn credential_binding_resource(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    binding: StoredCredentialBinding,
+) -> Result<CredentialBindingResource, (StatusCode, Json<ErrorResponse>)> {
+    let mut resource = binding.to_resource();
+    resource.project = credential_binding_project_summary(state, principal, resource.project_id)
+        .await
+        .map_err(map_session_store_error)?;
+    Ok(resource)
+}
+
+async fn credential_binding_project_summary(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    project_id: Option<Uuid>,
+) -> Result<Option<SessionProjectResource>, SessionStoreError> {
+    let Some(project_id) = project_id else {
+        return Ok(None);
+    };
+    Ok(state
+        .session_store
+        .get_project_for_owner(principal, project_id)
+        .await?
+        .map(|project| project.to_session_project_resource()))
 }
 
 async fn get_workflow_run_credential_binding_resolved(

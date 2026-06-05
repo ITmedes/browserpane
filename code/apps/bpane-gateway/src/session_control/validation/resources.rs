@@ -355,6 +355,11 @@ pub(in crate::session_control) fn validate_identity_mapping_request(
 pub(in crate::session_control) fn validate_credential_binding_request(
     request: &PersistCredentialBindingRequest,
 ) -> Result<(), SessionStoreError> {
+    if request.project_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "credential binding project_id must not be nil when provided".to_string(),
+        ));
+    }
     if request.name.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "credential binding name must not be empty".to_string(),

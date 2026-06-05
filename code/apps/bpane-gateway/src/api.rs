@@ -22,7 +22,7 @@ use crate::automation_tasks::{
 use crate::credentials::{
     CredentialBindingListResponse, CredentialBindingResource, CredentialProvider,
     PersistCredentialBindingRequest, ResolvedWorkflowRunCredentialBindingResource,
-    StoreCredentialSecretRequest, WorkflowRunCredentialBinding,
+    StoreCredentialSecretRequest, StoredCredentialBinding, WorkflowRunCredentialBinding,
 };
 use crate::extensions::{
     AppliedExtension, ExtensionDefinitionListResponse, ExtensionDefinitionResource,

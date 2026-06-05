@@ -199,6 +199,61 @@ fn finalize_runtime_usage(session: &mut StoredSession, now: chrono::DateTime<Utc
 }
 
 impl InMemorySessionStore {
+    async fn validate_session_egress_credential_project_scope(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: &CreateSessionRequest,
+    ) -> Result<(), SessionStoreError> {
+        let Some(egress_profile_id) = request
+            .network_identity
+            .as_ref()
+            .and_then(|identity| identity.egress_profile_id)
+        else {
+            return Ok(());
+        };
+        let Some(credential_binding_id) = self
+            .egress_profiles
+            .lock()
+            .await
+            .iter()
+            .find(|profile| {
+                profile.id == egress_profile_id
+                    && profile.owner_subject == principal.subject
+                    && profile.owner_issuer == principal.issuer
+            })
+            .and_then(|profile| {
+                profile
+                    .proxy
+                    .as_ref()
+                    .and_then(|proxy| proxy.credential_binding_id)
+            })
+        else {
+            return Ok(());
+        };
+        let binding = self
+            .credential_bindings
+            .lock()
+            .await
+            .iter()
+            .find(|binding| {
+                binding.id == credential_binding_id
+                    && binding.owner_subject == principal.subject
+                    && binding.owner_issuer == principal.issuer
+            })
+            .cloned()
+            .ok_or_else(|| {
+                SessionStoreError::NotFound(format!(
+                    "credential binding {credential_binding_id} not found"
+                ))
+            })?;
+        validate_credential_binding_project_scope(
+            request.project_id,
+            binding.id,
+            binding.project_id,
+            "session",
+        )
+    }
+
     pub(in crate::session_control) async fn get_session_by_id(
         &self,
         id: Uuid,
@@ -245,6 +300,8 @@ impl InMemorySessionStore {
         owner_mode: SessionOwnerMode,
     ) -> Result<StoredSession, SessionStoreError> {
         let now = Utc::now();
+        self.validate_session_egress_credential_project_scope(principal, &request)
+            .await?;
         let mut sessions = self.sessions.lock().await;
         let (admission, lifecycle_state) = if let Some(project_id) = request.project_id {
             let project = self

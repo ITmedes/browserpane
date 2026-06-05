@@ -19,6 +19,87 @@ fn queued_session_admission(
 }
 
 impl SessionRepository<'_> {
+    async fn validate_session_egress_credential_project_scope_in_transaction(
+        &self,
+        transaction: &Transaction<'_>,
+        principal: &AuthenticatedPrincipal,
+        request: &CreateSessionRequest,
+    ) -> Result<(), SessionStoreError> {
+        let Some(egress_profile_id) = request
+            .network_identity
+            .as_ref()
+            .and_then(|identity| identity.egress_profile_id)
+        else {
+            return Ok(());
+        };
+        let Some(profile_row) = transaction
+            .query_opt(
+                r#"
+                SELECT proxy
+                FROM control_egress_profiles
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[&egress_profile_id, &principal.subject, &principal.issuer],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to load egress profile for credential scope validation: {error}"
+                ))
+            })?
+        else {
+            return Ok(());
+        };
+        let proxy = profile_row
+            .get::<_, Option<Value>>("proxy")
+            .map(serde_json::from_value::<EgressProxyConfig>)
+            .transpose()
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to decode egress profile proxy for credential scope validation: {error}"
+                ))
+            })?;
+        let Some(credential_binding_id) = proxy.and_then(|proxy| proxy.credential_binding_id)
+        else {
+            return Ok(());
+        };
+        let binding_row = transaction
+            .query_opt(
+                r#"
+                SELECT project_id
+                FROM control_credential_bindings
+                WHERE id = $1
+                  AND owner_subject = $2
+                  AND owner_issuer = $3
+                "#,
+                &[
+                    &credential_binding_id,
+                    &principal.subject,
+                    &principal.issuer,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to load credential binding for egress scope validation: {error}"
+                ))
+            })?
+            .ok_or_else(|| {
+                SessionStoreError::NotFound(format!(
+                    "credential binding {credential_binding_id} not found"
+                ))
+            })?;
+        let binding_project_id = binding_row.get("project_id");
+        validate_credential_binding_project_scope(
+            request.project_id,
+            credential_binding_id,
+            binding_project_id,
+            "session",
+        )
+    }
+
     pub(in crate::session_control) async fn create_session(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -128,6 +209,12 @@ impl SessionRepository<'_> {
                 SessionLifecycleState::Ready,
             )
         };
+        self.validate_session_egress_credential_project_scope_in_transaction(
+            &transaction,
+            principal,
+            &request,
+        )
+        .await?;
         if lifecycle_state.is_runtime_candidate() {
             let active_runtime_candidates = self
                 .count_active_runtime_candidates_in_transaction(&transaction)

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::session_control::SessionProjectResource;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CredentialBindingProvider {
@@ -76,6 +78,7 @@ pub struct CredentialTotpMetadata {
 #[derive(Debug, Clone)]
 pub struct PersistCredentialBindingRequest {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
     pub name: String,
     pub provider: CredentialBindingProvider,
     pub external_ref: String,
@@ -89,6 +92,7 @@ pub struct PersistCredentialBindingRequest {
 #[derive(Debug, Clone)]
 pub struct StoredCredentialBinding {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
     pub owner_subject: String,
     pub owner_issuer: String,
     pub name: String,
@@ -111,6 +115,8 @@ pub struct CredentialBindingListResponse {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CredentialBindingResource {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
+    pub project: Option<SessionProjectResource>,
     pub name: String,
     pub provider: CredentialBindingProvider,
     pub external_ref: String,
@@ -126,6 +132,7 @@ pub struct CredentialBindingResource {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowRunCredentialBinding {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
     pub name: String,
     pub provider: CredentialBindingProvider,
     pub namespace: Option<String>,
@@ -138,6 +145,7 @@ pub struct WorkflowRunCredentialBinding {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct WorkflowRunCredentialBindingResource {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
     pub name: String,
     pub provider: CredentialBindingProvider,
     pub namespace: Option<String>,
@@ -157,6 +165,8 @@ impl StoredCredentialBinding {
     pub fn to_resource(&self) -> CredentialBindingResource {
         CredentialBindingResource {
             id: self.id,
+            project_id: self.project_id,
+            project: None,
             name: self.name.clone(),
             provider: self.provider,
             external_ref: self.external_ref.clone(),
@@ -173,6 +183,7 @@ impl StoredCredentialBinding {
     pub fn to_workflow_run_binding(&self) -> WorkflowRunCredentialBinding {
         WorkflowRunCredentialBinding {
             id: self.id,
+            project_id: self.project_id,
             name: self.name.clone(),
             provider: self.provider,
             namespace: self.namespace.clone(),
@@ -188,6 +199,7 @@ impl WorkflowRunCredentialBinding {
     pub fn to_resource(&self, run_id: Uuid) -> WorkflowRunCredentialBindingResource {
         WorkflowRunCredentialBindingResource {
             id: self.id,
+            project_id: self.project_id,
             name: self.name.clone(),
             provider: self.provider,
             namespace: self.namespace.clone(),
