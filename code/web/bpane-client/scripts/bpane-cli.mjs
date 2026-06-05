@@ -203,7 +203,7 @@ function usageText() {
     '  --state <state>           Repeatable cleanup state filter. Default: stopped.',
     '  --runtime-state <state>   Repeatable session runtime-state filter.',
     '  --template-id <id>        Session template id for create/list filters.',
-    '  --project-id <id>         Project id for session create/template defaults and project-owned resource creates.',
+    '  --project-id <id>         Project id for session create/template defaults and project-scoped resource creates.',
     '  --browser-context-id <id> Browser context id for reusable session creation.',
     '  --browser-context-mode <mode> Browser context mode: fresh, ephemeral, reusable.',
     '  --locale <tag>            Session locale, for example de-DE.',
@@ -1578,6 +1578,10 @@ function buildEgressProfileRequest(options, fallbackName = null) {
     );
   }
   const body = { name };
+  const projectId = getOption(options, 'project-id');
+  if (projectId) {
+    body.project_id = projectId;
+  }
   const description = getOption(options, 'description');
   if (description !== null) {
     body.description = description;
@@ -1669,6 +1673,10 @@ function buildEgressProfileUpdateRequest(existingProfile, options, forcedState =
   }
 
   const body = { name };
+  const projectId = getOption(options, 'project-id') ?? existingProfile?.project_id ?? null;
+  if (projectId) {
+    body.project_id = projectId;
+  }
   const description = getOption(options, 'description');
   if (description !== null) {
     body.description = description;

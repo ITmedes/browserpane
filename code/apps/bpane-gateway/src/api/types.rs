@@ -387,6 +387,8 @@ fn default_identity_mapping_state() -> IdentityMappingState {
 
 #[derive(Deserialize)]
 pub(super) struct CreateEgressProfileRequest {
+    #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
     pub(super) name: String,
     #[serde(default)]
     pub(super) description: Option<String>,

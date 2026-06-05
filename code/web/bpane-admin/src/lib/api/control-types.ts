@@ -392,6 +392,8 @@ export type CreateProjectCommand = {
 
 export type EgressProfileResource = {
   readonly id: string;
+  readonly project_id?: string | null;
+  readonly project?: SessionProjectResource | null;
   readonly name: string;
   readonly description?: string | null;
   readonly labels: Readonly<Record<string, string>>;
@@ -411,6 +413,7 @@ export type EgressProfileListResponse = {
 };
 
 export type CreateEgressProfileCommand = {
+  readonly project_id?: string | null;
   readonly name: string;
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;

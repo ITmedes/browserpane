@@ -387,6 +387,7 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
     };
     let profile = StoredEgressProfile {
         id: profile_id,
+        project_id: None,
         owner_subject: "owner".to_string(),
         owner_issuer: "https://issuer.example".to_string(),
         name: "eu-support-egress".to_string(),
@@ -605,6 +606,7 @@ async fn docker_runtime_resolves_secret_backed_proxy_auth_for_launch() {
         .create_egress_profile(
             &principal,
             PersistEgressProfileRequest {
+                project_id: None,
                 name: "authenticated-proxy".to_string(),
                 description: None,
                 labels: HashMap::new(),

@@ -47,7 +47,10 @@ Current product shape:
   deltas for project usage and alerting, but must not ingest requested URLs,
   headers, proxy credentials, payload contents, decrypted traffic, or raw CA
   material.
-  Session and egress-profile resources expose sanitized egress diagnostics so
+  Egress profiles can be owner-scoped or project-scoped; project-bound profiles
+  and project-bound proxy credential bindings are only usable by sessions in the
+  same project. Session and egress-profile resources expose sanitized egress
+  diagnostics so
   operators can distinguish configuration-only proof, runtime launch metadata,
   and active browser probe evidence without exposing requested URLs, proxy
   credentials, CA material, or decrypted traffic. Active browser probes run only

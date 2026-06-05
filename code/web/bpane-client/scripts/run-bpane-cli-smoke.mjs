@@ -299,6 +299,8 @@ async function run() {
       'suite=bpane-cli-smoke',
       '--label',
       `run_id=${runLabel}`,
+      '--project-id',
+      projectId,
       '--proxy-url',
       'https://proxy.example:8443',
       '--bypass-rule',
@@ -311,7 +313,7 @@ async function run() {
       'EU support CA',
     ], cliEnv);
     const egressProfileId = egressProfile.id;
-    if (!egressProfileId || egressProfile.effective?.proxy_configured !== true) {
+    if (!egressProfileId || egressProfile.project_id !== projectId || egressProfile.effective?.proxy_configured !== true) {
       throw new Error(`CLI egress-profile create returned an invalid profile: ${JSON.stringify(egressProfile)}`);
     }
 
@@ -321,7 +323,12 @@ async function run() {
     }
 
     const fetchedEgressProfile = runBpaneCli(['egress-profile', 'get', egressProfileId], cliEnv);
-    if (fetchedEgressProfile.id !== egressProfileId || fetchedEgressProfile.bypass_rules?.length !== 2) {
+    if (
+      fetchedEgressProfile.id !== egressProfileId
+      || fetchedEgressProfile.project_id !== projectId
+      || fetchedEgressProfile.project?.id !== projectId
+      || fetchedEgressProfile.bypass_rules?.length !== 2
+    ) {
       throw new Error(`CLI egress-profile get returned unexpected profile data: ${JSON.stringify(fetchedEgressProfile)}`);
     }
     const egressProfileDiagnostics = runBpaneCli(['egress-profile', 'diagnostics', egressProfileId], cliEnv);

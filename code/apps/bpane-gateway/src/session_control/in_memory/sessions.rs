@@ -211,7 +211,7 @@ impl InMemorySessionStore {
         else {
             return Ok(());
         };
-        let Some(credential_binding_id) = self
+        let Some(profile) = self
             .egress_profiles
             .lock()
             .await
@@ -221,12 +221,15 @@ impl InMemorySessionStore {
                     && profile.owner_subject == principal.subject
                     && profile.owner_issuer == principal.issuer
             })
-            .and_then(|profile| {
-                profile
-                    .proxy
-                    .as_ref()
-                    .and_then(|proxy| proxy.credential_binding_id)
-            })
+            .cloned()
+        else {
+            return Ok(());
+        };
+        validate_egress_profile_project_scope(request.project_id, profile.id, profile.project_id)?;
+        let Some(credential_binding_id) = profile
+            .proxy
+            .as_ref()
+            .and_then(|proxy| proxy.credential_binding_id)
         else {
             return Ok(());
         };

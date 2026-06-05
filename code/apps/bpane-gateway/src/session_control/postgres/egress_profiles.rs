@@ -2,6 +2,7 @@ use super::*;
 
 const EGRESS_PROFILE_COLUMNS: &str = r#"
     id,
+    project_id,
     owner_subject,
     owner_issuer,
     name,
@@ -144,6 +145,7 @@ impl EgressProfileRepository<'_> {
             r#"
             INSERT INTO control_egress_profiles (
                 id,
+                project_id,
                 owner_subject,
                 owner_issuer,
                 name,
@@ -157,7 +159,7 @@ impl EgressProfileRepository<'_> {
                 created_at,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $13)
             RETURNING
                 {EGRESS_PROFILE_COLUMNS}
             "#
@@ -171,6 +173,7 @@ impl EgressProfileRepository<'_> {
                 &query,
                 &[
                     &Uuid::now_v7(),
+                    &request.project_id,
                     &principal.subject,
                     &principal.issuer,
                     &request.name,
@@ -284,14 +287,15 @@ impl EgressProfileRepository<'_> {
             r#"
             UPDATE control_egress_profiles
             SET
-                name = $4,
-                description = $5,
-                labels = $6::jsonb,
-                proxy = $7::jsonb,
-                bypass_rules = $8::jsonb,
-                custom_ca = $9::jsonb,
-                traffic_observation = $10::jsonb,
-                state = $11,
+                project_id = $4,
+                name = $5,
+                description = $6,
+                labels = $7::jsonb,
+                proxy = $8::jsonb,
+                bypass_rules = $9::jsonb,
+                custom_ca = $10::jsonb,
+                traffic_observation = $11::jsonb,
+                state = $12,
                 updated_at = NOW()
             WHERE id = $1
               AND owner_subject = $2
@@ -311,6 +315,7 @@ impl EgressProfileRepository<'_> {
                     &id,
                     &principal.subject,
                     &principal.issuer,
+                    &request.project_id,
                     &request.name,
                     &request.description,
                     &json_labels(&request.labels),

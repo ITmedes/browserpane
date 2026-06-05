@@ -1357,6 +1357,7 @@ pub struct SessionEffectiveEgress {
 
 #[derive(Debug, Clone)]
 pub struct PersistEgressProfileRequest {
+    pub project_id: Option<Uuid>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
@@ -1370,6 +1371,7 @@ pub struct PersistEgressProfileRequest {
 #[derive(Debug, Clone)]
 pub struct StoredEgressProfile {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
     pub owner_subject: String,
     pub owner_issuer: String,
     pub name: String,
@@ -1387,6 +1389,8 @@ pub struct StoredEgressProfile {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct EgressProfileResource {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
+    pub project: Option<SessionProjectResource>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
@@ -1431,6 +1435,8 @@ impl StoredEgressProfile {
     pub fn to_resource(&self) -> EgressProfileResource {
         EgressProfileResource {
             id: self.id,
+            project_id: self.project_id,
+            project: None,
             name: self.name.clone(),
             description: self.description.clone(),
             labels: self.labels.clone(),

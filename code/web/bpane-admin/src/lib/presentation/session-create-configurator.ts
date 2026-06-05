@@ -255,6 +255,8 @@ function parseNetworkIdentity(
       errors.push('Selected egress profile is not available.');
     } else if (profile?.state === 'disabled') {
       errors.push('Selected egress profile is disabled.');
+    } else if (profile?.project_id && profile.project_id !== (state.projectId ?? '').trim()) {
+      errors.push('Selected egress profile belongs to a different project.');
     } else {
       identity.egress_profile_id = egressProfileId;
     }
@@ -497,6 +499,7 @@ export function egressProfileOptionLabel(profile: EgressProfileResource): string
     profile.effective.sensitive_log_sink_configured ? 'log sink' : null,
     profile.effective.custom_ca_configured ? 'custom CA' : null,
     profile.effective.bypass_rule_count > 0 ? `${profile.effective.bypass_rule_count} bypass` : null,
+    profile.project_id ? `project=${profile.project?.name ?? shortId(profile.project_id)}` : 'owner scoped',
   ].filter(Boolean);
   return `${profile.name} (${signals.join(', ')})`;
 }

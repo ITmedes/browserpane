@@ -9,6 +9,12 @@ import {
 
 const PROFILE: EgressProfileResource = {
   id: 'profile-1',
+  project_id: '019e4faf-77ab-728d-9cd2-54e21d377b46',
+  project: {
+    id: '019e4faf-77ab-728d-9cd2-54e21d377b46',
+    name: 'EU Support',
+    state: 'active',
+  },
   name: 'EU support egress',
   description: 'Support outbound path',
   labels: { region: 'eu' },
@@ -86,12 +92,14 @@ describe('egress profile catalog helpers', () => {
       kind: 'tls',
       health: 'ready',
       proofLevel: 'configuration',
-      badges: ['proxy', 'proxy auth', 'TLS inspect', 'custom CA', 'log sink', 'config proof'],
+      projectLabel: 'EU Support',
+      badges: ['proxy', 'proxy auth', 'TLS inspect', 'custom CA', 'log sink', 'project scoped', 'config proof'],
     });
   });
 
   it('creates a valid tls_intercept command from form input', () => {
     const result = buildEgressProfileCommand({
+      projectId: '019e4faf-77ab-728d-9cd2-54e21d377b46',
       name: 'Local TLS',
       description: 'Local interception profile',
       labels: 'browserpane.local=true\nregion=local',
@@ -110,6 +118,7 @@ describe('egress profile catalog helpers', () => {
       ok: true,
       command: {
         name: 'Local TLS',
+        project_id: '019e4faf-77ab-728d-9cd2-54e21d377b46',
         labels: { 'browserpane.local': 'true', region: 'local' },
         proxy: {
           url: 'http://bpane-egress-tls-observer:3129',
@@ -131,6 +140,7 @@ describe('egress profile catalog helpers', () => {
 
   it('rejects incomplete tls_intercept form input before hitting the API', () => {
     const result = buildEgressProfileCommand({
+      projectId: '',
       name: 'Bad TLS',
       description: '',
       labels: '',
@@ -153,8 +163,10 @@ describe('egress profile catalog helpers', () => {
 
   it('turns an existing profile into clone and disable payloads', () => {
     expect(formFromEgressProfile(PROFILE, { clone: true }).name).toBe('EU support egress-copy');
+    expect(formFromEgressProfile(PROFILE, { clone: true }).projectId).toBe(PROFILE.project_id);
     expect(commandFromEgressProfile(PROFILE, 'disabled')).toMatchObject({
       name: 'EU support egress',
+      project_id: PROFILE.project_id,
       state: 'disabled',
       traffic_observation: {
         mode: 'tls_intercept',

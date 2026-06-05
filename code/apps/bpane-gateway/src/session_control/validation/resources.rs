@@ -433,6 +433,11 @@ pub(in crate::session_control) fn validate_credential_binding_request(
 pub(in crate::session_control) fn validate_egress_profile_request(
     request: &PersistEgressProfileRequest,
 ) -> Result<(), SessionStoreError> {
+    if request.project_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "egress profile project_id must not be nil".to_string(),
+        ));
+    }
     if request.name.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "egress profile name must not be empty".to_string(),

@@ -664,6 +664,153 @@ async fn active_egress_probe_failures_are_persisted_as_session_diagnostics() {
 }
 
 #[tokio::test]
+async fn egress_profile_project_scope_enforces_session_and_proxy_credentials() {
+    let (app, token) = test_router_with_docker_pool().await;
+
+    let project_a_id = create_test_project(&app, &token, "Project A").await;
+    let project_b_id = create_test_project(&app, &token, "Project B").await;
+
+    let owner_profile = create_egress_profile_json(
+        &app,
+        &token,
+        json!({
+            "name": "owner-shared-egress",
+            "proxy": { "url": "http://proxy.example:3128" }
+        }),
+        StatusCode::CREATED,
+    )
+    .await;
+    assert_eq!(owner_profile["project_id"], Value::Null);
+    assert_eq!(owner_profile["project"], Value::Null);
+
+    let owner_profile_session = create_session_json(
+        &app,
+        &token,
+        json!({
+            "project_id": project_a_id,
+            "network_identity": {
+                "egress_profile_id": owner_profile["id"].as_str().unwrap()
+            }
+        }),
+        StatusCode::CREATED,
+    )
+    .await;
+    stop_session(&app, &token, owner_profile_session["id"].as_str().unwrap()).await;
+
+    let project_profile = create_egress_profile_json(
+        &app,
+        &token,
+        json!({
+            "project_id": project_a_id,
+            "name": "project-a-egress",
+            "proxy": { "url": "http://proxy.example:3128" }
+        }),
+        StatusCode::CREATED,
+    )
+    .await;
+    let project_profile_id = project_profile["id"].as_str().unwrap().to_string();
+    assert_eq!(project_profile["project_id"], project_a_id);
+    assert_eq!(project_profile["project"]["id"], project_a_id);
+    assert_eq!(project_profile["project"]["name"], "Project A");
+
+    let project_profile_session = create_session_json(
+        &app,
+        &token,
+        json!({
+            "project_id": project_a_id,
+            "network_identity": {
+                "egress_profile_id": project_profile_id
+            }
+        }),
+        StatusCode::CREATED,
+    )
+    .await;
+    stop_session(
+        &app,
+        &token,
+        project_profile_session["id"].as_str().unwrap(),
+    )
+    .await;
+
+    let cross_project_session = create_session_json(
+        &app,
+        &token,
+        json!({
+            "project_id": project_b_id,
+            "network_identity": {
+                "egress_profile_id": project_profile_id
+            }
+        }),
+        StatusCode::CONFLICT,
+    )
+    .await;
+    assert!(cross_project_session["error"]
+        .as_str()
+        .unwrap()
+        .contains("egress_profile_project_scope_mismatch"));
+
+    let binding_a_id =
+        create_proxy_credential_binding(&app, &token, "project-a-proxy-auth", Some(&project_a_id))
+            .await;
+    let binding_b_id =
+        create_proxy_credential_binding(&app, &token, "project-b-proxy-auth", Some(&project_b_id))
+            .await;
+
+    let scoped_auth_profile = create_egress_profile_json(
+        &app,
+        &token,
+        json!({
+            "project_id": project_a_id,
+            "name": "project-a-auth-egress",
+            "proxy": {
+                "url": "http://proxy.example:3128",
+                "credential_binding_id": binding_a_id
+            }
+        }),
+        StatusCode::CREATED,
+    )
+    .await;
+    assert_eq!(scoped_auth_profile["project_id"], project_a_id);
+
+    let mismatched_profile = create_egress_profile_json(
+        &app,
+        &token,
+        json!({
+            "project_id": project_a_id,
+            "name": "project-a-wrong-auth-egress",
+            "proxy": {
+                "url": "http://proxy.example:3128",
+                "credential_binding_id": binding_b_id
+            }
+        }),
+        StatusCode::CONFLICT,
+    )
+    .await;
+    assert!(mismatched_profile["error"]
+        .as_str()
+        .unwrap()
+        .contains("credential_binding_project_scope_mismatch"));
+
+    let owner_profile_project_binding = create_egress_profile_json(
+        &app,
+        &token,
+        json!({
+            "name": "owner-wrong-auth-egress",
+            "proxy": {
+                "url": "http://proxy.example:3128",
+                "credential_binding_id": binding_a_id
+            }
+        }),
+        StatusCode::CONFLICT,
+    )
+    .await;
+    assert!(owner_profile_project_binding["error"]
+        .as_str()
+        .unwrap()
+        .contains("credential_binding_project_scope_mismatch"));
+}
+
+#[tokio::test]
 async fn profile_reachability_probe_results_are_persisted_as_profile_diagnostics() {
     let (app, token) = test_router();
     let (proxy_url, proxy_task) = start_profile_proxy_probe_server(None).await;
@@ -955,6 +1102,128 @@ async fn create_proxy_auth_profile(
                     })
                     .to_string(),
                 ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    response_json(response).await["id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+async fn create_test_project(app: &Router, token: &str, name: &str) -> String {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/projects")
+                .header("authorization", bearer(token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "name": name }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    response_json(response).await["id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+async fn create_egress_profile_json(
+    app: &Router,
+    token: &str,
+    body: Value,
+    expected_status: StatusCode,
+) -> Value {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/egress-profiles")
+                .header("authorization", bearer(token))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), expected_status);
+    response_json(response).await
+}
+
+async fn create_session_json(
+    app: &Router,
+    token: &str,
+    body: Value,
+    expected_status: StatusCode,
+) -> Value {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(token))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), expected_status);
+    response_json(response).await
+}
+
+async fn stop_session(app: &Router, token: &str, session_id: &str) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/stop"))
+                .header("authorization", bearer(token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+async fn create_proxy_credential_binding(
+    app: &Router,
+    token: &str,
+    name: &str,
+    project_id: Option<&str>,
+) -> String {
+    let mut body = json!({
+        "name": name,
+        "provider": "vault_kv_v2",
+        "allowed_origins": ["http://proxy.example"],
+        "injection_mode": "form_fill",
+        "secret_payload": {
+            "username": "proxy-user",
+            "password": "proxy-pass"
+        }
+    });
+    if let Some(project_id) = project_id {
+        body["project_id"] = json!(project_id);
+    }
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/credential-bindings")
+                .header("authorization", bearer(token))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
                 .unwrap(),
         )
         .await

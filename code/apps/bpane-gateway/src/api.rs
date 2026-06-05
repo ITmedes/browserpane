@@ -55,8 +55,9 @@ use crate::session_control::{
     SessionRecordingResource, SessionRecordingState, SessionRecordingTerminationReason,
     SessionResource, SessionStore, SessionStoreError, SessionTemplateDefaults,
     SessionTemplateListResponse, SessionTemplateResource, SetAutomationDelegateRequest,
-    StoredBrowserContext, StoredEgressProfile, StoredIdentityMapping, StoredProject,
-    StoredServicePrincipal, StoredSession, StoredSessionRecording,
+    StoredBrowserContext, StoredEgressProfile, StoredEgressProfileReachabilityProbeResult,
+    StoredIdentityMapping, StoredProject, StoredServicePrincipal, StoredSession,
+    StoredSessionRecording,
 };
 use crate::session_files::{
     SessionFileBindingListResponse, SessionFileBindingResource, SessionFileListResponse,
