@@ -28,10 +28,10 @@ Recommended order:
 4. Migrate current live overlay features and inspect routes into the new shell
    without expanding product scope during the migration.
 
-## External Orientation
+## Product and Design Orientation
 
-Browser automation and cloud control-plane products converge around a few
-patterns that BrowserPane should adopt:
+Mature browser automation and cloud control-plane admin apps converge around a
+few patterns that BrowserPane should adopt:
 
 - Session inspector as the center of gravity: a session row opens a detail
   surface with status, configuration, live view, recordings, events, console,
@@ -47,19 +47,6 @@ patterns that BrowserPane should adopt:
   placing all controls in one overlay.
 - Long-running resources use explicit lifecycle states, bulk cleanup where
   useful, and clear admission or quota feedback.
-
-References checked for orientation:
-
-- Browserbase Session Inspector and observability documentation:
-  https://docs.browserbase.com/platform/browser/observability/observability
-- Browserbase contexts documentation:
-  https://docs.browserbase.com/features/contexts
-- Browserless Live Debugger documentation:
-  https://docs.browserless.io/baas/interactive-browser-sessions/live-debugger
-- Hyperbrowser session configuration documentation:
-  https://www.hyperbrowser.ai/docs/sessions/create
-- Steel session lifecycle documentation:
-  https://docs.steel.dev/overview/sessions-api/session-lifecycle
 
 ## Target App Shape
 
