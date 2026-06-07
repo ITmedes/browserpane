@@ -48,6 +48,7 @@ impl InMemorySessionStore {
         let now = Utc::now();
         let binding = StoredCredentialBinding {
             id: request.id,
+            project_id: request.project_id,
             owner_subject: principal.subject.clone(),
             owner_issuer: principal.issuer.clone(),
             name: request.name,

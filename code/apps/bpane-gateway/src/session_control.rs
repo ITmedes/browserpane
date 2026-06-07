@@ -79,6 +79,8 @@ use workflow_run_policy::*;
 pub use store::*;
 pub use types::*;
 
+const SESSION_EGRESS_USAGE_COUNTER_LIMIT: u64 = i64::MAX as u64;
+
 fn session_visible_to_principal(
     session: &StoredSession,
     principal: &AuthenticatedPrincipal,
@@ -97,6 +99,442 @@ fn session_visible_to_principal(
 
 fn task_visible_to_principal(session: &StoredSession, principal: &AuthenticatedPrincipal) -> bool {
     session.owner.subject == principal.subject && session.owner.issuer == principal.issuer
+}
+
+fn project_admission_conflict(decision: ProjectAdmissionDecision) -> SessionStoreError {
+    SessionStoreError::Conflict(format!(
+        "project admission rejected: {}: {}",
+        decision.reason_code.as_str(),
+        decision.message
+    ))
+}
+
+fn validate_project_retained_storage_quota(
+    project_id: Uuid,
+    retained_storage_bytes: u64,
+    incoming_bytes: u64,
+    max_retained_storage_bytes: u64,
+) -> Result<(), SessionStoreError> {
+    let projected_storage_bytes = retained_storage_bytes
+        .checked_add(incoming_bytes)
+        .unwrap_or(u64::MAX);
+    if projected_storage_bytes <= max_retained_storage_bytes {
+        return Ok(());
+    }
+
+    Err(SessionStoreError::Conflict(format!(
+        "retained_storage_quota_exceeded: project {project_id} retained storage quota would be exceeded ({projected_storage_bytes}/{max_retained_storage_bytes} bytes)"
+    )))
+}
+
+fn checked_session_egress_usage_bytes(
+    session_id: Uuid,
+    current: u64,
+    delta: u64,
+    label: &str,
+) -> Result<u64, SessionStoreError> {
+    let total = current.checked_add(delta).ok_or_else(|| {
+        SessionStoreError::Backend(format!(
+            "session_egress_usage_counter_exceeded: session {session_id} {label} egress usage counter exceeded u64 range"
+        ))
+    })?;
+    if total > SESSION_EGRESS_USAGE_COUNTER_LIMIT {
+        return Err(SessionStoreError::Backend(format!(
+            "session_egress_usage_counter_exceeded: session {session_id} {label} egress usage counter would exceed storage limit"
+        )));
+    }
+    Ok(total)
+}
+
+pub(crate) fn validate_credential_binding_project_scope(
+    project_id: Option<Uuid>,
+    binding_id: Uuid,
+    binding_project_id: Option<Uuid>,
+    consumer: &str,
+) -> Result<(), SessionStoreError> {
+    let Some(binding_project_id) = binding_project_id else {
+        return Ok(());
+    };
+    if project_id == Some(binding_project_id) {
+        return Ok(());
+    }
+    Err(SessionStoreError::Conflict(match project_id {
+        Some(project_id) => format!(
+            "credential_binding_project_scope_mismatch: credential binding {} belongs to project {binding_project_id} and cannot be used by {consumer} project {project_id}",
+            binding_id
+        ),
+        None => format!(
+            "credential_binding_project_scope_mismatch: credential binding {} belongs to project {binding_project_id} and cannot be used by owner-scoped {consumer}",
+            binding_id
+        ),
+    }))
+}
+
+pub(crate) fn validate_egress_profile_project_scope(
+    project_id: Option<Uuid>,
+    profile_id: Uuid,
+    profile_project_id: Option<Uuid>,
+) -> Result<(), SessionStoreError> {
+    let Some(profile_project_id) = profile_project_id else {
+        return Ok(());
+    };
+    if project_id == Some(profile_project_id) {
+        return Ok(());
+    }
+    Err(SessionStoreError::Conflict(match project_id {
+        Some(project_id) => format!(
+            "egress_profile_project_scope_mismatch: egress profile {profile_id} belongs to project {profile_project_id} and cannot be used by session project {project_id}"
+        ),
+        None => format!(
+            "egress_profile_project_scope_mismatch: egress profile {profile_id} belongs to project {profile_project_id} and cannot be used by owner-scoped session"
+        ),
+    }))
+}
+
+fn owner_principal_for_session(session: &StoredSession) -> AuthenticatedPrincipal {
+    AuthenticatedPrincipal {
+        subject: session.owner.subject.clone(),
+        issuer: session.owner.issuer.clone(),
+        display_name: session.owner.display_name.clone(),
+        client_id: None,
+        safe_claims: Default::default(),
+    }
+}
+
+pub(crate) async fn session_project_policy(
+    session_store: &SessionStore,
+    session: &StoredSession,
+) -> Result<Option<ProjectPolicy>, SessionStoreError> {
+    let Some(project_id) = session.project_id else {
+        return Ok(None);
+    };
+    let owner = owner_principal_for_session(session);
+    Ok(session_store
+        .get_project_for_owner(&owner, project_id)
+        .await?
+        .map(|project| project.policy))
+}
+
+pub(crate) fn validate_project_session_file_source_policy(
+    session: &StoredSession,
+    policy: Option<&ProjectPolicy>,
+    source: SessionFileSource,
+) -> Result<(), SessionStoreError> {
+    let Some(policy) = policy else {
+        return Ok(());
+    };
+    let Some(project_id) = session.project_id else {
+        return Ok(());
+    };
+    let (allowed, reason) = match source {
+        SessionFileSource::BrowserUpload => {
+            (policy.allow_browser_uploads, "browser_upload_not_allowed")
+        }
+        SessionFileSource::BrowserDownload => (
+            policy.allow_browser_downloads,
+            "browser_download_not_allowed",
+        ),
+    };
+    if allowed {
+        return Ok(());
+    }
+    Err(SessionStoreError::Conflict(format!(
+        "{reason}: project {project_id} policy does not allow {source:?} session file transfers"
+    )))
+}
+
+pub(crate) fn validate_project_session_file_binding_policy(
+    session: &StoredSession,
+    policy: Option<&ProjectPolicy>,
+) -> Result<(), SessionStoreError> {
+    if policy.is_none_or(|policy| policy.allow_session_file_bindings) {
+        return Ok(());
+    }
+    let Some(project_id) = session.project_id else {
+        return Ok(());
+    };
+    Err(SessionStoreError::Conflict(format!(
+        "session_file_binding_not_allowed: project {project_id} policy does not allow session file bindings"
+    )))
+}
+
+pub(crate) fn validate_project_file_workspace_policy(
+    project_id: Option<Uuid>,
+    policy: Option<&ProjectPolicy>,
+    workspace_id: Uuid,
+    usage: &str,
+) -> Result<(), SessionStoreError> {
+    let Some(project_id) = project_id else {
+        return Ok(());
+    };
+    let Some(policy) = policy else {
+        return Ok(());
+    };
+    if policy.allowed_file_workspace_ids.is_empty()
+        || policy
+            .allowed_file_workspace_ids
+            .iter()
+            .any(|allowed_id| *allowed_id == workspace_id)
+    {
+        return Ok(());
+    }
+    Err(SessionStoreError::Conflict(format!(
+        "{}: project {project_id} does not allow file workspace {workspace_id} for {usage}",
+        ProjectAdmissionReasonCode::FileWorkspaceNotAllowed.as_str()
+    )))
+}
+
+pub(crate) fn validate_project_manual_recording_policy(
+    session: &StoredSession,
+    policy: Option<&ProjectPolicy>,
+) -> Result<(), SessionStoreError> {
+    if policy.is_none_or(|policy| policy.allow_manual_recordings) {
+        return Ok(());
+    }
+    let Some(project_id) = session.project_id else {
+        return Ok(());
+    };
+    Err(SessionStoreError::Conflict(format!(
+        "manual_recording_not_allowed: project {project_id} policy does not allow manual recording starts"
+    )))
+}
+
+fn validate_project_session_policy(
+    project: &StoredProject,
+    request: &CreateSessionRequest,
+    active_project_sessions: u32,
+    checked_at: DateTime<Utc>,
+) -> Result<(), SessionStoreError> {
+    if !project.policy.allowed_session_template_ids.is_empty() {
+        let template_id = request.template_id.as_deref();
+        let allowed = template_id.is_some_and(|template_id| {
+            project
+                .policy
+                .allowed_session_template_ids
+                .iter()
+                .any(|allowed_id| allowed_id == template_id)
+        });
+        if !allowed {
+            let message = match template_id {
+                Some(template_id) => format!(
+                    "project {} does not allow session template {}",
+                    project.id, template_id
+                ),
+                None => format!(
+                    "project {} requires one of the allowed session templates",
+                    project.id
+                ),
+            };
+            return Err(project_admission_conflict(
+                ProjectAdmissionDecision::rejected(
+                    project.id,
+                    ProjectAdmissionReasonCode::SessionTemplateNotAllowed,
+                    message,
+                    active_project_sessions,
+                    project.quotas.max_active_sessions,
+                    checked_at,
+                ),
+            ));
+        }
+    }
+
+    if !project.policy.allowed_egress_profile_ids.is_empty() {
+        let egress_profile_id = request
+            .network_identity
+            .as_ref()
+            .and_then(|identity| identity.egress_profile_id);
+        let allowed = egress_profile_id.is_some_and(|profile_id| {
+            project
+                .policy
+                .allowed_egress_profile_ids
+                .iter()
+                .any(|allowed_id| *allowed_id == profile_id)
+        });
+        if !allowed {
+            let message = match egress_profile_id {
+                Some(profile_id) => format!(
+                    "project {} does not allow egress profile {}",
+                    project.id, profile_id
+                ),
+                None => format!(
+                    "project {} requires one of the allowed egress profiles",
+                    project.id
+                ),
+            };
+            return Err(project_admission_conflict(
+                ProjectAdmissionDecision::rejected(
+                    project.id,
+                    ProjectAdmissionReasonCode::EgressProfileNotAllowed,
+                    message,
+                    active_project_sessions,
+                    project.quotas.max_active_sessions,
+                    checked_at,
+                ),
+            ));
+        }
+    }
+
+    if !project.policy.allowed_extension_ids.is_empty() {
+        for extension_id in request.extension_ids.iter().chain(
+            request
+                .extensions
+                .iter()
+                .map(|extension| &extension.extension_id),
+        ) {
+            let allowed = project
+                .policy
+                .allowed_extension_ids
+                .iter()
+                .any(|allowed_id| allowed_id == extension_id);
+            if !allowed {
+                return Err(project_admission_conflict(
+                    ProjectAdmissionDecision::rejected(
+                        project.id,
+                        ProjectAdmissionReasonCode::ExtensionNotAllowed,
+                        format!(
+                            "project {} does not allow extension {}",
+                            project.id, extension_id
+                        ),
+                        active_project_sessions,
+                        project.quotas.max_active_sessions,
+                        checked_at,
+                    ),
+                ));
+            }
+        }
+    }
+
+    if !project.policy.allowed_browser_context_ids.is_empty() {
+        if let Some(browser_context) = &request.browser_context {
+            if browser_context.mode == SessionBrowserContextMode::Reusable {
+                let context_id = browser_context.context_id;
+                let allowed = context_id.is_some_and(|context_id| {
+                    project
+                        .policy
+                        .allowed_browser_context_ids
+                        .iter()
+                        .any(|allowed_id| *allowed_id == context_id)
+                });
+                if !allowed {
+                    let message = match context_id {
+                        Some(context_id) => format!(
+                            "project {} does not allow browser context {}",
+                            project.id, context_id
+                        ),
+                        None => format!(
+                            "project {} requires one of the allowed reusable browser contexts",
+                            project.id
+                        ),
+                    };
+                    return Err(project_admission_conflict(
+                        ProjectAdmissionDecision::rejected(
+                            project.id,
+                            ProjectAdmissionReasonCode::BrowserContextNotAllowed,
+                            message,
+                            active_project_sessions,
+                            project.quotas.max_active_sessions,
+                            checked_at,
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_project_session_creation_budget(
+    project: &StoredProject,
+    session_creations: u32,
+    checked_at: DateTime<Utc>,
+) -> Result<(), SessionStoreError> {
+    if project.policy.usage_budget_enforcement
+        != ProjectUsageBudgetEnforcement::BlockSessionCreation
+    {
+        return Ok(());
+    }
+    let Some(max_session_creations) = project.quotas.max_session_creations else {
+        return Ok(());
+    };
+    if session_creations < max_session_creations {
+        return Ok(());
+    }
+
+    Err(project_admission_conflict(
+        ProjectAdmissionDecision::session_creation_budget_rejected(
+            project.id,
+            session_creations,
+            max_session_creations,
+            checked_at,
+        ),
+    ))
+}
+
+fn project_session_creation_window_start(
+    project: &StoredProject,
+    checked_at: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    let window_sec = project.quotas.session_creation_window_sec?;
+    Some(checked_at - ChronoDuration::seconds(i64::from(window_sec)))
+}
+
+fn validate_project_session_creation_rate(
+    project: &StoredProject,
+    session_creations_in_window: u32,
+    checked_at: DateTime<Utc>,
+) -> Result<(), SessionStoreError> {
+    if project.policy.usage_budget_enforcement
+        != ProjectUsageBudgetEnforcement::BlockSessionCreation
+    {
+        return Ok(());
+    }
+    let (Some(max_session_creations_per_window), Some(session_creation_window_sec)) = (
+        project.quotas.max_session_creations_per_window,
+        project.quotas.session_creation_window_sec,
+    ) else {
+        return Ok(());
+    };
+    if session_creations_in_window < max_session_creations_per_window {
+        return Ok(());
+    }
+
+    Err(project_admission_conflict(
+        ProjectAdmissionDecision::session_creation_rate_rejected(
+            project.id,
+            session_creations_in_window,
+            max_session_creations_per_window,
+            session_creation_window_sec,
+            checked_at,
+        ),
+    ))
+}
+
+fn validate_project_runtime_usage_budget(
+    project: &StoredProject,
+    runtime_usage_ms: u64,
+    checked_at: DateTime<Utc>,
+) -> Result<(), SessionStoreError> {
+    if project.policy.usage_budget_enforcement
+        != ProjectUsageBudgetEnforcement::BlockSessionCreation
+    {
+        return Ok(());
+    }
+    let Some(max_runtime_usage_ms) = project.quotas.max_runtime_usage_ms else {
+        return Ok(());
+    };
+    if runtime_usage_ms < max_runtime_usage_ms {
+        return Ok(());
+    }
+
+    Err(project_admission_conflict(
+        ProjectAdmissionDecision::runtime_usage_budget_rejected(
+            project.id,
+            runtime_usage_ms,
+            max_runtime_usage_ms,
+            checked_at,
+        ),
+    ))
 }
 
 #[cfg(test)]

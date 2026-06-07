@@ -27,6 +27,7 @@ async fn create_workspace_file(
         .create_file_workspace(
             owner,
             PersistFileWorkspaceRequest {
+                project_id: None,
                 name: "inputs".to_string(),
                 description: None,
                 labels: HashMap::new(),
@@ -50,6 +51,17 @@ async fn create_workspace_file(
         )
         .await
         .unwrap()
+}
+
+#[test]
+fn project_policy_defaults_allow_file_and_recording_controls() {
+    let policy = serde_json::from_value::<ProjectPolicy>(json!({})).unwrap();
+
+    assert!(policy.allow_browser_uploads);
+    assert!(policy.allow_browser_downloads);
+    assert!(policy.allow_session_file_bindings);
+    assert!(policy.allow_manual_recordings);
+    assert!(policy.allowed_file_workspace_ids.is_empty());
 }
 
 #[tokio::test]
@@ -138,6 +150,229 @@ async fn in_memory_store_tracks_session_file_binding_lifecycle() {
         .await
         .unwrap();
     assert!(listed.is_empty());
+}
+
+#[tokio::test]
+async fn project_policy_rejects_disabled_session_file_sources() {
+    let store = SessionStore::in_memory();
+    let owner = principal("owner");
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "restricted-files".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas::default(),
+                policy: ProjectPolicy {
+                    allow_browser_uploads: false,
+                    allow_browser_downloads: false,
+                    ..ProjectPolicy::default()
+                },
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+    let session = store
+        .create_session(
+            &owner,
+            CreateSessionRequest {
+                project_id: Some(project.id),
+                ..create_session_request()
+            },
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+
+    for (source, expected_reason) in [
+        (
+            SessionFileSource::BrowserUpload,
+            "browser_upload_not_allowed",
+        ),
+        (
+            SessionFileSource::BrowserDownload,
+            "browser_download_not_allowed",
+        ),
+    ] {
+        let error = store
+            .record_session_file(PersistSessionFileRequest {
+                id: Uuid::now_v7(),
+                session_id: session.id,
+                name: format!("blocked-{}.txt", source.as_str()),
+                media_type: Some("text/plain".to_string()),
+                byte_count: 7,
+                sha256_hex: "abc123".to_string(),
+                artifact_ref: format!("local_fs:{}", source.as_str()),
+                source,
+                labels: HashMap::new(),
+            })
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(error, SessionStoreError::Conflict(message) if message.contains(expected_reason))
+        );
+    }
+}
+
+#[tokio::test]
+async fn project_policy_rejects_disabled_session_file_bindings() {
+    let store = SessionStore::in_memory();
+    let owner = principal("owner");
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "binding-policy".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas::default(),
+                policy: ProjectPolicy {
+                    allow_session_file_bindings: false,
+                    ..ProjectPolicy::default()
+                },
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+    let session = store
+        .create_session(
+            &owner,
+            CreateSessionRequest {
+                project_id: Some(project.id),
+                ..create_session_request()
+            },
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    let file = create_workspace_file(&store, &owner).await;
+
+    let error = store
+        .create_session_file_binding_for_owner(
+            &owner,
+            PersistSessionFileBindingRequest {
+                id: Uuid::now_v7(),
+                session_id: session.id,
+                workspace_id: file.workspace_id,
+                file_id: file.id,
+                mount_path: "inputs/input.csv".to_string(),
+                mode: SessionFileBindingMode::ReadOnly,
+                labels: HashMap::new(),
+            },
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        SessionStoreError::Conflict(message)
+            if message.contains("session_file_binding_not_allowed")
+    ));
+}
+
+#[tokio::test]
+async fn project_policy_rejects_disallowed_file_workspace_bindings() {
+    let store = SessionStore::in_memory();
+    let owner = principal("owner");
+    let allowed_file = create_workspace_file(&store, &owner).await;
+    let disallowed_workspace = store
+        .create_file_workspace(
+            &owner,
+            PersistFileWorkspaceRequest {
+                project_id: None,
+                name: "disallowed-inputs".to_string(),
+                description: None,
+                labels: HashMap::new(),
+            },
+        )
+        .await
+        .unwrap();
+    let disallowed_file = store
+        .create_file_workspace_file_for_owner(
+            &owner,
+            PersistFileWorkspaceFileRequest {
+                id: Uuid::now_v7(),
+                workspace_id: disallowed_workspace.id,
+                name: "secret.csv".to_string(),
+                media_type: Some("text/csv".to_string()),
+                byte_count: 12,
+                sha256_hex: "def456".to_string(),
+                provenance: None,
+                artifact_ref: "local_fs:workspace/secret.csv".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "workspace-policy".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas::default(),
+                policy: ProjectPolicy {
+                    allowed_file_workspace_ids: vec![allowed_file.workspace_id],
+                    ..ProjectPolicy::default()
+                },
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+    let session = store
+        .create_session(
+            &owner,
+            CreateSessionRequest {
+                project_id: Some(project.id),
+                ..create_session_request()
+            },
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+
+    let allowed_binding = store
+        .create_session_file_binding_for_owner(
+            &owner,
+            PersistSessionFileBindingRequest {
+                id: Uuid::now_v7(),
+                session_id: session.id,
+                workspace_id: allowed_file.workspace_id,
+                file_id: allowed_file.id,
+                mount_path: "inputs/allowed.csv".to_string(),
+                mode: SessionFileBindingMode::ReadOnly,
+                labels: HashMap::new(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(allowed_binding.workspace_id, allowed_file.workspace_id);
+
+    let error = store
+        .create_session_file_binding_for_owner(
+            &owner,
+            PersistSessionFileBindingRequest {
+                id: Uuid::now_v7(),
+                session_id: session.id,
+                workspace_id: disallowed_file.workspace_id,
+                file_id: disallowed_file.id,
+                mount_path: "inputs/disallowed.csv".to_string(),
+                mode: SessionFileBindingMode::ReadOnly,
+                labels: HashMap::new(),
+            },
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        SessionStoreError::Conflict(message) if message.contains("file_workspace_not_allowed")
+    ));
 }
 
 #[tokio::test]

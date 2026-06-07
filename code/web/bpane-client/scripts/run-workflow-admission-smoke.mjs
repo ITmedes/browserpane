@@ -7,14 +7,41 @@ import {
   createLocalWorkflowRepo,
   createLogger,
   ensureLoggedIn,
+  apiOrigin,
   fetchJson,
   getAccessToken,
   launchChrome,
   parseSmokeArgs,
   poll,
+  recreateComposeServices,
+  waitForWorkflowControlPlane,
 } from './workflow-smoke-lib.mjs';
 
 const log = createLogger('workflow-admission-smoke');
+
+async function configureGatewayForWorkerAdmissionSmoke(accessToken, options) {
+  log('Recreating gateway in docker_pool mode with workflow worker backpressure enabled');
+  recreateComposeServices(['gateway'], {
+    envOverrides: {
+      BPANE_GATEWAY_RUNTIME_BACKEND: 'docker_pool',
+      BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES: '4',
+      BPANE_WORKFLOW_WORKER_MAX_ACTIVE: '1',
+    },
+  });
+  await waitForWorkflowControlPlane(accessToken, options);
+}
+
+async function configureGatewayForProjectAdmissionSmoke(accessToken, options) {
+  log('Recreating gateway in docker_pool mode with workflow worker backpressure disabled');
+  recreateComposeServices(['gateway'], {
+    envOverrides: {
+      BPANE_GATEWAY_RUNTIME_BACKEND: 'docker_pool',
+      BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES: '4',
+      BPANE_WORKFLOW_WORKER_MAX_ACTIVE: '0',
+    },
+  });
+  await waitForWorkflowControlPlane(accessToken, options);
+}
 
 function workflowAdmissionEntrypoint() {
   return `export default async function run({ page, input, sessionId }) {
@@ -34,7 +61,7 @@ function workflowAdmissionEntrypoint() {
 }
 
 async function createWorkflow(accessToken, options) {
-  return await fetchJson(`${options.pageUrl}/api/v1/workflows`, {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/workflows`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -51,7 +78,7 @@ async function createWorkflow(accessToken, options) {
 }
 
 async function createWorkflowVersion(accessToken, options, workflowId, source) {
-  return await fetchJson(`${options.pageUrl}/api/v1/workflows/${workflowId}/versions`, {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/workflows/${workflowId}/versions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -76,30 +103,64 @@ async function createWorkflowVersion(accessToken, options, workflowId, source) {
   });
 }
 
-async function createWorkflowRun(accessToken, options, workflowId, input, clientRequestId) {
-  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs`, {
+async function createProject(accessToken, options) {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/projects`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      workflow_id: workflowId,
-      version: 'v1',
-      session: {
-        create_session: {},
-      },
-      client_request_id: clientRequestId,
-      input,
+      name: `workflow-admission-smoke-${Date.now()}`,
+      description: 'Validate project-scoped workflow admission and queueing',
       labels: {
         suite: 'workflow-admission-smoke',
+      },
+      quotas: {
+        max_active_sessions: 4,
+        max_active_workflow_runs: 1,
+        max_retained_storage_bytes: 1073741824,
       },
     }),
   });
 }
 
+async function createWorkflowRun(
+  accessToken,
+  options,
+  workflowId,
+  input,
+  clientRequestId,
+  { sessionProjectId = null, projectId = null } = {},
+) {
+  const body = {
+    workflow_id: workflowId,
+    version: 'v1',
+    session: {
+      create_session: sessionProjectId ? { project_id: sessionProjectId } : {},
+    },
+    client_request_id: clientRequestId,
+    input,
+    labels: {
+      suite: 'workflow-admission-smoke',
+    },
+  };
+  if (projectId) {
+    body.project_id = projectId;
+  }
+
+  return await fetchJson(`${apiOrigin(options)}/api/v1/workflow-runs`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 async function getWorkflowRun(accessToken, options, runId) {
-  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}`, {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/workflow-runs/${runId}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
@@ -107,11 +168,28 @@ async function getWorkflowRun(accessToken, options, runId) {
 }
 
 async function getWorkflowRunEvents(accessToken, options, runId) {
-  return await fetchJson(`${options.pageUrl}/api/v1/workflow-runs/${runId}/events`, {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/workflow-runs/${runId}/events`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
   });
+}
+
+async function waitForQueuedWorkflowRun(accessToken, options, runId, description) {
+  const run = await poll(
+    description,
+    async () => await getWorkflowRun(accessToken, options, runId),
+    (candidate) => {
+      const state = String(candidate?.state ?? '');
+      return ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'timed_out'].includes(state);
+    },
+    30000,
+    500,
+  );
+  if (run.state !== 'queued') {
+    throw new Error(`Expected ${description} to queue, got ${run.state ?? 'unknown'}.`);
+  }
+  return run;
 }
 
 async function main() {
@@ -124,6 +202,8 @@ async function main() {
   let localWorkflowSource = null;
   let firstRun = null;
   let secondRun = null;
+  let projectRun = null;
+  let queuedProjectRun = null;
   const requestIdPrefix = `workflow-admission-smoke-${Date.now().toString(36)}`;
 
   try {
@@ -148,6 +228,7 @@ async function main() {
 
     log('Building workflow-worker image');
     buildWorkflowWorkerImage();
+    await configureGatewayForWorkerAdmissionSmoke(accessToken, options);
 
     const workflow = await createWorkflow(accessToken, options);
     const version = await createWorkflowVersion(
@@ -165,7 +246,7 @@ async function main() {
       accessToken,
       options,
       workflow.id,
-      { hold_ms: 1500 },
+      { hold_ms: 5000 },
       `${requestIdPrefix}-run-1`,
     );
 
@@ -177,9 +258,12 @@ async function main() {
       { hold_ms: 0 },
       `${requestIdPrefix}-run-2`,
     );
-    if (secondRun.state !== 'queued') {
-      throw new Error(`Expected queued second run, got ${secondRun.state ?? 'unknown'}.`);
-    }
+    secondRun = await waitForQueuedWorkflowRun(
+      accessToken,
+      options,
+      secondRun.id,
+      'second workflow run',
+    );
     if (secondRun.admission?.reason !== 'workflow_worker_capacity') {
       throw new Error('Queued workflow run did not expose the expected admission reason.');
     }
@@ -219,18 +303,108 @@ async function main() {
       }
     }
 
+    await configureGatewayForProjectAdmissionSmoke(accessToken, options);
+    await cleanupWorkflowSmokeSessions(accessToken, options, log);
+
+    log('Creating project-scoped workflow runs that should queue on project quota');
+    const project = await createProject(accessToken, options);
+    projectRun = await createWorkflowRun(
+      accessToken,
+      options,
+      workflow.id,
+      { hold_ms: 5000 },
+      `${requestIdPrefix}-project-run-1`,
+      { sessionProjectId: project.id },
+    );
+    if (projectRun.project_id !== project.id) {
+      throw new Error(
+        `Expected first project run to inherit project ${project.id}, got ${projectRun.project_id ?? 'null'}.`,
+      );
+    }
+    if (projectRun.project?.id !== project.id) {
+      throw new Error('First project run did not expose the project summary.');
+    }
+    if (projectRun.project_admission?.state !== 'allowed') {
+      throw new Error(
+        `Expected first project run admission to be allowed, got ${projectRun.project_admission?.state ?? 'unknown'}.`,
+      );
+    }
+
+    queuedProjectRun = await createWorkflowRun(
+      accessToken,
+      options,
+      workflow.id,
+      { hold_ms: 0 },
+      `${requestIdPrefix}-project-run-2`,
+      { sessionProjectId: project.id },
+    );
+    queuedProjectRun = await waitForQueuedWorkflowRun(
+      accessToken,
+      options,
+      queuedProjectRun.id,
+      'project-quota workflow run',
+    );
+    if (queuedProjectRun.project_id !== project.id) {
+      throw new Error('Queued project run did not inherit the bound session project.');
+    }
+    if (queuedProjectRun.project_admission?.reason_code !== 'active_workflow_run_quota_exceeded') {
+      throw new Error(
+        `Expected project quota reason, got ${queuedProjectRun.project_admission?.reason_code ?? 'unknown'}.`,
+      );
+    }
+    if (queuedProjectRun.admission?.reason !== 'project_active_workflow_quota_exhausted') {
+      throw new Error(
+        `Expected workflow admission reason project_active_workflow_quota_exhausted, got ${queuedProjectRun.admission?.reason ?? 'unknown'}.`,
+      );
+    }
+
+    const completedProjectRun = await poll(
+      'first project workflow run completion',
+      async () => await getWorkflowRun(accessToken, options, projectRun.id),
+      (run) => ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(String(run?.state ?? '')),
+      30000,
+      500,
+    );
+    if (completedProjectRun.state !== 'succeeded') {
+      throw new Error(`Expected first project run to succeed, got ${completedProjectRun.state}.`);
+    }
+
+    const completedQueuedProjectRun = await poll(
+      'project queued workflow run completion',
+      async () => await getWorkflowRun(accessToken, options, queuedProjectRun.id),
+      (run) => ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(String(run?.state ?? '')),
+      30000,
+      500,
+    );
+    if (completedQueuedProjectRun.state !== 'succeeded') {
+      throw new Error(
+        `Expected queued project run to succeed, got ${completedQueuedProjectRun.state}.`,
+      );
+    }
+
     const summary = {
       workflowId: workflow.id,
       firstRunId: firstRun.id,
       secondRunId: secondRun.id,
+      projectRunId: projectRun.id,
+      queuedProjectRunId: queuedProjectRun.id,
       secondRunAdmissionReason: secondRun.admission?.reason ?? null,
       secondRunQueuedAt: secondRun.admission?.queued_at ?? null,
+      queuedProjectRunAdmissionReason: queuedProjectRun.admission?.reason ?? null,
+      queuedProjectRunProjectAdmissionReason: queuedProjectRun.project_admission?.reason_code ?? null,
       firstRunState: completedFirstRun.state,
       secondRunState: completedSecondRun.state,
+      projectRunState: completedProjectRun.state,
+      queuedProjectRunState: completedQueuedProjectRun.state,
       eventTypes,
     };
     console.log(JSON.stringify(summary, null, 2));
   } finally {
+    if (accessToken) {
+      await cleanupWorkflowSmokeSessions(accessToken, options, log).catch((error) => {
+        log(`Cleanup skipped after workflow admission smoke: ${error}`);
+      });
+    }
     if (context) {
       await context.close().catch(() => {});
     }

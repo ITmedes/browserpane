@@ -31,6 +31,7 @@ fn sample_run(state: WorkflowRunState) -> StoredWorkflowRun {
         workflow_definition_id: Uuid::now_v7(),
         workflow_definition_version_id: Uuid::now_v7(),
         workflow_version: "v1".to_string(),
+        project_id: None,
         session_id: Uuid::now_v7(),
         automation_task_id: Uuid::now_v7(),
         source_system: None,

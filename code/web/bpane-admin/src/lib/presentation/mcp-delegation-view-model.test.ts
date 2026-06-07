@@ -127,6 +127,15 @@ function sessionResource(id: string, delegated = false): SessionResource {
     state: 'active',
     browser_context: { mode: 'fresh', context_id: null },
     owner_mode: 'shared',
+    capabilities: {
+      browser_input: true,
+      clipboard: true,
+      audio: true,
+      microphone: true,
+      camera: true,
+      file_transfer: true,
+      resize: true,
+    },
     automation_delegate: delegated ? {
       client_id: BRIDGE.clientId,
       issuer: BRIDGE.issuer,

@@ -113,16 +113,36 @@ const PROJECT = {
     max_active_sessions: 2,
     max_active_workflow_runs: 4,
     max_retained_storage_bytes: 1073741824,
+    max_session_creations: 5,
+    max_session_creations_per_window: 2,
+    session_creation_window_sec: 3600,
   },
   state: 'active',
   usage: {
     project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
     active_sessions: 1,
+    queued_sessions: 0,
+    session_creations: 5,
+    max_session_creations: 5,
     max_active_sessions: 2,
     active_workflow_runs: 1,
     max_active_workflow_runs: 4,
+    runtime_usage_ms: 3600000,
+    egress_rx_bytes: 1024,
+    egress_tx_bytes: 2048,
+    egress_total_bytes: 3072,
     retained_storage_bytes: 268435456,
     max_retained_storage_bytes: 1073741824,
+    alerts: [
+      {
+        metric: 'session_creations',
+        state: 'exceeded',
+        current_value: 5,
+        limit_value: 5,
+        threshold_percent: 100,
+        message: 'Project session creation count exceeded the configured soft budget.',
+      },
+    ],
     observed_at: '2026-05-04T18:50:00Z',
   },
   created_at: '2026-05-04T18:50:00Z',
@@ -248,6 +268,12 @@ const TEMPLATE = {
 
 const EGRESS_PROFILE = {
   id: '019df7be-6222-7b00-8c86-9e1f3f8d4a73',
+  project_id: '019df7be-6c94-752f-bfd0-ff1d9bc539e8',
+  project: {
+    id: '019df7be-6c94-752f-bfd0-ff1d9bc539e8',
+    name: 'EU Support',
+    state: 'active',
+  },
   name: 'EU support egress',
   description: 'Approved support outbound path',
   labels: { region: 'eu' },
@@ -304,6 +330,45 @@ describe('ControlClient', () => {
         }),
       }),
     );
+  });
+
+  it('maps queued session metadata from the session list', async () => {
+    const queuedAt = '2026-05-04T19:02:00Z';
+    const fetchImpl = jsonFetch({
+      sessions: [{
+        ...SESSION,
+        state: 'queued',
+        queued_at: queuedAt,
+        queue: {
+          queued_at: queuedAt,
+          queued_for_ms: 125000,
+          position: 2,
+          active_sessions: 1,
+          queued_sessions: 3,
+          max_active_sessions: 1,
+          dispatch_blocker: 'earlier_queued_session',
+          cancellable: true,
+        },
+      }],
+    });
+    const client = new ControlClient({
+      baseUrl: 'http://localhost:8932',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
+    });
+
+    const response = await client.listSessions();
+
+    expect(response.sessions[0]?.state).toBe('queued');
+    expect(response.sessions[0]?.queued_at).toBe(queuedAt);
+    expect(response.sessions[0]?.queue).toMatchObject({
+      queued_at: queuedAt,
+      queued_for_ms: 125000,
+      position: 2,
+      queued_sessions: 3,
+      dispatch_blocker: 'earlier_queued_session',
+      cancellable: true,
+    });
   });
 
   it('loads identity and access-review resources with bearer auth', async () => {
@@ -555,6 +620,8 @@ describe('ControlClient', () => {
         max_active_sessions: 2,
         max_active_workflow_runs: 4,
         max_retained_storage_bytes: 1073741824,
+        max_session_creations_per_window: 2,
+        session_creation_window_sec: 3600,
       },
     });
     await client.getProject('project/with space');
@@ -569,7 +636,17 @@ describe('ControlClient', () => {
       name: 'Support tenant',
       usage: {
         active_sessions: 1,
+        session_creations: 5,
+        max_session_creations: 5,
         max_active_sessions: 2,
+        runtime_usage_ms: 3600000,
+        egress_total_bytes: 3072,
+        alerts: [
+          expect.objectContaining({
+            metric: 'session_creations',
+            state: 'exceeded',
+          }),
+        ],
       },
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(
@@ -585,7 +662,10 @@ describe('ControlClient', () => {
             max_active_sessions: 2,
             max_active_workflow_runs: 4,
             max_retained_storage_bytes: 1073741824,
+            max_session_creations_per_window: 2,
+            session_creation_window_sec: 3600,
           },
+          policy: {},
           state: 'active',
         }),
       }),
@@ -605,6 +685,7 @@ describe('ControlClient', () => {
           state: 'archived',
           labels: {},
           quotas: {},
+          policy: {},
         }),
       }),
     );
@@ -645,6 +726,7 @@ describe('ControlClient', () => {
 
     const created = await client.createBrowserContext({
       name: 'Support profile',
+      project_id: PROJECT.id,
       labels: { team: 'support' },
       retention_sec: 86400,
       max_profile_storage_bytes: 1048576,
@@ -657,6 +739,7 @@ describe('ControlClient', () => {
     const exported = await client.exportBrowserContext(BROWSER_CONTEXT.id);
     await client.importBrowserContext({
       name: 'Support profile imported',
+      project_id: PROJECT.id,
       archive: new Blob(['PKbrowser-context-export'], { type: 'application/zip' }),
       labels: { imported: 'true' },
       retention_sec: 43200,
@@ -687,6 +770,7 @@ describe('ControlClient', () => {
         method: 'POST',
         body: JSON.stringify({
           name: 'Support profile',
+          project_id: PROJECT.id,
           labels: { team: 'support' },
           retention_sec: 86400,
           max_profile_storage_bytes: 1048576,
@@ -726,6 +810,7 @@ describe('ControlClient', () => {
           accept: 'application/json',
           'content-type': 'application/zip',
           'x-bpane-browser-context-name': 'Support profile imported',
+          'x-bpane-browser-context-project-id': PROJECT.id,
           'x-bpane-browser-context-labels': JSON.stringify({ imported: 'true' }),
           'x-bpane-browser-context-retention-sec': '43200',
         }),
@@ -794,6 +879,7 @@ describe('ControlClient', () => {
 
     const created = await client.createEgressProfile({
       name: 'EU support egress',
+      project_id: EGRESS_PROFILE.project_id,
       labels: { region: 'eu' },
       proxy: { url: 'https://proxy.example:8443' },
       bypass_rules: ['localhost', '*.internal.example'],
@@ -815,6 +901,7 @@ describe('ControlClient', () => {
 
     expect(created).toMatchObject({
       id: EGRESS_PROFILE.id,
+      project_id: EGRESS_PROFILE.project_id,
       name: 'EU support egress',
       effective: {
         proxy_configured: true,
@@ -833,6 +920,7 @@ describe('ControlClient', () => {
         method: 'POST',
         body: JSON.stringify({
           name: 'EU support egress',
+          project_id: EGRESS_PROFILE.project_id,
           labels: { region: 'eu' },
           proxy: { url: 'https://proxy.example:8443' },
           bypass_rules: ['localhost', '*.internal.example'],
@@ -1077,10 +1165,15 @@ describe('ControlClient', () => {
     });
 
     await client.stopSession('session/with/slash');
+    await client.cancelQueuedSession('session/with/slash');
     await client.releaseSessionRuntime('session/with/slash');
 
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('http://localhost:8932/api/v1/sessions/session%2Fwith%2Fslash/stop'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8932/api/v1/sessions/session%2Fwith%2Fslash/cancel'),
       expect.objectContaining({ method: 'POST' }),
     );
     expect(fetchImpl).toHaveBeenCalledWith(

@@ -153,6 +153,14 @@
     );
   }
 
+  async function cancelQueuedSession(): Promise<void> {
+    await mutateSession(
+      'Cancelling queued session...',
+      'Queued session cancelled.',
+      () => controlClient.cancelQueuedSession(sessionId),
+    );
+  }
+
   async function releaseSessionRuntime(): Promise<void> {
     await mutateSession(
       'Releasing selected session runtime...',
@@ -336,6 +344,7 @@
         onRefresh={() => void refreshInspector()}
         onRelease={() => void releaseSessionRuntime()}
         onStop={() => void stopSession()}
+        onCancelQueue={() => void cancelQueuedSession()}
         onKill={() => void killSession()}
         onRunEgressProbe={() => void runEgressProbe()}
         onDisconnectConnection={(connectionId) => void disconnectConnection(connectionId)}

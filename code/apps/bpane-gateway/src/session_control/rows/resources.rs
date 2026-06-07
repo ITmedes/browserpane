@@ -32,6 +32,7 @@ pub(in crate::session_control) fn row_to_stored_browser_context(
 
     Ok(StoredBrowserContext {
         id: row.get("id"),
+        project_id: row.get("project_id"),
         owner_subject: row.get("owner_subject"),
         owner_issuer: row.get("owner_issuer"),
         name: row.get("name"),
@@ -91,6 +92,9 @@ pub(in crate::session_control) fn row_to_stored_project(
     let quotas = serde_json::from_value::<ProjectQuotas>(row.get("quotas")).map_err(|error| {
         SessionStoreError::Backend(format!("failed to decode project quotas: {error}"))
     })?;
+    let policy = serde_json::from_value::<ProjectPolicy>(row.get("policy")).map_err(|error| {
+        SessionStoreError::Backend(format!("failed to decode project policy: {error}"))
+    })?;
 
     Ok(StoredProject {
         id: row.get("id"),
@@ -100,6 +104,7 @@ pub(in crate::session_control) fn row_to_stored_project(
         description: row.get("description"),
         labels,
         quotas,
+        policy,
         state,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
@@ -251,6 +256,7 @@ pub(in crate::session_control) fn row_to_stored_credential_binding(
 
     Ok(StoredCredentialBinding {
         id: row.get("id"),
+        project_id: row.get("project_id"),
         owner_subject: row.get("owner_subject"),
         owner_issuer: row.get("owner_issuer"),
         name: row.get("name"),
@@ -413,6 +419,7 @@ pub(in crate::session_control) fn row_to_stored_file_workspace(
 
     Ok(StoredFileWorkspace {
         id: row.get("id"),
+        project_id: row.get("project_id"),
         owner_subject: row.get("owner_subject"),
         owner_issuer: row.get("owner_issuer"),
         name: row.get("name"),
@@ -527,6 +534,7 @@ pub(in crate::session_control) fn row_to_stored_egress_profile(
 
     Ok(StoredEgressProfile {
         id: row.get("id"),
+        project_id: row.get("project_id"),
         owner_subject: row.get("owner_subject"),
         owner_issuer: row.get("owner_issuer"),
         name: row.get("name"),

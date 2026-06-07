@@ -94,6 +94,7 @@ pub(in crate::session_control) fn row_to_stored_workflow_run(
         workflow_definition_id: row.get("workflow_definition_id"),
         workflow_definition_version_id: row.get("workflow_definition_version_id"),
         workflow_version: row.get("workflow_version"),
+        project_id: row.try_get("project_id").ok().flatten(),
         session_id: row.get("session_id"),
         automation_task_id: row.get("automation_task_id"),
         state,

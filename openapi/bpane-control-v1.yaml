@@ -422,7 +422,7 @@ paths:
     post:
       tags: [Browser Contexts]
       summary: Import a BrowserPane browser context export archive
-      description: Creates a new owner-scoped reusable context from an export zip. The import never overwrites an existing context; target metadata is provided by headers and omitted metadata defaults to the archive manifest.
+      description: Creates a new reusable context from an export zip. The import never overwrites an existing context; target metadata is provided by headers and omitted metadata defaults to the archive manifest. Project scope is applied only when `x-bpane-browser-context-project-id` is provided.
       operationId: importBrowserContext
       parameters:
         - name: x-bpane-browser-context-name
@@ -435,6 +435,12 @@ paths:
           required: false
           schema:
             type: string
+        - name: x-bpane-browser-context-project-id
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
         - name: x-bpane-browser-context-labels
           in: header
           required: false
@@ -2757,6 +2763,38 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/egress-usage:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Session Runtime]
+      summary: Report sanitized session egress usage counters
+      description: Accepts sanitized receive/transmit byte deltas and optional observer correlation metadata from an egress proxy, TLS interceptor, secure web gateway, or custom observer. BrowserPane stores only counters and sanitized correlation fields; URL, header, credential, status, timing, payload, and decrypted traffic logs remain owned by the configured observer.
+      operationId: reportSessionEgressUsage
+      security:
+        - bearerAuth: []
+        - sessionAutomationAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportSessionEgressUsageRequest'
+      responses:
+        '200':
+          description: Updated sanitized session egress usage counters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEgressUsageResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/connections/{connection_id}/disconnect:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -2827,6 +2865,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionStopConflictResponse'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Sessions]
+      summary: Cancel a queued session resource before it is admitted
+      operationId: cancelQueuedSession
+      responses:
+        '200':
+          description: Queued session cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Session is not queued and cannot be cancelled through the queue operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/release:
@@ -3185,6 +3249,7 @@ components:
       enum:
         - pending
         - starting
+        - queued
         - ready
         - active
         - idle
@@ -3538,6 +3603,14 @@ components:
         - provider
         - injection_mode
       properties:
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Optional project that owns this credential binding. Project-scoped
+            workflow runs and sessions may only consume bindings from the same
+            project; omitted bindings remain owner-scoped.
         name:
           type: string
         provider:
@@ -3571,6 +3644,8 @@ components:
       type: object
       required:
         - id
+        - project_id
+        - project
         - name
         - provider
         - external_ref
@@ -3585,6 +3660,14 @@ components:
         id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
         name:
           type: string
         provider:
@@ -3735,6 +3818,10 @@ components:
       properties:
         name:
           type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
         description:
           type: string
           nullable: true
@@ -3746,6 +3833,8 @@ components:
       type: object
       required:
         - id
+        - project_id
+        - project
         - name
         - description
         - labels
@@ -3756,6 +3845,14 @@ components:
         id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
         name:
           type: string
         description:
@@ -4216,6 +4313,10 @@ components:
           format: uuid
         version:
           type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
         session:
           allOf:
             - $ref: '#/components/schemas/CreateAutomationTaskSessionRequest'
@@ -4390,6 +4491,7 @@ components:
       type: object
       required:
         - id
+        - project_id
         - name
         - provider
         - namespace
@@ -4401,6 +4503,10 @@ components:
         id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
         name:
           type: string
         provider:
@@ -4559,6 +4665,8 @@ components:
         - workflow_definition_id
         - workflow_definition_version_id
         - workflow_version
+        - project_id
+        - project
         - source_system
         - source_reference
         - client_request_id
@@ -4576,6 +4684,7 @@ components:
         - produced_files
         - recordings
         - retention
+        - project_admission
         - admission
         - intervention
         - runtime
@@ -4598,6 +4707,14 @@ components:
           format: uuid
         workflow_version:
           type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
         source_system:
           type: string
           nullable: true
@@ -4652,6 +4769,8 @@ components:
             $ref: '#/components/schemas/WorkflowRunRecordingResource'
         retention:
           $ref: '#/components/schemas/WorkflowRunRetentionResource'
+        project_admission:
+          $ref: '#/components/schemas/ProjectAdmissionDecision'
         admission:
           allOf:
             - $ref: '#/components/schemas/WorkflowRunAdmissionResource'
@@ -5317,6 +5436,46 @@ components:
           $ref: '#/components/schemas/SessionStopEligibility'
         idle:
           $ref: '#/components/schemas/SessionIdleStatus'
+    SessionQueueInfo:
+      type: object
+      required:
+        - queued_at
+        - queued_for_ms
+        - position
+        - active_sessions
+        - queued_sessions
+        - max_active_sessions
+        - dispatch_blocker
+        - cancellable
+      properties:
+        queued_at:
+          type: string
+          format: date-time
+        queued_for_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        position:
+          type: integer
+          minimum: 1
+        active_sessions:
+          type: integer
+          minimum: 0
+        queued_sessions:
+          type: integer
+          minimum: 0
+        max_active_sessions:
+          type: integer
+          minimum: 1
+          nullable: true
+        dispatch_blocker:
+          type: string
+          enum:
+            - project_active_session_quota
+            - earlier_queued_session
+            - runtime_capacity
+        cancellable:
+          type: boolean
     BrowserContextState:
       type: string
       enum:
@@ -5364,6 +5523,10 @@ components:
       properties:
         name:
           type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
         description:
           type: string
           nullable: true
@@ -5392,6 +5555,11 @@ components:
       properties:
         name:
           type: string
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional project scope for the clone. When omitted, the source context project scope is inherited.
         description:
           type: string
           nullable: true
@@ -5413,6 +5581,8 @@ components:
       type: object
       required:
         - id
+        - project_id
+        - project
         - name
         - description
         - labels
@@ -5430,6 +5600,14 @@ components:
         id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
         name:
           type: string
         description:
@@ -5532,16 +5710,111 @@ components:
           format: int64
           minimum: 1
           nullable: true
+          description: Maximum retained bytes for project-linked workflow produced files, completed recording artifacts, session files, and project-owned file workspace files. Null means unbounded.
+        max_session_creations:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Budget for total created sessions in the project. Crossing this budget emits usage alerts; with usage_budget_enforcement=block_session_creation, new project sessions are rejected once the budget is exhausted.
+        max_session_creations_per_window:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Rolling-window session creation limit. Must be provided together with session_creation_window_sec. With usage_budget_enforcement=block_session_creation, new project sessions are rejected when the project already created this many sessions in the current window.
+        session_creation_window_sec:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Rolling-window duration in seconds for max_session_creations_per_window. Must be provided together with max_session_creations_per_window.
+        max_runtime_usage_ms:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+          description: Budget for aggregated finalized plus live browser runtime milliseconds. Crossing this budget emits usage alerts; with usage_budget_enforcement=block_session_creation, new project sessions are rejected once the budget is exhausted.
+        max_egress_total_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+          description: Soft metadata budget for sanitized egress byte counters. Crossing this budget emits usage alerts but does not reject requests.
+    ProjectPolicy:
+      type: object
+      additionalProperties: false
+      properties:
+        allowed_session_template_ids:
+          type: array
+          description: Empty or omitted means templates are unrestricted for this project.
+          items:
+            type: string
+        allowed_egress_profile_ids:
+          type: array
+          description: Empty or omitted means egress profiles are unrestricted for this project.
+          items:
+            type: string
+            format: uuid
+        allowed_extension_ids:
+          type: array
+          description: Empty or omitted means session extension definitions are unrestricted for this project.
+          items:
+            type: string
+            format: uuid
+        allowed_browser_context_ids:
+          type: array
+          description: Empty or omitted means reusable browser contexts are unrestricted for this project. Fresh and ephemeral session contexts remain allowed when this list is configured.
+          items:
+            type: string
+            format: uuid
+        allowed_file_workspace_ids:
+          type: array
+          description: Empty or omitted means file workspaces are unrestricted for this project. When configured, project workflow runs and session-file bindings may only consume listed workspace ids.
+          items:
+            type: string
+            format: uuid
+        allow_browser_uploads:
+          type: boolean
+          default: true
+          description: When false, project sessions reject browser upload transfers and clear the live file-transfer capability.
+        allow_browser_downloads:
+          type: boolean
+          default: true
+          description: When false, project sessions reject browser download transfers and clear the live file-transfer capability.
+        allow_session_file_bindings:
+          type: boolean
+          default: true
+          description: When false, owners cannot attach workspace files as session-file bindings for project sessions.
+        allow_manual_recordings:
+          type: boolean
+          default: true
+          description: When false, owners cannot start ad-hoc/manual recordings for project sessions. Always-on recording policy remains an explicit session setting.
+        usage_budget_enforcement:
+          $ref: '#/components/schemas/ProjectUsageBudgetEnforcement'
+    ProjectUsageBudgetEnforcement:
+      type: string
+      description: Warning-only keeps project usage budgets advisory. Block-session-creation rejects new project sessions after the project reaches max_session_creations, exhausts max_session_creations_per_window in the configured window, or reaches max_runtime_usage_ms; egress budgets remain advisory.
+      enum:
+        - warning_only
+        - block_session_creation
     ProjectUsageResource:
       type: object
       required:
         - project_id
         - active_sessions
+        - queued_sessions
+        - session_creations
+        - max_session_creations
         - max_active_sessions
         - active_workflow_runs
         - max_active_workflow_runs
+        - runtime_usage_ms
+        - max_runtime_usage_ms
+        - egress_rx_bytes
+        - egress_tx_bytes
+        - egress_total_bytes
+        - max_egress_total_bytes
         - retained_storage_bytes
         - max_retained_storage_bytes
+        - alerts
         - observed_at
       properties:
         project_id:
@@ -5550,6 +5823,16 @@ components:
         active_sessions:
           type: integer
           minimum: 0
+        queued_sessions:
+          type: integer
+          minimum: 0
+        session_creations:
+          type: integer
+          minimum: 0
+        max_session_creations:
+          type: integer
+          minimum: 1
+          nullable: true
         max_active_sessions:
           type: integer
           minimum: 1
@@ -5561,18 +5844,90 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        runtime_usage_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Aggregated browser runtime duration for sessions in this project. Live sessions include elapsed runtime through observed_at.
+        max_runtime_usage_ms:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+        egress_rx_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Sanitized receive byte counter reported by egress observers for sessions in this project.
+        egress_tx_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Sanitized transmit byte counter reported by egress observers for sessions in this project.
+        egress_total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Sum of egress_rx_bytes and egress_tx_bytes.
+        max_egress_total_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
         retained_storage_bytes:
           type: integer
           format: int64
           minimum: 0
+          description: Retained bytes currently counted from project-linked workflow produced files, completed recording artifacts, session files, and project-owned file workspace files.
         max_retained_storage_bytes:
           type: integer
           format: int64
           minimum: 1
           nullable: true
+          description: Configured retained-storage quota for the currently counted project artifact classes. Null means unbounded.
+        alerts:
+          type: array
+          description: Warning-first usage budget signals derived from configured soft budgets. Alerts do not imply request rejection.
+          items:
+            $ref: '#/components/schemas/ProjectUsageAlertResource'
         observed_at:
           type: string
           format: date-time
+    ProjectUsageAlertResource:
+      type: object
+      required:
+        - metric
+        - state
+        - current_value
+        - limit_value
+        - threshold_percent
+        - message
+      properties:
+        metric:
+          type: string
+          enum:
+            - session_creations
+            - runtime_usage_ms
+            - egress_total_bytes
+        state:
+          type: string
+          enum:
+            - approaching_limit
+            - exceeded
+        current_value:
+          type: integer
+          format: int64
+          minimum: 0
+        limit_value:
+          type: integer
+          format: int64
+          minimum: 1
+        threshold_percent:
+          type: integer
+          minimum: 1
+          maximum: 100
+        message:
+          type: string
     UpsertProjectRequest:
       type: object
       additionalProperties: false
@@ -5589,6 +5944,8 @@ components:
             type: string
         quotas:
           $ref: '#/components/schemas/ProjectQuotas'
+        policy:
+          $ref: '#/components/schemas/ProjectPolicy'
         state:
           $ref: '#/components/schemas/ProjectState'
     ProjectResource:
@@ -5599,6 +5956,7 @@ components:
         - description
         - labels
         - quotas
+        - policy
         - state
         - usage
         - created_at
@@ -5618,6 +5976,8 @@ components:
             type: string
         quotas:
           $ref: '#/components/schemas/ProjectQuotas'
+        policy:
+          $ref: '#/components/schemas/ProjectPolicy'
         state:
           $ref: '#/components/schemas/ProjectState'
         usage:
@@ -6144,7 +6504,15 @@ components:
         - owner_scope_unbounded
         - project_quota_available
         - active_session_quota_exceeded
+        - session_creation_budget_exceeded
+        - session_creation_rate_exceeded
+        - runtime_usage_budget_exceeded
+        - active_workflow_run_quota_exceeded
         - project_archived
+        - session_template_not_allowed
+        - egress_profile_not_allowed
+        - extension_not_allowed
+        - browser_context_not_allowed
     ProjectAdmissionDecision:
       type: object
       required:
@@ -6154,6 +6522,15 @@ components:
         - project_id
         - active_sessions
         - max_active_sessions
+        - active_workflow_runs
+        - max_active_workflow_runs
+        - session_creations
+        - max_session_creations
+        - session_creations_in_window
+        - max_session_creations_per_window
+        - session_creation_window_sec
+        - runtime_usage_ms
+        - max_runtime_usage_ms
         - checked_at
       properties:
         state:
@@ -6172,6 +6549,44 @@ components:
           nullable: true
         max_active_sessions:
           type: integer
+          minimum: 1
+          nullable: true
+        active_workflow_runs:
+          type: integer
+          minimum: 0
+          nullable: true
+        max_active_workflow_runs:
+          type: integer
+          minimum: 1
+          nullable: true
+        session_creations:
+          type: integer
+          minimum: 0
+          nullable: true
+        max_session_creations:
+          type: integer
+          minimum: 1
+          nullable: true
+        session_creations_in_window:
+          type: integer
+          minimum: 0
+          nullable: true
+        max_session_creations_per_window:
+          type: integer
+          minimum: 1
+          nullable: true
+        session_creation_window_sec:
+          type: integer
+          minimum: 1
+          nullable: true
+        runtime_usage_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        max_runtime_usage_ms:
+          type: integer
+          format: int64
           minimum: 1
           nullable: true
         checked_at:
@@ -6467,6 +6882,106 @@ components:
           minimum: 250
           maximum: 30000
           default: 8000
+    SessionEgressUsageSourceKind:
+      type: string
+      description: Sanitized observer class that reported the egress usage counter delta.
+      enum:
+        - proxy
+        - tls_interceptor
+        - secure_web_gateway
+        - custom
+    ReportSessionEgressUsageRequest:
+      type: object
+      description: Sanitized session egress usage counter delta. Do not include URLs, headers, credentials, response status, timing, payload bytes, or decrypted traffic contents.
+      properties:
+        rx_bytes_delta:
+          type: integer
+          format: int64
+          minimum: 0
+          default: 0
+          description: Sanitized received byte delta observed for this session.
+        tx_bytes_delta:
+          type: integer
+          format: int64
+          minimum: 0
+          default: 0
+          description: Sanitized transmitted byte delta observed for this session.
+        source_kind:
+          allOf:
+            - $ref: '#/components/schemas/SessionEgressUsageSourceKind'
+          default: proxy
+        observer_id:
+          type: string
+          maxLength: 128
+          nullable: true
+          pattern: '^[A-Za-z0-9._:-]+$'
+          description: Sanitized observer identifier, such as a proxy instance id or local observer name.
+        observed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Observer timestamp. Defaults to the gateway receipt time when omitted.
+    SessionEgressUsageResource:
+      type: object
+      required:
+        - session_id
+        - project_id
+        - egress_profile_id
+        - egress_rx_bytes
+        - egress_tx_bytes
+        - egress_total_bytes
+        - rx_bytes_delta
+        - tx_bytes_delta
+        - source_kind
+        - observer_id
+        - observed_at
+        - recorded_at
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        egress_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+        egress_rx_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Accumulated sanitized received byte counter for the session.
+        egress_tx_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Accumulated sanitized transmitted byte counter for the session.
+        egress_total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Sum of egress_rx_bytes and egress_tx_bytes.
+        rx_bytes_delta:
+          type: integer
+          format: int64
+          minimum: 0
+        tx_bytes_delta:
+          type: integer
+          format: int64
+          minimum: 0
+        source_kind:
+          $ref: '#/components/schemas/SessionEgressUsageSourceKind'
+        observer_id:
+          type: string
+          nullable: true
+        observed_at:
+          type: string
+          format: date-time
+        recorded_at:
+          type: string
+          format: date-time
     RunEgressProfileReachabilityProbeRequest:
       type: object
       properties:
@@ -6520,6 +7035,11 @@ components:
       additionalProperties: false
       required: [name]
       properties:
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional project that owns this egress profile. Project-scoped sessions can use profiles from the same project; owner-scoped profiles remain reusable by the owner.
         name:
           type: string
         description:
@@ -6554,6 +7074,8 @@ components:
       type: object
       required:
         - id
+        - project_id
+        - project
         - name
         - description
         - labels
@@ -6570,6 +7092,14 @@ components:
         id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project:
+          allOf:
+            - $ref: '#/components/schemas/SessionProjectResource'
+          nullable: true
         name:
           type: string
         description:
@@ -6639,8 +7169,10 @@ components:
         - connect
         - runtime
         - status
+        - queue
         - created_at
         - updated_at
+        - queued_at
         - runtime_released_at
         - stopped_at
       properties:
@@ -6706,12 +7238,20 @@ components:
           $ref: '#/components/schemas/SessionRuntimeInfo'
         status:
           $ref: '#/components/schemas/SessionStatusSummary'
+        queue:
+          allOf:
+            - $ref: '#/components/schemas/SessionQueueInfo'
+          nullable: true
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+        queued_at:
+          type: string
+          format: date-time
+          nullable: true
         runtime_released_at:
           type: string
           format: date-time

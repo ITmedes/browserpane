@@ -11,6 +11,7 @@
   import {
     buildEgressProfileCommand,
     commandFromEgressProfile,
+    egressProfileProjectLabel,
     egressProfileRows,
     emptyEgressProfileForm,
     formFromEgressProfile,
@@ -351,6 +352,7 @@
       <div class="grid min-w-0 gap-2 text-xs text-admin-ink/70">
         {@render ProfileFact('Mode', selectedRow?.kind ?? 'direct')}
         {@render ProfileFact('Health', selectedProfile.diagnostics.health, 'egress-profile-health')}
+        {@render ProfileFact('Project', egressProfileProjectLabel(selectedProfile), 'egress-profile-selected-project')}
         {@render ProfileFact('Proxy', selectedProfile.effective.proxy_configured ? 'configured' : 'none')}
         {@render ProfileFact('Proxy auth', selectedProfile.effective.proxy_auth_configured ? 'binding' : 'none')}
         {@render ProfileFact('TLS', selectedProfile.effective.tls_interception_enabled ? 'intercept' : 'metadata')}
@@ -420,6 +422,10 @@
             <option value="ready">ready</option>
             <option value="disabled">disabled</option>
           </select>
+        </label>
+        <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
+          Project ID
+          <input class="min-h-11 min-w-0 rounded-xl border border-[#90a6cc]/20 bg-admin-field px-3 text-admin-ink outline-none focus:border-admin-leaf/45" data-testid="egress-profile-project-id" placeholder="Optional project UUID" bind:value={form.projectId} disabled={disabled} />
         </label>
         <label class="grid min-w-0 gap-1 text-sm font-bold text-admin-ink/72">
           Description

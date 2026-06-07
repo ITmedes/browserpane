@@ -216,6 +216,21 @@
     }
   }
 
+  async function cancelQueuedSession(): Promise<void> {
+    const sessionId = selectedSession?.id ?? null;
+    if (!sessionId) {
+      return;
+    }
+    await runLifecycleAction(
+      'Cancelling queued session...',
+      'Queued session cancelled.',
+      async () => {
+        await controlClient.cancelQueuedSession(sessionId);
+        await onRefreshSelectedSession();
+      },
+    );
+  }
+
   async function refreshStatusFor(sessionId: string): Promise<void> {
     requestedSessionId = sessionId;
     statusLoading = true;
@@ -273,6 +288,7 @@
   onRefresh={() => void refreshPanel()}
   onRelease={() => void runLifecycleAction('Releasing selected session runtime...', 'Selected session runtime was released.', onReleaseSessionRuntime)}
   onStop={() => void runLifecycleAction('Stopping selected session...', 'Selected session stopped.', onStopSession)}
+  onCancelQueue={() => void cancelQueuedSession()}
   onKill={() => void runLifecycleAction('Killing selected session...', 'Selected session was force killed.', onKillSession)}
   onRunEgressProbe={() => void runEgressProbe()}
   onDisconnectConnection={(connectionId) => void disconnectConnection(connectionId)}

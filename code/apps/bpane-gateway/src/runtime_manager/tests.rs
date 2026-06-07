@@ -377,11 +377,17 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         recording: SessionRecordingPolicy::default(),
         created_at: now,
         updated_at: now,
+        queued_at: None,
+        runtime_started_at: Some(now),
+        runtime_usage_ms: 0,
+        egress_rx_bytes: 0,
+        egress_tx_bytes: 0,
         runtime_released_at: None,
         stopped_at: None,
     };
     let profile = StoredEgressProfile {
         id: profile_id,
+        project_id: None,
         owner_subject: "owner".to_string(),
         owner_issuer: "https://issuer.example".to_string(),
         name: "eu-support-egress".to_string(),
@@ -583,6 +589,7 @@ async fn docker_runtime_resolves_secret_backed_proxy_auth_for_launch() {
             &principal,
             PersistCredentialBindingRequest {
                 id: binding_id,
+                project_id: None,
                 name: "support-proxy-auth".to_string(),
                 provider: CredentialBindingProvider::VaultKvV2,
                 external_ref: "test/proxy-auth".to_string(),
@@ -599,6 +606,7 @@ async fn docker_runtime_resolves_secret_backed_proxy_auth_for_launch() {
         .create_egress_profile(
             &principal,
             PersistEgressProfileRequest {
+                project_id: None,
                 name: "authenticated-proxy".to_string(),
                 description: None,
                 labels: HashMap::new(),
@@ -858,6 +866,7 @@ async fn docker_runtime_rejects_parallel_writer_for_reusable_browser_context() {
             &principal,
             PersistBrowserContextRequest {
                 id: None,
+                project_id: None,
                 name: "authenticated".to_string(),
                 description: None,
                 labels: HashMap::new(),

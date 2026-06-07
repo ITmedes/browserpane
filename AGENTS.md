@@ -40,10 +40,21 @@ Current product shape:
 - MCP automation: supported via `mcp-bridge` and gateway ownership APIs.
 - Service-principal registry: owner-scoped external OIDC client metadata is supported through `/api/v1/service-principals`; disabled registered principals cannot be assigned as new automation delegates.
 - Browser extensions: owner-approved unpacked extensions are supported for docker-backed sessions and workflow runs; `static_single` does not support session extension sets.
+- Project policies can restrict live browser uploads/downloads, session-file
+  bindings, and manual recording starts for project-scoped sessions. Session
+  resources expose `capabilities.file_transfer=false` when a project disables
+  either live browser upload or live browser download transfer.
 - Egress traffic logging is proxy-side. BrowserPane should expose sanitized
   session/profile/container correlation metadata, while the configured egress
-  proxy or secure web gateway owns outbound URL/status/bytes/timing logs.
-  Session and egress-profile resources expose sanitized egress diagnostics so
+  proxy or secure web gateway owns outbound URL/status/timing and full traffic
+  logs. BrowserPane can ingest sanitized per-session receive/transmit byte
+  deltas for project usage and alerting, but must not ingest requested URLs,
+  headers, proxy credentials, payload contents, decrypted traffic, or raw CA
+  material.
+  Egress profiles can be owner-scoped or project-scoped; project-bound profiles
+  and project-bound proxy credential bindings are only usable by sessions in the
+  same project. Session and egress-profile resources expose sanitized egress
+  diagnostics so
   operators can distinguish configuration-only proof, runtime launch metadata,
   and active browser probe evidence without exposing requested URLs, proxy
   credentials, CA material, or decrypted traffic. Active browser probes run only
@@ -68,10 +79,10 @@ Current product shape:
   - WebTransport gateway and shared-session coordinator.
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
-  - `session_control.rs`: versioned session-control store and Postgres integration, including projects with admission quotas, service principals, session templates, browser contexts, workflows, credential bindings, file workspaces, and approved extension metadata.
+  - `session_control.rs`: versioned session-control store and Postgres integration, including projects with admission quotas and template/egress/extension/context/file-workspace policy bindings, service principals, session templates, browser contexts, workflows, credential bindings, file workspaces, and approved extension metadata.
   - `browser_contexts/retention.rs`: background cleanup for ready reusable browser contexts whose per-context retention window expired; runtime-backed cleanup skips active writers and removes docker profile volumes through the session manager. Browser context resources can also carry per-context profile storage limits; the API reports over-limit usage and blocks new reusable sessions from contexts whose inspected profile storage exceeds that limit. Inactive reusable contexts can be cloned into new owner-scoped reusable contexts, exported as zip archives, or imported from BrowserPane export archives into new reusable contexts; docker-backed runtimes copy, package, or restore profile volume data when present.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
-  - `credential_provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2.
+  - `credential_provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2. Credential bindings can be owner-scoped or project-scoped; workflow runs and egress-backed sessions must not consume project-bound bindings from another project.
   - `workflow_source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
   - `file_workspace.rs`: owner-scoped file workspace and workspace-file resource shapes persisted by the control plane.
   - `workspace_file_store.rs`: workspace file content storage boundary. `local_fs` is the current implementation; workspace files carry opaque artifact refs plus optional provenance metadata instead of raw filesystem paths.
@@ -87,7 +98,7 @@ Current product shape:
   - `workflow_retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. Local compose defaults to `docker_pool` for browser-session testing. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `runtime_manager/docker/container.rs`: docker runtime launch argument materialization, including safe egress observer labels, startup audit logs for correlating proxy access logs back to BrowserPane sessions, and TLS-interception CA bundle materialization for docker-backed runtimes.
-  - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, `mcp-owner`, and `egress-diagnostics` routes.
+  - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, `mcp-owner`, `egress-diagnostics`, and `egress-usage` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`
@@ -117,7 +128,7 @@ Current product shape:
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 - `deploy/examples/egress-observer`
-  - Local egress observation fixtures. `compose.yml` runs a metadata-only Squid forward proxy at `bpane-egress-observer:3128` and an auth-enforcing Squid proxy at `bpane-egress-auth-observer:3130` for proxy-auth validation. `compose.tls.yml` runs a mitmproxy TLS-intercept proxy at `bpane-egress-tls-observer:3129` using local CA material prepared by `prepare-mitmproxy-ca.sh`.
+  - Local egress observation fixtures. `compose.yml` runs a metadata-only Squid forward proxy at `bpane-egress-observer:3128` and an auth-enforcing Squid proxy at `bpane-egress-auth-observer:3130` for proxy-auth validation. `compose.tls.yml` runs a mitmproxy TLS-intercept proxy at `bpane-egress-tls-observer:3129` using local CA material prepared by `prepare-mitmproxy-ca.sh`. `egress-usage-reporter.mjs` is the local sanitized usage-ingestion example: it joins Squid logs with docker runtime labels and calls `/api/v1/sessions/{id}/egress-usage` with byte counters and safe observer metadata only.
 
 ## Protocol and media facts
 
@@ -185,6 +196,8 @@ Run these where applicable:
 - `cd code/integrations/mcp-bridge && npm run build`
 - `cd code/integrations/recording-worker && npm run build`
 - `cd code/integrations/workflow-worker && npm run build`
+- `node --test deploy/examples/egress-observer/egress-usage-reporter.test.mjs`
+- `node --check deploy/examples/egress-observer/egress-usage-reporter.mjs`
 
 ## Local development flow
 

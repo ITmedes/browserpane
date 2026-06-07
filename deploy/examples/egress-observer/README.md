@@ -180,6 +180,47 @@ Docker labels, API diagnostics, CLI output, or gateway startup logs. Profile
 reachability probes resolve the same binding and send proxy credentials only to
 the configured proxy.
 
+## Report Sanitized Usage Counters
+
+BrowserPane exposes `/api/v1/sessions/{id}/egress-usage` for sanitized byte
+counter ingestion. The local reporter reads the example Squid containers and
+Docker runtime labels, correlates proxy client IPs to BrowserPane sessions, and
+posts only byte deltas plus safe observer metadata to the gateway. It does not
+send proxy URLs, response status, headers, timing, payload, credentials, CA
+material, or decrypted traffic.
+
+Preview the correlated reports first:
+
+```bash
+BPANE_ACCESS_TOKEN=<owner-token> \
+  node deploy/examples/egress-observer/egress-usage-reporter.mjs \
+  --since 10m \
+  --dry-run
+```
+
+Dry-run output is sanitized JSON and does not call the API or advance the local
+watermark. To report the same batch, run without `--dry-run`:
+
+```bash
+BPANE_ACCESS_TOKEN=<owner-token> \
+  node deploy/examples/egress-observer/egress-usage-reporter.mjs \
+  --since 10m \
+  --state /tmp/bpane-egress-usage-state.json
+```
+
+The example Squid log format exposes the transferred response or tunnel byte
+field, so the reporter maps that value to `rx_bytes_delta` and leaves
+`tx_bytes_delta=0`. Production deployments that need request-byte accounting
+should implement that in the proxy or secure-web-gateway collector and call the
+same BrowserPane API with sanitized deltas.
+
+Local validation:
+
+```bash
+node --test deploy/examples/egress-observer/egress-usage-reporter.test.mjs
+node --check deploy/examples/egress-observer/egress-usage-reporter.mjs
+```
+
 ## Production Pattern
 
 For production, point egress profiles at the enterprise egress proxy or secure

@@ -70,6 +70,15 @@ function createSession(id: string): SessionResource {
     state: 'active',
     browser_context: { mode: 'fresh', context_id: null },
     owner_mode: 'collaborative',
+    capabilities: {
+      browser_input: true,
+      clipboard: true,
+      audio: true,
+      microphone: true,
+      camera: true,
+      file_transfer: true,
+      resize: true,
+    },
     connect: { gateway_url: 'https://gateway.example', transport_path: '/transport', auth_type: 'ticket', compatibility_mode: 'direct' },
     runtime: { binding: 'docker', compatibility_mode: 'direct' },
     status: {

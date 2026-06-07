@@ -503,6 +503,65 @@ describe('bpane operator CLI', () => {
     });
   });
 
+  it('reports sanitized session egress usage by id', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ egress_total_bytes: 6144 }));
+
+    const code = await runBpaneCli(
+      [
+        'session',
+        'egress-usage',
+        'report',
+        'session/with space',
+        '--rx-bytes-delta',
+        '4096',
+        '--tx-bytes-delta',
+        '2048',
+        '--egress-usage-source-kind',
+        'proxy',
+        '--observer-id',
+        'local-squid:3128',
+        '--observed-at',
+        '2026-06-05T10:00:00Z',
+      ],
+      { BPANE_BASE_URL: 'http://localhost:8080', BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(parseStdout(io)).toEqual({ egress_total_bytes: 6144 });
+    expect(calls[0].init.method).toBe('POST');
+    expect(calls[0].url).toBe('http://localhost:8080/api/v1/sessions/session%2Fwith%20space/egress-usage');
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      rx_bytes_delta: 4096,
+      tx_bytes_delta: 2048,
+      source_kind: 'proxy',
+      observer_id: 'local-squid:3128',
+      observed_at: '2026-06-05T10:00:00Z',
+    });
+  });
+
+  it('rejects no-op session egress usage reports', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(jsonResponse({ ok: true }));
+
+    const code = await runBpaneCli(
+      ['session', 'egress-usage', 'report', 'session-1'],
+      { BPANE_BASE_URL: 'http://localhost:8080', BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.usage);
+    expect(calls).toHaveLength(0);
+    expect(parseStderr(io)).toMatchObject({
+      ok: false,
+      code: 'USAGE',
+      error: 'At least one of --rx-bytes-delta or --tx-bytes-delta must be greater than zero.',
+    });
+  });
+
   it('creates a session with structured CLI options', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'session-1' }));
@@ -611,6 +670,8 @@ describe('bpane operator CLI', () => {
         'support-profile',
         '--description',
         'Support profile',
+        '--project-id',
+        'project-1',
         '--label',
         'team=support',
         '--retention-sec',
@@ -628,6 +689,7 @@ describe('bpane operator CLI', () => {
     expect(calls[0].init.method).toBe('POST');
     expect(JSON.parse(calls[0].init.body)).toEqual({
       name: 'support-profile',
+      project_id: 'project-1',
       description: 'Support profile',
       labels: { team: 'support' },
       retention_sec: 604800,
@@ -641,6 +703,8 @@ describe('bpane operator CLI', () => {
         'clone',
         'context-1',
         'support-profile-copy',
+        '--project-id',
+        'project-1',
         '--label',
         'copy=sandbox',
       ],
@@ -654,6 +718,7 @@ describe('bpane operator CLI', () => {
     expect(calls[1].init.method).toBe('POST');
     expect(JSON.parse(calls[1].init.body)).toEqual({
       name: 'support-profile-copy',
+      project_id: 'project-1',
       labels: { copy: 'sandbox' },
     });
 
@@ -703,6 +768,8 @@ describe('bpane operator CLI', () => {
         exportPath,
         '--name',
         'support-profile-import',
+        '--project-id',
+        'project-1',
         '--label',
         'imported=true',
         '--retention-sec',
@@ -737,6 +804,7 @@ describe('bpane operator CLI', () => {
     expect(calls[5].init.headers).toMatchObject({
       'Content-Type': 'application/zip',
       'x-bpane-browser-context-name': 'support-profile-import',
+      'x-bpane-browser-context-project-id': 'project-1',
       'x-bpane-browser-context-labels': JSON.stringify({ imported: 'true' }),
       'x-bpane-browser-context-retention-sec': '43200',
     });
@@ -949,6 +1017,19 @@ describe('bpane operator CLI', () => {
           max_active_sessions: 2,
           max_active_workflow_runs: 4,
           max_retained_storage_bytes: 1073741824,
+          max_session_creations: 10,
+          max_session_creations_per_window: 2,
+          session_creation_window_sec: 3600,
+          max_runtime_usage_ms: 3600000,
+          max_egress_total_bytes: 10485760,
+        },
+        policy: {
+          allowed_session_template_ids: [],
+          allowed_egress_profile_ids: [],
+          allowed_extension_ids: [],
+          allowed_browser_context_ids: [],
+          allowed_file_workspace_ids: [],
+          usage_budget_enforcement: 'warning_only',
         },
         state: 'active',
       }),
@@ -961,6 +1042,7 @@ describe('bpane operator CLI', () => {
         max_active_workflow_runs: 4,
         retained_storage_bytes: 0,
         max_retained_storage_bytes: 1073741824,
+        alerts: [],
       }),
       jsonResponse({
         id: 'project-1',
@@ -987,6 +1069,36 @@ describe('bpane operator CLI', () => {
         '4',
         '--max-retained-storage-bytes',
         '1073741824',
+        '--max-session-creations',
+        '10',
+        '--max-session-creations-per-window',
+        '2',
+        '--session-creation-window-sec',
+        '3600',
+        '--max-runtime-usage-ms',
+        '3600000',
+        '--max-egress-total-bytes',
+        '10485760',
+        '--allowed-session-template-id',
+        'template-1',
+        '--allowed-egress-profile-id',
+        'egress-1',
+        '--allowed-extension-id',
+        'extension-1',
+        '--allowed-browser-context-id',
+        'context-1',
+        '--allowed-file-workspace-id',
+        'workspace-1',
+        '--allow-browser-uploads',
+        'false',
+        '--allow-browser-downloads',
+        'true',
+        '--allow-session-file-bindings',
+        'false',
+        '--allow-manual-recordings',
+        'false',
+        '--usage-budget-enforcement',
+        'block_session_creation',
       ],
       { BPANE_ACCESS_TOKEN: 'token-1' },
       createProjectIo.io,
@@ -1004,6 +1116,23 @@ describe('bpane operator CLI', () => {
         max_active_sessions: 2,
         max_active_workflow_runs: 4,
         max_retained_storage_bytes: 1073741824,
+        max_session_creations: 10,
+        max_session_creations_per_window: 2,
+        session_creation_window_sec: 3600,
+        max_runtime_usage_ms: 3600000,
+        max_egress_total_bytes: 10485760,
+      },
+      policy: {
+        allowed_session_template_ids: ['template-1'],
+        allowed_egress_profile_ids: ['egress-1'],
+        allowed_extension_ids: ['extension-1'],
+        allowed_browser_context_ids: ['context-1'],
+        allowed_file_workspace_ids: ['workspace-1'],
+        allow_browser_uploads: false,
+        allow_browser_downloads: true,
+        allow_session_file_bindings: false,
+        allow_manual_recordings: false,
+        usage_budget_enforcement: 'block_session_creation',
       },
     });
 
@@ -1056,6 +1185,19 @@ describe('bpane operator CLI', () => {
         max_active_sessions: 3,
         max_active_workflow_runs: 4,
         max_retained_storage_bytes: 1073741824,
+        max_session_creations: 10,
+        max_session_creations_per_window: 2,
+        session_creation_window_sec: 3600,
+        max_runtime_usage_ms: 3600000,
+        max_egress_total_bytes: 10485760,
+      },
+      policy: {
+        allowed_session_template_ids: [],
+        allowed_egress_profile_ids: [],
+        allowed_extension_ids: [],
+        allowed_browser_context_ids: [],
+        allowed_file_workspace_ids: [],
+        usage_budget_enforcement: 'warning_only',
       },
       state: 'active',
     });
@@ -1248,6 +1390,16 @@ describe('bpane operator CLI', () => {
     );
     expect(invalidQuotaCode).toBe(EXIT_CODES.usage);
     expect(parseStderr(invalidQuotaIo).error).toContain('--max-active-sessions');
+
+    const invalidPolicyBooleanIo = createIo();
+    const invalidPolicyBooleanCode = await runBpaneCli(
+      ['project', 'create', 'support-tenant', '--allow-browser-uploads', 'maybe'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      invalidPolicyBooleanIo.io,
+      fetchImpl,
+    );
+    expect(invalidPolicyBooleanCode).toBe(EXIT_CODES.usage);
+    expect(parseStderr(invalidPolicyBooleanIo).error).toContain('--allow-browser-uploads');
     expect(calls).toHaveLength(0);
   });
 
@@ -1865,25 +2017,29 @@ describe('bpane operator CLI', () => {
     });
   });
 
-  it('mints access, automation access, and disconnects all session clients', async () => {
+  it('mints access, automation access, cancels queue, and disconnects all session clients', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(
       jsonResponse({ token_type: 'session_connect_ticket' }),
       jsonResponse({ token_type: 'session_automation_access_token' }),
+      jsonResponse({ state: 'stopped' }),
       jsonResponse({ state: 'idle' }),
     );
 
     const env = { BPANE_ACCESS_TOKEN: 'token-1' };
     const accessCode = await runBpaneCli(['session', 'access-token', 'session-1'], env, io.io, fetchImpl);
     const automationCode = await runBpaneCli(['session', 'automation-access', 'session-1'], env, io.io, fetchImpl);
+    const cancelCode = await runBpaneCli(['session', 'cancel', 'session-1'], env, io.io, fetchImpl);
     const disconnectCode = await runBpaneCli(['session', 'disconnect-all', 'session-1'], env, io.io, fetchImpl);
 
     expect(accessCode).toBe(EXIT_CODES.ok);
     expect(automationCode).toBe(EXIT_CODES.ok);
+    expect(cancelCode).toBe(EXIT_CODES.ok);
     expect(disconnectCode).toBe(EXIT_CODES.ok);
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([
       ['http://localhost:8080/api/v1/sessions/session-1/access-tokens', 'POST'],
       ['http://localhost:8080/api/v1/sessions/session-1/automation-access', 'POST'],
+      ['http://localhost:8080/api/v1/sessions/session-1/cancel', 'POST'],
       ['http://localhost:8080/api/v1/sessions/session-1/connections/disconnect-all', 'POST'],
     ]);
   });

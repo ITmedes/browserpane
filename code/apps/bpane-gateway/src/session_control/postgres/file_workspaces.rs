@@ -4,6 +4,18 @@ pub(super) struct FileWorkspaceRepository<'a> {
     store: &'a PostgresSessionStore,
 }
 
+const FILE_WORKSPACE_COLUMNS: &str = r#"
+    id,
+    project_id,
+    owner_subject,
+    owner_issuer,
+    name,
+    description,
+    labels,
+    created_at,
+    updated_at
+"#;
+
 impl PostgresSessionStore {
     fn file_workspace_repository(&self) -> FileWorkspaceRepository<'_> {
         FileWorkspaceRepository { store: self }
@@ -88,36 +100,34 @@ impl FileWorkspaceRepository<'_> {
         request: PersistFileWorkspaceRequest,
     ) -> Result<StoredFileWorkspace, SessionStoreError> {
         let now = Utc::now();
+        let query = format!(
+            r#"
+            INSERT INTO control_file_workspaces (
+                id,
+                project_id,
+                owner_subject,
+                owner_issuer,
+                name,
+                description,
+                labels,
+                created_at,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+            RETURNING
+                {FILE_WORKSPACE_COLUMNS}
+            "#
+        );
         let row = self
             .store
             .db
             .client()
             .await?
             .query_one(
-                r#"
-                INSERT INTO control_file_workspaces (
-                    id,
-                    owner_subject,
-                    owner_issuer,
-                    name,
-                    description,
-                    labels,
-                    created_at,
-                    updated_at
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
-                RETURNING
-                    id,
-                    owner_subject,
-                    owner_issuer,
-                    name,
-                    description,
-                    labels,
-                    created_at,
-                    updated_at
-                "#,
+                &query,
                 &[
                     &Uuid::now_v7(),
+                    &request.project_id,
                     &principal.subject,
                     &principal.issuer,
                     &request.name,
@@ -137,29 +147,22 @@ impl FileWorkspaceRepository<'_> {
         &self,
         principal: &AuthenticatedPrincipal,
     ) -> Result<Vec<StoredFileWorkspace>, SessionStoreError> {
+        let query = format!(
+            r#"
+            SELECT
+                {FILE_WORKSPACE_COLUMNS}
+            FROM control_file_workspaces
+            WHERE owner_subject = $1
+              AND owner_issuer = $2
+            ORDER BY created_at DESC
+            "#
+        );
         let rows = self
             .store
             .db
             .client()
             .await?
-            .query(
-                r#"
-                SELECT
-                    id,
-                    owner_subject,
-                    owner_issuer,
-                    name,
-                    description,
-                    labels,
-                    created_at,
-                    updated_at
-                FROM control_file_workspaces
-                WHERE owner_subject = $1
-                  AND owner_issuer = $2
-                ORDER BY created_at DESC
-                "#,
-                &[&principal.subject, &principal.issuer],
-            )
+            .query(&query, &[&principal.subject, &principal.issuer])
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to list file workspaces: {error}"))
@@ -172,29 +175,22 @@ impl FileWorkspaceRepository<'_> {
         principal: &AuthenticatedPrincipal,
         id: Uuid,
     ) -> Result<Option<StoredFileWorkspace>, SessionStoreError> {
+        let query = format!(
+            r#"
+            SELECT
+                {FILE_WORKSPACE_COLUMNS}
+            FROM control_file_workspaces
+            WHERE id = $1
+              AND owner_subject = $2
+              AND owner_issuer = $3
+            "#
+        );
         let row = self
             .store
             .db
             .client()
             .await?
-            .query_opt(
-                r#"
-                SELECT
-                    id,
-                    owner_subject,
-                    owner_issuer,
-                    name,
-                    description,
-                    labels,
-                    created_at,
-                    updated_at
-                FROM control_file_workspaces
-                WHERE id = $1
-                  AND owner_subject = $2
-                  AND owner_issuer = $3
-                "#,
-                &[&id, &principal.subject, &principal.issuer],
-            )
+            .query_opt(&query, &[&id, &principal.subject, &principal.issuer])
             .await
             .map_err(|error| {
                 SessionStoreError::Backend(format!("failed to fetch file workspace: {error}"))

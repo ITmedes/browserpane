@@ -51,6 +51,15 @@ function sessionResource(input: {
     state: 'active',
     browser_context: { mode: 'fresh', context_id: null },
     owner_mode: 'shared',
+    capabilities: {
+      browser_input: true,
+      clipboard: true,
+      audio: true,
+      microphone: true,
+      camera: true,
+      file_transfer: true,
+      resize: true,
+    },
     automation_delegate: null,
     connect: {
       gateway_url: 'https://localhost:4433',

@@ -91,6 +91,8 @@ type MutableCreateSessionCommand = {
 };
 
 export type BrowserContextCreateFormState = {
+  readonly projectId?: string;
+  readonly projects?: readonly ProjectResource[];
   readonly name: string;
   readonly labels: string;
   readonly retentionDays?: string;
@@ -159,6 +161,11 @@ export function validateSessionCreateForm(
         errors.push('Selected reusable browser context must be ready.');
       } else if (browserContext && browserContext.persistence_mode !== 'reusable') {
         errors.push('Selected browser context is not reusable.');
+      } else if (
+        browserContext?.project_id
+        && browserContext.project_id !== projectId
+      ) {
+        errors.push('Selected reusable browser context belongs to a different project.');
       } else {
         command.browser_context = {
           mode: 'reusable',
@@ -248,6 +255,8 @@ function parseNetworkIdentity(
       errors.push('Selected egress profile is not available.');
     } else if (profile?.state === 'disabled') {
       errors.push('Selected egress profile is disabled.');
+    } else if (profile?.project_id && profile.project_id !== (state.projectId ?? '').trim()) {
+      errors.push('Selected egress profile belongs to a different project.');
     } else {
       identity.egress_profile_id = egressProfileId;
     }
@@ -334,6 +343,15 @@ export function validateBrowserContextCreateForm(
   if (!name) {
     errors.push('Browser context name is required.');
   }
+  const projectId = (state.projectId ?? '').trim();
+  if (projectId) {
+    const project = state.projects?.find((entry) => entry.id === projectId) ?? null;
+    if (state.projects && state.projects.length > 0 && !project) {
+      errors.push('Selected project is not available.');
+    } else if (project?.state === 'archived') {
+      errors.push('Selected project is archived.');
+    }
+  }
   const labels = parseSessionCreateLabels(state.labels, errors);
   const retentionSec = parseRetentionDays(state.retentionDays ?? '', errors);
   const maxProfileStorageBytes = parseMaxProfileStorageMb(state.maxProfileStorageMb ?? '', errors);
@@ -341,6 +359,7 @@ export function validateBrowserContextCreateForm(
     command: errors.length === 0
       ? {
           name,
+          ...(projectId ? { project_id: projectId } : {}),
           labels,
           persistence_mode: 'reusable',
           ...(retentionSec !== undefined ? { retention_sec: retentionSec } : {}),
@@ -480,6 +499,7 @@ export function egressProfileOptionLabel(profile: EgressProfileResource): string
     profile.effective.sensitive_log_sink_configured ? 'log sink' : null,
     profile.effective.custom_ca_configured ? 'custom CA' : null,
     profile.effective.bypass_rule_count > 0 ? `${profile.effective.bypass_rule_count} bypass` : null,
+    profile.project_id ? `project=${profile.project?.name ?? shortId(profile.project_id)}` : 'owner scoped',
   ].filter(Boolean);
   return `${profile.name} (${signals.join(', ')})`;
 }
@@ -488,9 +508,34 @@ export function projectOptionLabel(project: ProjectResource): string {
   const signals = [
     project.state,
     `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
+    project.usage.queued_sessions > 0 ? `queued=${project.usage.queued_sessions}` : null,
+    project.usage.session_creations > 0 ? `created=${project.usage.session_creations}` : null,
+    sessionCreationRateLabel(project) ? `rate=${sessionCreationRateLabel(project)}` : null,
     project.usage.max_active_workflow_runs !== null && project.usage.max_active_workflow_runs !== undefined
       ? `workflows=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`
       : null,
+    project.usage.runtime_usage_ms > 0 ? `runtime=${formatDurationMs(project.usage.runtime_usage_ms)}` : null,
+    project.usage.egress_total_bytes > 0 ? `egress_bytes=${formatBytes(project.usage.egress_total_bytes)}` : null,
+    project.usage.alerts.length > 0 ? `alerts=${projectUsageAlertsSummary(project)}` : null,
+    project.policy.allowed_session_template_ids.length > 0
+      ? `templates=${project.policy.allowed_session_template_ids.length}`
+      : null,
+    project.policy.allowed_egress_profile_ids.length > 0
+      ? `egress=${project.policy.allowed_egress_profile_ids.length}`
+      : null,
+    project.policy.allowed_extension_ids.length > 0
+      ? `extensions=${project.policy.allowed_extension_ids.length}`
+      : null,
+    project.policy.allowed_browser_context_ids.length > 0
+      ? `contexts=${project.policy.allowed_browser_context_ids.length}`
+      : null,
+    project.policy.allowed_file_workspace_ids.length > 0
+      ? `workspaces=${project.policy.allowed_file_workspace_ids.length}`
+      : null,
+    !project.policy.allow_browser_uploads ? 'blocks_uploads' : null,
+    !project.policy.allow_browser_downloads ? 'blocks_downloads' : null,
+    !project.policy.allow_session_file_bindings ? 'blocks_file_bindings' : null,
+    !project.policy.allow_manual_recordings ? 'blocks_manual_recording' : null,
   ].filter(Boolean);
   return `${project.name} (${signals.join(', ')})`;
 }
@@ -502,14 +547,77 @@ export function projectUsageSummary(project: ProjectResource | null | undefined)
   const facts = [
     `state=${project.state}`,
     `sessions=${usageFraction(project.usage.active_sessions, project.usage.max_active_sessions)}`,
+    `queued_sessions=${project.usage.queued_sessions}`,
+    `created_sessions=${project.usage.session_creations}`,
+    sessionCreationRateLabel(project) ? `session_rate=${sessionCreationRateLabel(project)}` : null,
     `workflow_runs=${usageFraction(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs)}`,
+    `runtime=${formatDurationMs(project.usage.runtime_usage_ms)}`,
+    `egress_bytes=${formatBytes(project.usage.egress_total_bytes)}`,
     `storage=${usageFraction(project.usage.retained_storage_bytes, project.usage.max_retained_storage_bytes)}`,
-  ];
+    `alerts=${projectUsageAlertsSummary(project)}`,
+    `policy=${projectPolicySummary(project)}`,
+  ].filter(Boolean);
   const labels = Object.entries(project.labels).sort(([left], [right]) => left.localeCompare(right));
   if (labels.length > 0) {
     facts.push(`labels=${labels.map(([key, value]) => `${key}=${value}`).join(',')}`);
   }
   return facts.join(' | ');
+}
+
+function projectPolicySummary(project: ProjectResource): string {
+  const facts = [];
+  if (project.policy.allowed_session_template_ids.length > 0) {
+    facts.push(`${project.policy.allowed_session_template_ids.length} templates`);
+  }
+  if (project.policy.allowed_egress_profile_ids.length > 0) {
+    facts.push(`${project.policy.allowed_egress_profile_ids.length} egress profiles`);
+  }
+  if (project.policy.allowed_extension_ids.length > 0) {
+    facts.push(`${project.policy.allowed_extension_ids.length} extensions`);
+  }
+  if (project.policy.allowed_browser_context_ids.length > 0) {
+    facts.push(`${project.policy.allowed_browser_context_ids.length} contexts`);
+  }
+  if (project.policy.allowed_file_workspace_ids.length > 0) {
+    facts.push(`${project.policy.allowed_file_workspace_ids.length} workspaces`);
+  }
+  if (!project.policy.allow_browser_uploads) {
+    facts.push('blocks uploads');
+  }
+  if (!project.policy.allow_browser_downloads) {
+    facts.push('blocks downloads');
+  }
+  if (!project.policy.allow_session_file_bindings) {
+    facts.push('blocks file bindings');
+  }
+  if (!project.policy.allow_manual_recordings) {
+    facts.push('blocks manual recording');
+  }
+  if (project.policy.usage_budget_enforcement === 'block_session_creation') {
+    facts.push('budget blocks session creation');
+  }
+  return facts.length > 0 ? facts.join(',') : 'unrestricted';
+}
+
+function projectUsageAlertsSummary(project: ProjectResource): string {
+  if (project.usage.alerts.length === 0) {
+    return 'none';
+  }
+  const exceeded = project.usage.alerts.filter((alert) => alert.state === 'exceeded').length;
+  const approaching = project.usage.alerts.length - exceeded;
+  return [
+    exceeded > 0 ? `${exceeded} exceeded` : null,
+    approaching > 0 ? `${approaching} warning${approaching === 1 ? '' : 's'}` : null,
+  ].filter(Boolean).join(', ');
+}
+
+function sessionCreationRateLabel(project: ProjectResource): string | null {
+  const maxPerWindow = project.quotas.max_session_creations_per_window;
+  const windowSec = project.quotas.session_creation_window_sec;
+  if (maxPerWindow === null || maxPerWindow === undefined || windowSec === null || windowSec === undefined) {
+    return null;
+  }
+  return `${maxPerWindow}/${formatDuration(windowSec)}`;
 }
 
 export function egressProfileKind(profile: EgressProfileResource): 'tls_interceptor' | 'proxy' | 'other' {
@@ -534,7 +642,12 @@ export function isLocalTlsInterceptorEgressPreset(profile: EgressProfileResource
 
 export function browserContextOptionLabel(context: BrowserContextResource): string {
   const stateSuffix = context.state === 'ready' ? '' : `, ${context.state}`;
-  return `${context.name} (${shortId(context.id)}${stateSuffix})`;
+  const projectSuffix = context.project?.name
+    ? `, project=${context.project.name}`
+    : context.project_id
+      ? `, project=${shortId(context.project_id)}`
+      : '';
+  return `${context.name} (${shortId(context.id)}${stateSuffix}${projectSuffix})`;
 }
 
 export function sessionBrowserContextSummary(
@@ -553,6 +666,11 @@ export function sessionBrowserContextSummary(
   const facts = [
     `state=${context.state}`,
     `persistence=${context.persistence_mode}`,
+    context.project?.name
+      ? `project=${context.project.name}`
+      : context.project_id
+        ? `project=${shortId(context.project_id)}`
+        : 'owner-scoped',
     context.last_used_at ? `last_used=${context.last_used_at}` : 'never used',
   ];
   const labels = Object.entries(context.labels).sort(([left], [right]) => left.localeCompare(right));
@@ -609,6 +727,9 @@ function parseMaxProfileStorageMb(value: string, errors: string[]): number | und
 }
 
 function formatBytes(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0B';
+  }
   if (value % (1024 * 1024 * 1024) === 0) {
     const gib = value / (1024 * 1024 * 1024);
     return `${gib}GiB`;
@@ -636,6 +757,26 @@ function formatDuration(seconds: number): string {
   if (seconds % 3600 === 0) {
     const hours = seconds / 3600;
     return `${hours}h`;
+  }
+  return `${seconds}s`;
+}
+
+function formatDurationMs(milliseconds: number): string {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    return '0s';
+  }
+  const seconds = Math.floor(milliseconds / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  if (seconds % 86400 === 0) {
+    return `${seconds / 86400}d`;
+  }
+  if (seconds % 3600 === 0) {
+    return `${seconds / 3600}h`;
+  }
+  if (seconds % 60 === 0) {
+    return `${seconds / 60}m`;
   }
   return `${seconds}s`;
 }

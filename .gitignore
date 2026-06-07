@@ -26,6 +26,7 @@ code/web/bpane-admin/build/
 .vscode/
 .idea/
 .github_token
+.bpane-egress-usage-reporter-state.json
 PLAN_*.md
 plan-*.md
 *_PLAN.md

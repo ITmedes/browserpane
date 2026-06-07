@@ -1,8 +1,9 @@
 use uuid::Uuid;
 
+use super::policy::SessionFileTransportPolicy;
 use crate::auth::{AuthError, AuthValidator, AuthenticatedPrincipal};
 use crate::session_access::{SessionConnectTicketError, SessionConnectTicketManager};
-use crate::session_control::SessionStore;
+use crate::session_control::{session_project_policy, SessionStore, StoredSession};
 use crate::session_hub::BrowserClientRole;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -19,6 +20,7 @@ pub(super) enum RequestValidationError {
 pub(super) struct ValidatedConnectRequest {
     pub session_id: Uuid,
     pub client_role: BrowserClientRole,
+    pub file_transfer_policy: SessionFileTransportPolicy,
 }
 
 pub(super) async fn validate_request_path(
@@ -50,9 +52,12 @@ pub(super) async fn validate_request_path(
             {
                 return Err(RequestValidationError::SessionNotVisible);
             }
+            let session = session.ok_or(RequestValidationError::SessionNotVisible)?;
+            let file_transfer_policy = file_transfer_policy(session_store, &session).await?;
             Ok(ValidatedConnectRequest {
                 session_id: claims.session_id,
                 client_role,
+                file_transfer_policy,
             })
         }
         ConnectRequest::BearerToken { token, session_id } => {
@@ -70,12 +75,27 @@ pub(super) async fn validate_request_path(
             {
                 return Err(RequestValidationError::SessionNotVisible);
             }
+            let session = session.ok_or(RequestValidationError::SessionNotVisible)?;
+            let file_transfer_policy = file_transfer_policy(session_store, &session).await?;
             Ok(ValidatedConnectRequest {
                 session_id,
                 client_role,
+                file_transfer_policy,
             })
         }
     }
+}
+
+async fn file_transfer_policy(
+    session_store: &SessionStore,
+    session: &StoredSession,
+) -> Result<SessionFileTransportPolicy, RequestValidationError> {
+    let policy = session_project_policy(session_store, session)
+        .await
+        .map_err(|_| RequestValidationError::SessionLookupFailed)?;
+    Ok(SessionFileTransportPolicy::from_project_policy(
+        policy.as_ref(),
+    ))
 }
 
 enum ConnectRequest {

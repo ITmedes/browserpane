@@ -10,6 +10,11 @@ pub(in crate::session_control) fn validate_browser_context_request(
             "browser context id must not be nil when provided".to_string(),
         ));
     }
+    if request.project_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "browser context project_id must not be nil when provided".to_string(),
+        ));
+    }
     if request.name.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "browser context name must not be empty".to_string(),
@@ -101,6 +106,98 @@ pub(in crate::session_control) fn validate_project_request(
         return Err(SessionStoreError::InvalidRequest(
             "project quotas.max_retained_storage_bytes must be greater than zero when provided"
                 .to_string(),
+        ));
+    }
+    if request.quotas.max_session_creations == Some(0) {
+        return Err(SessionStoreError::InvalidRequest(
+            "project quotas.max_session_creations must be greater than zero when provided"
+                .to_string(),
+        ));
+    }
+    match (
+        request.quotas.max_session_creations_per_window,
+        request.quotas.session_creation_window_sec,
+    ) {
+        (Some(0), _) => {
+            return Err(SessionStoreError::InvalidRequest(
+                "project quotas.max_session_creations_per_window must be greater than zero when provided"
+                    .to_string(),
+            ));
+        }
+        (_, Some(0)) => {
+            return Err(SessionStoreError::InvalidRequest(
+                "project quotas.session_creation_window_sec must be greater than zero when provided"
+                    .to_string(),
+            ));
+        }
+        (Some(_), Some(_)) | (None, None) => {}
+        (Some(_), None) | (None, Some(_)) => {
+            return Err(SessionStoreError::InvalidRequest(
+                "project quotas.max_session_creations_per_window and session_creation_window_sec must be provided together"
+                    .to_string(),
+            ));
+        }
+    }
+    if request.quotas.max_runtime_usage_ms == Some(0) {
+        return Err(SessionStoreError::InvalidRequest(
+            "project quotas.max_runtime_usage_ms must be greater than zero when provided"
+                .to_string(),
+        ));
+    }
+    if request.quotas.max_egress_total_bytes == Some(0) {
+        return Err(SessionStoreError::InvalidRequest(
+            "project quotas.max_egress_total_bytes must be greater than zero when provided"
+                .to_string(),
+        ));
+    }
+    if request
+        .policy
+        .allowed_session_template_ids
+        .iter()
+        .any(|template_id| template_id.trim().is_empty())
+    {
+        return Err(SessionStoreError::InvalidRequest(
+            "project policy.allowed_session_template_ids must not contain empty values".to_string(),
+        ));
+    }
+    if request
+        .policy
+        .allowed_egress_profile_ids
+        .iter()
+        .any(|profile_id| *profile_id == Uuid::nil())
+    {
+        return Err(SessionStoreError::InvalidRequest(
+            "project policy.allowed_egress_profile_ids must not contain nil UUIDs".to_string(),
+        ));
+    }
+    if request
+        .policy
+        .allowed_extension_ids
+        .iter()
+        .any(|extension_id| *extension_id == Uuid::nil())
+    {
+        return Err(SessionStoreError::InvalidRequest(
+            "project policy.allowed_extension_ids must not contain nil UUIDs".to_string(),
+        ));
+    }
+    if request
+        .policy
+        .allowed_browser_context_ids
+        .iter()
+        .any(|context_id| *context_id == Uuid::nil())
+    {
+        return Err(SessionStoreError::InvalidRequest(
+            "project policy.allowed_browser_context_ids must not contain nil UUIDs".to_string(),
+        ));
+    }
+    if request
+        .policy
+        .allowed_file_workspace_ids
+        .iter()
+        .any(|workspace_id| *workspace_id == Uuid::nil())
+    {
+        return Err(SessionStoreError::InvalidRequest(
+            "project policy.allowed_file_workspace_ids must not contain nil UUIDs".to_string(),
         ));
     }
     Ok(())
@@ -268,6 +365,11 @@ pub(in crate::session_control) fn validate_identity_mapping_request(
 pub(in crate::session_control) fn validate_credential_binding_request(
     request: &PersistCredentialBindingRequest,
 ) -> Result<(), SessionStoreError> {
+    if request.project_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "credential binding project_id must not be nil when provided".to_string(),
+        ));
+    }
     if request.name.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "credential binding name must not be empty".to_string(),
@@ -341,6 +443,11 @@ pub(in crate::session_control) fn validate_credential_binding_request(
 pub(in crate::session_control) fn validate_egress_profile_request(
     request: &PersistEgressProfileRequest,
 ) -> Result<(), SessionStoreError> {
+    if request.project_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "egress profile project_id must not be nil".to_string(),
+        ));
+    }
     if request.name.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "egress profile name must not be empty".to_string(),
@@ -543,6 +650,11 @@ pub(in crate::session_control) fn validate_extension_version_request(
 pub(in crate::session_control) fn validate_file_workspace_request(
     request: &PersistFileWorkspaceRequest,
 ) -> Result<(), SessionStoreError> {
+    if request.project_id == Some(Uuid::nil()) {
+        return Err(SessionStoreError::InvalidRequest(
+            "file workspace project_id must not be nil when provided".to_string(),
+        ));
+    }
     if request.name.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "file workspace name must not be empty".to_string(),

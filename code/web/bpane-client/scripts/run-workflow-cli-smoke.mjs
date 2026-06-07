@@ -76,6 +76,28 @@ async function createFileWorkspace(accessToken, options) {
   });
 }
 
+async function createProject(accessToken, options) {
+  return await fetchJson(`${options.pageUrl}/api/v1/projects`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: `workflow-cli-smoke-project-${Date.now()}`,
+      description: 'Project used by the workflow CLI smoke',
+      labels: {
+        suite: 'workflow-cli-smoke',
+      },
+      quotas: {
+        max_active_sessions: 4,
+        max_active_workflow_runs: 4,
+        max_retained_storage_bytes: 1073741824,
+      },
+    }),
+  });
+}
+
 async function issueAutomationAccess(accessToken, options, sessionId) {
   return await fetchJson(`${options.pageUrl}/api/v1/sessions/${sessionId}/automation-access`, {
     method: 'POST',
@@ -146,6 +168,10 @@ async function main() {
     const workspace = await createFileWorkspace(accessToken, options);
     if (!workspace.id) {
       throw new Error('Workflow CLI smoke workspace creation did not return an id.');
+    }
+    const project = await createProject(accessToken, options);
+    if (!project.id) {
+      throw new Error('Workflow CLI smoke project creation did not return an id.');
     }
 
     const cliCwd = process.cwd();
@@ -222,20 +248,6 @@ async function main() {
     }
 
     const clientRequestId = `workflow-cli-smoke-job-${crypto.randomUUID()}`;
-    const runRequest = {
-      workflow_id: workflow.id,
-      version: 'v1',
-      source_system: 'camunda-prod',
-      source_reference: 'process-instance-123/task-7',
-      client_request_id: clientRequestId,
-      input: {
-        target_url: 'http://web:8080/test-embed.html',
-        workspace_id: workspace.id,
-      },
-      labels: {
-        suite: 'workflow-cli-smoke',
-      },
-    };
     const run = runWorkflowCli({
       cwd: cliCwd,
       env: cliEnv,
@@ -243,12 +255,40 @@ async function main() {
         'workflow',
         'run',
         'create',
-        '--body-json',
-        JSON.stringify(runRequest),
+        '--workflow-id',
+        workflow.id,
+        '--version',
+        'v1',
+        '--project-id',
+        project.id,
+        '--create-session',
+        '--source-system',
+        'camunda-prod',
+        '--source-reference',
+        'process-instance-123/task-7',
+        '--client-request-id',
+        clientRequestId,
+        '--input-json',
+        JSON.stringify({
+          target_url: 'http://web:8080/test-embed.html',
+          workspace_id: workspace.id,
+        }),
+        '--label',
+        'suite=workflow-cli-smoke',
+        '--summary',
       ],
     });
     if (!run.id) {
       throw new Error('Workflow CLI smoke run creation did not return an id.');
+    }
+    if (run.project_id !== project.id) {
+      throw new Error(`Workflow CLI smoke did not create a project-scoped run: ${JSON.stringify(run)}`);
+    }
+    if (run.project !== project.name) {
+      throw new Error(`Workflow CLI smoke summary did not expose the project name: ${JSON.stringify(run)}`);
+    }
+    if (run.project_admission_state !== 'allowed') {
+      throw new Error(`Workflow CLI smoke summary did not expose allowed project admission: ${JSON.stringify(run)}`);
     }
     if (run.source_system !== 'camunda-prod') {
       throw new Error('Workflow CLI smoke did not persist source_system on the created run.');
@@ -267,8 +307,27 @@ async function main() {
         'workflow',
         'run',
         'create',
-        '--body-json',
-        JSON.stringify(runRequest),
+        '--workflow-id',
+        workflow.id,
+        '--version',
+        'v1',
+        '--project-id',
+        project.id,
+        '--create-session',
+        '--source-system',
+        'camunda-prod',
+        '--source-reference',
+        'process-instance-123/task-7',
+        '--client-request-id',
+        clientRequestId,
+        '--input-json',
+        JSON.stringify({
+          target_url: 'http://web:8080/test-embed.html',
+          workspace_id: workspace.id,
+        }),
+        '--label',
+        'suite=workflow-cli-smoke',
+        '--summary',
       ],
     });
     if (duplicateRun.id !== run.id) {
@@ -276,6 +335,18 @@ async function main() {
     }
     if (duplicateRun.session_id !== run.session_id) {
       throw new Error('Workflow CLI smoke idempotent retry returned a different session id.');
+    }
+
+    const runSummary = runWorkflowCli({
+      cwd: cliCwd,
+      env: cliEnv,
+      args: ['workflow', 'run', 'get', run.id, '--summary'],
+    });
+    if (
+      runSummary.project_id !== project.id ||
+      runSummary.project_admission_state !== 'allowed'
+    ) {
+      throw new Error(`Workflow CLI smoke summary get did not include project admission: ${JSON.stringify(runSummary)}`);
     }
 
     const waitedRun = runWorkflowCli({

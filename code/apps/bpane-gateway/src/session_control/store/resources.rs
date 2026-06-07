@@ -319,6 +319,121 @@ impl SessionStore {
         }
     }
 
+    pub async fn count_queued_sessions_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .count_queued_sessions_for_project(principal, project_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .count_queued_sessions_for_project(principal, project_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn count_session_creations_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .count_session_creations_for_project(principal, project_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .count_session_creations_for_project(principal, project_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn count_active_workflow_runs_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .count_active_workflow_runs_for_project(principal, project_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .count_active_workflow_runs_for_project(principal, project_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn sum_runtime_usage_ms_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+        observed_at: DateTime<Utc>,
+    ) -> Result<u64, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .sum_runtime_usage_ms_for_project(principal, project_id, observed_at)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .sum_runtime_usage_ms_for_project(principal, project_id, observed_at)
+                    .await
+            }
+        }
+    }
+
+    pub async fn sum_egress_usage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<(u64, u64), SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .sum_egress_usage_bytes_for_project(principal, project_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .sum_egress_usage_bytes_for_project(principal, project_id)
+                    .await
+            }
+        }
+    }
+
+    pub async fn sum_retained_storage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u64, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .sum_retained_storage_bytes_for_project(principal, project_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .sum_retained_storage_bytes_for_project(principal, project_id)
+                    .await
+            }
+        }
+    }
+
     pub fn validate_browser_context_request(
         request: &PersistBrowserContextRequest,
     ) -> Result<(), SessionStoreError> {
@@ -331,6 +446,8 @@ impl SessionStore {
         request: PersistBrowserContextRequest,
     ) -> Result<StoredBrowserContext, SessionStoreError> {
         validate_browser_context_request(&request)?;
+        self.validate_optional_project_reference(principal, request.project_id, "browser context")
+            .await?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.create_browser_context(principal, request).await
@@ -490,6 +607,8 @@ impl SessionStore {
         request: PersistEgressProfileRequest,
     ) -> Result<StoredEgressProfile, SessionStoreError> {
         validate_egress_profile_request(&request)?;
+        self.validate_optional_project_reference(principal, request.project_id, "egress profile")
+            .await?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.create_egress_profile(principal, request).await
@@ -536,6 +655,8 @@ impl SessionStore {
         request: PersistEgressProfileRequest,
     ) -> Result<Option<StoredEgressProfile>, SessionStoreError> {
         validate_egress_profile_request(&request)?;
+        self.validate_optional_project_reference(principal, request.project_id, "egress profile")
+            .await?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store
@@ -642,6 +763,8 @@ impl SessionStore {
         request: PersistFileWorkspaceRequest,
     ) -> Result<StoredFileWorkspace, SessionStoreError> {
         validate_file_workspace_request(&request)?;
+        self.validate_optional_project_reference(principal, request.project_id, "file workspace")
+            .await?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.create_file_workspace(principal, request).await
@@ -652,12 +775,43 @@ impl SessionStore {
         }
     }
 
+    async fn validate_optional_project_reference(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Option<Uuid>,
+        resource_name: &str,
+    ) -> Result<(), SessionStoreError> {
+        let Some(project_id) = project_id else {
+            return Ok(());
+        };
+        let project = self
+            .get_project_for_owner(principal, project_id)
+            .await?
+            .ok_or_else(|| {
+                SessionStoreError::NotFound(format!(
+                    "project {project_id} not found for {resource_name}"
+                ))
+            })?;
+        if project.state == ProjectState::Archived {
+            return Err(SessionStoreError::InvalidRequest(format!(
+                "project {project_id} is archived and cannot be used for {resource_name}"
+            )));
+        }
+        Ok(())
+    }
+
     pub async fn create_credential_binding(
         &self,
         principal: &AuthenticatedPrincipal,
         request: PersistCredentialBindingRequest,
     ) -> Result<StoredCredentialBinding, SessionStoreError> {
         validate_credential_binding_request(&request)?;
+        self.validate_optional_project_reference(
+            principal,
+            request.project_id,
+            "credential binding",
+        )
+        .await?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.create_credential_binding(principal, request).await
@@ -840,6 +994,19 @@ impl SessionStore {
         request: PersistFileWorkspaceFileRequest,
     ) -> Result<StoredFileWorkspaceFile, SessionStoreError> {
         validate_file_workspace_file_request(&request)?;
+        if let Some(workspace) = self
+            .get_file_workspace_for_owner(principal, request.workspace_id)
+            .await?
+        {
+            if let Some(project_id) = workspace.project_id {
+                self.enforce_project_retained_storage_quota(
+                    principal,
+                    project_id,
+                    request.byte_count,
+                )
+                .await?;
+            }
+        }
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store

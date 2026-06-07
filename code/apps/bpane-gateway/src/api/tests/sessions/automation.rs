@@ -115,6 +115,34 @@ async fn automation_access_token_can_drive_status_and_mcp_owner_routes() {
     let status_before_body = response_json(status_before).await;
     assert_eq!(status_before_body["mcp_owner"], false);
 
+    let egress_usage = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/egress-usage"))
+                .header("x-bpane-automation-access-token", automation_token)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "rx_bytes_delta": 123,
+                        "tx_bytes_delta": 456,
+                        "source_kind": "secure_web_gateway",
+                        "observer_id": "swg-smoke"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(egress_usage.status(), StatusCode::OK);
+    let egress_usage_body = response_json(egress_usage).await;
+    assert_eq!(egress_usage_body["session_id"], session_id);
+    assert_eq!(egress_usage_body["egress_rx_bytes"], 123);
+    assert_eq!(egress_usage_body["egress_tx_bytes"], 456);
+    assert_eq!(egress_usage_body["source_kind"], "secure_web_gateway");
+
     let claim_response = app
         .clone()
         .oneshot(

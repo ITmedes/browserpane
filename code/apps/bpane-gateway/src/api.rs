@@ -22,7 +22,7 @@ use crate::automation_tasks::{
 use crate::credentials::{
     CredentialBindingListResponse, CredentialBindingResource, CredentialProvider,
     PersistCredentialBindingRequest, ResolvedWorkflowRunCredentialBindingResource,
-    StoreCredentialSecretRequest, WorkflowRunCredentialBinding,
+    StoreCredentialSecretRequest, StoredCredentialBinding, WorkflowRunCredentialBinding,
 };
 use crate::extensions::{
     AppliedExtension, ExtensionDefinitionListResponse, ExtensionDefinitionResource,
@@ -36,25 +36,28 @@ use crate::recording::{
 };
 use crate::session_access::SessionAutomationAccessTokenClaims;
 use crate::session_control::{
-    BrowserContextListResponse, BrowserContextPersistenceMode, BrowserContextResource,
-    BrowserContextState, CompleteSessionRecordingRequest, CreateSessionRequest,
-    EgressDiagnosticsResource, EgressProfileListResponse, EgressProfileResource,
-    EgressProfileState, FailSessionRecordingRequest, IdentityMappingKind,
-    IdentityMappingListResponse, IdentityMappingResource, IdentityMappingState,
-    PersistBrowserContextRequest, PersistCompletedSessionRecordingRequest,
-    PersistEgressDiagnosticsProbeResult, PersistEgressProfileReachabilityProbeResult,
-    PersistEgressProfileRequest, PersistIdentityMappingRequest, PersistProjectRequest,
-    PersistServicePrincipalRequest, PersistSessionFileBindingRequest,
-    PersistSessionTemplateRequest, ProjectAdmissionDecision, ProjectListResponse, ProjectResource,
-    ProjectUsageResource, ServicePrincipalListResponse, ServicePrincipalResource,
-    ServicePrincipalState, SessionBrowserContextMode, SessionEffectiveEgress,
-    SessionLifecycleState, SessionListResponse, SessionNetworkIdentity, SessionOwnerMode,
-    SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
+    session_project_policy, validate_project_manual_recording_policy, BrowserContextListResponse,
+    BrowserContextPersistenceMode, BrowserContextResource, BrowserContextState,
+    CompleteSessionRecordingRequest, CreateSessionRequest, EgressDiagnosticsResource,
+    EgressProfileListResponse, EgressProfileResource, EgressProfileState,
+    FailSessionRecordingRequest, IdentityMappingKind, IdentityMappingListResponse,
+    IdentityMappingResource, IdentityMappingState, PersistBrowserContextRequest,
+    PersistCompletedSessionRecordingRequest, PersistEgressDiagnosticsProbeResult,
+    PersistEgressProfileReachabilityProbeResult, PersistEgressProfileRequest,
+    PersistIdentityMappingRequest, PersistProjectRequest, PersistServicePrincipalRequest,
+    PersistSessionFileBindingRequest, PersistSessionTemplateRequest, ProjectAdmissionDecision,
+    ProjectAdmissionReasonCode, ProjectListResponse, ProjectPolicy, ProjectResource, ProjectState,
+    ProjectUsageResource, ReportSessionEgressUsageRequest, ServicePrincipalListResponse,
+    ServicePrincipalResource, ServicePrincipalState, SessionBrowserContextMode,
+    SessionCapabilities, SessionEffectiveEgress, SessionEgressUsageResource, SessionLifecycleState,
+    SessionListResponse, SessionNetworkIdentity, SessionOwnerMode, SessionProjectResource,
+    SessionQueueInfo, SessionRecordingFormat, SessionRecordingListResponse, SessionRecordingMode,
     SessionRecordingPolicy, SessionRecordingResource, SessionRecordingState,
     SessionRecordingTerminationReason, SessionResource, SessionStore, SessionStoreError,
     SessionTemplateDefaults, SessionTemplateListResponse, SessionTemplateResource,
-    SetAutomationDelegateRequest, StoredBrowserContext, StoredEgressProfile, StoredIdentityMapping,
-    StoredProject, StoredServicePrincipal, StoredSession, StoredSessionRecording,
+    SetAutomationDelegateRequest, StoredBrowserContext, StoredEgressProfile,
+    StoredEgressProfileReachabilityProbeResult, StoredIdentityMapping, StoredProject,
+    StoredServicePrincipal, StoredSession, StoredSessionRecording,
 };
 use crate::session_files::{
     SessionFileBindingListResponse, SessionFileBindingResource, SessionFileListResponse,

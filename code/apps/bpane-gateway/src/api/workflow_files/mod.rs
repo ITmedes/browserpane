@@ -30,8 +30,11 @@ pub(super) async fn resolve_workflow_run_workspace_inputs(
     state: &Arc<ApiState>,
     principal: &AuthenticatedPrincipal,
     version: &StoredWorkflowDefinitionVersion,
+    project_id: Option<Uuid>,
     requests: Vec<CreateWorkflowRunWorkspaceInputRequest>,
 ) -> Result<Vec<WorkflowRunWorkspaceInput>, (StatusCode, Json<ErrorResponse>)> {
-    workspace_inputs::resolve_workflow_run_workspace_inputs(state, principal, version, requests)
-        .await
+    workspace_inputs::resolve_workflow_run_workspace_inputs(
+        state, principal, version, project_id, requests,
+    )
+    .await
 }

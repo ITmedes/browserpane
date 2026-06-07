@@ -29,6 +29,11 @@ const SESSION_COLUMNS: &str = r#"
     recording,
     created_at,
     updated_at,
+    queued_at,
+    runtime_started_at,
+    runtime_usage_ms,
+    egress_rx_bytes,
+    egress_tx_bytes,
     runtime_released_at,
     stopped_at
 "#;
@@ -107,6 +112,16 @@ impl PostgresSessionStore {
             .await
     }
 
+    pub(in crate::session_control) async fn cancel_queued_session_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .cancel_queued_session_for_owner(principal, id)
+            .await
+    }
+
     pub(in crate::session_control) async fn release_session_runtime_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -140,6 +155,16 @@ impl PostgresSessionStore {
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         self.session_repository()
             .prepare_session_for_connect(id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn record_session_egress_usage(
+        &self,
+        id: Uuid,
+        request: ReportSessionEgressUsageRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .record_session_egress_usage(id, request)
             .await
     }
 
@@ -206,6 +231,7 @@ impl SessionRepository<'_> {
                 description,
                 labels,
                 quotas,
+                policy,
                 state,
                 created_at,
                 updated_at
@@ -255,6 +281,129 @@ impl SessionRepository<'_> {
         u32::try_from(count).map_err(|error| {
             SessionStoreError::Backend(format!(
                 "active project session count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
+    async fn count_session_creations_for_project_in_transaction(
+        &self,
+        transaction: &Transaction<'_>,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        let row = transaction
+            .query_opt(
+                r#"
+                SELECT COUNT(*)::BIGINT AS session_count
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                "#,
+                &[&principal.subject, &principal.issuer, &project_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to count project session creations for admission: {error}"
+                ))
+            })?;
+        let count = row
+            .as_ref()
+            .map(|row| row.get::<_, i64>("session_count"))
+            .unwrap_or(0);
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "project session creation count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
+    async fn count_session_creations_for_project_since_in_transaction(
+        &self,
+        transaction: &Transaction<'_>,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+        window_started_at: DateTime<Utc>,
+    ) -> Result<u32, SessionStoreError> {
+        let row = transaction
+            .query_opt(
+                r#"
+                SELECT COUNT(*)::BIGINT AS session_count
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                  AND created_at >= $4
+                "#,
+                &[
+                    &principal.subject,
+                    &principal.issuer,
+                    &project_id,
+                    &window_started_at,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to count project session creations in rate window for admission: {error}"
+                ))
+            })?;
+        let count = row
+            .as_ref()
+            .map(|row| row.get::<_, i64>("session_count"))
+            .unwrap_or(0);
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "project session creation rate-window count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
+    async fn sum_runtime_usage_ms_for_project_in_transaction(
+        &self,
+        transaction: &Transaction<'_>,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+        observed_at: DateTime<Utc>,
+    ) -> Result<u64, SessionStoreError> {
+        let row = transaction
+            .query_one(
+                r#"
+                SELECT COALESCE(SUM(
+                    runtime_usage_ms
+                    + CASE
+                        WHEN runtime_started_at IS NOT NULL
+                         AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
+                            THEN GREATEST(
+                                0,
+                                FLOOR(EXTRACT(EPOCH FROM ($4::timestamptz - runtime_started_at)) * 1000)
+                            )::BIGINT
+                        ELSE 0
+                    END
+                ), 0)::BIGINT AS runtime_usage_ms
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                "#,
+                &[
+                    &principal.subject,
+                    &principal.issuer,
+                    &project_id,
+                    &observed_at,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to sum project runtime usage milliseconds for admission: {error}"
+                ))
+            })?;
+        let runtime_usage_ms = row.get::<_, i64>("runtime_usage_ms");
+        u64::try_from(runtime_usage_ms).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "project runtime usage milliseconds exceeded u64 range: {error}"
             ))
         })
     }

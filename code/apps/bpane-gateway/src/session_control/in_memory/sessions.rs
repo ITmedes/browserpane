@@ -7,7 +7,256 @@ fn active_runtime_candidate_count(sessions: &[StoredSession]) -> usize {
         .count()
 }
 
+fn active_project_session_count(
+    sessions: &[StoredSession],
+    owner_subject: &str,
+    owner_issuer: &str,
+    project_id: Uuid,
+) -> u32 {
+    sessions
+        .iter()
+        .filter(|session| {
+            session.project_id == Some(project_id)
+                && session.owner.subject == owner_subject
+                && session.owner.issuer == owner_issuer
+                && session.state.is_runtime_candidate()
+        })
+        .count() as u32
+}
+
+fn project_session_creation_count(
+    sessions: &[StoredSession],
+    owner_subject: &str,
+    owner_issuer: &str,
+    project_id: Uuid,
+) -> u32 {
+    sessions
+        .iter()
+        .filter(|session| {
+            session.project_id == Some(project_id)
+                && session.owner.subject == owner_subject
+                && session.owner.issuer == owner_issuer
+        })
+        .count() as u32
+}
+
+fn project_session_creation_count_since(
+    sessions: &[StoredSession],
+    owner_subject: &str,
+    owner_issuer: &str,
+    project_id: Uuid,
+    window_started_at: chrono::DateTime<Utc>,
+) -> u32 {
+    sessions
+        .iter()
+        .filter(|session| {
+            session.project_id == Some(project_id)
+                && session.owner.subject == owner_subject
+                && session.owner.issuer == owner_issuer
+                && session.created_at >= window_started_at
+        })
+        .count() as u32
+}
+
+fn project_runtime_usage_ms(
+    sessions: &[StoredSession],
+    owner_subject: &str,
+    owner_issuer: &str,
+    project_id: Uuid,
+    observed_at: chrono::DateTime<Utc>,
+) -> Result<u64, SessionStoreError> {
+    sessions
+        .iter()
+        .filter(|session| {
+            session.project_id == Some(project_id)
+                && session.owner.subject == owner_subject
+                && session.owner.issuer == owner_issuer
+        })
+        .try_fold(0_u64, |total, session| {
+            let live_runtime_ms = if session.state.is_runtime_candidate() {
+                session
+                    .runtime_started_at
+                    .map(|started_at| {
+                        observed_at
+                            .signed_duration_since(started_at)
+                            .num_milliseconds()
+                            .max(0) as u64
+                    })
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+            total
+                .checked_add(session.runtime_usage_ms)
+                .and_then(|value| value.checked_add(live_runtime_ms))
+                .ok_or_else(|| {
+                    SessionStoreError::Backend(
+                        "project runtime usage milliseconds exceeded u64 range".to_string(),
+                    )
+                })
+        })
+}
+
+fn queued_session_admission(
+    project_id: Uuid,
+    active_sessions: u32,
+    max_active_sessions: u32,
+    now: chrono::DateTime<Utc>,
+) -> ProjectAdmissionDecision {
+    ProjectAdmissionDecision::session_queued(
+        project_id,
+        ProjectAdmissionReasonCode::ActiveSessionQuotaExceeded,
+        format!(
+            "project {project_id} active session quota is exhausted ({active_sessions}/{max_active_sessions}); session queued until capacity is available"
+        ),
+        active_sessions,
+        Some(max_active_sessions),
+        now,
+    )
+}
+
+fn promote_queued_project_sessions(
+    sessions: &mut [StoredSession],
+    projects: &[StoredProject],
+    max_runtime_candidates: usize,
+    now: chrono::DateTime<Utc>,
+) {
+    loop {
+        if active_runtime_candidate_count(sessions) >= max_runtime_candidates {
+            break;
+        }
+
+        let Some((candidate_index, active_sessions, max_active_sessions)) = sessions
+            .iter()
+            .enumerate()
+            .filter(|(_, session)| session.state == SessionLifecycleState::Queued)
+            .filter_map(|(index, session)| {
+                let project_id = session.project_id?;
+                let project = projects.iter().find(|project| {
+                    project.id == project_id
+                        && project.owner_subject == session.owner.subject
+                        && project.owner_issuer == session.owner.issuer
+                })?;
+                if project.state == ProjectState::Archived {
+                    return None;
+                }
+                let active_sessions = active_project_session_count(
+                    sessions,
+                    &session.owner.subject,
+                    &session.owner.issuer,
+                    project_id,
+                );
+                if project
+                    .quotas
+                    .max_active_sessions
+                    .is_some_and(|max_active_sessions| active_sessions >= max_active_sessions)
+                {
+                    return None;
+                }
+                Some((
+                    index,
+                    active_sessions,
+                    project.quotas.max_active_sessions,
+                    session.created_at,
+                ))
+            })
+            .min_by_key(|(_, _, _, created_at)| *created_at)
+            .map(|(index, active_sessions, max_active_sessions, _)| {
+                (index, active_sessions, max_active_sessions)
+            })
+        else {
+            break;
+        };
+
+        let session = &mut sessions[candidate_index];
+        let Some(project_id) = session.project_id else {
+            continue;
+        };
+        session.state = SessionLifecycleState::Ready;
+        session.admission = ProjectAdmissionDecision::project_quota_available(
+            project_id,
+            active_sessions.saturating_add(1),
+            max_active_sessions,
+            now,
+        );
+        session.updated_at = now;
+        session.queued_at = None;
+        session.runtime_started_at = Some(now);
+        session.runtime_released_at = None;
+        session.stopped_at = None;
+    }
+}
+
+fn finalize_runtime_usage(session: &mut StoredSession, now: chrono::DateTime<Utc>) {
+    let Some(started_at) = session.runtime_started_at.take() else {
+        return;
+    };
+    let elapsed_ms = now
+        .signed_duration_since(started_at)
+        .num_milliseconds()
+        .max(0) as u64;
+    session.runtime_usage_ms = session.runtime_usage_ms.saturating_add(elapsed_ms);
+}
+
 impl InMemorySessionStore {
+    async fn validate_session_egress_credential_project_scope(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request: &CreateSessionRequest,
+    ) -> Result<(), SessionStoreError> {
+        let Some(egress_profile_id) = request
+            .network_identity
+            .as_ref()
+            .and_then(|identity| identity.egress_profile_id)
+        else {
+            return Ok(());
+        };
+        let Some(profile) = self
+            .egress_profiles
+            .lock()
+            .await
+            .iter()
+            .find(|profile| {
+                profile.id == egress_profile_id
+                    && profile.owner_subject == principal.subject
+                    && profile.owner_issuer == principal.issuer
+            })
+            .cloned()
+        else {
+            return Ok(());
+        };
+        validate_egress_profile_project_scope(request.project_id, profile.id, profile.project_id)?;
+        let Some(credential_binding_id) = profile
+            .proxy
+            .as_ref()
+            .and_then(|proxy| proxy.credential_binding_id)
+        else {
+            return Ok(());
+        };
+        let binding = self
+            .credential_bindings
+            .lock()
+            .await
+            .iter()
+            .find(|binding| {
+                binding.id == credential_binding_id
+                    && binding.owner_subject == principal.subject
+                    && binding.owner_issuer == principal.issuer
+            })
+            .cloned()
+            .ok_or_else(|| {
+                SessionStoreError::NotFound(format!(
+                    "credential binding {credential_binding_id} not found"
+                ))
+            })?;
+        validate_credential_binding_project_scope(
+            request.project_id,
+            binding.id,
+            binding.project_id,
+            "session",
+        )
+    }
+
     pub(in crate::session_control) async fn get_session_by_id(
         &self,
         id: Uuid,
@@ -22,22 +271,42 @@ impl InMemorySessionStore {
         Ok(session)
     }
 
+    pub(in crate::session_control) async fn record_session_egress_usage(
+        &self,
+        id: Uuid,
+        request: ReportSessionEgressUsageRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| session.id == id) else {
+            return Ok(None);
+        };
+        session.egress_rx_bytes = checked_session_egress_usage_bytes(
+            id,
+            session.egress_rx_bytes,
+            request.rx_bytes_delta,
+            "rx",
+        )?;
+        session.egress_tx_bytes = checked_session_egress_usage_bytes(
+            id,
+            session.egress_tx_bytes,
+            request.tx_bytes_delta,
+            "tx",
+        )?;
+        session.updated_at = Utc::now();
+        Ok(Some(session.clone()))
+    }
+
     pub(in crate::session_control) async fn create_session(
         &self,
         principal: &AuthenticatedPrincipal,
         request: CreateSessionRequest,
         owner_mode: SessionOwnerMode,
     ) -> Result<StoredSession, SessionStoreError> {
-        let mut sessions = self.sessions.lock().await;
-        let active_runtime_candidates = active_runtime_candidate_count(&sessions);
-        if active_runtime_candidates >= self.config.max_runtime_candidates {
-            return Err(SessionStoreError::ActiveSessionConflict {
-                max_runtime_sessions: self.config.max_runtime_candidates,
-            });
-        }
-
         let now = Utc::now();
-        let admission = if let Some(project_id) = request.project_id {
+        self.validate_session_egress_credential_project_scope(principal, &request)
+            .await?;
+        let mut sessions = self.sessions.lock().await;
+        let (admission, lifecycle_state) = if let Some(project_id) = request.project_id {
             let project = self
                 .projects
                 .lock()
@@ -52,12 +321,12 @@ impl InMemorySessionStore {
                 .ok_or_else(|| {
                     SessionStoreError::NotFound(format!("project {project_id} not found"))
                 })?;
-            let active_project_sessions = sessions
-                .iter()
-                .filter(|session| {
-                    session.project_id == Some(project_id) && session.state.is_runtime_candidate()
-                })
-                .count() as u32;
+            let active_project_sessions = active_project_session_count(
+                &sessions,
+                &principal.subject,
+                &principal.issuer,
+                project_id,
+            );
             if project.state == ProjectState::Archived {
                 let decision = ProjectAdmissionDecision::rejected(
                     project_id,
@@ -73,38 +342,92 @@ impl InMemorySessionStore {
                     decision.message
                 )));
             }
+            validate_project_session_policy(&project, &request, active_project_sessions, now)?;
+            let session_creations = project_session_creation_count(
+                &sessions,
+                &principal.subject,
+                &principal.issuer,
+                project_id,
+            );
+            validate_project_session_creation_budget(&project, session_creations, now)?;
+            if let Some(window_started_at) = project_session_creation_window_start(&project, now) {
+                let session_creations_in_window = project_session_creation_count_since(
+                    &sessions,
+                    &principal.subject,
+                    &principal.issuer,
+                    project_id,
+                    window_started_at,
+                );
+                validate_project_session_creation_rate(&project, session_creations_in_window, now)?;
+            }
+            let runtime_usage_ms = project_runtime_usage_ms(
+                &sessions,
+                &principal.subject,
+                &principal.issuer,
+                project_id,
+                now,
+            )?;
+            validate_project_runtime_usage_budget(&project, runtime_usage_ms, now)?;
             if let Some(max_active_sessions) = project.quotas.max_active_sessions {
                 if active_project_sessions >= max_active_sessions {
-                    let decision = ProjectAdmissionDecision::rejected(
-                        project_id,
-                        ProjectAdmissionReasonCode::ActiveSessionQuotaExceeded,
-                        format!(
-                            "project {project_id} active session quota is exhausted ({active_project_sessions}/{max_active_sessions})"
+                    (
+                        queued_session_admission(
+                            project_id,
+                            active_project_sessions,
+                            max_active_sessions,
+                            now,
                         ),
-                        active_project_sessions,
-                        Some(max_active_sessions),
-                        now,
-                    );
-                    return Err(SessionStoreError::Conflict(format!(
-                        "project admission rejected: {}: {}",
-                        decision.reason_code.as_str(),
-                        decision.message
-                    )));
+                        SessionLifecycleState::Queued,
+                    )
+                } else {
+                    (
+                        ProjectAdmissionDecision::project_quota_available(
+                            project_id,
+                            active_project_sessions.saturating_add(1),
+                            project.quotas.max_active_sessions,
+                            now,
+                        ),
+                        SessionLifecycleState::Ready,
+                    )
                 }
+            } else {
+                (
+                    ProjectAdmissionDecision::project_quota_available(
+                        project_id,
+                        active_project_sessions.saturating_add(1),
+                        project.quotas.max_active_sessions,
+                        now,
+                    ),
+                    SessionLifecycleState::Ready,
+                )
             }
-            ProjectAdmissionDecision::project_quota_available(
-                project_id,
-                active_project_sessions.saturating_add(1),
-                project.quotas.max_active_sessions,
-                now,
-            )
         } else {
-            ProjectAdmissionDecision::owner_scope_unbounded(now)
+            (
+                ProjectAdmissionDecision::owner_scope_unbounded(now),
+                SessionLifecycleState::Ready,
+            )
         };
+        if lifecycle_state.is_runtime_candidate()
+            && active_runtime_candidate_count(&sessions) >= self.config.max_runtime_candidates
+        {
+            return Err(SessionStoreError::ActiveSessionConflict {
+                max_runtime_sessions: self.config.max_runtime_candidates,
+            });
+        }
         let browser_context = request.browser_context.unwrap_or_default();
+        let queued_at = if lifecycle_state == SessionLifecycleState::Queued {
+            Some(now)
+        } else {
+            None
+        };
+        let runtime_started_at = if lifecycle_state.is_runtime_candidate() {
+            Some(now)
+        } else {
+            None
+        };
         let session = StoredSession {
             id: Uuid::now_v7(),
-            state: SessionLifecycleState::Ready,
+            state: lifecycle_state,
             project_id: request.project_id,
             admission,
             template_id: request.template_id,
@@ -128,6 +451,11 @@ impl InMemorySessionStore {
             recording: request.recording,
             created_at: now,
             updated_at: now,
+            queued_at,
+            runtime_started_at,
+            runtime_usage_ms: 0,
+            egress_rx_bytes: 0,
+            egress_tx_bytes: 0,
             runtime_released_at: None,
             stopped_at: None,
         };
@@ -217,11 +545,52 @@ impl InMemorySessionStore {
         };
 
         if session.state != SessionLifecycleState::Stopped {
+            let now = Utc::now();
+            finalize_runtime_usage(session, now);
             session.state = SessionLifecycleState::Stopped;
-            session.updated_at = Utc::now();
+            session.updated_at = now;
+            session.queued_at = None;
+            session.runtime_started_at = None;
             session.stopped_at = Some(session.updated_at);
         }
 
+        let stopped = session.clone();
+        let now = Utc::now();
+        let projects = self.projects.lock().await.clone();
+        promote_queued_project_sessions(
+            &mut sessions,
+            &projects,
+            self.config.max_runtime_candidates,
+            now,
+        );
+
+        Ok(Some(stopped))
+    }
+
+    pub(in crate::session_control) async fn cancel_queued_session_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| {
+            session.id == id
+                && session.owner.subject == principal.subject
+                && session.owner.issuer == principal.issuer
+        }) else {
+            return Ok(None);
+        };
+        if session.state != SessionLifecycleState::Queued {
+            return Err(SessionStoreError::Conflict(format!(
+                "session {id} is not queued"
+            )));
+        }
+
+        session.state = SessionLifecycleState::Stopped;
+        session.updated_at = Utc::now();
+        session.queued_at = None;
+        session.runtime_started_at = None;
+        session.stopped_at = Some(session.updated_at);
         Ok(Some(session.clone()))
     }
 
@@ -252,11 +621,24 @@ impl InMemorySessionStore {
             )));
         }
 
+        let now = Utc::now();
+        finalize_runtime_usage(session, now);
         session.state = SessionLifecycleState::Released;
-        session.updated_at = Utc::now();
+        session.updated_at = now;
+        session.queued_at = None;
+        session.runtime_started_at = None;
         session.runtime_released_at = Some(session.updated_at);
         session.stopped_at = None;
-        Ok(Some(session.clone()))
+        let released = session.clone();
+        let now = Utc::now();
+        let projects = self.projects.lock().await.clone();
+        promote_queued_project_sessions(
+            &mut sessions,
+            &projects,
+            self.config.max_runtime_candidates,
+            now,
+        );
+        Ok(Some(released))
     }
 
     pub(in crate::session_control) async fn mark_session_state(
@@ -297,10 +679,23 @@ impl InMemorySessionStore {
             return Ok(Some(session.clone()));
         }
 
+        let now = Utc::now();
+        finalize_runtime_usage(session, now);
         session.state = SessionLifecycleState::Stopped;
-        session.updated_at = Utc::now();
+        session.updated_at = now;
+        session.queued_at = None;
+        session.runtime_started_at = None;
         session.stopped_at = Some(session.updated_at);
-        Ok(Some(session.clone()))
+        let stopped = session.clone();
+        let now = Utc::now();
+        let projects = self.projects.lock().await.clone();
+        promote_queued_project_sessions(
+            &mut sessions,
+            &projects,
+            self.config.max_runtime_candidates,
+            now,
+        );
+        Ok(Some(stopped))
     }
 
     pub(in crate::session_control) async fn prepare_session_for_connect(
@@ -313,6 +708,17 @@ impl InMemorySessionStore {
         };
 
         let state = sessions[index].state;
+        if state == SessionLifecycleState::Queued {
+            let now = Utc::now();
+            let projects = self.projects.lock().await.clone();
+            promote_queued_project_sessions(
+                &mut sessions,
+                &projects,
+                self.config.max_runtime_candidates,
+                now,
+            );
+            return Ok(Some(sessions[index].clone()));
+        }
         if state != SessionLifecycleState::Released && state != SessionLifecycleState::Stopped {
             return Ok(Some(sessions[index].clone()));
         }
@@ -321,6 +727,57 @@ impl InMemorySessionStore {
             return Err(SessionStoreError::ActiveSessionConflict {
                 max_runtime_sessions: self.config.max_runtime_candidates,
             });
+        }
+
+        let mut project_admission = None;
+        if let Some(project_id) = sessions[index].project_id {
+            let projects = self.projects.lock().await;
+            let project = projects
+                .iter()
+                .find(|project| {
+                    project.id == project_id
+                        && project.owner_subject == sessions[index].owner.subject
+                        && project.owner_issuer == sessions[index].owner.issuer
+                })
+                .cloned()
+                .ok_or_else(|| {
+                    SessionStoreError::NotFound(format!("project {project_id} not found"))
+                })?;
+            if project.state == ProjectState::Archived {
+                return Err(SessionStoreError::Conflict(format!(
+                    "project admission rejected: {}: project {project_id} is archived",
+                    ProjectAdmissionReasonCode::ProjectArchived.as_str()
+                )));
+            }
+            let active_project_sessions = active_project_session_count(
+                &sessions,
+                &sessions[index].owner.subject,
+                &sessions[index].owner.issuer,
+                project_id,
+            );
+            if let Some(max_active_sessions) = project.quotas.max_active_sessions {
+                if active_project_sessions >= max_active_sessions {
+                    let now = Utc::now();
+                    let session = &mut sessions[index];
+                    session.state = SessionLifecycleState::Queued;
+                    session.admission = queued_session_admission(
+                        project_id,
+                        active_project_sessions,
+                        max_active_sessions,
+                        now,
+                    );
+                    session.updated_at = now;
+                    session.queued_at = Some(now);
+                    session.runtime_started_at = None;
+                    return Ok(Some(session.clone()));
+                }
+            }
+            project_admission = Some(ProjectAdmissionDecision::project_quota_available(
+                project_id,
+                active_project_sessions.saturating_add(1),
+                project.quotas.max_active_sessions,
+                Utc::now(),
+            ));
         }
 
         let session = &mut sessions[index];
@@ -332,7 +789,12 @@ impl InMemorySessionStore {
         }
         session.state = SessionLifecycleState::Ready;
         session.updated_at = Utc::now();
+        session.queued_at = None;
+        session.runtime_started_at = Some(session.updated_at);
         session.stopped_at = None;
+        if let Some(admission) = project_admission {
+            session.admission = admission;
+        }
         Ok(Some(session.clone()))
     }
 

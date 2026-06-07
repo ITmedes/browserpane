@@ -1,3 +1,5 @@
+import type { ProjectAdmissionDecision, SessionProjectResource } from './control-types';
+
 export type WorkflowDefinitionResource = {
   readonly id: string;
   readonly name: string;
@@ -69,6 +71,7 @@ export type WorkflowRunSessionCommand = {
 export type CreateWorkflowRunCommand = {
   readonly workflow_id: string;
   readonly version: string;
+  readonly project_id?: string | null;
   readonly session?: WorkflowRunSessionCommand;
   readonly input?: unknown;
   readonly source_system?: string;
@@ -98,6 +101,8 @@ export type WorkflowRunResource = {
   readonly workflow_definition_id: string;
   readonly workflow_definition_version_id: string;
   readonly workflow_version: string;
+  readonly project_id?: string | null;
+  readonly project?: SessionProjectResource | null;
   readonly source_system?: string | null;
   readonly source_reference?: string | null;
   readonly client_request_id?: string | null;
@@ -109,6 +114,8 @@ export type WorkflowRunResource = {
   readonly error?: string | null;
   readonly artifact_refs: readonly string[];
   readonly produced_files: readonly WorkflowRunProducedFileResource[];
+  readonly project_admission?: ProjectAdmissionDecision | null;
+  readonly admission?: WorkflowRunAdmissionResource | null;
   readonly intervention: WorkflowRunInterventionResource;
   readonly runtime?: WorkflowRunRuntimeResource | null;
   readonly labels: Readonly<Record<string, string>>;
@@ -126,6 +133,13 @@ export type WorkflowRunListResponse = {
 
 export type WorkflowRunInterventionResource = {
   readonly pending_request?: WorkflowRunInterventionRequestResource | null;
+};
+
+export type WorkflowRunAdmissionResource = {
+  readonly state: string;
+  readonly reason: string;
+  readonly details?: unknown;
+  readonly queued_at: string;
 };
 
 export type WorkflowRunInterventionRequestResource = {

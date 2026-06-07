@@ -42,6 +42,8 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
     assert!(context["usage"]["active_runtime_session_id"].is_null());
     assert!(context["usage"]["profile_storage_bytes"].is_null());
     assert_eq!(context["usage"]["profile_storage_limit_exceeded"], false);
+    assert!(context["project_id"].is_null());
+    assert!(context["project"].is_null());
     assert!(context["last_used_at"].is_null());
 
     let duplicate_response = app
@@ -294,6 +296,132 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
         .await
         .unwrap();
     assert_eq!(deleted_context_session.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn scopes_browser_contexts_to_projects_for_session_reuse() {
+    let (app, token) = test_router();
+
+    let project_a = create_project(&app, &token, "tenant-a").await;
+    let project_a_id = project_a["id"].as_str().unwrap().to_string();
+    let project_b = create_project(&app, &token, "tenant-b").await;
+    let project_b_id = project_b["id"].as_str().unwrap().to_string();
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/browser-contexts")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_a_id,
+                        "name": "tenant-a-profile"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let context = response_json(create_response).await;
+    let context_id = context["id"].as_str().unwrap().to_string();
+    assert_eq!(context["project_id"], project_a_id);
+    assert_eq!(context["project"]["id"], project_a_id);
+    assert_eq!(context["project"]["name"], "tenant-a");
+
+    let mismatched_session = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_b_id,
+                        "browser_context": {
+                            "mode": "reusable",
+                            "context_id": context_id
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(mismatched_session.status(), StatusCode::BAD_REQUEST);
+    let rejected = response_json(mismatched_session).await;
+    assert!(rejected["error"]
+        .as_str()
+        .unwrap()
+        .contains("requires a matching session project_id"));
+
+    let matched_session = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_a_id,
+                        "browser_context": {
+                            "mode": "reusable",
+                            "context_id": context_id
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(matched_session.status(), StatusCode::CREATED);
+
+    let clone_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/browser-contexts/{context_id}/clone"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "name": "tenant-a-profile-copy" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(clone_response.status(), StatusCode::CREATED);
+    let cloned = response_json(clone_response).await;
+    assert_eq!(cloned["project_id"], project_a_id);
+    assert_eq!(cloned["project"]["id"], project_a_id);
+}
+
+async fn create_project(app: &Router, token: &str, name: &str) -> Value {
+    response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "name": name }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await
 }
 
 #[tokio::test]

@@ -98,6 +98,25 @@ pub(in crate::session_control) fn row_to_stored_session(
         recording,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
+        queued_at: row.get("queued_at"),
+        runtime_started_at: row.get("runtime_started_at"),
+        runtime_usage_ms: u64::try_from(row.get::<_, i64>("runtime_usage_ms")).map_err(
+            |error| {
+                SessionStoreError::Backend(format!(
+                    "session runtime usage milliseconds exceeded u64 range: {error}"
+                ))
+            },
+        )?,
+        egress_rx_bytes: u64::try_from(row.get::<_, i64>("egress_rx_bytes")).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "session egress receive byte count exceeded u64 range: {error}"
+            ))
+        })?,
+        egress_tx_bytes: u64::try_from(row.get::<_, i64>("egress_tx_bytes")).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "session egress transmit byte count exceeded u64 range: {error}"
+            ))
+        })?,
         runtime_released_at: row.get("runtime_released_at"),
         stopped_at: row.get("stopped_at"),
     })
