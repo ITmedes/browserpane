@@ -1,4 +1,5 @@
 import type {
+  WorkflowRunAdmissionResource,
   WorkflowRunEventListResponse,
   WorkflowRunEventResource,
   WorkflowRunInterventionRequestResource,
@@ -11,6 +12,7 @@ import type {
   WorkflowRunResource,
   WorkflowRunRuntimeResource,
 } from './workflow-types';
+import { ControlSessionMapper } from './control-session-mapper';
 import {
   expectBoolean,
   expectNumber,
@@ -33,6 +35,7 @@ export class WorkflowRunMapper {
     const sourceSystem = optionalString(object.source_system, 'workflow run source_system');
     const sourceReference = optionalString(object.source_reference, 'workflow run source_reference');
     const clientRequestId = optionalString(object.client_request_id, 'workflow run client_request_id');
+    const projectId = optionalString(object.project_id, 'workflow run project_id');
     const error = optionalString(object.error, 'workflow run error');
     const startedAt = optionalString(object.started_at, 'workflow run started_at');
     const completedAt = optionalString(object.completed_at, 'workflow run completed_at');
@@ -48,6 +51,8 @@ export class WorkflowRunMapper {
         'workflow run workflow_definition_version_id',
       ),
       workflow_version: expectString(object.workflow_version, 'workflow run workflow_version'),
+      project_id: projectId ?? null,
+      project: ControlSessionMapper.toSessionProjectResource(object.project),
       ...(sourceSystem !== undefined ? { source_system: sourceSystem } : {}),
       ...(sourceReference !== undefined ? { source_reference: sourceReference } : {}),
       ...(clientRequestId !== undefined ? { client_request_id: clientRequestId } : {}),
@@ -60,6 +65,8 @@ export class WorkflowRunMapper {
       artifact_refs: expectStringArray(object.artifact_refs ?? [], 'workflow run artifact_refs'),
       produced_files: expectArray(object.produced_files ?? [], 'workflow run produced_files')
         .map(toProducedFile),
+      project_admission: ControlSessionMapper.toProjectAdmissionDecision(object.project_admission),
+      admission: toAdmission(object.admission),
       intervention: toIntervention(object.intervention),
       ...(runtime !== undefined ? { runtime } : {}),
       labels: expectStringRecord(object.labels ?? {}, 'workflow run labels'),
@@ -92,6 +99,19 @@ export class WorkflowRunMapper {
       files: expectArray(object.files, 'workflow run produced file list files').map(toProducedFile),
     };
   }
+}
+
+function toAdmission(value: unknown): WorkflowRunAdmissionResource | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const object = expectRecord(value, 'workflow run admission');
+  return {
+    state: expectString(object.state, 'workflow run admission state'),
+    reason: expectString(object.reason, 'workflow run admission reason'),
+    ...(object.details !== undefined ? { details: object.details } : {}),
+    queued_at: expectString(object.queued_at, 'workflow run admission queued_at'),
+  };
 }
 
 function toIntervention(value: unknown): WorkflowRunInterventionResource {

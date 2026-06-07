@@ -22,6 +22,7 @@ export type SessionListItemViewModel = {
   readonly project: string;
   readonly projectId: string | null;
   readonly admission: string;
+  readonly capabilities: string;
   readonly browserContext: string;
   readonly browserContextId: string | null;
   readonly networkIdentity: string;
@@ -67,6 +68,7 @@ export type SessionDetailPanelViewModel = {
   readonly statusHint: string | null;
   readonly canRefresh: boolean;
   readonly canStop: boolean;
+  readonly canCancelQueue: boolean;
   readonly canKill: boolean;
   readonly canRelease: boolean;
   readonly canDisconnectAll: boolean;
@@ -116,6 +118,7 @@ export class SessionViewModelBuilder {
         statusHint: null,
         canRefresh: false,
         canStop: false,
+        canCancelQueue: false,
         canKill: false,
         canRelease: false,
         canDisconnectAll: false,
@@ -130,6 +133,8 @@ export class SessionViewModelBuilder {
     const connectionCount = status?.connection_counts.total_clients
       ?? session.status.connection_counts.total_clients;
     const hasLiveClients = input.connected || connectionCount > 0;
+    const queue = session.queue ?? null;
+    const isQueued = session.state === 'queued';
     return {
       title: session.id,
       facts: [
@@ -143,6 +148,11 @@ export class SessionViewModelBuilder {
           label: 'admission',
           value: admissionLabel(status?.admission ?? session.admission),
           testId: 'session-admission',
+        },
+        {
+          label: 'capabilities',
+          value: capabilityLabel(session),
+          testId: 'session-capabilities',
         },
         {
           label: 'template',
@@ -185,6 +195,17 @@ export class SessionViewModelBuilder {
         { label: 'transport', value: session.connect.compatibility_mode },
         { label: 'created', value: session.created_at },
         { label: 'updated', value: session.updated_at },
+        ...(queue ? [
+          { label: 'queued', value: queue.queued_at, testId: 'session-queued-at' },
+          { label: 'queue age', value: durationLabel(queue.queued_for_ms), testId: 'session-queue-age' },
+          {
+            label: 'queue position',
+            value: `${queue.position}/${queue.queued_sessions}`,
+            testId: 'session-queue-position',
+          },
+          { label: 'queue blocker', value: queue.dispatch_blocker, testId: 'session-queue-blocker' },
+        ] : []),
+        ...(session.queued_at && !queue ? [{ label: 'queued', value: session.queued_at, testId: 'session-queued-at' }] : []),
         ...(session.runtime_released_at ? [{ label: 'runtime released', value: session.runtime_released_at }] : []),
         ...(session.stopped_at ? [{ label: 'stopped', value: session.stopped_at }] : []),
         ...statusFacts(status),
@@ -198,14 +219,31 @@ export class SessionViewModelBuilder {
       hint: resolveHint(hasLiveClients, stopEligibility),
       statusHint: status ? null : 'Live status is loaded from the session status API.',
       canRefresh: !input.loading,
-      canStop: !input.loading && !hasLiveClients && stopEligibility.allowed,
-      canKill: !input.loading && !hasLiveClients,
-      canRelease: !input.loading && !hasLiveClients && stopEligibility.allowed && !['released', 'stopped'].includes(session.state),
+      canStop: !input.loading && !isQueued && !hasLiveClients && stopEligibility.allowed,
+      canCancelQueue: !input.loading && isQueued && (queue?.cancellable ?? true),
+      canKill: !input.loading && !isQueued && !hasLiveClients,
+      canRelease: !input.loading && !isQueued && !hasLiveClients && stopEligibility.allowed && !['released', 'stopped'].includes(session.state),
       canDisconnectAll: !input.loading && (status?.connections.length ?? 0) > 0,
       loading: input.loading,
       error: input.error,
     };
   }
+}
+
+function durationLabel(milliseconds: number): string {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    return '0s';
+  }
+  const seconds = Math.floor(milliseconds / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ${seconds % 60}s`;
+  }
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
 }
 
 function toListItem(
@@ -226,6 +264,7 @@ function toListItem(
     project: projectLabel(session),
     projectId: session.project_id ?? null,
     admission: admissionLabel(session.admission),
+    capabilities: capabilityLabel(session),
     browserContext: browserContextLabel(session, browserContexts),
     browserContextId: session.browser_context?.context_id ?? null,
     networkIdentity: networkIdentityLabel(session.network_identity),
@@ -286,6 +325,23 @@ function resolveHint(connected: boolean, stopEligibility: SessionStopEligibility
 
 function yesNo(value: boolean): string {
   return value ? 'yes' : 'no';
+}
+
+function capabilityLabel(session: SessionResource): string {
+  const blocked = [];
+  if (!session.capabilities.file_transfer) {
+    blocked.push('file transfer blocked');
+  }
+  if (!session.capabilities.clipboard) {
+    blocked.push('clipboard blocked');
+  }
+  if (!session.capabilities.microphone) {
+    blocked.push('mic blocked');
+  }
+  if (!session.capabilities.camera) {
+    blocked.push('camera blocked');
+  }
+  return blocked.length > 0 ? blocked.join(', ') : 'full';
 }
 
 function mcpDelegationLabel(session: SessionResource): string {
@@ -426,11 +482,27 @@ function admissionLabel(admission: SessionResource['admission'] | SessionStatus[
   if (!admission) {
     return 'No admission decision';
   }
-  const usage = admission.active_sessions !== null
-    && admission.active_sessions !== undefined
-    ? ` ${admission.active_sessions}/${admission.max_active_sessions ?? 'unlimited'}`
-    : '';
+  const usage = admissionUsageLabel(admission);
   return `${admission.state} | ${admission.reason_code}${usage}`;
+}
+
+function admissionUsageLabel(
+  admission: NonNullable<SessionResource['admission'] | SessionStatus['admission']>,
+): string {
+  if (admission.active_sessions !== null && admission.active_sessions !== undefined) {
+    return ` ${admission.active_sessions}/${admission.max_active_sessions ?? 'unlimited'}`;
+  }
+  if (admission.session_creations !== null && admission.session_creations !== undefined) {
+    return ` ${admission.session_creations}/${admission.max_session_creations ?? 'unlimited'}`;
+  }
+  if (admission.session_creations_in_window !== null && admission.session_creations_in_window !== undefined) {
+    const windowSec = admission.session_creation_window_sec ?? 'window';
+    return ` ${admission.session_creations_in_window}/${admission.max_session_creations_per_window ?? 'unlimited'} per ${windowSec}s`;
+  }
+  if (admission.runtime_usage_ms !== null && admission.runtime_usage_ms !== undefined) {
+    return ` ${admission.runtime_usage_ms}/${admission.max_runtime_usage_ms ?? 'unlimited'}ms`;
+  }
+  return '';
 }
 
 function browserContextLabel(

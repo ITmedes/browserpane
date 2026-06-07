@@ -123,21 +123,64 @@ export type SessionEffectiveEgress = {
 
 export type ProjectState = 'active' | 'archived';
 
+export type ProjectUsageBudgetEnforcement = 'warning_only' | 'block_session_creation';
+
 export type ProjectQuotas = {
   readonly max_active_sessions?: number | null;
   readonly max_active_workflow_runs?: number | null;
   readonly max_retained_storage_bytes?: number | null;
+  readonly max_session_creations?: number | null;
+  readonly max_session_creations_per_window?: number | null;
+  readonly session_creation_window_sec?: number | null;
+  readonly max_runtime_usage_ms?: number | null;
+  readonly max_egress_total_bytes?: number | null;
+};
+
+export type ProjectPolicy = {
+  readonly allowed_session_template_ids: readonly string[];
+  readonly allowed_egress_profile_ids: readonly string[];
+  readonly allowed_extension_ids: readonly string[];
+  readonly allowed_browser_context_ids: readonly string[];
+  readonly allowed_file_workspace_ids: readonly string[];
+  readonly allow_browser_uploads: boolean;
+  readonly allow_browser_downloads: boolean;
+  readonly allow_session_file_bindings: boolean;
+  readonly allow_manual_recordings: boolean;
+  readonly usage_budget_enforcement: ProjectUsageBudgetEnforcement;
 };
 
 export type ProjectUsageResource = {
   readonly project_id: string;
   readonly active_sessions: number;
+  readonly queued_sessions: number;
+  readonly session_creations: number;
+  readonly max_session_creations?: number | null;
   readonly max_active_sessions?: number | null;
   readonly active_workflow_runs: number;
   readonly max_active_workflow_runs?: number | null;
+  readonly runtime_usage_ms: number;
+  readonly max_runtime_usage_ms?: number | null;
+  readonly egress_rx_bytes: number;
+  readonly egress_tx_bytes: number;
+  readonly egress_total_bytes: number;
+  readonly max_egress_total_bytes?: number | null;
   readonly retained_storage_bytes: number;
   readonly max_retained_storage_bytes?: number | null;
+  readonly alerts: readonly ProjectUsageAlertResource[];
   readonly observed_at: string;
+};
+
+export type ProjectUsageAlertMetric = 'session_creations' | 'runtime_usage_ms' | 'egress_total_bytes';
+
+export type ProjectUsageAlertState = 'approaching_limit' | 'exceeded';
+
+export type ProjectUsageAlertResource = {
+  readonly metric: ProjectUsageAlertMetric;
+  readonly state: ProjectUsageAlertState;
+  readonly current_value: number;
+  readonly limit_value: number;
+  readonly threshold_percent: number;
+  readonly message: string;
 };
 
 export type ProjectResource = {
@@ -146,6 +189,7 @@ export type ProjectResource = {
   readonly description?: string | null;
   readonly labels: Readonly<Record<string, string>>;
   readonly quotas: ProjectQuotas;
+  readonly policy: ProjectPolicy;
   readonly state: ProjectState;
   readonly usage: ProjectUsageResource;
   readonly created_at: string;
@@ -164,7 +208,15 @@ export type ProjectAdmissionReasonCode =
   | 'owner_scope_unbounded'
   | 'project_quota_available'
   | 'active_session_quota_exceeded'
-  | 'project_archived';
+  | 'session_creation_budget_exceeded'
+  | 'session_creation_rate_exceeded'
+  | 'runtime_usage_budget_exceeded'
+  | 'active_workflow_run_quota_exceeded'
+  | 'project_archived'
+  | 'session_template_not_allowed'
+  | 'egress_profile_not_allowed'
+  | 'extension_not_allowed'
+  | 'browser_context_not_allowed';
 
 export type ProjectAdmissionDecision = {
   readonly state: ProjectAdmissionState;
@@ -173,6 +225,15 @@ export type ProjectAdmissionDecision = {
   readonly project_id?: string | null;
   readonly active_sessions?: number | null;
   readonly max_active_sessions?: number | null;
+  readonly active_workflow_runs?: number | null;
+  readonly max_active_workflow_runs?: number | null;
+  readonly session_creations?: number | null;
+  readonly max_session_creations?: number | null;
+  readonly session_creations_in_window?: number | null;
+  readonly max_session_creations_per_window?: number | null;
+  readonly session_creation_window_sec?: number | null;
+  readonly runtime_usage_ms?: number | null;
+  readonly max_runtime_usage_ms?: number | null;
   readonly checked_at: string;
 };
 
@@ -330,11 +391,14 @@ export type CreateProjectCommand = {
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly quotas?: ProjectQuotas;
+  readonly policy?: ProjectPolicy;
   readonly state?: ProjectState;
 };
 
 export type EgressProfileResource = {
   readonly id: string;
+  readonly project_id?: string | null;
+  readonly project?: SessionProjectResource | null;
   readonly name: string;
   readonly description?: string | null;
   readonly labels: Readonly<Record<string, string>>;
@@ -354,6 +418,7 @@ export type EgressProfileListResponse = {
 };
 
 export type CreateEgressProfileCommand = {
+  readonly project_id?: string | null;
   readonly name: string;
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
@@ -382,6 +447,8 @@ export type SessionBrowserContextCommand = {
 
 export type BrowserContextResource = {
   readonly id: string;
+  readonly project_id?: string | null;
+  readonly project?: SessionProjectResource | null;
   readonly name: string;
   readonly description?: string | null;
   readonly labels: Readonly<Record<string, string>>;
@@ -411,6 +478,7 @@ export type BrowserContextListResponse = {
 
 export type CreateBrowserContextCommand = {
   readonly name: string;
+  readonly project_id?: string | null;
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly persistence_mode?: BrowserContextPersistenceMode;
@@ -420,6 +488,7 @@ export type CreateBrowserContextCommand = {
 
 export type CloneBrowserContextCommand = {
   readonly name: string;
+  readonly project_id?: string | null;
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly retention_sec?: number | null;
@@ -429,6 +498,7 @@ export type CloneBrowserContextCommand = {
 export type ImportBrowserContextCommand = {
   readonly name: string;
   readonly archive: BodyInit;
+  readonly project_id?: string | null;
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly retention_sec?: number | null;
@@ -468,12 +538,33 @@ export type SessionConnectionCounts = {
   readonly total_clients: number;
 };
 
+export type SessionCapabilities = {
+  readonly browser_input: boolean;
+  readonly clipboard: boolean;
+  readonly audio: boolean;
+  readonly microphone: boolean;
+  readonly camera: boolean;
+  readonly file_transfer: boolean;
+  readonly resize: boolean;
+};
+
 export type SessionStatusSummary = {
   readonly runtime_state: string;
   readonly runtime_resume_mode: string;
   readonly presence_state: string;
   readonly connection_counts: SessionConnectionCounts;
   readonly stop_eligibility: SessionStopEligibility;
+};
+
+export type SessionQueueInfo = {
+  readonly queued_at: string;
+  readonly queued_for_ms: number;
+  readonly position: number;
+  readonly active_sessions: number;
+  readonly queued_sessions: number;
+  readonly max_active_sessions?: number | null;
+  readonly dispatch_blocker: string;
+  readonly cancellable: boolean;
 };
 
 export type SessionResource = {
@@ -488,6 +579,7 @@ export type SessionResource = {
   readonly effective_egress?: SessionEffectiveEgress;
   readonly egress_diagnostics?: EgressDiagnosticsResource;
   readonly owner_mode: string;
+  readonly capabilities: SessionCapabilities;
   readonly viewport?: SessionViewport | null;
   readonly idle_timeout_sec?: number | null;
   readonly labels?: Readonly<Record<string, string>>;
@@ -496,8 +588,10 @@ export type SessionResource = {
   readonly connect: SessionConnectInfo;
   readonly runtime: SessionRuntimeInfo;
   readonly status: SessionStatusSummary;
+  readonly queue?: SessionQueueInfo | null;
   readonly created_at: string;
   readonly updated_at: string;
+  readonly queued_at?: string | null;
   readonly runtime_released_at?: string | null;
   readonly stopped_at?: string | null;
 };
@@ -587,6 +681,8 @@ export type SessionFileListResponse = {
 
 export type FileWorkspaceResource = {
   readonly id: string;
+  readonly project_id?: string | null;
+  readonly project?: SessionProjectResource | null;
   readonly name: string;
   readonly description?: string | null;
   readonly labels: Readonly<Record<string, string>>;
@@ -601,6 +697,7 @@ export type FileWorkspaceListResponse = {
 
 export type CreateFileWorkspaceCommand = {
   readonly name: string;
+  readonly project_id?: string | null;
   readonly description?: string | null;
   readonly labels?: Readonly<Record<string, string>>;
 };

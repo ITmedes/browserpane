@@ -19,8 +19,11 @@ export type WorkflowOperationsViewModel = {
   readonly status: string;
   readonly note: string;
   readonly selectedSessionLabel: string;
+  readonly baselineProjectLabel: string;
   readonly runSessionLabel: string;
   readonly runSessionNote: string;
+  readonly runProjectLabel: string;
+  readonly projectAdmissionLabel: string;
   readonly definitionOptions: readonly WorkflowDefinitionOption[];
   readonly selectedWorkflowId: string;
   readonly selectedVersion: string;
@@ -87,8 +90,14 @@ export class WorkflowOperationsViewModelBuilder {
       status: statusLabel(input.loading, input.error, input.currentRun),
       note: note(input.definitions.length, hasSession, input.error),
       selectedSessionLabel: input.selectedSession?.id ?? '--',
+      baselineProjectLabel: projectLabel(
+        input.selectedSession?.project_id ?? null,
+        input.selectedSession?.project ?? null,
+      ),
       runSessionLabel: input.currentRun?.session_id ?? '--',
       runSessionNote: runSessionNote(input.selectedSession?.id ?? null, input.currentRun?.session_id ?? null),
+      runProjectLabel: projectLabel(input.currentRun?.project_id ?? null, input.currentRun?.project ?? null),
+      projectAdmissionLabel: projectAdmissionLabel(input.currentRun?.project_admission ?? null),
       definitionOptions: input.definitions.map(toDefinitionOption),
       selectedWorkflowId: input.selectedWorkflowId,
       selectedVersion: input.selectedVersion,
@@ -189,6 +198,30 @@ function runSessionNote(baselineSessionId: string | null, runSessionId: string |
   return 'Run uses the selected baseline session.';
 }
 
+function projectLabel(
+  projectId: string | null,
+  project: { readonly name: string; readonly state: string } | null,
+): string {
+  if (project) {
+    return `${project.name} (${project.state})`;
+  }
+  return projectId ? `Project ${shortId(projectId)}` : 'Owner scope';
+}
+
+function projectAdmissionLabel(
+  admission: { readonly state: string; readonly reason_code: string; readonly active_workflow_runs?: number | null; readonly max_active_workflow_runs?: number | null } | null,
+): string {
+  if (!admission) {
+    return '--';
+  }
+  const workflowQuota = admission.active_workflow_runs !== undefined
+    || admission.max_active_workflow_runs !== undefined;
+  if (!workflowQuota) {
+    return `${admission.state} · ${admission.reason_code}`;
+  }
+  return `${admission.state} · ${admission.active_workflow_runs ?? '--'}/${admission.max_active_workflow_runs ?? 'unlimited'} runs`;
+}
+
 function isTerminal(state: string | null): boolean {
   return state === 'succeeded' || state === 'failed' || state === 'cancelled' || state === 'timed_out';
 }
@@ -222,4 +255,8 @@ function formatBytes(bytes: number): string {
     return `${bytes} B`;
   }
   return `${Math.round(bytes / 102.4) / 10} KiB`;
+}
+
+function shortId(value: string): string {
+  return value.length > 13 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
 }

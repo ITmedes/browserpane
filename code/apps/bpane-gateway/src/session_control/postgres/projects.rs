@@ -8,6 +8,7 @@ const PROJECT_COLUMNS: &str = r#"
     description,
     labels,
     quotas,
+    policy,
     state,
     created_at,
     updated_at
@@ -71,6 +72,67 @@ impl PostgresSessionStore {
             .count_active_sessions_for_project(principal, project_id)
             .await
     }
+
+    pub(in crate::session_control) async fn count_queued_sessions_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        self.project_repository()
+            .count_queued_sessions_for_project(principal, project_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn count_session_creations_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        self.project_repository()
+            .count_session_creations_for_project(principal, project_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn count_active_workflow_runs_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        self.project_repository()
+            .count_active_workflow_runs_for_project(principal, project_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn sum_runtime_usage_ms_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+        observed_at: DateTime<Utc>,
+    ) -> Result<u64, SessionStoreError> {
+        self.project_repository()
+            .sum_runtime_usage_ms_for_project(principal, project_id, observed_at)
+            .await
+    }
+
+    pub(in crate::session_control) async fn sum_egress_usage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<(u64, u64), SessionStoreError> {
+        self.project_repository()
+            .sum_egress_usage_bytes_for_project(principal, project_id)
+            .await
+    }
+
+    pub(in crate::session_control) async fn sum_retained_storage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u64, SessionStoreError> {
+        self.project_repository()
+            .sum_retained_storage_bytes_for_project(principal, project_id)
+            .await
+    }
 }
 
 impl ProjectRepository<'_> {
@@ -83,6 +145,9 @@ impl ProjectRepository<'_> {
         let quotas_value = serde_json::to_value(&request.quotas).map_err(|error| {
             SessionStoreError::Backend(format!("failed to encode project quotas: {error}"))
         })?;
+        let policy_value = serde_json::to_value(&request.policy).map_err(|error| {
+            SessionStoreError::Backend(format!("failed to encode project policy: {error}"))
+        })?;
         let query = format!(
             r#"
             INSERT INTO control_projects (
@@ -93,11 +158,12 @@ impl ProjectRepository<'_> {
                 description,
                 labels,
                 quotas,
+                policy,
                 state,
                 created_at,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $9)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10, $10)
             RETURNING
                 {PROJECT_COLUMNS}
             "#
@@ -117,6 +183,7 @@ impl ProjectRepository<'_> {
                     &request.description,
                     &json_labels(&request.labels),
                     &quotas_value,
+                    &policy_value,
                     &request.state.as_str(),
                     &now,
                 ],
@@ -198,6 +265,9 @@ impl ProjectRepository<'_> {
         let quotas_value = serde_json::to_value(&request.quotas).map_err(|error| {
             SessionStoreError::Backend(format!("failed to encode project quotas: {error}"))
         })?;
+        let policy_value = serde_json::to_value(&request.policy).map_err(|error| {
+            SessionStoreError::Backend(format!("failed to encode project policy: {error}"))
+        })?;
         let query = format!(
             r#"
             UPDATE control_projects
@@ -206,7 +276,8 @@ impl ProjectRepository<'_> {
                 description = $5,
                 labels = $6::jsonb,
                 quotas = $7::jsonb,
-                state = $8,
+                policy = $8::jsonb,
+                state = $9,
                 updated_at = NOW()
             WHERE id = $1
               AND owner_subject = $2
@@ -230,6 +301,7 @@ impl ProjectRepository<'_> {
                     &request.description,
                     &json_labels(&request.labels),
                     &quotas_value,
+                    &policy_value,
                     &request.state.as_str(),
                 ],
             )
@@ -283,4 +355,282 @@ impl ProjectRepository<'_> {
             ))
         })
     }
+
+    async fn count_queued_sessions_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                SELECT COUNT(*)::BIGINT AS session_count
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                  AND state = 'queued'
+                "#,
+                &[&principal.subject, &principal.issuer, &project_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to count project queued sessions: {error}"
+                ))
+            })?;
+        let count = row
+            .as_ref()
+            .map(|row| row.get::<_, i64>("session_count"))
+            .unwrap_or(0);
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "queued project session count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
+    async fn count_active_workflow_runs_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                SELECT COUNT(*)::BIGINT AS run_count
+                FROM control_workflow_runs
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                  AND state IN ('pending', 'starting', 'running', 'awaiting_input')
+                "#,
+                &[&principal.subject, &principal.issuer, &project_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to count project active workflow runs: {error}"
+                ))
+            })?;
+        let count = row
+            .as_ref()
+            .map(|row| row.get::<_, i64>("run_count"))
+            .unwrap_or(0);
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "active project workflow run count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
+    async fn count_session_creations_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u32, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                r#"
+                SELECT COUNT(*)::BIGINT AS session_count
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                "#,
+                &[&principal.subject, &principal.issuer, &project_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to count project session creations: {error}"
+                ))
+            })?;
+        let count = row
+            .as_ref()
+            .map(|row| row.get::<_, i64>("session_count"))
+            .unwrap_or(0);
+        u32::try_from(count).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "project session creation count exceeded u32 range: {error}"
+            ))
+        })
+    }
+
+    async fn sum_runtime_usage_ms_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+        observed_at: DateTime<Utc>,
+    ) -> Result<u64, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_one(
+                r#"
+                SELECT COALESCE(SUM(
+                    runtime_usage_ms
+                    + CASE
+                        WHEN runtime_started_at IS NOT NULL
+                         AND state IN ('pending', 'starting', 'ready', 'active', 'idle')
+                            THEN GREATEST(
+                                0,
+                                FLOOR(EXTRACT(EPOCH FROM ($4::timestamptz - runtime_started_at)) * 1000)
+                            )::BIGINT
+                        ELSE 0
+                    END
+                ), 0)::BIGINT AS runtime_usage_ms
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                "#,
+                &[
+                    &principal.subject,
+                    &principal.issuer,
+                    &project_id,
+                    &observed_at,
+                ],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to sum project runtime usage milliseconds: {error}"
+                ))
+            })?;
+        i64_to_u64(
+            row.get::<_, i64>("runtime_usage_ms"),
+            "project runtime usage milliseconds",
+        )
+    }
+
+    async fn sum_egress_usage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<(u64, u64), SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_one(
+                r#"
+                SELECT
+                    COALESCE(SUM(egress_rx_bytes), 0)::BIGINT AS rx_bytes,
+                    COALESCE(SUM(egress_tx_bytes), 0)::BIGINT AS tx_bytes
+                FROM control_sessions
+                WHERE owner_subject = $1
+                  AND owner_issuer = $2
+                  AND project_id = $3
+                "#,
+                &[&principal.subject, &principal.issuer, &project_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to sum project egress byte counters: {error}"
+                ))
+            })?;
+        Ok((
+            i64_to_u64(
+                row.get::<_, i64>("rx_bytes"),
+                "project egress receive bytes",
+            )?,
+            i64_to_u64(
+                row.get::<_, i64>("tx_bytes"),
+                "project egress transmit bytes",
+            )?,
+        ))
+    }
+
+    async fn sum_retained_storage_bytes_for_project(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        project_id: Uuid,
+    ) -> Result<u64, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_one(
+                r#"
+                SELECT (
+                    COALESCE((
+                        SELECT SUM(COALESCE((produced_file.value->>'byte_count')::BIGINT, 0))
+                        FROM control_workflow_runs run
+                        CROSS JOIN LATERAL jsonb_array_elements(run.produced_files) AS produced_file(value)
+                        LEFT JOIN control_file_workspaces workspace
+                          ON workspace.id = (produced_file.value->>'workspace_id')::UUID
+                        WHERE run.owner_subject = $1
+                          AND run.owner_issuer = $2
+                          AND run.project_id = $3
+                          AND (
+                            workspace.project_id IS NULL
+                            OR workspace.project_id <> $3
+                          )
+                    ), 0)
+                    + COALESCE((
+                        SELECT SUM(recording.byte_count)
+                        FROM control_session_recordings recording
+                        INNER JOIN control_sessions session ON session.id = recording.session_id
+                        WHERE session.owner_subject = $1
+                          AND session.owner_issuer = $2
+                          AND session.project_id = $3
+                          AND recording.artifact_path IS NOT NULL
+                          AND recording.byte_count IS NOT NULL
+                    ), 0)
+                    + COALESCE((
+                        SELECT SUM(file.byte_count)
+                        FROM control_session_files file
+                        INNER JOIN control_sessions session ON session.id = file.session_id
+                        WHERE session.owner_subject = $1
+                          AND session.owner_issuer = $2
+                          AND session.project_id = $3
+                    ), 0)
+                    + COALESCE((
+                        SELECT SUM(file.byte_count)
+                        FROM control_file_workspace_files file
+                        INNER JOIN control_file_workspaces workspace ON workspace.id = file.workspace_id
+                        WHERE workspace.owner_subject = $1
+                          AND workspace.owner_issuer = $2
+                          AND workspace.project_id = $3
+                    ), 0)
+                )::BIGINT AS retained_storage_bytes
+                "#,
+                &[&principal.subject, &principal.issuer, &project_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to sum project retained storage bytes: {error}"
+                ))
+            })?;
+        let retained_storage_bytes = row.get::<_, i64>("retained_storage_bytes");
+        u64::try_from(retained_storage_bytes).map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "project retained storage byte count exceeded u64 range: {error}"
+            ))
+        })
+    }
+}
+
+fn i64_to_u64(value: i64, label: &str) -> Result<u64, SessionStoreError> {
+    u64::try_from(value)
+        .map_err(|error| SessionStoreError::Backend(format!("{label} exceeded u64 range: {error}")))
 }

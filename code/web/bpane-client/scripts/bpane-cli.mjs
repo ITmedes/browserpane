@@ -16,7 +16,16 @@ export const EXIT_CODES = Object.freeze({
 
 const KNOWN_OPTIONS = new Set([
   'access-token',
+  'allowed-browser-context-id',
+  'allowed-egress-profile-id',
+  'allowed-extension-id',
+  'allowed-file-workspace-id',
+  'allow-browser-downloads',
+  'allow-browser-uploads',
+  'allow-manual-recordings',
+  'allow-session-file-bindings',
   'api-url',
+  'allowed-session-template-id',
   'base-url',
   'body-json',
   'browser-context-id',
@@ -59,7 +68,11 @@ const KNOWN_OPTIONS = new Set([
   'max-profile-storage-bytes',
   'max-active-sessions',
   'max-active-workflow-runs',
+  'max-egress-total-bytes',
   'max-retained-storage-bytes',
+  'max-runtime-usage-ms',
+  'max-session-creations',
+  'max-session-creations-per-window',
   'name',
   'older-than-sec',
   'offset',
@@ -77,7 +90,10 @@ const KNOWN_OPTIONS = new Set([
   'recording-mode',
   'recording-retention-sec',
   'retention-sec',
+  'rx-bytes-delta',
   'save-token',
+  'session-creation-window-sec',
+  'usage-budget-enforcement',
   'set-default',
   'scope',
   'service-principal-id',
@@ -87,6 +103,10 @@ const KNOWN_OPTIONS = new Set([
   'token',
   'timezone',
   'traffic-observation-mode',
+  'tx-bytes-delta',
+  'egress-usage-source-kind',
+  'observer-id',
+  'observed-at',
   'sensitive-log-sink-name',
   'sensitive-log-sink-ref',
   'user-agent',
@@ -127,10 +147,12 @@ function usageText() {
     '  bpane session status <session-id> [options]',
     '  bpane session egress-diagnostics <session-id> [options]',
     '  bpane session egress-diagnostics probe <session-id> [options]',
+    '  bpane session egress-usage report <session-id> [options]',
     '  bpane session access-token <session-id> [options]',
     '  bpane session automation-access <session-id> [options]',
     '  bpane session disconnect-all <session-id> [options]',
     '  bpane session stop <session-id> [options]',
+    '  bpane session cancel <session-id> [options]',
     '  bpane session kill <session-id> [options]',
     '  bpane session cleanup [options]',
     '  bpane session-template create [template-name] [options]',
@@ -186,7 +208,7 @@ function usageText() {
     '  --state <state>           Repeatable cleanup state filter. Default: stopped.',
     '  --runtime-state <state>   Repeatable session runtime-state filter.',
     '  --template-id <id>        Session template id for create/list filters.',
-    '  --project-id <id>         Project id for session create/template defaults.',
+    '  --project-id <id>         Project id for session create/template defaults and project-scoped resource creates.',
     '  --browser-context-id <id> Browser context id for reusable session creation.',
     '  --browser-context-mode <mode> Browser context mode: fresh, ephemeral, reusable.',
     '  --locale <tag>            Session locale, for example de-DE.',
@@ -209,6 +231,11 @@ function usageText() {
     '  --probe-public-ip-url <url>  Public-IP endpoint for session egress probe.',
     '  --probe-tls-url <url>        HTTPS endpoint for TLS issuer probe.',
     '  --probe-timeout-ms <ms>      Session egress probe timeout. Requires an already-ready runtime.',
+    '  --rx-bytes-delta <bytes>     Sanitized received byte delta for session egress usage.',
+    '  --tx-bytes-delta <bytes>     Sanitized transmitted byte delta for session egress usage.',
+    '  --egress-usage-source-kind <kind> Egress usage source: proxy, tls_interceptor, secure_web_gateway, or custom.',
+    '  --observer-id <id>        Sanitized observer id for egress usage reports.',
+    '  --observed-at <timestamp> Observer timestamp for egress usage reports.',
     '  --name <name>             Resource name for create/update commands.',
     '  --description <text>      Resource description for create/update commands.',
     '  --client-id <id>          External service-principal client id.',
@@ -219,14 +246,29 @@ function usageText() {
     '  --service-principal-id <id> Registered service principal id for service-principal mappings.',
     '  --scope <name>            Repeatable service-principal scope metadata.',
     '  --allowed-project-id <id> Repeatable service-principal project metadata.',
+    '  --allowed-session-template-id <id> Repeatable project policy template allow-list entry.',
+    '  --allowed-egress-profile-id <id> Repeatable project policy egress-profile allow-list entry.',
+    '  --allowed-extension-id <id> Repeatable project policy extension-definition allow-list entry.',
+    '  --allowed-browser-context-id <id> Repeatable project policy reusable browser-context allow-list entry.',
+    '  --allowed-file-workspace-id <id> Repeatable project policy file-workspace allow-list entry.',
+    '  --allow-browser-uploads <bool> Project policy switch for browser upload transfers.',
+    '  --allow-browser-downloads <bool> Project policy switch for browser download transfers.',
+    '  --allow-session-file-bindings <bool> Project policy switch for session workspace-file bindings.',
+    '  --allow-manual-recordings <bool> Project policy switch for ad-hoc/manual recording starts.',
+    '  --usage-budget-enforcement <mode> Project budget mode: warning_only or block_session_creation.',
     '  --max-active-sessions <count> Project active-session quota.',
     '  --max-active-workflow-runs <count> Project active workflow-run quota.',
     '  --max-retained-storage-bytes <bytes> Project retained-storage quota.',
+    '  --max-session-creations <count> Project soft budget for created sessions.',
+    '  --max-session-creations-per-window <count> Project rolling session-creation limit.',
+    '  --session-creation-window-sec <sec> Project session-creation rolling window.',
+    '  --max-runtime-usage-ms <ms> Project soft budget for browser runtime milliseconds.',
+    '  --max-egress-total-bytes <bytes> Project soft metadata budget for egress bytes.',
     '  --persistence-mode <mode> Browser context persistence mode. Default: reusable.',
     '  --retention-sec <sec>     Browser context retention window in seconds.',
-  '  --max-profile-storage-bytes <bytes> Browser context profile storage limit in bytes.',
-  '  --input <path>            File path for binary import/upload commands.',
-  '  --output <path>           File path for binary export/download commands.',
+    '  --max-profile-storage-bytes <bytes> Browser context profile storage limit in bytes.',
+    '  --input <path>            File path for binary import/upload commands.',
+    '  --output <path>           File path for binary export/download commands.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
@@ -300,6 +342,21 @@ function getOptions(options, name) {
 function optionEnabled(options, name) {
   const value = getOption(options, name, 'false');
   return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
+}
+
+function parseBooleanOption(options, name) {
+  const raw = getOption(options, name);
+  if (raw === null || raw === '') {
+    return null;
+  }
+  const normalized = String(raw).toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+  throw new CliError('USAGE', `--${name} must be true or false.`, EXIT_CODES.usage);
 }
 
 function parseJsonOption(options, name) {
@@ -1129,7 +1186,72 @@ function buildProjectQuotas(options, existingQuotas = null) {
   if (maxRetainedStorageBytes !== null) {
     quotas.max_retained_storage_bytes = maxRetainedStorageBytes;
   }
+  const maxSessionCreations = parseIntegerOption(options, 'max-session-creations');
+  if (maxSessionCreations !== null) {
+    quotas.max_session_creations = maxSessionCreations;
+  }
+  const maxSessionCreationsPerWindow = parseIntegerOption(options, 'max-session-creations-per-window');
+  if (maxSessionCreationsPerWindow !== null) {
+    quotas.max_session_creations_per_window = maxSessionCreationsPerWindow;
+  }
+  const sessionCreationWindowSec = parseIntegerOption(options, 'session-creation-window-sec');
+  if (sessionCreationWindowSec !== null) {
+    quotas.session_creation_window_sec = sessionCreationWindowSec;
+  }
+  const maxRuntimeUsageMs = parseIntegerOption(options, 'max-runtime-usage-ms');
+  if (maxRuntimeUsageMs !== null) {
+    quotas.max_runtime_usage_ms = maxRuntimeUsageMs;
+  }
+  const maxEgressTotalBytes = parseIntegerOption(options, 'max-egress-total-bytes');
+  if (maxEgressTotalBytes !== null) {
+    quotas.max_egress_total_bytes = maxEgressTotalBytes;
+  }
   return quotas;
+}
+
+function buildProjectPolicy(options, existingPolicy = null) {
+  const policy = isObjectRecord(existingPolicy) ? { ...existingPolicy } : {};
+  const templateIds = getOptions(options, 'allowed-session-template-id');
+  if (templateIds.length) {
+    policy.allowed_session_template_ids = templateIds.filter((templateId) => templateId !== '');
+  }
+  const egressProfileIds = getOptions(options, 'allowed-egress-profile-id');
+  if (egressProfileIds.length) {
+    policy.allowed_egress_profile_ids = egressProfileIds.filter((profileId) => profileId !== '');
+  }
+  const extensionIds = getOptions(options, 'allowed-extension-id');
+  if (extensionIds.length) {
+    policy.allowed_extension_ids = extensionIds.filter((extensionId) => extensionId !== '');
+  }
+  const browserContextIds = getOptions(options, 'allowed-browser-context-id');
+  if (browserContextIds.length) {
+    policy.allowed_browser_context_ids = browserContextIds.filter((contextId) => contextId !== '');
+  }
+  const fileWorkspaceIds = getOptions(options, 'allowed-file-workspace-id');
+  if (fileWorkspaceIds.length) {
+    policy.allowed_file_workspace_ids = fileWorkspaceIds.filter((workspaceId) => workspaceId !== '');
+  }
+  const allowBrowserUploads = parseBooleanOption(options, 'allow-browser-uploads');
+  if (allowBrowserUploads !== null) {
+    policy.allow_browser_uploads = allowBrowserUploads;
+  }
+  const allowBrowserDownloads = parseBooleanOption(options, 'allow-browser-downloads');
+  if (allowBrowserDownloads !== null) {
+    policy.allow_browser_downloads = allowBrowserDownloads;
+  }
+  const allowSessionFileBindings = parseBooleanOption(options, 'allow-session-file-bindings');
+  if (allowSessionFileBindings !== null) {
+    policy.allow_session_file_bindings = allowSessionFileBindings;
+  }
+  const allowManualRecordings = parseBooleanOption(options, 'allow-manual-recordings');
+  if (allowManualRecordings !== null) {
+    policy.allow_manual_recordings = allowManualRecordings;
+  }
+  const usageBudgetEnforcement = getOption(options, 'usage-budget-enforcement');
+  if (usageBudgetEnforcement !== null) {
+    policy.usage_budget_enforcement = usageBudgetEnforcement;
+  }
+  return policy;
 }
 
 function buildProjectRequest(options, fallbackName = null) {
@@ -1158,6 +1280,10 @@ function buildProjectRequest(options, fallbackName = null) {
   const quotas = buildProjectQuotas(options);
   if (Object.keys(quotas).length) {
     body.quotas = quotas;
+  }
+  const policy = buildProjectPolicy(options);
+  if (Object.keys(policy).length) {
+    body.policy = policy;
   }
   const state = getOption(options, 'state');
   if (state) {
@@ -1197,6 +1323,10 @@ function buildProjectUpdateRequest(existingProject, options, forcedState = null)
   const quotas = buildProjectQuotas(options, existingProject?.quotas ?? null);
   if (Object.keys(quotas).length) {
     body.quotas = quotas;
+  }
+  const policy = buildProjectPolicy(options, existingProject?.policy ?? null);
+  if (Object.keys(policy).length) {
+    body.policy = policy;
   }
   const state = forcedState ?? getOption(options, 'state') ?? existingProject?.state;
   if (state) {
@@ -1493,6 +1623,10 @@ function buildEgressProfileRequest(options, fallbackName = null) {
     );
   }
   const body = { name };
+  const projectId = getOption(options, 'project-id');
+  if (projectId) {
+    body.project_id = projectId;
+  }
   const description = getOption(options, 'description');
   if (description !== null) {
     body.description = description;
@@ -1584,6 +1718,10 @@ function buildEgressProfileUpdateRequest(existingProfile, options, forcedState =
   }
 
   const body = { name };
+  const projectId = getOption(options, 'project-id') ?? existingProfile?.project_id ?? null;
+  if (projectId) {
+    body.project_id = projectId;
+  }
   const description = getOption(options, 'description');
   if (description !== null) {
     body.description = description;
@@ -1708,6 +1846,40 @@ function buildEgressDiagnosticsProbeRequest(options) {
   return body;
 }
 
+function buildSessionEgressUsageReport(options) {
+  const rawBody = parseJsonOption(options, 'body-json');
+  if (rawBody !== null) {
+    return rawBody;
+  }
+  const rxBytesDelta = parseNonNegativeIntegerOption(options, 'rx-bytes-delta') ?? 0;
+  const txBytesDelta = parseNonNegativeIntegerOption(options, 'tx-bytes-delta') ?? 0;
+  if (rxBytesDelta === 0 && txBytesDelta === 0) {
+    throw new CliError(
+      'USAGE',
+      'At least one of --rx-bytes-delta or --tx-bytes-delta must be greater than zero.',
+      EXIT_CODES.usage,
+    );
+  }
+
+  const body = {
+    rx_bytes_delta: rxBytesDelta,
+    tx_bytes_delta: txBytesDelta,
+  };
+  const sourceKind = getOption(options, 'egress-usage-source-kind');
+  if (sourceKind !== null) {
+    body.source_kind = sourceKind;
+  }
+  const observerId = getOption(options, 'observer-id');
+  if (observerId !== null) {
+    body.observer_id = observerId;
+  }
+  const observedAt = getOption(options, 'observed-at');
+  if (observedAt !== null) {
+    body.observed_at = observedAt;
+  }
+  return body;
+}
+
 function buildEgressProfileReachabilityProbeRequest(options) {
   const rawBody = parseJsonOption(options, 'body-json');
   if (rawBody !== null) {
@@ -1736,6 +1908,10 @@ function buildBrowserContextRequest(options, fallbackName = null, commandLabel =
     );
   }
   const body = { name };
+  const projectId = getOption(options, 'project-id');
+  if (projectId) {
+    body.project_id = projectId;
+  }
   const description = getOption(options, 'description');
   if (description !== null) {
     body.description = description;
@@ -2335,6 +2511,25 @@ async function handleSessionCommand(config, positionals, options) {
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`,
     );
   }
+  if (action === 'egress-usage') {
+    if (positionals[2] !== 'report') {
+      throw new CliError(
+        'USAGE',
+        'Usage: bpane session egress-usage report <session-id>',
+        EXIT_CODES.usage,
+      );
+    }
+    const sessionId = requiredNestedSessionId(positionals, 'session egress-usage report');
+    return await requestGateway(
+      config,
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-usage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildSessionEgressUsageReport(options)),
+      },
+    );
+  }
   if (action === 'access-token') {
     const sessionId = requiredSessionId(positionals, 'session access-token');
     return await requestGateway(
@@ -2362,6 +2557,12 @@ async function handleSessionCommand(config, positionals, options) {
   if (action === 'stop') {
     const sessionId = requiredSessionId(positionals, 'session stop');
     return await requestGateway(config, `/api/v1/sessions/${encodeURIComponent(sessionId)}/stop`, {
+      method: 'POST',
+    });
+  }
+  if (action === 'cancel') {
+    const sessionId = requiredSessionId(positionals, 'session cancel');
+    return await requestGateway(config, `/api/v1/sessions/${encodeURIComponent(sessionId)}/cancel`, {
       method: 'POST',
     });
   }
@@ -2677,6 +2878,10 @@ async function handleBrowserContextCommand(config, positionals, options) {
       'Content-Type': 'application/zip',
       'x-bpane-browser-context-name': name,
     };
+    const projectId = getOption(options, 'project-id');
+    if (projectId) {
+      headers['x-bpane-browser-context-project-id'] = projectId;
+    }
     const description = getOption(options, 'description');
     if (description !== null) {
       headers['x-bpane-browser-context-description'] = description;

@@ -1,5 +1,29 @@
 use super::*;
 
+fn project_policy_session_request(
+    project_id: Uuid,
+    template_id: Option<&str>,
+    egress_profile_id: Option<Uuid>,
+) -> CreateSessionRequest {
+    CreateSessionRequest {
+        project_id: Some(project_id),
+        template_id: template_id.map(str::to_string),
+        browser_context: None,
+        network_identity: egress_profile_id.map(|profile_id| SessionNetworkIdentity {
+            egress_profile_id: Some(profile_id),
+            ..SessionNetworkIdentity::default()
+        }),
+        owner_mode: None,
+        viewport: None,
+        idle_timeout_sec: None,
+        labels: HashMap::new(),
+        integration_context: None,
+        extension_ids: Vec::new(),
+        extensions: Vec::new(),
+        recording: SessionRecordingPolicy::default(),
+    }
+}
+
 #[tokio::test]
 async fn in_memory_store_limits_legacy_runtime_to_one_active_session() {
     let store = SessionStore::in_memory();
@@ -55,6 +79,382 @@ async fn in_memory_store_limits_legacy_runtime_to_one_active_session() {
             max_runtime_sessions: 1
         }
     ));
+}
+
+#[tokio::test]
+async fn in_memory_store_enforces_project_template_policy() {
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "docker_runtime_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 4,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = principal("owner");
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "Template policy".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas::default(),
+                policy: ProjectPolicy {
+                    allowed_session_template_ids: vec!["allowed-template".to_string()],
+                    allowed_egress_profile_ids: Vec::new(),
+                    ..ProjectPolicy::default()
+                },
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+
+    let allowed = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, Some("allowed-template"), None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    assert_eq!(allowed.project_id, Some(project.id));
+
+    let error = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, Some("other-template"), None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, SessionStoreError::Conflict(message) if message.contains("session_template_not_allowed"))
+    );
+}
+
+#[tokio::test]
+async fn in_memory_store_enforces_project_egress_policy() {
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "docker_runtime_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 4,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = principal("owner");
+    let allowed_profile_id = Uuid::now_v7();
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "Egress policy".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas::default(),
+                policy: ProjectPolicy {
+                    allowed_session_template_ids: Vec::new(),
+                    allowed_egress_profile_ids: vec![allowed_profile_id],
+                    ..ProjectPolicy::default()
+                },
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+
+    let error = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, Some(Uuid::now_v7())),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, SessionStoreError::Conflict(message) if message.contains("egress_profile_not_allowed"))
+    );
+
+    let allowed = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, Some(allowed_profile_id)),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        allowed.network_identity.egress_profile_id,
+        Some(allowed_profile_id)
+    );
+}
+
+#[tokio::test]
+async fn in_memory_store_enforces_project_extension_policy() {
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "docker_runtime_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 4,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = principal("owner");
+    let allowed_extension_id = Uuid::now_v7();
+    let disallowed_extension_id = Uuid::now_v7();
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "Extension policy".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas::default(),
+                policy: ProjectPolicy {
+                    allowed_extension_ids: vec![allowed_extension_id],
+                    ..ProjectPolicy::default()
+                },
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+
+    let no_extension = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    assert_eq!(no_extension.project_id, Some(project.id));
+
+    let mut disallowed_request = project_policy_session_request(project.id, None, None);
+    disallowed_request.extension_ids = vec![disallowed_extension_id];
+    let error = store
+        .create_session(&owner, disallowed_request, SessionOwnerMode::Collaborative)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, SessionStoreError::Conflict(message) if message.contains("extension_not_allowed"))
+    );
+
+    let mut allowed_request = project_policy_session_request(project.id, None, None);
+    allowed_request.extension_ids = vec![allowed_extension_id];
+    let allowed = store
+        .create_session(&owner, allowed_request, SessionOwnerMode::Collaborative)
+        .await
+        .unwrap();
+    assert_eq!(allowed.project_id, Some(project.id));
+}
+
+#[tokio::test]
+async fn in_memory_store_enforces_project_browser_context_policy() {
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "docker_runtime_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 4,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = principal("owner");
+    let allowed_context_id = Uuid::now_v7();
+    let disallowed_context_id = Uuid::now_v7();
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "Browser context policy".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas::default(),
+                policy: ProjectPolicy {
+                    allowed_browser_context_ids: vec![allowed_context_id],
+                    ..ProjectPolicy::default()
+                },
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+
+    let fresh = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    assert_eq!(fresh.browser_context.mode, SessionBrowserContextMode::Fresh);
+
+    let mut disallowed_request = project_policy_session_request(project.id, None, None);
+    disallowed_request.browser_context = Some(SessionBrowserContextRequest {
+        mode: SessionBrowserContextMode::Reusable,
+        context_id: Some(disallowed_context_id),
+    });
+    let error = store
+        .create_session(&owner, disallowed_request, SessionOwnerMode::Collaborative)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, SessionStoreError::Conflict(message) if message.contains("browser_context_not_allowed"))
+    );
+
+    let mut allowed_request = project_policy_session_request(project.id, None, None);
+    allowed_request.browser_context = Some(SessionBrowserContextRequest {
+        mode: SessionBrowserContextMode::Reusable,
+        context_id: Some(allowed_context_id),
+    });
+    let allowed = store
+        .create_session(&owner, allowed_request, SessionOwnerMode::Collaborative)
+        .await
+        .unwrap();
+    assert_eq!(
+        allowed.browser_context.mode,
+        SessionBrowserContextMode::Reusable
+    );
+    assert_eq!(allowed.browser_context.context_id, Some(allowed_context_id));
+}
+
+#[tokio::test]
+async fn in_memory_store_queues_project_sessions_and_promotes_after_stop() {
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "docker_runtime_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 3,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = principal("owner");
+    let project = store
+        .create_project(
+            &owner,
+            PersistProjectRequest {
+                name: "Queued sessions".to_string(),
+                description: None,
+                labels: HashMap::new(),
+                quotas: ProjectQuotas {
+                    max_active_sessions: Some(1),
+                    max_active_workflow_runs: None,
+                    max_retained_storage_bytes: None,
+                    max_session_creations: None,
+                    max_session_creations_per_window: None,
+                    session_creation_window_sec: None,
+                    max_runtime_usage_ms: None,
+                    max_egress_total_bytes: None,
+                },
+                policy: ProjectPolicy::default(),
+                state: ProjectState::Active,
+            },
+        )
+        .await
+        .unwrap();
+
+    let active = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    assert_eq!(active.state, SessionLifecycleState::Ready);
+    assert_eq!(active.admission.state, ProjectAdmissionState::Allowed);
+
+    let queued = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    assert_eq!(queued.state, SessionLifecycleState::Queued);
+    assert!(queued.queued_at.is_some());
+    assert_eq!(queued.admission.state, ProjectAdmissionState::Queued);
+    assert_eq!(
+        queued.admission.reason_code,
+        ProjectAdmissionReasonCode::ActiveSessionQuotaExceeded
+    );
+    assert_eq!(
+        store
+            .count_queued_sessions_for_project(&owner, project.id)
+            .await
+            .unwrap(),
+        1
+    );
+
+    let still_queued = store
+        .prepare_session_for_connect(queued.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(still_queued.state, SessionLifecycleState::Queued);
+
+    store
+        .stop_session_for_owner(&owner, active.id)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let promoted = store
+        .get_session_for_owner(&owner, queued.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(promoted.state, SessionLifecycleState::Ready);
+    assert!(promoted.queued_at.is_none());
+    assert_eq!(promoted.admission.state, ProjectAdmissionState::Allowed);
+    assert_eq!(promoted.admission.active_sessions, Some(1));
+    assert_eq!(
+        store
+            .count_queued_sessions_for_project(&owner, project.id)
+            .await
+            .unwrap(),
+        0
+    );
+
+    let queued_again = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    let queued_tail = store
+        .create_session(
+            &owner,
+            project_policy_session_request(project.id, None, None),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    assert_eq!(queued_again.state, SessionLifecycleState::Queued);
+    assert_eq!(queued_tail.state, SessionLifecycleState::Queued);
+
+    let cancelled = store
+        .cancel_queued_session_for_owner(&owner, queued_again.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(cancelled.state, SessionLifecycleState::Stopped);
+    assert!(cancelled.queued_at.is_none());
+
+    let still_queued = store
+        .get_session_for_owner(&owner, queued_tail.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(still_queued.state, SessionLifecycleState::Queued);
+    assert_eq!(
+        store
+            .count_queued_sessions_for_project(&owner, project.id)
+            .await
+            .unwrap(),
+        1
+    );
 }
 
 #[tokio::test]

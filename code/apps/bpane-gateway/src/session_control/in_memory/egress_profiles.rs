@@ -21,6 +21,7 @@ impl InMemorySessionStore {
         let now = Utc::now();
         let profile = StoredEgressProfile {
             id: Uuid::now_v7(),
+            project_id: request.project_id,
             owner_subject: principal.subject.clone(),
             owner_issuer: principal.issuer.clone(),
             name: request.name,
@@ -102,6 +103,7 @@ impl InMemorySessionStore {
         };
 
         profile.name = request.name;
+        profile.project_id = request.project_id;
         profile.description = request.description;
         profile.labels = request.labels;
         profile.proxy = request.proxy;

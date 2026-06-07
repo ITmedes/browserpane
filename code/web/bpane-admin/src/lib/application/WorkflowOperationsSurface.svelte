@@ -151,6 +151,7 @@
       }
       const run = await workflowService.invokeRun({
         sessionId,
+        projectId: selectedSession.project_id ?? null,
         workflowId,
         version,
         runInput: parseJson(inputText),

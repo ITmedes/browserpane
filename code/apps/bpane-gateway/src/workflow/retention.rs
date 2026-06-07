@@ -234,6 +234,7 @@ mod tests {
                     workflow_definition_id: workflow.id,
                     workflow_definition_version_id: version.id,
                     workflow_version: version.version.clone(),
+                    project_id: None,
                     session_id: session.id,
                     automation_task_id: task.id,
                     source_system: None,

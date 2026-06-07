@@ -8,6 +8,7 @@ import type {
   SessionFileBindingResource,
   SessionFileBindingState,
 } from './control-types';
+import { ControlSessionMapper } from './control-session-mapper';
 import {
   expectNumber,
   expectRecord,
@@ -36,6 +37,8 @@ export class ControlFileWorkspaceMapper {
     const description = optionalString(object.description, 'file workspace description');
     return {
       id: expectString(object.id, 'file workspace id'),
+      project_id: optionalString(object.project_id, 'file workspace project_id') ?? null,
+      project: ControlSessionMapper.toSessionProjectResource(object.project),
       name: expectString(object.name, 'file workspace name'),
       ...(description !== undefined ? { description } : {}),
       labels: expectStringRecord(object.labels, 'file workspace labels'),

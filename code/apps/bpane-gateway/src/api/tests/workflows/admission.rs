@@ -116,3 +116,156 @@ async fn workflow_run_create_exposes_queued_admission_when_worker_capacity_is_ex
         "workflow_worker_capacity"
     );
 }
+
+#[tokio::test]
+async fn workflow_run_create_inherits_project_and_exposes_project_quota_admission() {
+    let temp_dir = tempdir().unwrap();
+    let capture_file = temp_dir.path().join("workflow-worker-capture.txt");
+    let script = create_sleep_workflow_worker_script(&temp_dir, &capture_file, 0.3);
+    let (app, token, _state) = test_router_with_workflow_lifecycle(WorkflowWorkerConfig {
+        docker_bin: script,
+        image: "deploy-workflow-worker:test".to_string(),
+        max_active_workers: 0,
+        network: Some("deploy_bpane-internal".to_string()),
+        container_name_prefix: "bpane-workflow".to_string(),
+        gateway_api_url: "http://gateway:8932".to_string(),
+        work_root: std::path::PathBuf::from("/tmp/bpane-workflows"),
+        bearer_token: Some("token".to_string()),
+        oidc_token_url: None,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_scopes: None,
+    });
+
+    let project = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "name": "Support project",
+                            "quotas": {
+                                "max_active_workflow_runs": 1
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let project_id = project["id"].as_str().unwrap().to_string();
+
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "name": "project-workflow" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    let create_version = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v1",
+                        "executor": "playwright",
+                        "entrypoint": "workflows/project/run.mjs"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_version.status(), StatusCode::CREATED);
+
+    let first_run = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflow-runs")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "workflow_id": workflow_id,
+                            "version": "v1",
+                            "project_id": project_id,
+                            "session": { "create_session": {} }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(first_run["project_id"], project_id);
+    assert_eq!(first_run["project"]["name"], "Support project");
+    assert_eq!(first_run["project_admission"]["state"], "allowed");
+    assert_eq!(
+        first_run["project_admission"]["reason_code"],
+        "project_quota_available"
+    );
+
+    let second_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workflow-runs")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workflow_id": workflow_id,
+                        "version": "v1",
+                        "project_id": project_id,
+                        "session": { "create_session": {} }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second_response.status(), StatusCode::CREATED);
+    let second_run = response_json(second_response).await;
+    assert_eq!(second_run["project_id"], project_id);
+    assert_eq!(second_run["state"], "queued");
+    assert_eq!(second_run["project_admission"]["state"], "queued");
+    assert_eq!(
+        second_run["project_admission"]["reason_code"],
+        "active_workflow_run_quota_exceeded"
+    );
+    assert_eq!(
+        second_run["admission"]["reason"],
+        "project_active_workflow_quota_exhausted"
+    );
+}

@@ -26,6 +26,85 @@ pub(super) async fn delete_session(
     stop_session_for_owner(&state, &principal, session_id).await
 }
 
+pub(super) async fn cancel_queued_session(
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let stored = state
+        .session_store
+        .get_session_for_owner(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("session {session_id} not found"),
+                }),
+            )
+        })?;
+
+    if stored.state == SessionLifecycleState::Stopped {
+        let resource = session_resource(&state, &stored, None)
+            .await
+            .map_err(map_session_store_error)?;
+        return Ok((StatusCode::OK, Json(resource)).into_response());
+    }
+    if stored.state != SessionLifecycleState::Queued {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "session {session_id} cannot be cancelled from state {}; only queued sessions can be cancelled",
+                    stored.state.as_str()
+                ),
+            }),
+        ));
+    }
+
+    let cancelled = match state
+        .session_store
+        .cancel_queued_session_for_owner(&principal, session_id)
+        .await
+        .map_err(map_session_store_error)?
+    {
+        Some(cancelled) => cancelled,
+        None => {
+            return match state
+                .session_store
+                .get_session_for_owner(&principal, session_id)
+                .await
+            {
+                Ok(Some(current)) => Err((
+                    StatusCode::CONFLICT,
+                    Json(ErrorResponse {
+                        error: format!(
+                            "session {session_id} cannot be cancelled from state {}; only queued sessions can be cancelled",
+                            current.state.as_str()
+                        ),
+                    }),
+                )),
+                Ok(None) => Err((
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("session {session_id} not found"),
+                    }),
+                )),
+                Err(error) => Err(map_session_store_error(error)),
+            };
+        }
+    };
+    info!(%session_id, "cancelled queued session");
+    let resource = session_resource(&state, &cancelled, None)
+        .await
+        .map_err(map_session_store_error)?;
+    Ok((StatusCode::OK, Json(resource)).into_response())
+}
+
 pub(super) async fn stop_session_for_owner(
     state: &Arc<ApiState>,
     principal: &AuthenticatedPrincipal,

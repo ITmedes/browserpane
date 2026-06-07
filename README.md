@@ -321,6 +321,7 @@ Canonical contract:
 - `GET /api/v1/egress-profiles/{id}/diagnostics`
 - `GET /api/v1/sessions/{id}/egress-diagnostics`
 - `POST /api/v1/sessions/{id}/egress-diagnostics`
+- `POST /api/v1/sessions/{id}/egress-usage`
 
 These endpoints are bearer-protected, owner-scoped, and stored in Postgres. The
 full contract is in the OpenAPI file; the route lists below call out the
@@ -336,14 +337,54 @@ explicit override, and the API payload preview shows the exact fields that will
 be sent.
 `GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
 `runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
-Project resources let operators group sessions under an owner-scoped tenant,
-case, customer, or environment boundary. A project carries labels, lifecycle
-state, optional quotas such as `max_active_sessions`, and sanitized usage
-counters. Creating a session with `project_id` records the admission decision on
-the session and enforces active-session quota and archived-project checks before
-runtime launch. Session resources and `/status` include the project summary and
-admission reason so the admin live view, inspector, CLI, and API clients all
-show whether a session was admitted under a project quota or left owner-scoped.
+Project resources let operators group sessions and workflow runs under an
+owner-scoped tenant, case, customer, or environment boundary. A project carries
+labels, lifecycle state, optional quotas such as `max_active_sessions`,
+`max_active_workflow_runs`, `max_retained_storage_bytes`,
+`max_session_creations`, `max_session_creations_per_window` with
+`session_creation_window_sec`, `max_runtime_usage_ms`, and
+`max_egress_total_bytes`, policy bindings for allowed session templates,
+egress profiles, approved extensions, and reusable browser contexts, a
+`usage_budget_enforcement` mode, browser upload/download, session-file binding,
+and manual-recording policy switches, and sanitized usage counters. Creating a
+session or workflow run with `project_id` records the admission decision and
+enforces archived-project checks plus template, egress, extension,
+reusable-context, and file-workspace allow-lists before runtime launch. Project
+policy can also reject browser upload/download transfers, session-file binding
+creation, and ad-hoc manual recording starts for project sessions. Session resources expose
+`capabilities.file_transfer=false` when the project disables either browser
+upload or browser download transfer. Credential bindings and
+egress profiles can be owner-scoped or assigned to a project; project-scoped
+sessions may use owner-scoped egress profiles or profiles from the same project,
+and may only use project-bound proxy credential bindings from that same project.
+Owner-scoped bindings remain available to the owner. Project-scoped sessions
+that exceed
+`max_active_sessions` are persisted as visible `queued` session resources with
+`active_session_quota_exceeded` admission metadata, queue position, queue age,
+current dispatch blocker, and an explicit queued-session cancel operation.
+Queued sessions are promoted when capacity opens; workflow runs also inherit
+the project from their bound session when the request omits `project_id`.
+Project usage includes active and queued session counts, total session
+creations, live-plus-finalized browser runtime milliseconds, sanitized egress
+receive/transmit byte counters, and retained storage. Retained storage currently
+counts workflow produced files, completed recording artifacts,
+uploaded/downloaded session files, and files retained in project-owned file
+workspaces; workflow outputs stored in a workspace owned by the same project are
+counted once through the workspace. The gateway rejects new retained artifacts
+that would exceed the project storage quota. Egress byte counters are
+intentionally metadata-only until an attached proxy or secure web gateway
+reports authoritative traffic totals. Session-creation, runtime, and egress
+byte budgets emit `alerts` at 80% and 100% of the configured budget. Projects
+can opt into `usage_budget_enforcement=block_session_creation` to reject new
+project sessions after `max_session_creations` is reached, the rolling
+`max_session_creations_per_window` budget is exhausted, or
+`max_runtime_usage_ms` has already been consumed. Existing sessions are not
+stopped by runtime-budget admission. Egress budgets remain advisory until
+proxy ingestion is authoritative.
+Session and workflow-run resources include the project summary and admission
+reason so the admin live view, inspectors, CLI, and API clients all show
+whether work was admitted under project quota, queued by project capacity,
+rejected by project policy, or left owner-scoped.
 Identity resources expose a sanitized access-review foundation:
 `GET /api/v1/identity/me` returns the current bearer principal as `user`,
 `service_principal`, or `legacy_dev_token`, while
@@ -378,16 +419,24 @@ configuration-only evidence, runtime launch metadata, and the latest active
 profile or browser probe. Egress-profile probes perform a real proxy request
 and, when a proxy credential binding is configured, resolve the binding only for
 that probe so operators can see whether proxy authentication succeeds or is
-rejected. The active browser probe runs only against an already-ready session
-runtime and stores sanitized public-IP, TLS issuer, and failure summary fields;
-diagnostics do not store requested URLs, headers, proxy credentials, CA
-material, or decrypted traffic.
+rejected. When a session consumes an egress profile with proxy authentication,
+the gateway also checks that any project-scoped egress profile and credential
+binding belong to the same project as the session. The active browser probe runs
+only against an already-ready session runtime and stores sanitized public-IP,
+TLS issuer, and failure summary fields; diagnostics do not store requested URLs,
+headers, proxy credentials, CA material, or decrypted traffic. Egress observers
+can report sanitized
+per-session receive/transmit byte deltas through
+`/api/v1/sessions/{id}/egress-usage`; project usage rolls those counters up for
+budget alerts while detailed URL, status, timing, credential, payload, and
+decrypted traffic logs remain in the configured proxy or secure web gateway.
 Egress-side communication tracking belongs at the configured proxy or secure
 web gateway. BrowserPane emits safe correlation metadata instead: docker-backed
 runtime containers carry `browserpane.session_id` and egress-profile labels,
 and the gateway logs a sanitized runtime startup event that joins the session,
 runtime container, and egress profile. A runnable local Squid access-log example
-is available in `deploy/examples/egress-observer`.
+and sanitized usage reporter are available in
+`deploy/examples/egress-observer`.
 Egress profiles default to `traffic_observation.mode=metadata_only`. Full HTTPS
 inspection must be explicit with `mode=tls_intercept`, and the API requires a
 proxy, custom CA reference, and `sensitive_log_sink_ref` so operators do not
@@ -397,12 +446,16 @@ references into the session data volume and install them into Chromium's NSS
 trust store before launch; non-file CA providers remain a provider-integration
 follow-up. If `proxy.credential_binding_id` is set, the gateway resolves the
 owner-visible credential binding through the configured secret provider at
-runtime launch and writes only a session-local proxy-auth file; credentials are
-not embedded in proxy URLs, API responses, CLI output, Docker labels, or normal
+runtime launch and writes only a session-local proxy-auth file; project-bound
+bindings are limited to sessions in the same project. Credentials are not
+embedded in proxy URLs, API responses, CLI output, Docker labels, or normal
 logs.
-Browser context resources let callers name owner-scoped Chromium profile
-contexts and bind new sessions with `browser_context.mode=reusable` plus a
-`context_id`. Docker-backed runtimes materialize reusable contexts as a
+Browser context resources let callers name owner-scoped or project-owned
+Chromium profile contexts and bind new sessions with
+`browser_context.mode=reusable` plus a `context_id`. Project-owned contexts can
+only be reused by sessions in the same project; owner-scoped contexts remain
+available to owner-scoped and project-scoped sessions. Docker-backed runtimes
+materialize reusable contexts as a
 context-scoped Chromium profile volume mounted at the normal profile path,
 while uploads, downloads, and session-file mounts remain tied to the concrete
 session. Only one active runtime writer may use a reusable context at a time;
@@ -433,8 +486,10 @@ Inactive reusable contexts can also be exported with
 `profile.tar.gz`.
 BrowserPane export archives can be imported as new reusable contexts with
 `POST /api/v1/browser-contexts/import` using `application/zip` plus
-`x-bpane-browser-context-name`. Omitted metadata defaults to the archive
-manifest, and imports never overwrite an existing context.
+`x-bpane-browser-context-name`; callers can set
+`x-bpane-browser-context-project-id` to import directly into a project. Omitted
+metadata defaults to the archive manifest, and imports never overwrite an
+existing context.
 Deleting a reusable context refuses active runtime writers and, for
 docker-backed runtimes, removes the context-scoped Chromium profile volume when
 no active writer exists. The admin create-session configurator can create
@@ -482,6 +537,10 @@ Bindings snapshot workspace-file metadata, enforce relative mount paths, reject
 duplicate active mount paths per session, and allow session automation access to
 read/list bound file resources. The file-inspection/download APIs are available
 today; browser-container mount materialization is a separate runtime concern.
+For project sessions, `allow_session_file_bindings=false` rejects new
+session-file bindings. `allow_browser_uploads=false` and
+`allow_browser_downloads=false` reject live browser transfer sources from the
+corresponding direction and surface the session as file-transfer restricted.
 
 Session resources and status responses now expose a richer lifecycle model:
 
@@ -632,11 +691,27 @@ Common project operations:
   --label tenant=support \
   --max-active-sessions 3 \
   --max-active-workflow-runs 4 \
-  --max-retained-storage-bytes 1073741824
+  --max-retained-storage-bytes 1073741824 \
+  --max-session-creations 25 \
+  --max-session-creations-per-window 10 \
+  --session-creation-window-sec 3600 \
+  --max-runtime-usage-ms 86400000 \
+  --max-egress-total-bytes 10737418240 \
+  --allow-browser-uploads true \
+  --allow-browser-downloads true \
+  --allow-session-file-bindings true \
+  --allow-manual-recordings true \
+  --usage-budget-enforcement warning_only
 ./scripts/bpane project list
 ./scripts/bpane project get <project-id>
 ./scripts/bpane project usage <project-id>
-./scripts/bpane project update <project-id> --name support-tenant --max-active-sessions 5
+./scripts/bpane project update <project-id> --name support-tenant --max-active-sessions 5 --max-session-creations 50 --max-session-creations-per-window 10 --session-creation-window-sec 3600 --allow-session-file-bindings false --allow-manual-recordings false --usage-budget-enforcement block_session_creation
+./scripts/bpane project update <project-id> \
+  --allowed-session-template-id <template-id> \
+  --allowed-egress-profile-id <egress-profile-id> \
+  --allowed-extension-id <extension-id> \
+  --allowed-browser-context-id <browser-context-id> \
+  --allowed-file-workspace-id <workspace-id>
 ./scripts/bpane project archive <project-id>
 ./scripts/bpane session-template create tenant-debug-session --project-id <project-id> --default-label purpose=debug
 ```
@@ -646,6 +721,7 @@ Common egress-profile operations:
 ```bash
 ./scripts/bpane egress-profile create eu-support-egress \
   --description "Approved support outbound path" \
+  --project-id <project-id> \
   --label region=eu \
   --proxy-url https://proxy.example:8443 \
   --proxy-credential-binding-id <credential-binding-id> \
@@ -660,6 +736,11 @@ Common egress-profile operations:
 ./scripts/bpane egress-profile disable <egress-profile-id>
 ./scripts/bpane session egress-diagnostics <session-id>
 ./scripts/bpane session egress-diagnostics probe <session-id>
+./scripts/bpane session egress-usage report <session-id> \
+  --rx-bytes-delta 4096 \
+  --tx-bytes-delta 2048 \
+  --egress-usage-source-kind proxy \
+  --observer-id local-squid
 ```
 
 Omit `--proxy-credential-binding-id` for proxies that do not require
@@ -688,9 +769,29 @@ docker compose -f deploy/examples/egress-observer/compose.yml up --build
   --proxy-url http://bpane-egress-observer:3128 \
   --bypass-rule localhost \
   --bypass-rule 127.0.0.1
-docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-proxy
 deploy/examples/egress-observer/correlate-session-ip.sh
+BPANE_ACCESS_TOKEN=<owner-token> \
+  node deploy/examples/egress-observer/egress-usage-reporter.mjs \
+  --since 10m \
+  --dry-run
 ```
+
+Tail the raw proxy logs in a separate terminal when you need URL/status/timing
+debug evidence:
+
+```bash
+docker compose -f deploy/examples/egress-observer/compose.yml logs -f egress-proxy
+```
+
+The reporter reads the example Squid logs and BrowserPane docker runtime labels,
+then calls `/api/v1/sessions/{id}/egress-usage` with sanitized byte deltas when
+run without `--dry-run`. Dry-run output is sanitized and does not advance the
+local watermark. BrowserPane does not receive proxy URLs, response status,
+headers, timing, payload, credentials, CA material, or decrypted traffic. The
+example Squid log format provides response/tunnel bytes, so the local reporter
+maps that value to `rx_bytes_delta`; production collectors that need transmit
+byte counters should calculate those in the proxy or secure-web-gateway layer
+and call the same API.
 
 The same compose file also starts an authenticated Squid fixture at
 `bpane-egress-auth-observer:3130` with local test credentials
@@ -749,10 +850,10 @@ cd code/web/bpane-client && npm run smoke:admin-egress-profiles -- --headless
 Common browser-context operations:
 
 ```bash
-./scripts/bpane browser-context create support-profile --label team=support --retention-sec 604800 --max-profile-storage-bytes 536870912
-./scripts/bpane browser-context clone <context-id> support-profile-sandbox --label copy=sandbox
+./scripts/bpane browser-context create support-profile --project-id <project-id> --label team=support --retention-sec 604800 --max-profile-storage-bytes 536870912
+./scripts/bpane browser-context clone <context-id> support-profile-sandbox --project-id <project-id> --label copy=sandbox
 ./scripts/bpane browser-context export <context-id> --output support-profile.zip
-./scripts/bpane browser-context import --input support-profile.zip --name support-profile-restored --label restored=true
+./scripts/bpane browser-context import --input support-profile.zip --name support-profile-restored --project-id <project-id> --label restored=true
 ./scripts/bpane browser-context list
 ./scripts/bpane browser-context get <context-id>
 ./scripts/bpane browser-context delete <context-id>
@@ -818,6 +919,9 @@ BrowserPane session recording is now a control-plane feature rather than only a 
 - Recordings can be downloaded from the admin recording library, the legacy dev
   harness where applicable, or through the v1 API.
 - Playback/export is modeled separately from raw recording segments, so multi-segment sessions stay explicit.
+- Project policy can set `allow_manual_recordings=false` to block ad-hoc manual
+  recording starts for project sessions. Always-on session recording remains an
+  explicit session/template recording policy.
 
 Primary routes:
 
@@ -847,9 +951,16 @@ Current workflow capabilities:
 - workflow runs with logs, events, outputs, recordings, and produced files
 - workflow runs backed by persisted automation tasks with executor-visible
   state, event, and log APIs
+- project-scoped workflow runs with inherited session projects, project
+  summaries, and `max_active_workflow_runs` admission/queue visibility
+- project retained-storage accounting/enforcement for workflow produced files,
+  recording artifacts, session files, and project-owned file workspace files
 - external correlation fields on runs (`source_system`, `source_reference`, `client_request_id`)
 - safe idempotent run creation for retried upstream requests
-- durable queued/admission state when BrowserPane worker capacity is exhausted
+- durable queued/admission state when BrowserPane worker capacity, project
+  session quotas, or project workflow-run quotas are exhausted
+- queued session controls expose queue position/age/blocker metadata and allow
+  queued sessions to be cancelled before runtime admission
 - durable operator intervention state with `submit-input`, `resume`, `reject`, and `cancel`
 - explicit runtime hold/release semantics for paused runs (`live_runtime` vs `profile_restart`)
 - signed outbound workflow lifecycle webhook delivery
@@ -923,7 +1034,7 @@ Typical local workflow path:
 2. Create or reconnect a browser session from the admin console
 3. Create reusable inputs as needed:
    - file workspace for reusable input/output files
-   - credential binding for Vault-backed secrets
+   - credential binding for Vault-backed secrets, optionally assigned to the same project as the workflow/session that will consume it
    - approved extension if the workflow needs a Chromium extension
 4. Create a workflow definition and a pinned version that points at a git-backed Playwright entrypoint
 5. Start a workflow run from the workflow panel, the CLI, or the raw v1 API
@@ -946,12 +1057,24 @@ cd code/web/bpane-client
 export BPANE_API_URL=http://localhost:8932
 export BPANE_ACCESS_TOKEN=<owner bearer token>
 npm run workflow:cli -- workflow list
+npm run workflow:cli -- workflow run create \
+  --workflow-id <workflow-id> \
+  --version v1 \
+  --project-id <project-id> \
+  --create-session \
+  --input-json '{"target_url":"http://web:8080/test-embed.html"}' \
+  --client-request-id <stable-run-key> \
+  --summary
 npm run workflow:cli -- workflow run get <run-id>
+npm run workflow:cli -- workflow run get <run-id> --summary
 npm run workflow:cli -- workflow run cancel <run-id>
-npm run workflow:cli -- workflow run resume <run-id> --comment "approved"
+npm run workflow:cli -- workflow run resume <run-id> --body-json '{"comment":"approved"}'
 ```
 
-The CLI is intentionally thin. It wraps the existing owner-scoped v1 workflow routes rather than introducing a second control-plane contract.
+The CLI is intentionally thin. It wraps the existing owner-scoped v1 workflow
+routes rather than introducing a second control-plane contract. Use
+`--body-json` / `--body-file` for the full API payload, or the ergonomic
+`workflow run create` flags for the common project-scoped local test path.
 
 ### Build, Unit Tests, And Local Smokes
 
@@ -984,6 +1107,7 @@ npm run smoke:file-workspaces -- --headless
 npm run smoke:session-files -- --headless
 npm run smoke:mcp-session-endpoints -- --headless
 npm run smoke:recording -- --headless
+npm run smoke:workflow-admission -- --headless
 npm run smoke:workflow-cli -- --headless
 npm run smoke:workflow-credential-injection -- --headless
 npm run smoke:workflow-events -- --headless
@@ -1015,6 +1139,7 @@ cd code/integrations/recording-worker && npm run build
 cd code/integrations/workflow-worker && npm run build
 cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless
 cd code/web/bpane-client && npm run smoke:recording -- --headless
+cd code/web/bpane-client && npm run smoke:workflow-admission -- --headless
 cd code/web/bpane-client && npm run smoke:workflow-cli -- --headless
 cd code/web/bpane-client && npm run smoke:workflow-credential-injection -- --headless
 cd code/web/bpane-client && npm run smoke:workflow-events -- --headless

@@ -17,6 +17,7 @@ const DEFAULT_VIEWPORT_HEIGHT: u16 = 900;
 pub enum SessionLifecycleState {
     Pending,
     Starting,
+    Queued,
     Ready,
     Active,
     Idle,
@@ -32,6 +33,7 @@ impl SessionLifecycleState {
         match self {
             Self::Pending => "pending",
             Self::Starting => "starting",
+            Self::Queued => "queued",
             Self::Ready => "ready",
             Self::Active => "active",
             Self::Idle => "idle",
@@ -58,6 +60,7 @@ impl FromStr for SessionLifecycleState {
         match value {
             "pending" => Ok(Self::Pending),
             "starting" => Ok(Self::Starting),
+            "queued" => Ok(Self::Queued),
             "ready" => Ok(Self::Ready),
             "active" => Ok(Self::Active),
             "idle" => Ok(Self::Idle),
@@ -262,6 +265,71 @@ pub struct SessionNetworkIdentity {
     pub egress_profile_id: Option<Uuid>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionEgressUsageSourceKind {
+    #[default]
+    Proxy,
+    TlsInterceptor,
+    SecureWebGateway,
+    Custom,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ReportSessionEgressUsageRequest {
+    #[serde(default)]
+    pub rx_bytes_delta: u64,
+    #[serde(default)]
+    pub tx_bytes_delta: u64,
+    #[serde(default)]
+    pub source_kind: SessionEgressUsageSourceKind,
+    #[serde(default)]
+    pub observer_id: Option<String>,
+    #[serde(default)]
+    pub observed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionEgressUsageResource {
+    pub session_id: Uuid,
+    pub project_id: Option<Uuid>,
+    pub egress_profile_id: Option<Uuid>,
+    pub egress_rx_bytes: u64,
+    pub egress_tx_bytes: u64,
+    pub egress_total_bytes: u64,
+    pub rx_bytes_delta: u64,
+    pub tx_bytes_delta: u64,
+    pub source_kind: SessionEgressUsageSourceKind,
+    pub observer_id: Option<String>,
+    pub observed_at: DateTime<Utc>,
+    pub recorded_at: DateTime<Utc>,
+}
+
+impl SessionEgressUsageResource {
+    pub fn from_report(
+        session: &StoredSession,
+        request: &ReportSessionEgressUsageRequest,
+        recorded_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            session_id: session.id,
+            project_id: session.project_id,
+            egress_profile_id: session.network_identity.egress_profile_id,
+            egress_rx_bytes: session.egress_rx_bytes,
+            egress_tx_bytes: session.egress_tx_bytes,
+            egress_total_bytes: session
+                .egress_rx_bytes
+                .saturating_add(session.egress_tx_bytes),
+            rx_bytes_delta: request.rx_bytes_delta,
+            tx_bytes_delta: request.tx_bytes_delta,
+            source_kind: request.source_kind,
+            observer_id: request.observer_id.clone(),
+            observed_at: request.observed_at.unwrap_or(recorded_at),
+            recorded_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectState {
@@ -298,6 +366,69 @@ pub struct ProjectQuotas {
     pub max_active_workflow_runs: Option<u32>,
     #[serde(default)]
     pub max_retained_storage_bytes: Option<u64>,
+    #[serde(default)]
+    pub max_session_creations: Option<u32>,
+    #[serde(default)]
+    pub max_session_creations_per_window: Option<u32>,
+    #[serde(default)]
+    pub session_creation_window_sec: Option<u32>,
+    #[serde(default)]
+    pub max_runtime_usage_ms: Option<u64>,
+    #[serde(default)]
+    pub max_egress_total_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectUsageBudgetEnforcement {
+    #[default]
+    WarningOnly,
+    BlockSessionCreation,
+}
+
+fn project_policy_allow_default() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectPolicy {
+    #[serde(default)]
+    pub allowed_session_template_ids: Vec<String>,
+    #[serde(default)]
+    pub allowed_egress_profile_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub allowed_extension_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub allowed_browser_context_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub allowed_file_workspace_ids: Vec<Uuid>,
+    #[serde(default = "project_policy_allow_default")]
+    pub allow_browser_uploads: bool,
+    #[serde(default = "project_policy_allow_default")]
+    pub allow_browser_downloads: bool,
+    #[serde(default = "project_policy_allow_default")]
+    pub allow_session_file_bindings: bool,
+    #[serde(default = "project_policy_allow_default")]
+    pub allow_manual_recordings: bool,
+    #[serde(default)]
+    pub usage_budget_enforcement: ProjectUsageBudgetEnforcement,
+}
+
+impl Default for ProjectPolicy {
+    fn default() -> Self {
+        Self {
+            allowed_session_template_ids: Vec::new(),
+            allowed_egress_profile_ids: Vec::new(),
+            allowed_extension_ids: Vec::new(),
+            allowed_browser_context_ids: Vec::new(),
+            allowed_file_workspace_ids: Vec::new(),
+            allow_browser_uploads: true,
+            allow_browser_downloads: true,
+            allow_session_file_bindings: true,
+            allow_manual_recordings: true,
+            usage_budget_enforcement: ProjectUsageBudgetEnforcement::WarningOnly,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -314,7 +445,16 @@ pub enum ProjectAdmissionReasonCode {
     OwnerScopeUnbounded,
     ProjectQuotaAvailable,
     ActiveSessionQuotaExceeded,
+    SessionCreationBudgetExceeded,
+    SessionCreationRateExceeded,
+    RuntimeUsageBudgetExceeded,
+    ActiveWorkflowRunQuotaExceeded,
     ProjectArchived,
+    SessionTemplateNotAllowed,
+    EgressProfileNotAllowed,
+    ExtensionNotAllowed,
+    BrowserContextNotAllowed,
+    FileWorkspaceNotAllowed,
 }
 
 impl ProjectAdmissionReasonCode {
@@ -323,7 +463,16 @@ impl ProjectAdmissionReasonCode {
             Self::OwnerScopeUnbounded => "owner_scope_unbounded",
             Self::ProjectQuotaAvailable => "project_quota_available",
             Self::ActiveSessionQuotaExceeded => "active_session_quota_exceeded",
+            Self::SessionCreationBudgetExceeded => "session_creation_budget_exceeded",
+            Self::SessionCreationRateExceeded => "session_creation_rate_exceeded",
+            Self::RuntimeUsageBudgetExceeded => "runtime_usage_budget_exceeded",
+            Self::ActiveWorkflowRunQuotaExceeded => "active_workflow_run_quota_exceeded",
             Self::ProjectArchived => "project_archived",
+            Self::SessionTemplateNotAllowed => "session_template_not_allowed",
+            Self::EgressProfileNotAllowed => "egress_profile_not_allowed",
+            Self::ExtensionNotAllowed => "extension_not_allowed",
+            Self::BrowserContextNotAllowed => "browser_context_not_allowed",
+            Self::FileWorkspaceNotAllowed => "file_workspace_not_allowed",
         }
     }
 }
@@ -339,6 +488,24 @@ pub struct ProjectAdmissionDecision {
     pub active_sessions: Option<u32>,
     #[serde(default)]
     pub max_active_sessions: Option<u32>,
+    #[serde(default)]
+    pub active_workflow_runs: Option<u32>,
+    #[serde(default)]
+    pub max_active_workflow_runs: Option<u32>,
+    #[serde(default)]
+    pub session_creations: Option<u32>,
+    #[serde(default)]
+    pub max_session_creations: Option<u32>,
+    #[serde(default)]
+    pub session_creations_in_window: Option<u32>,
+    #[serde(default)]
+    pub max_session_creations_per_window: Option<u32>,
+    #[serde(default)]
+    pub session_creation_window_sec: Option<u32>,
+    #[serde(default)]
+    pub runtime_usage_ms: Option<u64>,
+    #[serde(default)]
+    pub max_runtime_usage_ms: Option<u64>,
     pub checked_at: DateTime<Utc>,
 }
 
@@ -351,6 +518,15 @@ impl ProjectAdmissionDecision {
             project_id: None,
             active_sessions: None,
             max_active_sessions: None,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
             checked_at,
         }
     }
@@ -368,6 +544,41 @@ impl ProjectAdmissionDecision {
             project_id: Some(project_id),
             active_sessions: Some(active_sessions),
             max_active_sessions,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
+            checked_at,
+        }
+    }
+
+    pub fn workflow_quota_available(
+        project_id: Uuid,
+        active_workflow_runs: u32,
+        max_active_workflow_runs: Option<u32>,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Allowed,
+            reason_code: ProjectAdmissionReasonCode::ProjectQuotaAvailable,
+            message: "Project workflow admission allowed.".to_string(),
+            project_id: Some(project_id),
+            active_sessions: None,
+            max_active_sessions: None,
+            active_workflow_runs: Some(active_workflow_runs),
+            max_active_workflow_runs,
+            session_creations: None,
+            max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
             checked_at,
         }
     }
@@ -387,6 +598,156 @@ impl ProjectAdmissionDecision {
             project_id: Some(project_id),
             active_sessions: Some(active_sessions),
             max_active_sessions,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
+            checked_at,
+        }
+    }
+
+    pub fn session_creation_budget_rejected(
+        project_id: Uuid,
+        session_creations: u32,
+        max_session_creations: u32,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Rejected,
+            reason_code: ProjectAdmissionReasonCode::SessionCreationBudgetExceeded,
+            message: format!(
+                "Project session creation budget is exhausted ({session_creations}/{max_session_creations})."
+            ),
+            project_id: Some(project_id),
+            active_sessions: None,
+            max_active_sessions: None,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            session_creations: Some(session_creations),
+            max_session_creations: Some(max_session_creations),
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
+            checked_at,
+        }
+    }
+
+    pub fn session_creation_rate_rejected(
+        project_id: Uuid,
+        session_creations_in_window: u32,
+        max_session_creations_per_window: u32,
+        session_creation_window_sec: u32,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Rejected,
+            reason_code: ProjectAdmissionReasonCode::SessionCreationRateExceeded,
+            message: format!(
+                "Project session creation rate limit is exhausted ({session_creations_in_window}/{max_session_creations_per_window} in {session_creation_window_sec}s)."
+            ),
+            project_id: Some(project_id),
+            active_sessions: None,
+            max_active_sessions: None,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
+            session_creations_in_window: Some(session_creations_in_window),
+            max_session_creations_per_window: Some(max_session_creations_per_window),
+            session_creation_window_sec: Some(session_creation_window_sec),
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
+            checked_at,
+        }
+    }
+
+    pub fn runtime_usage_budget_rejected(
+        project_id: Uuid,
+        runtime_usage_ms: u64,
+        max_runtime_usage_ms: u64,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Rejected,
+            reason_code: ProjectAdmissionReasonCode::RuntimeUsageBudgetExceeded,
+            message: format!(
+                "Project browser runtime budget is exhausted ({runtime_usage_ms}/{max_runtime_usage_ms} ms)."
+            ),
+            project_id: Some(project_id),
+            active_sessions: None,
+            max_active_sessions: None,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
+            runtime_usage_ms: Some(runtime_usage_ms),
+            max_runtime_usage_ms: Some(max_runtime_usage_ms),
+            checked_at,
+        }
+    }
+
+    pub fn workflow_queued(
+        project_id: Uuid,
+        reason_code: ProjectAdmissionReasonCode,
+        message: String,
+        active_workflow_runs: u32,
+        max_active_workflow_runs: Option<u32>,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Queued,
+            reason_code,
+            message,
+            project_id: Some(project_id),
+            active_sessions: None,
+            max_active_sessions: None,
+            active_workflow_runs: Some(active_workflow_runs),
+            max_active_workflow_runs,
+            session_creations: None,
+            max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
+            checked_at,
+        }
+    }
+
+    pub fn session_queued(
+        project_id: Uuid,
+        reason_code: ProjectAdmissionReasonCode,
+        message: String,
+        active_sessions: u32,
+        max_active_sessions: Option<u32>,
+        checked_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            state: ProjectAdmissionState::Queued,
+            reason_code,
+            message,
+            project_id: Some(project_id),
+            active_sessions: Some(active_sessions),
+            max_active_sessions,
+            active_workflow_runs: None,
+            max_active_workflow_runs: None,
+            session_creations: None,
+            max_session_creations: None,
+            session_creations_in_window: None,
+            max_session_creations_per_window: None,
+            session_creation_window_sec: None,
+            runtime_usage_ms: None,
+            max_runtime_usage_ms: None,
             checked_at,
         }
     }
@@ -398,6 +759,7 @@ pub struct PersistProjectRequest {
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
     pub quotas: ProjectQuotas,
+    pub policy: ProjectPolicy,
     pub state: ProjectState,
 }
 
@@ -410,6 +772,7 @@ pub struct StoredProject {
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
     pub quotas: ProjectQuotas,
+    pub policy: ProjectPolicy,
     pub state: ProjectState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -419,12 +782,47 @@ pub struct StoredProject {
 pub struct ProjectUsageResource {
     pub project_id: Uuid,
     pub active_sessions: u32,
+    pub queued_sessions: u32,
+    pub session_creations: u32,
+    pub max_session_creations: Option<u32>,
     pub max_active_sessions: Option<u32>,
     pub active_workflow_runs: u32,
     pub max_active_workflow_runs: Option<u32>,
+    pub runtime_usage_ms: u64,
+    pub max_runtime_usage_ms: Option<u64>,
+    pub egress_rx_bytes: u64,
+    pub egress_tx_bytes: u64,
+    pub egress_total_bytes: u64,
+    pub max_egress_total_bytes: Option<u64>,
     pub retained_storage_bytes: u64,
     pub max_retained_storage_bytes: Option<u64>,
+    pub alerts: Vec<ProjectUsageAlertResource>,
     pub observed_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectUsageAlertMetric {
+    SessionCreations,
+    RuntimeUsageMs,
+    EgressTotalBytes,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectUsageAlertState {
+    ApproachingLimit,
+    Exceeded,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProjectUsageAlertResource {
+    pub metric: ProjectUsageAlertMetric,
+    pub state: ProjectUsageAlertState,
+    pub current_value: u64,
+    pub limit_value: u64,
+    pub threshold_percent: u8,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -434,13 +832,14 @@ pub struct ProjectResource {
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
     pub quotas: ProjectQuotas,
+    pub policy: ProjectPolicy,
     pub state: ProjectState,
     pub usage: ProjectUsageResource,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionProjectResource {
     pub id: Uuid,
     pub name: String,
@@ -698,28 +1097,106 @@ impl StoredServicePrincipal {
 }
 
 impl StoredProject {
-    pub fn usage(&self, active_sessions: u32, observed_at: DateTime<Utc>) -> ProjectUsageResource {
+    const USAGE_ALERT_THRESHOLD_PERCENT: u8 = 80;
+
+    pub fn usage(
+        &self,
+        active_sessions: u32,
+        queued_sessions: u32,
+        session_creations: u32,
+        active_workflow_runs: u32,
+        runtime_usage_ms: u64,
+        egress_rx_bytes: u64,
+        egress_tx_bytes: u64,
+        retained_storage_bytes: u64,
+        observed_at: DateTime<Utc>,
+    ) -> ProjectUsageResource {
+        let egress_total_bytes = egress_rx_bytes.saturating_add(egress_tx_bytes);
+        let alerts = self.usage_alerts(session_creations, runtime_usage_ms, egress_total_bytes);
         ProjectUsageResource {
             project_id: self.id,
             active_sessions,
+            queued_sessions,
+            session_creations,
+            max_session_creations: self.quotas.max_session_creations,
             max_active_sessions: self.quotas.max_active_sessions,
-            active_workflow_runs: 0,
+            active_workflow_runs,
             max_active_workflow_runs: self.quotas.max_active_workflow_runs,
-            retained_storage_bytes: 0,
+            runtime_usage_ms,
+            max_runtime_usage_ms: self.quotas.max_runtime_usage_ms,
+            egress_rx_bytes,
+            egress_tx_bytes,
+            egress_total_bytes,
+            max_egress_total_bytes: self.quotas.max_egress_total_bytes,
+            retained_storage_bytes,
             max_retained_storage_bytes: self.quotas.max_retained_storage_bytes,
+            alerts,
             observed_at,
         }
     }
 
-    pub fn to_resource(&self, active_sessions: u32, observed_at: DateTime<Utc>) -> ProjectResource {
+    fn usage_alerts(
+        &self,
+        session_creations: u32,
+        runtime_usage_ms: u64,
+        egress_total_bytes: u64,
+    ) -> Vec<ProjectUsageAlertResource> {
+        let mut alerts = Vec::new();
+        push_usage_alert(
+            &mut alerts,
+            ProjectUsageAlertMetric::SessionCreations,
+            u64::from(session_creations),
+            self.quotas.max_session_creations.map(u64::from),
+            "Project session creation count",
+        );
+        push_usage_alert(
+            &mut alerts,
+            ProjectUsageAlertMetric::RuntimeUsageMs,
+            runtime_usage_ms,
+            self.quotas.max_runtime_usage_ms,
+            "Project browser runtime usage",
+        );
+        push_usage_alert(
+            &mut alerts,
+            ProjectUsageAlertMetric::EgressTotalBytes,
+            egress_total_bytes,
+            self.quotas.max_egress_total_bytes,
+            "Project metadata-only egress byte counter",
+        );
+        alerts
+    }
+
+    pub fn to_resource(
+        &self,
+        active_sessions: u32,
+        queued_sessions: u32,
+        session_creations: u32,
+        active_workflow_runs: u32,
+        runtime_usage_ms: u64,
+        egress_rx_bytes: u64,
+        egress_tx_bytes: u64,
+        retained_storage_bytes: u64,
+        observed_at: DateTime<Utc>,
+    ) -> ProjectResource {
         ProjectResource {
             id: self.id,
             name: self.name.clone(),
             description: self.description.clone(),
             labels: self.labels.clone(),
             quotas: self.quotas.clone(),
+            policy: self.policy.clone(),
             state: self.state,
-            usage: self.usage(active_sessions, observed_at),
+            usage: self.usage(
+                active_sessions,
+                queued_sessions,
+                session_creations,
+                active_workflow_runs,
+                runtime_usage_ms,
+                egress_rx_bytes,
+                egress_tx_bytes,
+                retained_storage_bytes,
+                observed_at,
+            ),
             created_at: self.created_at,
             updated_at: self.updated_at,
         }
@@ -732,6 +1209,50 @@ impl StoredProject {
             state: self.state,
         }
     }
+}
+
+fn push_usage_alert(
+    alerts: &mut Vec<ProjectUsageAlertResource>,
+    metric: ProjectUsageAlertMetric,
+    current_value: u64,
+    limit_value: Option<u64>,
+    label: &str,
+) {
+    let Some(limit_value) = limit_value else {
+        return;
+    };
+    if limit_value == 0 {
+        return;
+    }
+    let threshold = u64::from(StoredProject::USAGE_ALERT_THRESHOLD_PERCENT);
+    let state = if current_value >= limit_value {
+        ProjectUsageAlertState::Exceeded
+    } else if u128::from(current_value) * 100 >= u128::from(limit_value) * u128::from(threshold) {
+        ProjectUsageAlertState::ApproachingLimit
+    } else {
+        return;
+    };
+    let message = match state {
+        ProjectUsageAlertState::ApproachingLimit => {
+            format!("{label} has reached at least {threshold}% of the configured soft budget.")
+        }
+        ProjectUsageAlertState::Exceeded => {
+            format!("{label} exceeded the configured soft budget.")
+        }
+    };
+    alerts.push(ProjectUsageAlertResource {
+        metric,
+        state,
+        current_value,
+        limit_value,
+        threshold_percent: match state {
+            ProjectUsageAlertState::ApproachingLimit => {
+                StoredProject::USAGE_ALERT_THRESHOLD_PERCENT
+            }
+            ProjectUsageAlertState::Exceeded => 100,
+        },
+        message,
+    });
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -869,6 +1390,7 @@ pub struct SessionEffectiveEgress {
 
 #[derive(Debug, Clone)]
 pub struct PersistEgressProfileRequest {
+    pub project_id: Option<Uuid>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
@@ -882,6 +1404,7 @@ pub struct PersistEgressProfileRequest {
 #[derive(Debug, Clone)]
 pub struct StoredEgressProfile {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
     pub owner_subject: String,
     pub owner_issuer: String,
     pub name: String,
@@ -899,6 +1422,8 @@ pub struct StoredEgressProfile {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct EgressProfileResource {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
+    pub project: Option<SessionProjectResource>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
@@ -943,6 +1468,8 @@ impl StoredEgressProfile {
     pub fn to_resource(&self) -> EgressProfileResource {
         EgressProfileResource {
             id: self.id,
+            project_id: self.project_id,
+            project: None,
             name: self.name.clone(),
             description: self.description.clone(),
             labels: self.labels.clone(),
@@ -1360,6 +1887,7 @@ pub struct SessionBrowserContextResource {
 #[derive(Debug, Clone)]
 pub struct PersistBrowserContextRequest {
     pub id: Option<Uuid>,
+    pub project_id: Option<Uuid>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
@@ -1371,6 +1899,7 @@ pub struct PersistBrowserContextRequest {
 #[derive(Debug, Clone)]
 pub struct StoredBrowserContext {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
     pub owner_subject: String,
     pub owner_issuer: String,
     pub name: String,
@@ -1395,6 +1924,8 @@ pub struct BrowserContextRetentionCandidate {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BrowserContextResource {
     pub id: Uuid,
+    pub project_id: Option<Uuid>,
+    pub project: Option<SessionProjectResource>,
     pub name: String,
     pub description: Option<String>,
     pub labels: HashMap<String, String>,
@@ -1506,6 +2037,18 @@ pub struct SessionStatusSummary {
     pub idle: SessionIdleStatus,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionQueueInfo {
+    pub queued_at: DateTime<Utc>,
+    pub queued_for_ms: u64,
+    pub position: u32,
+    pub active_sessions: u32,
+    pub queued_sessions: u32,
+    pub max_active_sessions: Option<u32>,
+    pub dispatch_blocker: String,
+    pub cancellable: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SessionResource {
     pub id: Uuid,
@@ -1531,8 +2074,10 @@ pub struct SessionResource {
     pub connect: SessionConnectInfo,
     pub runtime: SessionRuntimeInfo,
     pub status: SessionStatusSummary,
+    pub queue: Option<SessionQueueInfo>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub queued_at: Option<DateTime<Utc>>,
     pub runtime_released_at: Option<DateTime<Utc>>,
     pub stopped_at: Option<DateTime<Utc>>,
 }
@@ -1673,6 +2218,11 @@ pub struct StoredSession {
     pub recording: crate::session_control::SessionRecordingPolicy,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub queued_at: Option<DateTime<Utc>>,
+    pub runtime_started_at: Option<DateTime<Utc>>,
+    pub runtime_usage_ms: u64,
+    pub egress_rx_bytes: u64,
+    pub egress_tx_bytes: u64,
     pub runtime_released_at: Option<DateTime<Utc>>,
     pub stopped_at: Option<DateTime<Utc>>,
 }
@@ -1682,8 +2232,10 @@ impl StoredSession {
         &self,
         public_gateway_url: &str,
         project: Option<SessionProjectResource>,
+        capabilities: SessionCapabilities,
         runtime: SessionRuntimeInfo,
         status: SessionStatusSummary,
+        queue: Option<SessionQueueInfo>,
         state_override: Option<SessionLifecycleState>,
         effective_egress: SessionEffectiveEgress,
         egress_diagnostics: EgressDiagnosticsResource,
@@ -1701,7 +2253,7 @@ impl StoredSession {
             egress_diagnostics,
             owner_mode: self.owner_mode,
             viewport: self.viewport.clone(),
-            capabilities: SessionCapabilities::default(),
+            capabilities,
             owner: self.owner.clone(),
             automation_delegate: self.automation_delegate.clone(),
             idle_timeout_sec: self.idle_timeout_sec,
@@ -1722,8 +2274,10 @@ impl StoredSession {
             },
             runtime,
             status,
+            queue,
             created_at: self.created_at,
             updated_at: self.updated_at,
+            queued_at: self.queued_at,
             runtime_released_at: self.runtime_released_at,
             stopped_at: self.stopped_at,
         }
@@ -1734,6 +2288,8 @@ impl StoredBrowserContext {
     pub fn to_resource(&self) -> BrowserContextResource {
         BrowserContextResource {
             id: self.id,
+            project_id: self.project_id,
+            project: None,
             name: self.name.clone(),
             description: self.description.clone(),
             labels: self.labels.clone(),

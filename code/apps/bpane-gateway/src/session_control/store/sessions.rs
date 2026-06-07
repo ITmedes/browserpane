@@ -58,6 +58,21 @@ impl SessionStore {
         }
     }
 
+    pub async fn cancel_queued_session_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.cancel_queued_session_for_owner(principal, id).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.cancel_queued_session_for_owner(principal, id).await
+            }
+        }
+    }
+
     pub async fn release_session_runtime_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -105,6 +120,22 @@ impl SessionStore {
         match &self.backend {
             SessionStoreBackend::InMemory(store) => store.prepare_session_for_connect(id).await,
             SessionStoreBackend::Postgres(store) => store.prepare_session_for_connect(id).await,
+        }
+    }
+
+    pub async fn record_session_egress_usage(
+        &self,
+        id: Uuid,
+        request: ReportSessionEgressUsageRequest,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        validate_session_egress_usage_report(&request)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store.record_session_egress_usage(id, request).await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store.record_session_egress_usage(id, request).await
+            }
         }
     }
 

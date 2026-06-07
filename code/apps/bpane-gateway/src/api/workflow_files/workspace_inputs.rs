@@ -4,11 +4,15 @@ use std::path::{Component, Path as FsPath};
 use axum::response::Response;
 
 use super::*;
+use crate::session_control::{
+    validate_project_file_workspace_policy, ProjectPolicy, SessionStoreError,
+};
 
 pub(super) async fn resolve_workflow_run_workspace_inputs(
     state: &Arc<ApiState>,
     principal: &AuthenticatedPrincipal,
     version: &StoredWorkflowDefinitionVersion,
+    project_id: Option<Uuid>,
     requests: Vec<CreateWorkflowRunWorkspaceInputRequest>,
 ) -> Result<Vec<WorkflowRunWorkspaceInput>, (StatusCode, Json<ErrorResponse>)> {
     if requests.is_empty() {
@@ -32,6 +36,10 @@ pub(super) async fn resolve_workflow_run_workspace_inputs(
         ));
     }
 
+    let project_policy = load_project_policy_for_workspace_inputs(state, principal, project_id)
+        .await
+        .map_err(map_session_store_error)?;
+
     let mut mount_paths = HashSet::new();
     let mut inputs = Vec::with_capacity(requests.len());
     for request in requests {
@@ -46,6 +54,32 @@ pub(super) async fn resolve_workflow_run_workspace_inputs(
                 }),
             ));
         }
+
+        let workspace = state
+            .session_store
+            .get_file_workspace_for_owner(principal, request.workspace_id)
+            .await
+            .map_err(map_session_store_error)?
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorResponse {
+                        error: format!("file workspace {} not found", request.workspace_id),
+                    }),
+                )
+            })?;
+        validate_workflow_workspace_project_scope(
+            "workflow run workspace input",
+            project_id,
+            &workspace,
+        )?;
+        validate_project_file_workspace_policy(
+            project_id,
+            project_policy.as_ref(),
+            request.workspace_id,
+            "workflow run workspace input",
+        )
+        .map_err(map_session_store_error)?;
 
         let file = state
             .session_store
@@ -92,6 +126,44 @@ pub(super) async fn resolve_workflow_run_workspace_inputs(
     }
 
     Ok(inputs)
+}
+
+async fn load_project_policy_for_workspace_inputs(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    project_id: Option<Uuid>,
+) -> Result<Option<ProjectPolicy>, SessionStoreError> {
+    let Some(project_id) = project_id else {
+        return Ok(None);
+    };
+    let project = state
+        .session_store
+        .get_project_for_owner(principal, project_id)
+        .await?
+        .ok_or_else(|| SessionStoreError::NotFound(format!("project {project_id} not found")))?;
+    Ok(Some(project.policy))
+}
+
+fn validate_workflow_workspace_project_scope(
+    usage: &str,
+    project_id: Option<Uuid>,
+    workspace: &crate::workspaces::StoredFileWorkspace,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let Some(workspace_project_id) = workspace.project_id else {
+        return Ok(());
+    };
+    if project_id == Some(workspace_project_id) {
+        return Ok(());
+    }
+    Err((
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse {
+            error: format!(
+                "file workspace {} belongs to project {} and cannot be used for {usage} without a matching workflow run project_id",
+                workspace.id, workspace_project_id
+            ),
+        }),
+    ))
 }
 
 fn normalize_workflow_run_workspace_input_mount_path(

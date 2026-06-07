@@ -86,6 +86,15 @@ const SESSION: SessionResource = {
   },
   egress_diagnostics: EGRESS_DIAGNOSTICS,
   owner_mode: 'shared',
+  capabilities: {
+    browser_input: true,
+    clipboard: true,
+    audio: true,
+    microphone: true,
+    camera: true,
+    file_transfer: true,
+    resize: true,
+  },
   idle_timeout_sec: 1800,
   labels: { case: '1234', purpose: 'import-repro' },
   integration_context: { ticket: 'INC-1234' },
@@ -250,6 +259,7 @@ describe('SessionViewModelBuilder', () => {
       project: 'Support tenant (019df811...7f19)',
       projectId: SESSION.project_id,
       admission: 'allowed | project_quota_available 1/2',
+      capabilities: 'full',
       template: 'Support triage (019df5c8...21c0)',
       templateId: TEMPLATE.id,
       browserContext: 'Support profile (019df7be...4a72)',
@@ -264,6 +274,7 @@ describe('SessionViewModelBuilder', () => {
       ownerMode: 'shared',
       runtimeBinding: 'docker_runtime_pool',
       canJoin: true,
+      capabilities: 'full',
     });
   });
 
@@ -308,6 +319,11 @@ describe('SessionViewModelBuilder', () => {
       testId: 'session-admission',
     });
     expect(viewModel.facts).toContainEqual({
+      label: 'capabilities',
+      value: 'full',
+      testId: 'session-capabilities',
+    });
+    expect(viewModel.facts).toContainEqual({
       label: 'template',
       value: 'Support triage (019df5c8...21c0)',
       testId: 'session-template',
@@ -349,6 +365,93 @@ describe('SessionViewModelBuilder', () => {
     expect(viewModel.canDisconnectAll).toBe(true);
   });
 
+  it('shows project session creation rate admission context in details', () => {
+    const viewModel = SessionViewModelBuilder.detail({
+      session: {
+        ...SESSION,
+        admission: {
+          state: 'rejected',
+          reason_code: 'session_creation_rate_exceeded',
+          message: 'Project session creation rate limit is exhausted.',
+          project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+          session_creations_in_window: 1,
+          max_session_creations_per_window: 1,
+          session_creation_window_sec: 3600,
+          checked_at: '2026-05-04T19:00:00Z',
+        },
+      },
+      browserContexts: [BROWSER_CONTEXT],
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(viewModel.facts).toContainEqual({
+      label: 'admission',
+      value: 'rejected | session_creation_rate_exceeded 1/1 per 3600s',
+      testId: 'session-admission',
+    });
+  });
+
+  it('surfaces project policy restricted session capabilities', () => {
+    const restrictedSession: SessionResource = {
+      ...SESSION,
+      capabilities: {
+        ...SESSION.capabilities,
+        file_transfer: false,
+      },
+    };
+
+    const list = SessionViewModelBuilder.list({
+      sessions: [restrictedSession],
+      browserContexts: [BROWSER_CONTEXT],
+      selectedSessionId: restrictedSession.id,
+      authenticated: true,
+      loading: false,
+      error: null,
+    });
+    const detail = SessionViewModelBuilder.detail({
+      session: restrictedSession,
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(list.selectedSession?.capabilities).toBe('file transfer blocked');
+    expect(detail.facts).toContainEqual({
+      label: 'capabilities',
+      value: 'file transfer blocked',
+      testId: 'session-capabilities',
+    });
+  });
+
+  it('shows project runtime budget admission context in details', () => {
+    const viewModel = SessionViewModelBuilder.detail({
+      session: {
+        ...SESSION,
+        admission: {
+          state: 'rejected',
+          reason_code: 'runtime_usage_budget_exceeded',
+          message: 'Project browser runtime budget is exhausted.',
+          project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+          runtime_usage_ms: 60_000,
+          max_runtime_usage_ms: 60_000,
+          checked_at: '2026-05-04T19:00:00Z',
+        },
+      },
+      browserContexts: [BROWSER_CONTEXT],
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(viewModel.facts).toContainEqual({
+      label: 'admission',
+      value: 'rejected | runtime_usage_budget_exceeded 60000/60000ms',
+      testId: 'session-admission',
+    });
+  });
+
   it('disables lifecycle actions when remote status reports live clients', () => {
     const viewModel = SessionViewModelBuilder.detail({
       session: {
@@ -371,6 +474,66 @@ describe('SessionViewModelBuilder', () => {
     expect(viewModel.canKill).toBe(false);
     expect(viewModel.canRelease).toBe(false);
     expect(viewModel.hint).toContain('Disconnect');
+  });
+
+  it('surfaces queue details and the queued-session cancel action', () => {
+    const queuedAt = '2026-05-04T19:02:00Z';
+    const queuedSession: SessionResource = {
+      ...SESSION,
+      state: 'queued',
+      queued_at: queuedAt,
+      queue: {
+        queued_at: queuedAt,
+        queued_for_ms: 125000,
+        position: 2,
+        active_sessions: 1,
+        queued_sessions: 3,
+        max_active_sessions: 1,
+        dispatch_blocker: 'earlier_queued_session',
+        cancellable: true,
+      },
+      status: {
+        ...SESSION.status,
+        runtime_state: 'queued',
+        presence_state: 'disconnected',
+        connection_counts: {
+          interactive_clients: 0,
+          owner_clients: 0,
+          viewer_clients: 0,
+          recorder_clients: 0,
+          automation_clients: 0,
+          total_clients: 0,
+        },
+        stop_eligibility: { allowed: true, blockers: [] },
+      },
+    };
+
+    const viewModel = SessionViewModelBuilder.detail({
+      session: queuedSession,
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(viewModel.facts).toContainEqual({
+      label: 'queue age',
+      value: '2m 5s',
+      testId: 'session-queue-age',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'queue position',
+      value: '2/3',
+      testId: 'session-queue-position',
+    });
+    expect(viewModel.facts).toContainEqual({
+      label: 'queue blocker',
+      value: 'earlier_queued_session',
+      testId: 'session-queue-blocker',
+    });
+    expect(viewModel.canCancelQueue).toBe(true);
+    expect(viewModel.canStop).toBe(false);
+    expect(viewModel.canKill).toBe(false);
+    expect(viewModel.canRelease).toBe(false);
   });
 
   it('exposes runtime release only for disconnected runtime candidates', () => {

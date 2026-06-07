@@ -97,8 +97,14 @@ pub(in crate::api) async fn prepare_runtime_access_session(
         })?;
     let was_stopped = stored.state == SessionLifecycleState::Stopped;
     let was_released = stored.state == SessionLifecycleState::Released;
+    let needs_prepare = matches!(
+        stored.state,
+        SessionLifecycleState::Queued
+            | SessionLifecycleState::Released
+            | SessionLifecycleState::Stopped
+    );
 
-    let connectable = if was_stopped || was_released {
+    let connectable = if needs_prepare {
         let prepared = state
             .session_store
             .prepare_session_for_connect(session_id)
@@ -112,6 +118,23 @@ pub(in crate::api) async fn prepare_runtime_access_session(
                     }),
                 )
             })?;
+        prepared
+    } else {
+        stored
+    };
+
+    if !connectable.state.is_runtime_candidate() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!(
+                    "session {session_id} is not connectable in state {}",
+                    connectable.state.as_str()
+                ),
+            }),
+        ));
+    }
+    if needs_prepare {
         schedule_idle_session_stop(
             session_id,
             state.idle_stop_timeout,
@@ -120,10 +143,7 @@ pub(in crate::api) async fn prepare_runtime_access_session(
             state.session_manager.clone(),
             state.recording_lifecycle.clone(),
         );
-        prepared
-    } else {
-        stored
-    };
+    }
 
     if let Err(error) = state
         .recording_lifecycle
@@ -141,18 +161,6 @@ pub(in crate::api) async fn prepare_runtime_access_session(
             state.registry.remove_session(session_id).await;
         }
         return Err(map_recording_lifecycle_error(error));
-    }
-
-    if !connectable.state.is_runtime_candidate() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: format!(
-                    "session {session_id} is not connectable in state {}",
-                    connectable.state.as_str()
-                ),
-            }),
-        ));
     }
 
     Ok(connectable)

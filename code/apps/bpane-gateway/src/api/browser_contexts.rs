@@ -63,6 +63,7 @@ async fn create_browser_context(
             &principal,
             PersistBrowserContextRequest {
                 id: None,
+                project_id: request.project_id,
                 name: request.name,
                 description: request.description,
                 labels: request.labels,
@@ -73,7 +74,10 @@ async fn create_browser_context(
         )
         .await
         .map_err(map_session_store_error)?;
-    Ok((StatusCode::CREATED, Json(context.to_resource())))
+    Ok((
+        StatusCode::CREATED,
+        Json(browser_context_resource_with_usage(&state, &principal, context).await?),
+    ))
 }
 
 async fn import_browser_context(
@@ -187,6 +191,7 @@ async fn clone_browser_context(
     let target_context_id = Uuid::now_v7();
     let target_request = PersistBrowserContextRequest {
         id: Some(target_context_id),
+        project_id: request.project_id.or(source.project_id),
         name: request.name,
         description: request.description.or_else(|| source.description.clone()),
         labels: request.labels.unwrap_or_else(|| source.labels.clone()),
@@ -447,16 +452,18 @@ async fn browser_context_resources_with_usage(
         .map(|context| context.id)
         .collect::<Vec<_>>();
     let usage_by_context = browser_context_usage_by_id(state, principal, &context_ids).await?;
-    Ok(contexts
-        .into_iter()
-        .map(|context| {
-            let usage = usage_by_context
-                .get(&context.id)
-                .cloned()
-                .unwrap_or_default();
-            browser_context_resource_with_usage_value(context, usage)
-        })
-        .collect())
+    let mut resources = Vec::with_capacity(contexts.len());
+    for context in contexts {
+        let usage = usage_by_context
+            .get(&context.id)
+            .cloned()
+            .unwrap_or_default();
+        let project = browser_context_project_summary(state, principal, context.project_id).await?;
+        resources.push(browser_context_resource_with_usage_value(
+            context, usage, project,
+        ));
+    }
+    Ok(resources)
 }
 
 async fn browser_context_resource_with_usage(
@@ -466,12 +473,16 @@ async fn browser_context_resource_with_usage(
 ) -> Result<BrowserContextResource, (StatusCode, Json<ErrorResponse>)> {
     let mut usage_by_context = browser_context_usage_by_id(state, principal, &[context.id]).await?;
     let usage = usage_by_context.remove(&context.id).unwrap_or_default();
-    Ok(browser_context_resource_with_usage_value(context, usage))
+    let project = browser_context_project_summary(state, principal, context.project_id).await?;
+    Ok(browser_context_resource_with_usage_value(
+        context, usage, project,
+    ))
 }
 
 fn browser_context_resource_with_usage_value(
     context: StoredBrowserContext,
     mut usage: BrowserContextUsageResource,
+    project: Option<SessionProjectResource>,
 ) -> BrowserContextResource {
     let mut resource = context.to_resource();
     usage.profile_storage_limit_exceeded = match (
@@ -482,7 +493,24 @@ fn browser_context_resource_with_usage_value(
         _ => false,
     };
     resource.usage = usage;
+    resource.project = project;
     resource
+}
+
+async fn browser_context_project_summary(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    project_id: Option<Uuid>,
+) -> Result<Option<SessionProjectResource>, (StatusCode, Json<ErrorResponse>)> {
+    let Some(project_id) = project_id else {
+        return Ok(None);
+    };
+    Ok(state
+        .session_store
+        .get_project_for_owner(principal, project_id)
+        .await
+        .map_err(map_session_store_error)?
+        .map(|project| project.to_session_project_resource()))
 }
 
 const BROWSER_CONTEXT_EXPORT_MANIFEST_PATH: &str = "manifest.json";
@@ -680,6 +708,7 @@ fn browser_context_import_request_from_headers(
 
     Ok(PersistBrowserContextRequest {
         id: Some(target_context_id),
+        project_id: optional_uuid_header(headers, BROWSER_CONTEXT_PROJECT_ID_HEADER)?,
         name,
         description,
         labels,
@@ -740,6 +769,24 @@ fn optional_u64_header(
                     StatusCode::BAD_REQUEST,
                     Json(ErrorResponse {
                         error: format!("header {name} must be a positive integer: {error}"),
+                    }),
+                )
+            })
+        })
+        .transpose()
+}
+
+fn optional_uuid_header(
+    headers: &HeaderMap,
+    name: &str,
+) -> Result<Option<Uuid>, (StatusCode, Json<ErrorResponse>)> {
+    optional_header_string(headers, name)?
+        .map(|value| {
+            value.parse::<Uuid>().map_err(|error| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: format!("header {name} must be a valid UUID: {error}"),
                     }),
                 )
             })

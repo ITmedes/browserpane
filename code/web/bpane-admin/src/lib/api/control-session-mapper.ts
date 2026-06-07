@@ -31,9 +31,14 @@ import type {
   ProjectAdmissionReasonCode,
   ProjectAdmissionState,
   ProjectListResponse,
+  ProjectPolicy,
   ProjectQuotas,
   ProjectResource,
   ProjectState,
+  ProjectUsageAlertMetric,
+  ProjectUsageAlertResource,
+  ProjectUsageAlertState,
+  ProjectUsageBudgetEnforcement,
   ProjectUsageResource,
   ServicePrincipalListResponse,
   ServicePrincipalResource,
@@ -49,6 +54,7 @@ import type {
   SessionListResponse,
   SessionNetworkIdentity,
   SessionProjectResource,
+  SessionQueueInfo,
   SessionResource,
   SessionRuntimeInfo,
   SessionStatusSummary,
@@ -157,6 +163,7 @@ export class ControlSessionMapper {
       description: description ?? null,
       labels: expectStringRecord(object.labels ?? {}, 'project labels'),
       quotas: toProjectQuotas(object.quotas),
+      policy: toProjectPolicy(object.policy),
       state: expectEnum(object.state, 'project state', PROJECT_STATES),
       usage: toProjectUsage(object.usage),
       created_at: expectString(object.created_at, 'project created_at'),
@@ -192,6 +199,8 @@ export class ControlSessionMapper {
     const description = optionalString(object.description, 'egress profile description');
     return {
       id: expectString(object.id, 'egress profile id'),
+      project_id: optionalString(object.project_id, 'egress profile project_id') ?? null,
+      project: toSessionProjectResource(object.project) ?? null,
       name: expectString(object.name, 'egress profile name'),
       description: description ?? null,
       labels: expectStringRecord(object.labels ?? {}, 'egress profile labels'),
@@ -242,6 +251,8 @@ export class ControlSessionMapper {
     const usage = toBrowserContextUsage(object.usage);
     return {
       id: expectString(object.id, 'browser context id'),
+      project_id: optionalString(object.project_id, 'browser context project_id') ?? null,
+      project: toSessionProjectResource(object.project) ?? null,
       name: expectString(object.name, 'browser context name'),
       description: description ?? null,
       labels: expectStringRecord(object.labels ?? {}, 'browser context labels'),
@@ -291,6 +302,7 @@ export class ControlSessionMapper {
     const object = expectRecord(payload, 'session resource');
     const templateId = optionalString(object.template_id, 'session resource template_id');
     const stoppedAt = optionalString(object.stopped_at, 'session resource stopped_at');
+    const queuedAt = optionalString(object.queued_at, 'session resource queued_at');
     const runtimeReleasedAt = optionalString(
       object.runtime_released_at,
       'session resource runtime_released_at',
@@ -308,6 +320,7 @@ export class ControlSessionMapper {
       effective_egress: toSessionEffectiveEgress(object.effective_egress),
       egress_diagnostics: toEgressDiagnosticsResource(object.egress_diagnostics),
       owner_mode: expectString(object.owner_mode, 'session resource owner_mode'),
+      capabilities: toSessionCapabilities(object.capabilities),
       viewport: toOptionalViewport(object.viewport, 'session resource viewport') ?? null,
       idle_timeout_sec: optionalNumber(object.idle_timeout_sec, 'session resource idle_timeout_sec') ?? null,
       labels: expectStringRecord(object.labels ?? {}, 'session resource labels'),
@@ -316,8 +329,10 @@ export class ControlSessionMapper {
       connect: toConnectInfo(object.connect),
       runtime: toRuntimeInfo(object.runtime),
       status: toStatusSummary(object.status),
+      queue: toSessionQueueInfo(object.queue) ?? null,
       created_at: expectString(object.created_at, 'session resource created_at'),
       updated_at: expectString(object.updated_at, 'session resource updated_at'),
+      ...(queuedAt !== undefined ? { queued_at: queuedAt } : {}),
       ...(runtimeReleasedAt !== undefined ? { runtime_released_at: runtimeReleasedAt } : {}),
       ...(stoppedAt !== undefined ? { stopped_at: stoppedAt } : {}),
     };
@@ -354,12 +369,30 @@ const BROWSER_CONTEXT_STATES = ['ready', 'deleted'] satisfies readonly BrowserCo
 const BROWSER_CONTEXT_PERSISTENCE_MODES = ['reusable', 'ephemeral'] satisfies readonly BrowserContextPersistenceMode[];
 const SESSION_BROWSER_CONTEXT_MODES = ['fresh', 'ephemeral', 'reusable'] satisfies readonly SessionBrowserContextMode[];
 const PROJECT_STATES = ['active', 'archived'] satisfies readonly ProjectState[];
+const PROJECT_USAGE_BUDGET_ENFORCEMENT = [
+  'warning_only',
+  'block_session_creation',
+] satisfies readonly ProjectUsageBudgetEnforcement[];
 const PROJECT_ADMISSION_STATES = ['allowed', 'queued', 'rejected'] satisfies readonly ProjectAdmissionState[];
+const PROJECT_USAGE_ALERT_METRICS = [
+  'session_creations',
+  'runtime_usage_ms',
+  'egress_total_bytes',
+] satisfies readonly ProjectUsageAlertMetric[];
+const PROJECT_USAGE_ALERT_STATES = ['approaching_limit', 'exceeded'] satisfies readonly ProjectUsageAlertState[];
 const PROJECT_ADMISSION_REASON_CODES = [
   'owner_scope_unbounded',
   'project_quota_available',
   'active_session_quota_exceeded',
+  'session_creation_budget_exceeded',
+  'session_creation_rate_exceeded',
+  'runtime_usage_budget_exceeded',
+  'active_workflow_run_quota_exceeded',
   'project_archived',
+  'session_template_not_allowed',
+  'egress_profile_not_allowed',
+  'extension_not_allowed',
+  'browser_context_not_allowed',
 ] satisfies readonly ProjectAdmissionReasonCode[];
 const IDENTITY_PRINCIPAL_TYPES = ['user', 'service_principal', 'legacy_dev_token'] satisfies readonly IdentityPrincipalType[];
 const IDENTITY_MAPPING_KINDS = ['user', 'group', 'claim', 'service_principal'] satisfies readonly IdentityMappingKind[];
@@ -577,6 +610,75 @@ function toProjectQuotas(value: unknown): ProjectQuotas {
       object.max_retained_storage_bytes,
       'project quotas max_retained_storage_bytes',
     ) ?? null,
+    max_session_creations: optionalNumber(
+      object.max_session_creations,
+      'project quotas max_session_creations',
+    ) ?? null,
+    max_session_creations_per_window: optionalNumber(
+      object.max_session_creations_per_window,
+      'project quotas max_session_creations_per_window',
+    ) ?? null,
+    session_creation_window_sec: optionalNumber(
+      object.session_creation_window_sec,
+      'project quotas session_creation_window_sec',
+    ) ?? null,
+    max_runtime_usage_ms: optionalNumber(
+      object.max_runtime_usage_ms,
+      'project quotas max_runtime_usage_ms',
+    ) ?? null,
+    max_egress_total_bytes: optionalNumber(
+      object.max_egress_total_bytes,
+      'project quotas max_egress_total_bytes',
+    ) ?? null,
+  };
+}
+
+function toProjectPolicy(value: unknown): ProjectPolicy {
+  const object = value === undefined || value === null
+    ? {}
+    : expectRecord(value, 'project policy');
+  return {
+    allowed_session_template_ids: toStringArray(
+      object.allowed_session_template_ids ?? [],
+      'project policy allowed_session_template_ids',
+    ),
+    allowed_egress_profile_ids: toStringArray(
+      object.allowed_egress_profile_ids ?? [],
+      'project policy allowed_egress_profile_ids',
+    ),
+    allowed_extension_ids: toStringArray(
+      object.allowed_extension_ids ?? [],
+      'project policy allowed_extension_ids',
+    ),
+    allowed_browser_context_ids: toStringArray(
+      object.allowed_browser_context_ids ?? [],
+      'project policy allowed_browser_context_ids',
+    ),
+    allowed_file_workspace_ids: toStringArray(
+      object.allowed_file_workspace_ids ?? [],
+      'project policy allowed_file_workspace_ids',
+    ),
+    allow_browser_uploads: expectBoolean(
+      object.allow_browser_uploads ?? true,
+      'project policy allow_browser_uploads',
+    ),
+    allow_browser_downloads: expectBoolean(
+      object.allow_browser_downloads ?? true,
+      'project policy allow_browser_downloads',
+    ),
+    allow_session_file_bindings: expectBoolean(
+      object.allow_session_file_bindings ?? true,
+      'project policy allow_session_file_bindings',
+    ),
+    allow_manual_recordings: expectBoolean(
+      object.allow_manual_recordings ?? true,
+      'project policy allow_manual_recordings',
+    ),
+    usage_budget_enforcement: expectEnum(
+      object.usage_budget_enforcement ?? 'warning_only',
+      'project policy usage_budget_enforcement',
+      PROJECT_USAGE_BUDGET_ENFORCEMENT,
+    ),
   };
 }
 
@@ -585,6 +687,18 @@ function toProjectUsage(value: unknown): ProjectUsageResource {
   return {
     project_id: expectString(object.project_id, 'project usage project_id'),
     active_sessions: expectNumber(object.active_sessions, 'project usage active_sessions'),
+    queued_sessions: optionalNumber(
+      object.queued_sessions,
+      'project usage queued_sessions',
+    ) ?? 0,
+    session_creations: optionalNumber(
+      object.session_creations,
+      'project usage session_creations',
+    ) ?? 0,
+    max_session_creations: optionalNumber(
+      object.max_session_creations,
+      'project usage max_session_creations',
+    ) ?? null,
     max_active_sessions: optionalNumber(
       object.max_active_sessions,
       'project usage max_active_sessions',
@@ -597,6 +711,30 @@ function toProjectUsage(value: unknown): ProjectUsageResource {
       object.max_active_workflow_runs,
       'project usage max_active_workflow_runs',
     ) ?? null,
+    runtime_usage_ms: optionalNumber(
+      object.runtime_usage_ms,
+      'project usage runtime_usage_ms',
+    ) ?? 0,
+    max_runtime_usage_ms: optionalNumber(
+      object.max_runtime_usage_ms,
+      'project usage max_runtime_usage_ms',
+    ) ?? null,
+    egress_rx_bytes: optionalNumber(
+      object.egress_rx_bytes,
+      'project usage egress_rx_bytes',
+    ) ?? 0,
+    egress_tx_bytes: optionalNumber(
+      object.egress_tx_bytes,
+      'project usage egress_tx_bytes',
+    ) ?? 0,
+    egress_total_bytes: optionalNumber(
+      object.egress_total_bytes,
+      'project usage egress_total_bytes',
+    ) ?? 0,
+    max_egress_total_bytes: optionalNumber(
+      object.max_egress_total_bytes,
+      'project usage max_egress_total_bytes',
+    ) ?? null,
     retained_storage_bytes: expectNumber(
       object.retained_storage_bytes,
       'project usage retained_storage_bytes',
@@ -605,7 +743,57 @@ function toProjectUsage(value: unknown): ProjectUsageResource {
       object.max_retained_storage_bytes,
       'project usage max_retained_storage_bytes',
     ) ?? null,
+    alerts: toProjectUsageAlerts(object.alerts ?? []),
     observed_at: expectString(object.observed_at, 'project usage observed_at'),
+  };
+}
+
+function toProjectUsageAlerts(value: unknown): readonly ProjectUsageAlertResource[] {
+  if (!Array.isArray(value)) {
+    throw new Error('project usage alerts must be an array');
+  }
+  return value.map((entry, index) => {
+    const object = expectRecord(entry, `project usage alerts[${index}]`);
+    return {
+      metric: expectEnum(
+        object.metric,
+        `project usage alerts[${index}].metric`,
+        PROJECT_USAGE_ALERT_METRICS,
+      ),
+      state: expectEnum(
+        object.state,
+        `project usage alerts[${index}].state`,
+        PROJECT_USAGE_ALERT_STATES,
+      ),
+      current_value: expectNumber(
+        object.current_value,
+        `project usage alerts[${index}].current_value`,
+      ),
+      limit_value: expectNumber(
+        object.limit_value,
+        `project usage alerts[${index}].limit_value`,
+      ),
+      threshold_percent: expectNumber(
+        object.threshold_percent,
+        `project usage alerts[${index}].threshold_percent`,
+      ),
+      message: expectString(object.message, `project usage alerts[${index}].message`),
+    };
+  });
+}
+
+function toSessionCapabilities(value: unknown): SessionResource['capabilities'] {
+  const object = value === undefined || value === null
+    ? {}
+    : expectRecord(value, 'session capabilities');
+  return {
+    browser_input: expectBoolean(object.browser_input ?? true, 'session capabilities browser_input'),
+    clipboard: expectBoolean(object.clipboard ?? true, 'session capabilities clipboard'),
+    audio: expectBoolean(object.audio ?? true, 'session capabilities audio'),
+    microphone: expectBoolean(object.microphone ?? true, 'session capabilities microphone'),
+    camera: expectBoolean(object.camera ?? true, 'session capabilities camera'),
+    file_transfer: expectBoolean(object.file_transfer ?? true, 'session capabilities file_transfer'),
+    resize: expectBoolean(object.resize ?? true, 'session capabilities resize'),
   };
 }
 
@@ -642,6 +830,42 @@ function toProjectAdmissionDecision(value: unknown): ProjectAdmissionDecision | 
     max_active_sessions: optionalNumber(
       object.max_active_sessions,
       'project admission max_active_sessions',
+    ) ?? null,
+    active_workflow_runs: optionalNumber(
+      object.active_workflow_runs,
+      'project admission active_workflow_runs',
+    ) ?? null,
+    max_active_workflow_runs: optionalNumber(
+      object.max_active_workflow_runs,
+      'project admission max_active_workflow_runs',
+    ) ?? null,
+    session_creations: optionalNumber(
+      object.session_creations,
+      'project admission session_creations',
+    ) ?? null,
+    max_session_creations: optionalNumber(
+      object.max_session_creations,
+      'project admission max_session_creations',
+    ) ?? null,
+    session_creations_in_window: optionalNumber(
+      object.session_creations_in_window,
+      'project admission session_creations_in_window',
+    ) ?? null,
+    max_session_creations_per_window: optionalNumber(
+      object.max_session_creations_per_window,
+      'project admission max_session_creations_per_window',
+    ) ?? null,
+    session_creation_window_sec: optionalNumber(
+      object.session_creation_window_sec,
+      'project admission session_creation_window_sec',
+    ) ?? null,
+    runtime_usage_ms: optionalNumber(
+      object.runtime_usage_ms,
+      'project admission runtime_usage_ms',
+    ) ?? null,
+    max_runtime_usage_ms: optionalNumber(
+      object.max_runtime_usage_ms,
+      'project admission max_runtime_usage_ms',
     ) ?? null,
     checked_at: expectString(object.checked_at, 'project admission checked_at'),
   };
@@ -1084,6 +1308,26 @@ function toStatusSummary(value: unknown): SessionStatusSummary {
     presence_state: expectString(object.presence_state, 'session status presence_state'),
     connection_counts: toConnectionCounts(object.connection_counts),
     stop_eligibility: toStopEligibility(object.stop_eligibility),
+  };
+}
+
+function toSessionQueueInfo(value: unknown): SessionQueueInfo | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const object = expectRecord(value, 'session resource queue');
+  return {
+    queued_at: expectString(object.queued_at, 'session queue queued_at'),
+    queued_for_ms: expectNumber(object.queued_for_ms, 'session queue queued_for_ms'),
+    position: expectNumber(object.position, 'session queue position'),
+    active_sessions: expectNumber(object.active_sessions, 'session queue active_sessions'),
+    queued_sessions: expectNumber(object.queued_sessions, 'session queue queued_sessions'),
+    max_active_sessions: optionalNumber(
+      object.max_active_sessions,
+      'session queue max_active_sessions',
+    ) ?? null,
+    dispatch_blocker: expectString(object.dispatch_blocker, 'session queue dispatch_blocker'),
+    cancellable: expectBoolean(object.cancellable, 'session queue cancellable'),
   };
 }
 

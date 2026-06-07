@@ -161,8 +161,11 @@
 
   <div class="grid min-w-0 grid-cols-2 gap-2 xl:grid-cols-4 max-[640px]:grid-cols-1">
     {@render Metric('Baseline', props.viewModel.selectedSessionLabel, 'workflow-session-id')}
+    {@render Metric('Baseline project', props.viewModel.baselineProjectLabel, 'workflow-baseline-project')}
     {@render Metric('Run session', props.viewModel.runSessionLabel, 'workflow-run-session-id')}
+    {@render Metric('Run project', props.viewModel.runProjectLabel, 'workflow-run-project')}
     {@render Metric('Run', props.viewModel.currentRunState, 'workflow-run-state')}
+    {@render Metric('Project admission', props.viewModel.projectAdmissionLabel, 'workflow-project-admission')}
     {@render Metric('Logs', String(props.viewModel.logCount), 'workflow-log-count')}
     {@render Metric('Artifacts', String(props.viewModel.fileCount), 'workflow-produced-file-count')}
   </div>

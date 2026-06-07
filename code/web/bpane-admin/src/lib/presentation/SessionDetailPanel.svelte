@@ -8,6 +8,7 @@
     readonly onRefresh: () => void;
     readonly onRelease: () => void;
     readonly onStop: () => void;
+    readonly onCancelQueue: () => void;
     readonly onKill: () => void;
     readonly onRunEgressProbe: () => void;
     readonly onDisconnectConnection: (connectionId: number) => void;
@@ -20,6 +21,7 @@
     onRefresh,
     onRelease,
     onStop,
+    onCancelQueue,
     onKill,
     onRunEgressProbe,
     onDisconnectConnection,
@@ -62,6 +64,15 @@
       onclick={onStop}
     >
       Stop
+    </button>
+    <button
+      class="admin-button-primary"
+      type="button"
+      data-testid="session-cancel-queue"
+      disabled={!viewModel.canCancelQueue}
+      onclick={onCancelQueue}
+    >
+      Cancel queued
     </button>
     <button
       class="admin-button-primary"

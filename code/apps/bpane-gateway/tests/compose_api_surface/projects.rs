@@ -21,6 +21,24 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
             invalid.body
         ));
     }
+    let invalid_policy = harness
+        .post_json_outcome(
+            "/api/v1/projects",
+            json!({
+                "name": "invalid-project-policy",
+                "policy": {
+                    "allowed_session_template_ids": [" "]
+                }
+            }),
+        )
+        .await?;
+    if invalid_policy.status != StatusCode::BAD_REQUEST {
+        return Err(anyhow!(
+            "invalid project policy create returned {} instead of 400: {}",
+            invalid_policy.status,
+            invalid_policy.body
+        ));
+    }
 
     let project_name = harness.unique_name("compose-project");
     let project = harness
@@ -42,11 +60,37 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     if project["state"] != json!("active")
         || project["usage"]["active_sessions"] != json!(0)
         || project["usage"]["max_active_sessions"] != json!(1)
+        || project["policy"]["allowed_session_template_ids"] != json!([])
+        || project["policy"]["allowed_egress_profile_ids"] != json!([])
     {
         return Err(anyhow!(
             "project create returned unexpected resource: {project}"
         ));
     }
+
+    let allowed_profile = harness
+        .post_json(
+            "/api/v1/egress-profiles",
+            json!({
+                "name": harness.unique_name("compose-project-egress-allowed"),
+                "description": "Compose e2e project policy allowed egress",
+                "labels": label_map("projects"),
+                "proxy": { "url": "https://proxy.example:8443" }
+            }),
+        )
+        .await?;
+    let allowed_profile_id = json_id(&allowed_profile, "id")?;
+    let disallowed_profile = harness
+        .post_json(
+            "/api/v1/egress-profiles",
+            json!({
+                "name": harness.unique_name("compose-project-egress-denied"),
+                "description": "Compose e2e project policy denied egress",
+                "labels": label_map("projects")
+            }),
+        )
+        .await?;
+    let disallowed_profile_id = json_id(&disallowed_profile, "id")?;
 
     let listed = harness.get_json("/api/v1/projects").await?;
     let listed_projects = json_array(&listed, "projects")?;
@@ -78,6 +122,9 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
                 "name": template_name,
                 "defaults": {
                     "project_id": project_id,
+                    "network_identity": {
+                        "egress_profile_id": allowed_profile_id
+                    },
                     "labels": {
                         "team": "support"
                     }
@@ -89,6 +136,94 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     if template["defaults"]["project_id"] != json!(project_id) {
         return Err(anyhow!(
             "project template default was not persisted: {template}"
+        ));
+    }
+
+    let disallowed_template = harness
+        .post_json(
+            "/api/v1/session-templates",
+            json!({
+                "name": harness.unique_name("compose-project-template-denied"),
+                "defaults": {
+                    "project_id": project_id,
+                    "network_identity": {
+                        "egress_profile_id": allowed_profile_id
+                    }
+                }
+            }),
+        )
+        .await?;
+    let disallowed_template_id = json_id(&disallowed_template, "id")?;
+
+    let policy_project = harness
+        .put_json(
+            &format!("/api/v1/projects/{project_id}"),
+            json!({
+                "name": project_name,
+                "description": "Compose e2e project with policy",
+                "labels": label_map("projects"),
+                "quotas": {
+                    "max_active_sessions": 1,
+                    "max_active_workflow_runs": 2,
+                    "max_retained_storage_bytes": 1048576
+                },
+                "policy": {
+                    "allowed_session_template_ids": [template_id],
+                    "allowed_egress_profile_ids": [allowed_profile_id]
+                }
+            }),
+        )
+        .await?;
+    if policy_project["policy"]["allowed_session_template_ids"][0] != json!(template_id)
+        || policy_project["policy"]["allowed_egress_profile_ids"][0] != json!(allowed_profile_id)
+    {
+        return Err(anyhow!(
+            "project policy update did not persist allow-lists: {policy_project}"
+        ));
+    }
+
+    let template_policy_rejected = harness
+        .post_json_outcome(
+            "/api/v1/sessions",
+            json!({
+                "template_id": disallowed_template_id
+            }),
+        )
+        .await?;
+    if template_policy_rejected.status != StatusCode::CONFLICT
+        || !template_policy_rejected.body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("session_template_not_allowed")
+    {
+        return Err(anyhow!(
+            "project template policy rejection returned unexpected result {}: {}",
+            template_policy_rejected.status,
+            template_policy_rejected.body
+        ));
+    }
+
+    let egress_policy_rejected = harness
+        .post_json_outcome(
+            "/api/v1/sessions",
+            json!({
+                "template_id": template_id,
+                "network_identity": {
+                    "egress_profile_id": disallowed_profile_id
+                }
+            }),
+        )
+        .await?;
+    if egress_policy_rejected.status != StatusCode::CONFLICT
+        || !egress_policy_rejected.body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("egress_profile_not_allowed")
+    {
+        return Err(anyhow!(
+            "project egress policy rejection returned unexpected result {}: {}",
+            egress_policy_rejected.status,
+            egress_policy_rejected.body
         ));
     }
 
@@ -126,33 +261,48 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         ));
     }
 
-    let rejected = harness
-        .post_json_outcome(
+    let queued = harness
+        .post_json(
             "/api/v1/sessions",
             json!({
-                "project_id": project_id
+                "template_id": template_id
             }),
         )
         .await?;
-    if rejected.status != StatusCode::CONFLICT
-        || !rejected.body["error"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("active_session_quota_exceeded")
+    let queued_session_id = json_id(&queued, "id")?;
+    if queued["state"] != json!("queued")
+        || queued["admission"]["state"] != json!("queued")
+        || queued["admission"]["reason_code"] != json!("active_session_quota_exceeded")
+        || queued["queue"]["position"] != json!(1)
+        || queued["queue"]["dispatch_blocker"] != json!("project_active_session_quota")
+        || queued["queue"]["cancellable"] != json!(true)
     {
         return Err(anyhow!(
-            "project quota rejection returned unexpected result {}: {}",
-            rejected.status,
-            rejected.body
+            "project quota exhaustion did not create expected queued session: {queued}"
         ));
     }
 
     let usage = harness
         .get_json(&format!("/api/v1/projects/{project_id}/usage"))
         .await?;
-    if usage["active_sessions"] != json!(1) {
+    if usage["active_sessions"] != json!(1) || usage["queued_sessions"] != json!(1) {
         return Err(anyhow!(
-            "project usage did not count the active session: {usage}"
+            "project usage did not count the active and queued sessions: {usage}"
+        ));
+    }
+
+    let cancelled = harness
+        .post_json(
+            &format!("/api/v1/sessions/{queued_session_id}/cancel"),
+            json!({}),
+        )
+        .await?;
+    if cancelled["state"] != json!("stopped")
+        || !cancelled["queued_at"].is_null()
+        || !cancelled["queue"].is_null()
+    {
+        return Err(anyhow!(
+            "queued project session cancellation did not persist: {cancelled}"
         ));
     }
 
@@ -169,7 +319,7 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .post_json(
             "/api/v1/sessions",
             json!({
-                "project_id": project_id,
+                "template_id": template_id,
                 "labels": {
                     "run_id": run_id,
                     "retry": "true"
@@ -231,6 +381,142 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     if stopped_second["state"] != json!("stopped") {
         return Err(anyhow!(
             "second project-scoped session cleanup did not stop the session"
+        ));
+    }
+
+    exercise_retained_storage_quota(harness).await?;
+
+    Ok(())
+}
+
+async fn exercise_retained_storage_quota(harness: &ComposeHarness) -> Result<()> {
+    let project_name = harness.unique_name("compose-project-storage");
+    let project = harness
+        .post_json(
+            "/api/v1/projects",
+            json!({
+                "name": project_name,
+                "description": "Compose e2e storage quota project",
+                "labels": label_map("projects-storage"),
+                "quotas": {
+                    "max_retained_storage_bytes": 10
+                }
+            }),
+        )
+        .await?;
+    let project_id = json_id(&project, "id")?;
+    if project["usage"]["retained_storage_bytes"] != json!(0)
+        || project["usage"]["max_retained_storage_bytes"] != json!(10)
+    {
+        return Err(anyhow!(
+            "storage project create returned unexpected usage: {project}"
+        ));
+    }
+
+    let session = harness
+        .post_json(
+            "/api/v1/sessions",
+            json!({
+                "project_id": project_id,
+                "recording": {
+                    "mode": "manual",
+                    "format": "webm"
+                },
+                "labels": label_map("projects-storage")
+            }),
+        )
+        .await?;
+    let session_id = json_id(&session, "id")?;
+
+    let first_recording = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/recordings"),
+            json!({}),
+        )
+        .await?;
+    let first_recording_id = json_id(&first_recording, "id")?;
+    let first_artifact =
+        harness.create_compose_visible_file("project-recording.webm", b"12345678")?;
+    let completed = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/recordings/{first_recording_id}/complete"),
+            json!({
+                "source_path": first_artifact.container_path,
+                "mime_type": "video/webm",
+                "bytes": 8,
+                "duration_ms": 1000
+            }),
+        )
+        .await?;
+    if completed["state"] != json!("ready") || completed["bytes"] != json!(8) {
+        return Err(anyhow!(
+            "storage project recording did not complete as expected: {completed}"
+        ));
+    }
+
+    let usage = harness
+        .get_json(&format!("/api/v1/projects/{project_id}/usage"))
+        .await?;
+    if usage["retained_storage_bytes"] != json!(8) {
+        return Err(anyhow!(
+            "project retained storage did not count recording bytes: {usage}"
+        ));
+    }
+
+    let second_recording = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/recordings"),
+            json!({}),
+        )
+        .await?;
+    let second_recording_id = json_id(&second_recording, "id")?;
+    let second_artifact =
+        harness.create_compose_visible_file("project-recording-over.webm", b"123")?;
+    let rejected = harness
+        .post_json_outcome(
+            &format!("/api/v1/sessions/{session_id}/recordings/{second_recording_id}/complete"),
+            json!({
+                "source_path": second_artifact.container_path,
+                "mime_type": "video/webm",
+                "bytes": 3,
+                "duration_ms": 250
+            }),
+        )
+        .await?;
+    if rejected.status != StatusCode::CONFLICT
+        || !rejected.body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("retained_storage_quota_exceeded")
+    {
+        return Err(anyhow!(
+            "project retained-storage quota rejection returned unexpected result {}: {}",
+            rejected.status,
+            rejected.body
+        ));
+    }
+
+    let failed_recording = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/recordings/{second_recording_id}/fail"),
+            json!({
+                "error": "compose retained-storage quota rejection cleanup",
+                "termination_reason": "worker_exit"
+            }),
+        )
+        .await?;
+    if failed_recording["state"] != json!("failed") {
+        return Err(anyhow!(
+            "storage project rejected recording cleanup did not fail recording: {failed_recording}"
+        ));
+    }
+
+    let stopped = harness
+        .delete_json(&format!("/api/v1/sessions/{session_id}"))
+        .await?;
+    if stopped["state"] != json!("stopped") {
+        return Err(anyhow!(
+            "storage project session cleanup did not stop the session"
         ));
     }
 

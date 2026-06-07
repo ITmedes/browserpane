@@ -107,16 +107,37 @@ const PROJECT = {
     max_active_sessions: 2,
     max_active_workflow_runs: 4,
     max_retained_storage_bytes: 1073741824,
+    max_session_creations_per_window: 3,
+    session_creation_window_sec: 3600,
+  },
+  policy: {
+    allowed_session_template_ids: ['template-1'],
+    allowed_egress_profile_ids: ['egress-1'],
+    allowed_extension_ids: ['extension-1'],
+    allowed_browser_context_ids: ['context-1'],
+    allowed_file_workspace_ids: ['workspace-1'],
+    allow_browser_uploads: true,
+    allow_browser_downloads: true,
+    allow_session_file_bindings: true,
+    allow_manual_recordings: true,
+    usage_budget_enforcement: 'warning_only',
   },
   state: 'active',
   usage: {
     project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
     active_sessions: 1,
+    queued_sessions: 0,
+    session_creations: 7,
     max_active_sessions: 2,
     active_workflow_runs: 1,
     max_active_workflow_runs: 4,
+    runtime_usage_ms: 7200000,
+    egress_rx_bytes: 1048576,
+    egress_tx_bytes: 1048576,
+    egress_total_bytes: 2097152,
     retained_storage_bytes: 268435456,
     max_retained_storage_bytes: 1073741824,
+    alerts: [],
     observed_at: '2026-05-04T18:50:00Z',
   },
   created_at: '2026-05-04T18:50:00Z',
@@ -192,6 +213,22 @@ describe('session create configurator', () => {
       'Latitude must be between -90 and 90.',
       'Geolocation accuracy must be greater than zero.',
     ]);
+
+    const projectScopedValidation = validateSessionCreateForm({
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      projectId: 'project-b',
+      egressProfileId: EGRESS_PROFILE.id,
+      egressProfiles: [{
+        ...EGRESS_PROFILE,
+        project_id: 'project-a',
+        project: { id: 'project-a', name: 'Project A', state: 'active' },
+      }],
+    });
+    expect(projectScopedValidation.command).toBeNull();
+    expect(projectScopedValidation.errors).toContain('Selected egress profile belongs to a different project.');
   });
 
   it('rejects unsupported owner modes and invalid idle timeout values', () => {
@@ -258,10 +295,37 @@ describe('session create configurator', () => {
       owner_mode: 'collaborative',
     });
     expect(validation.preview).toContain('"project_id"');
-    expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, workflows=1/4)');
+    expect(projectOptionLabel(PROJECT)).toBe('Support tenant (active, sessions=1/2, created=7, rate=3/1h, workflows=1/4, runtime=2h, egress_bytes=2MiB, templates=1, egress=1, extensions=1, contexts=1, workspaces=1)');
     expect(projectUsageSummary(PROJECT)).toBe(
-      'state=active | sessions=1/2 | workflow_runs=1/4 | storage=268435456/1073741824 | labels=tenant=support',
+      'state=active | sessions=1/2 | queued_sessions=0 | created_sessions=7 | session_rate=3/1h | workflow_runs=1/4 | runtime=2h | egress_bytes=2MiB | storage=268435456/1073741824 | alerts=none | policy=1 templates,1 egress profiles,1 extensions,1 contexts,1 workspaces | labels=tenant=support',
     );
+
+    const alertedProject = {
+      ...PROJECT,
+      usage: {
+        ...PROJECT.usage,
+        alerts: [
+          {
+            metric: 'session_creations',
+            state: 'exceeded',
+            current_value: 25,
+            limit_value: 25,
+            threshold_percent: 100,
+            message: 'Created sessions exceeded the configured soft budget.',
+          },
+          {
+            metric: 'runtime_usage_ms',
+            state: 'approaching_limit',
+            current_value: 80000,
+            limit_value: 100000,
+            threshold_percent: 80,
+            message: 'Browser runtime has reached at least 80% of the configured soft budget.',
+          },
+        ],
+      },
+    } as const;
+    expect(projectOptionLabel(alertedProject)).toContain('alerts=1 exceeded, 1 warning');
+    expect(projectUsageSummary(alertedProject)).toContain('alerts=1 exceeded, 1 warning');
   });
 
   it('rejects unavailable or archived project selections', () => {
@@ -374,8 +438,37 @@ describe('session create configurator', () => {
     expect(invalidMode.errors).toContain('Browser context id can only be set for reusable mode.');
   });
 
+  it('rejects reusable browser contexts scoped to a different project', () => {
+    const projectContext = {
+      ...BROWSER_CONTEXT,
+      project_id: PROJECT.id,
+      project: {
+        id: PROJECT.id,
+        name: PROJECT.name,
+        state: PROJECT.state,
+      },
+    } as const;
+
+    const validation = validateSessionCreateForm({
+      projectId: '',
+      templateId: '',
+      ownerMode: 'collaborative',
+      idleTimeoutSec: '',
+      labels: '',
+      browserContextMode: 'reusable',
+      browserContextId: projectContext.id,
+      browserContexts: [projectContext],
+      projects: [PROJECT],
+    });
+
+    expect(validation.command).toBeNull();
+    expect(validation.errors).toContain('Selected reusable browser context belongs to a different project.');
+  });
+
   it('validates browser context quick-create requests', () => {
     const valid = validateBrowserContextCreateForm({
+      projectId: PROJECT.id,
+      projects: [PROJECT],
       name: 'Support profile',
       labels: 'team=support, suite=admin',
       retentionDays: '7',
@@ -390,6 +483,7 @@ describe('session create configurator', () => {
 
     expect(valid.command).toEqual({
       name: 'Support profile',
+      project_id: PROJECT.id,
       labels: { team: 'support', suite: 'admin' },
       persistence_mode: 'reusable',
       retention_sec: 604800,
@@ -407,7 +501,7 @@ describe('session create configurator', () => {
   it('summarizes browser context catalog choices for the UI', () => {
     expect(browserContextOptionLabel(BROWSER_CONTEXT)).toBe('Support profile (019df7be...4a72)');
     expect(sessionBrowserContextSummary('reusable', BROWSER_CONTEXT)).toBe(
-      'state=ready | persistence=reusable | never used | labels=team=support | retention=2d | storage_limit=256MiB',
+      'state=ready | persistence=reusable | owner-scoped | never used | labels=team=support | retention=2d | storage_limit=256MiB',
     );
     expect(sessionBrowserContextSummary('fresh', null)).toContain('fresh persisted browser profile');
   });
@@ -463,7 +557,7 @@ describe('session create configurator', () => {
       browser_identity: null,
       egress_profile_id: EGRESS_PROFILE.id,
     }, [EGRESS_PROFILE])).toBe('locale=de-DE | languages=de-DE | timezone=Europe/Berlin | egress=EU support egress');
-    expect(egressProfileOptionLabel(EGRESS_PROFILE)).toBe('EU support egress (ready, proxy, TLS inspect, log sink, custom CA, 2 bypass)');
+    expect(egressProfileOptionLabel(EGRESS_PROFILE)).toBe('EU support egress (ready, proxy, TLS inspect, log sink, custom CA, 2 bypass, owner scoped)');
     expect(egressProfileKind(EGRESS_PROFILE)).toBe('tls_interceptor');
     expect(egressProfileKind({
       ...EGRESS_PROFILE,

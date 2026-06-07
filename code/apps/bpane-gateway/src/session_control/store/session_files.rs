@@ -6,6 +6,21 @@ impl SessionStore {
         request: PersistSessionFileRequest,
     ) -> Result<StoredSessionFile, SessionStoreError> {
         validate_session_file_request(&request)?;
+        if let Some(session) = self.get_session_by_id(request.session_id).await? {
+            let policy = session_project_policy(self, &session).await?;
+            validate_project_session_file_source_policy(&session, policy.as_ref(), request.source)?;
+            if let Some(project_id) = session.project_id {
+                let owner = AuthenticatedPrincipal {
+                    subject: session.owner.subject,
+                    issuer: session.owner.issuer,
+                    display_name: session.owner.display_name,
+                    client_id: None,
+                    safe_claims: Default::default(),
+                };
+                self.enforce_project_retained_storage_quota(&owner, project_id, request.byte_count)
+                    .await?;
+            }
+        }
         match &self.backend {
             SessionStoreBackend::InMemory(store) => store.record_session_file(request).await,
             SessionStoreBackend::Postgres(store) => store.record_session_file(request).await,
@@ -89,6 +104,20 @@ impl SessionStore {
         mut request: PersistSessionFileBindingRequest,
     ) -> Result<StoredSessionFileBinding, SessionStoreError> {
         validate_session_file_binding_request(&mut request)?;
+        let session = self
+            .get_session_for_owner(principal, request.session_id)
+            .await?
+            .ok_or_else(|| {
+                SessionStoreError::NotFound(format!("session {} not found", request.session_id))
+            })?;
+        let policy = session_project_policy(self, &session).await?;
+        validate_project_session_file_binding_policy(&session, policy.as_ref())?;
+        validate_project_file_workspace_policy(
+            session.project_id,
+            policy.as_ref(),
+            request.workspace_id,
+            "session file binding",
+        )?;
         match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store

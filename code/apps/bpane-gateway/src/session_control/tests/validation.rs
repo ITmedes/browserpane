@@ -189,6 +189,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
     }
 
     validate_egress_profile_request(&PersistEgressProfileRequest {
+        project_id: None,
         name: "eu-support-egress".to_string(),
         description: Some("EU support egress".to_string()),
         labels: HashMap::from([("region".to_string(), "eu".to_string())]),
@@ -212,6 +213,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
 
     for request in [
         PersistEgressProfileRequest {
+            project_id: None,
             name: "".to_string(),
             description: None,
             labels: HashMap::new(),
@@ -222,6 +224,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
             state: EgressProfileState::Ready,
         },
         PersistEgressProfileRequest {
+            project_id: None,
             name: "bad-proxy".to_string(),
             description: None,
             labels: HashMap::new(),
@@ -235,6 +238,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
             state: EgressProfileState::Ready,
         },
         PersistEgressProfileRequest {
+            project_id: None,
             name: "bad-ca".to_string(),
             description: None,
             labels: HashMap::new(),
@@ -248,6 +252,7 @@ fn validates_network_identity_and_egress_profile_shapes() {
             state: EgressProfileState::Ready,
         },
         PersistEgressProfileRequest {
+            project_id: None,
             name: "tls-without-sink".to_string(),
             description: None,
             labels: HashMap::new(),

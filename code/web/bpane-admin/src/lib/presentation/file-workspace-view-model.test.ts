@@ -17,8 +17,27 @@ describe('FileWorkspaceViewModelBuilder', () => {
     });
 
     expect(viewModel.rows).toHaveLength(1);
+    expect(viewModel.rows[0]?.project).toBe('Owner scope');
     expect(viewModel.rows[0]?.labels).toBe('purpose=support');
     expect(viewModel.emptyMessage).toBe('No file workspaces match the current filter.');
+  });
+
+  it('surfaces workspace project ownership', () => {
+    const viewModel = FileWorkspaceViewModelBuilder.list({
+      workspaces: [{
+        ...WORKSPACE,
+        project_id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+        project: {
+          id: '019df811-91a5-7b00-9fe5-93403ea57f19',
+          name: 'Support tenant',
+          state: 'active',
+        },
+      }],
+      search: 'support tenant',
+    });
+
+    expect(viewModel.rows).toHaveLength(1);
+    expect(viewModel.rows[0]?.project).toBe('Support tenant (active)');
   });
 
   it('summarizes workspace files and binding metadata', () => {

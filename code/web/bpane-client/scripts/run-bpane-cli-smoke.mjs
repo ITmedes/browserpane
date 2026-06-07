@@ -151,9 +151,28 @@ async function run() {
       '4',
       '--max-retained-storage-bytes',
       '1073741824',
+      '--max-session-creations',
+      '25',
+      '--max-session-creations-per-window',
+      '10',
+      '--session-creation-window-sec',
+      '3600',
+      '--max-runtime-usage-ms',
+      '86400000',
+      '--max-egress-total-bytes',
+      '1073741824',
     ], cliEnv);
     projectId = project.id;
-    if (!projectId || project.quotas?.max_active_sessions !== 3 || project.state !== 'active') {
+    if (
+      !projectId
+      || project.quotas?.max_active_sessions !== 3
+      || project.quotas?.max_session_creations !== 25
+      || project.quotas?.max_session_creations_per_window !== 10
+      || project.quotas?.session_creation_window_sec !== 3600
+      || project.quotas?.max_runtime_usage_ms !== 86400000
+      || project.quotas?.max_egress_total_bytes !== 1073741824
+      || project.state !== 'active'
+    ) {
       throw new Error(`CLI project create returned an invalid project: ${JSON.stringify(project)}`);
     }
 
@@ -168,7 +187,11 @@ async function run() {
     }
 
     const projectUsage = runBpaneCli(['project', 'usage', projectId], cliEnv);
-    if (projectUsage.project_id !== projectId || projectUsage.active_sessions !== 0) {
+    if (
+      projectUsage.project_id !== projectId
+      || projectUsage.active_sessions !== 0
+      || !Array.isArray(projectUsage.alerts)
+    ) {
       throw new Error(`CLI project usage returned unexpected data: ${JSON.stringify(projectUsage)}`);
     }
 
@@ -276,6 +299,8 @@ async function run() {
       'suite=bpane-cli-smoke',
       '--label',
       `run_id=${runLabel}`,
+      '--project-id',
+      projectId,
       '--proxy-url',
       'https://proxy.example:8443',
       '--bypass-rule',
@@ -288,7 +313,7 @@ async function run() {
       'EU support CA',
     ], cliEnv);
     const egressProfileId = egressProfile.id;
-    if (!egressProfileId || egressProfile.effective?.proxy_configured !== true) {
+    if (!egressProfileId || egressProfile.project_id !== projectId || egressProfile.effective?.proxy_configured !== true) {
       throw new Error(`CLI egress-profile create returned an invalid profile: ${JSON.stringify(egressProfile)}`);
     }
 
@@ -298,7 +323,12 @@ async function run() {
     }
 
     const fetchedEgressProfile = runBpaneCli(['egress-profile', 'get', egressProfileId], cliEnv);
-    if (fetchedEgressProfile.id !== egressProfileId || fetchedEgressProfile.bypass_rules?.length !== 2) {
+    if (
+      fetchedEgressProfile.id !== egressProfileId
+      || fetchedEgressProfile.project_id !== projectId
+      || fetchedEgressProfile.project?.id !== projectId
+      || fetchedEgressProfile.bypass_rules?.length !== 2
+    ) {
       throw new Error(`CLI egress-profile get returned unexpected profile data: ${JSON.stringify(fetchedEgressProfile)}`);
     }
     const egressProfileDiagnostics = runBpaneCli(['egress-profile', 'diagnostics', egressProfileId], cliEnv);
@@ -399,12 +429,39 @@ async function run() {
       throw new Error(`CLI session-template update did not increment the template version: ${JSON.stringify(updatedTemplate)}`);
     }
 
+    const policyProject = runBpaneCli([
+      'project',
+      'update',
+      projectId,
+      '--allowed-session-template-id',
+      templateId,
+      '--allowed-egress-profile-id',
+      egressProfileId,
+      '--allow-session-file-bindings',
+      'false',
+      '--allow-manual-recordings',
+      'false',
+      '--usage-budget-enforcement',
+      'block_session_creation',
+    ], cliEnv);
+    if (
+      policyProject.policy?.allowed_session_template_ids?.[0] !== templateId
+      || policyProject.policy?.allowed_egress_profile_ids?.[0] !== egressProfileId
+      || policyProject.policy?.allow_session_file_bindings !== false
+      || policyProject.policy?.allow_manual_recordings !== false
+      || policyProject.policy?.usage_budget_enforcement !== 'block_session_creation'
+    ) {
+      throw new Error(`CLI project update did not persist project policy bindings: ${JSON.stringify(policyProject)}`);
+    }
+
     const browserContext = runBpaneCli([
       'browser-context',
       'create',
       `support-profile-${runLabel}`,
       '--description',
       'Operator CLI smoke context',
+      '--project-id',
+      projectId,
       '--label',
       'suite=bpane-cli-smoke',
       '--retention-sec',
@@ -419,6 +476,7 @@ async function run() {
       || browserContext.retention_sec !== 604800
       || browserContext.max_profile_storage_bytes !== 67108864
       || !browserContext.retention_expires_at
+      || browserContext.project_id !== projectId
       || browserContext.state !== 'ready'
     ) {
       throw new Error(`CLI browser-context create returned an invalid context: ${JSON.stringify(browserContext)}`);
@@ -432,6 +490,22 @@ async function run() {
     const fetchedContext = runBpaneCli(['browser-context', 'get', contextId], cliEnv);
     if (fetchedContext.id !== contextId || fetchedContext.labels?.suite !== 'bpane-cli-smoke') {
       throw new Error(`CLI browser-context get returned unexpected context data: ${JSON.stringify(fetchedContext)}`);
+    }
+
+    const contextPolicyProject = runBpaneCli([
+      'project',
+      'update',
+      projectId,
+      '--allowed-browser-context-id',
+      contextId,
+    ], cliEnv);
+    if (
+      contextPolicyProject.policy?.allowed_session_template_ids?.[0] !== templateId
+      || contextPolicyProject.policy?.allowed_egress_profile_ids?.[0] !== egressProfileId
+      || contextPolicyProject.policy?.allowed_browser_context_ids?.[0] !== contextId
+      || contextPolicyProject.policy?.usage_budget_enforcement !== 'block_session_creation'
+    ) {
+      throw new Error(`CLI project update did not persist browser-context policy binding: ${JSON.stringify(contextPolicyProject)}`);
     }
 
     const exportPath = path.join(configDir, 'browser-context-export.zip');
@@ -459,6 +533,8 @@ async function run() {
       exportPath,
       '--name',
       `support-profile-import-${runLabel}`,
+      '--project-id',
+      projectId,
       '--label',
       'suite=bpane-cli-smoke',
       '--label',
@@ -471,6 +547,7 @@ async function run() {
       || importedContext.name !== `support-profile-import-${runLabel}`
       || importedContext.labels?.imported !== 'true'
       || importedContext.persistence_mode !== 'reusable'
+      || importedContext.project_id !== projectId
     ) {
       throw new Error(`CLI browser-context import returned an invalid context: ${JSON.stringify(importedContext)}`);
     }
@@ -482,6 +559,8 @@ async function run() {
       `support-profile-copy-${runLabel}`,
       '--description',
       'Operator CLI smoke context clone',
+      '--project-id',
+      projectId,
       '--label',
       'suite=bpane-cli-smoke',
       '--label',
@@ -494,6 +573,7 @@ async function run() {
       || clonedContext.name !== `support-profile-copy-${runLabel}`
       || clonedContext.labels?.copy !== 'sandbox'
       || clonedContext.persistence_mode !== 'reusable'
+      || clonedContext.project_id !== projectId
     ) {
       throw new Error(`CLI browser-context clone returned an invalid context: ${JSON.stringify(clonedContext)}`);
     }
@@ -579,6 +659,38 @@ async function run() {
     const automationAccess = runBpaneCli(['session', 'automation-access', sessionId], cliEnv);
     if (automationAccess.token_type !== 'session_automation_access_token' || !automationAccess.automation?.endpoint_url) {
       throw new Error('CLI session automation-access did not mint automation access.');
+    }
+
+    const sessionEgressUsage = runBpaneCli([
+      'session',
+      'egress-usage',
+      'report',
+      sessionId,
+      '--rx-bytes-delta',
+      '4096',
+      '--tx-bytes-delta',
+      '2048',
+      '--egress-usage-source-kind',
+      'proxy',
+      '--observer-id',
+      'cli-smoke-proxy',
+    ], cliEnv);
+    if (
+      sessionEgressUsage.session_id !== sessionId
+      || sessionEgressUsage.egress_rx_bytes < 4096
+      || sessionEgressUsage.egress_tx_bytes < 2048
+      || sessionEgressUsage.egress_total_bytes < 6144
+    ) {
+      throw new Error(`CLI session egress-usage report returned unexpected data: ${JSON.stringify(sessionEgressUsage)}`);
+    }
+
+    const projectUsageAfterEgress = runBpaneCli(['project', 'usage', projectId], cliEnv);
+    if (
+      projectUsageAfterEgress.egress_rx_bytes < 4096
+      || projectUsageAfterEgress.egress_tx_bytes < 2048
+      || projectUsageAfterEgress.egress_total_bytes < 6144
+    ) {
+      throw new Error(`CLI project usage did not include session egress usage: ${JSON.stringify(projectUsageAfterEgress)}`);
     }
 
     const sessionEgressDiagnostics = runBpaneCli(['session', 'egress-diagnostics', sessionId], cliEnv);

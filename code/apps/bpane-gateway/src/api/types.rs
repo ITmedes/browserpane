@@ -24,7 +24,7 @@ use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig,
     EgressDiagnosticsResource, EgressProfileState, EgressProxyConfig,
     EgressTrafficObservationConfig, IdentityMappingKind, IdentityMappingState,
-    ProjectAdmissionDecision, ProjectQuotas, ProjectState, ServicePrincipalState,
+    ProjectAdmissionDecision, ProjectPolicy, ProjectQuotas, ProjectState, ServicePrincipalState,
     SessionConnectInfo, SessionEffectiveEgress, SessionLifecycleState, SessionNetworkIdentity,
     SessionOwnerMode, SessionProjectResource, SessionRecordingFormat, SessionRecordingMode,
     SessionResource, SessionStatusSummary, SessionStore, SessionTemplateDefaults,
@@ -94,6 +94,7 @@ pub(super) const BROWSER_CONTEXT_LABELS_HEADER: &str = "x-bpane-browser-context-
 pub(super) const BROWSER_CONTEXT_MAX_PROFILE_STORAGE_BYTES_HEADER: &str =
     "x-bpane-browser-context-max-profile-storage-bytes";
 pub(super) const BROWSER_CONTEXT_NAME_HEADER: &str = "x-bpane-browser-context-name";
+pub(super) const BROWSER_CONTEXT_PROJECT_ID_HEADER: &str = "x-bpane-browser-context-project-id";
 pub(super) const BROWSER_CONTEXT_RETENTION_SEC_HEADER: &str =
     "x-bpane-browser-context-retention-sec";
 pub(super) const FILE_WORKSPACE_FILE_NAME_HEADER: &str = "x-bpane-file-name";
@@ -265,6 +266,8 @@ pub(super) struct CreateWorkflowRunRequest {
     pub(super) workflow_id: Uuid,
     pub(super) version: String,
     #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
+    #[serde(default)]
     pub(super) session: Option<AutomationTaskSessionRequest>,
     #[serde(default)]
     pub(super) input: Option<Value>,
@@ -299,6 +302,8 @@ pub(super) struct WorkflowRunProducedFileListResponse {
 pub(super) struct CreateFileWorkspaceRequest {
     pub(super) name: String,
     #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
+    #[serde(default)]
     pub(super) description: Option<String>,
     #[serde(default)]
     pub(super) labels: HashMap<String, String>,
@@ -324,6 +329,8 @@ pub(super) struct UpsertProjectRequest {
     pub(super) labels: HashMap<String, String>,
     #[serde(default)]
     pub(super) quotas: ProjectQuotas,
+    #[serde(default)]
+    pub(super) policy: ProjectPolicy,
     #[serde(default = "default_project_state")]
     pub(super) state: ProjectState,
 }
@@ -380,6 +387,8 @@ fn default_identity_mapping_state() -> IdentityMappingState {
 
 #[derive(Deserialize)]
 pub(super) struct CreateEgressProfileRequest {
+    #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
     pub(super) name: String,
     #[serde(default)]
     pub(super) description: Option<String>,
@@ -421,6 +430,8 @@ pub(super) struct RunEgressProfileReachabilityProbeRequest {
 pub(super) struct CreateBrowserContextRequest {
     pub(super) name: String,
     #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
+    #[serde(default)]
     pub(super) description: Option<String>,
     #[serde(default)]
     pub(super) labels: HashMap<String, String>,
@@ -435,6 +446,8 @@ pub(super) struct CreateBrowserContextRequest {
 #[derive(Deserialize)]
 pub(super) struct CloneBrowserContextRequest {
     pub(super) name: String,
+    #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
     #[serde(default)]
     pub(super) description: Option<String>,
     #[serde(default)]
@@ -466,6 +479,8 @@ fn default_session_file_binding_mode() -> SessionFileBindingMode {
 
 #[derive(Deserialize)]
 pub(super) struct CreateCredentialBindingRequest {
+    #[serde(default)]
+    pub(super) project_id: Option<Uuid>,
     pub(super) name: String,
     pub(super) provider: CredentialBindingProvider,
     #[serde(default)]

@@ -19,6 +19,7 @@ export type FileWorkspaceRowViewModel = {
   readonly id: string;
   readonly name: string;
   readonly description: string;
+  readonly project: string;
   readonly labels: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -81,6 +82,7 @@ export class FileWorkspaceViewModelBuilder {
       id: workspace.id,
       name: workspace.name,
       description: workspace.description ?? 'No description available.',
+      project: projectSummary(workspace),
       labels: labelSummary(workspace.labels),
       createdAt: formatSessionFileTimestamp(workspace.created_at),
       updatedAt: formatSessionFileTimestamp(workspace.updated_at),
@@ -166,10 +168,21 @@ function workspaceRowMatches(row: FileWorkspaceRowViewModel, normalized: string)
     row.id,
     row.name,
     row.description,
+    row.project,
     row.labels,
     row.createdAt,
     row.updatedAt,
   ].some((value) => value.toLowerCase().includes(normalized));
+}
+
+function projectSummary(workspace: FileWorkspaceResource): string {
+  if (workspace.project?.name) {
+    return `${workspace.project.name} (${workspace.project.state})`;
+  }
+  if (workspace.project_id) {
+    return `Project ${workspace.project_id}`;
+  }
+  return 'Owner scope';
 }
 
 function labelSummary(labels: Readonly<Record<string, string>>): string {

@@ -217,6 +217,15 @@ function sessionResource(overrides: Partial<SessionResource> = {}): SessionResou
     state: 'active',
     browser_context: { mode: 'fresh', context_id: null },
     owner_mode: 'collaborative',
+    capabilities: {
+      browser_input: true,
+      clipboard: true,
+      audio: true,
+      microphone: true,
+      camera: true,
+      file_transfer: true,
+      resize: true,
+    },
     idle_timeout_sec: null,
     labels: {},
     connect: {

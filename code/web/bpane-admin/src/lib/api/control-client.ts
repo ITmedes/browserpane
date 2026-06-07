@@ -179,6 +179,7 @@ export class ControlClient {
       ...command,
       labels: command.labels ?? {},
       quotas: command.quotas ?? {},
+      policy: command.policy ?? {},
       state: command.state ?? 'active',
     });
     return ControlSessionMapper.toProjectResource(payload);
@@ -194,6 +195,7 @@ export class ControlClient {
       ...command,
       labels: command.labels ?? {},
       quotas: command.quotas ?? {},
+      policy: command.policy ?? {},
       state: command.state ?? 'active',
     });
     return ControlSessionMapper.toProjectResource(payload);
@@ -297,6 +299,9 @@ export class ControlClient {
     const headers: Record<string, string> = {
       'x-bpane-browser-context-name': command.name,
     };
+    if (command.project_id !== undefined && command.project_id !== null) {
+      headers['x-bpane-browser-context-project-id'] = command.project_id;
+    }
     if (command.description !== undefined && command.description !== null) {
       headers['x-bpane-browser-context-description'] = command.description;
     }
@@ -362,6 +367,11 @@ export class ControlClient {
 
   async stopSession(sessionId: string): Promise<SessionResource> {
     const payload = await this.#request('POST', `/api/v1/sessions/${encodeURIComponent(sessionId)}/stop`);
+    return ControlSessionMapper.toSessionResource(payload);
+  }
+
+  async cancelQueuedSession(sessionId: string): Promise<SessionResource> {
+    const payload = await this.#request('POST', `/api/v1/sessions/${encodeURIComponent(sessionId)}/cancel`);
     return ControlSessionMapper.toSessionResource(payload);
   }
 

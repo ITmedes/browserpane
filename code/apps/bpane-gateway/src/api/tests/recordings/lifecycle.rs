@@ -163,6 +163,156 @@ async fn creates_lists_gets_and_stops_session_recording_metadata() {
 }
 
 #[tokio::test]
+async fn project_policy_blocks_manual_recording_and_reports_file_capability() {
+    let (app, token) = test_router();
+
+    let project_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/projects")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "recording-policy",
+                        "policy": {
+                            "allow_browser_uploads": false,
+                            "allow_manual_recordings": false
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(project_response.status(), StatusCode::CREATED);
+    let project_id = response_json(project_response).await["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": project_id,
+                        "recording": {
+                          "mode": "manual",
+                          "format": "webm"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let session = response_json(create_session_response).await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+    assert_eq!(session["capabilities"]["file_transfer"], false);
+
+    let create_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_recording_response.status(), StatusCode::CONFLICT);
+    let error = response_json(create_recording_response).await;
+    assert!(error["error"]
+        .as_str()
+        .unwrap()
+        .contains("manual_recording_not_allowed"));
+
+    let stop_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/stop"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stop_session_response.status(), StatusCode::OK);
+
+    let binding_policy_project_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/projects")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "name": "binding-policy",
+                        "policy": {
+                            "allow_session_file_bindings": false
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        binding_policy_project_response.status(),
+        StatusCode::CREATED
+    );
+    let binding_policy_project_id = response_json(binding_policy_project_response).await["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let binding_policy_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "project_id": binding_policy_project_id
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        binding_policy_session_response.status(),
+        StatusCode::CREATED
+    );
+    let binding_policy_session = response_json(binding_policy_session_response).await;
+    assert_eq!(
+        binding_policy_session["capabilities"]["file_transfer"],
+        true
+    );
+}
+
+#[tokio::test]
 async fn recording_failure_updates_metadata_state() {
     let (app, token) = test_router();
 

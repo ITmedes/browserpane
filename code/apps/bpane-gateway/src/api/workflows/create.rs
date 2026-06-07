@@ -2,6 +2,7 @@ use super::super::workflow_files::{
     prepare_workflow_run_source_snapshot, resolve_workflow_run_workspace_inputs,
 };
 use super::super::*;
+use crate::session_control::validate_credential_binding_project_scope;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 
@@ -9,6 +10,7 @@ async fn resolve_workflow_run_credential_bindings(
     state: &Arc<ApiState>,
     principal: &AuthenticatedPrincipal,
     version: &StoredWorkflowDefinitionVersion,
+    project_id: Option<Uuid>,
     requested_ids: Vec<Uuid>,
 ) -> Result<Vec<WorkflowRunCredentialBinding>, (StatusCode, Json<ErrorResponse>)> {
     if requested_ids.is_empty() {
@@ -67,6 +69,13 @@ async fn resolve_workflow_run_credential_bindings(
                     }),
                 )
             })?;
+        validate_credential_binding_project_scope(
+            project_id,
+            binding.id,
+            binding.project_id,
+            "workflow run",
+        )
+        .map_err(map_session_store_error)?;
         bindings.push(binding.to_workflow_run_binding());
     }
     Ok(bindings)
@@ -135,6 +144,7 @@ fn workflow_run_request_fingerprint(
     let descriptor = canonicalize_json(serde_json::json!({
         "workflow_id": request.workflow_id,
         "version": request.version,
+        "project_id": request.project_id,
         "session": request.session,
         "input": request.input,
         "source_system": request.source_system,
@@ -154,6 +164,49 @@ fn workflow_run_request_fingerprint(
     Ok(Some(hex::encode(Sha256::digest(bytes))))
 }
 
+async fn validate_workflow_run_project(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    project_id: Option<Uuid>,
+    session_project_id: Option<Uuid>,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let Some(project_id) = project_id else {
+        return Ok(());
+    };
+    if session_project_id != Some(project_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow run project_id {project_id} must match the bound session project_id"
+                ),
+            }),
+        ));
+    }
+    let project = state
+        .session_store
+        .get_project_for_owner(principal, project_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("project {project_id} not found"),
+                }),
+            )
+        })?;
+    if project.state == ProjectState::Archived {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!("project {project_id} is archived"),
+            }),
+        ));
+    }
+    Ok(())
+}
+
 pub(super) async fn create_workflow_run(
     headers: HeaderMap,
     State(state): State<Arc<ApiState>>,
@@ -163,6 +216,7 @@ pub(super) async fn create_workflow_run(
     let CreateWorkflowRunRequest {
         workflow_id,
         version: workflow_version_name,
+        project_id,
         session,
         input,
         source_system,
@@ -175,6 +229,14 @@ pub(super) async fn create_workflow_run(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    if project_id == Some(Uuid::nil()) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "workflow run project_id must not be nil".to_string(),
+            }),
+        ));
+    }
     if let Some(client_request_id) = client_request_id
         .as_deref()
         .filter(|value| !value.is_empty())
@@ -231,24 +293,53 @@ pub(super) async fn create_workflow_run(
                 }),
             )
         })?;
+    let prevalidated_credential_bindings = if project_id.is_some() {
+        Some(
+            resolve_workflow_run_credential_bindings(
+                &state,
+                &principal,
+                &version,
+                project_id,
+                credential_binding_ids.clone(),
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     let source_snapshot =
         prepare_workflow_run_source_snapshot(&state, &principal, &workflow, &version).await?;
-    let credential_bindings = resolve_workflow_run_credential_bindings(
-        &state,
-        &principal,
-        &version,
-        credential_binding_ids,
-    )
-    .await?;
-    let workspace_inputs =
-        resolve_workflow_run_workspace_inputs(&state, &principal, &version, workspace_inputs)
-            .await?;
     let (session, session_source) = resolve_task_session_binding(
         &state,
         &principal,
         session,
         version.default_session.as_ref(),
         Some(&version.allowed_extension_ids),
+        project_id,
+    )
+    .await?;
+    let effective_project_id = project_id.or(session.project_id);
+    validate_workflow_run_project(&state, &principal, effective_project_id, session.project_id)
+        .await?;
+    let credential_bindings = match prevalidated_credential_bindings {
+        Some(bindings) => bindings,
+        None => {
+            resolve_workflow_run_credential_bindings(
+                &state,
+                &principal,
+                &version,
+                effective_project_id,
+                credential_binding_ids,
+            )
+            .await?
+        }
+    };
+    let workspace_inputs = resolve_workflow_run_workspace_inputs(
+        &state,
+        &principal,
+        &version,
+        effective_project_id,
+        workspace_inputs,
     )
     .await?;
     let task = state
@@ -274,6 +365,7 @@ pub(super) async fn create_workflow_run(
                 workflow_definition_id: workflow.id,
                 workflow_definition_version_id: version.id,
                 workflow_version: version.version.clone(),
+                project_id: effective_project_id,
                 session_id: session.id,
                 automation_task_id: task.id,
                 source_system,

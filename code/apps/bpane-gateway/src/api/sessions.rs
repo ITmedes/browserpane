@@ -6,6 +6,7 @@ mod access;
 mod crud;
 mod disconnect;
 mod egress_diagnostics;
+mod egress_usage;
 mod kill;
 mod mcp;
 mod ownership;
@@ -49,6 +50,10 @@ pub(super) fn session_operation_routes() -> Router<Arc<ApiState>> {
                 .post(egress_diagnostics::run_session_egress_diagnostics_probe),
         )
         .route(
+            "/api/v1/sessions/{session_id}/egress-usage",
+            post(egress_usage::report_session_egress_usage),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/connections/{connection_id}/disconnect",
             post(disconnect::disconnect_session_connection),
         )
@@ -67,6 +72,10 @@ pub(super) fn session_operation_routes() -> Router<Arc<ApiState>> {
         .route(
             "/api/v1/sessions/{session_id}/stop",
             post(stop::stop_session),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/cancel",
+            post(stop::cancel_queued_session),
         )
         .route(
             "/api/v1/sessions/{session_id}/mcp-owner",

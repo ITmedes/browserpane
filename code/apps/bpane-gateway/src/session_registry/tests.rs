@@ -92,7 +92,7 @@ async fn recorder_role_joins_without_becoming_owner() {
 
     let (owner, _) = registry.join(session_id, sock_str).await.unwrap();
     let (recorder, _) = registry
-        .join_with_role(session_id, sock_str, BrowserClientRole::Recorder)
+        .join_with_role(session_id, sock_str, BrowserClientRole::Recorder, true)
         .await
         .unwrap();
 

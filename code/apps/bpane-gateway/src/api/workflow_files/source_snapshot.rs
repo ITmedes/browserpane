@@ -28,6 +28,7 @@ pub(super) async fn prepare_workflow_run_source_snapshot(
         .create_file_workspace(
             principal,
             PersistFileWorkspaceRequest {
+                project_id: None,
                 name: format!("{} {} source", workflow.name, version.version),
                 description: Some(format!(
                     "Immutable source snapshot for workflow {} {}",

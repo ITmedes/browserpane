@@ -111,6 +111,8 @@
   const reusableBrowserContexts = $derived(browserContexts.filter((context) => context.persistence_mode === 'reusable'));
   const selectedBrowserContext = $derived(reusableBrowserContexts.find((context) => context.id === browserContextId) ?? null);
   const browserContextCreateValidation = $derived(validateBrowserContextCreateForm({
+    projectId,
+    projects,
     name: browserContextName,
     labels: browserContextLabels,
     retentionDays: browserContextRetentionDays,
@@ -254,6 +256,10 @@
       return;
     }
     onCreateSession(validation.command);
+  }
+
+  function egressProfileOptionDisabled(profile: EgressProfileResource): boolean {
+    return profile.state === 'disabled' || Boolean(profile.project_id && profile.project_id !== projectId);
   }
 
   function setPayloadOpen(open: boolean): void {
@@ -453,7 +459,10 @@
             >
               <option value="">Select reusable context</option>
               {#each reusableBrowserContexts as context}
-                <option value={context.id} disabled={context.state !== 'ready'}>
+                <option
+                  value={context.id}
+                  disabled={context.state !== 'ready' || Boolean(context.project_id && context.project_id !== projectId)}
+                >
                   {browserContextOptionLabel(context)}
                 </option>
               {/each}
@@ -616,19 +625,19 @@
           >
             <option value="">No egress</option>
             {#if localProxyEgressPreset}
-              <option value={localProxyEgressPreset.id} disabled={localProxyEgressPreset.state === 'disabled'}>
+              <option value={localProxyEgressPreset.id} disabled={egressProfileOptionDisabled(localProxyEgressPreset)}>
                 Egress as Proxy
               </option>
             {/if}
             {#if localTlsEgressPreset}
-              <option value={localTlsEgressPreset.id} disabled={localTlsEgressPreset.state === 'disabled'}>
+              <option value={localTlsEgressPreset.id} disabled={egressProfileOptionDisabled(localTlsEgressPreset)}>
                 Egress as TLS Interceptor
               </option>
             {/if}
             {#if additionalProxyEgressProfiles.length > 0}
               <optgroup label={localProxyEgressPreset ? 'Additional proxy profiles' : 'Egress as Proxy'}>
                 {#each additionalProxyEgressProfiles as profile}
-                  <option value={profile.id} disabled={profile.state === 'disabled'}>
+                  <option value={profile.id} disabled={egressProfileOptionDisabled(profile)}>
                     {egressProfileOptionLabel(profile)}
                   </option>
                 {/each}
@@ -637,7 +646,7 @@
             {#if additionalTlsEgressProfiles.length > 0}
               <optgroup label={localTlsEgressPreset ? 'Additional TLS interceptor profiles' : 'Egress as TLS Interceptor'}>
                 {#each additionalTlsEgressProfiles as profile}
-                  <option value={profile.id} disabled={profile.state === 'disabled'}>
+                  <option value={profile.id} disabled={egressProfileOptionDisabled(profile)}>
                     {egressProfileOptionLabel(profile)}
                   </option>
                 {/each}
@@ -646,7 +655,7 @@
             {#if otherEgressProfiles.length > 0}
               <optgroup label="Other egress profiles">
                 {#each otherEgressProfiles as profile}
-                  <option value={profile.id} disabled={profile.state === 'disabled'}>
+                  <option value={profile.id} disabled={egressProfileOptionDisabled(profile)}>
                     {egressProfileOptionLabel(profile)}
                   </option>
                 {/each}

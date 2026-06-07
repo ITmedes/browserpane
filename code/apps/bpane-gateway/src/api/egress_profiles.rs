@@ -4,6 +4,8 @@ use axum::routing::{get, post};
 use reqwest::{redirect::Policy as RedirectPolicy, Proxy, Url};
 use serde::Deserialize;
 
+use crate::session_control::validate_credential_binding_project_scope;
+
 use super::*;
 
 const DEFAULT_PROFILE_REACHABILITY_TIMEOUT_MS: u64 = 5_000;
@@ -49,11 +51,17 @@ async fn list_egress_profiles(
         .list_egress_profile_reachability_probe_results_for_owner(&principal)
         .await
         .map_err(map_session_store_error)?;
-    let profiles = profiles
-        .into_iter()
-        .map(|profile| profile.to_resource_with_reachability(reachability.get(&profile.id)))
-        .collect();
-    Ok(Json(EgressProfileListResponse { profiles }))
+    let mut resources = Vec::with_capacity(profiles.len());
+    for profile in profiles {
+        resources.push(
+            profile_resource(&state, &principal, &profile, reachability.get(&profile.id))
+                .await
+                .map_err(map_session_store_error)?,
+        );
+    }
+    Ok(Json(EgressProfileListResponse {
+        profiles: resources,
+    }))
 }
 
 async fn create_egress_profile(
@@ -71,7 +79,14 @@ async fn create_egress_profile(
         .create_egress_profile(&principal, request)
         .await
         .map_err(map_session_store_error)?;
-    Ok((StatusCode::CREATED, Json(profile.to_resource())))
+    Ok((
+        StatusCode::CREATED,
+        Json(
+            profile_resource(&state, &principal, &profile, None)
+                .await
+                .map_err(map_session_store_error)?,
+        ),
+    ))
 }
 
 async fn get_egress_profile(
@@ -96,7 +111,7 @@ async fn get_egress_profile(
             )
         })?;
     Ok(Json(
-        profile_resource_with_reachability(&state, &profile)
+        profile_resource_with_reachability(&state, &principal, &profile)
             .await
             .map_err(map_session_store_error)?,
     ))
@@ -155,7 +170,7 @@ async fn update_egress_profile(
             )
         })?;
     Ok(Json(
-        profile_resource_with_reachability(&state, &profile)
+        profile_resource_with_reachability(&state, &principal, &profile)
             .await
             .map_err(map_session_store_error)?,
     ))
@@ -201,6 +216,7 @@ fn persist_egress_profile_request(
     request: CreateEgressProfileRequest,
 ) -> PersistEgressProfileRequest {
     PersistEgressProfileRequest {
+        project_id: request.project_id,
         name: request.name,
         description: request.description,
         labels: request.labels,
@@ -237,26 +253,61 @@ async fn validate_proxy_auth_binding(
         .get_credential_binding_for_owner(principal, binding_id)
         .await
         .map_err(map_session_store_error)?;
-    if binding.is_none() {
+    let Some(binding) = binding else {
         return Err((
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
                 error: format!("credential binding {binding_id} not found"),
             }),
         ));
-    }
+    };
+    validate_credential_binding_project_scope(
+        request.project_id,
+        binding.id,
+        binding.project_id,
+        "egress profile",
+    )
+    .map_err(map_session_store_error)?;
     Ok(())
+}
+
+async fn profile_resource(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    profile: &StoredEgressProfile,
+    reachability: Option<&StoredEgressProfileReachabilityProbeResult>,
+) -> Result<EgressProfileResource, SessionStoreError> {
+    let mut resource = profile.to_resource_with_reachability(reachability);
+    resource.project =
+        egress_profile_project_summary(state, principal, resource.project_id).await?;
+    Ok(resource)
 }
 
 async fn profile_resource_with_reachability(
     state: &ApiState,
+    principal: &AuthenticatedPrincipal,
     profile: &StoredEgressProfile,
 ) -> Result<EgressProfileResource, SessionStoreError> {
     let reachability = state
         .session_store
         .get_egress_profile_reachability_probe_result(profile.id)
         .await?;
-    Ok(profile.to_resource_with_reachability(reachability.as_ref()))
+    profile_resource(state, principal, profile, reachability.as_ref()).await
+}
+
+async fn egress_profile_project_summary(
+    state: &ApiState,
+    principal: &AuthenticatedPrincipal,
+    project_id: Option<Uuid>,
+) -> Result<Option<SessionProjectResource>, SessionStoreError> {
+    let Some(project_id) = project_id else {
+        return Ok(None);
+    };
+    Ok(state
+        .session_store
+        .get_project_for_owner(principal, project_id)
+        .await?
+        .map(|project| project.to_session_project_resource()))
 }
 
 async fn profile_diagnostics_with_reachability(

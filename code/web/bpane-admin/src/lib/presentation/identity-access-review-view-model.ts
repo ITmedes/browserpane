@@ -16,8 +16,14 @@ export type IdentityProjectRow = {
   readonly name: string;
   readonly state: string;
   readonly activeSessions: string;
+  readonly queuedSessions: string;
+  readonly sessionCreations: string;
   readonly activeWorkflowRuns: string;
+  readonly runtimeUsage: string;
+  readonly egressUsage: string;
   readonly retainedStorage: string;
+  readonly alerts: string;
+  readonly policy: string;
 };
 
 export type IdentityDelegationRow = {
@@ -221,19 +227,90 @@ function projectRow(project: ProjectResource): IdentityProjectRow {
       project.usage.active_sessions,
       project.usage.max_active_sessions,
     ),
+    queuedSessions: String(project.usage.queued_sessions),
+    sessionCreations: sessionCreationLabel(project),
     activeWorkflowRuns: quotaLabel(
       project.usage.active_workflow_runs,
       project.usage.max_active_workflow_runs,
     ),
+    runtimeUsage: formatDurationMs(project.usage.runtime_usage_ms),
+    egressUsage: formatBytes(project.usage.egress_total_bytes),
     retainedStorage: storageLabel(
       project.usage.retained_storage_bytes,
       project.usage.max_retained_storage_bytes,
     ),
+    alerts: usageAlertsLabel(project),
+    policy: policyLabel(project),
   };
+}
+
+function usageAlertsLabel(project: ProjectResource): string {
+  if (project.usage.alerts.length === 0) {
+    return 'none';
+  }
+  const exceeded = project.usage.alerts.filter((alert) => alert.state === 'exceeded').length;
+  const approaching = project.usage.alerts.length - exceeded;
+  return [
+    exceeded > 0 ? `${exceeded} exceeded` : null,
+    approaching > 0 ? `${approaching} warning${approaching === 1 ? '' : 's'}` : null,
+  ].filter(Boolean).join(', ');
+}
+
+function policyLabel(project: ProjectResource): string {
+  const facts = [];
+  if (project.policy.allowed_session_template_ids.length > 0) {
+    facts.push(`${project.policy.allowed_session_template_ids.length} templates`);
+  }
+  if (project.policy.allowed_egress_profile_ids.length > 0) {
+    facts.push(`${project.policy.allowed_egress_profile_ids.length} egress profiles`);
+  }
+  if (project.policy.allowed_extension_ids.length > 0) {
+    facts.push(`${project.policy.allowed_extension_ids.length} extensions`);
+  }
+  if (project.policy.allowed_browser_context_ids.length > 0) {
+    facts.push(`${project.policy.allowed_browser_context_ids.length} contexts`);
+  }
+  if (project.policy.allowed_file_workspace_ids.length > 0) {
+    facts.push(`${project.policy.allowed_file_workspace_ids.length} workspaces`);
+  }
+  if (!project.policy.allow_browser_uploads) {
+    facts.push('blocks uploads');
+  }
+  if (!project.policy.allow_browser_downloads) {
+    facts.push('blocks downloads');
+  }
+  if (!project.policy.allow_session_file_bindings) {
+    facts.push('blocks file bindings');
+  }
+  if (!project.policy.allow_manual_recordings) {
+    facts.push('blocks manual recording');
+  }
+  if (project.policy.usage_budget_enforcement === 'block_session_creation') {
+    facts.push('budget blocks session creation');
+  }
+  return facts.length > 0 ? facts.join(', ') : 'Unrestricted';
 }
 
 function quotaLabel(current: number, limit: number | null | undefined): string {
   return limit === null || limit === undefined ? `${current}` : `${current}/${limit}`;
+}
+
+function sessionCreationLabel(project: ProjectResource): string {
+  const cumulative = quotaLabel(
+    project.usage.session_creations,
+    project.usage.max_session_creations,
+  );
+  const rate = sessionCreationRateLabel(project);
+  return rate ? `${cumulative}, ${rate}` : cumulative;
+}
+
+function sessionCreationRateLabel(project: ProjectResource): string | null {
+  const maxPerWindow = project.quotas.max_session_creations_per_window;
+  const windowSec = project.quotas.session_creation_window_sec;
+  if (maxPerWindow === null || maxPerWindow === undefined || windowSec === null || windowSec === undefined) {
+    return null;
+  }
+  return `${maxPerWindow} / ${formatDurationSeconds(windowSec)}`;
 }
 
 function storageLabel(current: number, limit: number | null | undefined): string {
@@ -241,6 +318,19 @@ function storageLabel(current: number, limit: number | null | undefined): string
   return limit === null || limit === undefined
     ? currentLabel
     : `${currentLabel} / ${formatBytes(limit)}`;
+}
+
+function formatDurationSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '0s';
+  }
+  if (seconds % 3600 === 0) {
+    return `${seconds / 3600}h`;
+  }
+  if (seconds % 60 === 0) {
+    return `${seconds / 60}m`;
+  }
+  return `${seconds}s`;
 }
 
 function formatBytes(value: number): string {
@@ -255,6 +345,26 @@ function formatBytes(value: number): string {
     unitIndex += 1;
   }
   return `${next >= 10 || unitIndex === 0 ? next.toFixed(0) : next.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function formatDurationMs(milliseconds: number): string {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    return '0s';
+  }
+  const seconds = Math.floor(milliseconds / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  if (seconds % 86400 === 0) {
+    return `${seconds / 86400}d`;
+  }
+  if (seconds % 3600 === 0) {
+    return `${seconds / 3600}h`;
+  }
+  if (seconds % 60 === 0) {
+    return `${seconds / 60}m`;
+  }
+  return `${seconds}s`;
 }
 
 function formatDateTime(value: string): string {

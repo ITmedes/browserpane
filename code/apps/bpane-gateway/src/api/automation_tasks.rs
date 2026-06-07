@@ -57,7 +57,8 @@ async fn create_automation_task(
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
     let (session, session_source) =
-        resolve_task_session_binding(&state, &principal, Some(request.session), None, None).await?;
+        resolve_task_session_binding(&state, &principal, Some(request.session), None, None, None)
+            .await?;
 
     let task = state
         .session_store

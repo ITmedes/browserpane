@@ -463,6 +463,7 @@ impl ComposeHarness {
                 continue;
             }
             let session_id = json_id(session, "id")?;
+            self.clear_active_recording_blockers(&session_id).await?;
             let _ = self.stop_session_eventually(&session_id).await?;
         }
 
@@ -546,6 +547,39 @@ impl ComposeHarness {
             },
         )
         .await?;
+        Ok(())
+    }
+
+    async fn clear_active_recording_blockers(&self, session_id: &str) -> Result<()> {
+        let recordings = self
+            .get_json(&format!("/api/v1/sessions/{session_id}/recordings"))
+            .await?;
+        for recording in json_array(&recordings, "recordings")? {
+            let state = recording
+                .get("state")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if !matches!(state, "starting" | "recording" | "finalizing") {
+                continue;
+            }
+            let recording_id = json_id(recording, "id")?;
+            let failed = self
+                .post_json_outcome(
+                    &format!("/api/v1/sessions/{session_id}/recordings/{recording_id}/fail"),
+                    json!({
+                        "error": "compose e2e cleanup cleared active recording blocker",
+                        "termination_reason": "worker_exit"
+                    }),
+                )
+                .await?;
+            if failed.status != StatusCode::OK && failed.status != StatusCode::CONFLICT {
+                return Err(anyhow!(
+                    "recording cleanup for {recording_id} returned {}: {}",
+                    failed.status,
+                    failed.body
+                ));
+            }
+        }
         Ok(())
     }
 
