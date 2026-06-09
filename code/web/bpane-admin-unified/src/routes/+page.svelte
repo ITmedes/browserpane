@@ -6,7 +6,6 @@
     Boxes,
     ChevronRight,
     CircleUserRound,
-    Command,
     Folder,
     Gauge,
     Layers3,
@@ -158,62 +157,7 @@
         {/each}
       </nav>
 
-      <section class="min-w-0 flex-1 overflow-auto bg-admin-bg">
-        <div class="mx-auto grid max-w-6xl gap-4 p-4 sm:p-6">
-          <div class="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p class="m-0 font-mono text-xs font-medium text-admin-muted">/admin-new</p>
-              <h1 class="m-0 mt-1 text-2xl font-semibold text-admin-ink sm:text-3xl">Dashboard</h1>
-            </div>
-            <button
-              class="inline-flex h-9 items-center gap-2 rounded-md bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm"
-              type="button"
-            >
-              <Command size={15} strokeWidth={2} />
-              Command
-            </button>
-          </div>
-
-          <div class="grid gap-4 lg:grid-cols-[1.45fr_0.85fr]">
-            <article class="min-h-72 rounded-lg border border-admin-border bg-admin-panel p-5 shadow-sm">
-              <div class="flex items-center justify-between gap-4">
-                <div>
-                  <h2 class="m-0 text-base font-semibold text-admin-ink">Live workspace</h2>
-                  <p class="m-0 mt-1 text-sm text-admin-muted">No session selected</p>
-                </div>
-                <span class="rounded-md border border-admin-border bg-admin-bg px-2.5 py-1 font-mono text-xs text-admin-muted">
-                  standby
-                </span>
-              </div>
-
-              <div class="mt-6 grid min-h-44 place-items-center rounded-lg border border-dashed border-admin-border bg-admin-bg">
-                <div class="text-center">
-                  <Monitor class="mx-auto text-admin-muted" size={28} strokeWidth={1.6} />
-                  <div class="mt-3 text-sm font-medium text-admin-ink">No live preview</div>
-                </div>
-              </div>
-            </article>
-
-            <article class="rounded-lg border border-admin-border bg-admin-panel p-5 shadow-sm">
-              <h2 class="m-0 text-base font-semibold text-admin-ink">Resource focus</h2>
-              <div class="mt-4 space-y-3">
-                <div class="rounded-md border border-admin-border bg-admin-bg p-3">
-                  <div class="text-sm font-medium text-admin-ink">Sessions</div>
-                  <div class="mt-1 text-sm text-admin-muted">0 connected, 0 running</div>
-                </div>
-                <div class="rounded-md border border-admin-border bg-admin-bg p-3">
-                  <div class="text-sm font-medium text-admin-ink">Operations</div>
-                  <div class="mt-1 text-sm text-admin-muted">No active operation</div>
-                </div>
-                <div class="rounded-md border border-admin-border bg-admin-bg p-3">
-                  <div class="text-sm font-medium text-admin-ink">Governance</div>
-                  <div class="mt-1 text-sm text-admin-muted">Local policy profile</div>
-                </div>
-              </div>
-            </article>
-          </div>
-        </div>
-      </section>
+      <section class="min-w-0 flex-1 bg-admin-bg" aria-label="Workspace"></section>
     </div>
   </section>
 </main>
