@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { base } from '$app/paths';
   import {
     Activity,
     Bell,
@@ -65,10 +64,14 @@
       data-testid="admin-new-header"
     >
       <div class="flex min-w-0 items-center gap-3">
-        <div class="flex h-10 w-36 shrink-0 items-center justify-center overflow-hidden rounded-md bg-admin-shell px-2 sm:w-40">
-          <img class="w-full max-w-none" src={`${base}/browserpane-logo.png`} alt="BrowserPane" />
-        </div>
+        <span
+          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-admin-shell text-[11px] font-bold text-white"
+          aria-label="BrowserPane"
+        >
+          BP
+        </span>
         <div class="min-w-0">
+          <div class="truncate text-sm font-semibold text-admin-ink">BrowserPane</div>
           <div class="hidden truncate font-mono text-xs text-admin-muted sm:block">Unified admin</div>
         </div>
       </div>
