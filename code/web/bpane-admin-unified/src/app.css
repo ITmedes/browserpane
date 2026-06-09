@@ -1,20 +1,24 @@
 @import "tailwindcss";
 
 @theme {
+  --color-admin-shell: #0b0e14;
+  --color-admin-paper: #fafbfc;
   --color-admin-bg: #f6f8fb;
   --color-admin-panel: #ffffff;
+  --color-admin-soft: #f1f5f9;
   --color-admin-ink: #121826;
-  --color-admin-muted: #5d6b82;
-  --color-admin-border: #d9e1ec;
-  --color-admin-accent: #265dff;
+  --color-admin-muted: #64748b;
+  --color-admin-border: #dfe5ee;
+  --color-admin-accent: #4f46e5;
+  --color-admin-success: #0f9f6e;
   --font-sans: "Inter", "Avenir Next", "Segoe UI", sans-serif;
-  --font-mono: "SFMono-Regular", "Cascadia Code", monospace;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", "Cascadia Code", monospace;
 }
 
 @layer base {
   :root {
     color: #121826;
-    background: #f6f8fb;
+    background: #0b0e14;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
   }
@@ -23,10 +27,14 @@
     min-width: 320px;
     min-height: 100vh;
     margin: 0;
-    background: #f6f8fb;
+    background: #0b0e14;
   }
 
   * {
     box-sizing: border-box;
+  }
+
+  button {
+    font: inherit;
   }
 }
