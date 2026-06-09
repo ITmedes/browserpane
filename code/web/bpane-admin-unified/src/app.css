@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --color-admin-bg: #f6f8fb;
+  --color-admin-panel: #ffffff;
+  --color-admin-ink: #121826;
+  --color-admin-muted: #5d6b82;
+  --color-admin-border: #d9e1ec;
+  --color-admin-accent: #265dff;
+  --font-sans: "Inter", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", "Cascadia Code", monospace;
+}
+
+@layer base {
+  :root {
+    color: #121826;
+    background: #f6f8fb;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    background: #f6f8fb;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
