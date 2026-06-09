@@ -38,27 +38,10 @@
 </svelte:head>
 
 <main
-  class="min-h-screen bg-admin-shell p-0 text-admin-ink sm:p-4 lg:p-6"
+  class="min-h-screen bg-admin-bg text-admin-ink"
   data-testid="admin-new-shell"
 >
-  <section
-    class="flex min-h-screen flex-col overflow-hidden bg-admin-paper shadow-2xl sm:min-h-[calc(100vh-2rem)] sm:rounded-xl lg:min-h-[calc(100vh-3rem)]"
-  >
-    <div
-      class="hidden h-8 shrink-0 items-center gap-2 border-b border-admin-border bg-[#f4f5f7] px-3 sm:flex"
-      aria-hidden="true"
-    >
-      <span class="h-2.5 w-2.5 rounded-full bg-[#ff5f57]"></span>
-      <span class="h-2.5 w-2.5 rounded-full bg-[#febc2e]"></span>
-      <span class="h-2.5 w-2.5 rounded-full bg-[#28c840]"></span>
-      <div
-        class="mx-auto flex h-5 w-full max-w-xl items-center justify-center rounded border border-admin-border bg-white px-3 font-mono text-[11px] text-admin-muted"
-      >
-        app.browserpane.io/admin-new
-      </div>
-      <div class="w-12"></div>
-    </div>
-
+  <section class="flex min-h-screen flex-col overflow-hidden bg-admin-paper">
     <header
       class="flex min-h-16 shrink-0 items-center gap-3 border-b border-admin-border bg-admin-panel px-4 sm:px-5"
       data-testid="admin-new-header"
