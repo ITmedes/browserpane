@@ -69,6 +69,9 @@
         await completeLoginRedirect();
       }
       auth = authClient.getSnapshot();
+      if (!auth.authenticated && config.mode === 'oidc') {
+        await login();
+      }
     } catch (error) {
       authError = errorMessage(error);
     } finally {
@@ -178,19 +181,13 @@
               {/if}
 
               {#if !authLoading && !auth?.authenticated}
-                <p class="m-0 text-xs font-semibold uppercase tracking-[0.14em] text-admin-muted">Operator access</p>
-                <h1 class="m-0 mt-2 text-xl font-semibold text-admin-ink">Sign in to BrowserPane</h1>
-                {#if auth?.configured}
-                  <p class="m-0 mt-2 text-sm text-admin-muted">Use the configured Keycloak realm to access this admin route.</p>
-                  <button
-                    class="mt-4 inline-flex h-10 items-center rounded-md bg-admin-accent px-4 text-sm font-semibold text-white hover:bg-indigo-600"
-                    type="button"
-                    onclick={() => void login()}
-                    disabled={authRedirecting}
-                    data-testid="admin-new-login-button"
+                {#if auth?.configured && !authError}
+                  <p
+                    class="m-0 text-sm text-admin-muted"
+                    data-testid="admin-new-auth-redirecting"
                   >
-                    Sign in
-                  </button>
+                    Redirecting to Keycloak sign-in...
+                  </p>
                 {:else if !authError}
                   <p class="m-0 mt-2 text-sm text-admin-muted">OIDC is not configured for this deployment.</p>
                 {/if}

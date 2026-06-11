@@ -15,7 +15,8 @@ and new `/admin-new/` app coexist.
 ## New App Shell
 
 1. Open `http://localhost:8080/admin-new/`.
-2. Confirm the shell shows the Keycloak sign-in state when no session is active.
+2. Confirm the shell automatically redirects to Keycloak when no admin session
+   is active.
 3. Sign in with `demo / demo-demo`.
 4. Confirm Keycloak returns to the same `/admin-new/` route without callback
    query parameters.
@@ -26,7 +27,8 @@ and new `/admin-new/` app coexist.
 ## Projects Overview
 
 1. Open `http://localhost:8080/admin-new/projects`.
-2. Sign in through Keycloak if prompted.
+2. Confirm unauthenticated access automatically redirects to Keycloak, then
+   sign in through Keycloak if prompted.
 3. Confirm the Projects navigation item is highlighted under Resources.
 4. Confirm the overview shows loading, then either the project catalog or a
    clear catalog error.
