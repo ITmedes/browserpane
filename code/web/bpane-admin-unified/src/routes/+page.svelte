@@ -1,11 +1,9 @@
 <script lang="ts">
-  import {
-    Bell,
-    ChevronRight,
-    CircleUserRound,
-  } from '@lucide/svelte';
+  import { ChevronRight } from '@lucide/svelte';
+  import ShellAccountButton from '$lib/components/ShellAccountButton.svelte';
   import ShellLogo from '$lib/components/ShellLogo.svelte';
   import ShellNavigation from '$lib/components/ShellNavigation.svelte';
+  import ShellNotificationsButton from '$lib/components/ShellNotificationsButton.svelte';
   import ShellSearch from '$lib/components/ShellSearch.svelte';
 </script>
 
@@ -31,21 +29,8 @@
 
       <ShellSearch />
 
-      <button
-        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-admin-border bg-admin-panel text-admin-muted shadow-sm"
-        type="button"
-        aria-label="Notifications"
-      >
-        <Bell size={17} strokeWidth={1.8} />
-      </button>
-
-      <button
-        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-admin-border bg-admin-panel text-admin-muted shadow-sm"
-        type="button"
-        aria-label="Account"
-      >
-        <CircleUserRound size={18} strokeWidth={1.8} />
-      </button>
+      <ShellNotificationsButton />
+      <ShellAccountButton />
     </header>
 
     <div class="flex min-h-0 flex-1">
