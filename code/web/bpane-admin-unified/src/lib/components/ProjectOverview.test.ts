@@ -26,20 +26,21 @@ describe('ProjectOverview', () => {
     expect(byTestId(target, 'projects-empty').textContent).toContain('Project catalog is empty');
   });
 
-  it('renders project metrics, list, selected detail, and refresh action', () => {
+  it('renders project metrics, table catalog, filters, and refresh action', () => {
     const onRefresh = vi.fn();
     const target = renderComponent(ProjectOverview, {
       state: {
         status: 'ready',
         projects: [project()],
-        selectedProjectId: 'project-a',
       },
       onRefresh,
     });
 
     expect(byTestId(target, 'projects-metric-total').textContent).toContain('1');
     expect(byTestId(target, 'projects-list').textContent).toContain('Support');
-    expect(byTestId(target, 'projects-selected-detail').textContent).toContain('Budget enforcement');
+    expect(byTestId(target, 'projects-list').textContent).toContain('Activity');
+    expect(byTestId(target, 'projects-list').textContent).toContain('unrestricted, warning budgets');
+    expect(target.querySelector('[data-testid="projects-selected-detail"]')).toBeNull();
 
     byTestId(target, 'projects-refresh-button').click();
     expect(onRefresh).toHaveBeenCalledOnce();

@@ -4,7 +4,7 @@ import { buildProjectOverviewModel } from './project-overview-view-model';
 import type { ProjectResource } from './project-types';
 
 describe('buildProjectOverviewModel', () => {
-  it('summarizes project states, alerts, selected row, usage, and policy', () => {
+  it('summarizes project states, alerts, usage, and policy for the table view', () => {
     const projects = [
       project({
         id: 'project-a',
@@ -15,7 +15,7 @@ describe('buildProjectOverviewModel', () => {
       project({ id: 'project-b', name: 'Archive', state: 'archived' }),
     ];
 
-    const model = buildProjectOverviewModel(projects, 'project-a');
+    const model = buildProjectOverviewModel(projects);
 
     expect(model.metrics.map((metric) => [metric.label, metric.value])).toEqual([
       ['Projects', '2'],
@@ -25,23 +25,25 @@ describe('buildProjectOverviewModel', () => {
     ]);
     expect(model.rows[0]).toMatchObject({
       name: 'Support',
-      selected: true,
+      stateTone: 'success',
       activeSessions: '2 / 5',
+      queuedSessions: '1',
+      activeWorkflowRuns: '1 / 2',
+      sessionCreations: '10 / unbounded',
+      runtimeUsage: '2m / unbounded',
+      egressUsage: '1.0 KB / unbounded',
+      retainedStorage: '2.0 KB / unbounded',
       alerts: '1 exceeded',
+      alertTone: 'danger',
       policySummary: '1 restricted selectors, 2 disabled operations, blocking budgets',
+      updatedAt: expect.stringContaining('2026'),
     });
-    expect(model.selectedSections.map((section) => section.title)).toEqual(['Metadata', 'Usage', 'Policy']);
-    expect(model.selectedSections[2]?.rows).toContainEqual({
-      label: 'Budget enforcement',
-      value: 'block session creation',
+    expect(model.rows[1]).toMatchObject({
+      name: 'Archive',
+      stateTone: 'neutral',
+      alertTone: 'neutral',
+      alerts: 'none',
     });
-  });
-
-  it('falls back to the first project when the requested selection is unavailable', () => {
-    const model = buildProjectOverviewModel([project({ id: 'project-a', name: 'Support' })], 'missing');
-
-    expect(model.selected?.id).toBe('project-a');
-    expect(model.rows[0]?.selected).toBe(true);
   });
 });
 

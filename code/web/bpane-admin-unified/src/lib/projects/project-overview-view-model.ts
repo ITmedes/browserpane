@@ -6,7 +6,6 @@ export type ProjectOverviewLoadState =
   | {
       readonly status: 'ready';
       readonly projects: readonly ProjectResource[];
-      readonly selectedProjectId?: string | null;
     };
 
 export type ProjectOverviewMetric = {
@@ -20,35 +19,28 @@ export type ProjectOverviewRow = {
   readonly name: string;
   readonly description: string;
   readonly state: string;
+  readonly stateTone: 'success' | 'neutral';
   readonly activeSessions: string;
+  readonly queuedSessions: string;
   readonly activeWorkflowRuns: string;
+  readonly sessionCreations: string;
+  readonly runtimeUsage: string;
+  readonly egressUsage: string;
+  readonly retainedStorage: string;
   readonly alerts: string;
+  readonly alertTone: 'neutral' | 'warning' | 'danger';
   readonly policySummary: string;
-  readonly selected: boolean;
-};
-
-export type ProjectDetailSection = {
-  readonly title: string;
-  readonly rows: readonly ProjectDetailRow[];
-};
-
-export type ProjectDetailRow = {
-  readonly label: string;
-  readonly value: string;
+  readonly updatedAt: string;
 };
 
 export type ProjectOverviewModel = {
   readonly metrics: readonly ProjectOverviewMetric[];
   readonly rows: readonly ProjectOverviewRow[];
-  readonly selected: ProjectResource | null;
-  readonly selectedSections: readonly ProjectDetailSection[];
 };
 
 export function buildProjectOverviewModel(
   projects: readonly ProjectResource[],
-  selectedProjectId: string | null | undefined = null,
 ): ProjectOverviewModel {
-  const selected = selectProject(projects, selectedProjectId);
   return {
     metrics: [
       metric('total', 'Projects', projects.length),
@@ -60,97 +52,38 @@ export function buildProjectOverviewModel(
         projects.reduce((total, project) => total + project.usage.alerts.length, 0),
       ),
     ],
-    rows: projects.map((project) => projectRow(project, selected?.id ?? null)),
-    selected,
-    selectedSections: selected ? projectDetailSections(selected) : [],
+    rows: projects.map(projectRow),
   };
 }
 
-function selectProject(projects: readonly ProjectResource[], selectedProjectId: string | null | undefined): ProjectResource | null {
-  if (projects.length === 0) {
-    return null;
-  }
-  return projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
-}
-
-function projectRow(project: ProjectResource, selectedProjectId: string | null): ProjectOverviewRow {
+function projectRow(project: ProjectResource): ProjectOverviewRow {
   return {
     id: project.id,
     name: project.name,
     description: project.description?.trim() || project.id,
     state: project.state,
+    stateTone: project.state === 'active' ? 'success' : 'neutral',
     activeSessions: usageWithLimit(project.usage.active_sessions, project.usage.max_active_sessions),
+    queuedSessions: String(project.usage.queued_sessions),
     activeWorkflowRuns: usageWithLimit(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs),
+    sessionCreations: usageWithLimit(project.usage.session_creations, project.usage.max_session_creations),
+    runtimeUsage: usageWithLimit(
+      formatDuration(project.usage.runtime_usage_ms) ?? '0s',
+      formatDuration(project.usage.max_runtime_usage_ms),
+    ),
+    egressUsage: usageWithLimit(
+      formatBytes(project.usage.egress_total_bytes) ?? '0 B',
+      formatBytes(project.usage.max_egress_total_bytes),
+    ),
+    retainedStorage: usageWithLimit(
+      formatBytes(project.usage.retained_storage_bytes) ?? '0 B',
+      formatBytes(project.usage.max_retained_storage_bytes),
+    ),
     alerts: usageAlertsLabel(project),
+    alertTone: usageAlertTone(project),
     policySummary: projectPolicySummary(project.policy),
-    selected: project.id === selectedProjectId,
+    updatedAt: formatDateTime(project.updated_at),
   };
-}
-
-function projectDetailSections(project: ProjectResource): readonly ProjectDetailSection[] {
-  const labelEntries = Object.entries(project.labels);
-  return [
-    {
-      title: 'Metadata',
-      rows: [
-        { label: 'Project id', value: project.id },
-        { label: 'State', value: project.state },
-        { label: 'Created', value: formatDateTime(project.created_at) },
-        { label: 'Updated', value: formatDateTime(project.updated_at) },
-        { label: 'Labels', value: labelEntries.length > 0 ? labelEntries.map(([key, value]) => `${key}=${value}`).join(', ') : 'none' },
-      ],
-    },
-    {
-      title: 'Usage',
-      rows: [
-        { label: 'Active sessions', value: usageWithLimit(project.usage.active_sessions, project.usage.max_active_sessions) },
-        { label: 'Queued sessions', value: String(project.usage.queued_sessions) },
-        {
-          label: 'Active workflow runs',
-          value: usageWithLimit(project.usage.active_workflow_runs, project.usage.max_active_workflow_runs),
-        },
-        { label: 'Session creations', value: usageWithLimit(project.usage.session_creations, project.usage.max_session_creations) },
-        {
-          label: 'Runtime',
-          value: usageWithLimit(
-            formatDuration(project.usage.runtime_usage_ms) ?? '0s',
-            formatDuration(project.usage.max_runtime_usage_ms),
-          ),
-        },
-        {
-          label: 'Egress',
-          value: usageWithLimit(
-            formatBytes(project.usage.egress_total_bytes) ?? '0 B',
-            formatBytes(project.usage.max_egress_total_bytes),
-          ),
-        },
-        {
-          label: 'Retained storage',
-          value: usageWithLimit(
-            formatBytes(project.usage.retained_storage_bytes) ?? '0 B',
-            formatBytes(project.usage.max_retained_storage_bytes),
-          ),
-        },
-        { label: 'Usage alerts', value: usageAlertsLabel(project) },
-        { label: 'Observed', value: formatDateTime(project.usage.observed_at) },
-      ],
-    },
-    {
-      title: 'Policy',
-      rows: [
-        { label: 'Browser uploads', value: enabledLabel(project.policy.allow_browser_uploads) },
-        { label: 'Browser downloads', value: enabledLabel(project.policy.allow_browser_downloads) },
-        { label: 'Session file bindings', value: enabledLabel(project.policy.allow_session_file_bindings) },
-        { label: 'Manual recordings', value: enabledLabel(project.policy.allow_manual_recordings) },
-        { label: 'Budget enforcement', value: budgetEnforcementLabel(project.policy.usage_budget_enforcement) },
-        { label: 'Session templates', value: restrictionLabel(project.policy.allowed_session_template_ids.length) },
-        { label: 'Browser contexts', value: restrictionLabel(project.policy.allowed_browser_context_ids.length) },
-        { label: 'Egress profiles', value: restrictionLabel(project.policy.allowed_egress_profile_ids.length) },
-        { label: 'File workspaces', value: restrictionLabel(project.policy.allowed_file_workspace_ids.length) },
-        { label: 'Extensions', value: restrictionLabel(project.policy.allowed_extension_ids.length) },
-      ],
-    },
-  ];
 }
 
 function metric(key: string, label: string, value: number): ProjectOverviewMetric {
@@ -180,6 +113,16 @@ function usageAlertsLabel(project: ProjectResource): string {
   ].filter(Boolean).join(', ');
 }
 
+function usageAlertTone(project: ProjectResource): 'neutral' | 'warning' | 'danger' {
+  if (project.usage.alerts.some((alert) => alert.state === 'exceeded')) {
+    return 'danger';
+  }
+  if (project.usage.alerts.length > 0) {
+    return 'warning';
+  }
+  return 'neutral';
+}
+
 function projectPolicySummary(policy: ProjectPolicy): string {
   const restrictions = [
     policy.allowed_session_template_ids.length,
@@ -204,18 +147,6 @@ function projectPolicySummary(policy: ProjectPolicy): string {
     disabledTransfers > 0 ? `${disabledTransfers} disabled operations` : null,
     policy.usage_budget_enforcement === 'block_session_creation' ? 'blocking budgets' : 'warning budgets',
   ].filter(Boolean).join(', ');
-}
-
-function enabledLabel(enabled: boolean): string {
-  return enabled ? 'enabled' : 'disabled';
-}
-
-function budgetEnforcementLabel(value: string): string {
-  return value === 'block_session_creation' ? 'block session creation' : 'warning only';
-}
-
-function restrictionLabel(count: number): string {
-  return count > 0 ? `${count} allowed` : 'unrestricted';
 }
 
 function formatDateTime(value: string): string {
