@@ -15,16 +15,18 @@ and new `/admin-new/` app coexist.
 ## New App Shell
 
 1. Open `http://localhost:8080/admin-new/`.
-2. Confirm the static shell renders without requiring the current `/admin/` app.
-3. Refresh `http://localhost:8080/admin-new/sessions`.
-4. Confirm nginx deep-link fallback works.
-5. Open `http://localhost:8080/admin/` and confirm the old app is unchanged.
+2. Confirm the shell shows the Keycloak sign-in state when no session is active.
+3. Sign in with `demo / demo-demo`.
+4. Confirm Keycloak returns to the same `/admin-new/` route without callback
+   query parameters.
+5. Refresh `http://localhost:8080/admin-new/projects`.
+6. Confirm nginx deep-link fallback works.
+7. Open `http://localhost:8080/admin/` and confirm the old app is unchanged.
 
 ## Projects Overview
 
-1. Log in through `http://localhost:8080/admin/` so the current admin access
-   token exists in session storage.
-2. Open `http://localhost:8080/admin-new/projects`.
+1. Open `http://localhost:8080/admin-new/projects`.
+2. Sign in through Keycloak if prompted.
 3. Confirm the Projects navigation item is highlighted under Resources.
 4. Confirm the overview shows loading, then either the project catalog or a
    clear catalog error.
@@ -32,6 +34,8 @@ and new `/admin-new/` app coexist.
    is shown beside or below it depending on viewport width.
 6. Use Refresh and confirm the catalog reloads without changing the current
    `/admin/` application.
+7. Expire or clear the token and confirm the next project refresh redirects to
+   Keycloak instead of silently failing.
 
 ## Session Workflow
 
