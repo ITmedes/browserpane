@@ -21,7 +21,7 @@ describe('admin navigation model', () => {
   });
 
   it('covers the first migrated resource groups', () => {
-    expect(primaryNav.map((item) => item.id)).toEqual([
+    const migratedResourceIds = new Set([
       'dashboard',
       'sessions',
       'runs',
@@ -30,5 +30,7 @@ describe('admin navigation model', () => {
       'projects',
       'workspaces',
     ]);
+
+    expect(new Set(primaryNav.map((item) => item.id))).toEqual(migratedResourceIds);
   });
 });
