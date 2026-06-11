@@ -21,6 +21,12 @@
   import type { Component } from 'svelte';
   import { navGroups, primaryNav, type NavIconKey } from '$lib/admin-navigation';
 
+  type ShellNavigationProps = {
+    readonly activeId?: string;
+  };
+
+  let { activeId = 'dashboard' }: ShellNavigationProps = $props();
+
   const navIcons: Record<NavIconKey, Component<{ size?: number; strokeWidth?: number; class?: string }>> = {
     activity: Activity,
     'book-open': BookOpen,
@@ -40,6 +46,10 @@
     terminal: SquareTerminal,
     workflow: Workflow,
   };
+
+  function isActive(itemId: string): boolean {
+    return itemId === activeId;
+  }
 </script>
 
 <aside
@@ -62,7 +72,7 @@
             {@const Icon = navIcons[item.icon]}
             <a
               class={`flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium ${
-                item.active
+                isActive(item.id)
                   ? 'bg-[#eef2ff] text-admin-accent'
                   : 'text-admin-muted hover:bg-admin-soft hover:text-admin-ink'
               }`}
@@ -96,7 +106,7 @@
     {@const Icon = navIcons[item.icon]}
     <a
       class={`inline-flex h-10 w-10 items-center justify-center rounded-md ${
-        item.active ? 'bg-[#eef2ff] text-admin-accent' : 'text-admin-muted'
+        isActive(item.id) ? 'bg-[#eef2ff] text-admin-accent' : 'text-admin-muted'
       }`}
       href={item.route}
       aria-label={item.label}

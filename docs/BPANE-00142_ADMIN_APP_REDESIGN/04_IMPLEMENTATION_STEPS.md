@@ -30,28 +30,47 @@ focused validation for the current step is accepted.
 4. Add compatibility endpoint manifest.
 5. Add schema property-level generated parity.
 
-## Step 2: Dashboard
+## Step 2: Projects Overview
 
-1. Add `/admin-new/`.
-2. Use real read-only data.
-3. Show active sessions, recent workflow runs, and resource counts.
-4. No new mutations except navigation.
+1. Add `/admin-new/projects`.
+2. Use real read-only project data from `/api/v1/projects`.
+3. Show project scope, state, quotas, policy gates, usage counters, and alerts.
+4. Use the resource selection pattern: compact list plus selected-resource metadata.
+5. Bridge against the existing admin session token until the full new auth shell is migrated.
 
-## Step 3: Sessions Catalog
+## Step 3: Resource Foundation
+
+Add selector-grade catalog/detail routes for resources that session creation must reference:
+
+- Browser contexts
+- Egress profiles
+- File workspaces
+
+Keep mutations narrow until the session-create flow proves which operations need to be in the first redesign pass.
+
+## Step 4: Create Session Flow
+
+1. Add `/admin-new/sessions/new`.
+2. Preserve template selection, project selection, browser context modes,
+   network identity, egress profiles, labels, idle timeout, owner mode, and API
+   payload preview.
+3. Use the Projects overview data model as the first selector contract.
+
+## Step 5: Sessions Catalog
 
 1. Add `/admin-new/sessions`.
 2. Use a focused sessions list plus selected-session metadata area.
 3. Preserve join/reconnect/disconnect behavior.
 4. Keep current session switch behavior explicit.
 
-## Step 4: Session Detail Overview
+## Step 6: Session Detail Overview
 
 1. Add `/admin-new/sessions/[session_id]`.
 2. Add route-backed overview.
 3. Preserve lifecycle actions, stop eligibility, queue state, connections,
    disconnect all, and per-connection disconnect.
 
-## Step 5: Live Tab
+## Step 7: Live Tab
 
 1. Add `/admin-new/sessions/[session_id]/live`.
 2. Reuse the browser SDK from `/dist/`.
@@ -59,57 +78,46 @@ focused validation for the current step is accepted.
 4. Preserve attach/detach, upload, microphone, camera, display controls, and
    trust guidance.
 
-## Step 6: Session Files
+## Step 8: Session Files
 
 1. Add `/admin-new/sessions/[session_id]/files`.
 2. Preserve session files and session file bindings.
 3. Preserve workspace-file binding and download behavior.
 
-## Step 7: Recordings
+## Step 9: Recordings
 
 1. Add `/admin-new/sessions/[session_id]/recordings`.
 2. Preserve recording status, retained segments, downloads, playback manifest,
    and playback export.
 
-## Step 8: Network
+## Step 10: Network
 
 1. Add `/admin-new/sessions/[session_id]/network`.
 2. Preserve network identity, effective egress, diagnostics, and probes.
 3. Link to egress profile detail.
 
-## Step 9: Automation
+## Step 11: Automation
 
 1. Add `/admin-new/sessions/[session_id]/automation`.
 2. Preserve MCP delegation, workflow associations, automation owner/delegate
    state, and API companion separation for worker routes.
 
-## Step 9A: Browser Policy
+## Step 12: Browser Policy
 
 1. Add `/admin-new/sessions/[session_id]/policy`.
 2. Preserve local-file and File System Access guardrails.
 3. Preserve probe command and CDP endpoint evidence.
 
-## Step 10: Observability
+## Step 13: Observability
 
 1. Add `/admin-new/sessions/[session_id]/observability`.
 2. Preserve logs, metrics summaries, admin event stream state, workflow
    snapshots, recording snapshots, and future observability placeholders.
 
-## Step 11: Create Session Flow
-
-1. Add `/admin-new/sessions/new`.
-2. Preserve template selection, project selection, browser context modes,
-   network identity, egress profiles, labels, idle timeout, owner mode, and API
-   payload preview.
-
-## Step 12: Resource Catalogs
+## Step 14: Remaining Resource Catalogs
 
 Add route-backed catalogs and detail views for:
 
-- Projects
-- Browser contexts
-- Egress profiles
-- File workspaces
 - Workflows and workflow runs
 - Session templates
 - Extensions
@@ -118,20 +126,26 @@ Add route-backed catalogs and detail views for:
 - Operation counters and internal automation evidence
 - Identity and access review
 
-## Step 13: Command Palette
+## Step 15: Dashboard
+
+1. Add real resource counts and recent operational activity to `/admin-new/`.
+2. Link to resource catalogs and active session work.
+3. Keep dashboard read-only.
+
+## Step 16: Command Palette
 
 1. Add command palette to the new shell.
 2. Support navigation, session join, and common creation actions.
 3. Do not create a second hidden state model.
 
-## Step 14: API Reference And Coverage Companion
+## Step 17: API Reference And Coverage Companion
 
 1. Add `/admin-new/api`.
 2. Link OpenAPI.
 3. Show operation classification and copyable examples.
 4. Keep compatibility endpoints separated from the frozen API.
 
-## Step 15: Promotion Decision
+## Step 18: Promotion Decision
 
 1. Compare against current app parity.
 2. Keep `/admin/` and `/admin-new/` side by side.
