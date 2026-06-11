@@ -55,4 +55,13 @@ describe('ShellNavigation', () => {
       expectedItems.map((item) => item.route),
     );
   });
+
+  it('marks the route-backed active resource item', () => {
+    const target = renderComponent(ShellNavigation, { activeId: 'projects' });
+    const projectLink = Array.from(byTestId(target, 'admin-new-side-nav').querySelectorAll('a')).find(
+      (link) => link.textContent?.trim() === 'Projects',
+    );
+
+    expect(projectLink?.className).toContain('text-admin-accent');
+  });
 });
