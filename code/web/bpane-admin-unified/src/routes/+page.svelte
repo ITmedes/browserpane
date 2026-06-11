@@ -3,10 +3,10 @@
     Bell,
     ChevronRight,
     CircleUserRound,
-    Search,
   } from '@lucide/svelte';
   import ShellLogo from '$lib/components/ShellLogo.svelte';
   import ShellNavigation from '$lib/components/ShellNavigation.svelte';
+  import ShellSearch from '$lib/components/ShellSearch.svelte';
 </script>
 
 <svelte:head>
@@ -29,13 +29,7 @@
         <span class="font-medium text-admin-ink">Dashboard</span>
       </div>
 
-      <button
-        class="ml-auto hidden h-9 min-w-72 items-center gap-2 rounded-md border border-admin-border bg-admin-bg px-3 text-left text-sm text-admin-muted shadow-sm lg:flex"
-        type="button"
-      >
-        <Search size={16} strokeWidth={1.8} />
-        <span class="min-w-0 flex-1 truncate">Search sessions, workflows, resources</span>
-      </button>
+      <ShellSearch />
 
       <button
         class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-admin-border bg-admin-panel text-admin-muted shadow-sm"
