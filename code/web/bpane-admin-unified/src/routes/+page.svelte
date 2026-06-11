@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { ChevronRight } from '@lucide/svelte';
   import ShellAccountButton from '$lib/components/ShellAccountButton.svelte';
   import ShellLogo from '$lib/components/ShellLogo.svelte';
   import ShellNavigation from '$lib/components/ShellNavigation.svelte';
@@ -21,11 +20,6 @@
       data-testid="admin-new-header"
     >
       <ShellLogo />
-
-      <div class="hidden min-w-0 items-center gap-1 text-sm text-admin-muted md:flex">
-        <ChevronRight size={15} strokeWidth={1.8} />
-        <span class="font-medium text-admin-ink">Dashboard</span>
-      </div>
 
       <ShellSearch />
 
