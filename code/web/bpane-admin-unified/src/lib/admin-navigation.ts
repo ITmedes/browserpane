@@ -20,12 +20,13 @@ export type NavItem = {
 
 export const primaryNav: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', route: '/admin-new/', icon: 'gauge', active: true },
-  { id: 'sessions', label: 'Sessions', route: '/admin-new/sessions', icon: 'monitor' },
-  { id: 'runs', label: 'Workflow runs', route: '/admin-new/runs', icon: 'activity' },
-  { id: 'contexts', label: 'Browser contexts', route: '/admin-new/contexts', icon: 'boxes' },
-  { id: 'egress', label: 'Egress profiles', route: '/admin-new/egress', icon: 'network' },
   { id: 'projects', label: 'Projects', route: '/admin-new/projects', icon: 'layers' },
   { id: 'workspaces', label: 'File workspaces', route: '/admin-new/workspaces', icon: 'folder' },
+  { id: 'contexts', label: 'Browser contexts', route: '/admin-new/contexts', icon: 'boxes' },
+  { id: 'egress', label: 'Egress profiles', route: '/admin-new/egress', icon: 'network' },
+  { id: 'sessions', label: 'Sessions', route: '/admin-new/sessions', icon: 'monitor' },
+  { id: 'runs', label: 'Workflow runs', route: '/admin-new/runs', icon: 'activity' },
+
 ];
 
 export const secondaryNav: NavItem[] = [
