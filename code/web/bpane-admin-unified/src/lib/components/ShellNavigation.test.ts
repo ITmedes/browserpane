@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { primaryNav, secondaryNav } from '$lib/admin-navigation';
+import { allNavItems, navGroups, primaryNav } from '$lib/admin-navigation';
 import {
   byTestId,
   cleanupRenderedComponents,
@@ -14,17 +14,24 @@ describe('ShellNavigation', () => {
   it('renders the desktop navigation from the shared nav model', () => {
     const target = renderComponent(ShellNavigation);
     const sideNav = byTestId(target, 'admin-new-side-nav');
-    const expectedItems = [...primaryNav, ...secondaryNav];
     const links = Array.from(sideNav.querySelectorAll('a'));
 
-    expect(links).toHaveLength(expectedItems.length);
+    expect(links).toHaveLength(allNavItems.length);
     expect(links.map((link) => link.textContent?.trim())).toEqual(
-      expectedItems.map((item) => item.label),
+      allNavItems.map((item) => item.label),
     );
     expect(links.map((link) => link.getAttribute('href'))).toEqual(
-      expectedItems.map((item) => item.route),
+      allNavItems.map((item) => item.route),
     );
+    expect(
+      Array.from(sideNav.querySelectorAll('[data-testid="admin-new-nav-group"]')).map((group) =>
+        group.textContent?.trim(),
+      ),
+    ).toEqual(navGroups.map((group) => group.group).filter(Boolean));
+    expect(sideNav.textContent).toContain('Operate');
+    expect(sideNav.textContent).toContain('Resources');
     expect(sideNav.textContent).toContain('Govern');
+    expect(sideNav.textContent).toContain('Docs');
     expect(sideNav.textContent).toContain('Local stack');
     expect(sideNav.textContent).toContain('docker_pool');
   });

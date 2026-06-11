@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { primaryNav, secondaryNav } from './admin-navigation';
+import { allNavItems, navGroups } from './admin-navigation';
 
 describe('admin navigation model', () => {
   it('keeps every route inside the unified admin route prefix', () => {
-    for (const item of [...primaryNav, ...secondaryNav]) {
+    for (const item of allNavItems) {
       expect(item.route).toMatch(/^\/admin-new(\/|$)/);
     }
   });
 
   it('has one active dashboard entry for the static shell', () => {
-    const activeItems = primaryNav.filter((item) => item.active);
+    const activeItems = allNavItems.filter((item) => item.active);
 
     expect(activeItems).toEqual([
       expect.objectContaining({
@@ -20,17 +20,18 @@ describe('admin navigation model', () => {
     ]);
   });
 
-  it('covers the first migrated resource groups', () => {
-    const migratedResourceIds = new Set([
-      'dashboard',
-      'sessions',
-      'runs',
-      'contexts',
-      'egress',
-      'projects',
-      'workspaces',
+  it('matches the grouped concept navigation structure', () => {
+    expect(
+      navGroups.map((group) => ({
+        group: group.group,
+        ids: group.items.map((item) => item.id),
+      })),
+    ).toEqual([
+      { group: null, ids: ['dashboard'] },
+      { group: 'Operate', ids: ['sessions', 'workflows', 'runs'] },
+      { group: 'Resources', ids: ['projects', 'contexts', 'egress', 'workspaces'] },
+      { group: 'Govern', ids: ['identity', 'api'] },
+      { group: 'Docs', ids: ['memo', 'coverage'] },
     ]);
-
-    expect(new Set(primaryNav.map((item) => item.id))).toEqual(migratedResourceIds);
   });
 });

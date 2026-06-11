@@ -3,28 +3,42 @@
     Activity,
     BookOpen,
     Boxes,
+    Check,
+    Cpu,
     Folder,
     Gauge,
+    Globe,
+    Info,
+    KeyRound,
     Layers3,
+    List,
     Monitor,
     Network,
     ShieldCheck,
     SquareTerminal,
+    Workflow,
   } from '@lucide/svelte';
   import type { Component } from 'svelte';
-  import { primaryNav, secondaryNav, type NavIconKey } from '$lib/admin-navigation';
+  import { navGroups, primaryNav, type NavIconKey } from '$lib/admin-navigation';
 
   const navIcons: Record<NavIconKey, Component<{ size?: number; strokeWidth?: number; class?: string }>> = {
     activity: Activity,
     'book-open': BookOpen,
     boxes: Boxes,
+    check: Check,
+    cpu: Cpu,
     folder: Folder,
     gauge: Gauge,
+    globe: Globe,
+    info: Info,
+    key: KeyRound,
     layers: Layers3,
+    list: List,
     monitor: Monitor,
     network: Network,
     shield: ShieldCheck,
     terminal: SquareTerminal,
+    workflow: Workflow,
   };
 </script>
 
@@ -33,37 +47,33 @@
   data-testid="admin-new-side-nav"
 >
   <nav class="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Primary">
-    <div class="space-y-1">
-      {#each primaryNav as item}
-        {@const Icon = navIcons[item.icon]}
-        <a
-          class={`flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium ${
-            item.active
-              ? 'bg-[#eef2ff] text-admin-accent'
-              : 'text-admin-muted hover:bg-admin-soft hover:text-admin-ink'
-          }`}
-          href={item.route}
-        >
-          <Icon size={16} strokeWidth={1.9} />
-          <span class="truncate">{item.label}</span>
-        </a>
+    <div class="space-y-4">
+      {#each navGroups as group}
+        <div class="space-y-1">
+          {#if group.group}
+            <div
+              class="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.1em] text-admin-muted"
+              data-testid="admin-new-nav-group"
+            >
+              {group.group}
+            </div>
+          {/if}
+          {#each group.items as item}
+            {@const Icon = navIcons[item.icon]}
+            <a
+              class={`flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium ${
+                item.active
+                  ? 'bg-[#eef2ff] text-admin-accent'
+                  : 'text-admin-muted hover:bg-admin-soft hover:text-admin-ink'
+              }`}
+              href={item.route}
+            >
+              <Icon size={16} strokeWidth={1.9} />
+              <span class="truncate">{item.label}</span>
+            </a>
+          {/each}
+        </div>
       {/each}
-    </div>
-
-    <div class="mt-6 border-t border-admin-border pt-4">
-      <div class="px-3 pb-2 text-xs font-semibold text-admin-muted">Govern</div>
-      <div class="space-y-1">
-        {#each secondaryNav as item}
-          {@const Icon = navIcons[item.icon]}
-          <a
-            class="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-admin-muted hover:bg-admin-soft hover:text-admin-ink"
-            href={item.route}
-          >
-            <Icon size={16} strokeWidth={1.9} />
-            <span class="truncate">{item.label}</span>
-          </a>
-        {/each}
-      </div>
     </div>
   </nav>
 
