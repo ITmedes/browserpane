@@ -11,7 +11,6 @@ import type {
   ProjectUsageResource,
 } from './project-types';
 
-const TOKEN_STORAGE_KEY = 'bpane.admin.auth.tokens.v1';
 const PROJECT_STATES = ['active', 'archived'] satisfies readonly ProjectState[];
 const BUDGET_ENFORCEMENT = [
   'warning_only',
@@ -24,7 +23,6 @@ const ALERT_METRICS = [
 ] satisfies readonly ProjectUsageAlertMetric[];
 const ALERT_STATES = ['approaching_limit', 'exceeded'] satisfies readonly ProjectUsageAlertState[];
 
-export type StorageReader = Pick<Storage, 'getItem'>;
 export type AccessTokenProvider = () => Promise<string | null> | string | null;
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export type ProjectCatalogErrorCode = 'missing_token' | 'http_error' | 'invalid_payload';
@@ -86,25 +84,6 @@ export class ProjectCatalogClient {
     }
 
     return toProjectListResponse(await response.json());
-  }
-}
-
-export function loadStoredAdminAccessToken(storage: StorageReader, nowMs = Date.now()): string | null {
-  const raw = storage.getItem(TOKEN_STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(raw) as Partial<{ access_token: unknown; expiresAtMs: unknown }>;
-    if (typeof parsed.access_token !== 'string' || typeof parsed.expiresAtMs !== 'number') {
-      return null;
-    }
-    if (parsed.expiresAtMs <= nowMs + 5_000) {
-      return null;
-    }
-    return parsed.access_token;
-  } catch {
-    return null;
   }
 }
 

@@ -36,7 +36,8 @@ focused validation for the current step is accepted.
 2. Use real read-only project data from `/api/v1/projects`.
 3. Show project scope, state, quotas, policy gates, usage counters, and alerts.
 4. Use the resource selection pattern: compact list plus selected-resource metadata.
-5. Bridge against the existing admin session token until the full new auth shell is migrated.
+5. Use the new admin shell's Keycloak/OIDC token provider and global auth
+   failure handler.
 
 ## Step 3: Resource Foundation
 

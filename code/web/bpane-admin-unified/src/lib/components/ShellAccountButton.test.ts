@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   byTestId,
@@ -18,5 +18,17 @@ describe('ShellAccountButton', () => {
     expect(button.getAttribute('type')).toBe('button');
     expect(button.getAttribute('aria-label')).toBe('Account');
     expect(button.querySelector('svg')).not.toBeNull();
+  });
+
+  it('invokes the account action when clicked', () => {
+    const onClick = vi.fn();
+    const target = renderComponent(ShellAccountButton, {
+      label: 'Account: demo. Click to sign out.',
+      onClick,
+    });
+
+    byTestId(target, 'admin-new-account').click();
+
+    expect(onClick).toHaveBeenCalledOnce();
   });
 });

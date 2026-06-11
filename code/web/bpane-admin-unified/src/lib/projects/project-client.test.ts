@@ -1,35 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  loadStoredAdminAccessToken,
   ProjectCatalogClient,
   ProjectCatalogError,
   toProjectListResponse,
 } from './project-client';
-
-const TOKEN = JSON.stringify({
-  access_token: 'admin-token',
-  expiresAtMs: 2_000_000,
-});
-
-describe('loadStoredAdminAccessToken', () => {
-  it('returns a non-expired access token from the existing admin token store', () => {
-    const storage = { getItem: vi.fn(() => TOKEN) };
-
-    expect(loadStoredAdminAccessToken(storage, 1_000_000)).toBe('admin-token');
-  });
-
-  it('returns null for expired or malformed token payloads', () => {
-    expect(
-      loadStoredAdminAccessToken(
-        { getItem: () => JSON.stringify({ access_token: 'old', expiresAtMs: 100 }) },
-        100,
-      ),
-    ).toBeNull();
-    expect(loadStoredAdminAccessToken({ getItem: () => 'not-json' }, 100)).toBeNull();
-    expect(loadStoredAdminAccessToken({ getItem: () => null }, 100)).toBeNull();
-  });
-});
 
 describe('ProjectCatalogClient', () => {
   it('lists projects through the authenticated control API', async () => {
