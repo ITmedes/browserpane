@@ -10,19 +10,13 @@
   <title>BrowserPane Admin Redesign</title>
 </svelte:head>
 
-<main
-  class="min-h-screen bg-admin-bg text-admin-ink"
-  data-testid="admin-new-shell"
->
+<main class="min-h-screen bg-admin-bg text-admin-ink" data-testid="admin-new-shell">
   <section class="flex min-h-screen flex-col overflow-hidden bg-admin-paper">
     <header
       class="flex min-h-16 shrink-0 items-center gap-3 border-b border-admin-border bg-admin-panel px-4 sm:px-5"
-      data-testid="admin-new-header"
-    >
+      data-testid="admin-new-header">
       <ShellLogo />
-
       <ShellSearch />
-
       <ShellNotificationsButton />
       <ShellAccountButton />
     </header>
