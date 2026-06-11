@@ -1,30 +1,109 @@
 <script lang="ts">
-  import { AlertTriangle, RefreshCw } from '@lucide/svelte';
+  import { AlertTriangle, RefreshCw, Search } from '@lucide/svelte';
   import {
     buildProjectOverviewModel,
     type ProjectOverviewLoadState,
+    type ProjectOverviewRow,
   } from '$lib/projects/project-overview-view-model';
+
+  type ProjectLens = 'all' | 'active' | 'archived' | 'alerts';
+
+  type ProjectLensDefinition = {
+    readonly id: ProjectLens;
+    readonly label: string;
+    readonly count: number;
+    readonly showDot?: boolean;
+  };
 
   type ProjectOverviewProps = {
     readonly state: ProjectOverviewLoadState;
     readonly onRefresh?: () => void | Promise<void>;
   };
 
-  let { state, onRefresh }: ProjectOverviewProps = $props();
+  let { state: loadState, onRefresh }: ProjectOverviewProps = $props();
+  let projectLens = $state<ProjectLens>('all');
+  let searchQuery = $state('');
 
-  const model = $derived(state.status === 'ready'
-    ? buildProjectOverviewModel(state.projects, state.selectedProjectId)
+  const model = $derived(loadState.status === 'ready'
+    ? buildProjectOverviewModel(loadState.projects)
     : null);
+  const lensDefinitions = $derived(model ? buildProjectLensDefinitions(model.rows) : []);
+  const visibleRows = $derived(model ? filterProjectRows(model.rows, projectLens, searchQuery) : []);
 
   function refresh(): void {
     void onRefresh?.();
+  }
+
+  function buildProjectLensDefinitions(rows: readonly ProjectOverviewRow[]): readonly ProjectLensDefinition[] {
+    return [
+      { id: 'all', label: 'All', count: rows.length },
+      {
+        id: 'active',
+        label: 'Active',
+        count: rows.filter((row) => row.state === 'active').length,
+        showDot: true,
+      },
+      { id: 'archived', label: 'Archived', count: rows.filter((row) => row.state === 'archived').length },
+      { id: 'alerts', label: 'Needs attention', count: rows.filter((row) => row.alertTone !== 'neutral').length },
+    ];
+  }
+
+  function filterProjectRows(
+    rows: readonly ProjectOverviewRow[],
+    lens: ProjectLens,
+    query: string,
+  ): readonly ProjectOverviewRow[] {
+    const normalizedQuery = query.trim().toLowerCase();
+    return rows.filter((row) => matchesLens(row, lens) && matchesSearch(row, normalizedQuery));
+  }
+
+  function matchesLens(row: ProjectOverviewRow, lens: ProjectLens): boolean {
+    if (lens === 'active') {
+      return row.state === 'active';
+    }
+    if (lens === 'archived') {
+      return row.state === 'archived';
+    }
+    if (lens === 'alerts') {
+      return row.alertTone !== 'neutral';
+    }
+    return true;
+  }
+
+  function matchesSearch(row: ProjectOverviewRow, normalizedQuery: string): boolean {
+    if (!normalizedQuery) {
+      return true;
+    }
+    return [
+      row.id,
+      row.name,
+      row.description,
+      row.state,
+      row.activeSessions,
+      row.activeWorkflowRuns,
+      row.policySummary,
+      row.alerts,
+    ].some((value) => value.toLowerCase().includes(normalizedQuery));
+  }
+
+  function toneClass(tone: 'success' | 'neutral' | 'warning' | 'danger'): string {
+    if (tone === 'success') {
+      return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+    }
+    if (tone === 'warning') {
+      return 'bg-amber-50 text-amber-700 ring-amber-200';
+    }
+    if (tone === 'danger') {
+      return 'bg-red-50 text-red-700 ring-red-200';
+    }
+    return 'bg-slate-100 text-slate-600 ring-slate-200';
   }
 </script>
 
 <div class="mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8" data-testid="projects-overview">
   <header class="flex flex-col gap-3 border-b border-admin-border pb-4 md:flex-row md:items-end md:justify-between">
     <div class="min-w-0">
-      <p class="m-0 text-xs font-semibold uppercase tracking-[0.14em] text-admin-muted">Resources</p>
+      <p class="m-0 text-xs font-semibold uppercase text-admin-muted">Resources</p>
       <h1 class="m-0 mt-1 text-2xl font-semibold text-admin-ink">Projects</h1>
     </div>
 
@@ -32,7 +111,7 @@
       class="inline-flex h-10 w-fit items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink shadow-sm hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
       type="button"
       onclick={refresh}
-      disabled={state.status === 'loading'}
+      disabled={loadState.status === 'loading'}
       data-testid="projects-refresh-button"
     >
       <RefreshCw size={16} strokeWidth={1.9} />
@@ -40,7 +119,7 @@
     </button>
   </header>
 
-  {#if state.status === 'loading'}
+  {#if loadState.status === 'loading'}
     <section
       class="flex min-h-64 items-center justify-center rounded-md border border-dashed border-admin-border bg-admin-panel text-sm text-admin-muted"
       aria-live="polite"
@@ -48,7 +127,7 @@
     >
       Loading projects...
     </section>
-  {:else if state.status === 'error'}
+  {:else if loadState.status === 'error'}
     <section
       class="flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-900"
       role="alert"
@@ -57,10 +136,10 @@
       <AlertTriangle class="mt-0.5 shrink-0" size={17} strokeWidth={1.9} />
       <div class="min-w-0">
         <p class="m-0 font-semibold">Project catalog unavailable</p>
-        <p class="m-0 mt-1 break-words text-red-800">{state.message}</p>
+        <p class="m-0 mt-1 break-words text-red-800">{loadState.message}</p>
       </div>
     </section>
-  {:else if state.projects.length === 0}
+  {:else if loadState.projects.length === 0}
     <section
       class="flex min-h-64 items-center justify-center rounded-md border border-dashed border-admin-border bg-admin-panel text-sm text-admin-muted"
       data-testid="projects-empty"
@@ -71,74 +150,125 @@
     <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Project metrics">
       {#each model.metrics as metric}
         <div class="rounded-md border border-admin-border bg-admin-panel p-4" data-testid={metric.testId}>
-          <p class="m-0 text-xs font-semibold uppercase tracking-[0.1em] text-admin-muted">{metric.label}</p>
+          <p class="m-0 text-xs font-semibold uppercase text-admin-muted">{metric.label}</p>
           <p class="m-0 mt-2 text-2xl font-semibold text-admin-ink">{metric.value}</p>
         </div>
       {/each}
     </section>
 
-    <section class="grid min-h-0 gap-5 xl:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.4fr)]">
-      <div class="min-w-0 rounded-md border border-admin-border bg-admin-panel" data-testid="projects-list">
-        <div class="border-b border-admin-border px-4 py-3">
+    <section class="min-h-0 rounded-md border border-admin-border bg-admin-panel" data-testid="projects-list">
+      <div class="flex flex-col gap-3 border-b border-admin-border px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div class="min-w-0">
           <h2 class="m-0 text-sm font-semibold text-admin-ink">Project catalog</h2>
+          <p class="m-0 mt-1 text-xs text-admin-muted">Governance scope, policy gates, usage, and quota signals.</p>
         </div>
-        <div class="max-h-[calc(100vh-260px)] min-h-64 overflow-y-auto">
-          {#each model.rows as row}
-            <a
-              class={`grid min-w-0 gap-2 border-b border-admin-border px-4 py-3 text-left last:border-b-0 ${
-                row.selected ? 'bg-[#eef2ff]' : 'hover:bg-admin-soft'
-              }`}
-              href={`/admin-new/projects?project=${encodeURIComponent(row.id)}`}
-              data-testid="projects-list-row"
-            >
-              <div class="flex min-w-0 items-center justify-between gap-3">
-                <span class="truncate text-sm font-semibold text-admin-ink">{row.name}</span>
-                <span
-                  class={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    row.state === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {row.state}
-                </span>
-              </div>
-              <p class="m-0 truncate text-xs text-admin-muted">{row.description}</p>
-              <div class="grid gap-2 text-xs text-admin-muted sm:grid-cols-2">
-                <span>Sessions: {row.activeSessions}</span>
-                <span>Runs: {row.activeWorkflowRuns}</span>
-                <span>Alerts: {row.alerts}</span>
-                <span class="truncate">{row.policySummary}</span>
-              </div>
-            </a>
-          {/each}
-        </div>
+        <span class="text-xs text-admin-muted" data-testid="projects-list-count">
+          {visibleRows.length} of {model.rows.length}
+        </span>
       </div>
 
-      <div class="min-w-0 rounded-md border border-admin-border bg-admin-panel" data-testid="projects-selected-detail">
-        {#if model.selected}
-          <div class="border-b border-admin-border px-4 py-4">
-            <p class="m-0 text-xs font-semibold uppercase tracking-[0.1em] text-admin-muted">Selected project</p>
-            <h2 class="m-0 mt-1 truncate text-xl font-semibold text-admin-ink">{model.selected.name}</h2>
-            {#if model.selected.description}
-              <p class="m-0 mt-1 text-sm text-admin-muted">{model.selected.description}</p>
-            {/if}
-          </div>
+      <div class="flex flex-col gap-0 border-b border-admin-border bg-admin-panel lg:flex-row lg:items-center lg:justify-between">
+        <div class="flex min-w-0 flex-wrap items-center gap-0 px-4">
+          {#each lensDefinitions as lens}
+            <button
+              class={`inline-flex h-10 items-center gap-2 border-b-2 px-3 text-sm font-medium ${
+                projectLens === lens.id
+                  ? 'border-admin-accent text-admin-ink'
+                  : 'border-transparent text-admin-muted hover:text-admin-ink'
+              }`}
+              type="button"
+              aria-pressed={projectLens === lens.id}
+              onclick={() => {
+                projectLens = lens.id;
+              }}
+              data-testid={`projects-lens-${lens.id}`}
+            >
+              {#if lens.showDot}
+                <span class="h-1.5 w-1.5 rounded-full bg-admin-success" aria-hidden="true"></span>
+              {/if}
+              <span>{lens.label}</span>
+              <span class="rounded border border-admin-border bg-admin-soft px-1.5 py-0.5 text-[11px] font-semibold text-admin-muted">
+                {lens.count}
+              </span>
+            </button>
+          {/each}
+        </div>
 
-          <div class="grid gap-5 p-4 lg:grid-cols-3">
-            {#each model.selectedSections as section}
-              <section class="min-w-0" aria-label={section.title}>
-                <h3 class="m-0 text-sm font-semibold text-admin-ink">{section.title}</h3>
-                <dl class="mt-3 grid gap-3">
-                  {#each section.rows as row}
+        <label class="mx-4 mb-3 flex h-9 min-w-0 items-center gap-2 rounded-md border border-admin-border px-3 text-sm text-admin-muted lg:mb-0 lg:w-[360px]">
+          <Search size={15} strokeWidth={1.8} aria-hidden="true" />
+          <span class="sr-only">Search projects</span>
+          <input
+            class="min-w-0 flex-1 border-0 bg-transparent text-sm text-admin-ink outline-none placeholder:text-admin-muted"
+            type="search"
+            placeholder="Project, state, policy, usage..."
+            bind:value={searchQuery}
+            data-testid="projects-search"
+          />
+        </label>
+      </div>
+
+      <div class="max-h-[calc(100vh-360px)] min-h-64 overflow-auto bg-admin-panel">
+        <table class="w-full min-w-[1120px] border-collapse">
+          <thead class="sticky top-0 z-10 bg-admin-soft">
+            <tr class="border-b border-admin-border">
+              <th class="px-4 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Project</th>
+              <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">State</th>
+              <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Activity</th>
+              <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Runtime</th>
+              <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Egress</th>
+              <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Storage</th>
+              <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Policy</th>
+              <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Alerts</th>
+              <th class="px-4 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#if visibleRows.length === 0}
+              <tr>
+                <td class="px-4 py-14 text-center text-sm text-admin-muted" colspan="9" data-testid="projects-filter-empty">
+                  No projects match the current filters.
+                </td>
+              </tr>
+            {:else}
+              {#each visibleRows as row}
+                <tr class="border-b border-admin-border last:border-b-0 hover:bg-admin-soft" data-testid="projects-list-row">
+                  <td class="w-[260px] px-4 py-3 align-middle">
                     <div class="min-w-0">
-                      <dt class="text-xs font-semibold uppercase tracking-[0.08em] text-admin-muted">{row.label}</dt>
-                      <dd class="m-0 mt-1 break-words text-sm text-admin-ink">{row.value}</dd>
+                      <p class="m-0 truncate text-sm font-semibold text-admin-ink">{row.name}</p>
+                      <p class="m-0 mt-1 truncate text-xs text-admin-muted">{row.description}</p>
+                      <p class="m-0 mt-1 truncate font-mono text-[11px] text-admin-muted">{row.id}</p>
                     </div>
-                  {/each}
-                </dl>
-              </section>
-            {/each}
-          </div>
-        {/if}
+                  </td>
+                  <td class="px-3 py-3 align-middle">
+                    <span class={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${toneClass(row.stateTone)}`}>
+                      {row.state}
+                    </span>
+                  </td>
+                  <td class="px-3 py-3 align-middle text-xs text-admin-muted">
+                    <div class="grid gap-1">
+                      <span><span class="font-semibold text-admin-ink">{row.activeSessions}</span> sessions</span>
+                      <span>{row.queuedSessions} queued</span>
+                      <span>{row.activeWorkflowRuns} runs</span>
+                      <span>{row.sessionCreations} created</span>
+                    </div>
+                  </td>
+                  <td class="px-3 py-3 align-middle font-mono text-xs text-admin-ink">{row.runtimeUsage}</td>
+                  <td class="px-3 py-3 align-middle font-mono text-xs text-admin-ink">{row.egressUsage}</td>
+                  <td class="px-3 py-3 align-middle font-mono text-xs text-admin-ink">{row.retainedStorage}</td>
+                  <td class="max-w-[220px] px-3 py-3 align-middle text-xs text-admin-muted">
+                    <span class="line-clamp-2">{row.policySummary}</span>
+                  </td>
+                  <td class="px-3 py-3 align-middle">
+                    <span class={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${toneClass(row.alertTone)}`}>
+                      {row.alerts}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 align-middle text-xs text-admin-muted">{row.updatedAt}</td>
+                </tr>
+              {/each}
+            {/if}
+          </tbody>
+        </table>
       </div>
     </section>
   {/if}

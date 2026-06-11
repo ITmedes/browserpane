@@ -32,11 +32,13 @@ and new `/admin-new/` app coexist.
 3. Confirm the Projects navigation item is highlighted under Resources.
 4. Confirm the overview shows loading, then either the project catalog or a
    clear catalog error.
-5. Confirm the list uses one-column selection and the selected project metadata
-   is shown beside or below it depending on viewport width.
-6. Use Refresh and confirm the catalog reloads without changing the current
+5. Confirm the catalog uses the concept-style table overview with project,
+   state, activity, runtime, egress, storage, policy, alert, and updated columns.
+6. Confirm project lens tabs and search filter the table without opening a
+   selected-project detail panel.
+7. Use Refresh and confirm the catalog reloads without changing the current
    `/admin/` application.
-7. Expire or clear the token and confirm the next project refresh redirects to
+8. Expire or clear the token and confirm the next project refresh redirects to
    Keycloak instead of silently failing.
 
 ## Session Workflow

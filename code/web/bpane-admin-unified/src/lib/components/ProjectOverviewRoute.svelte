@@ -28,7 +28,6 @@
       projectState = {
         status: 'ready',
         projects: response.projects,
-        selectedProjectId: new URL(window.location.href).searchParams.get('project'),
       };
     } catch (error) {
       projectState = {

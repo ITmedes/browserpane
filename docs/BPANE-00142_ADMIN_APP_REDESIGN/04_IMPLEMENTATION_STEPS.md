@@ -35,8 +35,9 @@ focused validation for the current step is accepted.
 1. Add `/admin-new/projects`.
 2. Use real read-only project data from `/api/v1/projects`.
 3. Show project scope, state, quotas, policy gates, usage counters, and alerts.
-4. Use the resource selection pattern: compact list plus selected-resource metadata.
-5. Use the new admin shell's Keycloak/OIDC token provider and global auth
+4. Use the concept sessions-table pattern for a read-only project catalog overview.
+5. Defer the selected-project detail view until the resource detail routes are introduced.
+6. Use the new admin shell's Keycloak/OIDC token provider and global auth
    failure handler.
 
 ## Step 3: Resource Foundation
