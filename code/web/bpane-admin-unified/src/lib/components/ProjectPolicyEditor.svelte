@@ -75,16 +75,22 @@
 <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="project-policy-editor">
   <div class="border-b border-admin-border pb-3">
     <h4 class="m-0 text-sm font-semibold text-admin-ink">Policy</h4>
-    <p class="m-0 mt-1 text-xs text-admin-muted">
+    <p class="m-0 mt-1 text-xs leading-5 text-admin-muted">
       Project policy controls live file capabilities, budget enforcement, and allowed resource sets.
     </p>
   </div>
 
   <div class="mt-4 grid gap-3 lg:grid-cols-2">
     {#each PROJECT_POLICY_BOOLEAN_FIELDS as field}
-      <label class="flex items-start gap-3 rounded-md border border-admin-border bg-admin-panel p-3 text-sm">
+      <label
+        class={`flex items-start gap-3 rounded-md border p-3 text-sm transition ${
+          draft[field.key]
+            ? 'border-admin-accent/50 bg-white shadow-sm'
+            : 'border-admin-border bg-admin-panel'
+        }`}
+      >
         <input
-          class="mt-1 h-4 w-4 rounded border-admin-border text-admin-accent focus:ring-admin-accent"
+          class="mt-1 h-4 w-4 rounded border-admin-border text-admin-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/30 disabled:cursor-not-allowed disabled:opacity-60"
           type="checkbox"
           checked={draft[field.key]}
           disabled={disabled}
@@ -102,7 +108,7 @@
   <label class="mt-4 grid gap-1 text-sm">
     <span class="font-medium text-admin-ink">Usage budget enforcement</span>
     <select
-      class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none focus:border-admin-accent"
+      class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
       value={draft.usageBudgetEnforcement}
       disabled={disabled}
       onchange={(event) => onDraftChange?.({ ...draft, usageBudgetEnforcement: selectValue(event) })}
@@ -128,15 +134,22 @@
     {/if}
 
     {#each PROJECT_POLICY_ALLOW_LIST_GROUPS as group}
-      <section class="min-w-0 rounded-md border border-admin-border bg-admin-panel p-3" data-testid={`project-policy-${group.testId}`}>
+      <section
+        class={`min-w-0 rounded-md border p-3 transition ${
+          restricted(group.restrictedKey)
+            ? 'border-admin-accent/50 bg-white shadow-sm'
+            : 'border-admin-border bg-admin-panel'
+        }`}
+        data-testid={`project-policy-${group.testId}`}
+      >
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div class="min-w-0">
             <h5 class="m-0 text-sm font-semibold text-admin-ink">{group.label}</h5>
             <p class="m-0 mt-1 text-xs leading-5 text-admin-muted">{group.description}</p>
           </div>
-          <label class="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-admin-ink">
+          <label class="inline-flex shrink-0 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-2.5 py-1.5 text-sm font-medium text-admin-ink">
             <input
-              class="h-4 w-4 rounded border-admin-border text-admin-accent focus:ring-admin-accent"
+              class="h-4 w-4 rounded border-admin-border text-admin-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/30 disabled:cursor-not-allowed disabled:opacity-60"
               type="checkbox"
               checked={restricted(group.restrictedKey)}
               disabled={disabled}
@@ -152,16 +165,22 @@
             Unrestricted. The API will persist an empty allow-list for this resource type.
           </p>
         {:else}
-          <div class="mt-3 max-h-48 overflow-y-auto rounded-md border border-admin-border" data-testid={`project-policy-${group.testId}-options`}>
+          <div class="mt-3 max-h-48 overflow-y-auto rounded-md border border-admin-border bg-admin-panel" data-testid={`project-policy-${group.testId}-options`}>
             {#if optionsFor(group).length === 0}
               <p class="m-0 px-3 py-3 text-sm text-admin-muted">
                 No selectable resources are available yet.
               </p>
             {:else}
               {#each optionsFor(group) as option}
-                <label class="flex items-start gap-3 border-b border-admin-border px-3 py-2 text-sm last:border-b-0">
+                <label
+                  class={`flex items-start gap-3 border-b border-admin-border px-3 py-2 text-sm transition last:border-b-0 ${
+                    selectedIds(group.selectedIdsKey).includes(option.id)
+                      ? 'bg-admin-soft'
+                      : 'bg-admin-panel hover:bg-admin-soft/70'
+                  }`}
+                >
                   <input
-                    class="mt-1 h-4 w-4 rounded border-admin-border text-admin-accent focus:ring-admin-accent"
+                    class="mt-1 h-4 w-4 rounded border-admin-border text-admin-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/30 disabled:cursor-not-allowed disabled:opacity-60"
                     type="checkbox"
                     checked={selectedIds(group.selectedIdsKey).includes(option.id)}
                     disabled={disabled}
