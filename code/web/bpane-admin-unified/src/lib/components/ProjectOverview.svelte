@@ -1,63 +1,26 @@
 <script lang="ts">
   import { AlertTriangle, RefreshCw } from '@lucide/svelte';
-  import type { ProjectActionState, ProjectDetailLoadState } from '$lib/projects/project-detail-state';
   import {
     buildProjectOverviewModel,
     type ProjectOverviewLoadState,
   } from '$lib/projects/project-overview-view-model';
-  import type { UpsertProjectRequest } from '$lib/projects/project-types';
   import ProjectCatalogTable from './ProjectCatalogTable.svelte';
-  import ProjectInspector from './ProjectInspector.svelte';
 
   type ProjectOverviewProps = {
     readonly state: ProjectOverviewLoadState;
-    readonly selectedProjectState?: ProjectDetailLoadState;
-    readonly projectActionState?: ProjectActionState;
     readonly onRefresh?: () => void | Promise<void>;
-    readonly onSelectProject?: (projectId: string) => void | Promise<void>;
-    readonly onRefreshSelectedProject?: () => void | Promise<void>;
-    readonly onRefreshSelectedUsage?: () => void | Promise<void>;
-    readonly onSaveProject?: (request: UpsertProjectRequest) => void | Promise<void>;
   };
 
   let {
     state: loadState,
-    selectedProjectState = { status: 'idle' },
-    projectActionState = { status: 'idle' },
     onRefresh,
-    onSelectProject,
-    onRefreshSelectedProject,
-    onRefreshSelectedUsage,
-    onSaveProject,
   }: ProjectOverviewProps = $props();
 
   const model = $derived(loadState.status === 'ready'
     ? buildProjectOverviewModel(loadState.projects)
     : null);
-  const selectedProjectId = $derived(selectedProjectState.status === 'ready'
-    ? selectedProjectState.project.id
-    : selectedProjectState.status === 'loading' || selectedProjectState.status === 'error'
-      ? selectedProjectState.projectId
-      : null);
-
   function refresh(): void {
     void onRefresh?.();
-  }
-
-  function selectProject(projectId: string): void {
-    void onSelectProject?.(projectId);
-  }
-
-  function refreshSelectedProject(): void {
-    void onRefreshSelectedProject?.();
-  }
-
-  function refreshSelectedUsage(): void {
-    void onRefreshSelectedUsage?.();
-  }
-
-  function saveProject(request: UpsertProjectRequest): void {
-    void onSaveProject?.(request);
   }
 </script>
 
@@ -117,19 +80,6 @@
       {/each}
     </section>
 
-    <section class="grid min-h-0 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
-      <ProjectCatalogTable
-        projects={loadState.projects}
-        {selectedProjectId}
-        onSelect={selectProject}
-      />
-      <ProjectInspector
-        state={selectedProjectState}
-        actionState={projectActionState}
-        onRefreshProject={refreshSelectedProject}
-        onRefreshUsage={refreshSelectedUsage}
-        onSaveProject={saveProject}
-      />
-    </section>
+    <ProjectCatalogTable projects={loadState.projects} />
   {/if}
 </div>

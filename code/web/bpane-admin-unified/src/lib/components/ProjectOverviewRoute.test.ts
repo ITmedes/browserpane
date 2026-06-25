@@ -1,4 +1,3 @@
-import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
@@ -33,58 +32,6 @@ describe('ProjectOverviewRoute', () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toEqual(new URL('http://localhost:3000/api/v1/projects'));
     expect(fetchImpl.mock.calls[0]?.[1]?.method).toBe('GET');
     expect(headers.get('authorization')).toBe('Bearer shell-token');
-  });
-
-  it('selects and saves an existing project through the authenticated API', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
-      const url = input.toString();
-      if (init?.method === 'PUT') {
-        return jsonResponse({
-          ...projectPayload(),
-          description: 'Updated support browser work',
-          labels: { team: 'support', env: 'prod' },
-        }, 200);
-      }
-      if (url.endsWith('/api/v1/projects/11111111-1111-4111-8111-111111111111')) {
-        return jsonResponse(projectPayload(), 200);
-      }
-      return jsonResponse(projectListPayload(), 200);
-    });
-    vi.stubGlobal('fetch', fetchImpl);
-    const target = renderComponent(ProjectOverviewRoute, {
-      authContext: authContext({ accessTokenProvider: async () => 'shell-token' }),
-    });
-
-    await vi.waitFor(() => {
-      expect(byTestId(target, 'projects-list').textContent).toContain('Support');
-    });
-    byTestId(target, 'projects-select-row').click();
-    await vi.waitFor(() => {
-      expect(byTestId(target, 'project-inspector').textContent).toContain('Edit project');
-    });
-
-    const description = byTestId(target, 'project-edit-description') as HTMLTextAreaElement;
-    description.value = 'Updated support browser work';
-    description.dispatchEvent(new Event('input', { bubbles: true }));
-    const labels = byTestId(target, 'project-edit-labels') as HTMLTextAreaElement;
-    labels.value = 'env=prod\nteam=support';
-    labels.dispatchEvent(new Event('input', { bubbles: true }));
-    await tick();
-    byTestId(target, 'project-edit-save').click();
-
-    await vi.waitFor(() => {
-      expect(byTestId(target, 'project-action-success').textContent).toContain('Project saved');
-    });
-    const putCall = fetchImpl.mock.calls.find((call) => call[1]?.method === 'PUT');
-    expect(putCall?.[0]).toEqual(new URL('http://localhost:3000/api/v1/projects/11111111-1111-4111-8111-111111111111'));
-    expect(JSON.parse(putCall?.[1]?.body as string)).toMatchObject({
-      name: 'Support',
-      description: 'Updated support browser work',
-      labels: { env: 'prod', team: 'support' },
-      quotas: {},
-      policy: expect.objectContaining({ allow_browser_uploads: true }),
-      state: 'active',
-    });
   });
 
   it('delegates authentication failures back to the shell', async () => {
