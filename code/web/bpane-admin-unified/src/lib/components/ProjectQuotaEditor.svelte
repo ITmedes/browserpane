@@ -5,6 +5,8 @@
     type ProjectEditDraft,
     type ProjectEditFieldErrors,
     type ProjectQuotaLimitDraftKey,
+    type ProjectQuotaPresetDefinition,
+    type ProjectRollingSessionCreationQuotaPresetDefinition,
   } from '$lib/projects/project-edit-view-model';
   import AdminMessage from './AdminMessage.svelte';
 
@@ -62,6 +64,49 @@
         value,
       },
     });
+  }
+
+  function applyQuotaPreset(key: ProjectQuotaLimitDraftKey, preset: ProjectQuotaPresetDefinition): void {
+    onDraftChange?.({
+      ...draft,
+      [key]: {
+        ...draft[key],
+        enabled: true,
+        value: preset.value,
+      },
+    });
+  }
+
+  function applyRollingSessionCreationPreset(preset: ProjectRollingSessionCreationQuotaPresetDefinition): void {
+    onDraftChange?.({
+      ...draft,
+      maxSessionCreationsPerWindow: {
+        ...draft.maxSessionCreationsPerWindow,
+        enabled: true,
+        value: preset.limitValue,
+      },
+      sessionCreationWindowSec: {
+        ...draft.sessionCreationWindowSec,
+        enabled: true,
+        value: preset.windowValue,
+      },
+    });
+  }
+
+  function isQuotaPresetSelected(key: ProjectQuotaLimitDraftKey, preset: ProjectQuotaPresetDefinition): boolean {
+    return draft[key].enabled && draft[key].value === preset.value;
+  }
+
+  function isRollingSessionCreationPresetSelected(preset: ProjectRollingSessionCreationQuotaPresetDefinition): boolean {
+    return rollingQuotaEnabled
+      && draft.maxSessionCreationsPerWindow.value === preset.limitValue
+      && draft.sessionCreationWindowSec.value === preset.windowValue;
+  }
+
+  function presetButtonClass(selected: boolean): string {
+    return selected
+      ? 'border-admin-accent bg-admin-accent text-white shadow-sm'
+      : 'border-admin-border bg-white text-admin-ink hover:border-admin-accent/50 hover:bg-admin-soft';
   }
 
   function inputChecked(event: Event): boolean {
@@ -132,6 +177,23 @@
             />
           {/if}
         </label>
+
+        {#if quota.presets?.length}
+          <div class="mt-3 flex flex-wrap gap-1.5" aria-label={`${quota.label} presets`}>
+            {#each quota.presets as preset}
+              <button
+                class={`inline-flex h-8 items-center justify-center rounded-md border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60 ${presetButtonClass(isQuotaPresetSelected(quota.key, preset))}`}
+                type="button"
+                disabled={disabled}
+                aria-pressed={isQuotaPresetSelected(quota.key, preset)}
+                onclick={() => applyQuotaPreset(quota.key, preset)}
+                data-testid={`project-quota-${quota.testId}-preset-${preset.testId}`}
+              >
+                {preset.label}
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
     {/each}
 
@@ -194,6 +256,21 @@
             data-testid="project-quota-session-creation-window-sec-value"
           />
         </label>
+      </div>
+
+      <div class="mt-3 flex flex-wrap gap-1.5" aria-label="Session creation rate presets">
+        {#each PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets as preset}
+          <button
+            class={`inline-flex h-8 items-center justify-center rounded-md border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60 ${presetButtonClass(isRollingSessionCreationPresetSelected(preset))}`}
+            type="button"
+            disabled={disabled}
+            aria-pressed={isRollingSessionCreationPresetSelected(preset)}
+            onclick={() => applyRollingSessionCreationPreset(preset)}
+            data-testid={`project-quota-${PROJECT_ROLLING_SESSION_CREATION_QUOTA.testId}-preset-${preset.testId}`}
+          >
+            {preset.label}
+          </button>
+        {/each}
       </div>
 
       {#if rollingQuotaErrors.length}
