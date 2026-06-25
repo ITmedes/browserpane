@@ -38,16 +38,16 @@ and new `/admin-new/` app coexist.
    route-level detail page.
 7. Click Details for an existing project and confirm navigation to
    `/admin-new/projects/{project_id}`.
-8. Confirm the detail view loads backend-backed metadata, usage, quotas, policy,
-   and alerts.
+8. Confirm the project settings surface loads backend-backed metadata, usage,
+   quotas, policy, and alerts.
 9. Edit name, description, labels, or state.
 10. Toggle one project policy checkbox, restrict Session Templates or Browser
    Contexts, and select one available resource.
-11. Enable one quota, enter a positive integer, save, and confirm the detail
-   view updates from the API response.
+11. Enable one quota, enter a positive integer, save, and confirm the settings
+   surface updates from the API response.
 12. Enter an invalid quota such as `0` and confirm validation blocks save.
-13. Confirm usage and generated alerts remain read-only evidence in the detail
-   view.
+13. Confirm usage and generated alerts remain read-only evidence in the same
+   settings surface.
 14. Refresh project detail and project usage from the detail route.
 15. Use the Projects back link and confirm the catalog overview remains
    list-only.

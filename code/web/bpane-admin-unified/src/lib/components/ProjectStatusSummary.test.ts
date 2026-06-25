@@ -1,30 +1,29 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { buildProjectInspectorModel } from './project-inspector-view-model';
-import type { ProjectResource } from './project-types';
+import { buildProjectInspectorModel } from '$lib/projects/project-inspector-view-model';
+import type { ProjectResource } from '$lib/projects/project-types';
+import {
+  byTestId,
+  cleanupRenderedComponents,
+  renderComponent,
+} from '$lib/test-utils/svelte-component-test';
+import ProjectStatusSummary from './ProjectStatusSummary.svelte';
 
-describe('buildProjectInspectorModel', () => {
-  it('formats header, identity, usage, and generated alerts', () => {
-    const model = buildProjectInspectorModel(project());
+afterEach(cleanupRenderedComponents);
 
-    expect(model).toMatchObject({
-      id: '11111111-1111-4111-8111-111111111111',
-      name: 'Support',
-      state: 'active',
-      stateTone: 'success',
+describe('ProjectStatusSummary', () => {
+  it('renders immutable identity, usage, and generated alerts', () => {
+    const target = renderComponent(ProjectStatusSummary, {
+      model: buildProjectInspectorModel(project()),
     });
-    expect(model.identityRows).toContainEqual({
-      label: 'Project ID',
-      value: '11111111-1111-4111-8111-111111111111',
-    });
-    expect(model.usageRows).toContainEqual({
-      label: 'Active sessions',
-      value: '1 / 4',
-    });
-    expect(model.alerts[0]).toMatchObject({
-      label: 'session_creations exceeded',
-      value: 'Session creation budget exceeded.',
-    });
+
+    const text = byTestId(target, 'project-status-summary').textContent ?? '';
+    expect(text).toContain('Project identity');
+    expect(text).toContain('Current usage');
+    expect(text).toContain('11111111-1111-4111-8111-111111111111');
+    expect(text).toContain('Active sessions');
+    expect(text).toContain('1 / 4');
+    expect(text).toContain('session_creations exceeded');
   });
 });
 

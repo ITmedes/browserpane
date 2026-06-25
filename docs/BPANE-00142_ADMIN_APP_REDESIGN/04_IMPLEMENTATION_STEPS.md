@@ -46,8 +46,9 @@ focused validation for the current step is accepted.
 8. Load selector catalogs from session templates, browser contexts, egress
    profiles, extensions, and file workspaces so project policy allow-lists use
    backend-backed options.
-9. Keep usage and generated alerts visible as read-only detail-view evidence;
-   alert thresholds are derived from quotas and enforcement mode by the API.
+9. Keep usage and generated alerts visible as read-only evidence inside the
+   same settings surface; alert thresholds are derived from quotas and
+   enforcement mode by the API.
 10. Use the new admin shell's Keycloak/OIDC token provider and global auth
    failure handler.
 

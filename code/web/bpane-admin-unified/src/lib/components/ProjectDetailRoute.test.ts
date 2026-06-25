@@ -90,7 +90,7 @@ describe('ProjectDetailRoute', () => {
     });
 
     await vi.waitFor(() => {
-      expect(byTestId(target, 'project-detail-route').textContent).toContain('Edit project');
+      expect(byTestId(target, 'project-detail-route').textContent).toContain('Project settings');
     });
     byTestId(target, 'project-refresh-usage').click();
     await vi.waitFor(() => {
