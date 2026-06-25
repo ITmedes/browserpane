@@ -96,6 +96,19 @@ describe('ProjectQuotaEditor', () => {
     );
   });
 
+  it('aligns slider ticks and legends to the same stop positions', () => {
+    const target = renderComponent(ProjectQuotaEditor, {
+      draft: createProjectEditDraft(project()),
+    });
+
+    expect((byTestId(target, 'project-quota-max-runtime-usage-ms-tick-1h') as HTMLElement).style.left).toBe('0%');
+    expect((byTestId(target, 'project-quota-max-runtime-usage-ms-legend-1h') as HTMLElement).style.left).toBe('0%');
+    expect((byTestId(target, 'project-quota-max-runtime-usage-ms-tick-4h') as HTMLElement).style.left).toBe('50%');
+    expect((byTestId(target, 'project-quota-max-runtime-usage-ms-legend-4h') as HTMLElement).style.left).toBe('50%');
+    expect((byTestId(target, 'project-quota-max-runtime-usage-ms-tick-8h') as HTMLElement).style.left).toBe('100%');
+    expect((byTestId(target, 'project-quota-max-runtime-usage-ms-legend-8h') as HTMLElement).style.left).toBe('100%');
+  });
+
   it('renders quota errors inside the affected quota card', () => {
     const draft = createProjectEditDraft(project());
     const target = renderComponent(ProjectQuotaEditor, {
