@@ -1,5 +1,5 @@
 import { tick } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import type { ProjectResource } from '$lib/projects/project-types';
 import {
@@ -12,22 +12,19 @@ import ProjectCatalogTable from './ProjectCatalogTable.svelte';
 afterEach(cleanupRenderedComponents);
 
 describe('ProjectCatalogTable', () => {
-  it('renders rows, filters locally, and selects a project', async () => {
-    const onSelect = vi.fn();
+  it('renders rows, filters locally, and links to project details', async () => {
     const target = renderComponent(ProjectCatalogTable, {
       projects: [
         project({ id: '11111111-1111-4111-8111-111111111111', name: 'Support' }),
         project({ id: '22222222-2222-4222-8222-222222222222', name: 'Archive', state: 'archived' }),
       ],
-      selectedProjectId: '22222222-2222-4222-8222-222222222222',
-      onSelect,
     });
 
     expect(byTestId(target, 'projects-list-count').textContent).toContain('2 of 2');
     expect(target.querySelectorAll('[data-testid="projects-list-row"]')).toHaveLength(2);
-
-    (target.querySelector('[data-testid="projects-select-row"]') as HTMLButtonElement).click();
-    expect(onSelect).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+    expect((target.querySelector('[data-testid="projects-detail-link"]') as HTMLAnchorElement).href).toBe(
+      'http://localhost:3000/admin-new/projects/11111111-1111-4111-8111-111111111111',
+    );
 
     const search = byTestId(target, 'projects-search') as HTMLInputElement;
     search.value = 'missing';

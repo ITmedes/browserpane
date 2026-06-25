@@ -18,14 +18,10 @@
 
   type ProjectCatalogTableProps = {
     readonly projects: readonly ProjectResource[];
-    readonly selectedProjectId?: string | null;
-    readonly onSelect?: (projectId: string) => void;
   };
 
   let {
     projects,
-    selectedProjectId = null,
-    onSelect,
   }: ProjectCatalogTableProps = $props();
   let projectLens = $state<ProjectLens>('all');
   let searchQuery = $state('');
@@ -86,8 +82,8 @@
     ].some((value) => value.toLowerCase().includes(normalizedQuery));
   }
 
-  function selectProject(projectId: string): void {
-    onSelect?.(projectId);
+  function detailHref(projectId: string): string {
+    return `/admin-new/projects/${encodeURIComponent(projectId)}`;
   }
 </script>
 
@@ -154,36 +150,26 @@
           <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Storage</th>
           <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Policy</th>
           <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Alerts</th>
-          <th class="px-4 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Updated</th>
+          <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Updated</th>
+          <th class="px-4 py-2 text-right text-xs font-bold uppercase text-admin-muted" scope="col">Actions</th>
         </tr>
       </thead>
       <tbody>
         {#if visibleRows.length === 0}
           <tr>
-            <td class="px-4 py-14 text-center text-sm text-admin-muted" colspan="9" data-testid="projects-filter-empty">
+            <td class="px-4 py-14 text-center text-sm text-admin-muted" colspan="10" data-testid="projects-filter-empty">
               No projects match the current filters.
             </td>
           </tr>
         {:else}
           {#each visibleRows as row}
-            <tr
-              class={`border-b border-admin-border last:border-b-0 hover:bg-admin-soft ${
-                row.id === selectedProjectId ? 'bg-[#eef2ff]' : ''
-              }`}
-              data-testid="projects-list-row"
-            >
+            <tr class="border-b border-admin-border last:border-b-0 hover:bg-admin-soft" data-testid="projects-list-row">
               <td class="w-[260px] px-4 py-3 align-middle">
-                <button
-                  class="grid min-w-0 text-left"
-                  type="button"
-                  onclick={() => selectProject(row.id)}
-                  data-testid="projects-select-row"
-                  aria-current={row.id === selectedProjectId ? 'true' : undefined}
-                >
+                <div class="grid min-w-0 text-left">
                   <span class="truncate text-sm font-semibold text-admin-ink">{row.name}</span>
                   <span class="mt-1 truncate text-xs text-admin-muted">{row.description}</span>
                   <span class="mt-1 truncate font-mono text-[11px] text-admin-muted">{row.id}</span>
-                </button>
+                </div>
               </td>
               <td class="px-3 py-3 align-middle">
                 <span class={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${projectToneClass(row.stateTone)}`}>
@@ -209,7 +195,16 @@
                   {row.alerts}
                 </span>
               </td>
-              <td class="px-4 py-3 align-middle text-xs text-admin-muted">{row.updatedAt}</td>
+              <td class="px-3 py-3 align-middle text-xs text-admin-muted">{row.updatedAt}</td>
+              <td class="px-4 py-3 align-middle text-right">
+                <a
+                  class="inline-flex h-8 items-center rounded-md border border-admin-border bg-admin-panel px-3 text-xs font-semibold text-admin-ink hover:bg-admin-soft"
+                  href={detailHref(row.id)}
+                  data-testid="projects-detail-link"
+                >
+                  Details
+                </a>
+              </td>
             </tr>
           {/each}
         {/if}
