@@ -144,6 +144,8 @@ const BUDGET_ENFORCEMENT_VALUES = [
   'block_session_creation',
 ] satisfies readonly ProjectUsageBudgetEnforcement[];
 
+const EMPTY_QUOTA_DRAFT = { enabled: false, value: '' } satisfies ProjectQuotaLimitDraft;
+
 export const PROJECT_QUOTA_LIMITS = [
   {
     key: 'maxActiveSessions',
@@ -306,6 +308,38 @@ export const PROJECT_POLICY_ALLOW_LIST_GROUPS = [
   },
 ] satisfies readonly ProjectPolicyAllowListGroup[];
 
+export function createNewProjectEditDraft(): ProjectEditDraft {
+  return {
+    name: '',
+    description: '',
+    labelsText: '',
+    state: 'active',
+    allowBrowserUploads: true,
+    allowBrowserDownloads: true,
+    allowSessionFileBindings: true,
+    allowManualRecordings: true,
+    usageBudgetEnforcement: 'warning_only',
+    restrictSessionTemplates: false,
+    allowedSessionTemplateIds: [],
+    restrictBrowserContexts: false,
+    allowedBrowserContextIds: [],
+    restrictEgressProfiles: false,
+    allowedEgressProfileIds: [],
+    restrictExtensions: false,
+    allowedExtensionIds: [],
+    restrictFileWorkspaces: false,
+    allowedFileWorkspaceIds: [],
+    maxActiveSessions: { ...EMPTY_QUOTA_DRAFT },
+    maxActiveWorkflowRuns: { ...EMPTY_QUOTA_DRAFT },
+    maxRetainedStorageBytes: { ...EMPTY_QUOTA_DRAFT },
+    maxSessionCreations: { ...EMPTY_QUOTA_DRAFT },
+    maxSessionCreationsPerWindow: { ...EMPTY_QUOTA_DRAFT },
+    sessionCreationWindowSec: { ...EMPTY_QUOTA_DRAFT },
+    maxRuntimeUsageMs: { ...EMPTY_QUOTA_DRAFT },
+    maxEgressTotalBytes: { ...EMPTY_QUOTA_DRAFT },
+  };
+}
+
 export function createProjectEditDraft(project: ProjectResource): ProjectEditDraft {
   const { policy, quotas } = project;
   return {
@@ -339,6 +373,10 @@ export function createProjectEditDraft(project: ProjectResource): ProjectEditDra
   };
 }
 
+export function hasNewProjectEditChanges(draft: ProjectEditDraft): boolean {
+  return JSON.stringify(draft) !== JSON.stringify(createNewProjectEditDraft());
+}
+
 export function hasProjectEditChanges(project: ProjectResource, draft: ProjectEditDraft): boolean {
   const validation = validateProjectEdit(project, draft);
   if (!validation.request) {
@@ -348,7 +386,7 @@ export function hasProjectEditChanges(project: ProjectResource, draft: ProjectEd
   return JSON.stringify(validation.request) !== JSON.stringify(currentValidation.request);
 }
 
-export function validateProjectEdit(project: ProjectResource, draft: ProjectEditDraft): ProjectEditValidation {
+export function validateProjectEdit(project: ProjectResource | null, draft: ProjectEditDraft): ProjectEditValidation {
   const errors: string[] = [];
   const fieldErrors: Partial<Record<ProjectEditValidationField, string[]>> = {};
   const addError = (field: ProjectEditValidationField, message: string): void => {

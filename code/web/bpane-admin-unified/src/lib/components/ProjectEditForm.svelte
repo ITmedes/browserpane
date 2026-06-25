@@ -1,6 +1,8 @@
 <script lang="ts">
   import {
     createProjectEditDraft,
+    createNewProjectEditDraft,
+    hasNewProjectEditChanges,
     hasProjectEditChanges,
     validateProjectEdit,
     type ProjectEditDraft,
@@ -13,8 +15,11 @@
   import ProjectQuotaEditor from './ProjectQuotaEditor.svelte';
   import ProjectStatusSummary from './ProjectStatusSummary.svelte';
 
+  type ProjectEditFormMode = 'edit' | 'create';
+
   type ProjectEditFormProps = {
-    readonly project: ProjectResource;
+    readonly project?: ProjectResource;
+    readonly mode?: ProjectEditFormMode;
     readonly disabled?: boolean;
     readonly policyOptionsState?: ProjectPolicyOptionsLoadState;
     readonly onSave?: (request: UpsertProjectRequest) => void | Promise<void>;
@@ -22,25 +27,44 @@
 
   let {
     project,
+    mode = project ? 'edit' : 'create',
     disabled = false,
     policyOptionsState = { status: 'idle' },
     onSave,
   }: ProjectEditFormProps = $props();
   // svelte-ignore state_referenced_locally
-  let draft = $state<ProjectEditDraft>(createProjectEditDraft(project));
+  let draft = $state<ProjectEditDraft>(initialDraft());
 
-  const validation = $derived(validateProjectEdit(project, draft));
-  const changed = $derived(hasProjectEditChanges(project, draft));
-  const statusModel = $derived(buildProjectInspectorModel(project));
-  const changeStatusLabel = $derived(disabled ? 'Read-only access' : changed ? 'Unsaved changes' : 'No changes');
+  const validation = $derived(validateProjectEdit(project ?? null, draft));
+  const createMode = $derived(mode === 'create');
+  const changed = $derived(createMode ? hasNewProjectEditChanges(draft) : project ? hasProjectEditChanges(project, draft) : false);
+  const statusModel = $derived(project ? buildProjectInspectorModel(project) : null);
+  const title = $derived(createMode ? 'New project settings' : 'Project settings');
+  const description = $derived(createMode
+    ? 'Define metadata, policy, resource allow-lists, and quotas before creating the project.'
+    : 'Review current status and update metadata, policy, resource allow-lists, and quotas.');
+  const changeStatusLabel = $derived(disabled
+    ? 'Read-only access'
+    : createMode
+      ? validation.valid
+        ? 'Ready to create'
+        : 'Project draft'
+      : changed
+        ? 'Unsaved changes'
+        : 'No changes');
   const changeStatusClass = $derived(disabled
     ? 'border-admin-border bg-admin-soft text-admin-muted'
-    : changed
+    : createMode
+      ? validation.valid
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : 'border-amber-200 bg-amber-50 text-amber-900'
+      : changed
       ? 'border-amber-200 bg-amber-50 text-amber-900'
       : 'border-emerald-200 bg-emerald-50 text-emerald-800');
+  const saveLabel = $derived(createMode ? 'Create project' : 'Save changes');
 
   function reset(): void {
-    draft = createProjectEditDraft(project);
+    draft = initialDraft();
   }
 
   function updateDraft(nextDraft: ProjectEditDraft): void {
@@ -53,14 +77,18 @@
     }
     void onSave?.(validation.request);
   }
+
+  function initialDraft(): ProjectEditDraft {
+    return project ? createProjectEditDraft(project) : createNewProjectEditDraft();
+  }
 </script>
 
 <section class="rounded-md border border-admin-border bg-admin-panel p-4 sm:p-5" data-testid="project-edit-form">
   <div class="flex flex-col gap-3 border-b border-admin-border pb-4 lg:flex-row lg:items-start lg:justify-between">
     <div class="min-w-0">
-      <h3 class="m-0 text-base font-semibold text-admin-ink">Project settings</h3>
+      <h3 class="m-0 text-base font-semibold text-admin-ink">{title}</h3>
       <p class="m-0 mt-1 text-sm leading-6 text-admin-muted">
-        Review current status and update metadata, policy, resource allow-lists, and quotas.
+        {description}
       </p>
     </div>
     <span class={`inline-flex w-fit shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${changeStatusClass}`}>
@@ -69,7 +97,9 @@
   </div>
 
   <div class="mt-5 grid gap-4">
-    <ProjectStatusSummary model={statusModel} />
+    {#if statusModel}
+      <ProjectStatusSummary model={statusModel} />
+    {/if}
 
     <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="project-metadata-editor">
       <div class="border-b border-admin-border pb-3">
@@ -179,7 +209,7 @@
       disabled={disabled || !changed || !validation.valid}
       data-testid="project-edit-save"
     >
-      Save changes
+      {saveLabel}
     </button>
   </div>
 </section>
