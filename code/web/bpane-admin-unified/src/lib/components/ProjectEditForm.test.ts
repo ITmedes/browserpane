@@ -1,7 +1,7 @@
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { ProjectResource } from '$lib/projects/project-types';
+import type { ProjectPolicyOptions, ProjectResource } from '$lib/projects/project-types';
 import {
   byTestId,
   cleanupRenderedComponents,
@@ -30,9 +30,48 @@ describe('ProjectEditForm', () => {
       name: 'Support',
       description: 'Updated support project',
       labels: { env: 'prod', team: 'support' },
-      quotas: { max_active_sessions: 4 },
+      quotas: expect.objectContaining({ max_active_sessions: 4 }),
       policy: expect.objectContaining({ allow_browser_uploads: true }),
       state: 'active',
+    }));
+  });
+
+  it('saves edited policy allow-lists and quota limits', async () => {
+    const onSave = vi.fn();
+    const target = renderComponent(ProjectEditForm, {
+      project: project(),
+      policyOptionsState: { status: 'ready', options: options() },
+      onSave,
+    });
+
+    setCheckbox(byTestId(target, 'project-policy-browser-uploads'), false);
+    setSelectValue(byTestId(target, 'project-policy-budget-enforcement'), 'block_session_creation');
+    setCheckbox(byTestId(target, 'project-policy-session-templates-restrict'), true);
+    setCheckbox(byTestId(target, 'project-policy-browser-contexts-restrict'), true);
+    await tick();
+    setCheckbox(policyOption(target, 'session-templates', 'template-support'), true);
+    setCheckbox(policyOption(target, 'browser-contexts', '22222222-2222-4222-8222-222222222222'), true);
+    setInputValue(byTestId(target, 'project-quota-max-active-sessions-value'), '6');
+    setCheckbox(byTestId(target, 'project-quota-max-session-creations-per-window-enabled'), true);
+    setInputValue(byTestId(target, 'project-quota-max-session-creations-per-window-value'), '10');
+    setCheckbox(byTestId(target, 'project-quota-session-creation-window-sec-enabled'), true);
+    setInputValue(byTestId(target, 'project-quota-session-creation-window-sec-value'), '3600');
+    await tick();
+
+    byTestId(target, 'project-edit-save').click();
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      quotas: expect.objectContaining({
+        max_active_sessions: 6,
+        max_session_creations_per_window: 10,
+        session_creation_window_sec: 3600,
+      }),
+      policy: expect.objectContaining({
+        allowed_session_template_ids: ['template-support'],
+        allowed_browser_context_ids: ['22222222-2222-4222-8222-222222222222'],
+        allow_browser_uploads: false,
+        usage_budget_enforcement: 'block_session_creation',
+      }),
     }));
   });
 
@@ -54,6 +93,44 @@ describe('ProjectEditForm', () => {
 function setInputValue(element: Element, value: string): void {
   (element as HTMLInputElement | HTMLTextAreaElement).value = value;
   element.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setCheckbox(element: Element, checked: boolean): void {
+  (element as HTMLInputElement).checked = checked;
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function setSelectValue(element: Element, value: string): void {
+  (element as HTMLSelectElement).value = value;
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function policyOption(target: ParentNode, group: string, optionId: string): HTMLElement {
+  const option = target.querySelector(`[data-testid="project-policy-${group}-option"][data-option-id="${optionId}"]`);
+  expect(option).toBeInstanceOf(HTMLElement);
+  return option as HTMLElement;
+}
+
+function options(): ProjectPolicyOptions {
+  return {
+    sessionTemplates: [{
+      id: 'template-support',
+      name: 'Support Browser',
+      description: 'Approved template',
+      state: 'v1',
+      scope: null,
+    }],
+    browserContexts: [{
+      id: '22222222-2222-4222-8222-222222222222',
+      name: 'Support Context',
+      description: null,
+      state: 'ready',
+      scope: 'owner scoped',
+    }],
+    egressProfiles: [],
+    extensions: [],
+    fileWorkspaces: [],
+  };
 }
 
 function project(): ProjectResource {

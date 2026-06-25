@@ -4,7 +4,11 @@
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import ProjectInspector from '$lib/components/ProjectInspector.svelte';
   import { ProjectCatalogClient } from '$lib/projects/project-client';
-  import type { ProjectActionState, ProjectDetailLoadState } from '$lib/projects/project-detail-state';
+  import type {
+    ProjectActionState,
+    ProjectDetailLoadState,
+    ProjectPolicyOptionsLoadState,
+  } from '$lib/projects/project-detail-state';
   import type { ProjectResource, ProjectUsageResource, UpsertProjectRequest } from '$lib/projects/project-types';
 
   type ProjectDetailRouteProps = {
@@ -14,6 +18,7 @@
   let { authContext }: ProjectDetailRouteProps = $props();
   let projectState = $state<ProjectDetailLoadState>({ status: 'idle' });
   let projectActionState = $state<ProjectActionState>({ status: 'idle' });
+  let policyOptionsState = $state<ProjectPolicyOptionsLoadState>({ status: 'idle' });
 
   onMount(() => {
     const projectId = currentProjectId();
@@ -26,6 +31,7 @@
       return;
     }
     void loadProject(projectId);
+    void loadPolicyOptions();
   });
 
   function client(): ProjectCatalogClient {
@@ -47,6 +53,19 @@
         status: 'error',
         projectId,
         message: error instanceof Error ? error.message : 'Unexpected project detail error.',
+      };
+    }
+  }
+
+  async function loadPolicyOptions(): Promise<void> {
+    policyOptionsState = { status: 'loading' };
+    try {
+      const options = await client().listProjectPolicyOptions();
+      policyOptionsState = { status: 'ready', options };
+    } catch (error) {
+      policyOptionsState = {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Project resource selector load failed.',
       };
     }
   }
@@ -160,6 +179,7 @@
     <ProjectInspector
       state={projectState}
       actionState={projectActionState}
+      {policyOptionsState}
       onRefreshProject={refreshProject}
       onRefreshUsage={refreshUsage}
       onSaveProject={saveProject}

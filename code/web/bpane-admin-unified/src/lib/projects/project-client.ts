@@ -1,5 +1,7 @@
 import type {
   ProjectListResponse,
+  ProjectPolicyOption,
+  ProjectPolicyOptions,
   ProjectPolicy,
   ProjectQuotas,
   ProjectResource,
@@ -107,6 +109,34 @@ export class ProjectCatalogClient {
     );
 
     return toProjectUsageResource(await response.json(), projectId);
+  }
+
+  async listProjectPolicyOptions(): Promise<ProjectPolicyOptions> {
+    const [sessionTemplates, browserContexts, egressProfiles, extensions, fileWorkspaces] = await Promise.all([
+      this.#listPolicyOptions('/api/v1/session-templates', 'templates', 'session template'),
+      this.#listPolicyOptions('/api/v1/browser-contexts', 'contexts', 'browser context'),
+      this.#listPolicyOptions('/api/v1/egress-profiles', 'profiles', 'egress profile'),
+      this.#listPolicyOptions('/api/v1/extensions', 'extensions', 'extension'),
+      this.#listPolicyOptions('/api/v1/file-workspaces', 'workspaces', 'file workspace'),
+    ]);
+
+    return {
+      sessionTemplates,
+      browserContexts,
+      egressProfiles,
+      extensions,
+      fileWorkspaces,
+    };
+  }
+
+  async #listPolicyOptions(pathname: string, collectionKey: string, label: string): Promise<readonly ProjectPolicyOption[]> {
+    const response = await this.#request(new URL(pathname, this.#baseUrl), {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+      },
+    });
+    return toProjectPolicyOptionList(await response.json(), collectionKey, label);
   }
 
   async #request(input: URL, init: RequestInit): Promise<Response> {
@@ -219,6 +249,17 @@ export function toProjectUsageResource(value: unknown, fallbackProjectId: string
   };
 }
 
+export function toProjectPolicyOptionList(
+  payload: unknown,
+  collectionKey: string,
+  label: string,
+): readonly ProjectPolicyOption[] {
+  const object = expectRecord(payload, `${label} list response`);
+  return expectArray(object[collectionKey], `${label} list ${collectionKey}`).map((entry) =>
+    toProjectPolicyOption(entry, label),
+  );
+}
+
 function toProjectUsageAlert(value: unknown): ProjectUsageAlertResource {
   const object = expectRecord(value, 'project usage alert');
   return {
@@ -229,6 +270,53 @@ function toProjectUsageAlert(value: unknown): ProjectUsageAlertResource {
     threshold_percent: expectNumber(object.threshold_percent, 'project usage alert threshold_percent'),
     message: expectString(object.message, 'project usage alert message'),
   };
+}
+
+function toProjectPolicyOption(value: unknown, label: string): ProjectPolicyOption {
+  const object = expectRecord(value, label);
+  return {
+    id: expectString(object.id, `${label} id`),
+    name: expectString(object.name, `${label} name`),
+    description: optionalString(object.description, `${label} description`) ?? null,
+    state: optionState(object),
+    scope: optionScope(object),
+  };
+}
+
+function optionState(object: Record<string, unknown>): string | null {
+  const enabled = optionalBoolean(object.enabled, 'policy option enabled');
+  if (enabled !== undefined) {
+    return enabled ? 'enabled' : 'disabled';
+  }
+  const state = optionalString(object.state, 'policy option state');
+  if (state) {
+    return state;
+  }
+  const persistenceMode = optionalString(object.persistence_mode, 'policy option persistence_mode');
+  if (persistenceMode) {
+    return persistenceMode;
+  }
+  const version = optionalNumber(object.version, 'policy option version');
+  if (version !== undefined) {
+    return `v${version}`;
+  }
+  return null;
+}
+
+function optionScope(object: Record<string, unknown>): string | null {
+  const project = object.project;
+  if (project && typeof project === 'object' && !Array.isArray(project)) {
+    const projectObject = project as Record<string, unknown>;
+    const projectName = optionalString(projectObject.name, 'policy option project name');
+    if (projectName) {
+      return `project ${projectName}`;
+    }
+  }
+  const projectId = optionalString(object.project_id, 'policy option project_id');
+  if (projectId) {
+    return `project ${projectId}`;
+  }
+  return 'owner scoped';
 }
 
 function expectRecord(value: unknown, label: string): Record<string, unknown> {

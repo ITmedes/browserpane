@@ -5,17 +5,22 @@
     validateProjectEdit,
     type ProjectEditDraft,
   } from '$lib/projects/project-edit-view-model';
+  import type { ProjectPolicyOptionsLoadState } from '$lib/projects/project-detail-state';
   import type { ProjectResource, UpsertProjectRequest } from '$lib/projects/project-types';
+  import ProjectPolicyEditor from './ProjectPolicyEditor.svelte';
+  import ProjectQuotaEditor from './ProjectQuotaEditor.svelte';
 
   type ProjectEditFormProps = {
     readonly project: ProjectResource;
     readonly disabled?: boolean;
+    readonly policyOptionsState?: ProjectPolicyOptionsLoadState;
     readonly onSave?: (request: UpsertProjectRequest) => void | Promise<void>;
   };
 
   let {
     project,
     disabled = false,
+    policyOptionsState = { status: 'idle' },
     onSave,
   }: ProjectEditFormProps = $props();
   // svelte-ignore state_referenced_locally
@@ -26,6 +31,10 @@
 
   function reset(): void {
     draft = createProjectEditDraft(project);
+  }
+
+  function updateDraft(nextDraft: ProjectEditDraft): void {
+    draft = nextDraft;
   }
 
   function save(): void {
@@ -39,7 +48,7 @@
 <section class="rounded-md border border-admin-border bg-admin-panel p-4" data-testid="project-edit-form">
   <div class="flex flex-col gap-1 border-b border-admin-border pb-3">
     <h3 class="m-0 text-sm font-semibold text-admin-ink">Edit project</h3>
-    <p class="m-0 text-xs text-admin-muted">Safe metadata fields only. Quotas and policy remain unchanged.</p>
+    <p class="m-0 text-xs text-admin-muted">Update metadata, project policy, resource allow-lists, and quotas.</p>
   </div>
 
   <div class="mt-4 grid gap-4">
@@ -88,6 +97,19 @@
       ></textarea>
       <span class="text-xs text-admin-muted">One `key=value` label per line.</span>
     </label>
+
+    <ProjectPolicyEditor
+      {draft}
+      {disabled}
+      {policyOptionsState}
+      onDraftChange={updateDraft}
+    />
+
+    <ProjectQuotaEditor
+      {draft}
+      {disabled}
+      onDraftChange={updateDraft}
+    />
   </div>
 
   {#if validation.errors.length > 0}

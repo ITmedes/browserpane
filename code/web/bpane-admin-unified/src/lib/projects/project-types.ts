@@ -2,6 +2,22 @@ export type ProjectState = 'active' | 'archived';
 
 export type ProjectUsageBudgetEnforcement = 'warning_only' | 'block_session_creation';
 
+export type ProjectPolicyOption = {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly state: string | null;
+  readonly scope: string | null;
+};
+
+export type ProjectPolicyOptions = {
+  readonly sessionTemplates: readonly ProjectPolicyOption[];
+  readonly browserContexts: readonly ProjectPolicyOption[];
+  readonly egressProfiles: readonly ProjectPolicyOption[];
+  readonly extensions: readonly ProjectPolicyOption[];
+  readonly fileWorkspaces: readonly ProjectPolicyOption[];
+};
+
 export type ProjectQuotas = {
   readonly max_active_sessions?: number | null;
   readonly max_active_workflow_runs?: number | null;

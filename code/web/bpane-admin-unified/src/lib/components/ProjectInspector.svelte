@@ -1,6 +1,10 @@
 <script lang="ts">
   import { AlertTriangle, Copy, RefreshCw } from '@lucide/svelte';
-  import type { ProjectActionState, ProjectDetailLoadState } from '$lib/projects/project-detail-state';
+  import type {
+    ProjectActionState,
+    ProjectDetailLoadState,
+    ProjectPolicyOptionsLoadState,
+  } from '$lib/projects/project-detail-state';
   import { buildProjectInspectorModel } from '$lib/projects/project-inspector-view-model';
   import type { UpsertProjectRequest } from '$lib/projects/project-types';
   import { projectToneClass } from '$lib/projects/project-ui';
@@ -9,6 +13,7 @@
   type ProjectInspectorProps = {
     readonly state: ProjectDetailLoadState;
     readonly actionState?: ProjectActionState;
+    readonly policyOptionsState?: ProjectPolicyOptionsLoadState;
     readonly onRefreshProject?: () => void | Promise<void>;
     readonly onRefreshUsage?: () => void | Promise<void>;
     readonly onSaveProject?: (request: UpsertProjectRequest) => void | Promise<void>;
@@ -17,6 +22,7 @@
   let {
     state,
     actionState = { status: 'idle' },
+    policyOptionsState = { status: 'idle' },
     onRefreshProject,
     onRefreshUsage,
     onSaveProject,
@@ -45,7 +51,7 @@
 <aside class="min-w-0 rounded-md border border-admin-border bg-admin-panel" data-testid="project-inspector">
   {#if state.status === 'idle'}
     <div class="flex min-h-64 items-center justify-center p-6 text-center text-sm text-admin-muted" data-testid="project-inspector-idle">
-      Select a project to inspect and edit existing metadata.
+      Select a project to inspect and edit.
     </div>
   {:else if state.status === 'loading'}
     <div class="flex min-h-64 items-center justify-center p-6 text-sm text-admin-muted" data-testid="project-inspector-loading">
@@ -123,13 +129,18 @@
 
     <div class="grid gap-4 p-4">
       {#key `${state.project.id}:${state.project.updated_at}`}
-        <ProjectEditForm project={state.project} disabled={busy} onSave={saveProject} />
+        <ProjectEditForm
+          project={state.project}
+          disabled={busy}
+          {policyOptionsState}
+          onSave={saveProject}
+        />
       {/key}
 
       <section class="rounded-md border border-admin-border bg-admin-panel p-4" data-testid="project-readonly-details">
         <div class="border-b border-admin-border pb-3">
           <h3 class="m-0 text-sm font-semibold text-admin-ink">Read-only project evidence</h3>
-          <p class="m-0 mt-1 text-xs text-admin-muted">Quotas, policy, usage, and alerts are visible here but not edited in this slice.</p>
+          <p class="m-0 mt-1 text-xs text-admin-muted">Current metadata, usage, policy, quotas, and generated alerts after the latest refresh.</p>
         </div>
 
         <div class="mt-4 grid gap-5 xl:grid-cols-2">

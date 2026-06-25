@@ -40,11 +40,16 @@ and new `/admin-new/` app coexist.
    `/admin-new/projects/{project_id}`.
 8. Confirm the detail view loads backend-backed metadata, usage, quotas, policy,
    and alerts.
-9. Edit name, description, labels, or state, save, and confirm the detail view
-   updates from the API response.
-10. Confirm quota and policy data remain read-only in this slice.
-11. Refresh project detail and project usage from the detail route.
-12. Use the Projects back link and confirm the catalog overview remains
+9. Edit name, description, labels, or state.
+10. Toggle one project policy checkbox, restrict Session Templates or Browser
+   Contexts, and select one available resource.
+11. Enable one quota, enter a positive integer, save, and confirm the detail
+   view updates from the API response.
+12. Enter an invalid quota such as `0` and confirm validation blocks save.
+13. Confirm usage and generated alerts remain read-only evidence in the detail
+   view.
+14. Refresh project detail and project usage from the detail route.
+15. Use the Projects back link and confirm the catalog overview remains
    list-only.
 13. Use Refresh and confirm the catalog reloads without changing the current
    `/admin/` application.
