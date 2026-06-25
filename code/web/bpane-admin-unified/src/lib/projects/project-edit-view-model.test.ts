@@ -34,6 +34,71 @@ describe('project edit view model', () => {
     });
   });
 
+  it('maps every new project field into the create request', () => {
+    const draft = {
+      ...createNewProjectEditDraft(),
+      name: 'Customer Support',
+      description: 'Support project',
+      labelsText: 'env=prod\nteam=support',
+      state: 'archived' as const,
+      allowBrowserUploads: false,
+      allowBrowserDownloads: false,
+      allowSessionFileBindings: false,
+      allowManualRecordings: false,
+      usageBudgetEnforcement: 'block_session_creation' as const,
+      restrictSessionTemplates: true,
+      allowedSessionTemplateIds: ['template-support'],
+      restrictBrowserContexts: true,
+      allowedBrowserContextIds: ['context-support'],
+      restrictEgressProfiles: true,
+      allowedEgressProfileIds: ['egress-support'],
+      restrictExtensions: true,
+      allowedExtensionIds: ['extension-support'],
+      restrictFileWorkspaces: true,
+      allowedFileWorkspaceIds: ['workspace-support'],
+      maxActiveSessions: { enabled: true, value: '3' },
+      maxActiveWorkflowRuns: { enabled: true, value: '4' },
+      maxRetainedStorageBytes: { enabled: true, value: '1073741824' },
+      maxSessionCreations: { enabled: true, value: '100' },
+      maxSessionCreationsPerWindow: { enabled: true, value: '20' },
+      sessionCreationWindowSec: { enabled: true, value: '3600' },
+      maxRuntimeUsageMs: { enabled: true, value: '14400000' },
+      maxEgressTotalBytes: { enabled: true, value: '2147483648' },
+    };
+
+    const validation = validateProjectEdit(null, draft);
+
+    expect(validation.valid).toBe(true);
+    expect(validation.request).toEqual({
+      name: 'Customer Support',
+      description: 'Support project',
+      labels: { env: 'prod', team: 'support' },
+      state: 'archived',
+      policy: {
+        allowed_session_template_ids: ['template-support'],
+        allowed_egress_profile_ids: ['egress-support'],
+        allowed_extension_ids: ['extension-support'],
+        allowed_browser_context_ids: ['context-support'],
+        allowed_file_workspace_ids: ['workspace-support'],
+        allow_browser_uploads: false,
+        allow_browser_downloads: false,
+        allow_session_file_bindings: false,
+        allow_manual_recordings: false,
+        usage_budget_enforcement: 'block_session_creation',
+      },
+      quotas: {
+        max_active_sessions: 3,
+        max_active_workflow_runs: 4,
+        max_retained_storage_bytes: 1073741824,
+        max_session_creations: 100,
+        max_session_creations_per_window: 20,
+        session_creation_window_sec: 3600,
+        max_runtime_usage_ms: 14400000,
+        max_egress_total_bytes: 2147483648,
+      },
+    });
+  });
+
   it('creates a draft and maps edited quotas and policy into the update request', () => {
     const source = project();
     const draft = {
@@ -103,6 +168,14 @@ describe('project edit view model', () => {
       maxActiveSessions: { enabled: true, value: '0' },
       maxSessionCreationsPerWindow: { enabled: true, value: '3' },
       sessionCreationWindowSec: { enabled: false, value: '' },
+      restrictBrowserContexts: true,
+      allowedBrowserContextIds: [],
+      restrictEgressProfiles: true,
+      allowedEgressProfileIds: [],
+      restrictExtensions: true,
+      allowedExtensionIds: [],
+      restrictFileWorkspaces: true,
+      allowedFileWorkspaceIds: [],
     });
 
     expect(validation.request).toBeNull();
@@ -110,6 +183,10 @@ describe('project edit view model', () => {
       'Active sessions quota needs a positive integer.',
       'Rolling session creation quota needs both a session limit and a window duration.',
       'Session Templates restriction needs at least one selected resource.',
+      'Egress Profiles restriction needs at least one selected resource.',
+      'Extensions restriction needs at least one selected resource.',
+      'Browser Contexts restriction needs at least one selected resource.',
+      'File Workspaces restriction needs at least one selected resource.',
     ]);
     expect(validation.fieldErrors).toMatchObject({
       maxActiveSessions: ['Active sessions quota needs a positive integer.'],
@@ -120,6 +197,10 @@ describe('project edit view model', () => {
         'Rolling session creation quota needs both a session limit and a window duration.',
       ],
       allowedSessionTemplateIds: ['Session Templates restriction needs at least one selected resource.'],
+      allowedEgressProfileIds: ['Egress Profiles restriction needs at least one selected resource.'],
+      allowedExtensionIds: ['Extensions restriction needs at least one selected resource.'],
+      allowedBrowserContextIds: ['Browser Contexts restriction needs at least one selected resource.'],
+      allowedFileWorkspaceIds: ['File Workspaces restriction needs at least one selected resource.'],
     });
   });
 });

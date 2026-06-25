@@ -1102,6 +1102,7 @@ npm run build
 ../../../scripts/bpane --help
 npm run smoke:bpane-cli -- --headless
 npm run smoke:admin-session -- --headless
+npm run smoke:admin-unified-projects -- --headless
 npm run workflow:cli -- --help
 npm run smoke:automation-tasks -- --headless
 npm run smoke:file-workspaces -- --headless

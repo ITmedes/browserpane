@@ -93,6 +93,36 @@ describe('ProjectCreateRoute', () => {
       expect(byTestId(target, 'project-create-error').textContent).toContain('Project action failed');
     });
   });
+
+  it('reports policy option load failures without blocking basic project creation', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = input.toString();
+      if (init?.method === 'POST' && url.endsWith('/api/v1/projects')) {
+        return jsonResponse(projectPayload(), 201);
+      }
+      return new Response('unavailable', { status: 503 });
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    const navigateToProject = vi.fn();
+    const target = renderComponent(ProjectCreateRoute, {
+      authContext: authContext({ accessTokenProvider: async () => 'shell-token' }),
+      navigateToProject,
+    });
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'project-policy-options-error').textContent).toContain(
+        'Selectable resources could not be refreshed',
+      );
+    });
+
+    setInputValue(byTestId(target, 'project-edit-name'), 'Fallback Project');
+    await tick();
+    byTestId(target, 'project-edit-save').click();
+
+    await vi.waitFor(() => {
+      expect(navigateToProject).toHaveBeenCalledWith(expect.objectContaining({ id: PROJECT_ID }));
+    });
+  });
 });
 
 function authContext(

@@ -14,7 +14,9 @@ export async function ensureAdminLoggedIn(page, options) {
     throw new Error('OIDC auth is enabled, but no example user is configured for smoke login.');
   }
 
-  await page.getByTestId('admin-login').click();
+  if (state.login) {
+    await page.getByTestId('admin-login').click();
+  }
   await fillKeycloakLogin(page, authConfig, options);
   await page.waitForURL(urlPatternFor(options.pageUrl), { timeout: options.connectTimeoutMs });
   await waitForAdminAuthenticated(page, options);
@@ -134,10 +136,12 @@ async function fillKeycloakLogin(page, authConfig, options) {
 }
 
 async function waitForAdminAuthSurface(page, options) {
+  const username = page.locator('input[name="username"], #username').first();
   return await poll('admin auth surface', async () => ({
     login: await page.getByTestId('admin-login').isVisible().catch(() => false),
     authenticated: await adminAuthenticatedVisible(page),
-  }), (state) => state.login || state.authenticated, options.connectTimeoutMs);
+    usernameVisible: await username.isVisible().catch(() => false),
+  }), (state) => state.login || state.authenticated || state.usernameVisible, options.connectTimeoutMs);
 }
 
 async function waitForAdminAuthenticated(page, options) {
@@ -153,7 +157,10 @@ async function adminAuthenticatedVisible(page) {
   return await page.getByTestId('session-new').isVisible().catch(() => false)
     || await page.getByTestId('session-inspector-new').isVisible().catch(() => false)
     || await page.getByTestId('browser-context-route').isVisible().catch(() => false)
-    || await page.getByTestId('file-workspace-create-submit').isVisible().catch(() => false);
+    || await page.getByTestId('file-workspace-create-submit').isVisible().catch(() => false)
+    || await page.getByTestId('projects-new-link').isVisible().catch(() => false)
+    || await page.getByTestId('project-create-route').isVisible().catch(() => false)
+    || await page.getByTestId('project-detail-route').isVisible().catch(() => false);
 }
 
 async function waitForSessionClients(page, options, sessionId, expectedClients) {
