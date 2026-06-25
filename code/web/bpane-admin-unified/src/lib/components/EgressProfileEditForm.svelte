@@ -15,6 +15,7 @@
   import type { EgressProfileResource, UpsertEgressProfileRequest } from '$lib/egress-profiles/egress-profile-types';
   import AdminMessage from './AdminMessage.svelte';
   import EgressProfileStatusSummary from './EgressProfileStatusSummary.svelte';
+  import FieldFeedback from './FieldFeedback.svelte';
 
   type EgressProfileEditFormProps = {
     readonly profile?: EgressProfileResource;
@@ -116,8 +117,8 @@
         </p>
       </div>
 
-      <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
-        <label class="grid gap-1.5 text-sm">
+      <div class="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <label class="grid content-start gap-1.5 text-sm">
           <span class="font-medium text-admin-ink">Name</span>
           <input
             class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -127,12 +128,10 @@
             autocomplete="off"
             data-testid="egress-profile-edit-name"
           />
-          {#if validation.fieldErrors.name?.length}
-            <AdminMessage tone="error" density="compact" items={validation.fieldErrors.name} testId="egress-profile-edit-name-error" />
-          {/if}
+          <FieldFeedback errors={validation.fieldErrors.name} testId="egress-profile-edit-name-error" />
         </label>
 
-        <label class="grid gap-1.5 text-sm">
+        <label class="grid content-start gap-1.5 text-sm">
           <span class="font-medium text-admin-ink">State</span>
           <select
             class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -143,9 +142,10 @@
             <option value="ready">ready</option>
             <option value="disabled">disabled</option>
           </select>
+          <FieldFeedback hint="Disabled profiles remain visible but cannot be selected for healthy launches." />
         </label>
 
-        <label class="grid gap-1.5 text-sm lg:col-span-2">
+        <label class="grid content-start gap-1.5 text-sm lg:col-span-2">
           <span class="font-medium text-admin-ink">Description</span>
           <textarea
             class="min-h-24 rounded-md border border-admin-border bg-white px-3 py-2 text-sm leading-6 text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -153,9 +153,10 @@
             disabled={disabled}
             data-testid="egress-profile-edit-description"
           ></textarea>
+          <FieldFeedback hint="Optional operator-facing explanation for this egress profile." />
         </label>
 
-        <label class="grid gap-1.5 text-sm lg:col-span-2">
+        <label class="grid content-start gap-1.5 text-sm lg:col-span-2">
           <span class="font-medium text-admin-ink">Labels</span>
           <textarea
             class="min-h-28 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs leading-5 text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -165,10 +166,11 @@
             spellcheck="false"
             data-testid="egress-profile-edit-labels"
           ></textarea>
-          <span class="text-xs leading-5 text-admin-muted">One `key=value` label per line.</span>
-          {#if validation.fieldErrors.labels?.length}
-            <AdminMessage tone="error" density="compact" items={validation.fieldErrors.labels} testId="egress-profile-edit-labels-error" />
-          {/if}
+          <FieldFeedback
+            errors={validation.fieldErrors.labels}
+            hint="One key=value label per line."
+            testId="egress-profile-edit-labels-error"
+          />
         </label>
       </div>
     </section>
@@ -196,8 +198,8 @@
         </div>
       {/if}
 
-      <div class="mt-4 grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <label class="grid gap-1.5 text-sm">
+      <div class="mt-4 grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <label class="grid content-start gap-1.5 text-sm">
           <span class="font-medium text-admin-ink">Binding</span>
           <select
             class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -208,10 +210,11 @@
             <option value="owner">owner scoped</option>
             <option value="project">project scoped</option>
           </select>
+          <FieldFeedback hint="Choose whether this profile is reusable globally or bound to one project." />
         </label>
 
         {#if draft.projectBinding === 'project'}
-          <label class="grid gap-1.5 text-sm">
+          <label class="grid content-start gap-1.5 text-sm">
             <span class="font-medium text-admin-ink">Project</span>
             <select
               class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -224,12 +227,10 @@
                 <option value={project.id}>{project.name} · {project.state}</option>
               {/each}
             </select>
-            {#if validation.fieldErrors.projectId?.length}
-              <AdminMessage tone="error" density="compact" items={validation.fieldErrors.projectId} testId="egress-profile-edit-project-id-error" />
-            {/if}
+            <FieldFeedback errors={validation.fieldErrors.projectId} testId="egress-profile-edit-project-id-error" />
           </label>
         {:else}
-          <p class="m-0 self-end rounded-md bg-admin-soft px-3 py-2 text-xs leading-5 text-admin-muted">
+          <p class="m-0 self-start rounded-md bg-admin-soft px-3 py-2 text-xs leading-5 text-admin-muted lg:mt-6">
             The API will persist `project_id=null`.
           </p>
         {/if}
@@ -260,8 +261,8 @@
       </div>
 
       {#if draft.proxyEnabled}
-        <div class="mt-4 grid gap-4 lg:grid-cols-2">
-          <label class="grid gap-1.5 text-sm">
+        <div class="mt-4 grid items-start gap-4 lg:grid-cols-2">
+          <label class="grid content-start gap-1.5 text-sm">
             <span class="font-medium text-admin-ink">Proxy URL</span>
             <input
               class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -271,12 +272,10 @@
               disabled={disabled}
               data-testid="egress-profile-edit-proxy-url"
             />
-            {#if validation.fieldErrors.proxyUrl?.length}
-              <AdminMessage tone="error" density="compact" items={validation.fieldErrors.proxyUrl} testId="egress-profile-edit-proxy-url-error" />
-            {/if}
+            <FieldFeedback errors={validation.fieldErrors.proxyUrl} testId="egress-profile-edit-proxy-url-error" />
           </label>
 
-          <label class="grid gap-1.5 text-sm">
+          <label class="grid content-start gap-1.5 text-sm">
             <span class="font-medium text-admin-ink">Credential binding id</span>
             <input
               class="h-10 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -286,12 +285,14 @@
               disabled={disabled}
               data-testid="egress-profile-edit-proxy-credential-binding-id"
             />
-            {#if validation.fieldErrors.proxyCredentialBindingId?.length}
-              <AdminMessage tone="error" density="compact" items={validation.fieldErrors.proxyCredentialBindingId} testId="egress-profile-edit-proxy-credential-binding-id-error" />
-            {/if}
+            <FieldFeedback
+              errors={validation.fieldErrors.proxyCredentialBindingId}
+              hint="Optional UUID of a secret-backed credential binding."
+              testId="egress-profile-edit-proxy-credential-binding-id-error"
+            />
           </label>
 
-          <label class="grid gap-1.5 text-sm lg:col-span-2">
+          <label class="grid content-start gap-1.5 text-sm lg:col-span-2">
             <span class="font-medium text-admin-ink">Bypass rules</span>
             <textarea
               class="min-h-24 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs leading-5 text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -301,7 +302,11 @@
               spellcheck="false"
               data-testid="egress-profile-edit-bypass-rules"
             ></textarea>
-            <span class="text-xs leading-5 text-admin-muted">One bypass host or pattern per line.</span>
+            <FieldFeedback
+              errors={validation.fieldErrors.bypassRules}
+              hint="One bypass host or pattern per line."
+              testId="egress-profile-edit-bypass-rules-error"
+            />
           </label>
         </div>
       {:else}
@@ -335,8 +340,8 @@
       </div>
 
       {#if draft.customCaEnabled}
-        <div class="mt-4 grid gap-4 lg:grid-cols-2">
-          <label class="grid gap-1.5 text-sm">
+        <div class="mt-4 grid items-start gap-4 lg:grid-cols-2">
+          <label class="grid content-start gap-1.5 text-sm">
             <span class="font-medium text-admin-ink">Certificate reference</span>
             <input
               class="h-10 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -346,12 +351,13 @@
               disabled={disabled}
               data-testid="egress-profile-edit-custom-ca-certificate-ref"
             />
-            {#if validation.fieldErrors.customCaCertificateRef?.length}
-              <AdminMessage tone="error" density="compact" items={validation.fieldErrors.customCaCertificateRef} testId="egress-profile-edit-custom-ca-certificate-ref-error" />
-            {/if}
+            <FieldFeedback
+              errors={validation.fieldErrors.customCaCertificateRef}
+              testId="egress-profile-edit-custom-ca-certificate-ref-error"
+            />
           </label>
 
-          <label class="grid gap-1.5 text-sm">
+          <label class="grid content-start gap-1.5 text-sm">
             <span class="font-medium text-admin-ink">Display name</span>
             <input
               class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -361,9 +367,11 @@
               disabled={disabled}
               data-testid="egress-profile-edit-custom-ca-display-name"
             />
-            {#if validation.fieldErrors.customCaDisplayName?.length}
-              <AdminMessage tone="error" density="compact" items={validation.fieldErrors.customCaDisplayName} testId="egress-profile-edit-custom-ca-display-name-error" />
-            {/if}
+            <FieldFeedback
+              errors={validation.fieldErrors.customCaDisplayName}
+              hint="Optional display name shown to operators."
+              testId="egress-profile-edit-custom-ca-display-name-error"
+            />
           </label>
         </div>
       {:else}
@@ -381,8 +389,8 @@
         </p>
       </div>
 
-      <div class="mt-4 grid gap-4 lg:grid-cols-2">
-        <label class="grid gap-1.5 text-sm">
+      <div class="mt-4 grid items-start gap-4 lg:grid-cols-2">
+        <label class="grid content-start gap-1.5 text-sm">
           <span class="font-medium text-admin-ink">Observation mode</span>
           <select
             class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -396,9 +404,10 @@
             <option value="metadata_only">metadata_only</option>
             <option value="tls_intercept">tls_intercept</option>
           </select>
+          <FieldFeedback hint="TLS interception automatically requires proxy and custom CA settings." />
         </label>
 
-        <label class="grid gap-1.5 text-sm">
+        <label class="grid content-start gap-1.5 text-sm">
           <span class="font-medium text-admin-ink">Sensitive log sink reference</span>
           <input
             class="h-10 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -408,12 +417,13 @@
             disabled={disabled}
             data-testid="egress-profile-edit-sensitive-log-sink-ref"
           />
-          {#if validation.fieldErrors.sensitiveLogSinkRef?.length}
-            <AdminMessage tone="error" density="compact" items={validation.fieldErrors.sensitiveLogSinkRef} testId="egress-profile-edit-sensitive-log-sink-ref-error" />
-          {/if}
+          <FieldFeedback
+            errors={validation.fieldErrors.sensitiveLogSinkRef}
+            testId="egress-profile-edit-sensitive-log-sink-ref-error"
+          />
         </label>
 
-        <label class="grid gap-1.5 text-sm lg:col-span-2">
+        <label class="grid content-start gap-1.5 text-sm lg:col-span-2">
           <span class="font-medium text-admin-ink">Sensitive log sink display name</span>
           <input
             class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
@@ -423,9 +433,11 @@
             disabled={disabled}
             data-testid="egress-profile-edit-sensitive-log-sink-display-name"
           />
-          {#if validation.fieldErrors.sensitiveLogSinkDisplayName?.length}
-            <AdminMessage tone="error" density="compact" items={validation.fieldErrors.sensitiveLogSinkDisplayName} testId="egress-profile-edit-sensitive-log-sink-display-name-error" />
-          {/if}
+          <FieldFeedback
+            errors={validation.fieldErrors.sensitiveLogSinkDisplayName}
+            hint="Optional label for the approved sensitive log sink."
+            testId="egress-profile-edit-sensitive-log-sink-display-name-error"
+          />
         </label>
       </div>
 
