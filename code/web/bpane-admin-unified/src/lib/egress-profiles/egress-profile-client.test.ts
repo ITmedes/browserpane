@@ -58,6 +58,74 @@ describe('EgressProfileCatalogClient', () => {
     expect(onAuthenticationFailure).toHaveBeenCalledOnce();
   });
 
+  it('loads a single egress profile', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify(egressProfilePayload()), { status: 200 }));
+    const client = new EgressProfileCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl,
+    });
+
+    const profile = await client.getEgressProfile('profile-1');
+
+    expect(profile.id).toBe('profile-1');
+    expect(fetchImpl.mock.calls[0]?.[0]).toEqual(new URL('http://browserpane.test/api/v1/egress-profiles/profile-1'));
+    expect(fetchImpl.mock.calls[0]?.[1]?.method).toBe('GET');
+  });
+
+  it('creates and updates egress profiles with JSON bodies', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify(egressProfilePayload()), { status: 200 }));
+    const client = new EgressProfileCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl,
+    });
+    const request = {
+      project_id: null,
+      name: 'Direct profile',
+      description: null,
+      labels: {},
+      proxy: null,
+      bypass_rules: [],
+      custom_ca: null,
+      traffic_observation: {
+        mode: 'metadata_only' as const,
+        sensitive_log_sink_ref: null,
+        sensitive_log_sink_display_name: null,
+      },
+      state: 'ready' as const,
+    };
+
+    await client.createEgressProfile(request);
+    await client.updateEgressProfile('profile-1', request);
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toEqual(new URL('http://browserpane.test/api/v1/egress-profiles'));
+    expect(fetchImpl.mock.calls[0]?.[1]?.method).toBe('POST');
+    expect(fetchImpl.mock.calls[0]?.[1]?.body).toBe(JSON.stringify(request));
+    expect(fetchImpl.mock.calls[1]?.[0]).toEqual(new URL('http://browserpane.test/api/v1/egress-profiles/profile-1'));
+    expect(fetchImpl.mock.calls[1]?.[1]?.method).toBe('PUT');
+    expect(fetchImpl.mock.calls[1]?.[1]?.body).toBe(JSON.stringify(request));
+  });
+
+  it('loads project binding options from the project catalog', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({
+        projects: [{ id: 'project-1', name: 'Support', state: 'active', ignored: true }],
+      }), { status: 200 }));
+    const client = new EgressProfileCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl,
+    });
+
+    const response = await client.listProjectOptions();
+
+    expect(response.projects).toEqual([{ id: 'project-1', name: 'Support', state: 'active' }]);
+    expect(fetchImpl.mock.calls[0]?.[0]).toEqual(new URL('http://browserpane.test/api/v1/projects'));
+  });
+
   it('defaults optional effective and diagnostics payloads defensively', () => {
     const response = toEgressProfileListResponse({
       profiles: [{

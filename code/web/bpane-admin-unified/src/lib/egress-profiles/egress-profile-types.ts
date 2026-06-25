@@ -99,3 +99,19 @@ export type EgressProfileResource = {
 export type EgressProfileListResponse = {
   readonly profiles: readonly EgressProfileResource[];
 };
+
+export type UpsertEgressProfileRequest = {
+  readonly project_id?: string | null;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly labels: Readonly<Record<string, string>>;
+  readonly proxy?: EgressProxyConfig | null;
+  readonly bypass_rules: readonly string[];
+  readonly custom_ca?: EgressCustomCaConfig | null;
+  readonly traffic_observation: EgressTrafficObservationConfig;
+  readonly state: EgressProfileState;
+};
+
+export type EgressProfileProjectOptionsResponse = {
+  readonly projects: readonly EgressProfileProjectResource[];
+};
