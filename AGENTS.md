@@ -170,6 +170,7 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:bpane-cli -- --headless`
 - `npm run smoke:admin-browser-contexts -- --headless`
 - `npm run smoke:admin-egress-profiles -- --headless`
+- `npm run smoke:admin-unified-projects -- --headless`
 - `npm run smoke:file-workspaces -- --headless`
 - `npm test`
 - `npm run build`
