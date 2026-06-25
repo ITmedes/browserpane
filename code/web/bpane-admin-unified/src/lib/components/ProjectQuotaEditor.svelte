@@ -49,17 +49,24 @@
 <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="project-quota-editor">
   <div class="border-b border-admin-border pb-3">
     <h4 class="m-0 text-sm font-semibold text-admin-ink">Quotas and usage alerts</h4>
-    <p class="m-0 mt-1 text-xs text-admin-muted">
-      Enable a quota to persist a positive integer limit. Usage alerts are generated from these limits by the backend.
+    <p class="m-0 mt-1 text-xs leading-5 text-admin-muted">
+      Enable the limits this project should enforce or monitor. Leave a quota disabled to persist it as unbounded.
     </p>
   </div>
 
   <div class="mt-4 grid gap-3 lg:grid-cols-2">
     {#each PROJECT_QUOTA_LIMITS as quota}
-      <div class="min-w-0 rounded-md border border-admin-border bg-admin-panel p-3" data-testid={`project-quota-${quota.testId}`}>
+      <div
+        class={`min-w-0 rounded-md border p-3 transition ${
+          draft[quota.key].enabled
+            ? 'border-admin-accent/50 bg-white shadow-sm'
+            : 'border-admin-border bg-admin-panel'
+        }`}
+        data-testid={`project-quota-${quota.testId}`}
+      >
         <label class="flex items-start gap-3 text-sm">
           <input
-            class="mt-1 h-4 w-4 rounded border-admin-border text-admin-accent focus:ring-admin-accent"
+            class="mt-1 h-4 w-4 rounded border-admin-border text-admin-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/30 disabled:cursor-not-allowed disabled:opacity-60"
             type="checkbox"
             checked={draft[quota.key].enabled}
             disabled={disabled}
@@ -72,10 +79,10 @@
           </span>
         </label>
 
-        <label class="mt-3 grid gap-1 text-sm">
+        <label class="mt-3 grid gap-1.5 text-sm">
           <span class="text-xs font-semibold uppercase text-admin-muted">{quota.unitLabel}</span>
           <input
-            class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none focus:border-admin-accent disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
             type="number"
             min="1"
             step="1"
@@ -89,8 +96,4 @@
       </div>
     {/each}
   </div>
-
-  <p class="m-0 mt-3 text-xs text-admin-muted" data-testid="project-usage-alert-note">
-    Alert thresholds are not editable here. The project API reports generated alerts when session, runtime, or egress budgets approach or exceed their limits.
-  </p>
 </section>
