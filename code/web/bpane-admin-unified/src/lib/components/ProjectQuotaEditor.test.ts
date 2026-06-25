@@ -31,6 +31,27 @@ describe('ProjectQuotaEditor', () => {
     }));
   });
 
+  it('uses one control for the rolling session creation quota pair', () => {
+    const draft = createProjectEditDraft(project());
+    const onDraftChange = vi.fn();
+    const target = renderComponent(ProjectQuotaEditor, {
+      draft,
+      onDraftChange,
+    });
+
+    expect(target.querySelector('[data-testid="project-quota-max-session-creations-per-window-enabled"]')).toBeNull();
+    expect(target.querySelector('[data-testid="project-quota-session-creation-window-sec-enabled"]')).toBeNull();
+
+    setCheckbox(byTestId(target, 'project-quota-session-creation-rate-enabled'), true);
+    expect(onDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      maxSessionCreationsPerWindow: { enabled: true, value: '' },
+      sessionCreationWindowSec: { enabled: true, value: '' },
+    }));
+
+    expect(byTestId(target, 'project-quota-max-session-creations-per-window-value')).toBeTruthy();
+    expect(byTestId(target, 'project-quota-session-creation-window-sec-value')).toBeTruthy();
+  });
+
   it('renders quota errors inside the affected quota card', () => {
     const draft = createProjectEditDraft(project());
     const target = renderComponent(ProjectQuotaEditor, {
@@ -43,6 +64,25 @@ describe('ProjectQuotaEditor', () => {
     expect(byTestId(target, 'project-quota-max-active-sessions-error').textContent).toContain(
       'Active sessions quota needs a positive integer.',
     );
+  });
+
+  it('renders rolling quota pair errors once inside the combined card', () => {
+    const draft = {
+      ...createProjectEditDraft(project()),
+      maxSessionCreationsPerWindow: { enabled: true, value: '3' },
+      sessionCreationWindowSec: { enabled: false, value: '' },
+    };
+    const target = renderComponent(ProjectQuotaEditor, {
+      draft,
+      fieldErrors: {
+        maxSessionCreationsPerWindow: ['Rolling session creation quota needs both a session limit and a window duration.'],
+        sessionCreationWindowSec: ['Rolling session creation quota needs both a session limit and a window duration.'],
+      },
+    });
+
+    const error = byTestId(target, 'project-quota-session-creation-rate-error');
+    expect(error.textContent).toContain('Rolling session creation quota needs both a session limit and a window duration.');
+    expect(error.querySelectorAll('li')).toHaveLength(1);
   });
 });
 

@@ -98,6 +98,16 @@ export type ProjectQuotaLimitDefinition = {
   readonly testId: string;
 };
 
+export type ProjectRollingSessionCreationQuotaDefinition = {
+  readonly limitKey: 'maxSessionCreationsPerWindow';
+  readonly windowKey: 'sessionCreationWindowSec';
+  readonly label: string;
+  readonly description: string;
+  readonly limitLabel: string;
+  readonly windowLabel: string;
+  readonly testId: string;
+};
+
 export type ProjectPolicyBooleanDefinition = {
   readonly key: ProjectPolicyBooleanDraftKey;
   readonly label: string;
@@ -149,20 +159,6 @@ export const PROJECT_QUOTA_LIMITS = [
     testId: 'max-session-creations',
   },
   {
-    key: 'maxSessionCreationsPerWindow',
-    label: 'Session creations/window',
-    description: 'Rolling-window created-session budget. Enable the matching window duration below.',
-    unitLabel: 'sessions',
-    testId: 'max-session-creations-per-window',
-  },
-  {
-    key: 'sessionCreationWindowSec',
-    label: 'Session creation window',
-    description: 'Window duration paired with the rolling created-session budget above.',
-    unitLabel: 'seconds',
-    testId: 'session-creation-window-sec',
-  },
-  {
     key: 'maxRuntimeUsageMs',
     label: 'Runtime budget',
     description: 'Aggregated finalized plus live runtime budget. Generated usage alerts use this limit.',
@@ -177,6 +173,16 @@ export const PROJECT_QUOTA_LIMITS = [
     testId: 'max-egress-total-bytes',
   },
 ] satisfies readonly ProjectQuotaLimitDefinition[];
+
+export const PROJECT_ROLLING_SESSION_CREATION_QUOTA = {
+  limitKey: 'maxSessionCreationsPerWindow',
+  windowKey: 'sessionCreationWindowSec',
+  label: 'Session creation rate',
+  description: 'Rolling-window created-session budget. The API persists this as a session count plus a window duration.',
+  limitLabel: 'sessions per window',
+  windowLabel: 'window seconds',
+  testId: 'session-creation-rate',
+} satisfies ProjectRollingSessionCreationQuotaDefinition;
 
 export const PROJECT_POLICY_BOOLEAN_FIELDS = [
   {
@@ -387,13 +393,13 @@ function projectQuotasFromDraft(
     addError,
   );
   const maxSessionCreationsPerWindow = quotaValue(
-    'Session creations/window',
+    'Session limit',
     'maxSessionCreationsPerWindow',
     draft.maxSessionCreationsPerWindow,
     addError,
   );
   const sessionCreationWindowSec = quotaValue(
-    'Session creation window',
+    'Window duration',
     'sessionCreationWindowSec',
     draft.sessionCreationWindowSec,
     addError,
@@ -401,7 +407,7 @@ function projectQuotasFromDraft(
   const maxRuntimeUsageMs = quotaValue('Runtime budget', 'maxRuntimeUsageMs', draft.maxRuntimeUsageMs, addError);
   const maxEgressTotalBytes = quotaValue('Egress budget', 'maxEgressTotalBytes', draft.maxEgressTotalBytes, addError);
   if (draft.maxSessionCreationsPerWindow.enabled !== draft.sessionCreationWindowSec.enabled) {
-    const message = 'Rolling session creation quota needs both session creations/window and session creation window enabled.';
+    const message = 'Rolling session creation quota needs both a session limit and a window duration.';
     addError('maxSessionCreationsPerWindow', message);
     addError('sessionCreationWindowSec', message);
   }

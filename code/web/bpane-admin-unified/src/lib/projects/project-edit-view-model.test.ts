@@ -82,16 +82,16 @@ describe('project edit view model', () => {
     expect(validation.request).toBeNull();
     expect(validation.errors).toEqual([
       'Active sessions quota needs a positive integer.',
-      'Rolling session creation quota needs both session creations/window and session creation window enabled.',
+      'Rolling session creation quota needs both a session limit and a window duration.',
       'Session Templates restriction needs at least one selected resource.',
     ]);
     expect(validation.fieldErrors).toMatchObject({
       maxActiveSessions: ['Active sessions quota needs a positive integer.'],
       maxSessionCreationsPerWindow: [
-        'Rolling session creation quota needs both session creations/window and session creation window enabled.',
+        'Rolling session creation quota needs both a session limit and a window duration.',
       ],
       sessionCreationWindowSec: [
-        'Rolling session creation quota needs both session creations/window and session creation window enabled.',
+        'Rolling session creation quota needs both a session limit and a window duration.',
       ],
       allowedSessionTemplateIds: ['Session Templates restriction needs at least one selected resource.'],
     });

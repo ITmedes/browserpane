@@ -52,9 +52,8 @@ describe('ProjectEditForm', () => {
     setCheckbox(policyOption(target, 'session-templates', 'template-support'), true);
     setCheckbox(policyOption(target, 'browser-contexts', '22222222-2222-4222-8222-222222222222'), true);
     setInputValue(byTestId(target, 'project-quota-max-active-sessions-value'), '6');
-    setCheckbox(byTestId(target, 'project-quota-max-session-creations-per-window-enabled'), true);
+    setCheckbox(byTestId(target, 'project-quota-session-creation-rate-enabled'), true);
     setInputValue(byTestId(target, 'project-quota-max-session-creations-per-window-value'), '10');
-    setCheckbox(byTestId(target, 'project-quota-session-creation-window-sec-enabled'), true);
     setInputValue(byTestId(target, 'project-quota-session-creation-window-sec-value'), '3600');
     await tick();
 
