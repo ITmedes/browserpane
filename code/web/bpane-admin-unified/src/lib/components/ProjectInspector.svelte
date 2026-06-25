@@ -136,41 +136,6 @@
           onSave={saveProject}
         />
       {/key}
-
-      <section class="rounded-md border border-admin-border bg-admin-panel p-4" data-testid="project-readonly-details">
-        <div class="border-b border-admin-border pb-3">
-          <h3 class="m-0 text-sm font-semibold text-admin-ink">Read-only project evidence</h3>
-          <p class="m-0 mt-1 text-xs text-admin-muted">Current metadata, usage, policy, quotas, and generated alerts after the latest refresh.</p>
-        </div>
-
-        <div class="mt-4 grid gap-5 xl:grid-cols-2">
-          {#each model.sections as section}
-            <section class="min-w-0" aria-label={section.title}>
-              <h4 class="m-0 text-sm font-semibold text-admin-ink">{section.title}</h4>
-              <dl class="mt-3 grid gap-2">
-                {#each section.rows as row}
-                  <div class="grid gap-1">
-                    <dt class="text-xs font-semibold uppercase text-admin-muted">{row.label}</dt>
-                    <dd class="m-0 break-words text-sm text-admin-ink">{row.value}</dd>
-                  </div>
-                {/each}
-              </dl>
-            </section>
-          {/each}
-        </div>
-
-        <section class="mt-5 min-w-0" aria-label="Usage alerts">
-          <h4 class="m-0 text-sm font-semibold text-admin-ink">Usage alerts</h4>
-          <dl class="mt-3 grid gap-2">
-            {#each model.alerts as alert}
-              <div class="grid gap-1">
-                <dt class="text-xs font-semibold uppercase text-admin-muted">{alert.label}</dt>
-                <dd class="m-0 break-words text-sm text-admin-ink">{alert.value}</dd>
-              </div>
-            {/each}
-          </dl>
-        </section>
-      </section>
     </div>
   {/if}
 </aside>

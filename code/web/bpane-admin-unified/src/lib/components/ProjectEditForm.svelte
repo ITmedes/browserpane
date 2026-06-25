@@ -5,10 +5,12 @@
     validateProjectEdit,
     type ProjectEditDraft,
   } from '$lib/projects/project-edit-view-model';
+  import { buildProjectInspectorModel } from '$lib/projects/project-inspector-view-model';
   import type { ProjectPolicyOptionsLoadState } from '$lib/projects/project-detail-state';
   import type { ProjectResource, UpsertProjectRequest } from '$lib/projects/project-types';
   import ProjectPolicyEditor from './ProjectPolicyEditor.svelte';
   import ProjectQuotaEditor from './ProjectQuotaEditor.svelte';
+  import ProjectStatusSummary from './ProjectStatusSummary.svelte';
 
   type ProjectEditFormProps = {
     readonly project: ProjectResource;
@@ -28,6 +30,7 @@
 
   const validation = $derived(validateProjectEdit(project, draft));
   const changed = $derived(hasProjectEditChanges(project, draft));
+  const statusModel = $derived(buildProjectInspectorModel(project));
 
   function reset(): void {
     draft = createProjectEditDraft(project);
@@ -47,11 +50,13 @@
 
 <section class="rounded-md border border-admin-border bg-admin-panel p-4" data-testid="project-edit-form">
   <div class="flex flex-col gap-1 border-b border-admin-border pb-3">
-    <h3 class="m-0 text-sm font-semibold text-admin-ink">Edit project</h3>
-    <p class="m-0 text-xs text-admin-muted">Update metadata, project policy, resource allow-lists, and quotas.</p>
+    <h3 class="m-0 text-sm font-semibold text-admin-ink">Project settings</h3>
+    <p class="m-0 text-xs text-admin-muted">Review current status and update metadata, policy, resource allow-lists, and quotas.</p>
   </div>
 
   <div class="mt-4 grid gap-4">
+    <ProjectStatusSummary model={statusModel} />
+
     <label class="grid gap-1 text-sm">
       <span class="font-medium text-admin-ink">Name</span>
       <input
