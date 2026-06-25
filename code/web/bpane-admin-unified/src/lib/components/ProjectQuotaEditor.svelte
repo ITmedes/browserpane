@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     PROJECT_QUOTA_LIMITS,
+    PROJECT_ROLLING_SESSION_CREATION_QUOTA,
     type ProjectEditDraft,
     type ProjectEditFieldErrors,
     type ProjectQuotaLimitDraftKey,
@@ -21,11 +22,33 @@
     onDraftChange,
   }: ProjectQuotaEditorProps = $props();
 
+  const rollingQuotaErrors = $derived(uniqueMessages([
+    ...(fieldErrors.maxSessionCreationsPerWindow ?? []),
+    ...(fieldErrors.sessionCreationWindowSec ?? []),
+  ]));
+  const rollingQuotaEnabled = $derived(
+    draft.maxSessionCreationsPerWindow.enabled || draft.sessionCreationWindowSec.enabled,
+  );
+
   function setQuotaEnabled(key: ProjectQuotaLimitDraftKey, enabled: boolean): void {
     onDraftChange?.({
       ...draft,
       [key]: {
         ...draft[key],
+        enabled,
+      },
+    });
+  }
+
+  function setRollingSessionCreationEnabled(enabled: boolean): void {
+    onDraftChange?.({
+      ...draft,
+      maxSessionCreationsPerWindow: {
+        ...draft.maxSessionCreationsPerWindow,
+        enabled,
+      },
+      sessionCreationWindowSec: {
+        ...draft.sessionCreationWindowSec,
         enabled,
       },
     });
@@ -47,6 +70,10 @@
 
   function inputValue(event: Event): string {
     return (event.currentTarget as HTMLInputElement).value;
+  }
+
+  function uniqueMessages(messages: readonly string[]): readonly string[] {
+    return [...new Set(messages)];
   }
 </script>
 
@@ -107,5 +134,78 @@
         </label>
       </div>
     {/each}
+
+    <div
+      class={`min-w-0 rounded-md border p-3 transition ${
+        rollingQuotaEnabled
+          ? 'border-admin-accent/50 bg-white shadow-sm'
+          : 'border-admin-border bg-admin-panel'
+      }`}
+      data-testid={`project-quota-${PROJECT_ROLLING_SESSION_CREATION_QUOTA.testId}`}
+    >
+      <label class="flex items-start gap-3 text-sm">
+        <input
+          class="mt-1 h-4 w-4 rounded border-admin-border text-admin-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/30 disabled:cursor-not-allowed disabled:opacity-60"
+          type="checkbox"
+          checked={rollingQuotaEnabled}
+          disabled={disabled}
+          onchange={(event) => setRollingSessionCreationEnabled(inputChecked(event))}
+          data-testid={`project-quota-${PROJECT_ROLLING_SESSION_CREATION_QUOTA.testId}-enabled`}
+        />
+        <span class="min-w-0">
+          <span class="block font-medium text-admin-ink">Limit {PROJECT_ROLLING_SESSION_CREATION_QUOTA.label}</span>
+          <span class="mt-0.5 block text-xs leading-5 text-admin-muted">
+            {PROJECT_ROLLING_SESSION_CREATION_QUOTA.description}
+          </span>
+        </span>
+      </label>
+
+      <div class="mt-3 grid gap-3 sm:grid-cols-2">
+        <label class="grid gap-1.5 text-sm">
+          <span class="text-xs font-semibold uppercase text-admin-muted">
+            {PROJECT_ROLLING_SESSION_CREATION_QUOTA.limitLabel}
+          </span>
+          <input
+            class="h-10 min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            type="number"
+            min="1"
+            step="1"
+            inputmode="numeric"
+            value={draft.maxSessionCreationsPerWindow.value}
+            disabled={disabled || !rollingQuotaEnabled}
+            oninput={(event) => setQuotaValue('maxSessionCreationsPerWindow', inputValue(event))}
+            data-testid="project-quota-max-session-creations-per-window-value"
+          />
+        </label>
+
+        <label class="grid gap-1.5 text-sm">
+          <span class="text-xs font-semibold uppercase text-admin-muted">
+            {PROJECT_ROLLING_SESSION_CREATION_QUOTA.windowLabel}
+          </span>
+          <input
+            class="h-10 min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            type="number"
+            min="1"
+            step="1"
+            inputmode="numeric"
+            value={draft.sessionCreationWindowSec.value}
+            disabled={disabled || !rollingQuotaEnabled}
+            oninput={(event) => setQuotaValue('sessionCreationWindowSec', inputValue(event))}
+            data-testid="project-quota-session-creation-window-sec-value"
+          />
+        </label>
+      </div>
+
+      {#if rollingQuotaErrors.length}
+        <div class="mt-3">
+          <AdminMessage
+            tone="error"
+            density="compact"
+            items={rollingQuotaErrors}
+            testId={`project-quota-${PROJECT_ROLLING_SESSION_CREATION_QUOTA.testId}-error`}
+          />
+        </div>
+      {/if}
+    </div>
   </div>
 </section>
