@@ -9,6 +9,7 @@ import type {
   ProjectUsageAlertState,
   ProjectUsageBudgetEnforcement,
   ProjectUsageResource,
+  UpsertProjectRequest,
 } from './project-types';
 
 const PROJECT_STATES = ['active', 'archived'] satisfies readonly ProjectState[];
@@ -60,17 +61,66 @@ export class ProjectCatalogClient {
   }
 
   async listProjects(): Promise<ProjectListResponse> {
+    const response = await this.#request(new URL('/api/v1/projects', this.#baseUrl), {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+      },
+    });
+
+    return toProjectListResponse(await response.json());
+  }
+
+  async getProject(projectId: string): Promise<ProjectResource> {
+    const response = await this.#request(new URL(`/api/v1/projects/${encodeURIComponent(projectId)}`, this.#baseUrl), {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+      },
+    });
+
+    return toProjectResource(await response.json());
+  }
+
+  async updateProject(projectId: string, request: UpsertProjectRequest): Promise<ProjectResource> {
+    const response = await this.#request(new URL(`/api/v1/projects/${encodeURIComponent(projectId)}`, this.#baseUrl), {
+      method: 'PUT',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+
+    return toProjectResource(await response.json());
+  }
+
+  async getProjectUsage(projectId: string): Promise<ProjectUsageResource> {
+    const response = await this.#request(
+      new URL(`/api/v1/projects/${encodeURIComponent(projectId)}/usage`, this.#baseUrl),
+      {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+        },
+      },
+    );
+
+    return toProjectUsageResource(await response.json(), projectId);
+  }
+
+  async #request(input: URL, init: RequestInit): Promise<Response> {
     const accessToken = await this.#accessTokenProvider();
     if (!accessToken) {
       throw new ProjectCatalogError('No active admin access token is available.', 'missing_token');
     }
 
-    const response = await this.#fetchImpl(new URL('/api/v1/projects', this.#baseUrl), {
-      method: 'GET',
-      headers: {
-        accept: 'application/json',
-        authorization: `Bearer ${accessToken}`,
-      },
+    const headers = new Headers(init.headers);
+    headers.set('authorization', `Bearer ${accessToken}`);
+
+    const response = await this.#fetchImpl(input, {
+      ...init,
+      headers,
     });
     if (response.status === 401) {
       this.#onAuthenticationFailure?.();
@@ -83,7 +133,7 @@ export class ProjectCatalogClient {
       );
     }
 
-    return toProjectListResponse(await response.json());
+    return response;
   }
 }
 
@@ -93,7 +143,7 @@ export function toProjectListResponse(payload: unknown): ProjectListResponse {
   return { projects };
 }
 
-function toProjectResource(value: unknown): ProjectResource {
+export function toProjectResource(value: unknown): ProjectResource {
   const object = expectRecord(value, 'project');
   const id = expectString(object.id, 'project id');
   return {
@@ -104,7 +154,7 @@ function toProjectResource(value: unknown): ProjectResource {
     quotas: toProjectQuotas(object.quotas ?? {}),
     policy: toProjectPolicy(object.policy ?? {}),
     state: expectEnum(object.state, PROJECT_STATES, 'project state'),
-    usage: toProjectUsage(object.usage, id),
+    usage: toProjectUsageResource(object.usage, id),
     created_at: expectString(object.created_at, 'project created_at'),
     updated_at: expectString(object.updated_at, 'project updated_at'),
   };
@@ -143,7 +193,7 @@ function toProjectPolicy(value: unknown): ProjectPolicy {
   };
 }
 
-function toProjectUsage(value: unknown, fallbackProjectId: string): ProjectUsageResource {
+export function toProjectUsageResource(value: unknown, fallbackProjectId: string): ProjectUsageResource {
   const object = expectRecord(value, 'project usage');
   return {
     project_id: optionalString(object.project_id, 'project usage project_id') ?? fallbackProjectId,

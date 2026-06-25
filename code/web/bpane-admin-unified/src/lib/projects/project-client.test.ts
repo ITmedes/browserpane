@@ -8,7 +8,7 @@ import {
 
 describe('ProjectCatalogClient', () => {
   it('lists projects through the authenticated control API', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(projectListPayload()), { status: 200 }));
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(projectListPayload()), { status: 200 }));
     const client = new ProjectCatalogClient({
       baseUrl: 'http://browserpane.test',
       accessTokenProvider: () => 'token-1',
@@ -19,15 +19,58 @@ describe('ProjectCatalogClient', () => {
 
     expect(response.projects).toHaveLength(1);
     expect(response.projects[0]?.name).toBe('Support');
+    const headers = fetchImpl.mock.calls[0]?.[1]?.headers as Headers;
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('http://browserpane.test/api/v1/projects'),
       expect.objectContaining({
         method: 'GET',
-        headers: expect.objectContaining({
-          authorization: 'Bearer token-1',
-        }),
       }),
     );
+    expect(headers.get('authorization')).toBe('Bearer token-1');
+    expect(headers.get('accept')).toBe('application/json');
+  });
+
+  it('fetches, updates, and refreshes usage for one project', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (init?.method === 'PUT') {
+        return new Response(JSON.stringify({ ...projectPayload(), name: 'Support Ops' }), { status: 200 });
+      }
+      if (url.endsWith('/usage')) {
+        return new Response(JSON.stringify(projectPayload().usage), { status: 200 });
+      }
+      return new Response(JSON.stringify(projectPayload()), { status: 200 });
+    });
+    const client = new ProjectCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl,
+    });
+
+    const project = await client.getProject('11111111-1111-4111-8111-111111111111');
+    const updated = await client.updateProject(project.id, {
+      name: 'Support Ops',
+      description: 'Updated',
+      labels: { team: 'support' },
+      quotas: project.quotas,
+      policy: project.policy,
+      state: 'active',
+    });
+    const usage = await client.getProjectUsage(project.id);
+
+    expect(project.name).toBe('Support');
+    expect(updated.name).toBe('Support Ops');
+    expect(usage.project_id).toBe(project.id);
+    expect(fetchImpl.mock.calls.map((call) => [call[0].toString(), call[1]?.method])).toEqual([
+      ['http://browserpane.test/api/v1/projects/11111111-1111-4111-8111-111111111111', 'GET'],
+      ['http://browserpane.test/api/v1/projects/11111111-1111-4111-8111-111111111111', 'PUT'],
+      ['http://browserpane.test/api/v1/projects/11111111-1111-4111-8111-111111111111/usage', 'GET'],
+    ]);
+    expect(JSON.parse(fetchImpl.mock.calls[1]?.[1]?.body as string)).toMatchObject({
+      name: 'Support Ops',
+      labels: { team: 'support' },
+      state: 'active',
+    });
   });
 
   it('reports authentication failures before throwing the HTTP error', async () => {
