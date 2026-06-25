@@ -73,6 +73,15 @@ export type ProjectResource = {
   readonly updated_at: string;
 };
 
+export type UpsertProjectRequest = {
+  readonly name: string;
+  readonly description?: string | null;
+  readonly labels?: Readonly<Record<string, string>>;
+  readonly quotas?: ProjectQuotas;
+  readonly policy?: ProjectPolicy;
+  readonly state?: ProjectState;
+};
+
 export type ProjectListResponse = {
   readonly projects: readonly ProjectResource[];
 };

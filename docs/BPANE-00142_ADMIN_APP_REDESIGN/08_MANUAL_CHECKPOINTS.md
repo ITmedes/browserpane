@@ -35,10 +35,18 @@ and new `/admin-new/` app coexist.
 5. Confirm the catalog uses the concept-style table overview with project,
    state, activity, runtime, egress, storage, policy, alert, and updated columns.
 6. Confirm project lens tabs and search filter the table without opening a
-   selected-project detail panel.
-7. Use Refresh and confirm the catalog reloads without changing the current
+   route-level detail page.
+7. Select an existing project and confirm the inspector loads backend-backed
+   metadata, usage, quotas, policy, and alerts.
+8. Edit name, description, labels, or state, save, and confirm the table row and
+   inspector update from the API response.
+9. Confirm quota and policy data remain read-only in this slice.
+10. Refresh selected-project detail and selected-project usage.
+11. Reload `/admin-new/projects?project=<id>` and confirm the same project
+   selection is restored.
+12. Use Refresh and confirm the catalog reloads without changing the current
    `/admin/` application.
-8. Expire or clear the token and confirm the next project refresh redirects to
+13. Expire or clear the token and confirm the next project refresh redirects to
    Keycloak instead of silently failing.
 
 ## Session Workflow

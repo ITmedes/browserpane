@@ -1,0 +1,165 @@
+<script lang="ts">
+  import { AlertTriangle, Copy, RefreshCw } from '@lucide/svelte';
+  import type { ProjectActionState, ProjectDetailLoadState } from '$lib/projects/project-detail-state';
+  import { buildProjectInspectorModel } from '$lib/projects/project-inspector-view-model';
+  import type { UpsertProjectRequest } from '$lib/projects/project-types';
+  import { projectToneClass } from '$lib/projects/project-ui';
+  import ProjectEditForm from './ProjectEditForm.svelte';
+
+  type ProjectInspectorProps = {
+    readonly state: ProjectDetailLoadState;
+    readonly actionState?: ProjectActionState;
+    readonly onRefreshProject?: () => void | Promise<void>;
+    readonly onRefreshUsage?: () => void | Promise<void>;
+    readonly onSaveProject?: (request: UpsertProjectRequest) => void | Promise<void>;
+  };
+
+  let {
+    state,
+    actionState = { status: 'idle' },
+    onRefreshProject,
+    onRefreshUsage,
+    onSaveProject,
+  }: ProjectInspectorProps = $props();
+
+  const model = $derived(state.status === 'ready' ? buildProjectInspectorModel(state.project) : null);
+  const busy = $derived(actionState.status === 'running');
+
+  function refreshProject(): void {
+    void onRefreshProject?.();
+  }
+
+  function refreshUsage(): void {
+    void onRefreshUsage?.();
+  }
+
+  function saveProject(request: UpsertProjectRequest): void {
+    void onSaveProject?.(request);
+  }
+
+  async function copyProjectId(projectId: string): Promise<void> {
+    await navigator.clipboard?.writeText(projectId);
+  }
+</script>
+
+<aside class="min-w-0 rounded-md border border-admin-border bg-admin-panel" data-testid="project-inspector">
+  {#if state.status === 'idle'}
+    <div class="flex min-h-64 items-center justify-center p-6 text-center text-sm text-admin-muted" data-testid="project-inspector-idle">
+      Select a project to inspect and edit existing metadata.
+    </div>
+  {:else if state.status === 'loading'}
+    <div class="flex min-h-64 items-center justify-center p-6 text-sm text-admin-muted" data-testid="project-inspector-loading">
+      Loading project...
+    </div>
+  {:else if state.status === 'error'}
+    <div class="flex items-start gap-3 p-4 text-sm text-red-900" role="alert" data-testid="project-inspector-error">
+      <AlertTriangle class="mt-0.5 shrink-0" size={17} strokeWidth={1.9} />
+      <div class="min-w-0">
+        <p class="m-0 font-semibold">Project unavailable</p>
+        <p class="m-0 mt-1 break-words text-red-800">{state.message}</p>
+      </div>
+    </div>
+  {:else if model}
+    <div class="border-b border-admin-border p-4">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div class="min-w-0">
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 class="m-0 truncate text-xl font-semibold text-admin-ink">{model.name}</h2>
+            <span class={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${projectToneClass(model.stateTone)}`}>
+              {model.state}
+            </span>
+          </div>
+          <p class="m-0 mt-1 text-sm text-admin-muted">{model.description}</p>
+          <p class="m-0 mt-2 truncate font-mono text-xs text-admin-muted">{model.id}</p>
+        </div>
+
+        <div class="flex shrink-0 flex-wrap gap-2">
+          <button
+            class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft"
+            type="button"
+            onclick={() => void copyProjectId(model.id)}
+            data-testid="project-copy-id"
+          >
+            <Copy size={15} strokeWidth={1.8} />
+            <span>Copy ID</span>
+          </button>
+          <button
+            class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            onclick={refreshProject}
+            disabled={busy}
+            data-testid="project-refresh-detail"
+          >
+            <RefreshCw size={15} strokeWidth={1.8} />
+            <span>Refresh</span>
+          </button>
+          <button
+            class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            onclick={refreshUsage}
+            disabled={busy}
+            data-testid="project-refresh-usage"
+          >
+            <RefreshCw size={15} strokeWidth={1.8} />
+            <span>Usage</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {#if actionState.status === 'success'}
+      <div class="border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" data-testid="project-action-success">
+        {actionState.message}
+      </div>
+    {:else if actionState.status === 'error'}
+      <div class="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert" data-testid="project-action-error">
+        {actionState.message}
+      </div>
+    {:else if actionState.status === 'running'}
+      <div class="border-b border-admin-border bg-admin-soft px-4 py-3 text-sm text-admin-muted" data-testid="project-action-running">
+        {actionState.label}
+      </div>
+    {/if}
+
+    <div class="grid gap-4 p-4">
+      {#key `${state.project.id}:${state.project.updated_at}`}
+        <ProjectEditForm project={state.project} disabled={busy} onSave={saveProject} />
+      {/key}
+
+      <section class="rounded-md border border-admin-border bg-admin-panel p-4" data-testid="project-readonly-details">
+        <div class="border-b border-admin-border pb-3">
+          <h3 class="m-0 text-sm font-semibold text-admin-ink">Read-only project evidence</h3>
+          <p class="m-0 mt-1 text-xs text-admin-muted">Quotas, policy, usage, and alerts are visible here but not edited in this slice.</p>
+        </div>
+
+        <div class="mt-4 grid gap-5 xl:grid-cols-2">
+          {#each model.sections as section}
+            <section class="min-w-0" aria-label={section.title}>
+              <h4 class="m-0 text-sm font-semibold text-admin-ink">{section.title}</h4>
+              <dl class="mt-3 grid gap-2">
+                {#each section.rows as row}
+                  <div class="grid gap-1">
+                    <dt class="text-xs font-semibold uppercase text-admin-muted">{row.label}</dt>
+                    <dd class="m-0 break-words text-sm text-admin-ink">{row.value}</dd>
+                  </div>
+                {/each}
+              </dl>
+            </section>
+          {/each}
+        </div>
+
+        <section class="mt-5 min-w-0" aria-label="Usage alerts">
+          <h4 class="m-0 text-sm font-semibold text-admin-ink">Usage alerts</h4>
+          <dl class="mt-3 grid gap-2">
+            {#each model.alerts as alert}
+              <div class="grid gap-1">
+                <dt class="text-xs font-semibold uppercase text-admin-muted">{alert.label}</dt>
+                <dd class="m-0 break-words text-sm text-admin-ink">{alert.value}</dd>
+              </div>
+            {/each}
+          </dl>
+        </section>
+      </section>
+    </div>
+  {/if}
+</aside>

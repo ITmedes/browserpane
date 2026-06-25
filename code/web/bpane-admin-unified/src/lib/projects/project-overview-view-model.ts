@@ -1,4 +1,11 @@
 import type { ProjectPolicy, ProjectResource } from './project-types';
+import {
+  formatBytes,
+  formatDateTime,
+  formatDuration,
+  usageWithLimit,
+  type ProjectTone,
+} from './project-formatters';
 
 export type ProjectOverviewLoadState =
   | { readonly status: 'loading' }
@@ -19,7 +26,7 @@ export type ProjectOverviewRow = {
   readonly name: string;
   readonly description: string;
   readonly state: string;
-  readonly stateTone: 'success' | 'neutral';
+  readonly stateTone: ProjectTone;
   readonly activeSessions: string;
   readonly queuedSessions: string;
   readonly activeWorkflowRuns: string;
@@ -28,7 +35,7 @@ export type ProjectOverviewRow = {
   readonly egressUsage: string;
   readonly retainedStorage: string;
   readonly alerts: string;
-  readonly alertTone: 'neutral' | 'warning' | 'danger';
+  readonly alertTone: ProjectTone;
   readonly policySummary: string;
   readonly updatedAt: string;
 };
@@ -94,13 +101,6 @@ function metric(key: string, label: string, value: number): ProjectOverviewMetri
   };
 }
 
-function usageWithLimit(value: number | string, limit: number | string | null | undefined): string {
-  if (limit === undefined || limit === null) {
-    return `${value} / unbounded`;
-  }
-  return `${value} / ${limit}`;
-}
-
 function usageAlertsLabel(project: ProjectResource): string {
   if (project.usage.alerts.length === 0) {
     return 'none';
@@ -113,7 +113,7 @@ function usageAlertsLabel(project: ProjectResource): string {
   ].filter(Boolean).join(', ');
 }
 
-function usageAlertTone(project: ProjectResource): 'neutral' | 'warning' | 'danger' {
+function usageAlertTone(project: ProjectResource): ProjectTone {
   if (project.usage.alerts.some((alert) => alert.state === 'exceeded')) {
     return 'danger';
   }
@@ -147,48 +147,4 @@ function projectPolicySummary(policy: ProjectPolicy): string {
     disabledTransfers > 0 ? `${disabledTransfers} disabled operations` : null,
     policy.usage_budget_enforcement === 'block_session_creation' ? 'blocking budgets' : 'warning budgets',
   ].filter(Boolean).join(', ');
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat('en', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date);
-}
-
-function formatBytes(value: number | null | undefined): string | null {
-  if (value === undefined || value === null) {
-    return null;
-  }
-  if (value < 1024) {
-    return `${value} B`;
-  }
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let current = value / 1024;
-  let unitIndex = 0;
-  while (current >= 1024 && unitIndex < units.length - 1) {
-    current /= 1024;
-    unitIndex += 1;
-  }
-  return `${current.toFixed(current >= 10 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-function formatDuration(value: number | null | undefined): string | null {
-  if (value === undefined || value === null) {
-    return null;
-  }
-  const totalSeconds = Math.floor(value / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m`;
-  }
-  return `${totalSeconds}s`;
 }

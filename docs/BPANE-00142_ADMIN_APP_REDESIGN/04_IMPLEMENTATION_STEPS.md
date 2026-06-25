@@ -36,8 +36,13 @@ focused validation for the current step is accepted.
 2. Use real read-only project data from `/api/v1/projects`.
 3. Show project scope, state, quotas, policy gates, usage counters, and alerts.
 4. Use the concept sessions-table pattern for a read-only project catalog overview.
-5. Defer the selected-project detail view until the resource detail routes are introduced.
-6. Use the new admin shell's Keycloak/OIDC token provider and global auth
+5. Add existing-project row selection backed by `GET /api/v1/projects/{project_id}`.
+6. Allow safe edits for name, description, labels, and state through
+   `PUT /api/v1/projects/{project_id}`, preserving current quotas and policy in
+   the replace payload.
+7. Keep quotas, policy, usage, and alerts visible as read-only inspector
+   evidence until dedicated editing flows are scoped.
+8. Use the new admin shell's Keycloak/OIDC token provider and global auth
    failure handler.
 
 ## Step 3: Resource Foundation
