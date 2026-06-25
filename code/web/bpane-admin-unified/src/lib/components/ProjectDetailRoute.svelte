@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { ArrowLeft, AlertTriangle } from '@lucide/svelte';
+  import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
+  import AdminMessage from '$lib/components/AdminMessage.svelte';
   import ProjectInspector from '$lib/components/ProjectInspector.svelte';
   import { ProjectCatalogClient } from '$lib/projects/project-client';
   import type {
@@ -164,17 +165,15 @@
   </header>
 
   {#if projectState.status === 'error'}
-    <section
-      class="flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-900"
-      role="alert"
+    <div
       data-testid="project-detail-error"
     >
-      <AlertTriangle class="mt-0.5 shrink-0" size={17} strokeWidth={1.9} />
-      <div class="min-w-0">
-        <p class="m-0 font-semibold">Project detail unavailable</p>
-        <p class="m-0 mt-1 break-words text-red-800">{projectState.message}</p>
-      </div>
-    </section>
+      <AdminMessage
+        tone="error"
+        title="Project detail unavailable"
+        message={projectState.message}
+      />
+    </div>
   {:else}
     <ProjectInspector
       state={projectState}

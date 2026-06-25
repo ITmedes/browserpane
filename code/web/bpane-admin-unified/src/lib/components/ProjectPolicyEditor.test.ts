@@ -50,6 +50,24 @@ describe('ProjectPolicyEditor', () => {
       allowedSessionTemplateIds: ['template-support'],
     }));
   });
+
+  it('renders selector errors inside the affected allow-list group', () => {
+    const draft = {
+      ...createProjectEditDraft(project()),
+      restrictSessionTemplates: true,
+    };
+    const target = renderComponent(ProjectPolicyEditor, {
+      draft,
+      policyOptionsState: { status: 'ready', options: options() },
+      fieldErrors: {
+        allowedSessionTemplateIds: ['Session Templates restriction needs at least one selected resource.'],
+      },
+    });
+
+    expect(byTestId(target, 'project-policy-session-templates-error').textContent).toContain(
+      'Session Templates restriction needs at least one selected resource.',
+    );
+  });
 });
 
 function setCheckbox(element: Element, checked: boolean): void {

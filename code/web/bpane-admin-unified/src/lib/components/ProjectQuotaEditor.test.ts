@@ -30,6 +30,20 @@ describe('ProjectQuotaEditor', () => {
       maxEgressTotalBytes: { enabled: true, value: '' },
     }));
   });
+
+  it('renders quota errors inside the affected quota card', () => {
+    const draft = createProjectEditDraft(project());
+    const target = renderComponent(ProjectQuotaEditor, {
+      draft,
+      fieldErrors: {
+        maxActiveSessions: ['Active sessions quota needs a positive integer.'],
+      },
+    });
+
+    expect(byTestId(target, 'project-quota-max-active-sessions-error').textContent).toContain(
+      'Active sessions quota needs a positive integer.',
+    );
+  });
 });
 
 function setCheckbox(element: Element, checked: boolean): void {

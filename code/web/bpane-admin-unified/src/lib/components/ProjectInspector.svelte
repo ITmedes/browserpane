@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle, Copy, RefreshCw } from '@lucide/svelte';
+  import { Copy, RefreshCw } from '@lucide/svelte';
   import type {
     ProjectActionState,
     ProjectDetailLoadState,
@@ -8,6 +8,7 @@
   import { buildProjectInspectorModel } from '$lib/projects/project-inspector-view-model';
   import type { UpsertProjectRequest } from '$lib/projects/project-types';
   import { projectToneClass } from '$lib/projects/project-ui';
+  import AdminMessage from './AdminMessage.svelte';
   import ProjectEditForm from './ProjectEditForm.svelte';
 
   type ProjectInspectorProps = {
@@ -58,12 +59,13 @@
       Loading project...
     </div>
   {:else if state.status === 'error'}
-    <div class="flex items-start gap-3 p-4 text-sm text-red-900" role="alert" data-testid="project-inspector-error">
-      <AlertTriangle class="mt-0.5 shrink-0" size={17} strokeWidth={1.9} />
-      <div class="min-w-0">
-        <p class="m-0 font-semibold">Project unavailable</p>
-        <p class="m-0 mt-1 break-words text-red-800">{state.message}</p>
-      </div>
+    <div class="p-4">
+      <AdminMessage
+        tone="error"
+        title="Project unavailable"
+        message={state.message}
+        testId="project-inspector-error"
+      />
     </div>
   {:else if model}
     <div class="border-b border-admin-border p-4">
@@ -114,16 +116,30 @@
     </div>
 
     {#if actionState.status === 'success'}
-      <div class="border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" data-testid="project-action-success">
-        {actionState.message}
+      <div class="border-b border-admin-border p-4">
+        <AdminMessage
+          tone="success"
+          title="Project action completed"
+          message={actionState.message}
+          testId="project-action-success"
+        />
       </div>
     {:else if actionState.status === 'error'}
-      <div class="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert" data-testid="project-action-error">
-        {actionState.message}
+      <div class="border-b border-admin-border p-4">
+        <AdminMessage
+          tone="error"
+          title="Project action failed"
+          message={actionState.message}
+          testId="project-action-error"
+        />
       </div>
     {:else if actionState.status === 'running'}
-      <div class="border-b border-admin-border bg-admin-soft px-4 py-3 text-sm text-admin-muted" data-testid="project-action-running">
-        {actionState.label}
+      <div class="border-b border-admin-border p-4">
+        <AdminMessage
+          tone="loading"
+          title={actionState.label}
+          testId="project-action-running"
+        />
       </div>
     {/if}
 

@@ -6,6 +6,7 @@
   import { OidcAuthClient } from '$lib/auth/oidc-auth-client';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import type { AuthSnapshot } from '$lib/auth/oidc-types';
+  import AdminMessage from '$lib/components/AdminMessage.svelte';
   import ShellAccountButton from '$lib/components/ShellAccountButton.svelte';
   import ShellLogo from '$lib/components/ShellLogo.svelte';
   import ShellNavigation from '$lib/components/ShellNavigation.svelte';
@@ -173,23 +174,36 @@
               data-testid="admin-new-auth-gate"
             >
               {#if authLoading}
-                <p class="m-0 text-sm text-admin-muted">Loading authentication metadata...</p>
+                <AdminMessage
+                  tone="loading"
+                  title="Loading authentication metadata"
+                  message="The admin shell is resolving the configured sign-in provider."
+                  testId="admin-new-auth-loading"
+                />
               {:else if authError && !auth?.authenticated}
-                <div class="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900" role="alert">
-                  {authError}
-                </div>
+                <AdminMessage
+                  tone="error"
+                  title="Authentication required"
+                  message={authError}
+                  testId="admin-new-auth-error"
+                />
               {/if}
 
               {#if !authLoading && !auth?.authenticated}
                 {#if auth?.configured && !authError}
-                  <p
-                    class="m-0 text-sm text-admin-muted"
-                    data-testid="admin-new-auth-redirecting"
-                  >
-                    Redirecting to Keycloak sign-in...
-                  </p>
+                  <AdminMessage
+                    tone="loading"
+                    title="Redirecting to sign in"
+                    message="Keycloak sign-in is opening for this admin session."
+                    testId="admin-new-auth-redirecting"
+                  />
                 {:else if !authError}
-                  <p class="m-0 mt-2 text-sm text-admin-muted">OIDC is not configured for this deployment.</p>
+                  <AdminMessage
+                    tone="info"
+                    title="OIDC is not configured"
+                    message="This deployment does not expose an admin sign-in provider."
+                    testId="admin-new-auth-unconfigured"
+                  />
                 {/if}
               {/if}
             </section>

@@ -4,17 +4,20 @@
     PROJECT_POLICY_BOOLEAN_FIELDS,
     mergePolicyOptionsWithSelected,
     type ProjectEditDraft,
+    type ProjectEditFieldErrors,
     type ProjectPolicyAllowedIdsDraftKey,
     type ProjectPolicyBooleanDraftKey,
     type ProjectPolicyRestrictionDraftKey,
   } from '$lib/projects/project-edit-view-model';
   import type { ProjectPolicyOptionsLoadState } from '$lib/projects/project-detail-state';
   import type { ProjectPolicyOption } from '$lib/projects/project-types';
+  import AdminMessage from './AdminMessage.svelte';
 
   type ProjectPolicyEditorProps = {
     readonly draft: ProjectEditDraft;
     readonly disabled?: boolean;
     readonly policyOptionsState?: ProjectPolicyOptionsLoadState;
+    readonly fieldErrors?: ProjectEditFieldErrors;
     readonly onDraftChange?: (draft: ProjectEditDraft) => void;
   };
 
@@ -22,6 +25,7 @@
     draft,
     disabled = false,
     policyOptionsState = { status: 'idle' },
+    fieldErrors = {},
     onDraftChange,
   }: ProjectPolicyEditorProps = $props();
 
@@ -120,17 +124,31 @@
     <span class="text-xs text-admin-muted">
       Blocking enforcement rejects new sessions after selected session/runtime budgets are exhausted.
     </span>
+    {#if fieldErrors.usageBudgetEnforcement?.length}
+      <AdminMessage
+        tone="error"
+        density="compact"
+        items={fieldErrors.usageBudgetEnforcement}
+        testId="project-policy-budget-enforcement-error"
+      />
+    {/if}
   </label>
 
   <div class="mt-5 grid gap-4" data-testid="project-policy-allow-lists">
     {#if policyOptionsState.status === 'loading'}
-      <p class="m-0 rounded-md border border-admin-border bg-admin-panel px-3 py-2 text-sm text-admin-muted" data-testid="project-policy-options-loading">
-        Loading selectable resources...
-      </p>
+      <AdminMessage
+        tone="loading"
+        title="Loading selectable resources"
+        message="Session templates, browser contexts, and related project resources are being refreshed."
+        testId="project-policy-options-loading"
+      />
     {:else if policyOptionsState.status === 'error'}
-      <p class="m-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="project-policy-options-error">
-        Selectable resources could not be refreshed: {policyOptionsState.message}
-      </p>
+      <AdminMessage
+        tone="warning"
+        title="Selectable resources could not be refreshed"
+        message={policyOptionsState.message}
+        testId="project-policy-options-error"
+      />
     {/if}
 
     {#each PROJECT_POLICY_ALLOW_LIST_GROUPS as group}
@@ -203,6 +221,17 @@
                 </label>
               {/each}
             {/if}
+          </div>
+        {/if}
+
+        {#if fieldErrors[group.selectedIdsKey]?.length}
+          <div class="mt-3">
+            <AdminMessage
+              tone="error"
+              density="compact"
+              items={fieldErrors[group.selectedIdsKey]}
+              testId={`project-policy-${group.testId}-error`}
+            />
           </div>
         {/if}
       </section>

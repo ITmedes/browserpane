@@ -2,18 +2,22 @@
   import {
     PROJECT_QUOTA_LIMITS,
     type ProjectEditDraft,
+    type ProjectEditFieldErrors,
     type ProjectQuotaLimitDraftKey,
   } from '$lib/projects/project-edit-view-model';
+  import AdminMessage from './AdminMessage.svelte';
 
   type ProjectQuotaEditorProps = {
     readonly draft: ProjectEditDraft;
     readonly disabled?: boolean;
+    readonly fieldErrors?: ProjectEditFieldErrors;
     readonly onDraftChange?: (draft: ProjectEditDraft) => void;
   };
 
   let {
     draft,
     disabled = false,
+    fieldErrors = {},
     onDraftChange,
   }: ProjectQuotaEditorProps = $props();
 
@@ -92,6 +96,14 @@
             oninput={(event) => setQuotaValue(quota.key, inputValue(event))}
             data-testid={`project-quota-${quota.testId}-value`}
           />
+          {#if fieldErrors[quota.key]?.length}
+            <AdminMessage
+              tone="error"
+              density="compact"
+              items={fieldErrors[quota.key]}
+              testId={`project-quota-${quota.testId}-error`}
+            />
+          {/if}
         </label>
       </div>
     {/each}

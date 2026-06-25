@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { AlertTriangle, RefreshCw } from '@lucide/svelte';
+  import { RefreshCw } from '@lucide/svelte';
   import {
     buildProjectOverviewModel,
     type ProjectOverviewLoadState,
   } from '$lib/projects/project-overview-view-model';
+  import AdminMessage from './AdminMessage.svelte';
   import ProjectCatalogTable from './ProjectCatalogTable.svelte';
 
   type ProjectOverviewProps = {
@@ -49,20 +50,19 @@
       aria-live="polite"
       data-testid="projects-loading"
     >
-      Loading projects...
+      <AdminMessage
+        tone="loading"
+        title="Loading projects"
+        message="The project catalog is being refreshed from the control API."
+      />
     </section>
   {:else if loadState.status === 'error'}
-    <section
-      class="flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-900"
-      role="alert"
-      data-testid="projects-error"
-    >
-      <AlertTriangle class="mt-0.5 shrink-0" size={17} strokeWidth={1.9} />
-      <div class="min-w-0">
-        <p class="m-0 font-semibold">Project catalog unavailable</p>
-        <p class="m-0 mt-1 break-words text-red-800">{loadState.message}</p>
-      </div>
-    </section>
+    <AdminMessage
+      tone="error"
+      title="Project catalog unavailable"
+      message={loadState.message}
+      testId="projects-error"
+    />
   {:else if loadState.projects.length === 0}
     <section
       class="flex min-h-64 items-center justify-center rounded-md border border-dashed border-admin-border bg-admin-panel text-sm text-admin-muted"
