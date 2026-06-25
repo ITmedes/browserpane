@@ -96,6 +96,7 @@ export type ProjectQuotaLimitDefinition = {
   readonly description: string;
   readonly unitLabel: string;
   readonly testId: string;
+  readonly presets?: readonly ProjectQuotaPresetDefinition[];
 };
 
 export type ProjectRollingSessionCreationQuotaDefinition = {
@@ -105,6 +106,20 @@ export type ProjectRollingSessionCreationQuotaDefinition = {
   readonly description: string;
   readonly limitLabel: string;
   readonly windowLabel: string;
+  readonly testId: string;
+  readonly presets: readonly ProjectRollingSessionCreationQuotaPresetDefinition[];
+};
+
+export type ProjectQuotaPresetDefinition = {
+  readonly label: string;
+  readonly value: string;
+  readonly testId: string;
+};
+
+export type ProjectRollingSessionCreationQuotaPresetDefinition = {
+  readonly label: string;
+  readonly limitValue: string;
+  readonly windowValue: string;
   readonly testId: string;
 };
 
@@ -136,6 +151,12 @@ export const PROJECT_QUOTA_LIMITS = [
     description: 'Maximum simultaneously active browser sessions in this project.',
     unitLabel: 'sessions',
     testId: 'max-active-sessions',
+    presets: [
+      { label: '1', value: '1', testId: '1' },
+      { label: '2', value: '2', testId: '2' },
+      { label: '5', value: '5', testId: '5' },
+      { label: '10', value: '10', testId: '10' },
+    ],
   },
   {
     key: 'maxActiveWorkflowRuns',
@@ -143,6 +164,12 @@ export const PROJECT_QUOTA_LIMITS = [
     description: 'Maximum simultaneously active workflow runs in this project.',
     unitLabel: 'runs',
     testId: 'max-active-workflow-runs',
+    presets: [
+      { label: '1', value: '1', testId: '1' },
+      { label: '2', value: '2', testId: '2' },
+      { label: '5', value: '5', testId: '5' },
+      { label: '10', value: '10', testId: '10' },
+    ],
   },
   {
     key: 'maxRetainedStorageBytes',
@@ -150,6 +177,11 @@ export const PROJECT_QUOTA_LIMITS = [
     description: 'Retained bytes for workflow outputs, recordings, session files, and project workspaces.',
     unitLabel: 'bytes',
     testId: 'max-retained-storage-bytes',
+    presets: [
+      { label: '1 GB', value: '1073741824', testId: '1gb' },
+      { label: '10 GB', value: '10737418240', testId: '10gb' },
+      { label: '100 GB', value: '107374182400', testId: '100gb' },
+    ],
   },
   {
     key: 'maxSessionCreations',
@@ -157,6 +189,11 @@ export const PROJECT_QUOTA_LIMITS = [
     description: 'Project-wide created-session budget. Generated usage alerts use this limit.',
     unitLabel: 'sessions',
     testId: 'max-session-creations',
+    presets: [
+      { label: '100', value: '100', testId: '100' },
+      { label: '1k', value: '1000', testId: '1000' },
+      { label: '10k', value: '10000', testId: '10000' },
+    ],
   },
   {
     key: 'maxRuntimeUsageMs',
@@ -164,6 +201,11 @@ export const PROJECT_QUOTA_LIMITS = [
     description: 'Aggregated finalized plus live runtime budget. Generated usage alerts use this limit.',
     unitLabel: 'milliseconds',
     testId: 'max-runtime-usage-ms',
+    presets: [
+      { label: '1 h', value: '3600000', testId: '1h' },
+      { label: '4 h', value: '14400000', testId: '4h' },
+      { label: '8 h', value: '28800000', testId: '8h' },
+    ],
   },
   {
     key: 'maxEgressTotalBytes',
@@ -171,6 +213,11 @@ export const PROJECT_QUOTA_LIMITS = [
     description: 'Sanitized egress byte-counter budget. Generated alerts are advisory for this limit.',
     unitLabel: 'bytes',
     testId: 'max-egress-total-bytes',
+    presets: [
+      { label: '1 GB', value: '1073741824', testId: '1gb' },
+      { label: '10 GB', value: '10737418240', testId: '10gb' },
+      { label: '100 GB', value: '107374182400', testId: '100gb' },
+    ],
   },
 ] satisfies readonly ProjectQuotaLimitDefinition[];
 
@@ -182,6 +229,11 @@ export const PROJECT_ROLLING_SESSION_CREATION_QUOTA = {
   limitLabel: 'sessions per window',
   windowLabel: 'window seconds',
   testId: 'session-creation-rate',
+  presets: [
+    { label: '10 / h', limitValue: '10', windowValue: '3600', testId: '10-hour' },
+    { label: '50 / h', limitValue: '50', windowValue: '3600', testId: '50-hour' },
+    { label: '500 / d', limitValue: '500', windowValue: '86400', testId: '500-day' },
+  ],
 } satisfies ProjectRollingSessionCreationQuotaDefinition;
 
 export const PROJECT_POLICY_BOOLEAN_FIELDS = [

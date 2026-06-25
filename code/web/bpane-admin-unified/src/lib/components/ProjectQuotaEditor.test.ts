@@ -52,6 +52,38 @@ describe('ProjectQuotaEditor', () => {
     expect(byTestId(target, 'project-quota-session-creation-window-sec-value')).toBeTruthy();
   });
 
+  it('applies exact quota presets without hiding numeric input', () => {
+    const draft = createProjectEditDraft(project());
+    const onDraftChange = vi.fn();
+    const target = renderComponent(ProjectQuotaEditor, {
+      draft,
+      onDraftChange,
+    });
+
+    byTestId(target, 'project-quota-max-runtime-usage-ms-preset-4h').click();
+
+    expect(onDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      maxRuntimeUsageMs: { enabled: true, value: '14400000' },
+    }));
+    expect(byTestId(target, 'project-quota-max-runtime-usage-ms-value')).toBeTruthy();
+  });
+
+  it('applies rolling session creation rate presets as count and window values', () => {
+    const draft = createProjectEditDraft(project());
+    const onDraftChange = vi.fn();
+    const target = renderComponent(ProjectQuotaEditor, {
+      draft,
+      onDraftChange,
+    });
+
+    byTestId(target, 'project-quota-session-creation-rate-preset-50-hour').click();
+
+    expect(onDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      maxSessionCreationsPerWindow: { enabled: true, value: '50' },
+      sessionCreationWindowSec: { enabled: true, value: '3600' },
+    }));
+  });
+
   it('renders quota errors inside the affected quota card', () => {
     const draft = createProjectEditDraft(project());
     const target = renderComponent(ProjectQuotaEditor, {
