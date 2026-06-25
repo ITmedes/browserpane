@@ -37,6 +37,51 @@ describe('ProjectDetailRoute', () => {
           session_creations: 2,
         }, 200);
       }
+      if (url.endsWith('/session-templates')) {
+        return jsonResponse({
+          templates: [{
+            id: 'template-support',
+            name: 'Support Browser',
+            description: 'Approved support defaults',
+            labels: {},
+            defaults: {},
+            version: 1,
+            created_at: '2026-06-11T09:00:00.000Z',
+            updated_at: '2026-06-11T10:00:00.000Z',
+          }],
+        }, 200);
+      }
+      if (url.endsWith('/browser-contexts')) {
+        return jsonResponse({
+          contexts: [{
+            id: '22222222-2222-4222-8222-222222222222',
+            project_id: null,
+            project: null,
+            name: 'Support Context',
+            description: null,
+            labels: {},
+            persistence_mode: 'reusable',
+            retention_sec: null,
+            retention_expires_at: null,
+            max_profile_storage_bytes: null,
+            state: 'ready',
+            usage: {},
+            created_at: '2026-06-11T09:00:00.000Z',
+            updated_at: '2026-06-11T10:00:00.000Z',
+            last_used_at: null,
+            deleted_at: null,
+          }],
+        }, 200);
+      }
+      if (url.endsWith('/egress-profiles')) {
+        return jsonResponse({ profiles: [] }, 200);
+      }
+      if (url.endsWith('/extensions')) {
+        return jsonResponse({ extensions: [] }, 200);
+      }
+      if (url.endsWith('/file-workspaces')) {
+        return jsonResponse({ workspaces: [] }, 200);
+      }
       return jsonResponse(projectPayload(), 200);
     });
     vi.stubGlobal('fetch', fetchImpl);
@@ -89,7 +134,7 @@ describe('ProjectDetailRoute', () => {
     await vi.waitFor(() => {
       expect(byTestId(target, 'project-detail-error').textContent).toContain('Project detail unavailable');
     });
-    expect(onAuthenticationFailure).toHaveBeenCalledOnce();
+    expect(onAuthenticationFailure).toHaveBeenCalled();
   });
 });
 

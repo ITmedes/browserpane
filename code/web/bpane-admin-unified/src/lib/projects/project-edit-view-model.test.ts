@@ -8,12 +8,21 @@ import {
 import type { ProjectResource } from './project-types';
 
 describe('project edit view model', () => {
-  it('creates a draft and preserves quotas and policy in the update request', () => {
+  it('creates a draft and maps edited quotas and policy into the update request', () => {
     const source = project();
     const draft = {
       ...createProjectEditDraft(source),
       description: 'Updated support project',
       labelsText: 'env=prod\nteam=support',
+      allowBrowserUploads: false,
+      usageBudgetEnforcement: 'block_session_creation' as const,
+      restrictSessionTemplates: true,
+      allowedSessionTemplateIds: ['template-support'],
+      restrictBrowserContexts: true,
+      allowedBrowserContextIds: ['22222222-2222-4222-8222-222222222222'],
+      maxActiveSessions: { enabled: true, value: '6' },
+      maxSessionCreationsPerWindow: { enabled: true, value: '10' },
+      sessionCreationWindowSec: { enabled: true, value: '3600' },
     };
 
     const validation = validateProjectEdit(source, draft);
@@ -23,19 +32,28 @@ describe('project edit view model', () => {
       name: 'Support',
       description: 'Updated support project',
       labels: { env: 'prod', team: 'support' },
-      quotas: source.quotas,
-      policy: source.policy,
+      quotas: expect.objectContaining({
+        max_active_sessions: 6,
+        max_session_creations_per_window: 10,
+        session_creation_window_sec: 3600,
+      }),
+      policy: expect.objectContaining({
+        allowed_session_template_ids: ['template-support'],
+        allowed_browser_context_ids: ['22222222-2222-4222-8222-222222222222'],
+        allow_browser_uploads: false,
+        usage_budget_enforcement: 'block_session_creation',
+      }),
       state: 'active',
     });
     expect(hasProjectEditChanges(source, draft)).toBe(true);
   });
 
   it('rejects empty names and invalid label lines', () => {
+    const source = project();
     const validation = validateProjectEdit(project(), {
+      ...createProjectEditDraft(source),
       name: ' ',
-      description: '',
       labelsText: 'missing-separator\nteam=',
-      state: 'active',
     });
 
     expect(validation.request).toBeNull();
@@ -43,6 +61,25 @@ describe('project edit view model', () => {
       'Project name is required.',
       'Label line 1 must use key=value.',
       'Label line 2 has an empty value.',
+    ]);
+  });
+
+  it('rejects invalid quotas and empty restricted allow-lists', () => {
+    const source = project();
+    const validation = validateProjectEdit(source, {
+      ...createProjectEditDraft(source),
+      restrictSessionTemplates: true,
+      allowedSessionTemplateIds: [],
+      maxActiveSessions: { enabled: true, value: '0' },
+      maxSessionCreationsPerWindow: { enabled: true, value: '3' },
+      sessionCreationWindowSec: { enabled: false, value: '' },
+    });
+
+    expect(validation.request).toBeNull();
+    expect(validation.errors).toEqual([
+      'Active sessions quota needs a positive integer.',
+      'Rolling session creation quota needs both session creations/window and session creation window enabled.',
+      'Session Templates restriction needs at least one selected resource.',
     ]);
   });
 });

@@ -40,12 +40,15 @@ focused validation for the current step is accepted.
    `/admin-new/projects/{project_id}`.
 6. Add a route-backed existing-project detail view backed by
    `GET /api/v1/projects/{project_id}`.
-7. Allow safe edits for name, description, labels, and state through
-   `PUT /api/v1/projects/{project_id}`, preserving current quotas and policy in
-   the replace payload.
-8. Keep quotas, policy, usage, and alerts visible as read-only detail-view
-   evidence until dedicated editing flows are scoped.
-9. Use the new admin shell's Keycloak/OIDC token provider and global auth
+7. Allow edits for name, description, labels, state, policy checkboxes,
+   resource allow-lists, and quotas through
+   `PUT /api/v1/projects/{project_id}`.
+8. Load selector catalogs from session templates, browser contexts, egress
+   profiles, extensions, and file workspaces so project policy allow-lists use
+   backend-backed options.
+9. Keep usage and generated alerts visible as read-only detail-view evidence;
+   alert thresholds are derived from quotas and enforcement mode by the API.
+10. Use the new admin shell's Keycloak/OIDC token provider and global auth
    failure handler.
 
 ## Step 3: Resource Foundation
