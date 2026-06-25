@@ -24,6 +24,9 @@ describe('EgressProfileCatalogTable', () => {
     expect(target.querySelectorAll('[data-testid="egress-profiles-list-row"]')).toHaveLength(2);
     expect(byTestId(target, 'egress-profiles-list').textContent).toContain('TLS interceptor');
     expect(byTestId(target, 'egress-profiles-list').textContent).toContain('Direct');
+    expect((target.querySelector('[data-testid="egress-profiles-detail-link"]') as HTMLAnchorElement).href).toBe(
+      'http://localhost:3000/admin-new/egress/tls-profile',
+    );
 
     byTestId(target, 'egress-profiles-lens-tls').click();
     await tick();

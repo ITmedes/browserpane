@@ -73,6 +73,10 @@
     }
     return true;
   }
+
+  function detailHref(profileId: string): string {
+    return `/admin-new/egress/${encodeURIComponent(profileId)}`;
+  }
 </script>
 
 <section class="min-h-0 min-w-0 rounded-md border border-admin-border bg-admin-panel" data-testid="egress-profiles-list">
@@ -139,12 +143,13 @@
           <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Health</th>
           <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Proof</th>
           <th class="px-3 py-2 text-left text-xs font-bold uppercase text-admin-muted" scope="col">Updated</th>
+          <th class="px-4 py-2 text-right text-xs font-bold uppercase text-admin-muted" scope="col">Actions</th>
         </tr>
       </thead>
       <tbody>
         {#if visibleRows.length === 0}
           <tr>
-            <td class="px-4 py-14 text-center text-sm text-admin-muted" colspan="9" data-testid="egress-profiles-filter-empty">
+            <td class="px-4 py-14 text-center text-sm text-admin-muted" colspan="10" data-testid="egress-profiles-filter-empty">
               No egress profiles match the current filters.
             </td>
           </tr>
@@ -184,6 +189,15 @@
               </td>
               <td class="px-3 py-3 align-middle text-xs text-admin-muted">{row.proofLabel}</td>
               <td class="px-3 py-3 align-middle text-xs text-admin-muted">{row.updatedAt}</td>
+              <td class="px-4 py-3 align-middle text-right">
+                <a
+                  class="inline-flex h-8 items-center rounded-md border border-admin-border bg-admin-panel px-3 text-xs font-semibold text-admin-ink hover:bg-admin-soft"
+                  href={detailHref(row.id)}
+                  data-testid="egress-profiles-detail-link"
+                >
+                  Details
+                </a>
+              </td>
             </tr>
           {/each}
         {/if}

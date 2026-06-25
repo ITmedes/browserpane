@@ -33,16 +33,25 @@
       <h1 class="m-0 mt-1 text-2xl font-semibold text-admin-ink">Egress profiles</h1>
     </div>
 
-    <button
-      class="inline-flex h-10 w-fit items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink shadow-sm hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
-      type="button"
-      onclick={refresh}
-      disabled={loadState.status === 'loading'}
-      data-testid="egress-profiles-refresh-button"
-    >
-      <RefreshCw size={16} strokeWidth={1.9} />
-      <span>Refresh</span>
-    </button>
+    <div class="flex flex-wrap gap-2">
+      <a
+        class="inline-flex h-10 items-center justify-center rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/30 focus-visible:ring-offset-2"
+        href="/admin-new/egress/new"
+        data-testid="egress-profiles-new-link"
+      >
+        New egress profile
+      </a>
+      <button
+        class="inline-flex h-10 w-fit items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink shadow-sm hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
+        type="button"
+        onclick={refresh}
+        disabled={loadState.status === 'loading'}
+        data-testid="egress-profiles-refresh-button"
+      >
+        <RefreshCw size={16} strokeWidth={1.9} />
+        <span>Refresh</span>
+      </button>
+    </div>
   </header>
 
   {#if loadState.status === 'loading'}

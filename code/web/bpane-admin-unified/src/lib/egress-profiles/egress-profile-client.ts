@@ -6,12 +6,14 @@ import type {
   EgressDiagnosticsResource,
   EgressProfileEffectiveStatus,
   EgressProfileListResponse,
+  EgressProfileProjectOptionsResponse,
   EgressProfileProjectResource,
   EgressProfileResource,
   EgressProfileState,
   EgressProxyConfig,
   EgressTrafficObservationConfig,
   EgressTrafficObservationMode,
+  UpsertEgressProfileRequest,
 } from './egress-profile-types';
 
 const EGRESS_PROFILE_STATES = ['ready', 'disabled'] satisfies readonly EgressProfileState[];
@@ -70,6 +72,60 @@ export class EgressProfileCatalogClient {
     return toEgressProfileListResponse(await response.json());
   }
 
+  async getEgressProfile(profileId: string): Promise<EgressProfileResource> {
+    const response = await this.#request(
+      new URL(`/api/v1/egress-profiles/${encodeURIComponent(profileId)}`, this.#baseUrl),
+      {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+        },
+      },
+    );
+
+    return toEgressProfileResource(await response.json());
+  }
+
+  async createEgressProfile(request: UpsertEgressProfileRequest): Promise<EgressProfileResource> {
+    const response = await this.#request(new URL('/api/v1/egress-profiles', this.#baseUrl), {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+
+    return toEgressProfileResource(await response.json());
+  }
+
+  async updateEgressProfile(profileId: string, request: UpsertEgressProfileRequest): Promise<EgressProfileResource> {
+    const response = await this.#request(
+      new URL(`/api/v1/egress-profiles/${encodeURIComponent(profileId)}`, this.#baseUrl),
+      {
+        method: 'PUT',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      },
+    );
+
+    return toEgressProfileResource(await response.json());
+  }
+
+  async listProjectOptions(): Promise<EgressProfileProjectOptionsResponse> {
+    const response = await this.#request(new URL('/api/v1/projects', this.#baseUrl), {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+      },
+    });
+
+    return toEgressProfileProjectOptionsResponse(await response.json());
+  }
+
   async #request(input: URL, init: RequestInit): Promise<Response> {
     const accessToken = await this.#accessTokenProvider();
     if (!accessToken) {
@@ -104,6 +160,12 @@ export function toEgressProfileListResponse(payload: unknown): EgressProfileList
   return { profiles };
 }
 
+export function toEgressProfileProjectOptionsResponse(payload: unknown): EgressProfileProjectOptionsResponse {
+  const object = expectRecord(payload, 'project list response');
+  const projects = expectArray(object.projects, 'project list projects').map(toEgressProjectResourceFromRequired);
+  return { projects };
+}
+
 export function toEgressProfileResource(value: unknown): EgressProfileResource {
   const object = expectRecord(value, 'egress profile');
   return {
@@ -129,6 +191,10 @@ function toEgressProjectResource(value: unknown): EgressProfileProjectResource |
   if (value === undefined || value === null) {
     return value;
   }
+  return toEgressProjectResourceFromRequired(value);
+}
+
+function toEgressProjectResourceFromRequired(value: unknown): EgressProfileProjectResource {
   const object = expectRecord(value, 'egress profile project');
   return {
     id: expectString(object.id, 'egress profile project id'),

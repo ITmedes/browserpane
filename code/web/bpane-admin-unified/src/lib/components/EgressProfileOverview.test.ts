@@ -41,6 +41,7 @@ describe('EgressProfileOverview', () => {
     expect(byTestId(target, 'egress-profiles-metric-tls').textContent).toContain('1');
     expect(byTestId(target, 'egress-profiles-list').textContent).toContain('EU support egress');
     expect(byTestId(target, 'egress-profiles-list').textContent).toContain('TLS interceptor');
+    expect(byTestId(target, 'egress-profiles-new-link').getAttribute('href')).toBe('/admin-new/egress/new');
 
     byTestId(target, 'egress-profiles-refresh-button').click();
     expect(onRefresh).toHaveBeenCalledOnce();
