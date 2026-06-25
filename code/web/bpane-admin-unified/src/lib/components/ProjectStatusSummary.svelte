@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ProjectInspectorModel, ProjectInspectorRow } from '$lib/projects/project-inspector-view-model';
+  import AdminMessage from './AdminMessage.svelte';
 
   type ProjectStatusSummaryProps = {
     readonly model: ProjectInspectorModel;
@@ -44,13 +45,16 @@
 
   <section class="mt-3 min-w-0 rounded-md border border-admin-border bg-admin-panel p-3" aria-label="Usage alerts">
     <h5 class="m-0 text-sm font-semibold text-admin-ink">Usage alerts</h5>
-    <dl class="mt-3 grid gap-2">
+    <div class="mt-3 grid gap-2">
       {#each model.alerts as alert}
-        <div class="grid gap-1 rounded-md bg-admin-soft px-3 py-2">
-          <dt class="text-xs font-semibold uppercase text-admin-muted">{alert.label}</dt>
-          <dd class="m-0 break-words text-sm text-admin-ink">{alert.value}</dd>
-        </div>
+        <AdminMessage
+          tone={alert.label === 'Usage alerts' ? 'info' : 'warning'}
+          density="compact"
+          title={alert.label}
+          message={alert.value}
+          testId="project-usage-alert-message"
+        />
       {/each}
-    </dl>
+    </div>
   </section>
 </section>

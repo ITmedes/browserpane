@@ -62,6 +62,10 @@ describe('project edit view model', () => {
       'Label line 1 must use key=value.',
       'Label line 2 has an empty value.',
     ]);
+    expect(validation.fieldErrors).toMatchObject({
+      name: ['Project name is required.'],
+      labels: ['Label line 1 must use key=value.', 'Label line 2 has an empty value.'],
+    });
   });
 
   it('rejects invalid quotas and empty restricted allow-lists', () => {
@@ -81,6 +85,16 @@ describe('project edit view model', () => {
       'Rolling session creation quota needs both session creations/window and session creation window enabled.',
       'Session Templates restriction needs at least one selected resource.',
     ]);
+    expect(validation.fieldErrors).toMatchObject({
+      maxActiveSessions: ['Active sessions quota needs a positive integer.'],
+      maxSessionCreationsPerWindow: [
+        'Rolling session creation quota needs both session creations/window and session creation window enabled.',
+      ],
+      sessionCreationWindowSec: [
+        'Rolling session creation quota needs both session creations/window and session creation window enabled.',
+      ],
+      allowedSessionTemplateIds: ['Session Templates restriction needs at least one selected resource.'],
+    });
   });
 });
 

@@ -8,6 +8,7 @@
   import { buildProjectInspectorModel } from '$lib/projects/project-inspector-view-model';
   import type { ProjectPolicyOptionsLoadState } from '$lib/projects/project-detail-state';
   import type { ProjectResource, UpsertProjectRequest } from '$lib/projects/project-types';
+  import AdminMessage from './AdminMessage.svelte';
   import ProjectPolicyEditor from './ProjectPolicyEditor.svelte';
   import ProjectQuotaEditor from './ProjectQuotaEditor.svelte';
   import ProjectStatusSummary from './ProjectStatusSummary.svelte';
@@ -89,6 +90,14 @@
             autocomplete="off"
             data-testid="project-edit-name"
           />
+          {#if validation.fieldErrors.name?.length}
+            <AdminMessage
+              tone="error"
+              density="compact"
+              items={validation.fieldErrors.name}
+              testId="project-edit-name-error"
+            />
+          {/if}
         </label>
 
         <label class="grid gap-1.5 text-sm">
@@ -125,6 +134,14 @@
             data-testid="project-edit-labels"
           ></textarea>
           <span class="text-xs leading-5 text-admin-muted">One `key=value` label per line.</span>
+          {#if validation.fieldErrors.labels?.length}
+            <AdminMessage
+              tone="error"
+              density="compact"
+              items={validation.fieldErrors.labels}
+              testId="project-edit-labels-error"
+            />
+          {/if}
         </label>
       </div>
     </section>
@@ -133,23 +150,17 @@
       {draft}
       {disabled}
       {policyOptionsState}
+      fieldErrors={validation.fieldErrors}
       onDraftChange={updateDraft}
     />
 
     <ProjectQuotaEditor
       {draft}
       {disabled}
+      fieldErrors={validation.fieldErrors}
       onDraftChange={updateDraft}
     />
   </div>
-
-  {#if validation.errors.length > 0}
-    <div class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert" data-testid="project-edit-validation">
-      {#each validation.errors as error}
-        <p class="m-0">{error}</p>
-      {/each}
-    </div>
-  {/if}
 
   <div class="sticky bottom-0 z-10 -mx-4 -mb-4 mt-5 flex flex-col gap-2 border-t border-admin-border bg-admin-panel/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:-mb-5 sm:flex-row sm:items-center sm:justify-end sm:px-5">
     <button

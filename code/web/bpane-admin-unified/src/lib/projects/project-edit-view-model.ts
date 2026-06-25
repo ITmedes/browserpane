@@ -45,6 +45,13 @@ export type ProjectPolicyAllowedIdsDraftKey =
   | 'allowedFileWorkspaceIds';
 
 export type ProjectPolicyOptionsKey = keyof ProjectPolicyOptions;
+export type ProjectEditValidationField =
+  | 'name'
+  | 'labels'
+  | 'usageBudgetEnforcement'
+  | ProjectQuotaLimitDraftKey
+  | ProjectPolicyAllowedIdsDraftKey;
+export type ProjectEditFieldErrors = Partial<Record<ProjectEditValidationField, readonly string[]>>;
 
 export type ProjectEditDraft = {
   name: string;
@@ -79,6 +86,7 @@ export type ProjectEditDraft = {
 export type ProjectEditValidation = {
   readonly valid: boolean;
   readonly errors: readonly string[];
+  readonly fieldErrors: ProjectEditFieldErrors;
   readonly request: UpsertProjectRequest | null;
 };
 
@@ -284,23 +292,34 @@ export function hasProjectEditChanges(project: ProjectResource, draft: ProjectEd
 
 export function validateProjectEdit(project: ProjectResource, draft: ProjectEditDraft): ProjectEditValidation {
   const errors: string[] = [];
+  const fieldErrors: Partial<Record<ProjectEditValidationField, string[]>> = {};
+  const addError = (field: ProjectEditValidationField, message: string): void => {
+    if (!errors.includes(message)) {
+      errors.push(message);
+    }
+    fieldErrors[field] ??= [];
+    fieldErrors[field].push(message);
+  };
   const name = draft.name.trim();
   if (!name) {
-    errors.push('Project name is required.');
+    addError('name', 'Project name is required.');
   }
   if (!BUDGET_ENFORCEMENT_VALUES.includes(draft.usageBudgetEnforcement)) {
-    errors.push('Budget enforcement has an unsupported value.');
+    addError('usageBudgetEnforcement', 'Budget enforcement has an unsupported value.');
   }
   const labelsResult = parseLabels(draft.labelsText);
-  errors.push(...labelsResult.errors);
+  for (const error of labelsResult.errors) {
+    addError('labels', error);
+  }
 
-  const quotas = projectQuotasFromDraft(draft, errors);
-  const policy = projectPolicyFromDraft(draft, errors);
+  const quotas = projectQuotasFromDraft(draft, addError);
+  const policy = projectPolicyFromDraft(draft, addError);
 
   if (errors.length > 0) {
     return {
       valid: false,
       errors,
+      fieldErrors,
       request: null,
     };
   }
@@ -308,6 +327,7 @@ export function validateProjectEdit(project: ProjectResource, draft: ProjectEdit
   return {
     valid: true,
     errors: [],
+    fieldErrors: {},
     request: {
       name,
       description: draft.description.trim() || null,
@@ -343,21 +363,47 @@ export function mergePolicyOptionsWithSelected(
   return [...options].sort(compareOptions).concat(missingOptions);
 }
 
-function projectQuotasFromDraft(draft: ProjectEditDraft, errors: string[]): ProjectQuotas {
-  const maxActiveSessions = quotaValue('Active sessions', draft.maxActiveSessions, errors);
-  const maxActiveWorkflowRuns = quotaValue('Active workflow runs', draft.maxActiveWorkflowRuns, errors);
-  const maxRetainedStorageBytes = quotaValue('Retained storage', draft.maxRetainedStorageBytes, errors);
-  const maxSessionCreations = quotaValue('Total session creations', draft.maxSessionCreations, errors);
+function projectQuotasFromDraft(
+  draft: ProjectEditDraft,
+  addError: (field: ProjectEditValidationField, message: string) => void,
+): ProjectQuotas {
+  const maxActiveSessions = quotaValue('Active sessions', 'maxActiveSessions', draft.maxActiveSessions, addError);
+  const maxActiveWorkflowRuns = quotaValue(
+    'Active workflow runs',
+    'maxActiveWorkflowRuns',
+    draft.maxActiveWorkflowRuns,
+    addError,
+  );
+  const maxRetainedStorageBytes = quotaValue(
+    'Retained storage',
+    'maxRetainedStorageBytes',
+    draft.maxRetainedStorageBytes,
+    addError,
+  );
+  const maxSessionCreations = quotaValue(
+    'Total session creations',
+    'maxSessionCreations',
+    draft.maxSessionCreations,
+    addError,
+  );
   const maxSessionCreationsPerWindow = quotaValue(
     'Session creations/window',
+    'maxSessionCreationsPerWindow',
     draft.maxSessionCreationsPerWindow,
-    errors,
+    addError,
   );
-  const sessionCreationWindowSec = quotaValue('Session creation window', draft.sessionCreationWindowSec, errors);
-  const maxRuntimeUsageMs = quotaValue('Runtime budget', draft.maxRuntimeUsageMs, errors);
-  const maxEgressTotalBytes = quotaValue('Egress budget', draft.maxEgressTotalBytes, errors);
+  const sessionCreationWindowSec = quotaValue(
+    'Session creation window',
+    'sessionCreationWindowSec',
+    draft.sessionCreationWindowSec,
+    addError,
+  );
+  const maxRuntimeUsageMs = quotaValue('Runtime budget', 'maxRuntimeUsageMs', draft.maxRuntimeUsageMs, addError);
+  const maxEgressTotalBytes = quotaValue('Egress budget', 'maxEgressTotalBytes', draft.maxEgressTotalBytes, addError);
   if (draft.maxSessionCreationsPerWindow.enabled !== draft.sessionCreationWindowSec.enabled) {
-    errors.push('Rolling session creation quota needs both session creations/window and session creation window enabled.');
+    const message = 'Rolling session creation quota needs both session creations/window and session creation window enabled.';
+    addError('maxSessionCreationsPerWindow', message);
+    addError('sessionCreationWindowSec', message);
   }
 
   return {
@@ -372,32 +418,45 @@ function projectQuotasFromDraft(draft: ProjectEditDraft, errors: string[]): Proj
   };
 }
 
-function projectPolicyFromDraft(draft: ProjectEditDraft, errors: string[]): ProjectPolicy {
+function projectPolicyFromDraft(
+  draft: ProjectEditDraft,
+  addError: (field: ProjectEditValidationField, message: string) => void,
+): ProjectPolicy {
   return {
     allowed_session_template_ids: restrictedIds(
       'Session Templates',
+      'allowedSessionTemplateIds',
       draft.restrictSessionTemplates,
       draft.allowedSessionTemplateIds,
-      errors,
+      addError,
     ),
     allowed_egress_profile_ids: restrictedIds(
       'Egress Profiles',
+      'allowedEgressProfileIds',
       draft.restrictEgressProfiles,
       draft.allowedEgressProfileIds,
-      errors,
+      addError,
     ),
-    allowed_extension_ids: restrictedIds('Extensions', draft.restrictExtensions, draft.allowedExtensionIds, errors),
+    allowed_extension_ids: restrictedIds(
+      'Extensions',
+      'allowedExtensionIds',
+      draft.restrictExtensions,
+      draft.allowedExtensionIds,
+      addError,
+    ),
     allowed_browser_context_ids: restrictedIds(
       'Browser Contexts',
+      'allowedBrowserContextIds',
       draft.restrictBrowserContexts,
       draft.allowedBrowserContextIds,
-      errors,
+      addError,
     ),
     allowed_file_workspace_ids: restrictedIds(
       'File Workspaces',
+      'allowedFileWorkspaceIds',
       draft.restrictFileWorkspaces,
       draft.allowedFileWorkspaceIds,
-      errors,
+      addError,
     ),
     allow_browser_uploads: draft.allowBrowserUploads,
     allow_browser_downloads: draft.allowBrowserDownloads,
@@ -414,30 +473,41 @@ function quotaDraft(value: number | null | undefined): ProjectQuotaLimitDraft {
   };
 }
 
-function quotaValue(label: string, draft: ProjectQuotaLimitDraft, errors: string[]): number | null {
+function quotaValue(
+  label: string,
+  field: ProjectQuotaLimitDraftKey,
+  draft: ProjectQuotaLimitDraft,
+  addError: (field: ProjectEditValidationField, message: string) => void,
+): number | null {
   if (!draft.enabled) {
     return null;
   }
   const value = draft.value.trim();
   if (!value) {
-    errors.push(`${label} quota needs a positive integer.`);
+    addError(field, `${label} quota needs a positive integer.`);
     return null;
   }
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) {
-    errors.push(`${label} quota needs a positive integer.`);
+    addError(field, `${label} quota needs a positive integer.`);
     return null;
   }
   return parsed;
 }
 
-function restrictedIds(label: string, restricted: boolean, selectedIds: readonly string[], errors: string[]): readonly string[] {
+function restrictedIds(
+  label: string,
+  field: ProjectPolicyAllowedIdsDraftKey,
+  restricted: boolean,
+  selectedIds: readonly string[],
+  addError: (field: ProjectEditValidationField, message: string) => void,
+): readonly string[] {
   if (!restricted) {
     return [];
   }
   const normalized = uniqueSortedIds(selectedIds);
   if (normalized.length === 0) {
-    errors.push(`${label} restriction needs at least one selected resource.`);
+    addError(field, `${label} restriction needs at least one selected resource.`);
   }
   return normalized;
 }

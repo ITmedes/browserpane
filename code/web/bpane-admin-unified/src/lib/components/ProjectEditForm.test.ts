@@ -85,7 +85,9 @@ describe('ProjectEditForm', () => {
     setInputValue(byTestId(target, 'project-edit-labels'), 'broken');
     await tick();
 
-    expect(byTestId(target, 'project-edit-validation').textContent).toContain('Project name is required');
+    expect(byTestId(target, 'project-edit-name-error').textContent).toContain('Project name is required');
+    expect(byTestId(target, 'project-edit-labels-error').textContent).toContain('Label line 1 must use key=value.');
+    expect(target.querySelector('[data-testid="project-edit-validation"]')).toBeNull();
     expect((byTestId(target, 'project-edit-save') as HTMLButtonElement).disabled).toBe(true);
   });
 });
