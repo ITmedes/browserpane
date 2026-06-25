@@ -168,6 +168,24 @@
     return presets[index];
   }
 
+  function sliderStopPosition(index: number, count: number): string {
+    if (count <= 1) {
+      return '0%';
+    }
+    const percentage = (index / (count - 1)) * 100;
+    return `${Number.isInteger(percentage) ? percentage : percentage.toFixed(4)}%`;
+  }
+
+  function sliderStopAlignmentClass(index: number, count: number): string {
+    if (index === 0) {
+      return 'translate-x-0 text-left';
+    }
+    if (index === count - 1) {
+      return '-translate-x-full text-right';
+    }
+    return '-translate-x-1/2 text-center';
+  }
+
   function inputChecked(event: Event): boolean {
     return (event.currentTarget as HTMLInputElement).checked;
   }
@@ -256,12 +274,28 @@
               step="1"
               value={quotaSliderIndex(quota.key, quota.presets)}
               disabled={disabled}
+              aria-label={`${quota.label} recommended value`}
               oninput={(event) => applyQuotaSliderValue(quota.key, quota.presets, inputValue(event))}
               data-testid={`project-quota-${quota.testId}-slider`}
             />
-            <div class="grid auto-cols-fr grid-flow-col gap-1 text-[10px] font-medium text-admin-muted">
-              {#each quota.presets as preset}
-                <span class="min-w-0 truncate text-center">{preset.label}</span>
+            <div class="relative h-2" aria-hidden="true">
+              {#each quota.presets as preset, index}
+                <span
+                  class="absolute top-0 h-2 w-px rounded-full bg-admin-border"
+                  style={`left: ${sliderStopPosition(index, quota.presets.length)}`}
+                  data-testid={`project-quota-${quota.testId}-tick-${preset.testId}`}
+                ></span>
+              {/each}
+            </div>
+            <div class="relative h-4 text-[10px] font-medium text-admin-muted">
+              {#each quota.presets as preset, index}
+                <span
+                  class={`absolute top-0 min-w-8 whitespace-nowrap ${sliderStopAlignmentClass(index, quota.presets.length)}`}
+                  style={`left: ${sliderStopPosition(index, quota.presets.length)}`}
+                  data-testid={`project-quota-${quota.testId}-legend-${preset.testId}`}
+                >
+                  {preset.label}
+                </span>
               {/each}
             </div>
           </div>
@@ -348,12 +382,28 @@
           step="1"
           value={rollingSliderIndex()}
           disabled={disabled}
+          aria-label="Session creation rate recommended value"
           oninput={(event) => applyRollingSessionCreationSliderValue(inputValue(event))}
           data-testid={`project-quota-${PROJECT_ROLLING_SESSION_CREATION_QUOTA.testId}-slider`}
         />
-        <div class="grid auto-cols-fr grid-flow-col gap-1 text-[10px] font-medium text-admin-muted">
-          {#each PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets as preset}
-            <span class="min-w-0 truncate text-center">{preset.label}</span>
+        <div class="relative h-2" aria-hidden="true">
+          {#each PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets as preset, index}
+            <span
+              class="absolute top-0 h-2 w-px rounded-full bg-admin-border"
+              style={`left: ${sliderStopPosition(index, PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets.length)}`}
+              data-testid={`project-quota-${PROJECT_ROLLING_SESSION_CREATION_QUOTA.testId}-tick-${preset.testId}`}
+            ></span>
+          {/each}
+        </div>
+        <div class="relative h-4 text-[10px] font-medium text-admin-muted">
+          {#each PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets as preset, index}
+            <span
+              class={`absolute top-0 min-w-10 whitespace-nowrap ${sliderStopAlignmentClass(index, PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets.length)}`}
+              style={`left: ${sliderStopPosition(index, PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets.length)}`}
+              data-testid={`project-quota-${PROJECT_ROLLING_SESSION_CREATION_QUOTA.testId}-legend-${preset.testId}`}
+            >
+              {preset.label}
+            </span>
           {/each}
         </div>
       </div>
