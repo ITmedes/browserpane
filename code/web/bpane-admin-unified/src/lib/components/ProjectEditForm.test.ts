@@ -12,6 +12,34 @@ import ProjectEditForm from './ProjectEditForm.svelte';
 afterEach(cleanupRenderedComponents);
 
 describe('ProjectEditForm', () => {
+  it('creates a project from the shared settings controls', async () => {
+    const onSave = vi.fn();
+    const target = renderComponent(ProjectEditForm, {
+      mode: 'create',
+      onSave,
+    });
+
+    expect(byTestId(target, 'project-edit-form').textContent).toContain('New project settings');
+    expect(target.querySelector('[data-testid="project-status-summary"]')).toBeNull();
+    expect((byTestId(target, 'project-edit-save') as HTMLButtonElement).disabled).toBe(true);
+
+    setInputValue(byTestId(target, 'project-edit-name'), 'Customer Support');
+    setInputValue(byTestId(target, 'project-edit-labels'), 'team=support');
+    await tick();
+    byTestId(target, 'project-edit-save').click();
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Customer Support',
+      description: null,
+      labels: { team: 'support' },
+      policy: expect.objectContaining({
+        allow_browser_uploads: true,
+        usage_budget_enforcement: 'warning_only',
+      }),
+      state: 'active',
+    }));
+  });
+
   it('validates and saves safe project fields while preserving policy and quotas', async () => {
     const onSave = vi.fn();
     const target = renderComponent(ProjectEditForm, {

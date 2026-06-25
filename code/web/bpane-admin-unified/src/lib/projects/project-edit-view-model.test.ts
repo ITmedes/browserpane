@@ -2,12 +2,38 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createProjectEditDraft,
+  createNewProjectEditDraft,
+  hasNewProjectEditChanges,
   hasProjectEditChanges,
   validateProjectEdit,
 } from './project-edit-view-model';
 import type { ProjectResource } from './project-types';
 
 describe('project edit view model', () => {
+  it('creates and validates new project drafts', () => {
+    const draft = createNewProjectEditDraft();
+
+    expect(hasNewProjectEditChanges(draft)).toBe(false);
+    expect(validateProjectEdit(null, draft).fieldErrors.name).toEqual(['Project name is required.']);
+
+    const validation = validateProjectEdit(null, {
+      ...draft,
+      name: 'Customer Support',
+      labelsText: 'team=support',
+    });
+
+    expect(hasNewProjectEditChanges({ ...draft, name: 'Customer Support' })).toBe(true);
+    expect(validation.request).toMatchObject({
+      name: 'Customer Support',
+      labels: { team: 'support' },
+      policy: expect.objectContaining({
+        allow_browser_uploads: true,
+        usage_budget_enforcement: 'warning_only',
+      }),
+      state: 'active',
+    });
+  });
+
   it('creates a draft and maps edited quotas and policy into the update request', () => {
     const source = project();
     const draft = {

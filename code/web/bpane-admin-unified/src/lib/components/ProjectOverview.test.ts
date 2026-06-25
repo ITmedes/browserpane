@@ -41,6 +41,7 @@ describe('ProjectOverview', () => {
     expect(byTestId(target, 'projects-list').textContent).toContain('Activity');
     expect(byTestId(target, 'projects-list').textContent).toContain('unrestricted, warning budgets');
     expect(target.querySelector('[data-testid="projects-selected-detail"]')).toBeNull();
+    expect(byTestId(target, 'projects-new-link').getAttribute('href')).toBe('/admin-new/projects/new');
 
     byTestId(target, 'projects-refresh-button').click();
     expect(onRefresh).toHaveBeenCalledOnce();

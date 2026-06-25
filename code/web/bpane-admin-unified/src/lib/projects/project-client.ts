@@ -84,6 +84,19 @@ export class ProjectCatalogClient {
     return toProjectResource(await response.json());
   }
 
+  async createProject(request: UpsertProjectRequest): Promise<ProjectResource> {
+    const response = await this.#request(new URL('/api/v1/projects', this.#baseUrl), {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+
+    return toProjectResource(await response.json());
+  }
+
   async updateProject(projectId: string, request: UpsertProjectRequest): Promise<ProjectResource> {
     const response = await this.#request(new URL(`/api/v1/projects/${encodeURIComponent(projectId)}`, this.#baseUrl), {
       method: 'PUT',

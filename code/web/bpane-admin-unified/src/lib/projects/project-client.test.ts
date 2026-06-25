@@ -73,6 +73,48 @@ describe('ProjectCatalogClient', () => {
     });
   });
 
+  it('creates projects through the authenticated control API', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ ...projectPayload(), name: 'New Support' }), { status: 201 }));
+    const client = new ProjectCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl,
+    });
+
+    const created = await client.createProject({
+      name: 'New Support',
+      description: null,
+      labels: {},
+      quotas: {},
+      policy: {
+        allowed_session_template_ids: [],
+        allowed_egress_profile_ids: [],
+        allowed_extension_ids: [],
+        allowed_browser_context_ids: [],
+        allowed_file_workspace_ids: [],
+        allow_browser_uploads: true,
+        allow_browser_downloads: true,
+        allow_session_file_bindings: true,
+        allow_manual_recordings: true,
+        usage_budget_enforcement: 'warning_only',
+      },
+      state: 'active',
+    });
+
+    expect(created.name).toBe('New Support');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://browserpane.test/api/v1/projects'),
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    );
+    expect(JSON.parse(fetchImpl.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      name: 'New Support',
+      state: 'active',
+    });
+  });
+
   it('loads selectable policy resources for project allow-lists', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
