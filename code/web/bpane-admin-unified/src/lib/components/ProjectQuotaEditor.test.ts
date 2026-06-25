@@ -52,7 +52,7 @@ describe('ProjectQuotaEditor', () => {
     expect(byTestId(target, 'project-quota-session-creation-window-sec-value')).toBeTruthy();
   });
 
-  it('applies exact quota presets without hiding numeric input', () => {
+  it('applies exact quota slider values without hiding numeric input', () => {
     const draft = createProjectEditDraft(project());
     const onDraftChange = vi.fn();
     const target = renderComponent(ProjectQuotaEditor, {
@@ -60,7 +60,7 @@ describe('ProjectQuotaEditor', () => {
       onDraftChange,
     });
 
-    byTestId(target, 'project-quota-max-runtime-usage-ms-preset-4h').click();
+    setInputValue(byTestId(target, 'project-quota-max-runtime-usage-ms-slider'), '1');
 
     expect(onDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({
       maxRuntimeUsageMs: { enabled: true, value: '14400000' },
@@ -68,7 +68,7 @@ describe('ProjectQuotaEditor', () => {
     expect(byTestId(target, 'project-quota-max-runtime-usage-ms-value')).toBeTruthy();
   });
 
-  it('applies rolling session creation rate presets as count and window values', () => {
+  it('applies rolling session creation rate slider values as count and window values', () => {
     const draft = createProjectEditDraft(project());
     const onDraftChange = vi.fn();
     const target = renderComponent(ProjectQuotaEditor, {
@@ -76,12 +76,24 @@ describe('ProjectQuotaEditor', () => {
       onDraftChange,
     });
 
-    byTestId(target, 'project-quota-session-creation-rate-preset-50-hour').click();
+    setInputValue(byTestId(target, 'project-quota-session-creation-rate-slider'), '1');
 
     expect(onDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({
       maxSessionCreationsPerWindow: { enabled: true, value: '50' },
       sessionCreationWindowSec: { enabled: true, value: '3600' },
     }));
+  });
+
+  it('labels custom numeric values without overriding them', () => {
+    const draft = {
+      ...createProjectEditDraft(project()),
+      maxRuntimeUsageMs: { enabled: true, value: '5400000' },
+    };
+    const target = renderComponent(ProjectQuotaEditor, { draft });
+
+    expect(byTestId(target, 'project-quota-max-runtime-usage-ms-slider-label').textContent).toContain(
+      'Custom 5400000',
+    );
   });
 
   it('renders quota errors inside the affected quota card', () => {

@@ -77,6 +77,14 @@
     });
   }
 
+  function applyQuotaSliderValue(
+    key: ProjectQuotaLimitDraftKey,
+    presets: readonly ProjectQuotaPresetDefinition[],
+    value: string,
+  ): void {
+    applyQuotaPreset(key, presetAt(presets, value));
+  }
+
   function applyRollingSessionCreationPreset(preset: ProjectRollingSessionCreationQuotaPresetDefinition): void {
     onDraftChange?.({
       ...draft,
@@ -93,20 +101,71 @@
     });
   }
 
-  function isQuotaPresetSelected(key: ProjectQuotaLimitDraftKey, preset: ProjectQuotaPresetDefinition): boolean {
-    return draft[key].enabled && draft[key].value === preset.value;
+  function applyRollingSessionCreationSliderValue(value: string): void {
+    applyRollingSessionCreationPreset(presetAt(PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets, value));
   }
 
-  function isRollingSessionCreationPresetSelected(preset: ProjectRollingSessionCreationQuotaPresetDefinition): boolean {
-    return rollingQuotaEnabled
-      && draft.maxSessionCreationsPerWindow.value === preset.limitValue
-      && draft.sessionCreationWindowSec.value === preset.windowValue;
+  function quotaSliderIndex(key: ProjectQuotaLimitDraftKey, presets: readonly ProjectQuotaPresetDefinition[]): number {
+    if (!draft[key].enabled) {
+      return 0;
+    }
+    const exactIndex = presets.findIndex((preset) => preset.value === draft[key].value);
+    return exactIndex >= 0 ? exactIndex : nearestQuotaPresetIndex(draft[key].value, presets);
   }
 
-  function presetButtonClass(selected: boolean): string {
-    return selected
-      ? 'border-admin-accent bg-admin-accent text-white shadow-sm'
-      : 'border-admin-border bg-white text-admin-ink hover:border-admin-accent/50 hover:bg-admin-soft';
+  function quotaSliderLabel(key: ProjectQuotaLimitDraftKey, presets: readonly ProjectQuotaPresetDefinition[]): string {
+    if (!draft[key].enabled) {
+      return 'Unbounded';
+    }
+    const exactMatch = presets.find((preset) => preset.value === draft[key].value);
+    return exactMatch ? exactMatch.label : `Custom ${draft[key].value || '--'}`;
+  }
+
+  function rollingSliderIndex(): number {
+    if (!rollingQuotaEnabled) {
+      return 0;
+    }
+    const exactIndex = PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets.findIndex((preset) =>
+      preset.limitValue === draft.maxSessionCreationsPerWindow.value
+      && preset.windowValue === draft.sessionCreationWindowSec.value
+    );
+    return exactIndex >= 0 ? exactIndex : 0;
+  }
+
+  function rollingSliderLabel(): string {
+    if (!rollingQuotaEnabled) {
+      return 'Unbounded';
+    }
+    const exactMatch = PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets.find((preset) =>
+      preset.limitValue === draft.maxSessionCreationsPerWindow.value
+      && preset.windowValue === draft.sessionCreationWindowSec.value
+    );
+    if (exactMatch) {
+      return exactMatch.label;
+    }
+    const limit = draft.maxSessionCreationsPerWindow.value || '--';
+    const window = draft.sessionCreationWindowSec.value || '--';
+    return `Custom ${limit} / ${window}s`;
+  }
+
+  function nearestQuotaPresetIndex(value: string, presets: readonly ProjectQuotaPresetDefinition[]): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return presets.reduce((bestIndex, preset, index) => {
+      const currentDistance = Math.abs(Number(preset.value) - parsed);
+      const bestDistance = Math.abs(Number(presets[bestIndex].value) - parsed);
+      return currentDistance < bestDistance ? index : bestIndex;
+    }, 0);
+  }
+
+  function presetAt<T>(presets: readonly T[], value: string): T {
+    const index = Number(value);
+    if (!Number.isInteger(index) || index < 0 || index >= presets.length) {
+      return presets[0];
+    }
+    return presets[index];
   }
 
   function inputChecked(event: Event): boolean {
@@ -179,19 +238,32 @@
         </label>
 
         {#if quota.presets?.length}
-          <div class="mt-3 flex flex-wrap gap-1.5" aria-label={`${quota.label} presets`}>
-            {#each quota.presets as preset}
-              <button
-                class={`inline-flex h-8 items-center justify-center rounded-md border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60 ${presetButtonClass(isQuotaPresetSelected(quota.key, preset))}`}
-                type="button"
-                disabled={disabled}
-                aria-pressed={isQuotaPresetSelected(quota.key, preset)}
-                onclick={() => applyQuotaPreset(quota.key, preset)}
-                data-testid={`project-quota-${quota.testId}-preset-${preset.testId}`}
+          <div class="mt-3 grid gap-2" aria-label={`${quota.label} presets`}>
+            <div class="flex min-w-0 items-center justify-between gap-3">
+              <span class="text-xs font-semibold uppercase text-admin-muted">Recommended</span>
+              <span
+                class="truncate rounded-md bg-admin-soft px-2 py-1 text-xs font-medium text-admin-ink"
+                data-testid={`project-quota-${quota.testId}-slider-label`}
               >
-                {preset.label}
-              </button>
-            {/each}
+                {quotaSliderLabel(quota.key, quota.presets)}
+              </span>
+            </div>
+            <input
+              class="h-2 w-full cursor-pointer rounded-lg bg-admin-border accent-admin-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+              type="range"
+              min="0"
+              max={quota.presets.length - 1}
+              step="1"
+              value={quotaSliderIndex(quota.key, quota.presets)}
+              disabled={disabled}
+              oninput={(event) => applyQuotaSliderValue(quota.key, quota.presets, inputValue(event))}
+              data-testid={`project-quota-${quota.testId}-slider`}
+            />
+            <div class="grid auto-cols-fr grid-flow-col gap-1 text-[10px] font-medium text-admin-muted">
+              {#each quota.presets as preset}
+                <span class="min-w-0 truncate text-center">{preset.label}</span>
+              {/each}
+            </div>
           </div>
         {/if}
       </div>
@@ -258,19 +330,32 @@
         </label>
       </div>
 
-      <div class="mt-3 flex flex-wrap gap-1.5" aria-label="Session creation rate presets">
-        {#each PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets as preset}
-          <button
-            class={`inline-flex h-8 items-center justify-center rounded-md border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60 ${presetButtonClass(isRollingSessionCreationPresetSelected(preset))}`}
-            type="button"
-            disabled={disabled}
-            aria-pressed={isRollingSessionCreationPresetSelected(preset)}
-            onclick={() => applyRollingSessionCreationPreset(preset)}
-            data-testid={`project-quota-${PROJECT_ROLLING_SESSION_CREATION_QUOTA.testId}-preset-${preset.testId}`}
+      <div class="mt-3 grid gap-2" aria-label="Session creation rate presets">
+        <div class="flex min-w-0 items-center justify-between gap-3">
+          <span class="text-xs font-semibold uppercase text-admin-muted">Recommended</span>
+          <span
+            class="truncate rounded-md bg-admin-soft px-2 py-1 text-xs font-medium text-admin-ink"
+            data-testid={`project-quota-${PROJECT_ROLLING_SESSION_CREATION_QUOTA.testId}-slider-label`}
           >
-            {preset.label}
-          </button>
-        {/each}
+            {rollingSliderLabel()}
+          </span>
+        </div>
+        <input
+          class="h-2 w-full cursor-pointer rounded-lg bg-admin-border accent-admin-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+          type="range"
+          min="0"
+          max={PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets.length - 1}
+          step="1"
+          value={rollingSliderIndex()}
+          disabled={disabled}
+          oninput={(event) => applyRollingSessionCreationSliderValue(inputValue(event))}
+          data-testid={`project-quota-${PROJECT_ROLLING_SESSION_CREATION_QUOTA.testId}-slider`}
+        />
+        <div class="grid auto-cols-fr grid-flow-col gap-1 text-[10px] font-medium text-admin-muted">
+          {#each PROJECT_ROLLING_SESSION_CREATION_QUOTA.presets as preset}
+            <span class="min-w-0 truncate text-center">{preset.label}</span>
+          {/each}
+        </div>
       </div>
 
       {#if rollingQuotaErrors.length}
