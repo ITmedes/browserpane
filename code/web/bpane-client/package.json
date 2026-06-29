@@ -24,6 +24,7 @@
     "smoke:admin-unified-browser-contexts": "node scripts/run-admin-unified-browser-contexts-smoke.mjs",
     "smoke:admin-unified-egress-profiles": "node scripts/run-admin-unified-egress-profiles-smoke.mjs",
     "smoke:admin-unified-projects": "node scripts/run-admin-unified-projects-smoke.mjs",
+    "smoke:admin-unified-sessions": "node scripts/run-admin-unified-sessions-smoke.mjs",
     "smoke:admin-unified-workflows": "node scripts/run-admin-unified-workflows-smoke.mjs",
     "smoke:admin-session-configurator": "node scripts/run-admin-session-configurator-smoke.mjs",
     "smoke:admin-realtime": "node scripts/run-admin-realtime-smoke.mjs",
