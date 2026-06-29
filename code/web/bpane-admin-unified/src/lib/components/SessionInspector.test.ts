@@ -35,4 +35,24 @@ describe('SessionInspector', () => {
     byTestId(target, 'session-disconnect-all').click();
     expect(onDisconnectAll).toHaveBeenCalledOnce();
   });
+
+  it('renders stopped sessions with a start-and-connect preview action', () => {
+    const onConnectPreview = vi.fn();
+    const target = renderComponent(SessionInspector, {
+      state: {
+        status: 'ready',
+        session: sessionResource({ state: 'stopped', runtimeState: 'stopped', totalClients: 0, stopAllowed: false }),
+        liveStatus: sessionStatus({ state: 'stopped', runtimeState: 'stopped', totalClients: 0, stopAllowed: false }),
+      },
+      onConnectPreview,
+    });
+
+    const connect = byTestId(target, 'session-connect-preview') as HTMLButtonElement;
+    expect(connect.textContent).toContain('Start and connect');
+    expect(connect.disabled).toBe(false);
+    expect(connect.title).toContain('persisted browser profile');
+
+    connect.click();
+    expect(onConnectPreview).toHaveBeenCalledWith('session-1');
+  });
 });

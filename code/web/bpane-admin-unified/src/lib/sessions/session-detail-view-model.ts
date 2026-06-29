@@ -27,6 +27,8 @@ export type SessionFactSection = {
 
 export type SessionDetailActionModel = {
   readonly canConnectPreview: boolean;
+  readonly connectPreviewLabel: string;
+  readonly connectPreviewDescription: string;
   readonly canCancelQueue: boolean;
   readonly canDisconnectAll: boolean;
   readonly canRelease: boolean;
@@ -153,7 +155,9 @@ export function buildSessionDetailModel(session: SessionResource, liveStatus: Se
       role: connection.role,
     })) ?? [],
     actions: {
-      canConnectPreview: !isQueued && !['stopped', 'killed', 'cancelled', 'failed'].includes(session.state),
+      canConnectPreview: !isQueued && !['killed', 'cancelled', 'failed'].includes(session.state),
+      connectPreviewLabel: connectPreviewLabel(session.state),
+      connectPreviewDescription: connectPreviewDescription(session.state),
       canCancelQueue: isQueued && (session.queue?.cancellable ?? true),
       canDisconnectAll: totalClients > 0,
       canRelease: !isQueued && !terminal && totalClients === 0 && stopEligibility.allowed && session.state !== 'released',
@@ -161,6 +165,20 @@ export function buildSessionDetailModel(session: SessionResource, liveStatus: Se
       canKill: !isQueued && !terminal,
     },
   };
+}
+
+function connectPreviewLabel(state: string): string {
+  if (state === 'stopped' || state === 'released') {
+    return 'Start and connect';
+  }
+  return 'Connect';
+}
+
+function connectPreviewDescription(state: string): string {
+  if (state === 'stopped' || state === 'released') {
+    return 'Start a runtime from the persisted browser profile and open the browser preview in a popup window.';
+  }
+  return 'Open this browser session in a popup preview window.';
 }
 
 function fact(label: string, value: string, testId?: string, tone?: ProjectTone): SessionFact {

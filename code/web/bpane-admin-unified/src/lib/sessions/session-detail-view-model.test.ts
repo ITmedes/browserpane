@@ -36,4 +36,20 @@ describe('buildSessionDetailModel', () => {
       canKill: false,
     });
   });
+
+  it('allows stopped and released sessions to start through the preview connect action', () => {
+    for (const state of ['stopped', 'released']) {
+      const model = buildSessionDetailModel(
+        sessionResource({ state, totalClients: 0, stopAllowed: false }),
+        sessionStatus({ state, runtimeState: state, totalClients: 0, stopAllowed: false }),
+      );
+
+      expect(model.actions).toMatchObject({
+        canConnectPreview: true,
+        connectPreviewLabel: 'Start and connect',
+        canStop: false,
+      });
+      expect(model.actions.connectPreviewDescription).toContain('persisted browser profile');
+    }
+  });
 });

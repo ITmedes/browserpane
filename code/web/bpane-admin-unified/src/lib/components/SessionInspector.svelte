@@ -125,10 +125,12 @@
           type="button"
           onclick={() => void onConnectPreview?.(model.id)}
           disabled={busy || !model.actions.canConnectPreview}
+          title={model.actions.connectPreviewDescription}
+          aria-label={model.actions.connectPreviewDescription}
           data-testid="session-connect-preview"
         >
           <ExternalLink size={15} strokeWidth={1.8} />
-          <span>Connect</span>
+          <span>{model.actions.connectPreviewLabel}</span>
         </button>
         <button
           class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
