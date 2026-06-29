@@ -36,6 +36,7 @@ coexist:
 - `smoke:admin-egress-profiles`
 - `smoke:admin-unified-browser-contexts`
 - `smoke:admin-unified-egress-profiles`
+- `smoke:admin-unified-file-workspaces`
 - `smoke:admin-browser-contexts`
 - `smoke:admin-file-workspaces`
 - `smoke:admin-mcp`
@@ -96,6 +97,9 @@ Add `/admin-new/` smokes progressively:
     - `smoke:admin-unified-browser-contexts` covers the unified browser-context
       catalog, create route, validation errors, detail refresh/delete flow,
       project binding, and mobile overflow checks.
+    - `smoke:admin-unified-file-workspaces` covers the unified file-workspace
+      catalog, create route, validation errors, project binding, upload,
+      download, delete, catalog search, and mobile overflow checks.
 14. API companion smoke
 
 ## Error Cases
