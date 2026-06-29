@@ -15,6 +15,12 @@ describe('admin navigation model', () => {
     });
   });
 
+  it('routes file workspaces to the nested file resource path', () => {
+    expect(allNavItems.find((item) => item.id === 'workspaces')).toMatchObject({
+      route: '/admin-new/files/workspaces',
+    });
+  });
+
   it('has one active dashboard entry for the static shell', () => {
     const activeItems = allNavItems.filter((item) => item.active);
 

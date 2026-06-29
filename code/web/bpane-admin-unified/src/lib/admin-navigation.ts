@@ -53,7 +53,7 @@ export const navGroups: NavGroup[] = [
       { id: 'projects', label: 'Projects', route: '/admin-new/projects', icon: 'layers' },
       { id: 'contexts', label: 'Browser contexts', route: '/admin-new/browser-contexts', icon: 'globe' },
       { id: 'egress', label: 'Egress profiles', route: '/admin-new/egress', icon: 'network' },
-      { id: 'workspaces', label: 'File workspaces', route: '/admin-new/workspaces', icon: 'folder' },
+      { id: 'workspaces', label: 'File workspaces', route: '/admin-new/files/workspaces', icon: 'folder' },
     ],
   },
   {
