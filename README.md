@@ -1114,6 +1114,7 @@ npm run smoke:admin-session -- --headless
 npm run smoke:admin-unified-browser-contexts -- --headless
 npm run smoke:admin-unified-egress-profiles -- --headless
 npm run smoke:admin-unified-projects -- --headless
+npm run smoke:admin-unified-workflows -- --headless
 npm run smoke:admin-unified-file-workspaces -- --headless
 npm run workflow:cli -- --help
 npm run smoke:automation-tasks -- --headless
