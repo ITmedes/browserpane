@@ -68,6 +68,8 @@ async function run() {
     await waitForContains(page, options, 'workflow-definition-version-entrypoint', 'browserpane-tour');
     await waitForContains(page, options, 'workflow-definition-source', '/workspace');
     await waitForContains(page, options, 'workflow-definition-policy', 'File workspaces');
+    await waitForContains(page, options, 'workflow-code-file-list', 'dev/workflows/browserpane-tour/run.mjs');
+    await waitForContains(page, options, 'workflow-code-file-list', 'dev/web-fixtures/test-embed.html');
     await waitForContains(page, options, 'workflow-code-preview-code', 'export default async function run');
     await waitForContains(page, options, 'workflow-code-preview-language', 'TypeScript');
     const highlightedKeywordCount = await page
@@ -77,6 +79,13 @@ async function run() {
     if (highlightedKeywordCount === 0) {
       throw new Error('Workflow code preview did not render TypeScript syntax highlighting.');
     }
+    await page
+      .getByTestId('workflow-code-file-row')
+      .filter({ hasText: 'dev/web-fixtures/test-embed.html' })
+      .first()
+      .click();
+    await waitForContains(page, options, 'workflow-code-preview-entrypoint', 'dev/web-fixtures/test-embed.html');
+    await waitForContains(page, options, 'workflow-code-preview-code', 'BrowserPane Test Embed');
     await assertNoBodyHorizontalOverflow(page, 'unified workflow detail');
     await assertNoHorizontalOverflow(page, 'workflow-definition-detail-route', 'unified workflow detail route');
 

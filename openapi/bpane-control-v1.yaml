@@ -1241,8 +1241,15 @@ paths:
       - $ref: '#/components/parameters/WorkflowVersion'
     get:
       tags: [Workflows]
-      summary: Fetch a bounded text preview of a workflow definition version entrypoint
+      summary: Fetch a bounded text preview of a workflow definition version source file
       operationId: getWorkflowDefinitionSourcePreview
+      parameters:
+        - name: path
+          in: query
+          required: false
+          description: Relative source file path inside the workflow source root. Defaults to the workflow version entrypoint.
+          schema:
+            type: string
       responses:
         '200':
           description: Workflow definition source preview
@@ -1250,6 +1257,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinitionSourcePreviewResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Workflow source ref could not be resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Workflow source repository could not be accessed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}/versions/{version}/source-files:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/WorkflowVersion'
+    get:
+      tags: [Workflows]
+      summary: List available source files for a workflow definition version
+      operationId: listWorkflowDefinitionSourceFiles
+      responses:
+        '200':
+          description: Workflow definition source file listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionSourceFileListResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4314,6 +4356,7 @@ components:
         - workflow_definition_id
         - workflow_version
         - entrypoint
+        - path
         - source
         - media_type
         - language
@@ -4329,6 +4372,9 @@ components:
           type: string
         entrypoint:
           type: string
+        path:
+          type: string
+          description: Relative source file path included in this preview.
         source:
           $ref: '#/components/schemas/WorkflowSource'
         media_type:
@@ -4341,7 +4387,7 @@ components:
             - text
         content:
           type: string
-          description: UTF-8 text preview of the selected entrypoint file.
+          description: UTF-8 text preview of the selected source file.
         byte_count:
           type: integer
           minimum: 0
@@ -4350,6 +4396,54 @@ components:
           minimum: 1
         truncated:
           type: boolean
+    WorkflowDefinitionSourceFileResource:
+      type: object
+      required:
+        - path
+        - byte_count
+        - media_type
+        - language
+        - entrypoint
+      properties:
+        path:
+          type: string
+          description: Relative source file path.
+        byte_count:
+          type: integer
+          minimum: 0
+        media_type:
+          type: string
+        language:
+          type: string
+          enum:
+            - typescript
+            - json
+            - text
+        entrypoint:
+          type: boolean
+          description: True when this file is the workflow version entrypoint.
+    WorkflowDefinitionSourceFileListResponse:
+      type: object
+      required:
+        - workflow_definition_id
+        - workflow_version
+        - entrypoint
+        - source
+        - files
+      properties:
+        workflow_definition_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: string
+        entrypoint:
+          type: string
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowDefinitionSourceFileResource'
     WorkflowSource:
       oneOf:
         - $ref: '#/components/schemas/WorkflowGitSource'

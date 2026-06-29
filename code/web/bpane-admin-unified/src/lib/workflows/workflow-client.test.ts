@@ -4,6 +4,7 @@ import {
   WorkflowCatalogClient,
   WorkflowCatalogError,
   toWorkflowDefinitionListResponse,
+  toWorkflowDefinitionSourceFileListResponse,
   toWorkflowDefinitionSourcePreviewResource,
 } from './workflow-client';
 
@@ -77,8 +78,19 @@ describe('WorkflowCatalogClient', () => {
   it('loads workflow definition source previews', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
-      if (url.endsWith('/api/v1/workflows/workflow%2Fwith%2Fslash/versions/v1%2Fcandidate/source-preview')) {
-        return jsonResponse(sourcePreviewPayload({ workflow_version: 'v1/candidate' }), 200);
+      if (
+        url.endsWith(
+          '/api/v1/workflows/workflow%2Fwith%2Fslash/versions/v1%2Fcandidate/source-preview?path=dev%2Fworkflows%2Fsupport%2Fhelper.ts',
+        )
+      ) {
+        return jsonResponse(
+          sourcePreviewPayload({
+            workflow_version: 'v1/candidate',
+            path: 'dev/workflows/support/helper.ts',
+            content: 'export const helperValue = 1;',
+          }),
+          200,
+        );
       }
       return new Response('not found', { status: 404 });
     });
@@ -88,13 +100,48 @@ describe('WorkflowCatalogClient', () => {
       fetchImpl,
     });
 
-    const preview = await client.getDefinitionSourcePreview('workflow/with/slash', 'v1/candidate');
+    const preview = await client.getDefinitionSourcePreview(
+      'workflow/with/slash',
+      'v1/candidate',
+      'dev/workflows/support/helper.ts',
+    );
 
     expect(preview.workflow_version).toBe('v1/candidate');
+    expect(preview.path).toBe('dev/workflows/support/helper.ts');
     expect(preview.language).toBe('typescript');
-    expect(preview.content).toContain('export default async function run');
+    expect(preview.content).toContain('helperValue');
     expect(fetchImpl).toHaveBeenCalledWith(
-      new URL('http://browserpane.test/api/v1/workflows/workflow%2Fwith%2Fslash/versions/v1%2Fcandidate/source-preview'),
+      new URL(
+        'http://browserpane.test/api/v1/workflows/workflow%2Fwith%2Fslash/versions/v1%2Fcandidate/source-preview?path=dev%2Fworkflows%2Fsupport%2Fhelper.ts',
+      ),
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('loads workflow definition source file listings', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/workflows/workflow%2Fwith%2Fslash/versions/v1%2Fcandidate/source-files')) {
+        return jsonResponse(sourceFileListPayload({ workflow_version: 'v1/candidate' }), 200);
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const client = new WorkflowCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl,
+    });
+
+    const listing = await client.listDefinitionSourceFiles('workflow/with/slash', 'v1/candidate');
+
+    expect(listing.workflow_version).toBe('v1/candidate');
+    expect(listing.files).toHaveLength(2);
+    expect(listing.files[0]).toMatchObject({
+      path: 'dev/workflows/support/run.mjs',
+      entrypoint: true,
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://browserpane.test/api/v1/workflows/workflow%2Fwith%2Fslash/versions/v1%2Fcandidate/source-files'),
       expect.objectContaining({ method: 'GET' }),
     );
   });
@@ -146,6 +193,10 @@ describe('WorkflowCatalogClient', () => {
   it('rejects invalid source preview payloads', () => {
     expect(() => toWorkflowDefinitionSourcePreviewResource({ content: 42 })).toThrow(WorkflowCatalogError);
   });
+
+  it('rejects invalid source file listing payloads', () => {
+    expect(() => toWorkflowDefinitionSourceFileListResponse({ files: [{}] })).toThrow(WorkflowCatalogError);
+  });
 });
 
 function jsonResponse(payload: unknown, status: number): Response {
@@ -191,7 +242,35 @@ function versionPayload(overrides: Partial<{ readonly version: string }> = {}) {
   };
 }
 
-function sourcePreviewPayload(overrides: Partial<{ readonly workflow_version: string }> = {}) {
+function sourcePreviewPayload(
+  overrides: Partial<{
+    readonly workflow_version: string;
+    readonly path: string;
+    readonly content: string;
+  }> = {},
+) {
+  return {
+    workflow_definition_id: 'workflow-1',
+    workflow_version: overrides.workflow_version ?? 'v1',
+    entrypoint: 'dev/workflows/support/run.mjs',
+    path: overrides.path ?? 'dev/workflows/support/run.mjs',
+    source: {
+      kind: 'git',
+      repository_url: '/workspace',
+      ref: 'HEAD',
+      resolved_commit: 'abc123',
+      root_path: 'dev',
+    },
+    media_type: 'text/javascript; charset=utf-8',
+    language: 'typescript',
+    content: overrides.content ?? 'export default async function run() {}',
+    byte_count: 38,
+    max_bytes: 65536,
+    truncated: false,
+  };
+}
+
+function sourceFileListPayload(overrides: Partial<{ readonly workflow_version: string }> = {}) {
   return {
     workflow_definition_id: 'workflow-1',
     workflow_version: overrides.workflow_version ?? 'v1',
@@ -203,11 +282,21 @@ function sourcePreviewPayload(overrides: Partial<{ readonly workflow_version: st
       resolved_commit: 'abc123',
       root_path: 'dev',
     },
-    media_type: 'text/javascript; charset=utf-8',
-    language: 'typescript',
-    content: 'export default async function run() {}',
-    byte_count: 38,
-    max_bytes: 65536,
-    truncated: false,
+    files: [
+      {
+        path: 'dev/workflows/support/run.mjs',
+        byte_count: 38,
+        media_type: 'text/javascript; charset=utf-8',
+        language: 'typescript',
+        entrypoint: true,
+      },
+      {
+        path: 'dev/workflows/support/helper.ts',
+        byte_count: 29,
+        media_type: 'text/typescript; charset=utf-8',
+        language: 'typescript',
+        entrypoint: false,
+      },
+    ],
   };
 }

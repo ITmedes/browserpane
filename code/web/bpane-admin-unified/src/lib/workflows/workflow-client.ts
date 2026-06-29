@@ -3,6 +3,8 @@ import type {
   CreateWorkflowDefinitionVersionRequest,
   WorkflowDefinitionListResponse,
   WorkflowDefinitionResource,
+  WorkflowDefinitionSourceFileListResponse,
+  WorkflowDefinitionSourceFileResource,
   WorkflowDefinitionSourcePreviewResource,
   WorkflowDefinitionVersionListResponse,
   WorkflowDefinitionVersionResource,
@@ -122,10 +124,32 @@ export class WorkflowCatalogClient {
   async getDefinitionSourcePreview(
     workflowId: string,
     version: string,
+    sourcePath?: string,
   ): Promise<WorkflowDefinitionSourcePreviewResource> {
+    const url = new URL(
+      `/api/v1/workflows/${encodeURIComponent(workflowId)}/versions/${encodeURIComponent(version)}/source-preview`,
+      this.#baseUrl,
+    );
+    if (sourcePath) {
+      url.searchParams.set('path', sourcePath);
+    }
+    const response = await this.#request(
+      url,
+      {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+      },
+    );
+    return toWorkflowDefinitionSourcePreviewResource(await response.json());
+  }
+
+  async listDefinitionSourceFiles(
+    workflowId: string,
+    version: string,
+  ): Promise<WorkflowDefinitionSourceFileListResponse> {
     const response = await this.#request(
       new URL(
-        `/api/v1/workflows/${encodeURIComponent(workflowId)}/versions/${encodeURIComponent(version)}/source-preview`,
+        `/api/v1/workflows/${encodeURIComponent(workflowId)}/versions/${encodeURIComponent(version)}/source-files`,
         this.#baseUrl,
       ),
       {
@@ -133,7 +157,7 @@ export class WorkflowCatalogClient {
         headers: { accept: 'application/json' },
       },
     );
-    return toWorkflowDefinitionSourcePreviewResource(await response.json());
+    return toWorkflowDefinitionSourceFileListResponse(await response.json());
   }
 
   async #request(input: URL, init: RequestInit): Promise<Response> {
@@ -231,6 +255,7 @@ export function toWorkflowDefinitionSourcePreviewResource(value: unknown): Workf
     ),
     workflow_version: expectString(object.workflow_version, 'workflow definition source preview workflow_version'),
     entrypoint: expectString(object.entrypoint, 'workflow definition source preview entrypoint'),
+    path: expectString(object.path, 'workflow definition source preview path'),
     source: toRequiredWorkflowSource(object.source),
     media_type: expectString(object.media_type, 'workflow definition source preview media_type'),
     language: expectString(object.language, 'workflow definition source preview language'),
@@ -238,6 +263,35 @@ export function toWorkflowDefinitionSourcePreviewResource(value: unknown): Workf
     byte_count: expectNumber(object.byte_count, 'workflow definition source preview byte_count'),
     max_bytes: expectNumber(object.max_bytes, 'workflow definition source preview max_bytes'),
     truncated: expectBoolean(object.truncated, 'workflow definition source preview truncated'),
+  };
+}
+
+export function toWorkflowDefinitionSourceFileListResponse(
+  value: unknown,
+): WorkflowDefinitionSourceFileListResponse {
+  const object = expectRecord(value, 'workflow definition source file list');
+  return {
+    workflow_definition_id: expectString(
+      object.workflow_definition_id,
+      'workflow definition source file list workflow_definition_id',
+    ),
+    workflow_version: expectString(object.workflow_version, 'workflow definition source file list workflow_version'),
+    entrypoint: expectString(object.entrypoint, 'workflow definition source file list entrypoint'),
+    source: toRequiredWorkflowSource(object.source),
+    files: expectArray(object.files, 'workflow definition source file list files').map(
+      toWorkflowDefinitionSourceFileResource,
+    ),
+  };
+}
+
+export function toWorkflowDefinitionSourceFileResource(value: unknown): WorkflowDefinitionSourceFileResource {
+  const object = expectRecord(value, 'workflow definition source file');
+  return {
+    path: expectString(object.path, 'workflow definition source file path'),
+    byte_count: expectNumber(object.byte_count, 'workflow definition source file byte_count'),
+    media_type: expectString(object.media_type, 'workflow definition source file media_type'),
+    language: expectString(object.language, 'workflow definition source file language'),
+    entrypoint: expectBoolean(object.entrypoint, 'workflow definition source file entrypoint'),
   };
 }
 

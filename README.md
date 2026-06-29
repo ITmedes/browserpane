@@ -989,7 +989,8 @@ Primary workflow routes:
 - `GET /api/v1/workflows/{id}`
 - `POST /api/v1/workflows/{id}/versions`
 - `GET /api/v1/workflows/{id}/versions/{version}`
-- `GET /api/v1/workflows/{id}/versions/{version}/source-preview`
+- `GET /api/v1/workflows/{id}/versions/{version}/source-files`
+- `GET /api/v1/workflows/{id}/versions/{version}/source-preview?path={relative_source_path}`
 - `POST /api/v1/workflow-runs`
 - `GET /api/v1/workflow-runs`
 - `GET /api/v1/workflow-runs/{id}`

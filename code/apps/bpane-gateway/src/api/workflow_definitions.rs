@@ -1,4 +1,5 @@
 use axum::routing::{get, post};
+use serde::Deserialize;
 
 use super::*;
 
@@ -23,9 +24,18 @@ pub(super) fn workflow_definition_routes() -> Router<Arc<ApiState>> {
             get(get_workflow_definition_version),
         )
         .route(
+            "/api/v1/workflows/{workflow_id}/versions/{version}/source-files",
+            get(list_workflow_definition_source_files),
+        )
+        .route(
             "/api/v1/workflows/{workflow_id}/versions/{version}/source-preview",
             get(get_workflow_definition_source_preview),
         )
+}
+
+#[derive(Debug, Deserialize)]
+struct SourcePreviewQuery {
+    path: Option<String>,
 }
 
 async fn list_workflow_definitions(
@@ -206,6 +216,7 @@ async fn get_workflow_definition_version(
 async fn get_workflow_definition_source_preview(
     headers: HeaderMap,
     Path((workflow_id, version)): Path<(Uuid, String)>,
+    Query(query): Query<SourcePreviewQuery>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<WorkflowDefinitionSourcePreviewResource>, (StatusCode, Json<ErrorResponse>)> {
     let principal = authorize_api_request(&headers, &state.auth_validator)
@@ -236,11 +247,16 @@ async fn get_workflow_definition_source_preview(
             }),
         )
     })?;
+    let preview_path = query
+        .path
+        .as_deref()
+        .unwrap_or(version_resource.entrypoint.as_str());
     let preview = state
         .workflow_source_resolver
-        .materialize_entrypoint_preview(
+        .materialize_source_file_preview(
             source,
             &version_resource.entrypoint,
+            preview_path,
             WORKFLOW_SOURCE_PREVIEW_MAX_BYTES,
         )
         .await
@@ -248,5 +264,48 @@ async fn get_workflow_definition_source_preview(
     Ok(Json(preview.to_definition_preview_resource(
         &version_resource,
         WORKFLOW_SOURCE_PREVIEW_MAX_BYTES,
+    )))
+}
+
+async fn list_workflow_definition_source_files(
+    headers: HeaderMap,
+    Path((workflow_id, version)): Path<(Uuid, String)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowDefinitionSourceFileListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let version_resource = state
+        .session_store
+        .get_workflow_definition_version_for_owner(&principal, workflow_id, &version)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {version} for workflow {workflow_id} not found"
+                    ),
+                }),
+            )
+        })?;
+    let source = version_resource.source.as_ref().ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow definition version {version} for workflow {workflow_id} does not have source metadata"
+                ),
+            }),
+        )
+    })?;
+    let listing = state
+        .workflow_source_resolver
+        .materialize_source_files(source, &version_resource.entrypoint)
+        .await
+        .map_err(map_workflow_source_error)?;
+    Ok(Json(listing.to_definition_source_file_list_response(
+        &version_resource,
     )))
 }

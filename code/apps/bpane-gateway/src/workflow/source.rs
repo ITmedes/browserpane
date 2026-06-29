@@ -42,11 +42,27 @@ pub struct WorkflowSourceArchive {
 pub struct WorkflowSourcePreview {
     pub source: WorkflowSource,
     pub entrypoint: String,
+    pub path: String,
     pub media_type: String,
     pub language: String,
     pub content: String,
     pub byte_count: usize,
     pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSourceFile {
+    pub path: String,
+    pub byte_count: u64,
+    pub media_type: String,
+    pub language: String,
+    pub entrypoint: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSourceFileListing {
+    pub source: WorkflowSource,
+    pub files: Vec<WorkflowSourceFile>,
 }
 
 #[derive(Debug, thiserror::Error)]

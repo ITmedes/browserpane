@@ -1,4 +1,5 @@
 import type {
+  WorkflowDefinitionSourceFileListResponse,
   WorkflowDefinitionSourcePreviewResource,
   WorkflowDefinitionResource,
   WorkflowDefinitionVersionResource,
@@ -27,6 +28,17 @@ export type WorkflowSourcePreviewState =
       readonly status: 'ready';
       readonly version: string;
       readonly preview: WorkflowDefinitionSourcePreviewResource;
+    }
+  | { readonly status: 'unavailable'; readonly version: string; readonly message: string }
+  | { readonly status: 'error'; readonly version: string; readonly message: string };
+
+export type WorkflowSourceFileListState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly version: string }
+  | {
+      readonly status: 'ready';
+      readonly version: string;
+      readonly response: WorkflowDefinitionSourceFileListResponse;
     }
   | { readonly status: 'unavailable'; readonly version: string; readonly message: string }
   | { readonly status: 'error'; readonly version: string; readonly message: string };
