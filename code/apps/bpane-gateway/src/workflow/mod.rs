@@ -8,11 +8,11 @@ pub mod state;
 pub use observability::{WorkflowObservability, WorkflowObservabilitySnapshot};
 pub use resources::{
     WorkflowDefinitionListResponse, WorkflowDefinitionResource,
-    WorkflowDefinitionSourcePreviewResource, WorkflowDefinitionVersionListResponse,
-    WorkflowDefinitionVersionResource, WorkflowRunEventListResponse, WorkflowRunEventResource,
-    WorkflowRunListResponse, WorkflowRunLogListResponse, WorkflowRunLogResource,
-    WorkflowRunProducedFileResource, WorkflowRunRecordingResource, WorkflowRunResource,
-    WorkflowRunRetentionResource,
+    WorkflowDefinitionSourceFileListResponse, WorkflowDefinitionSourcePreviewResource,
+    WorkflowDefinitionVersionListResponse, WorkflowDefinitionVersionResource,
+    WorkflowRunEventListResponse, WorkflowRunEventResource, WorkflowRunListResponse,
+    WorkflowRunLogListResponse, WorkflowRunLogResource, WorkflowRunProducedFileResource,
+    WorkflowRunRecordingResource, WorkflowRunResource, WorkflowRunRetentionResource,
 };
 pub use retention::WorkflowRetentionManager;
 pub use runtime::{
@@ -23,7 +23,7 @@ pub use runtime::{
 };
 pub use source::{
     validate_workflow_source_entrypoint, WorkflowSource, WorkflowSourceArchive,
-    WorkflowSourceError, WorkflowSourcePreview, WorkflowSourceResolver,
+    WorkflowSourceError, WorkflowSourceFileListing, WorkflowSourcePreview, WorkflowSourceResolver,
 };
 pub use state::{
     automation_task_default_message_for_run_state, automation_task_event_type_for_run_state,

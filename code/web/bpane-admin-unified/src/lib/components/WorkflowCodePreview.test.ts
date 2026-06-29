@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   byTestId,
@@ -11,6 +11,7 @@ afterEach(cleanupRenderedComponents);
 
 describe('WorkflowCodePreview', () => {
   it('renders TypeScript-highlighted source content', () => {
+    const onSelectFile = vi.fn();
     const target = renderComponent(WorkflowCodePreview, {
       state: {
         status: 'ready',
@@ -19,6 +20,7 @@ describe('WorkflowCodePreview', () => {
           workflow_definition_id: 'workflow-1',
           workflow_version: 'v1',
           entrypoint: 'dev/workflows/demo/run.ts',
+          path: 'dev/workflows/demo/run.ts',
           source: {
             kind: 'git',
             repository_url: '/workspace',
@@ -34,14 +36,22 @@ describe('WorkflowCodePreview', () => {
           truncated: false,
         },
       },
+      filesState: sourceFilesState(),
+      onSelectFile,
     });
 
     expect(byTestId(target, 'workflow-code-preview-language').textContent).toContain('TypeScript');
     expect(byTestId(target, 'workflow-code-preview-entrypoint').textContent).toContain('run.ts');
+    expect(byTestId(target, 'workflow-code-file-list').textContent).toContain('helper.ts');
+    expect(target.querySelector('[data-source-path="dev/workflows/demo/run.ts"]')?.getAttribute('data-selected')).toBe('true');
     expect(byTestId(target, 'workflow-code-preview-code-language').className).toContain('language-typescript');
     expect(byTestId(target, 'workflow-code-preview-code').textContent).toContain('export default async function run');
     expect(target.querySelector('.hljs-keyword')?.textContent).toBe('export');
     expect(target.querySelector('.hljs-string')?.textContent).toBe("'ok'");
+
+    (target.querySelector('[data-source-path="dev/workflows/demo/helper.ts"]') as HTMLButtonElement).click();
+
+    expect(onSelectFile).toHaveBeenCalledWith('dev/workflows/demo/helper.ts');
   });
 
   it('renders loading, unavailable, and error states', () => {
@@ -63,3 +73,38 @@ describe('WorkflowCodePreview', () => {
     expect(byTestId(target, 'workflow-code-preview-error').textContent).toContain('git failed');
   });
 });
+
+function sourceFilesState() {
+  return {
+    status: 'ready' as const,
+    version: 'v1',
+    response: {
+      workflow_definition_id: 'workflow-1',
+      workflow_version: 'v1',
+      entrypoint: 'dev/workflows/demo/run.ts',
+      source: {
+        kind: 'git' as const,
+        repository_url: '/workspace',
+        ref: 'HEAD',
+        resolved_commit: 'abc123',
+        root_path: 'dev',
+      },
+      files: [
+        {
+          path: 'dev/workflows/demo/run.ts',
+          byte_count: 76,
+          media_type: 'text/typescript; charset=utf-8',
+          language: 'typescript',
+          entrypoint: true,
+        },
+        {
+          path: 'dev/workflows/demo/helper.ts',
+          byte_count: 34,
+          media_type: 'text/typescript; charset=utf-8',
+          language: 'typescript',
+          entrypoint: false,
+        },
+      ],
+    },
+  };
+}

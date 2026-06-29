@@ -23,6 +23,7 @@ describe('WorkflowDefinitionInspector', () => {
         version: 'v1',
         preview: sourcePreview(),
       },
+      sourceFilesState: sourceFilesState(),
       onRefreshWorkflow,
     });
 
@@ -32,6 +33,7 @@ describe('WorkflowDefinitionInspector', () => {
     expect(byTestId(target, 'workflow-definition-version-entrypoint').textContent).toContain('browserpane-tour');
     expect(byTestId(target, 'workflow-definition-source').textContent).toContain('/workspace');
     expect(byTestId(target, 'workflow-definition-policy').textContent).toContain('workspace-1');
+    expect(byTestId(target, 'workflow-code-file-list').textContent).toContain('browserpane-tour/run.mjs');
     expect(byTestId(target, 'workflow-code-preview-code').textContent).toContain('export default async function run');
 
     byTestId(target, 'workflow-definition-refresh-detail').click();
@@ -72,6 +74,7 @@ function sourcePreview() {
     workflow_definition_id: 'workflow-1',
     workflow_version: 'v1',
     entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
+    path: 'dev/workflows/browserpane-tour/run.mjs',
     source: {
       kind: 'git' as const,
       repository_url: '/workspace',
@@ -85,6 +88,34 @@ function sourcePreview() {
     byte_count: 38,
     max_bytes: 65536,
     truncated: false,
+  };
+}
+
+function sourceFilesState() {
+  return {
+    status: 'ready' as const,
+    version: 'v1',
+    response: {
+      workflow_definition_id: 'workflow-1',
+      workflow_version: 'v1',
+      entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
+      source: {
+        kind: 'git' as const,
+        repository_url: '/workspace',
+        ref: 'HEAD',
+        resolved_commit: 'abc123',
+        root_path: 'dev',
+      },
+      files: [
+        {
+          path: 'dev/workflows/browserpane-tour/run.mjs',
+          byte_count: 38,
+          media_type: 'text/javascript; charset=utf-8',
+          language: 'typescript',
+          entrypoint: true,
+        },
+      ],
+    },
   };
 }
 

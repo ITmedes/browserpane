@@ -24,6 +24,11 @@ async fn workflow_definition_versions_expose_entrypoint_source_preview_to_owner(
         "import { test } from '@playwright/test';\nexport async function run(): Promise<void> {\n  console.log('preview');\n}\n",
     )
     .unwrap();
+    fs::write(
+        source_repo.path().join("workflows/helper.ts"),
+        "export const helperValue = 42;\n",
+    )
+    .unwrap();
     fs::write(source_repo.path().join("README.md"), "not in preview\n").unwrap();
     git(&["add", "."], source_repo.path());
     git(&["commit", "-m", "init"], source_repo.path());
@@ -59,6 +64,39 @@ async fn workflow_definition_versions_expose_entrypoint_source_preview_to_owner(
         .unwrap();
     assert_eq!(create_version.status(), StatusCode::CREATED);
 
+    let files_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/workflows/{workflow_id}/versions/v1/source-files"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(files_response.status(), StatusCode::OK);
+    let files = response_json(files_response).await;
+    let file_paths = files["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|file| file["path"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(files["entrypoint"], "workflows/run.ts");
+    assert!(file_paths.contains(&"workflows/run.ts".to_string()));
+    assert!(file_paths.contains(&"workflows/helper.ts".to_string()));
+    assert!(!file_paths.contains(&"README.md".to_string()));
+    let entrypoint_file = files["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|file| file["path"] == "workflows/run.ts")
+        .unwrap();
+    assert_eq!(entrypoint_file["entrypoint"], true);
+
     let preview_response = app
         .clone()
         .oneshot(
@@ -77,6 +115,7 @@ async fn workflow_definition_versions_expose_entrypoint_source_preview_to_owner(
     assert_eq!(preview["workflow_definition_id"], workflow_id);
     assert_eq!(preview["workflow_version"], "v1");
     assert_eq!(preview["entrypoint"], "workflows/run.ts");
+    assert_eq!(preview["path"], "workflows/run.ts");
     assert_eq!(preview["language"], "typescript");
     assert_eq!(preview["media_type"], "text/typescript; charset=utf-8");
     assert_eq!(preview["truncated"], false);
@@ -86,6 +125,43 @@ async fn workflow_definition_versions_expose_entrypoint_source_preview_to_owner(
         .unwrap()
         .contains("export async function run(): Promise<void>"));
     assert_eq!(preview["source"]["resolved_commit"], resolved_commit);
+
+    let helper_preview_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/workflows/{workflow_id}/versions/v1/source-preview?path=workflows/helper.ts"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(helper_preview_response.status(), StatusCode::OK);
+    let helper_preview = response_json(helper_preview_response).await;
+    assert_eq!(helper_preview["entrypoint"], "workflows/run.ts");
+    assert_eq!(helper_preview["path"], "workflows/helper.ts");
+    assert!(helper_preview["content"]
+        .as_str()
+        .unwrap()
+        .contains("helperValue"));
+
+    let outside_root_preview = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/workflows/{workflow_id}/versions/v1/source-preview?path=README.md"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(outside_root_preview.status(), StatusCode::BAD_REQUEST);
 
     let foreign_preview = app
         .clone()
@@ -101,6 +177,21 @@ async fn workflow_definition_versions_expose_entrypoint_source_preview_to_owner(
         .await
         .unwrap();
     assert_eq!(foreign_preview.status(), StatusCode::NOT_FOUND);
+
+    let foreign_files = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/workflows/{workflow_id}/versions/v1/source-files"
+                ))
+                .header("authorization", bearer(&foreign_token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(foreign_files.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -150,6 +241,21 @@ async fn workflow_definition_source_preview_requires_source_metadata() {
         .as_str()
         .unwrap()
         .contains("does not have source metadata"));
+
+    let files_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/workflows/{workflow_id}/versions/v1/source-files"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(files_response.status(), StatusCode::NOT_FOUND);
 }
 
 async fn create_workflow(app: &Router, token: &str, name: &str) -> Value {

@@ -46,6 +46,7 @@ export type WorkflowDefinitionSourcePreviewResource = {
   readonly workflow_definition_id: string;
   readonly workflow_version: string;
   readonly entrypoint: string;
+  readonly path: string;
   readonly source: WorkflowSourceResource;
   readonly media_type: string;
   readonly language: string;
@@ -53,6 +54,22 @@ export type WorkflowDefinitionSourcePreviewResource = {
   readonly byte_count: number;
   readonly max_bytes: number;
   readonly truncated: boolean;
+};
+
+export type WorkflowDefinitionSourceFileResource = {
+  readonly path: string;
+  readonly byte_count: number;
+  readonly media_type: string;
+  readonly language: string;
+  readonly entrypoint: boolean;
+};
+
+export type WorkflowDefinitionSourceFileListResponse = {
+  readonly workflow_definition_id: string;
+  readonly workflow_version: string;
+  readonly entrypoint: string;
+  readonly source: WorkflowSourceResource;
+  readonly files: readonly WorkflowDefinitionSourceFileResource[];
 };
 
 export type CreateWorkflowDefinitionRequest = {

@@ -27,8 +27,28 @@ describe('WorkflowDefinitionDetailRoute', () => {
       if (url.endsWith('/api/v1/workflows/workflow-1/versions')) {
         return jsonResponse({ versions: [versionPayload()] }, 200);
       }
-      if (url.endsWith('/api/v1/workflows/workflow-1/versions/v1/source-preview')) {
+      if (url.endsWith('/api/v1/workflows/workflow-1/versions/v1/source-files')) {
+        return jsonResponse(sourceFilesPayload(), 200);
+      }
+      if (
+        url.endsWith(
+          '/api/v1/workflows/workflow-1/versions/v1/source-preview?path=dev%2Fworkflows%2Fbrowserpane-tour%2Frun.mjs',
+        )
+      ) {
         return jsonResponse(sourcePreviewPayload(), 200);
+      }
+      if (
+        url.endsWith(
+          '/api/v1/workflows/workflow-1/versions/v1/source-preview?path=dev%2Fworkflows%2Fbrowserpane-tour%2Fhelper.ts',
+        )
+      ) {
+        return jsonResponse(
+          sourcePreviewPayload({
+            path: 'dev/workflows/browserpane-tour/helper.ts',
+            content: 'export const helperValue = 1;',
+          }),
+          200,
+        );
       }
       return new Response('not found', { status: 404 });
     });
@@ -45,6 +65,11 @@ describe('WorkflowDefinitionDetailRoute', () => {
       expect(byTestId(target, 'workflow-code-preview-code').textContent).toContain('export default async function run');
     });
     expect(byTestId(target, 'workflow-code-preview-code-language').className).toContain('language-typescript');
+    expect(byTestId(target, 'workflow-code-file-list').textContent).toContain('helper.ts');
+    (target.querySelector('[data-source-path="dev/workflows/browserpane-tour/helper.ts"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'workflow-code-preview-code').textContent).toContain('helperValue');
+    });
     const headers = fetchImpl.mock.calls[0]?.[1]?.headers as Headers;
     expect(headers.get('authorization')).toBe('Bearer shell-token');
   });
@@ -128,7 +153,34 @@ function versionPayload() {
   };
 }
 
-function sourcePreviewPayload() {
+function sourcePreviewPayload(
+  overrides: Partial<{
+    readonly path: string;
+    readonly content: string;
+  }> = {},
+) {
+  return {
+    workflow_definition_id: 'workflow-1',
+    workflow_version: 'v1',
+    entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
+    path: overrides.path ?? 'dev/workflows/browserpane-tour/run.mjs',
+    source: {
+      kind: 'git',
+      repository_url: '/workspace',
+      ref: 'HEAD',
+      resolved_commit: 'abc123',
+      root_path: 'dev',
+    },
+    media_type: 'text/javascript; charset=utf-8',
+    language: 'typescript',
+    content: overrides.content ?? 'export default async function run() {}',
+    byte_count: 38,
+    max_bytes: 65536,
+    truncated: false,
+  };
+}
+
+function sourceFilesPayload() {
   return {
     workflow_definition_id: 'workflow-1',
     workflow_version: 'v1',
@@ -140,11 +192,21 @@ function sourcePreviewPayload() {
       resolved_commit: 'abc123',
       root_path: 'dev',
     },
-    media_type: 'text/javascript; charset=utf-8',
-    language: 'typescript',
-    content: 'export default async function run() {}',
-    byte_count: 38,
-    max_bytes: 65536,
-    truncated: false,
+    files: [
+      {
+        path: 'dev/workflows/browserpane-tour/run.mjs',
+        byte_count: 38,
+        media_type: 'text/javascript; charset=utf-8',
+        language: 'typescript',
+        entrypoint: true,
+      },
+      {
+        path: 'dev/workflows/browserpane-tour/helper.ts',
+        byte_count: 29,
+        media_type: 'text/typescript; charset=utf-8',
+        language: 'typescript',
+        entrypoint: false,
+      },
+    ],
   };
 }

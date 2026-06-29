@@ -3,6 +3,7 @@
   import type {
     WorkflowActionState,
     WorkflowDetailLoadState,
+    WorkflowSourceFileListState,
     WorkflowSourcePreviewState,
   } from '$lib/workflows/workflow-detail-state';
   import {
@@ -18,17 +19,21 @@
   type WorkflowDefinitionInspectorProps = {
     readonly state: WorkflowDetailLoadState;
     readonly actionState?: WorkflowActionState;
+    readonly sourceFilesState?: WorkflowSourceFileListState;
     readonly sourcePreviewState?: WorkflowSourcePreviewState;
     readonly onRefreshWorkflow?: () => void | Promise<void>;
     readonly onSelectVersion?: (version: string) => void | Promise<void>;
+    readonly onSelectSourceFile?: (path: string) => void | Promise<void>;
   };
 
   let {
     state: loadState,
     actionState = { status: 'idle' },
+    sourceFilesState = { status: 'idle' },
     sourcePreviewState = { status: 'idle' },
     onRefreshWorkflow,
     onSelectVersion,
+    onSelectSourceFile,
   }: WorkflowDefinitionInspectorProps = $props();
   let selectedVersion = $state('');
   let notifiedVersion = $state('');
@@ -241,7 +246,11 @@
         </div>
       </section>
 
-      <WorkflowCodePreview state={sourcePreviewState} />
+      <WorkflowCodePreview
+        state={sourcePreviewState}
+        filesState={sourceFilesState}
+        onSelectFile={onSelectSourceFile}
+      />
     </div>
   {/if}
 </aside>

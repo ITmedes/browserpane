@@ -9,6 +9,7 @@
   import type {
     WorkflowActionState,
     WorkflowDetailLoadState,
+    WorkflowSourceFileListState,
     WorkflowSourcePreviewState,
   } from '$lib/workflows/workflow-detail-state';
   import AdminMessage from './AdminMessage.svelte';
@@ -21,7 +22,9 @@
   let { authContext }: WorkflowDefinitionDetailRouteProps = $props();
   let workflowState = $state<WorkflowDetailLoadState>({ status: 'idle' });
   let actionState = $state<WorkflowActionState>({ status: 'idle' });
+  let sourceFilesState = $state<WorkflowSourceFileListState>({ status: 'idle' });
   let sourcePreviewState = $state<WorkflowSourcePreviewState>({ status: 'idle' });
+  let sourceFilesRequestId = 0;
   let sourcePreviewRequestId = 0;
 
   onMount(() => {
@@ -48,6 +51,7 @@
   async function loadWorkflow(workflowId: string): Promise<void> {
     workflowState = { status: 'loading', workflowId };
     actionState = { status: 'idle' };
+    sourceFilesState = { status: 'idle' };
     sourcePreviewState = { status: 'idle' };
     try {
       const workflowClient = client();
@@ -81,7 +85,7 @@
       actionState = { status: 'success', message: 'Workflow definition refreshed.' };
       const previewVersion = activePreviewVersion();
       if (previewVersion) {
-        void loadSourcePreview(definition.id, previewVersion);
+        void loadSourceFilesAndPreview(definition.id, previewVersion);
       }
     } catch (error) {
       actionState = {
@@ -96,15 +100,54 @@
     if (!workflowId) {
       return;
     }
-    await loadSourcePreview(workflowId, version);
+    await loadSourceFilesAndPreview(workflowId, version);
   }
 
-  async function loadSourcePreview(workflowId: string, version: string): Promise<void> {
+  async function loadSourceFilesAndPreview(workflowId: string, version: string): Promise<void> {
+    const requestId = sourceFilesRequestId + 1;
+    sourceFilesRequestId = requestId;
+    sourcePreviewRequestId += 1;
+    sourceFilesState = { status: 'loading', version };
+    sourcePreviewState = { status: 'loading', version };
+    try {
+      const response = await client().listDefinitionSourceFiles(workflowId, version);
+      if (sourceFilesRequestId !== requestId) {
+        return;
+      }
+      sourceFilesState = { status: 'ready', version, response };
+      const entrypointPath = response.files.find((file) => file.entrypoint)?.path ?? response.entrypoint;
+      await loadSourcePreview(workflowId, version, entrypointPath);
+    } catch (error) {
+      if (sourceFilesRequestId !== requestId) {
+        return;
+      }
+      const message = error instanceof Error ? error.message : 'Workflow source files failed.';
+      if (error instanceof WorkflowCatalogError && error.status === 404) {
+        const unavailableMessage = 'This workflow version does not expose source metadata for browsing.';
+        sourceFilesState = { status: 'unavailable', version, message: unavailableMessage };
+        sourcePreviewState = { status: 'unavailable', version, message: unavailableMessage };
+        return;
+      }
+      sourceFilesState = { status: 'error', version, message };
+      sourcePreviewState = { status: 'error', version, message };
+    }
+  }
+
+  async function selectSourceFile(sourcePath: string): Promise<void> {
+    const workflowId = activeWorkflowId();
+    const version = activeSourceVersion();
+    if (!workflowId || !version) {
+      return;
+    }
+    await loadSourcePreview(workflowId, version, sourcePath);
+  }
+
+  async function loadSourcePreview(workflowId: string, version: string, sourcePath?: string): Promise<void> {
     const requestId = sourcePreviewRequestId + 1;
     sourcePreviewRequestId = requestId;
     sourcePreviewState = { status: 'loading', version };
     try {
-      const preview = await client().getDefinitionSourcePreview(workflowId, version);
+      const preview = await client().getDefinitionSourcePreview(workflowId, version, sourcePath);
       if (sourcePreviewRequestId !== requestId) {
         return;
       }
@@ -118,7 +161,9 @@
         sourcePreviewState = {
           status: 'unavailable',
           version,
-          message: 'This workflow version does not expose source metadata for preview.',
+          message: sourcePath
+            ? 'This workflow source file is not available for preview.'
+            : 'This workflow version does not expose source metadata for preview.',
         };
         return;
       }
@@ -147,6 +192,13 @@
     }
     return sourcePreviewState.version;
   }
+
+  function activeSourceVersion(): string | null {
+    if (sourceFilesState.status !== 'idle') {
+      return sourceFilesState.version;
+    }
+    return activePreviewVersion();
+  }
 </script>
 
 <div class="mx-auto flex min-h-full w-full max-w-[1180px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8" data-testid="workflow-definition-detail-route">
@@ -173,9 +225,11 @@
     <WorkflowDefinitionInspector
       state={workflowState}
       {actionState}
+      {sourceFilesState}
       {sourcePreviewState}
       onRefreshWorkflow={refreshWorkflow}
       onSelectVersion={selectWorkflowVersion}
+      onSelectSourceFile={selectSourceFile}
     />
   {/if}
 </div>
