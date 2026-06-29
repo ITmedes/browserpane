@@ -438,6 +438,7 @@ impl InMemorySessionStore {
             network_identity: request.network_identity.unwrap_or_default(),
             owner_mode,
             viewport: request.viewport.unwrap_or_default(),
+            capabilities: request.capabilities,
             owner: SessionOwner {
                 subject: principal.subject.clone(),
                 issuer: principal.issuer.clone(),

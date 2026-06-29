@@ -62,6 +62,28 @@ describe('session create view model', () => {
     expect(JSON.stringify(validation.request)).not.toContain('bpane_admin_surface');
   });
 
+  it('adds capability overrides only after a default is changed', () => {
+    const validation = validateSessionCreateDraft({
+      ...createNewSessionCreateDraft(),
+      capabilityClipboard: false,
+      capabilityMicrophone: false,
+      capabilityCamera: false,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(validation.request).toEqual({
+      capabilities: {
+        browser_input: true,
+        clipboard: false,
+        audio: true,
+        microphone: false,
+        camera: false,
+        file_transfer: true,
+        resize: true,
+      },
+    });
+  });
+
   it('rejects invalid metadata references and malformed labels', () => {
     const validation = validateSessionCreateDraft({
       ...createNewSessionCreateDraft(),

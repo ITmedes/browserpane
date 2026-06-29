@@ -28,6 +28,33 @@ describe('SessionCreateForm', () => {
     expect(onSave).toHaveBeenCalledWith({});
   });
 
+  it('submits explicit capability overrides from the capability checkboxes', async () => {
+    const onSave = vi.fn<(request: CreateSessionRequest) => void>();
+    const target = renderComponent(SessionCreateForm, {
+      optionsState: { status: 'ready', options: emptyOptions() },
+      onSave,
+    });
+
+    setCheckboxChecked(byTestId(target, 'session-create-capability-microphone'), false);
+    setCheckboxChecked(byTestId(target, 'session-create-capability-camera'), false);
+    await tick();
+    expect(byTestId(target, 'session-create-payload').textContent).toContain('"camera": false');
+
+    byTestId(target, 'session-create-save').click();
+
+    expect(onSave).toHaveBeenCalledWith({
+      capabilities: {
+        browser_input: true,
+        clipboard: true,
+        audio: true,
+        microphone: false,
+        camera: false,
+        file_transfer: true,
+        resize: true,
+      },
+    });
+  });
+
   it('submits only explicitly selected session metadata', async () => {
     const onSave = vi.fn<(request: CreateSessionRequest) => void>();
     const target = renderComponent(SessionCreateForm, {
@@ -71,6 +98,11 @@ function setInputValue(element: Element, value: string): void {
 
 function setSelectValue(element: Element, value: string): void {
   (element as HTMLSelectElement).value = value;
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function setCheckboxChecked(element: Element, checked: boolean): void {
+  (element as HTMLInputElement).checked = checked;
   element.dispatchEvent(new Event('change', { bubbles: true }));
 }
 

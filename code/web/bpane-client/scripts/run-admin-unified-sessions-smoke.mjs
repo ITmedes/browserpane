@@ -52,10 +52,15 @@ async function run() {
     });
     await assertNoBodyHorizontalOverflow(page, 'unified session create');
     await assertNoHorizontalOverflow(page, 'session-create-route', 'unified session create route');
+    await page.getByTestId('session-create-capability-camera').uncheck();
+    await page.getByTestId('session-create-capability-microphone').uncheck();
     await page.getByTestId('session-create-labels').fill('suite=admin-unified-sessions\npurpose=smoke');
     const preview = await page.getByTestId('session-create-payload').textContent();
     if (preview?.includes('bpane_admin_surface')) {
       throw new Error(`Session create form added an implicit admin label: ${preview}`);
+    }
+    if (!preview?.includes('"camera": false') || !preview.includes('"microphone": false')) {
+      throw new Error(`Session create form did not include capability overrides: ${preview}`);
     }
     await page.getByTestId('session-create-save').click();
     createdSessionId = await waitForSessionDetailUrl(page, options);
@@ -76,6 +81,8 @@ async function run() {
       state: 'visible',
       timeout: options.connectTimeoutMs,
     });
+    await waitForContains(page, options, 'session-capability-camera', 'disabled');
+    await waitForContains(page, options, 'session-capability-microphone', 'disabled');
     await assertNoBodyHorizontalOverflow(page, 'unified session detail');
     await assertNoHorizontalOverflow(page, 'session-detail-route', 'unified session detail route');
     await assertNoHorizontalOverflow(page, 'session-inspector', 'unified session inspector');

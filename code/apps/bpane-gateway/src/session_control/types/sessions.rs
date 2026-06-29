@@ -2097,6 +2097,8 @@ pub struct CreateSessionRequest {
     #[serde(default)]
     pub viewport: Option<SessionViewport>,
     #[serde(default)]
+    pub capabilities: SessionCapabilities,
+    #[serde(default)]
     pub idle_timeout_sec: Option<u32>,
     #[serde(default)]
     pub labels: HashMap<String, String>,
@@ -2209,6 +2211,7 @@ pub struct StoredSession {
     pub network_identity: SessionNetworkIdentity,
     pub owner_mode: SessionOwnerMode,
     pub viewport: SessionViewport,
+    pub capabilities: SessionCapabilities,
     pub owner: SessionOwner,
     pub automation_delegate: Option<SessionAutomationDelegate>,
     pub idle_timeout_sec: Option<u32>,

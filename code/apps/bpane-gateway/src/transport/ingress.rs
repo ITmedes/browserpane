@@ -7,7 +7,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, warn};
 use wtransport::RecvStream;
 
-use super::policy::viewer_can_forward_frame;
+use super::policy::{client_can_forward_frame, SessionTransportPolicy};
 use crate::session_files::{new_active_transfer_map, SessionFileRecorder};
 use crate::session_hub::{ResizeResult, SessionHub};
 
@@ -20,7 +20,7 @@ pub(super) fn spawn_browser_to_agent_task(
     mut recv_stream: RecvStream,
     to_host: mpsc::Sender<Frame>,
     file_recorder: SessionFileRecorder,
-    allow_browser_uploads: bool,
+    transport_policy: SessionTransportPolicy,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut buf = vec![0u8; 64 * 1024];
@@ -47,6 +47,9 @@ pub(super) fn spawn_browser_to_agent_task(
                                 let is_owner = hub.is_browser_owner(client_id);
 
                                 if let Some((req_w, req_h)) = resolution_request(&frame) {
+                                    if !transport_policy.capabilities.resize {
+                                        continue;
+                                    }
                                     match hub.request_resize(client_id, req_w, req_h).await {
                                         ResizeResult::Applied => {}
                                         ResizeResult::Locked(width, height) => {
@@ -63,11 +66,7 @@ pub(super) fn spawn_browser_to_agent_task(
                                     continue;
                                 }
 
-                                if !is_owner && !viewer_can_forward_frame(&frame) {
-                                    continue;
-                                }
-
-                                if frame.channel == ChannelId::FileUp && !allow_browser_uploads {
+                                if !client_can_forward_frame(&frame, is_owner, &transport_policy) {
                                     continue;
                                 }
 

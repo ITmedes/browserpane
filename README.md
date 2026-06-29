@@ -233,7 +233,7 @@ The default local auth flow is OIDC-based:
 - click `Login`
 - authenticate against the local Keycloak realm
 - use the demo account `demo / demo-demo`
-- return to the admin console and either select an existing session or create a new one, optionally from a session template and reusable browser context
+- return to the admin console and either select an existing session or create a new one, optionally from a session template, reusable browser context, and explicit capability restrictions
 - the admin console joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
 - the live session panel and session inspector show the applied template, and the inspector can filter sessions by template, lifecycle state, and runtime state
 - sessions created from the admin console use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
@@ -354,7 +354,9 @@ reusable-context, and file-workspace allow-lists before runtime launch. Project
 policy can also reject browser upload/download transfers, session-file binding
 creation, and ad-hoc manual recording starts for project sessions. Session resources expose
 `capabilities.file_transfer=false` when the project disables either browser
-upload or browser download transfer. Credential bindings and
+upload or browser download transfer, and explicit session create requests can
+narrow browser input, clipboard, audio, microphone, camera, file transfer, and
+resize capabilities for that session. Credential bindings and
 egress profiles can be owner-scoped or assigned to a project; project-scoped
 sessions may use owner-scoped egress profiles or profiles from the same project,
 and may only use project-bound proxy credential bindings from that same project.

@@ -195,6 +195,115 @@
       </div>
     </section>
 
+    <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="session-create-capabilities-section">
+      <div class="border-b border-admin-border pb-3">
+        <h4 class="m-0 text-sm font-semibold text-admin-ink">Capabilities</h4>
+        <p class="m-0 mt-1 text-xs leading-5 text-admin-muted">
+          Disable browser features that should not be available in this session.
+        </p>
+      </div>
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <label class="flex min-w-0 items-start gap-3 rounded-md border border-admin-border bg-white p-3 text-sm transition hover:border-admin-accent/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-admin-accent/25">
+          <input
+            class="mt-0.5 size-4 shrink-0 rounded border-admin-border text-admin-accent focus:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+            type="checkbox"
+            bind:checked={draft.capabilityBrowserInput}
+            disabled={disabled}
+            data-testid="session-create-capability-browser-input"
+          />
+          <span class="min-w-0">
+            <span class="block font-medium text-admin-ink">Browser input</span>
+            <span class="block text-xs leading-5 text-admin-muted">Keyboard and pointer control.</span>
+          </span>
+        </label>
+
+        <label class="flex min-w-0 items-start gap-3 rounded-md border border-admin-border bg-white p-3 text-sm transition hover:border-admin-accent/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-admin-accent/25">
+          <input
+            class="mt-0.5 size-4 shrink-0 rounded border-admin-border text-admin-accent focus:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+            type="checkbox"
+            bind:checked={draft.capabilityClipboard}
+            disabled={disabled}
+            data-testid="session-create-capability-clipboard"
+          />
+          <span class="min-w-0">
+            <span class="block font-medium text-admin-ink">Clipboard</span>
+            <span class="block text-xs leading-5 text-admin-muted">Copy and paste access.</span>
+          </span>
+        </label>
+
+        <label class="flex min-w-0 items-start gap-3 rounded-md border border-admin-border bg-white p-3 text-sm transition hover:border-admin-accent/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-admin-accent/25">
+          <input
+            class="mt-0.5 size-4 shrink-0 rounded border-admin-border text-admin-accent focus:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+            type="checkbox"
+            bind:checked={draft.capabilityAudio}
+            disabled={disabled}
+            data-testid="session-create-capability-audio"
+          />
+          <span class="min-w-0">
+            <span class="block font-medium text-admin-ink">Audio output</span>
+            <span class="block text-xs leading-5 text-admin-muted">Remote browser sound.</span>
+          </span>
+        </label>
+
+        <label class="flex min-w-0 items-start gap-3 rounded-md border border-admin-border bg-white p-3 text-sm transition hover:border-admin-accent/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-admin-accent/25">
+          <input
+            class="mt-0.5 size-4 shrink-0 rounded border-admin-border text-admin-accent focus:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+            type="checkbox"
+            bind:checked={draft.capabilityMicrophone}
+            disabled={disabled}
+            data-testid="session-create-capability-microphone"
+          />
+          <span class="min-w-0">
+            <span class="block font-medium text-admin-ink">Microphone</span>
+            <span class="block text-xs leading-5 text-admin-muted">Local microphone ingress.</span>
+          </span>
+        </label>
+
+        <label class="flex min-w-0 items-start gap-3 rounded-md border border-admin-border bg-white p-3 text-sm transition hover:border-admin-accent/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-admin-accent/25">
+          <input
+            class="mt-0.5 size-4 shrink-0 rounded border-admin-border text-admin-accent focus:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+            type="checkbox"
+            bind:checked={draft.capabilityCamera}
+            disabled={disabled}
+            data-testid="session-create-capability-camera"
+          />
+          <span class="min-w-0">
+            <span class="block font-medium text-admin-ink">Camera</span>
+            <span class="block text-xs leading-5 text-admin-muted">Browser camera ingress.</span>
+          </span>
+        </label>
+
+        <label class="flex min-w-0 items-start gap-3 rounded-md border border-admin-border bg-white p-3 text-sm transition hover:border-admin-accent/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-admin-accent/25">
+          <input
+            class="mt-0.5 size-4 shrink-0 rounded border-admin-border text-admin-accent focus:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+            type="checkbox"
+            bind:checked={draft.capabilityFileTransfer}
+            disabled={disabled}
+            data-testid="session-create-capability-file-transfer"
+          />
+          <span class="min-w-0">
+            <span class="block font-medium text-admin-ink">File transfer</span>
+            <span class="block text-xs leading-5 text-admin-muted">Live upload and download transfer.</span>
+          </span>
+        </label>
+
+        <label class="flex min-w-0 items-start gap-3 rounded-md border border-admin-border bg-white p-3 text-sm transition hover:border-admin-accent/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-admin-accent/25">
+          <input
+            class="mt-0.5 size-4 shrink-0 rounded border-admin-border text-admin-accent focus:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+            type="checkbox"
+            bind:checked={draft.capabilityResize}
+            disabled={disabled}
+            data-testid="session-create-capability-resize"
+          />
+          <span class="min-w-0">
+            <span class="block font-medium text-admin-ink">Resize</span>
+            <span class="block text-xs leading-5 text-admin-muted">Viewport resize requests.</span>
+          </span>
+        </label>
+      </div>
+    </section>
+
     <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="session-create-metadata-section">
       <div class="border-b border-admin-border pb-3">
         <h4 class="m-0 text-sm font-semibold text-admin-ink">Runtime metadata</h4>
