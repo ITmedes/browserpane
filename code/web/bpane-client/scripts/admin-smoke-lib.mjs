@@ -169,7 +169,9 @@ async function adminAuthenticatedVisible(page) {
     || await page.getByTestId('egress-profile-detail-route').isVisible().catch(() => false)
     || await page.getByTestId('file-workspaces-new-link').isVisible().catch(() => false)
     || await page.getByTestId('file-workspace-create-route').isVisible().catch(() => false)
-    || await page.getByTestId('file-workspace-detail-route').isVisible().catch(() => false);
+    || await page.getByTestId('file-workspace-detail-route').isVisible().catch(() => false)
+    || await page.getByTestId('workflows-overview').isVisible().catch(() => false)
+    || await page.getByTestId('workflow-definition-detail-route').isVisible().catch(() => false);
 }
 
 async function waitForSessionClients(page, options, sessionId, expectedClients) {
