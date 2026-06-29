@@ -846,6 +846,7 @@ CLI options `--probe-public-ip-url`, `--probe-tls-url`, and
 
 ```bash
 cd code/web/bpane-client && npm run smoke:admin-egress-profiles -- --headless
+cd code/web/bpane-client && npm run smoke:admin-unified-egress-profiles -- --headless
 ```
 
 Common browser-context operations:
@@ -1102,6 +1103,7 @@ npm run build
 ../../../scripts/bpane --help
 npm run smoke:bpane-cli -- --headless
 npm run smoke:admin-session -- --headless
+npm run smoke:admin-unified-egress-profiles -- --headless
 npm run smoke:admin-unified-projects -- --headless
 npm run workflow:cli -- --help
 npm run smoke:automation-tasks -- --headless

@@ -118,10 +118,10 @@
       </div>
 
       <div class="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
-        <label class="grid content-start gap-1.5 text-sm">
+        <label class="grid min-w-0 content-start gap-1.5 text-sm">
           <span class="font-medium text-admin-ink">Name</span>
           <input
-            class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
             type="text"
             bind:value={draft.name}
             disabled={disabled}
@@ -131,10 +131,10 @@
           <FieldFeedback errors={validation.fieldErrors.name} testId="egress-profile-edit-name-error" />
         </label>
 
-        <label class="grid content-start gap-1.5 text-sm">
+        <label class="grid min-w-0 content-start gap-1.5 text-sm">
           <span class="font-medium text-admin-ink">State</span>
           <select
-            class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
             bind:value={draft.state}
             disabled={disabled}
             data-testid="egress-profile-edit-state"
@@ -145,10 +145,10 @@
           <FieldFeedback hint="Disabled profiles remain visible but cannot be selected for healthy launches." />
         </label>
 
-        <label class="grid content-start gap-1.5 text-sm lg:col-span-2">
+        <label class="grid min-w-0 content-start gap-1.5 text-sm lg:col-span-2">
           <span class="font-medium text-admin-ink">Description</span>
           <textarea
-            class="min-h-24 rounded-md border border-admin-border bg-white px-3 py-2 text-sm leading-6 text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            class="min-h-24 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 py-2 text-sm leading-6 text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
             bind:value={draft.description}
             disabled={disabled}
             data-testid="egress-profile-edit-description"
@@ -156,10 +156,10 @@
           <FieldFeedback hint="Optional operator-facing explanation for this egress profile." />
         </label>
 
-        <label class="grid content-start gap-1.5 text-sm lg:col-span-2">
+        <label class="grid min-w-0 content-start gap-1.5 text-sm lg:col-span-2">
           <span class="font-medium text-admin-ink">Labels</span>
           <textarea
-            class="min-h-28 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs leading-5 text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            class="min-h-28 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs leading-5 text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
             placeholder="team=support&#10;region=eu"
             bind:value={draft.labelsText}
             disabled={disabled}
@@ -199,10 +199,10 @@
       {/if}
 
       <div class="mt-4 grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <label class="grid content-start gap-1.5 text-sm">
+        <label class="grid min-w-0 content-start gap-1.5 text-sm">
           <span class="font-medium text-admin-ink">Binding</span>
           <select
-            class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
             bind:value={draft.projectBinding}
             disabled={disabled}
             data-testid="egress-profile-edit-project-binding"
@@ -214,10 +214,10 @@
         </label>
 
         {#if draft.projectBinding === 'project'}
-          <label class="grid content-start gap-1.5 text-sm">
+          <label class="grid min-w-0 content-start gap-1.5 text-sm">
             <span class="font-medium text-admin-ink">Project</span>
             <select
-              class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+              class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
               bind:value={draft.projectId}
               disabled={disabled}
               data-testid="egress-profile-edit-project-id"
@@ -262,10 +262,10 @@
 
       {#if draft.proxyEnabled}
         <div class="mt-4 grid items-start gap-4 lg:grid-cols-2">
-          <label class="grid content-start gap-1.5 text-sm">
+          <label class="grid min-w-0 content-start gap-1.5 text-sm">
             <span class="font-medium text-admin-ink">Proxy URL</span>
             <input
-              class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+              class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
               type="url"
               placeholder="http://proxy.example:3128"
               bind:value={draft.proxyUrl}
@@ -275,10 +275,10 @@
             <FieldFeedback errors={validation.fieldErrors.proxyUrl} testId="egress-profile-edit-proxy-url-error" />
           </label>
 
-          <label class="grid content-start gap-1.5 text-sm">
+          <label class="grid min-w-0 content-start gap-1.5 text-sm">
             <span class="font-medium text-admin-ink">Credential binding id</span>
             <input
-              class="h-10 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+              class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
               type="text"
               placeholder="optional UUID"
               bind:value={draft.proxyCredentialBindingId}
@@ -292,10 +292,10 @@
             />
           </label>
 
-          <label class="grid content-start gap-1.5 text-sm lg:col-span-2">
+          <label class="grid min-w-0 content-start gap-1.5 text-sm lg:col-span-2">
             <span class="font-medium text-admin-ink">Bypass rules</span>
             <textarea
-              class="min-h-24 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs leading-5 text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+              class="min-h-24 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs leading-5 text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
               placeholder="localhost&#10;127.0.0.1"
               bind:value={draft.bypassRulesText}
               disabled={disabled}
@@ -341,10 +341,10 @@
 
       {#if draft.customCaEnabled}
         <div class="mt-4 grid items-start gap-4 lg:grid-cols-2">
-          <label class="grid content-start gap-1.5 text-sm">
+          <label class="grid min-w-0 content-start gap-1.5 text-sm">
             <span class="font-medium text-admin-ink">Certificate reference</span>
             <input
-              class="h-10 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+              class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
               type="text"
               placeholder="file:///workspace/dev/egress-ca.pem"
               bind:value={draft.customCaCertificateRef}
@@ -357,10 +357,10 @@
             />
           </label>
 
-          <label class="grid content-start gap-1.5 text-sm">
+          <label class="grid min-w-0 content-start gap-1.5 text-sm">
             <span class="font-medium text-admin-ink">Display name</span>
             <input
-              class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+              class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
               type="text"
               placeholder="Local intercept CA"
               bind:value={draft.customCaDisplayName}
@@ -390,10 +390,10 @@
       </div>
 
       <div class="mt-4 grid items-start gap-4 lg:grid-cols-2">
-        <label class="grid content-start gap-1.5 text-sm">
+        <label class="grid min-w-0 content-start gap-1.5 text-sm">
           <span class="font-medium text-admin-ink">Observation mode</span>
           <select
-            class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
             value={draft.observationMode}
             disabled={disabled}
             onchange={(event) => {
@@ -407,10 +407,10 @@
           <FieldFeedback hint="TLS interception automatically requires proxy and custom CA settings." />
         </label>
 
-        <label class="grid content-start gap-1.5 text-sm">
+        <label class="grid min-w-0 content-start gap-1.5 text-sm">
           <span class="font-medium text-admin-ink">Sensitive log sink reference</span>
           <input
-            class="h-10 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
             type="text"
             placeholder="siem://browserpane/support"
             bind:value={draft.sensitiveLogSinkRef}
@@ -423,10 +423,10 @@
           />
         </label>
 
-        <label class="grid content-start gap-1.5 text-sm lg:col-span-2">
+        <label class="grid min-w-0 content-start gap-1.5 text-sm lg:col-span-2">
           <span class="font-medium text-admin-ink">Sensitive log sink display name</span>
           <input
-            class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
             type="text"
             placeholder="Support SIEM"
             bind:value={draft.sensitiveLogSinkDisplayName}
@@ -457,7 +457,7 @@
 
   <div class="sticky bottom-0 z-10 -mx-4 -mb-4 mt-5 flex flex-col gap-2 border-t border-admin-border bg-admin-panel/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:-mb-5 sm:flex-row sm:items-center sm:justify-end sm:px-5">
     <button
-      class="inline-flex h-10 items-center justify-center rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink transition hover:bg-admin-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+      class="inline-flex h-10 w-full items-center justify-center rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink transition hover:bg-admin-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
       type="button"
       onclick={reset}
       disabled={disabled || !changed}
@@ -466,7 +466,7 @@
       Cancel
     </button>
     <button
-      class="inline-flex h-10 items-center justify-center rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+      class="inline-flex h-10 w-full items-center justify-center rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
       type="button"
       onclick={save}
       disabled={disabled || !changed || !validation.valid}
