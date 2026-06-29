@@ -86,12 +86,13 @@ async function run() {
     await page.getByTestId('session-detail-refresh').click();
     await waitForContains(page, options, 'session-detail-action-success', 'refreshed');
     await verifySessionPreviewPopup(page, options);
-    await runSafeTerminalAction(page, options);
+    await verifyStoppedSessionCanStartWithPreview(page, options);
 
     console.log(JSON.stringify({
       sessionId: createdSessionId,
       detailVisible: true,
       previewPopup: true,
+      stoppedSessionRestarted: true,
     }, null, 2));
   } finally {
     if (accessToken && createdSessionId) {
@@ -104,8 +105,8 @@ async function run() {
   }
 }
 
-async function verifySessionPreviewPopup(page, options) {
-  await waitForConnectPreviewEnabled(page, options);
+async function verifySessionPreviewPopup(page, options, expectedActionLabel = 'Connect') {
+  await waitForConnectPreviewEnabled(page, options, expectedActionLabel);
   const popupPromise = page.waitForEvent('popup');
   await page.getByTestId('session-connect-preview').click();
   const popup = await popupPromise;
@@ -123,11 +124,38 @@ async function verifySessionPreviewPopup(page, options) {
   }
 }
 
-async function waitForConnectPreviewEnabled(page, options) {
+async function verifyStoppedSessionCanStartWithPreview(page, options) {
+  await waitForStopActionEnabled(page, options);
+  await page.getByTestId('session-stop').click();
+  await waitForContains(page, options, 'session-detail-action-success', 'stopped');
+  await waitForContains(page, options, 'session-detail-state', 'stopped');
+  await verifySessionPreviewPopup(page, options, 'Start and connect');
+}
+
+async function waitForConnectPreviewEnabled(page, options, expectedActionLabel) {
   await poll(
     'session preview connect action',
     async () => {
-      const enabled = await page.getByTestId('session-connect-preview').isEnabled().catch(() => false);
+      const action = page.getByTestId('session-connect-preview');
+      const enabled = await action.isEnabled().catch(() => false);
+      const text = await action.textContent().catch(() => '');
+      if (enabled && text?.trim() === expectedActionLabel) {
+        return true;
+      }
+      await page.getByTestId('session-detail-refresh').click().catch(() => {});
+      return false;
+    },
+    Boolean,
+    options.connectTimeoutMs,
+    1000,
+  );
+}
+
+async function waitForStopActionEnabled(page, options) {
+  await poll(
+    'session stop action',
+    async () => {
+      const enabled = await page.getByTestId('session-stop').isEnabled().catch(() => false);
       if (enabled) {
         return true;
       }
@@ -151,29 +179,6 @@ async function waitForPreviewConnected(popup, options) {
     const detail = await popup.getByTestId('session-preview-error').textContent().catch(() => '');
     throw new Error(`Session preview popup connection failed${detail ? `: ${detail}` : ''}`);
   }
-}
-
-async function runSafeTerminalAction(page, options) {
-  const cancel = page.getByTestId('session-cancel-queue');
-  const stop = page.getByTestId('session-stop');
-  const kill = page.getByTestId('session-kill');
-
-  if (await cancel.isEnabled().catch(() => false)) {
-    await cancel.click();
-    await waitForContains(page, options, 'session-detail-action-success', 'cancelled');
-    return;
-  }
-  if (await stop.isEnabled().catch(() => false)) {
-    await stop.click();
-    await waitForContains(page, options, 'session-detail-action-success', 'stopped');
-    return;
-  }
-  if (await kill.isEnabled().catch(() => false)) {
-    await kill.click();
-    await waitForContains(page, options, 'session-detail-action-success', 'killed');
-    return;
-  }
-  throw new Error('No safe terminal lifecycle action was enabled for the smoke-created session.');
 }
 
 async function waitForContains(page, options, testId, expected) {
