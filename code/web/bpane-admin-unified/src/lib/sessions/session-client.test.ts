@@ -20,6 +20,9 @@ describe('SessionCatalogClient', () => {
       if (url.endsWith('/api/v1/sessions/session-1/status')) {
         return jsonResponse(sessionStatusPayload(), 200);
       }
+      if (url.endsWith('/api/v1/sessions/session-1/access-tokens') && init?.method === 'POST') {
+        return jsonResponse(sessionAccessTokenPayload(), 200);
+      }
       if (url.endsWith('/api/v1/sessions/session-1')) {
         return jsonResponse(sessionPayload(), 200);
       }
@@ -35,11 +38,17 @@ describe('SessionCatalogClient', () => {
     const created = await client.createSession({ labels: { bpane_admin_surface: 'unified' } });
     const loaded = await client.getSession('session-1');
     const status = await client.getSessionStatus('session-1');
+    const access = await client.issueSessionAccessToken('session-1');
 
     expect(listed.sessions[0]?.id).toBe('session-1');
     expect(created.id).toBe('created-session');
     expect(loaded.runtime.binding).toBe('docker:browser-1');
     expect(status.connections[0]).toMatchObject({ connection_id: 7, role: 'browser-owner' });
+    expect(access).toMatchObject({
+      session_id: 'session-1',
+      token_type: 'session_connect_ticket',
+      token: 'connect-ticket',
+    });
     const createBody = JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body));
     expect(createBody.labels).toEqual({ bpane_admin_surface: 'unified' });
     const headers = fetchImpl.mock.calls[0]?.[1]?.headers as Headers;
@@ -117,4 +126,20 @@ function jsonResponse(payload: unknown, status: number): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function sessionAccessTokenPayload() {
+  return {
+    session_id: 'session-1',
+    token_type: 'session_connect_ticket',
+    token: 'connect-ticket',
+    expires_at: '2026-06-21T10:10:00.000Z',
+    connect: {
+      gateway_url: 'https://localhost:4433',
+      transport_path: '/session/session-1',
+      auth_type: 'session_connect_ticket',
+      ticket_path: '/api/v1/sessions/session-1/access-tokens',
+      compatibility_mode: 'webtransport',
+    },
+  };
 }

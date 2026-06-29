@@ -85,12 +85,13 @@ async function run() {
 
     await page.getByTestId('session-detail-refresh').click();
     await waitForContains(page, options, 'session-detail-action-success', 'refreshed');
+    await verifySessionPreviewPopup(page, options);
     await runSafeTerminalAction(page, options);
 
     console.log(JSON.stringify({
       sessionId: createdSessionId,
       detailVisible: true,
-      previewEmbedded: false,
+      previewPopup: true,
     }, null, 2));
   } finally {
     if (accessToken && createdSessionId) {
@@ -100,6 +101,55 @@ async function run() {
     }
     await context.close();
     await browser.close();
+  }
+}
+
+async function verifySessionPreviewPopup(page, options) {
+  await waitForConnectPreviewEnabled(page, options);
+  const popupPromise = page.waitForEvent('popup');
+  await page.getByTestId('session-connect-preview').click();
+  const popup = await popupPromise;
+  try {
+    await popup.getByTestId('session-preview-route').waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+    await assertNoBodyHorizontalOverflow(popup, 'unified session preview popup');
+    await assertNoHorizontalOverflow(popup, 'session-preview-route', 'unified session preview route');
+    await waitForPreviewConnected(popup, options);
+    await assertNoHorizontalOverflow(popup, 'session-preview-viewport', 'unified session preview viewport');
+  } finally {
+    await popup.close({ runBeforeUnload: true }).catch(() => {});
+  }
+}
+
+async function waitForConnectPreviewEnabled(page, options) {
+  await poll(
+    'session preview connect action',
+    async () => {
+      const enabled = await page.getByTestId('session-connect-preview').isEnabled().catch(() => false);
+      if (enabled) {
+        return true;
+      }
+      await page.getByTestId('session-detail-refresh').click().catch(() => {});
+      return false;
+    },
+    Boolean,
+    options.connectTimeoutMs,
+    1000,
+  );
+}
+
+async function waitForPreviewConnected(popup, options) {
+  const status = await poll(
+    'session preview popup connection',
+    async () => await popup.getByTestId('session-preview-status').textContent().catch(() => ''),
+    (value) => value === 'Connected' || value === 'Connection failed',
+    options.connectTimeoutMs,
+  );
+  if (status === 'Connection failed') {
+    const detail = await popup.getByTestId('session-preview-error').textContent().catch(() => '');
+    throw new Error(`Session preview popup connection failed${detail ? `: ${detail}` : ''}`);
   }
 }
 

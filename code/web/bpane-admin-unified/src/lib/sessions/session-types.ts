@@ -150,6 +150,14 @@ export type SessionListResponse = {
   readonly sessions: readonly SessionResource[];
 };
 
+export type SessionAccessTokenResponse = {
+  readonly session_id: string;
+  readonly token_type: string;
+  readonly token: string;
+  readonly expires_at: string;
+  readonly connect: SessionConnectInfo;
+};
+
 export type CreateSessionRequest = {
   readonly project_id?: string | null;
   readonly template_id?: string | null;

@@ -106,6 +106,23 @@
     await mutateSession('Killing session...', 'Session killed.', (catalog, sessionId) => catalog.killSession(sessionId));
   }
 
+  function openPreviewWindow(sessionId: string): void {
+    const url = `/admin-new/sessions/${encodeURIComponent(sessionId)}/preview`;
+    const popup = window.open(
+      url,
+      `bpane-session-preview-${sessionId}`,
+      'popup=yes,width=1440,height=960,resizable=yes,scrollbars=no',
+    );
+    if (popup) {
+      popup.focus();
+      return;
+    }
+    actionState = {
+      status: 'error',
+      message: 'The browser preview popup was blocked. Allow popups for this admin origin and try again.',
+    };
+  }
+
   async function mutateSession(
     runningLabel: string,
     successMessage: string,
@@ -193,6 +210,7 @@
       state={sessionState}
       {actionState}
       onRefresh={refreshSession}
+      onConnectPreview={openPreviewWindow}
       onCancelQueue={cancelQueuedSession}
       onDisconnectAll={disconnectAllConnections}
       onRelease={releaseSessionRuntime}

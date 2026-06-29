@@ -2,6 +2,7 @@ import type {
   CreateSessionRequest,
   ProjectAdmissionDecision,
   SessionAutomationDelegate,
+  SessionAccessTokenResponse,
   SessionBrowserContext,
   SessionCapabilities,
   SessionConnectInfo,
@@ -124,6 +125,17 @@ export class SessionCatalogClient {
     return toSessionStatus(await response.json());
   }
 
+  async issueSessionAccessToken(sessionId: string): Promise<SessionAccessTokenResponse> {
+    const response = await this.#request(
+      new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/access-tokens`, this.#baseUrl),
+      {
+        method: 'POST',
+        headers: { accept: 'application/json' },
+      },
+    );
+    return toSessionAccessTokenResponse(await response.json());
+  }
+
   async #sessionMutation(sessionId: string, action: string): Promise<SessionResource> {
     const response = await this.#request(
       new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/${action}`, this.#baseUrl),
@@ -238,6 +250,17 @@ export function toSessionStatus(payload: unknown): SessionStatus {
     egress_diagnostics: object.egress_diagnostics === null || object.egress_diagnostics === undefined
       ? null
       : toSessionEgressDiagnostics(object.egress_diagnostics),
+  };
+}
+
+export function toSessionAccessTokenResponse(payload: unknown): SessionAccessTokenResponse {
+  const object = expectRecord(payload, 'session access token response');
+  return {
+    session_id: expectString(object.session_id, 'session access token session_id'),
+    token_type: expectString(object.token_type, 'session access token token_type'),
+    token: expectString(object.token, 'session access token token'),
+    expires_at: expectString(object.expires_at, 'session access token expires_at'),
+    connect: toConnectInfo(object.connect),
   };
 }
 

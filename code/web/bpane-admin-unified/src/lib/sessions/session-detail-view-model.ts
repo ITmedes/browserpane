@@ -26,6 +26,7 @@ export type SessionFactSection = {
 };
 
 export type SessionDetailActionModel = {
+  readonly canConnectPreview: boolean;
   readonly canCancelQueue: boolean;
   readonly canDisconnectAll: boolean;
   readonly canRelease: boolean;
@@ -152,6 +153,7 @@ export function buildSessionDetailModel(session: SessionResource, liveStatus: Se
       role: connection.role,
     })) ?? [],
     actions: {
+      canConnectPreview: !isQueued && !['stopped', 'killed', 'cancelled', 'failed'].includes(session.state),
       canCancelQueue: isQueued && (session.queue?.cancellable ?? true),
       canDisconnectAll: totalClients > 0,
       canRelease: !isQueued && !terminal && totalClients === 0 && stopEligibility.allowed && session.state !== 'released',
