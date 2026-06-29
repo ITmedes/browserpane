@@ -5,8 +5,8 @@ import {
   cleanupAdminBeforeRun,
   cleanupAdminSmoke,
   ensureAdminLoggedIn,
+  joinSelectedSession,
   openAdminTab,
-  waitForBrowserConnected,
 } from './admin-smoke-lib.mjs';
 import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs, poll, sleep } from './workflow-smoke-lib.mjs';
 
@@ -27,8 +27,8 @@ async function run() {
     await openAdminTab(page, 'sessions');
     await page.getByTestId('session-new').click();
     const sessionId = await resolveSelectedSessionId(page, options);
-    log(`Waiting for automatic browser join for ${sessionId}.`);
-    await waitForBrowserConnected(page, options);
+    log(`Joining explicitly created session ${sessionId}.`);
+    await joinSelectedSession(page, options);
 
     await openAdminTab(page, 'metrics');
     await waitForEnabled(page.getByTestId('metrics-start'), options, 'metrics start');

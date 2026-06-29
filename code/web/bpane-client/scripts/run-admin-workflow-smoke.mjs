@@ -154,6 +154,10 @@ async function prepareWorkflowBaseline(page, options) {
   }
   if (state.createVisible) {
     await page.getByTestId('workflow-create-session').click();
+    await poll('workflow baseline connect action after create', async () => {
+      return await page.getByTestId('workflow-connect-session').isVisible().catch(() => false);
+    }, Boolean, options.connectTimeoutMs);
+    await page.getByTestId('workflow-connect-session').click();
     return;
   }
   if (state.connectVisible) {

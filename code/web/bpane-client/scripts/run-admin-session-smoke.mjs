@@ -7,6 +7,7 @@ import {
   disconnectEmbeddedBrowser,
   ensureAdminLoggedIn,
   getAdminAccessToken,
+  joinSelectedSession,
   openAdminTab,
   waitForBrowserConnected,
   waitForSessionState,
@@ -37,8 +38,9 @@ async function run() {
     await openAdminTab(page, 'sessions');
     await page.getByTestId('session-new').click();
     sessionId = await resolveSelectedSessionId(page, options);
+    await expectBrowserDisconnectedAfterCreate(page, options);
     await waitForMcpDelegationReady(page, options);
-    await waitForBrowserConnected(page, options);
+    await joinSelectedSession(page, options);
     await verifyIdentityPanel(page, options);
     await expectSessionDisconnectControl(page);
     await verifySessionSwitchDisconnect(page, options, sessionId);
@@ -428,6 +430,16 @@ async function reconnectStoppedSession(page, options, sessionId) {
   await page.getByTestId('session-join').click();
   await waitForBrowserConnected(page, options);
   await expectRuntimeResumeMode(page, options, 'profile_restart');
+}
+
+async function expectBrowserDisconnectedAfterCreate(page, options) {
+  await poll(
+    'admin browser remains disconnected after session create',
+    async () => await page.getByTestId('browser-status').textContent().catch(() => ''),
+    (status) => status === 'Disconnected',
+    options.connectTimeoutMs,
+    100,
+  );
 }
 
 async function expectGlobalMessage(page, options, matches) {
