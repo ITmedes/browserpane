@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { RefreshCw, Square, SquareX, Unplug, XCircle } from '@lucide/svelte';
+  import { ExternalLink, RefreshCw, Square, SquareX, Unplug, XCircle } from '@lucide/svelte';
   import {
     buildSessionDetailModel,
     type SessionDetailLoadState,
@@ -13,6 +13,7 @@
     readonly state: SessionDetailLoadState;
     readonly actionState?: SessionActionState;
     readonly onRefresh?: () => void | Promise<void>;
+    readonly onConnectPreview?: (sessionId: string) => void | Promise<void>;
     readonly onCancelQueue?: () => void | Promise<void>;
     readonly onDisconnectAll?: () => void | Promise<void>;
     readonly onRelease?: () => void | Promise<void>;
@@ -24,6 +25,7 @@
     state: loadState,
     actionState = { status: 'idle' },
     onRefresh,
+    onConnectPreview,
     onCancelQueue,
     onDisconnectAll,
     onRelease,
@@ -118,6 +120,16 @@
 
     <div class="grid gap-4 p-4">
       <section class="flex flex-wrap gap-2 rounded-md border border-admin-border bg-admin-soft/50 p-4" aria-label="Session lifecycle actions">
+        <button
+          class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          type="button"
+          onclick={() => void onConnectPreview?.(model.id)}
+          disabled={busy || !model.actions.canConnectPreview}
+          data-testid="session-connect-preview"
+        >
+          <ExternalLink size={15} strokeWidth={1.8} />
+          <span>Connect</span>
+        </button>
         <button
           class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
           type="button"

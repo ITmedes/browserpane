@@ -57,6 +57,37 @@ describe('SessionDetailRoute', () => {
     expect(headers.get('authorization')).toBe('Bearer shell-token');
   });
 
+  it('opens the selected session in a popup preview window', async () => {
+    const focus = vi.fn();
+    const open = vi.spyOn(window, 'open').mockReturnValue({ focus } as unknown as Window);
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/sessions/session-1/status')) {
+        return jsonResponse(sessionStatusPayload({ totalClients: 0 }), 200);
+      }
+      if (url.endsWith('/api/v1/sessions/session-1')) {
+        return jsonResponse(sessionPayload({ totalClients: 0 }), 200);
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    const target = renderComponent(SessionDetailRoute, {
+      authContext: authContext({ accessTokenProvider: async () => 'shell-token' }),
+    });
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'session-detail-title').textContent).toContain('session-1');
+    });
+    byTestId(target, 'session-connect-preview').click();
+
+    expect(open).toHaveBeenCalledWith(
+      '/admin-new/sessions/session-1/preview',
+      'bpane-session-preview-session-1',
+      'popup=yes,width=1440,height=960,resizable=yes,scrollbars=no',
+    );
+    expect(focus).toHaveBeenCalledOnce();
+  });
+
   it('delegates authentication failures back to the shell', async () => {
     const onAuthenticationFailure = vi.fn();
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response('unauthorized', { status: 401 })));
