@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 mod archive;
 mod git;
+mod preview;
 mod validation;
 
 pub use validation::validate_workflow_source_entrypoint;
@@ -35,6 +36,17 @@ pub struct WorkflowSourceArchive {
     pub file_name: String,
     pub media_type: String,
     pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSourcePreview {
+    pub source: WorkflowSource,
+    pub entrypoint: String,
+    pub media_type: String,
+    pub language: String,
+    pub content: String,
+    pub byte_count: usize,
+    pub truncated: bool,
 }
 
 #[derive(Debug, thiserror::Error)]

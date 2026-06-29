@@ -3,6 +3,7 @@ import type {
   CreateWorkflowDefinitionVersionRequest,
   WorkflowDefinitionListResponse,
   WorkflowDefinitionResource,
+  WorkflowDefinitionSourcePreviewResource,
   WorkflowDefinitionVersionListResponse,
   WorkflowDefinitionVersionResource,
   WorkflowSourceResource,
@@ -118,6 +119,23 @@ export class WorkflowCatalogClient {
     return toWorkflowDefinitionVersionResource(await response.json());
   }
 
+  async getDefinitionSourcePreview(
+    workflowId: string,
+    version: string,
+  ): Promise<WorkflowDefinitionSourcePreviewResource> {
+    const response = await this.#request(
+      new URL(
+        `/api/v1/workflows/${encodeURIComponent(workflowId)}/versions/${encodeURIComponent(version)}/source-preview`,
+        this.#baseUrl,
+      ),
+      {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+      },
+    );
+    return toWorkflowDefinitionSourcePreviewResource(await response.json());
+  }
+
   async #request(input: URL, init: RequestInit): Promise<Response> {
     const accessToken = await this.#accessTokenProvider();
     if (!accessToken) {
@@ -204,6 +222,25 @@ export function toWorkflowDefinitionVersionResource(value: unknown): WorkflowDef
   };
 }
 
+export function toWorkflowDefinitionSourcePreviewResource(value: unknown): WorkflowDefinitionSourcePreviewResource {
+  const object = expectRecord(value, 'workflow definition source preview');
+  return {
+    workflow_definition_id: expectString(
+      object.workflow_definition_id,
+      'workflow definition source preview workflow_definition_id',
+    ),
+    workflow_version: expectString(object.workflow_version, 'workflow definition source preview workflow_version'),
+    entrypoint: expectString(object.entrypoint, 'workflow definition source preview entrypoint'),
+    source: toRequiredWorkflowSource(object.source),
+    media_type: expectString(object.media_type, 'workflow definition source preview media_type'),
+    language: expectString(object.language, 'workflow definition source preview language'),
+    content: expectString(object.content, 'workflow definition source preview content'),
+    byte_count: expectNumber(object.byte_count, 'workflow definition source preview byte_count'),
+    max_bytes: expectNumber(object.max_bytes, 'workflow definition source preview max_bytes'),
+    truncated: expectBoolean(object.truncated, 'workflow definition source preview truncated'),
+  };
+}
+
 function toWorkflowSource(value: unknown): WorkflowSourceResource | null {
   if (value === null) {
     return null;
@@ -228,6 +265,14 @@ function toWorkflowSource(value: unknown): WorkflowSourceResource | null {
   };
 }
 
+function toRequiredWorkflowSource(value: unknown): WorkflowSourceResource {
+  const source = toWorkflowSource(value);
+  if (!source) {
+    throw new WorkflowCatalogError('workflow definition source preview source must be set.', 'invalid_payload');
+  }
+  return source;
+}
+
 function expectRecord(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new WorkflowCatalogError(`${label} must be an object.`, 'invalid_payload');
@@ -245,6 +290,20 @@ function expectArray(value: unknown, label: string): readonly unknown[] {
 function expectString(value: unknown, label: string): string {
   if (typeof value !== 'string') {
     throw new WorkflowCatalogError(`${label} must be a string.`, 'invalid_payload');
+  }
+  return value;
+}
+
+function expectNumber(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new WorkflowCatalogError(`${label} must be a finite number.`, 'invalid_payload');
+  }
+  return value;
+}
+
+function expectBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== 'boolean') {
+    throw new WorkflowCatalogError(`${label} must be a boolean.`, 'invalid_payload');
   }
   return value;
 }

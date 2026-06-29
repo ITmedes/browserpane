@@ -68,6 +68,15 @@ async function run() {
     await waitForContains(page, options, 'workflow-definition-version-entrypoint', 'browserpane-tour');
     await waitForContains(page, options, 'workflow-definition-source', '/workspace');
     await waitForContains(page, options, 'workflow-definition-policy', 'File workspaces');
+    await waitForContains(page, options, 'workflow-code-preview-code', 'export default async function run');
+    await waitForContains(page, options, 'workflow-code-preview-language', 'TypeScript');
+    const highlightedKeywordCount = await page
+      .getByTestId('workflow-code-preview-code')
+      .locator('.hljs-keyword')
+      .count();
+    if (highlightedKeywordCount === 0) {
+      throw new Error('Workflow code preview did not render TypeScript syntax highlighting.');
+    }
     await assertNoBodyHorizontalOverflow(page, 'unified workflow detail');
     await assertNoHorizontalOverflow(page, 'workflow-definition-detail-route', 'unified workflow detail route');
 

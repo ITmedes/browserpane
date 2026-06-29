@@ -42,6 +42,19 @@ export type WorkflowDefinitionVersionListResponse = {
   readonly versions: readonly WorkflowDefinitionVersionResource[];
 };
 
+export type WorkflowDefinitionSourcePreviewResource = {
+  readonly workflow_definition_id: string;
+  readonly workflow_version: string;
+  readonly entrypoint: string;
+  readonly source: WorkflowSourceResource;
+  readonly media_type: string;
+  readonly language: string;
+  readonly content: string;
+  readonly byte_count: number;
+  readonly max_bytes: number;
+  readonly truncated: boolean;
+};
+
 export type CreateWorkflowDefinitionRequest = {
   readonly name: string;
   readonly description?: string | null;

@@ -2,10 +2,14 @@
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
-  import { WorkflowCatalogClient } from '$lib/workflows/workflow-client';
+  import {
+    WorkflowCatalogClient,
+    WorkflowCatalogError,
+  } from '$lib/workflows/workflow-client';
   import type {
     WorkflowActionState,
     WorkflowDetailLoadState,
+    WorkflowSourcePreviewState,
   } from '$lib/workflows/workflow-detail-state';
   import AdminMessage from './AdminMessage.svelte';
   import WorkflowDefinitionInspector from './WorkflowDefinitionInspector.svelte';
@@ -17,6 +21,8 @@
   let { authContext }: WorkflowDefinitionDetailRouteProps = $props();
   let workflowState = $state<WorkflowDetailLoadState>({ status: 'idle' });
   let actionState = $state<WorkflowActionState>({ status: 'idle' });
+  let sourcePreviewState = $state<WorkflowSourcePreviewState>({ status: 'idle' });
+  let sourcePreviewRequestId = 0;
 
   onMount(() => {
     const workflowId = currentWorkflowId();
@@ -42,6 +48,7 @@
   async function loadWorkflow(workflowId: string): Promise<void> {
     workflowState = { status: 'loading', workflowId };
     actionState = { status: 'idle' };
+    sourcePreviewState = { status: 'idle' };
     try {
       const workflowClient = client();
       const [definition, versions] = await Promise.all([
@@ -72,11 +79,50 @@
       ]);
       workflowState = { status: 'ready', definition, versions: versions.versions };
       actionState = { status: 'success', message: 'Workflow definition refreshed.' };
+      const previewVersion = activePreviewVersion();
+      if (previewVersion) {
+        void loadSourcePreview(definition.id, previewVersion);
+      }
     } catch (error) {
       actionState = {
         status: 'error',
         message: error instanceof Error ? error.message : 'Workflow definition refresh failed.',
       };
+    }
+  }
+
+  async function selectWorkflowVersion(version: string): Promise<void> {
+    const workflowId = activeWorkflowId();
+    if (!workflowId) {
+      return;
+    }
+    await loadSourcePreview(workflowId, version);
+  }
+
+  async function loadSourcePreview(workflowId: string, version: string): Promise<void> {
+    const requestId = sourcePreviewRequestId + 1;
+    sourcePreviewRequestId = requestId;
+    sourcePreviewState = { status: 'loading', version };
+    try {
+      const preview = await client().getDefinitionSourcePreview(workflowId, version);
+      if (sourcePreviewRequestId !== requestId) {
+        return;
+      }
+      sourcePreviewState = { status: 'ready', version, preview };
+    } catch (error) {
+      if (sourcePreviewRequestId !== requestId) {
+        return;
+      }
+      const message = error instanceof Error ? error.message : 'Workflow source preview failed.';
+      if (error instanceof WorkflowCatalogError && error.status === 404) {
+        sourcePreviewState = {
+          status: 'unavailable',
+          version,
+          message: 'This workflow version does not expose source metadata for preview.',
+        };
+        return;
+      }
+      sourcePreviewState = { status: 'error', version, message };
     }
   }
 
@@ -93,6 +139,13 @@
       return workflowState.workflowId;
     }
     return null;
+  }
+
+  function activePreviewVersion(): string | null {
+    if (sourcePreviewState.status === 'idle') {
+      return null;
+    }
+    return sourcePreviewState.version;
   }
 </script>
 
@@ -120,7 +173,9 @@
     <WorkflowDefinitionInspector
       state={workflowState}
       {actionState}
+      {sourcePreviewState}
       onRefreshWorkflow={refreshWorkflow}
+      onSelectVersion={selectWorkflowVersion}
     />
   {/if}
 </div>

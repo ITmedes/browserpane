@@ -17,7 +17,7 @@ use super::{
     StoredWorkflowRunEvent, StoredWorkflowRunLog, WorkflowRunAdmissionResource,
     WorkflowRunEventSource, WorkflowRunInterventionResource, WorkflowRunLogSource,
     WorkflowRunProducedFile, WorkflowRunRuntimeResource, WorkflowRunSourceSnapshot,
-    WorkflowRunState, WorkflowRunWorkspaceInput, WorkflowSource,
+    WorkflowRunState, WorkflowRunWorkspaceInput, WorkflowSource, WorkflowSourcePreview,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -119,6 +119,20 @@ pub struct WorkflowDefinitionVersionResource {
     pub allowed_extension_ids: Vec<String>,
     pub allowed_file_workspace_ids: Vec<String>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowDefinitionSourcePreviewResource {
+    pub workflow_definition_id: Uuid,
+    pub workflow_version: String,
+    pub entrypoint: String,
+    pub source: WorkflowSource,
+    pub media_type: String,
+    pub language: String,
+    pub content: String,
+    pub byte_count: usize,
+    pub max_bytes: usize,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -227,6 +241,27 @@ impl StoredWorkflowDefinitionVersion {
             allowed_extension_ids: self.allowed_extension_ids.clone(),
             allowed_file_workspace_ids: self.allowed_file_workspace_ids.clone(),
             created_at: self.created_at,
+        }
+    }
+}
+
+impl WorkflowSourcePreview {
+    pub fn to_definition_preview_resource(
+        &self,
+        version: &StoredWorkflowDefinitionVersion,
+        max_bytes: usize,
+    ) -> WorkflowDefinitionSourcePreviewResource {
+        WorkflowDefinitionSourcePreviewResource {
+            workflow_definition_id: version.workflow_definition_id,
+            workflow_version: version.version.clone(),
+            entrypoint: self.entrypoint.clone(),
+            source: self.source.clone(),
+            media_type: self.media_type.clone(),
+            language: self.language.clone(),
+            content: self.content.clone(),
+            byte_count: self.byte_count,
+            max_bytes,
+            truncated: self.truncated,
         }
     }
 }

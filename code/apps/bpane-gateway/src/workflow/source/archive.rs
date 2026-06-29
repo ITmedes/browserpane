@@ -193,12 +193,12 @@ fn collect_archive_files(
     Ok(())
 }
 
-struct TemporaryWorkflowSourceDir {
+pub(super) struct TemporaryWorkflowSourceDir {
     path: PathBuf,
 }
 
 impl TemporaryWorkflowSourceDir {
-    fn new() -> Result<Self, WorkflowSourceError> {
+    pub(super) fn new() -> Result<Self, WorkflowSourceError> {
         let path = std::env::temp_dir().join(format!("bpane-workflow-source-{}", Uuid::now_v7()));
         fs::create_dir_all(&path).map_err(|error| {
             WorkflowSourceError::Materialize(format!(
@@ -209,7 +209,7 @@ impl TemporaryWorkflowSourceDir {
         Ok(Self { path })
     }
 
-    fn path(&self) -> &Path {
+    pub(super) fn path(&self) -> &Path {
         &self.path
     }
 }

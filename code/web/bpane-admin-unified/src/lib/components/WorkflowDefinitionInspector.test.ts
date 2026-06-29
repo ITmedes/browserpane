@@ -18,6 +18,11 @@ describe('WorkflowDefinitionInspector', () => {
     const onRefreshWorkflow = vi.fn();
     const target = renderComponent(WorkflowDefinitionInspector, {
       state: { status: 'ready', definition: workflow(), versions: [version()] },
+      sourcePreviewState: {
+        status: 'ready',
+        version: 'v1',
+        preview: sourcePreview(),
+      },
       onRefreshWorkflow,
     });
 
@@ -27,6 +32,7 @@ describe('WorkflowDefinitionInspector', () => {
     expect(byTestId(target, 'workflow-definition-version-entrypoint').textContent).toContain('browserpane-tour');
     expect(byTestId(target, 'workflow-definition-source').textContent).toContain('/workspace');
     expect(byTestId(target, 'workflow-definition-policy').textContent).toContain('workspace-1');
+    expect(byTestId(target, 'workflow-code-preview-code').textContent).toContain('export default async function run');
 
     byTestId(target, 'workflow-definition-refresh-detail').click();
 
@@ -58,6 +64,27 @@ function workflow(): WorkflowDefinitionResource {
     latest_version: 'v1',
     created_at: '2026-06-21T09:00:00.000Z',
     updated_at: '2026-06-21T10:00:00.000Z',
+  };
+}
+
+function sourcePreview() {
+  return {
+    workflow_definition_id: 'workflow-1',
+    workflow_version: 'v1',
+    entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
+    source: {
+      kind: 'git' as const,
+      repository_url: '/workspace',
+      ref: 'HEAD',
+      resolved_commit: 'abc123',
+      root_path: 'dev',
+    },
+    media_type: 'text/javascript; charset=utf-8',
+    language: 'typescript',
+    content: 'export default async function run() {}',
+    byte_count: 38,
+    max_bytes: 65536,
+    truncated: false,
   };
 }
 
