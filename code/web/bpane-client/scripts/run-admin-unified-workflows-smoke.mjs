@@ -68,8 +68,8 @@ async function run() {
     await waitForContains(page, options, 'workflow-definition-version-entrypoint', 'browserpane-tour');
     await waitForContains(page, options, 'workflow-definition-source', '/workspace');
     await waitForContains(page, options, 'workflow-definition-policy', 'File workspaces');
-    await waitForContains(page, options, 'workflow-code-file-list', 'dev/workflows/browserpane-tour/run.mjs');
-    await waitForContains(page, options, 'workflow-code-file-list', 'dev/web-fixtures/test-embed.html');
+    await waitForSourceTreePath(page, options, 'dev/workflows/browserpane-tour/run.mjs');
+    await waitForSourceTreePath(page, options, 'dev/web-fixtures');
     await waitForContains(page, options, 'workflow-code-preview-code', 'export default async function run');
     await waitForContains(page, options, 'workflow-code-preview-language', 'TypeScript');
     const highlightedKeywordCount = await page
@@ -79,11 +79,9 @@ async function run() {
     if (highlightedKeywordCount === 0) {
       throw new Error('Workflow code preview did not render TypeScript syntax highlighting.');
     }
-    await page
-      .getByTestId('workflow-code-file-row')
-      .filter({ hasText: 'dev/web-fixtures/test-embed.html' })
-      .first()
-      .click();
+    await page.locator(sourceTreeSelector('dev/web-fixtures')).click();
+    await waitForSourceTreePath(page, options, 'dev/web-fixtures/test-embed.html');
+    await page.locator(sourceTreeSelector('dev/web-fixtures/test-embed.html')).click();
     await waitForContains(page, options, 'workflow-code-preview-entrypoint', 'dev/web-fixtures/test-embed.html');
     await waitForContains(page, options, 'workflow-code-preview-code', 'BrowserPane Test Embed');
     await assertNoBodyHorizontalOverflow(page, 'unified workflow detail');
@@ -123,6 +121,19 @@ async function waitForContains(page, options, testId, expected) {
     (value) => value?.includes(expected),
     options.connectTimeoutMs,
   );
+}
+
+async function waitForSourceTreePath(page, options, path) {
+  await poll(
+    `source tree path ${path}`,
+    async () => await page.locator(sourceTreeSelector(path)).count(),
+    (count) => count > 0,
+    options.connectTimeoutMs,
+  );
+}
+
+function sourceTreeSelector(path) {
+  return `[data-source-path="${path}"]`;
 }
 
 async function verifyResponsiveDetailLayout(page, options) {

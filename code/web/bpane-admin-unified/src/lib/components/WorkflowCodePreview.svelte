@@ -8,6 +8,7 @@
   } from '$lib/workflows/workflow-detail-state';
   import type { WorkflowDefinitionSourceFileResource } from '$lib/workflows/workflow-types';
   import AdminMessage from './AdminMessage.svelte';
+  import WorkflowSourceTree from './WorkflowSourceTree.svelte';
 
   if (!hljs.getLanguage('typescript')) {
     hljs.registerLanguage('typescript', typescript);
@@ -58,21 +59,8 @@
     return `${(value / 1024).toFixed(1)} KB`;
   }
 
-  function selectFile(path: string): void {
-    void onSelectFile?.(path);
-  }
-
   function fileMeta(file: WorkflowDefinitionSourceFileResource): string {
     return `${languageDisplayName(file.language)} · ${formatByteCount(file.byte_count)}`;
-  }
-
-  function fileRowClass(file: WorkflowDefinitionSourceFileResource): string {
-    const selected = selectedPath === file.path;
-    return `grid min-w-0 gap-1 rounded-md border p-3 text-left text-xs transition ${
-      selected
-        ? 'border-admin-accent bg-admin-panel text-admin-ink shadow-sm'
-        : 'border-admin-border bg-admin-panel text-admin-muted hover:border-admin-accent/60 hover:bg-admin-soft'
-    }`;
   }
 </script>
 
@@ -154,29 +142,12 @@
           No previewable source files were found.
         </p>
       {:else}
-        <div class="mt-3 grid max-h-[520px] gap-2 overflow-auto pr-1" data-testid="workflow-code-file-list">
-          {#each filesState.response.files as file (file.path)}
-            <button
-              class={fileRowClass(file)}
-              type="button"
-              onclick={() => selectFile(file.path)}
-              data-testid="workflow-code-file-row"
-              data-source-path={file.path}
-              data-selected={selectedPath === file.path ? 'true' : 'false'}
-              aria-pressed={selectedPath === file.path}
-            >
-              <span class="flex min-w-0 items-start justify-between gap-2">
-                <span class="min-w-0 break-words font-mono text-[11px] leading-4">{file.path}</span>
-                {#if file.entrypoint}
-                  <span class="shrink-0 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                    entry
-                  </span>
-                {/if}
-              </span>
-              <span class="text-[11px] text-admin-muted">{fileMeta(file)}</span>
-            </button>
-          {/each}
-        </div>
+        <WorkflowSourceTree
+          files={filesState.response.files}
+          {selectedPath}
+          onSelectFile={onSelectFile}
+          formatFileMeta={fileMeta}
+        />
       {/if}
     </aside>
 

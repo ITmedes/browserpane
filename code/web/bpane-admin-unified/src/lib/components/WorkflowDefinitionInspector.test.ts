@@ -33,7 +33,7 @@ describe('WorkflowDefinitionInspector', () => {
     expect(byTestId(target, 'workflow-definition-version-entrypoint').textContent).toContain('browserpane-tour');
     expect(byTestId(target, 'workflow-definition-source').textContent).toContain('/workspace');
     expect(byTestId(target, 'workflow-definition-policy').textContent).toContain('workspace-1');
-    expect(byTestId(target, 'workflow-code-file-list').textContent).toContain('browserpane-tour/run.mjs');
+    expect(target.querySelector('[data-source-path="dev/workflows/browserpane-tour/run.mjs"]')).toBeInstanceOf(HTMLButtonElement);
     expect(byTestId(target, 'workflow-code-preview-code').textContent).toContain('export default async function run');
 
     byTestId(target, 'workflow-definition-refresh-detail').click();
