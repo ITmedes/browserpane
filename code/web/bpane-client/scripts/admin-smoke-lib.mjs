@@ -184,6 +184,7 @@ async function adminAuthenticatedVisible(page) {
     || await page.getByTestId('file-workspace-create-route').isVisible().catch(() => false)
     || await page.getByTestId('file-workspace-detail-route').isVisible().catch(() => false)
     || await page.getByTestId('sessions-overview').isVisible().catch(() => false)
+    || await page.getByTestId('session-create-route').isVisible().catch(() => false)
     || await page.getByTestId('session-detail-route').isVisible().catch(() => false)
     || await page.getByTestId('session-preview-route').isVisible().catch(() => false)
     || await page.getByTestId('workflows-overview').isVisible().catch(() => false)

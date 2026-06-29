@@ -19,14 +19,11 @@ afterEach(async () => {
 });
 
 describe('SessionOverviewRoute', () => {
-  it('loads sessions and creates a new session through the authenticated API', async () => {
+  it('loads sessions and exposes the new-session form route without creating a session', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
       if (url.endsWith('/api/v1/sessions') && init?.method === 'GET') {
         return jsonResponse({ sessions: [sessionPayload()] }, 200);
-      }
-      if (url.endsWith('/api/v1/sessions') && init?.method === 'POST') {
-        return jsonResponse(sessionPayload({ id: 'created-session', totalClients: 0 }), 201);
       }
       return new Response('not found', { status: 404 });
     });
@@ -38,15 +35,8 @@ describe('SessionOverviewRoute', () => {
     await vi.waitFor(() => {
       expect(byTestId(target, 'sessions-list').textContent).toContain('session-1');
     });
-    byTestId(target, 'sessions-new').click();
-
-    await vi.waitFor(() => {
-      expect(byTestId(target, 'sessions-action-success').textContent).toContain('created-session');
-    });
-    const createCall = fetchImpl.mock.calls.find((call) => String(call[0]).endsWith('/api/v1/sessions') && call[1]?.method === 'POST');
-    expect(createCall?.[1]?.body).toContain('bpane_admin_surface');
-    const headers = createCall?.[1]?.headers as Headers;
-    expect(headers.get('authorization')).toBe('Bearer shell-token');
+    expect(byTestId(target, 'sessions-new').getAttribute('href')).toBe('/admin-new/sessions/new');
+    expect(fetchImpl.mock.calls.some((call) => call[1]?.method === 'POST')).toBe(false);
   });
 
   it('delegates authentication failures back to the shell', async () => {

@@ -12,14 +12,12 @@
     readonly state: SessionOverviewLoadState;
     readonly actionState?: SessionActionState;
     readonly onRefresh?: () => void | Promise<void>;
-    readonly onCreateSession?: () => void | Promise<void>;
   };
 
   let {
     state: loadState,
     actionState = { status: 'idle' },
     onRefresh,
-    onCreateSession,
   }: SessionOverviewProps = $props();
 
   const model = $derived(loadState.status === 'ready'
@@ -30,9 +28,6 @@
     void onRefresh?.();
   }
 
-  function createSession(): void {
-    void onCreateSession?.();
-  }
 </script>
 
 <div class="mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8" data-testid="sessions-overview">
@@ -43,16 +38,14 @@
     </div>
 
     <div class="flex flex-wrap gap-2">
-      <button
-        class="inline-flex h-10 w-fit items-center gap-2 rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-        type="button"
-        onclick={createSession}
-        disabled={actionState.status === 'running' || loadState.status === 'loading'}
+      <a
+        class="inline-flex h-10 w-fit items-center gap-2 rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/30 focus-visible:ring-offset-2"
+        href="/admin-new/sessions/new"
         data-testid="sessions-new"
       >
         <Plus size={16} strokeWidth={1.9} />
         <span>New session</span>
-      </button>
+      </a>
       <button
         class="inline-flex h-10 w-fit items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink shadow-sm hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
         type="button"
