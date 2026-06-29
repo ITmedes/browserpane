@@ -7,8 +7,8 @@ import {
   disconnectEmbeddedBrowser,
   ensureAdminLoggedIn,
   getAdminAccessToken,
+  joinSelectedSession,
   openAdminTab,
-  waitForBrowserConnected,
 } from './admin-smoke-lib.mjs';
 import { DEFAULTS, createLogger, fetchAuthConfig, fetchJson, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
 
@@ -83,7 +83,7 @@ async function createAndConnectSession(page, options) {
   const previousSessionId = await readSelectedSessionId(page);
   await page.getByTestId('session-new').click();
   const sessionId = await resolveSelectedSessionId(page, options, previousSessionId);
-  await waitForBrowserConnected(page, options);
+  await joinSelectedSession(page, options);
   await page.locator('[data-testid="browser-viewport"] canvas').first().waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,

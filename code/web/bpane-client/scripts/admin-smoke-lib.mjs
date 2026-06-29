@@ -51,6 +51,19 @@ export async function waitForBrowserConnected(page, options) {
   }
 }
 
+export async function joinSelectedSession(page, options) {
+  await openAdminTab(page, 'sessions');
+  await poll(
+    'admin selected session join enabled',
+    async () => await page.getByTestId('session-join').isEnabled().catch(() => false),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+  await page.getByTestId('session-join').click();
+  await waitForBrowserConnected(page, options);
+}
+
 export async function disconnectEmbeddedBrowser(page, options) {
   await closeAdminOverlay(page);
   await page.getByTestId('browser-disconnect').click();

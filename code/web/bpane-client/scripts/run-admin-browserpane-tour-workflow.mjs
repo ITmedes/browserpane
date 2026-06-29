@@ -7,8 +7,8 @@ import {
   cleanupAdminSmoke,
   ensureAdminLoggedIn,
   getAdminAccessToken,
+  joinSelectedSession,
   openAdminTab,
-  waitForBrowserConnected,
 } from './admin-smoke-lib.mjs';
 import {
   DEFAULTS,
@@ -168,7 +168,7 @@ async function createAndJoinSession(page, options) {
     state: 'visible',
     timeout: options.connectTimeoutMs,
   });
-  await waitForBrowserConnected(page, options);
+  await joinSelectedSession(page, options);
 }
 
 async function invokeWorkflow(page, options, workflowId) {
