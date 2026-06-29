@@ -1235,6 +1235,41 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}/versions/{version}/source-preview:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/WorkflowVersion'
+    get:
+      tags: [Workflows]
+      summary: Fetch a bounded text preview of a workflow definition version entrypoint
+      operationId: getWorkflowDefinitionSourcePreview
+      responses:
+        '200':
+          description: Workflow definition source preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionSourcePreviewResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Workflow source ref could not be resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Workflow source repository could not be accessed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflow-runs:
     get:
       tags: [Workflows]
@@ -4273,6 +4308,48 @@ components:
         created_at:
           type: string
           format: date-time
+    WorkflowDefinitionSourcePreviewResource:
+      type: object
+      required:
+        - workflow_definition_id
+        - workflow_version
+        - entrypoint
+        - source
+        - media_type
+        - language
+        - content
+        - byte_count
+        - max_bytes
+        - truncated
+      properties:
+        workflow_definition_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: string
+        entrypoint:
+          type: string
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+        media_type:
+          type: string
+        language:
+          type: string
+          enum:
+            - typescript
+            - json
+            - text
+        content:
+          type: string
+          description: UTF-8 text preview of the selected entrypoint file.
+        byte_count:
+          type: integer
+          minimum: 0
+        max_bytes:
+          type: integer
+          minimum: 1
+        truncated:
+          type: boolean
     WorkflowSource:
       oneOf:
         - $ref: '#/components/schemas/WorkflowGitSource'

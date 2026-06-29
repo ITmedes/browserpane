@@ -3,6 +3,7 @@
   import type {
     WorkflowActionState,
     WorkflowDetailLoadState,
+    WorkflowSourcePreviewState,
   } from '$lib/workflows/workflow-detail-state';
   import {
     buildWorkflowDefinitionDetailModel,
@@ -12,19 +13,25 @@
   import { formatDateTime } from '$lib/projects/project-formatters';
   import { projectToneClass } from '$lib/projects/project-ui';
   import AdminMessage from './AdminMessage.svelte';
+  import WorkflowCodePreview from './WorkflowCodePreview.svelte';
 
   type WorkflowDefinitionInspectorProps = {
     readonly state: WorkflowDetailLoadState;
     readonly actionState?: WorkflowActionState;
+    readonly sourcePreviewState?: WorkflowSourcePreviewState;
     readonly onRefreshWorkflow?: () => void | Promise<void>;
+    readonly onSelectVersion?: (version: string) => void | Promise<void>;
   };
 
   let {
     state: loadState,
     actionState = { status: 'idle' },
+    sourcePreviewState = { status: 'idle' },
     onRefreshWorkflow,
+    onSelectVersion,
   }: WorkflowDefinitionInspectorProps = $props();
   let selectedVersion = $state('');
+  let notifiedVersion = $state('');
 
   const busy = $derived(actionState.status === 'running');
   const model = $derived(loadState.status === 'ready'
@@ -38,12 +45,20 @@
   $effect(() => {
     if (loadState.status !== 'ready') {
       selectedVersion = '';
+      notifiedVersion = '';
       return;
     }
-    if (selectedVersion && loadState.versions.some((version) => version.version === selectedVersion)) {
+    const nextVersion = selectedVersion && loadState.versions.some((version) => version.version === selectedVersion)
+      ? selectedVersion
+      : loadState.definition.latest_version ?? loadState.versions[0]?.version ?? '';
+    if (selectedVersion !== nextVersion) {
+      selectedVersion = nextVersion;
       return;
     }
-    selectedVersion = loadState.definition.latest_version ?? loadState.versions[0]?.version ?? '';
+    if (nextVersion && notifiedVersion !== nextVersion) {
+      notifiedVersion = nextVersion;
+      void onSelectVersion?.(nextVersion);
+    }
   });
 
   function refreshWorkflow(): void {
@@ -225,6 +240,8 @@
           {/if}
         </div>
       </section>
+
+      <WorkflowCodePreview state={sourcePreviewState} />
     </div>
   {/if}
 </aside>

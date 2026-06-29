@@ -72,11 +72,11 @@ use crate::workflow::{
     PersistWorkflowRunLogRequest, PersistWorkflowRunProducedFileRequest, PersistWorkflowRunRequest,
     StoredWorkflowDefinition, StoredWorkflowDefinitionVersion, StoredWorkflowRun,
     WorkflowDefinitionListResponse, WorkflowDefinitionResource,
-    WorkflowDefinitionVersionListResponse, WorkflowDefinitionVersionResource,
-    WorkflowRunEventListResponse, WorkflowRunEventResource, WorkflowRunInterventionResource,
-    WorkflowRunListResponse, WorkflowRunLogListResponse, WorkflowRunLogResource,
-    WorkflowRunProducedFileResource, WorkflowRunRecordingResource, WorkflowRunResource,
-    WorkflowRunRetentionResource, WorkflowRunSourceSnapshot, WorkflowRunState,
+    WorkflowDefinitionSourcePreviewResource, WorkflowDefinitionVersionListResponse,
+    WorkflowDefinitionVersionResource, WorkflowRunEventListResponse, WorkflowRunEventResource,
+    WorkflowRunInterventionResource, WorkflowRunListResponse, WorkflowRunLogListResponse,
+    WorkflowRunLogResource, WorkflowRunProducedFileResource, WorkflowRunRecordingResource,
+    WorkflowRunResource, WorkflowRunRetentionResource, WorkflowRunSourceSnapshot, WorkflowRunState,
     WorkflowRunTransitionRequest, WorkflowRunWorkspaceInput,
 };
 use crate::workflow::{

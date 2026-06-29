@@ -27,6 +27,9 @@ describe('WorkflowDefinitionDetailRoute', () => {
       if (url.endsWith('/api/v1/workflows/workflow-1/versions')) {
         return jsonResponse({ versions: [versionPayload()] }, 200);
       }
+      if (url.endsWith('/api/v1/workflows/workflow-1/versions/v1/source-preview')) {
+        return jsonResponse(sourcePreviewPayload(), 200);
+      }
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchImpl);
@@ -38,6 +41,10 @@ describe('WorkflowDefinitionDetailRoute', () => {
       expect(byTestId(target, 'workflow-definition-inspector').textContent).toContain('BrowserPane Tour');
     });
     expect(byTestId(target, 'workflow-definition-source').textContent).toContain('/workspace');
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'workflow-code-preview-code').textContent).toContain('export default async function run');
+    });
+    expect(byTestId(target, 'workflow-code-preview-code-language').className).toContain('language-typescript');
     const headers = fetchImpl.mock.calls[0]?.[1]?.headers as Headers;
     expect(headers.get('authorization')).toBe('Bearer shell-token');
   });
@@ -118,5 +125,26 @@ function versionPayload() {
     allowed_extension_ids: [],
     allowed_file_workspace_ids: [],
     created_at: '2026-06-21T09:30:00.000Z',
+  };
+}
+
+function sourcePreviewPayload() {
+  return {
+    workflow_definition_id: 'workflow-1',
+    workflow_version: 'v1',
+    entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
+    source: {
+      kind: 'git',
+      repository_url: '/workspace',
+      ref: 'HEAD',
+      resolved_commit: 'abc123',
+      root_path: 'dev',
+    },
+    media_type: 'text/javascript; charset=utf-8',
+    language: 'typescript',
+    content: 'export default async function run() {}',
+    byte_count: 38,
+    max_bytes: 65536,
+    truncated: false,
   };
 }

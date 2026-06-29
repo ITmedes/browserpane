@@ -2,6 +2,8 @@ use axum::routing::{get, post};
 
 use super::*;
 
+const WORKFLOW_SOURCE_PREVIEW_MAX_BYTES: usize = 64 * 1024;
+
 pub(super) fn workflow_definition_routes() -> Router<Arc<ApiState>> {
     Router::new()
         .route(
@@ -19,6 +21,10 @@ pub(super) fn workflow_definition_routes() -> Router<Arc<ApiState>> {
         .route(
             "/api/v1/workflows/{workflow_id}/versions/{version}",
             get(get_workflow_definition_version),
+        )
+        .route(
+            "/api/v1/workflows/{workflow_id}/versions/{version}/source-preview",
+            get(get_workflow_definition_source_preview),
         )
 }
 
@@ -195,4 +201,52 @@ async fn get_workflow_definition_version(
             )
         })?;
     Ok(Json(version_resource.to_resource()))
+}
+
+async fn get_workflow_definition_source_preview(
+    headers: HeaderMap,
+    Path((workflow_id, version)): Path<(Uuid, String)>,
+    State(state): State<Arc<ApiState>>,
+) -> Result<Json<WorkflowDefinitionSourcePreviewResource>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let version_resource = state
+        .session_store
+        .get_workflow_definition_version_for_owner(&principal, workflow_id, &version)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!(
+                        "workflow definition version {version} for workflow {workflow_id} not found"
+                    ),
+                }),
+            )
+        })?;
+    let source = version_resource.source.as_ref().ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!(
+                    "workflow definition version {version} for workflow {workflow_id} does not have source metadata"
+                ),
+            }),
+        )
+    })?;
+    let preview = state
+        .workflow_source_resolver
+        .materialize_entrypoint_preview(
+            source,
+            &version_resource.entrypoint,
+            WORKFLOW_SOURCE_PREVIEW_MAX_BYTES,
+        )
+        .await
+        .map_err(map_workflow_source_error)?;
+    Ok(Json(preview.to_definition_preview_resource(
+        &version_resource,
+        WORKFLOW_SOURCE_PREVIEW_MAX_BYTES,
+    )))
 }
