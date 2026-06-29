@@ -57,36 +57,10 @@
       };
     }
   }
-
-  async function createSession(): Promise<void> {
-    actionState = { status: 'running', label: 'Creating session...' };
-    try {
-      const created = await client().createSession({
-        labels: {
-          bpane_admin_surface: 'unified',
-        },
-      });
-      if (sessionState.status === 'ready') {
-        sessionState = {
-          status: 'ready',
-          sessions: [created, ...sessionState.sessions.filter((session) => session.id !== created.id)],
-        };
-      } else {
-        sessionState = { status: 'ready', sessions: [created] };
-      }
-      actionState = { status: 'success', message: `Session ${created.id} created.` };
-    } catch (error) {
-      actionState = {
-        status: 'error',
-        message: error instanceof Error ? error.message : 'Session creation failed.',
-      };
-    }
-  }
 </script>
 
 <SessionOverview
   state={sessionState}
   {actionState}
   onRefresh={refreshSessions}
-  onCreateSession={createSession}
 />

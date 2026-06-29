@@ -41,27 +41,24 @@ async function run() {
     await assertNoBodyHorizontalOverflow(page, 'unified sessions catalog');
     await assertNoHorizontalOverflow(page, 'sessions-overview', 'unified sessions overview');
 
-    await page.getByTestId('sessions-new').click();
-    createdSessionId = await poll(
-      'created unified session id',
-      async () => {
-        const text = await page.getByTestId('sessions-action-success').textContent().catch(() => '');
-        return text?.match(/Session ([^ ]+) created/)?.[1] ?? '';
-      },
-      Boolean,
-      options.connectTimeoutMs,
-    );
-
-    await page.getByTestId('sessions-search').fill(createdSessionId);
-    const row = page.locator('[data-testid="sessions-list-row"]').filter({ hasText: createdSessionId });
-    await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-    const detailLink = row.getByTestId('sessions-detail-link');
-    const href = await detailLink.getAttribute('href');
-    if (!href?.endsWith(`/admin-new/sessions/${encodeURIComponent(createdSessionId)}`)) {
-      throw new Error(`Expected session detail link for ${createdSessionId}, got ${href}`);
+    const newSessionHref = await page.getByTestId('sessions-new').getAttribute('href');
+    if (!newSessionHref?.endsWith('/admin-new/sessions/new')) {
+      throw new Error(`Expected New session to open the create form, got ${newSessionHref}`);
     }
-    await detailLink.click();
-
+    await page.getByTestId('sessions-new').click();
+    await page.getByTestId('session-create-route').waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+    await assertNoBodyHorizontalOverflow(page, 'unified session create');
+    await assertNoHorizontalOverflow(page, 'session-create-route', 'unified session create route');
+    await page.getByTestId('session-create-labels').fill('suite=admin-unified-sessions\npurpose=smoke');
+    const preview = await page.getByTestId('session-create-payload').textContent();
+    if (preview?.includes('bpane_admin_surface')) {
+      throw new Error(`Session create form added an implicit admin label: ${preview}`);
+    }
+    await page.getByTestId('session-create-save').click();
+    createdSessionId = await waitForSessionDetailUrl(page, options);
     await page.getByTestId('session-detail-route').waitFor({
       state: 'visible',
       timeout: options.connectTimeoutMs,
@@ -188,6 +185,25 @@ async function waitForContains(page, options, testId, expected) {
     (value) => value?.includes(expected),
     options.connectTimeoutMs,
   );
+}
+
+async function waitForSessionDetailUrl(page, options) {
+  const result = await poll(
+    'created unified session detail url',
+    async () => {
+      const url = new URL(page.url());
+      const match = url.pathname.match(/\/admin-new\/sessions\/([^/]+)$/);
+      const sessionId = match?.[1] ? decodeURIComponent(match[1]) : '';
+      const error = await page.getByTestId('session-create-error').textContent().catch(() => '');
+      return { sessionId: sessionId && sessionId !== 'new' ? sessionId : '', error };
+    },
+    (value) => Boolean(value.sessionId || value.error),
+    options.connectTimeoutMs,
+  );
+  if (result.error) {
+    throw new Error(`Session create form failed: ${result.error}`);
+  }
+  return result.sessionId;
 }
 
 async function assertNoHorizontalOverflow(page, testId, label) {
