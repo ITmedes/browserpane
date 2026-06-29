@@ -34,6 +34,7 @@ coexist:
 - `smoke:admin-workflow-run-detail`
 - `smoke:admin-browserpane-tour`
 - `smoke:admin-egress-profiles`
+- `smoke:admin-unified-egress-profiles`
 - `smoke:admin-browser-contexts`
 - `smoke:admin-file-workspaces`
 - `smoke:admin-mcp`
@@ -83,6 +84,9 @@ Add `/admin-new/` smokes progressively:
 6. session files smoke
 7. recordings smoke
 8. network/egress diagnostics smoke
+   - `smoke:admin-unified-egress-profiles` covers the unified egress catalog,
+     create route, validation errors, detail/update flow, disabled state, and
+     edit-form overflow checks.
 9. automation/MCP smoke
 10. browser policy smoke
 11. observability/logs smoke

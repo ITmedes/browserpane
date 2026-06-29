@@ -66,7 +66,7 @@
       <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div class="min-w-0">
           <div class="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 class="m-0 truncate text-xl font-semibold text-admin-ink">{row.name}</h2>
+            <h2 class="m-0 min-w-0 max-w-full truncate text-xl font-semibold text-admin-ink">{row.name}</h2>
             <span class={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${projectToneClass(row.stateTone)}`}>
               {row.state}
             </span>
@@ -78,7 +78,7 @@
             </span>
           </div>
           <p class="m-0 mt-1 text-sm text-admin-muted">{row.description}</p>
-          <p class="m-0 mt-2 truncate font-mono text-xs text-admin-muted">{row.id}</p>
+          <p class="m-0 mt-2 min-w-0 truncate font-mono text-xs text-admin-muted">{row.id}</p>
         </div>
 
         <div class="flex shrink-0 flex-wrap gap-2">

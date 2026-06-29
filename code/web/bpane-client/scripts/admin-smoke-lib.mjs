@@ -160,7 +160,10 @@ async function adminAuthenticatedVisible(page) {
     || await page.getByTestId('file-workspace-create-submit').isVisible().catch(() => false)
     || await page.getByTestId('projects-new-link').isVisible().catch(() => false)
     || await page.getByTestId('project-create-route').isVisible().catch(() => false)
-    || await page.getByTestId('project-detail-route').isVisible().catch(() => false);
+    || await page.getByTestId('project-detail-route').isVisible().catch(() => false)
+    || await page.getByTestId('egress-profiles-new-link').isVisible().catch(() => false)
+    || await page.getByTestId('egress-profile-create-route').isVisible().catch(() => false)
+    || await page.getByTestId('egress-profile-detail-route').isVisible().catch(() => false);
 }
 
 async function waitForSessionClients(page, options, sessionId, expectedClients) {
