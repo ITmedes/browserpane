@@ -21,6 +21,7 @@
     "smoke:admin-session": "node scripts/run-admin-session-smoke.mjs",
     "smoke:admin-browser-contexts": "node scripts/run-admin-browser-contexts-smoke.mjs",
     "smoke:admin-egress-profiles": "node scripts/run-admin-egress-profiles-smoke.mjs",
+    "smoke:admin-unified-browser-contexts": "node scripts/run-admin-unified-browser-contexts-smoke.mjs",
     "smoke:admin-unified-egress-profiles": "node scripts/run-admin-unified-egress-profiles-smoke.mjs",
     "smoke:admin-unified-projects": "node scripts/run-admin-unified-projects-smoke.mjs",
     "smoke:admin-session-configurator": "node scripts/run-admin-session-configurator-smoke.mjs",

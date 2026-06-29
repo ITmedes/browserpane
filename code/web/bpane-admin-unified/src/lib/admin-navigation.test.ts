@@ -9,6 +9,12 @@ describe('admin navigation model', () => {
     }
   });
 
+  it('routes browser contexts to the API-aligned resource path', () => {
+    expect(allNavItems.find((item) => item.id === 'contexts')).toMatchObject({
+      route: '/admin-new/browser-contexts',
+    });
+  });
+
   it('has one active dashboard entry for the static shell', () => {
     const activeItems = allNavItems.filter((item) => item.active);
 

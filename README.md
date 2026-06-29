@@ -860,6 +860,7 @@ Common browser-context operations:
 ./scripts/bpane browser-context get <context-id>
 ./scripts/bpane browser-context delete <context-id>
 cd code/web/bpane-client && npm run smoke:admin-browser-contexts -- --headless
+cd code/web/bpane-client && npm run smoke:admin-unified-browser-contexts -- --headless
 ```
 
 MCP delegation and recovery operations:
@@ -1103,6 +1104,7 @@ npm run build
 ../../../scripts/bpane --help
 npm run smoke:bpane-cli -- --headless
 npm run smoke:admin-session -- --headless
+npm run smoke:admin-unified-browser-contexts -- --headless
 npm run smoke:admin-unified-egress-profiles -- --headless
 npm run smoke:admin-unified-projects -- --headless
 npm run workflow:cli -- --help
