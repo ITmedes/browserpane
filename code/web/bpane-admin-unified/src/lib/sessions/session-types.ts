@@ -165,6 +165,7 @@ export type CreateSessionRequest = {
   readonly network_identity?: SessionNetworkIdentity | null;
   readonly owner_mode?: string | null;
   readonly viewport?: SessionViewport | null;
+  readonly capabilities?: SessionCapabilities;
   readonly idle_timeout_sec?: number | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly integration_context?: Readonly<Record<string, unknown>> | null;

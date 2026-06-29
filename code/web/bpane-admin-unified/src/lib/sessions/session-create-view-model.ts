@@ -1,5 +1,5 @@
 import type { ProjectPolicyOption, ProjectResource } from '$lib/projects/project-types';
-import type { CreateSessionRequest } from './session-types';
+import type { CreateSessionRequest, SessionCapabilities } from './session-types';
 
 export type SessionCreateDraft = {
   projectId: string;
@@ -11,12 +11,29 @@ export type SessionCreateDraft = {
   idleTimeoutSec: string;
   viewportWidth: string;
   viewportHeight: string;
+  capabilityBrowserInput: boolean;
+  capabilityClipboard: boolean;
+  capabilityAudio: boolean;
+  capabilityMicrophone: boolean;
+  capabilityCamera: boolean;
+  capabilityFileTransfer: boolean;
+  capabilityResize: boolean;
   locale: string;
   languagesText: string;
   timezone: string;
   browserIdentity: string;
   userAgent: string;
   labelsText: string;
+};
+
+const DEFAULT_CAPABILITIES: SessionCapabilities = {
+  browser_input: true,
+  clipboard: true,
+  audio: true,
+  microphone: true,
+  camera: true,
+  file_transfer: true,
+  resize: true,
 };
 
 export type SessionCreateOptions = {
@@ -62,6 +79,13 @@ export function createNewSessionCreateDraft(): SessionCreateDraft {
     idleTimeoutSec: '',
     viewportWidth: '',
     viewportHeight: '',
+    capabilityBrowserInput: DEFAULT_CAPABILITIES.browser_input,
+    capabilityClipboard: DEFAULT_CAPABILITIES.clipboard,
+    capabilityAudio: DEFAULT_CAPABILITIES.audio,
+    capabilityMicrophone: DEFAULT_CAPABILITIES.microphone,
+    capabilityCamera: DEFAULT_CAPABILITIES.camera,
+    capabilityFileTransfer: DEFAULT_CAPABILITIES.file_transfer,
+    capabilityResize: DEFAULT_CAPABILITIES.resize,
     locale: '',
     languagesText: '',
     timezone: '',
@@ -181,6 +205,7 @@ export function validateSessionCreateDraft(
     network_identity?: typeof networkIdentity;
     owner_mode?: string;
     viewport?: { width: number; height: number };
+    capabilities?: SessionCapabilities;
     idle_timeout_sec?: number;
     labels?: Readonly<Record<string, string>>;
   } = {};
@@ -197,6 +222,10 @@ export function validateSessionCreateDraft(
   }
   if (viewport) {
     request.viewport = viewport;
+  }
+  const capabilities = capabilitiesFromDraft(draft);
+  if (!sessionCapabilitiesEqual(capabilities, DEFAULT_CAPABILITIES)) {
+    request.capabilities = capabilities;
   }
   if (Object.keys(labels).length > 0) {
     request.labels = labels;
@@ -221,6 +250,31 @@ export function emptySessionCreateOptions(): SessionCreateOptions {
     browserContexts: [],
     egressProfiles: [],
   };
+}
+
+function capabilitiesFromDraft(draft: SessionCreateDraft): SessionCapabilities {
+  return {
+    browser_input: draft.capabilityBrowserInput,
+    clipboard: draft.capabilityClipboard,
+    audio: draft.capabilityAudio,
+    microphone: draft.capabilityMicrophone,
+    camera: draft.capabilityCamera,
+    file_transfer: draft.capabilityFileTransfer,
+    resize: draft.capabilityResize,
+  };
+}
+
+function sessionCapabilitiesEqual(
+  left: SessionCapabilities,
+  right: SessionCapabilities,
+): boolean {
+  return left.browser_input === right.browser_input
+    && left.clipboard === right.clipboard
+    && left.audio === right.audio
+    && left.microphone === right.microphone
+    && left.camera === right.camera
+    && left.file_transfer === right.file_transfer
+    && left.resize === right.resize;
 }
 
 function validatePolicyOptionSelection(

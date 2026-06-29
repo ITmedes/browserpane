@@ -372,7 +372,8 @@ pub(super) async fn session_resource(
     let status = session_status_summary(state, stored).await?;
     let project = session_project_resource(state, stored).await?;
     let project_policy = session_project_policy(&state.session_store, stored).await?;
-    let capabilities = session_capabilities_for_policy(project_policy.as_ref());
+    let capabilities =
+        session_capabilities_for_policy(stored.capabilities.clone(), project_policy.as_ref());
     let queue = session_queue_info(state, stored).await?;
     let effective_egress = session_effective_egress(state, stored).await?;
     let egress_diagnostics = session_egress_diagnostics(state, stored).await?;
@@ -392,10 +393,14 @@ pub(super) async fn session_resource(
     ))
 }
 
-fn session_capabilities_for_policy(project_policy: Option<&ProjectPolicy>) -> SessionCapabilities {
-    let mut capabilities = SessionCapabilities::default();
+fn session_capabilities_for_policy(
+    mut capabilities: SessionCapabilities,
+    project_policy: Option<&ProjectPolicy>,
+) -> SessionCapabilities {
     if let Some(policy) = project_policy {
-        capabilities.file_transfer = policy.allow_browser_uploads && policy.allow_browser_downloads;
+        capabilities.file_transfer = capabilities.file_transfer
+            && policy.allow_browser_uploads
+            && policy.allow_browser_downloads;
     }
     capabilities
 }

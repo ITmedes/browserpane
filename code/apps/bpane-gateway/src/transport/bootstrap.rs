@@ -2,19 +2,21 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use bpane_protocol::frame::Frame;
-use bpane_protocol::ControlMessage;
+use bpane_protocol::{ClientAccessFlags, ControlMessage};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use super::policy::{adapt_frame_for_client_with_file_policy, SessionFileTransportPolicy};
+use super::policy::{
+    adapt_control_message_for_client, adapt_frame_for_client_with_policy, SessionTransportPolicy,
+};
 
 pub(super) async fn send_initial_frames<S>(
     send_stream: &Arc<Mutex<S>>,
     initial_frames: &[Arc<Frame>],
     joined_as_owner: bool,
     initial_access_state: Option<ControlMessage>,
-    file_policy: SessionFileTransportPolicy,
+    policy: SessionTransportPolicy,
     session_id: u64,
     client_id: u64,
 ) -> anyhow::Result<()>
@@ -24,15 +26,21 @@ where
     let mut stream = send_stream.lock().await;
 
     for frame in initial_frames {
-        let encoded =
-            adapt_frame_for_client_with_file_policy(frame, joined_as_owner, file_policy).encode();
+        let encoded = adapt_frame_for_client_with_policy(frame, joined_as_owner, &policy).encode();
         stream
             .write_all(&encoded)
             .await
             .context("failed to send initial frames")?;
     }
 
-    if let Some(access_state) = initial_access_state {
+    let had_initial_access_state = initial_access_state.is_some();
+    let access_state = initial_access_state.unwrap_or(ControlMessage::ClientAccessState {
+        flags: ClientAccessFlags::empty(),
+        width: 0,
+        height: 0,
+    });
+    let access_state = adapt_control_message_for_client(access_state, &policy);
+    if had_initial_access_state || client_access_state_has_flags(&access_state) {
         let encoded = access_state.to_frame().encode();
         stream
             .write_all(&encoded)
@@ -47,6 +55,10 @@ where
     Ok(())
 }
 
+fn client_access_state_has_flags(message: &ControlMessage) -> bool {
+    matches!(message, ControlMessage::ClientAccessState { flags, .. } if !flags.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -56,7 +68,9 @@ mod tests {
     use tokio::io::{duplex, AsyncReadExt};
     use tokio::sync::Mutex;
 
-    use super::super::policy::SessionFileTransportPolicy;
+    use crate::session_control::SessionCapabilities;
+
+    use super::super::policy::{SessionFileTransportPolicy, SessionTransportPolicy};
     use super::send_initial_frames;
 
     #[tokio::test]
@@ -84,7 +98,7 @@ mod tests {
                 width: 1280,
                 height: 720,
             }),
-            SessionFileTransportPolicy::default(),
+            SessionTransportPolicy::default(),
             7,
             11,
         )
@@ -138,7 +152,7 @@ mod tests {
                 width: 1440,
                 height: 900,
             }),
-            SessionFileTransportPolicy::default(),
+            SessionTransportPolicy::default(),
             8,
             13,
         )
@@ -187,7 +201,7 @@ mod tests {
             &initial_frames,
             true,
             None,
-            SessionFileTransportPolicy::default(),
+            SessionTransportPolicy::default(),
             3,
             5,
         )
@@ -211,6 +225,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn owner_receives_access_state_when_session_capabilities_disable_input_or_resize() {
+        let (writer, mut reader) = duplex(4096);
+        let send_stream = Arc::new(Mutex::new(writer));
+        let initial_frames = vec![Arc::new(
+            ControlMessage::SessionReady {
+                version: 1,
+                flags: SessionFlags::FILE_TRANSFER | SessionFlags::KEYBOARD_LAYOUT,
+            }
+            .to_frame(),
+        )];
+        let policy = SessionTransportPolicy::from_project_policy_and_capabilities(
+            None,
+            SessionCapabilities {
+                browser_input: false,
+                clipboard: true,
+                audio: true,
+                microphone: true,
+                camera: true,
+                file_transfer: true,
+                resize: false,
+            },
+        );
+
+        send_initial_frames(&send_stream, &initial_frames, true, None, policy, 4, 6)
+            .await
+            .unwrap();
+
+        let mut buf = vec![0u8; 512];
+        let n = reader.read(&mut buf).await.unwrap();
+        let mut decoder = FrameDecoder::new();
+        decoder.push(&buf[..n]).unwrap();
+
+        let ready = decoder.next_frame().unwrap().unwrap();
+        let access_state = decoder.next_frame().unwrap().unwrap();
+        assert_eq!(ready.payload[0], 0x03);
+        assert_eq!(ready.payload[2] & SessionFlags::KEYBOARD_LAYOUT.bits(), 0);
+        assert_eq!(
+            ControlMessage::decode(&access_state.payload).unwrap(),
+            ControlMessage::ClientAccessState {
+                flags: ClientAccessFlags::VIEW_ONLY | ClientAccessFlags::RESIZE_LOCKED,
+                width: 0,
+                height: 0,
+            }
+        );
+        assert!(decoder.next_frame().unwrap().is_none());
+    }
+
+    #[tokio::test]
     async fn owner_session_ready_clears_file_transfer_when_policy_disables_uploads() {
         let (writer, mut reader) = duplex(4096);
         let send_stream = Arc::new(Mutex::new(writer));
@@ -227,10 +289,10 @@ mod tests {
             &initial_frames,
             true,
             None,
-            SessionFileTransportPolicy {
+            SessionTransportPolicy::with_file_transfer_policy(SessionFileTransportPolicy {
                 allow_browser_uploads: false,
                 allow_browser_downloads: true,
-            },
+            }),
             3,
             5,
         )

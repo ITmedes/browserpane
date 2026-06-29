@@ -22,6 +22,7 @@ const SESSION_COLUMNS: &str = r#"
     owner_mode,
     viewport_width,
     viewport_height,
+    capabilities,
     idle_timeout_sec,
     labels,
     integration_context,

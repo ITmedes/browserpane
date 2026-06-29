@@ -7519,6 +7519,8 @@ components:
           $ref: '#/components/schemas/SessionOwnerMode'
         viewport:
           $ref: '#/components/schemas/SessionViewport'
+        capabilities:
+          $ref: '#/components/schemas/SessionCapabilities'
         idle_timeout_sec:
           type: integer
           minimum: 1

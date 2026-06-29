@@ -8,6 +8,7 @@ use tokio::task::JoinHandle;
 use tracing::debug;
 
 use super::bitrate::{compute_adapted_bitrate, DatagramStats};
+use super::policy::{adapt_control_message_for_client, SessionTransportPolicy};
 use crate::session_hub::BrowserClientRole;
 
 use super::session::Session;
@@ -117,6 +118,7 @@ pub(super) fn spawn_direct_control_task<S>(
     session: Arc<Session>,
     send_stream: Arc<Mutex<S>>,
     mut control_rx: tokio::sync::mpsc::Receiver<ControlMessage>,
+    policy: SessionTransportPolicy,
 ) -> JoinHandle<()>
 where
     S: AsyncWrite + Unpin + Send + 'static,
@@ -127,7 +129,9 @@ where
                 break;
             }
 
-            let encoded = message.to_frame().encode();
+            let encoded = adapt_control_message_for_client(message, &policy)
+                .to_frame()
+                .encode();
             let mut stream = send_stream.lock().await;
             if stream.write_all(&encoded).await.is_err() {
                 break;

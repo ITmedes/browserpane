@@ -364,6 +364,7 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         },
         owner_mode: SessionOwnerMode::Collaborative,
         viewport: SessionViewport::default(),
+        capabilities: Default::default(),
         owner: SessionOwner {
             subject: "owner".to_string(),
             issuer: "https://issuer.example".to_string(),

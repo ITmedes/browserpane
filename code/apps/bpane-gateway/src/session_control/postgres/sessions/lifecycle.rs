@@ -247,6 +247,9 @@ impl SessionRepository<'_> {
         let labels_value = json_labels(&request.labels);
         let extensions_value = json_applied_extensions(&request.extensions)?;
         let recording_value = json_recording_policy(&request.recording)?;
+        let capabilities_value = serde_json::to_value(&request.capabilities).map_err(|error| {
+            SessionStoreError::Backend(format!("failed to encode session capabilities: {error}"))
+        })?;
         let network_identity_value = serde_json::to_value(
             request.network_identity.clone().unwrap_or_default(),
         )
@@ -275,6 +278,7 @@ impl SessionRepository<'_> {
                 owner_mode,
                 viewport_width,
                 viewport_height,
+                capabilities,
                 idle_timeout_sec,
                 labels,
                 integration_context,
@@ -290,8 +294,9 @@ impl SessionRepository<'_> {
                 egress_tx_bytes
             )
             VALUES (
-                $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, $14, $15,
-                $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $21, $22, $23, 0, 0, 0
+                $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, $14,
+                $15::jsonb, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20::jsonb, $21, $22,
+                $22, $23, $24, 0, 0, 0
             )
             RETURNING
                 {SESSION_COLUMNS}
@@ -315,6 +320,7 @@ impl SessionRepository<'_> {
                     &owner_mode.as_str(),
                     &(viewport.width as i32),
                     &(viewport.height as i32),
+                    &capabilities_value,
                     &request.idle_timeout_sec.map(|value| value as i32),
                     &labels_value,
                     &request.integration_context,

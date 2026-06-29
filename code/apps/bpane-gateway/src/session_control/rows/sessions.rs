@@ -54,6 +54,10 @@ pub(in crate::session_control) fn row_to_stored_session(
                 "failed to decode session admission decision: {error}"
             ))
         })?;
+    let capabilities = serde_json::from_value::<SessionCapabilities>(row.get("capabilities"))
+        .map_err(|error| {
+            SessionStoreError::Backend(format!("failed to decode session capabilities: {error}"))
+        })?;
 
     let width = row.get::<_, i32>("viewport_width");
     let height = row.get::<_, i32>("viewport_height");
@@ -76,6 +80,7 @@ pub(in crate::session_control) fn row_to_stored_session(
             width: width as u16,
             height: height as u16,
         },
+        capabilities,
         owner: SessionOwner {
             subject: row.get("owner_subject"),
             issuer: row.get("owner_issuer"),
