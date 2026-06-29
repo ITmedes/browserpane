@@ -1167,6 +1167,46 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}/source-validation:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    post:
+      tags: [Workflows]
+      summary: Validate a workflow definition source before publishing a version
+      operationId: validateWorkflowDefinitionSource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateWorkflowDefinitionSourceRequest'
+      responses:
+        '200':
+          description: Workflow definition source validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionSourceValidationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Workflow source ref could not be resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Workflow source repository could not be accessed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflows/{workflow_id}/versions:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -4294,6 +4334,35 @@ components:
           type: array
           items:
             type: string
+    ValidateWorkflowDefinitionSourceRequest:
+      type: object
+      additionalProperties: false
+      required: [entrypoint, source]
+      properties:
+        entrypoint:
+          type: string
+          description: Relative workflow entrypoint to validate against the supplied source root.
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+    WorkflowDefinitionSourceValidationResponse:
+      type: object
+      required:
+        - workflow_definition_id
+        - entrypoint
+        - source
+        - files
+      properties:
+        workflow_definition_id:
+          type: string
+          format: uuid
+        entrypoint:
+          type: string
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowDefinitionSourceFileResource'
     WorkflowDefinitionVersionResource:
       type: object
       required:

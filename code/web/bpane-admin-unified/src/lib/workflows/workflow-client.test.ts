@@ -5,6 +5,7 @@ import {
   WorkflowCatalogError,
   toWorkflowDefinitionListResponse,
   toWorkflowDefinitionSourceFileListResponse,
+  toWorkflowDefinitionSourceValidationResponse,
   toWorkflowDefinitionSourcePreviewResource,
 } from './workflow-client';
 
@@ -146,6 +147,44 @@ describe('WorkflowCatalogClient', () => {
     );
   });
 
+  it('validates workflow definition sources without creating a version', async () => {
+    const request = {
+      entrypoint: 'dev/workflows/support/run.mjs',
+      source: {
+        kind: 'git' as const,
+        repository_url: '/workspace',
+        ref: 'HEAD',
+        resolved_commit: null,
+        root_path: 'dev',
+      },
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/workflows/workflow%2Fwith%2Fslash/source-validation')) {
+        expect(init?.body).toBe(JSON.stringify(request));
+        return jsonResponse(sourceValidationPayload(), 200);
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const client = new WorkflowCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl,
+    });
+
+    const validation = await client.validateDefinitionSource('workflow/with/slash', request);
+
+    expect(validation.source.resolved_commit).toBe('abc123');
+    expect(validation.files[0]).toMatchObject({
+      path: 'dev/workflows/support/run.mjs',
+      entrypoint: true,
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://browserpane.test/api/v1/workflows/workflow%2Fwith%2Fslash/source-validation'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('loads definition detail and version lists', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
@@ -196,6 +235,10 @@ describe('WorkflowCatalogClient', () => {
 
   it('rejects invalid source file listing payloads', () => {
     expect(() => toWorkflowDefinitionSourceFileListResponse({ files: [{}] })).toThrow(WorkflowCatalogError);
+  });
+
+  it('rejects invalid source validation payloads', () => {
+    expect(() => toWorkflowDefinitionSourceValidationResponse({ source: null })).toThrow(WorkflowCatalogError);
   });
 });
 
@@ -296,6 +339,29 @@ function sourceFileListPayload(overrides: Partial<{ readonly workflow_version: s
         media_type: 'text/typescript; charset=utf-8',
         language: 'typescript',
         entrypoint: false,
+      },
+    ],
+  };
+}
+
+function sourceValidationPayload() {
+  return {
+    workflow_definition_id: 'workflow-1',
+    entrypoint: 'dev/workflows/support/run.mjs',
+    source: {
+      kind: 'git',
+      repository_url: '/workspace',
+      ref: 'HEAD',
+      resolved_commit: 'abc123',
+      root_path: 'dev',
+    },
+    files: [
+      {
+        path: 'dev/workflows/support/run.mjs',
+        byte_count: 38,
+        media_type: 'text/javascript; charset=utf-8',
+        language: 'typescript',
+        entrypoint: true,
       },
     ],
   };

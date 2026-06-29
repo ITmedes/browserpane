@@ -74,6 +74,68 @@ describe('WorkflowDefinitionDetailRoute', () => {
     expect(headers.get('authorization')).toBe('Bearer shell-token');
   });
 
+  it('validates source and creates a new workflow version from the detail view', async () => {
+    let versionCreated = false;
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/workflows/workflow-1')) {
+        return jsonResponse(workflowPayload({ latest_version: versionCreated ? 'v2' : 'v1' }), 200);
+      }
+      if (url.endsWith('/api/v1/workflows/workflow-1/versions') && init?.method === 'GET') {
+        return jsonResponse(
+          { versions: versionCreated ? [versionPayload(), versionPayload({ version: 'v2', id: 'version-2' })] : [versionPayload()] },
+          200,
+        );
+      }
+      if (url.endsWith('/api/v1/workflows/workflow-1/source-validation') && init?.method === 'POST') {
+        return jsonResponse(sourceValidationPayload(), 200);
+      }
+      if (url.endsWith('/api/v1/workflows/workflow-1/versions') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toMatchObject({
+          version: 'v2',
+          source: { resolved_commit: 'def456' },
+        });
+        versionCreated = true;
+        return jsonResponse(versionPayload({ version: 'v2', id: 'version-2', resolved_commit: 'def456' }), 201);
+      }
+      if (url.endsWith('/api/v1/workflows/workflow-1/versions/v1/source-files')) {
+        return jsonResponse(sourceFilesPayload(), 200);
+      }
+      if (url.endsWith('/api/v1/workflows/workflow-1/versions/v2/source-files')) {
+        return jsonResponse(sourceFilesPayload({ workflow_version: 'v2', resolved_commit: 'def456' }), 200);
+      }
+      if (url.includes('/api/v1/workflows/workflow-1/versions/v1/source-preview')) {
+        return jsonResponse(sourcePreviewPayload(), 200);
+      }
+      if (url.includes('/api/v1/workflows/workflow-1/versions/v2/source-preview')) {
+        return jsonResponse(sourcePreviewPayload({ workflow_version: 'v2', resolved_commit: 'def456' }), 200);
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    const target = renderComponent(WorkflowDefinitionDetailRoute, {
+      authContext: authContext({ accessTokenProvider: async () => 'shell-token' }),
+    });
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'workflow-source-editor').textContent).toContain('New version source');
+    });
+
+    byTestId(target, 'workflow-source-validate').click();
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'workflow-source-validation-ready').textContent).toContain('def456');
+    });
+    byTestId(target, 'workflow-source-create-version').click();
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'workflow-definition-action-success').textContent).toContain('v2');
+    });
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'workflow-definition-selected-version').textContent).toContain('v2');
+    });
+  });
+
   it('delegates authentication failures back to the shell', async () => {
     const onAuthenticationFailure = vi.fn();
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response('unauthorized', { status: 401 })));
@@ -117,30 +179,36 @@ function jsonResponse(payload: unknown, status: number): Response {
   });
 }
 
-function workflowPayload() {
+function workflowPayload(overrides: Partial<{ readonly latest_version: string }> = {}) {
   return {
     id: 'workflow-1',
     name: 'BrowserPane Tour',
     description: 'Example tour',
     labels: { bpane_admin_template: 'browserpane-tour' },
-    latest_version: 'v1',
+    latest_version: overrides.latest_version ?? 'v1',
     created_at: '2026-06-21T09:00:00.000Z',
     updated_at: '2026-06-21T10:00:00.000Z',
   };
 }
 
-function versionPayload() {
+function versionPayload(
+  overrides: Partial<{
+    readonly id: string;
+    readonly version: string;
+    readonly resolved_commit: string;
+  }> = {},
+) {
   return {
-    id: 'version-1',
+    id: overrides.id ?? 'version-1',
     workflow_definition_id: 'workflow-1',
-    version: 'v1',
+    version: overrides.version ?? 'v1',
     executor: 'playwright',
     entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
     source: {
       kind: 'git',
       repository_url: '/workspace',
       ref: 'HEAD',
-      resolved_commit: 'abc123',
+      resolved_commit: overrides.resolved_commit ?? 'abc123',
       root_path: 'dev',
     },
     input_schema: { type: 'object' },
@@ -155,20 +223,22 @@ function versionPayload() {
 
 function sourcePreviewPayload(
   overrides: Partial<{
+    readonly workflow_version: string;
     readonly path: string;
     readonly content: string;
+    readonly resolved_commit: string;
   }> = {},
 ) {
   return {
     workflow_definition_id: 'workflow-1',
-    workflow_version: 'v1',
+    workflow_version: overrides.workflow_version ?? 'v1',
     entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
     path: overrides.path ?? 'dev/workflows/browserpane-tour/run.mjs',
     source: {
       kind: 'git',
       repository_url: '/workspace',
       ref: 'HEAD',
-      resolved_commit: 'abc123',
+      resolved_commit: overrides.resolved_commit ?? 'abc123',
       root_path: 'dev',
     },
     media_type: 'text/javascript; charset=utf-8',
@@ -180,16 +250,21 @@ function sourcePreviewPayload(
   };
 }
 
-function sourceFilesPayload() {
+function sourceFilesPayload(
+  overrides: Partial<{
+    readonly workflow_version: string;
+    readonly resolved_commit: string;
+  }> = {},
+) {
   return {
     workflow_definition_id: 'workflow-1',
-    workflow_version: 'v1',
+    workflow_version: overrides.workflow_version ?? 'v1',
     entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
     source: {
       kind: 'git',
       repository_url: '/workspace',
       ref: 'HEAD',
-      resolved_commit: 'abc123',
+      resolved_commit: overrides.resolved_commit ?? 'abc123',
       root_path: 'dev',
     },
     files: [
@@ -206,6 +281,29 @@ function sourceFilesPayload() {
         media_type: 'text/typescript; charset=utf-8',
         language: 'typescript',
         entrypoint: false,
+      },
+    ],
+  };
+}
+
+function sourceValidationPayload() {
+  return {
+    workflow_definition_id: 'workflow-1',
+    entrypoint: 'dev/workflows/browserpane-tour/run.mjs',
+    source: {
+      kind: 'git',
+      repository_url: '/workspace',
+      ref: 'HEAD',
+      resolved_commit: 'def456',
+      root_path: 'dev',
+    },
+    files: [
+      {
+        path: 'dev/workflows/browserpane-tour/run.mjs',
+        byte_count: 38,
+        media_type: 'text/javascript; charset=utf-8',
+        language: 'typescript',
+        entrypoint: true,
       },
     ],
   };

@@ -1,11 +1,13 @@
 import type {
   CreateWorkflowDefinitionRequest,
   CreateWorkflowDefinitionVersionRequest,
+  ValidateWorkflowDefinitionSourceRequest,
   WorkflowDefinitionListResponse,
   WorkflowDefinitionResource,
   WorkflowDefinitionSourceFileListResponse,
   WorkflowDefinitionSourceFileResource,
   WorkflowDefinitionSourcePreviewResource,
+  WorkflowDefinitionSourceValidationResponse,
   WorkflowDefinitionVersionListResponse,
   WorkflowDefinitionVersionResource,
   WorkflowSourceResource,
@@ -105,6 +107,24 @@ export class WorkflowCatalogClient {
       },
     );
     return toWorkflowDefinitionVersionResource(await response.json());
+  }
+
+  async validateDefinitionSource(
+    workflowId: string,
+    request: ValidateWorkflowDefinitionSourceRequest,
+  ): Promise<WorkflowDefinitionSourceValidationResponse> {
+    const response = await this.#request(
+      new URL(`/api/v1/workflows/${encodeURIComponent(workflowId)}/source-validation`, this.#baseUrl),
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      },
+    );
+    return toWorkflowDefinitionSourceValidationResponse(await response.json());
   }
 
   async getDefinitionVersion(workflowId: string, version: string): Promise<WorkflowDefinitionVersionResource> {
@@ -279,6 +299,23 @@ export function toWorkflowDefinitionSourceFileListResponse(
     entrypoint: expectString(object.entrypoint, 'workflow definition source file list entrypoint'),
     source: toRequiredWorkflowSource(object.source),
     files: expectArray(object.files, 'workflow definition source file list files').map(
+      toWorkflowDefinitionSourceFileResource,
+    ),
+  };
+}
+
+export function toWorkflowDefinitionSourceValidationResponse(
+  value: unknown,
+): WorkflowDefinitionSourceValidationResponse {
+  const object = expectRecord(value, 'workflow definition source validation');
+  return {
+    workflow_definition_id: expectString(
+      object.workflow_definition_id,
+      'workflow definition source validation workflow_definition_id',
+    ),
+    entrypoint: expectString(object.entrypoint, 'workflow definition source validation entrypoint'),
+    source: toRequiredWorkflowSource(object.source),
+    files: expectArray(object.files, 'workflow definition source validation files').map(
       toWorkflowDefinitionSourceFileResource,
     ),
   };

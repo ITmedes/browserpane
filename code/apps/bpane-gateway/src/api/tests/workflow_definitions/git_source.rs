@@ -129,4 +129,62 @@ async fn workflow_definition_versions_can_pin_git_source_metadata() {
     assert_eq!(version["source"]["ref"], "main");
     assert_eq!(version["source"]["root_path"], "workflows");
     assert_eq!(version["source"]["resolved_commit"], resolved_commit);
+
+    let validation_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/source-validation"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "entrypoint": "workflows/run.ts",
+                        "source": {
+                            "kind": "git",
+                            "repository_url": temp.path().to_string_lossy(),
+                            "ref": "main",
+                            "root_path": "workflows"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(validation_response.status(), StatusCode::OK);
+    let validation = response_json(validation_response).await;
+    assert_eq!(validation["workflow_definition_id"], workflow_id);
+    assert_eq!(validation["entrypoint"], "workflows/run.ts");
+    assert_eq!(validation["source"]["resolved_commit"], resolved_commit);
+    assert_eq!(validation["files"][0]["path"], "workflows/run.ts");
+    assert_eq!(validation["files"][0]["entrypoint"], true);
+
+    let invalid_validation = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/source-validation"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "entrypoint": "README.md",
+                        "source": {
+                            "kind": "git",
+                            "repository_url": temp.path().to_string_lossy(),
+                            "ref": "main",
+                            "root_path": "workflows"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_validation.status(), StatusCode::BAD_REQUEST);
 }

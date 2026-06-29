@@ -72,6 +72,18 @@ export type WorkflowDefinitionSourceFileListResponse = {
   readonly files: readonly WorkflowDefinitionSourceFileResource[];
 };
 
+export type ValidateWorkflowDefinitionSourceRequest = {
+  readonly entrypoint: string;
+  readonly source: WorkflowSourceResource;
+};
+
+export type WorkflowDefinitionSourceValidationResponse = {
+  readonly workflow_definition_id: string;
+  readonly entrypoint: string;
+  readonly source: WorkflowSourceResource;
+  readonly files: readonly WorkflowDefinitionSourceFileResource[];
+};
+
 export type CreateWorkflowDefinitionRequest = {
   readonly name: string;
   readonly description?: string | null;

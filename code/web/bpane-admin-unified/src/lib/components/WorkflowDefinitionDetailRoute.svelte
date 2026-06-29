@@ -7,6 +7,12 @@
     WorkflowCatalogError,
   } from '$lib/workflows/workflow-client';
   import type {
+    CreateWorkflowDefinitionVersionRequest,
+    ValidateWorkflowDefinitionSourceRequest,
+    WorkflowDefinitionSourceValidationResponse,
+    WorkflowDefinitionVersionResource,
+  } from '$lib/workflows/workflow-types';
+  import type {
     WorkflowActionState,
     WorkflowDetailLoadState,
     WorkflowSourceFileListState,
@@ -142,6 +148,35 @@
     await loadSourcePreview(workflowId, version, sourcePath);
   }
 
+  async function validateWorkflowSource(
+    request: ValidateWorkflowDefinitionSourceRequest,
+  ): Promise<WorkflowDefinitionSourceValidationResponse> {
+    const workflowId = activeWorkflowId();
+    if (!workflowId) {
+      throw new Error('Workflow id is not available for source validation.');
+    }
+    return await client().validateDefinitionSource(workflowId, request);
+  }
+
+  async function createWorkflowVersion(request: CreateWorkflowDefinitionVersionRequest): Promise<void> {
+    const workflowId = activeWorkflowId();
+    if (!workflowId) {
+      throw new Error('Workflow id is not available for version creation.');
+    }
+    const workflowClient = client();
+    const created = await workflowClient.createDefinitionVersion(workflowId, request);
+    const [definition, versions] = await Promise.all([
+      workflowClient.getDefinition(workflowId),
+      workflowClient.listDefinitionVersions(workflowId),
+    ]);
+    workflowState = { status: 'ready', definition, versions: versions.versions };
+    actionState = {
+      status: 'success',
+      message: `Workflow version ${created.version} created from validated source.`,
+    };
+    await loadSourceFilesAndPreview(workflowId, created.version);
+  }
+
   async function loadSourcePreview(workflowId: string, version: string, sourcePath?: string): Promise<void> {
     const requestId = sourcePreviewRequestId + 1;
     sourcePreviewRequestId = requestId;
@@ -230,6 +265,8 @@
       onRefreshWorkflow={refreshWorkflow}
       onSelectVersion={selectWorkflowVersion}
       onSelectSourceFile={selectSourceFile}
+      onValidateSource={validateWorkflowSource}
+      onCreateVersion={createWorkflowVersion}
     />
   {/if}
 </div>

@@ -9,10 +9,11 @@ pub use observability::{WorkflowObservability, WorkflowObservabilitySnapshot};
 pub use resources::{
     WorkflowDefinitionListResponse, WorkflowDefinitionResource,
     WorkflowDefinitionSourceFileListResponse, WorkflowDefinitionSourcePreviewResource,
-    WorkflowDefinitionVersionListResponse, WorkflowDefinitionVersionResource,
-    WorkflowRunEventListResponse, WorkflowRunEventResource, WorkflowRunListResponse,
-    WorkflowRunLogListResponse, WorkflowRunLogResource, WorkflowRunProducedFileResource,
-    WorkflowRunRecordingResource, WorkflowRunResource, WorkflowRunRetentionResource,
+    WorkflowDefinitionSourceValidationResponse, WorkflowDefinitionVersionListResponse,
+    WorkflowDefinitionVersionResource, WorkflowRunEventListResponse, WorkflowRunEventResource,
+    WorkflowRunListResponse, WorkflowRunLogListResponse, WorkflowRunLogResource,
+    WorkflowRunProducedFileResource, WorkflowRunRecordingResource, WorkflowRunResource,
+    WorkflowRunRetentionResource,
 };
 pub use retention::WorkflowRetentionManager;
 pub use runtime::{

@@ -88,6 +88,7 @@ async function run() {
     await assertNoHorizontalOverflow(page, 'workflow-definition-detail-route', 'unified workflow detail route');
 
     await verifyResponsiveDetailLayout(page, options);
+    await verifySourceEditor(page, options, log, hiddenWorkflow.id);
 
     summary = {
       pageUrl: options.pageUrl,
@@ -151,6 +152,23 @@ async function verifyResponsiveDetailLayout(page, options) {
   await assertNoHorizontalOverflow(page, 'workflow-definition-detail-route', 'mobile unified workflow detail route');
   await assertNoHorizontalOverflow(page, 'workflow-definition-inspector', 'mobile unified workflow inspector');
   await page.setViewportSize({ width: 1440, height: 980 });
+}
+
+async function verifySourceEditor(page, options, log, workflowId) {
+  log(`Opening hidden workflow ${workflowId} for source editor smoke`);
+  await page.goto(adminRouteUrl(options, `workflows/${workflowId}`), { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('workflow-definition-detail-route').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await page.getByTestId('workflow-source-entrypoint').fill('dev/workflows/browserpane-tour/run.mjs');
+  await page.getByTestId('workflow-source-validate').click();
+  await waitForContains(page, options, 'workflow-source-validation-ready', 'files available');
+  await page.getByTestId('workflow-source-create-version').click();
+  await waitForContains(page, options, 'workflow-definition-action-success', 'Workflow version');
+  await waitForContains(page, options, 'workflow-definition-selected-version', 'v2');
+  await assertNoBodyHorizontalOverflow(page, 'unified workflow source editor');
+  await assertNoHorizontalOverflow(page, 'workflow-definition-detail-route', 'unified workflow source editor route');
 }
 
 async function assertNoHorizontalOverflow(page, testId, label) {

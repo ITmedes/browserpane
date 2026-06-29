@@ -1,6 +1,12 @@
 <script lang="ts">
   import { Copy, RefreshCw } from '@lucide/svelte';
   import type {
+    CreateWorkflowDefinitionVersionRequest,
+    ValidateWorkflowDefinitionSourceRequest,
+    WorkflowDefinitionSourceValidationResponse,
+    WorkflowDefinitionVersionResource,
+  } from '$lib/workflows/workflow-types';
+  import type {
     WorkflowActionState,
     WorkflowDetailLoadState,
     WorkflowSourceFileListState,
@@ -15,6 +21,7 @@
   import { projectToneClass } from '$lib/projects/project-ui';
   import AdminMessage from './AdminMessage.svelte';
   import WorkflowCodePreview from './WorkflowCodePreview.svelte';
+  import WorkflowVersionSourceEditor from './WorkflowVersionSourceEditor.svelte';
 
   type WorkflowDefinitionInspectorProps = {
     readonly state: WorkflowDetailLoadState;
@@ -24,6 +31,10 @@
     readonly onRefreshWorkflow?: () => void | Promise<void>;
     readonly onSelectVersion?: (version: string) => void | Promise<void>;
     readonly onSelectSourceFile?: (path: string) => void | Promise<void>;
+    readonly onValidateSource?: (
+      request: ValidateWorkflowDefinitionSourceRequest,
+    ) => Promise<WorkflowDefinitionSourceValidationResponse>;
+    readonly onCreateVersion?: (request: CreateWorkflowDefinitionVersionRequest) => Promise<void>;
   };
 
   let {
@@ -34,6 +45,8 @@
     onRefreshWorkflow,
     onSelectVersion,
     onSelectSourceFile,
+    onValidateSource,
+    onCreateVersion,
   }: WorkflowDefinitionInspectorProps = $props();
   let selectedVersion = $state('');
   let notifiedVersion = $state('');
@@ -45,6 +58,9 @@
         versions: loadState.versions,
         selectedVersion,
       })
+    : null);
+  const selectedVersionResource = $derived(loadState.status === 'ready'
+    ? selectedWorkflowVersionResource(loadState.versions, selectedVersion, loadState.definition.latest_version ?? null)
     : null);
 
   $effect(() => {
@@ -66,12 +82,38 @@
     }
   });
 
+  $effect(() => {
+    if (loadState.status !== 'ready' || sourcePreviewState.status === 'idle') {
+      return;
+    }
+    const previewVersion = sourcePreviewState.version;
+    if (
+      previewVersion &&
+      selectedVersion !== previewVersion &&
+      loadState.versions.some((version) => version.version === previewVersion)
+    ) {
+      selectedVersion = previewVersion;
+      notifiedVersion = previewVersion;
+    }
+  });
+
   function refreshWorkflow(): void {
     void onRefreshWorkflow?.();
   }
 
   async function copyWorkflowId(workflowId: string): Promise<void> {
     await navigator.clipboard?.writeText(workflowId);
+  }
+
+  function selectedWorkflowVersionResource(
+    versions: readonly WorkflowDefinitionVersionResource[],
+    selected: string,
+    latestVersion: string | null,
+  ): WorkflowDefinitionVersionResource | null {
+    return versions.find((version) => version.version === selected)
+      ?? versions.find((version) => version.version === latestVersion)
+      ?? versions[0]
+      ?? null;
   }
 </script>
 
@@ -245,6 +287,14 @@
           {/if}
         </div>
       </section>
+
+      <WorkflowVersionSourceEditor
+        versions={loadState.versions}
+        baseVersion={selectedVersionResource}
+        disabled={busy}
+        onValidateSource={onValidateSource}
+        onCreateVersion={onCreateVersion}
+      />
 
       <WorkflowCodePreview
         state={sourcePreviewState}

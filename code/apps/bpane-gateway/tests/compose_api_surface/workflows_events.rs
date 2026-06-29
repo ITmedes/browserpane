@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
+use reqwest::StatusCode;
 use serde_json::json;
 
 use super::support::{json_array, json_id, label_map, recording_policy, ComposeHarness};
@@ -113,6 +114,57 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     if fetched_workflow["id"] != json!(workflow_id) {
         return Err(anyhow!(
             "workflow definition lookup returned the wrong resource"
+        ));
+    }
+
+    let source_validation = harness
+        .post_json(
+            &format!("/api/v1/workflows/{workflow_id}/source-validation"),
+            json!({
+                "entrypoint": "workflows/smoke/run.mjs",
+                "source": {
+                    "kind": "git",
+                    "repository_url": source.repository_url.clone(),
+                    "ref": "refs/heads/main",
+                    "root_path": "workflows",
+                },
+            }),
+        )
+        .await?;
+    if source_validation["source"]["resolved_commit"] != json!(source.commit) {
+        return Err(anyhow!(
+            "workflow source validation did not resolve the expected commit"
+        ));
+    }
+    let source_validation_files = json_array(&source_validation, "files")?;
+    if !source_validation_files.iter().any(|file| {
+        file.get("path") == Some(&json!("workflows/smoke/run.mjs"))
+            && file.get("entrypoint") == Some(&json!(true))
+    }) {
+        return Err(anyhow!(
+            "workflow source validation did not expose the entrypoint file"
+        ));
+    }
+
+    let invalid_source_validation = harness
+        .post_json_outcome(
+            &format!("/api/v1/workflows/{workflow_id}/source-validation"),
+            json!({
+                "entrypoint": "README.md",
+                "source": {
+                    "kind": "git",
+                    "repository_url": source.repository_url.clone(),
+                    "ref": "refs/heads/main",
+                    "root_path": "workflows",
+                },
+            }),
+        )
+        .await?;
+    if invalid_source_validation.status != StatusCode::BAD_REQUEST {
+        return Err(anyhow!(
+            "invalid workflow source validation returned unexpected status {} {}",
+            invalid_source_validation.status,
+            invalid_source_validation.body
         ));
     }
 
