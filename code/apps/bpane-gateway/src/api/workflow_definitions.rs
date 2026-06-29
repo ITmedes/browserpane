@@ -16,6 +16,10 @@ pub(super) fn workflow_definition_routes() -> Router<Arc<ApiState>> {
             get(get_workflow_definition),
         )
         .route(
+            "/api/v1/workflows/{workflow_id}/source-validation",
+            post(validate_workflow_definition_source),
+        )
+        .route(
             "/api/v1/workflows/{workflow_id}/versions",
             post(create_workflow_definition_version).get(list_workflow_definition_versions),
         )
@@ -185,6 +189,54 @@ async fn create_workflow_definition_version(
         .await
         .map_err(map_session_store_error)?;
     Ok((StatusCode::CREATED, Json(version.to_resource())))
+}
+
+async fn validate_workflow_definition_source(
+    headers: HeaderMap,
+    Path(workflow_id): Path<Uuid>,
+    State(state): State<Arc<ApiState>>,
+    Json(request): Json<ValidateWorkflowDefinitionSourceRequest>,
+) -> Result<Json<WorkflowDefinitionSourceValidationResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let workflow = state
+        .session_store
+        .get_workflow_definition_for_owner(&principal, workflow_id)
+        .await
+        .map_err(map_session_store_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: format!("workflow definition {workflow_id} not found"),
+                }),
+            )
+        })?;
+    let resolved_source = state
+        .workflow_source_resolver
+        .resolve(Some(request.source))
+        .await
+        .map_err(map_workflow_source_error)?
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "workflow source is required".to_string(),
+                }),
+            )
+        })?;
+    validate_workflow_source_entrypoint(Some(&resolved_source), &request.entrypoint)
+        .map_err(map_workflow_source_error)?;
+    let listing = state
+        .workflow_source_resolver
+        .materialize_source_files(&resolved_source, &request.entrypoint)
+        .await
+        .map_err(map_workflow_source_error)?;
+    Ok(Json(listing.to_definition_source_validation_response(
+        workflow.id,
+        &request.entrypoint,
+    )))
 }
 
 async fn get_workflow_definition_version(

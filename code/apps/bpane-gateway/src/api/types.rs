@@ -261,6 +261,12 @@ pub(super) struct CreateWorkflowDefinitionVersionRequest {
     pub(super) allowed_file_workspace_ids: Vec<String>,
 }
 
+#[derive(Deserialize)]
+pub(super) struct ValidateWorkflowDefinitionSourceRequest {
+    pub(super) entrypoint: String,
+    pub(super) source: WorkflowSource,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub(super) struct CreateWorkflowRunRequest {
     pub(super) workflow_id: Uuid,

@@ -156,6 +156,14 @@ pub struct WorkflowDefinitionSourceFileListResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowDefinitionSourceValidationResponse {
+    pub workflow_definition_id: Uuid,
+    pub entrypoint: String,
+    pub source: WorkflowSource,
+    pub files: Vec<WorkflowDefinitionSourceFileResource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct WorkflowRunResource {
     pub id: Uuid,
     pub workflow_definition_id: Uuid,
@@ -296,6 +304,29 @@ impl WorkflowSourceFileListing {
             workflow_definition_id: version.workflow_definition_id,
             workflow_version: version.version.clone(),
             entrypoint: version.entrypoint.clone(),
+            source: self.source.clone(),
+            files: self
+                .files
+                .iter()
+                .map(|file| WorkflowDefinitionSourceFileResource {
+                    path: file.path.clone(),
+                    byte_count: file.byte_count,
+                    media_type: file.media_type.clone(),
+                    language: file.language.clone(),
+                    entrypoint: file.entrypoint,
+                })
+                .collect(),
+        }
+    }
+
+    pub fn to_definition_source_validation_response(
+        &self,
+        workflow_definition_id: Uuid,
+        entrypoint: &str,
+    ) -> WorkflowDefinitionSourceValidationResponse {
+        WorkflowDefinitionSourceValidationResponse {
+            workflow_definition_id,
+            entrypoint: entrypoint.to_string(),
             source: self.source.clone(),
             files: self
                 .files
