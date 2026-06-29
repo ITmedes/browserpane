@@ -161,6 +161,9 @@ async function adminAuthenticatedVisible(page) {
     || await page.getByTestId('projects-new-link').isVisible().catch(() => false)
     || await page.getByTestId('project-create-route').isVisible().catch(() => false)
     || await page.getByTestId('project-detail-route').isVisible().catch(() => false)
+    || await page.getByTestId('browser-contexts-new-link').isVisible().catch(() => false)
+    || await page.getByTestId('browser-context-create-route').isVisible().catch(() => false)
+    || await page.getByTestId('browser-context-detail-route').isVisible().catch(() => false)
     || await page.getByTestId('egress-profiles-new-link').isVisible().catch(() => false)
     || await page.getByTestId('egress-profile-create-route').isVisible().catch(() => false)
     || await page.getByTestId('egress-profile-detail-route').isVisible().catch(() => false);

@@ -34,6 +34,7 @@ coexist:
 - `smoke:admin-workflow-run-detail`
 - `smoke:admin-browserpane-tour`
 - `smoke:admin-egress-profiles`
+- `smoke:admin-unified-browser-contexts`
 - `smoke:admin-unified-egress-profiles`
 - `smoke:admin-browser-contexts`
 - `smoke:admin-file-workspaces`
@@ -92,6 +93,9 @@ Add `/admin-new/` smokes progressively:
 11. observability/logs smoke
 12. create session configurator smoke
 13. resource catalog smokes
+    - `smoke:admin-unified-browser-contexts` covers the unified browser-context
+      catalog, create route, validation errors, detail refresh/delete flow,
+      project binding, and mobile overflow checks.
 14. API companion smoke
 
 ## Error Cases
