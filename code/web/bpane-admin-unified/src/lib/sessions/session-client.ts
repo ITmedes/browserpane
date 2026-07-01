@@ -166,6 +166,24 @@ export class SessionCatalogClient {
     return toSessionResource(await response.json());
   }
 
+  async updateSessionRecordingPolicy(
+    sessionId: string,
+    recording: SessionRecordingPolicy,
+  ): Promise<SessionResource> {
+    const response = await this.#request(
+      new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/recording-policy`, this.#baseUrl),
+      {
+        method: 'PUT',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(recording),
+      },
+    );
+    return toSessionResource(await response.json());
+  }
+
   async #sessionMutation(sessionId: string, action: string): Promise<SessionResource> {
     const response = await this.#request(
       new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/${action}`, this.#baseUrl),

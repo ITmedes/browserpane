@@ -111,6 +111,24 @@
     });
   }
 
+  async function enableSessionRecording(): Promise<void> {
+    await mutateSession('Enabling recording...', 'Session recording policy enabled.', (catalog, sessionId) =>
+      catalog.updateSessionRecordingPolicy(sessionId, {
+        mode: 'always',
+        format: 'webm',
+      }),
+    );
+  }
+
+  async function disableSessionRecording(): Promise<void> {
+    await mutateSession('Disabling recording...', 'Session recording policy disabled.', (catalog, sessionId) =>
+      catalog.updateSessionRecordingPolicy(sessionId, {
+        mode: 'disabled',
+        format: 'webm',
+      }),
+    );
+  }
+
   async function releaseSessionRuntime(): Promise<void> {
     await mutateSession('Releasing runtime...', 'Session runtime released.', (catalog, sessionId) =>
       catalog.releaseSessionRuntime(sessionId),
@@ -368,6 +386,8 @@
       onConnectPreview={openPreviewWindow}
       onCancelQueue={cancelQueuedSession}
       onDisconnectAll={disconnectAllConnections}
+      onEnableRecording={enableSessionRecording}
+      onDisableRecording={disableSessionRecording}
       onRelease={releaseSessionRuntime}
       onStop={stopSession}
       onKill={killSession}

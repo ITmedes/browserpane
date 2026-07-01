@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ExternalLink, RefreshCw, Square, SquareX, Unplug, XCircle } from '@lucide/svelte';
+  import { ExternalLink, RefreshCw, Square, SquareX, Unplug, Video, VideoOff, XCircle } from '@lucide/svelte';
   import {
     buildSessionDetailModel,
     type SessionDetailLoadState,
@@ -18,6 +18,8 @@
     readonly onConnectPreview?: (sessionId: string) => void | Promise<void>;
     readonly onCancelQueue?: () => void | Promise<void>;
     readonly onDisconnectAll?: () => void | Promise<void>;
+    readonly onEnableRecording?: () => void | Promise<void>;
+    readonly onDisableRecording?: () => void | Promise<void>;
     readonly onRelease?: () => void | Promise<void>;
     readonly onStop?: () => void | Promise<void>;
     readonly onKill?: () => void | Promise<void>;
@@ -38,6 +40,8 @@
     onConnectPreview,
     onCancelQueue,
     onDisconnectAll,
+    onEnableRecording,
+    onDisableRecording,
     onRelease,
     onStop,
     onKill,
@@ -159,6 +163,26 @@
         >
           <Unplug size={15} strokeWidth={1.8} />
           <span>Disconnect all</span>
+        </button>
+        <button
+          class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
+          type="button"
+          onclick={() => void onEnableRecording?.()}
+          disabled={busy || !model.actions.canEnableRecording}
+          data-testid="session-enable-recording"
+        >
+          <Video size={15} strokeWidth={1.8} />
+          <span>Enable recording</span>
+        </button>
+        <button
+          class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
+          type="button"
+          onclick={() => void onDisableRecording?.()}
+          disabled={busy || !model.actions.canDisableRecording}
+          data-testid="session-disable-recording"
+        >
+          <VideoOff size={15} strokeWidth={1.8} />
+          <span>Disable recording</span>
         </button>
         <button
           class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"

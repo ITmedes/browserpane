@@ -730,6 +730,45 @@ impl SessionRepository<'_> {
         row_to_stored_session(&row).map(Some)
     }
 
+    pub(in crate::session_control) async fn update_session_recording_policy_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        recording: SessionRecordingPolicy,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let recording_value = json_recording_policy(&recording)?;
+        let update_query = format!(
+            r#"
+            UPDATE control_sessions
+            SET
+                recording = $4::jsonb,
+                updated_at = NOW()
+            WHERE id = $1
+              AND owner_subject = $2
+              AND owner_issuer = $3
+            RETURNING
+                {SESSION_COLUMNS}
+            "#
+        );
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                &update_query,
+                &[&id, &principal.subject, &principal.issuer, &recording_value],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to update session recording policy: {error}"
+                ))
+            })?;
+
+        row.as_ref().map(row_to_stored_session).transpose()
+    }
+
     pub(in crate::session_control) async fn stop_session_if_idle(
         &self,
         id: Uuid,

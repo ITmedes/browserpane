@@ -15,6 +15,8 @@ describe('buildSessionDetailModel', () => {
     expect(model.connections).toEqual([{ id: 7, role: 'browser-owner' }]);
     expect(model.actions).toMatchObject({
       canDisconnectAll: true,
+      canEnableRecording: true,
+      canDisableRecording: false,
       canRelease: false,
       canStop: false,
       canKill: true,
@@ -66,5 +68,9 @@ describe('buildSessionDetailModel', () => {
       testId: 'session-detail-recording',
       tone: 'success',
     }));
+    expect(model.actions).toMatchObject({
+      canEnableRecording: false,
+      canDisableRecording: true,
+    });
   });
 });

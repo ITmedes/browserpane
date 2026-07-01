@@ -14,6 +14,7 @@ describe('SessionInspector', () => {
   it('renders detail sections and dispatches lifecycle actions', () => {
     const onConnectPreview = vi.fn();
     const onDisconnectAll = vi.fn();
+    const onEnableRecording = vi.fn();
     const target = renderComponent(SessionInspector, {
       state: {
         status: 'ready',
@@ -22,6 +23,7 @@ describe('SessionInspector', () => {
       },
       onConnectPreview,
       onDisconnectAll,
+      onEnableRecording,
     });
 
     expect(byTestId(target, 'session-detail-title').textContent).toContain('session-1');
@@ -34,6 +36,10 @@ describe('SessionInspector', () => {
 
     byTestId(target, 'session-disconnect-all').click();
     expect(onDisconnectAll).toHaveBeenCalledOnce();
+
+    byTestId(target, 'session-enable-recording').click();
+    expect(onEnableRecording).toHaveBeenCalledOnce();
+    expect((byTestId(target, 'session-disable-recording') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('renders stopped sessions with a start-and-connect preview action', () => {
@@ -54,5 +60,23 @@ describe('SessionInspector', () => {
 
     connect.click();
     expect(onConnectPreview).toHaveBeenCalledWith('session-1');
+  });
+
+  it('dispatches disable recording for sessions with active recording policy', () => {
+    const onDisableRecording = vi.fn();
+    const target = renderComponent(SessionInspector, {
+      state: {
+        status: 'ready',
+        session: sessionResource({ recordingMode: 'always', totalClients: 0 }),
+        liveStatus: sessionStatus({ totalClients: 0 }),
+      },
+      onDisableRecording,
+    });
+
+    expect((byTestId(target, 'session-enable-recording') as HTMLButtonElement).disabled).toBe(true);
+    const disable = byTestId(target, 'session-disable-recording') as HTMLButtonElement;
+    expect(disable.disabled).toBe(false);
+    disable.click();
+    expect(onDisableRecording).toHaveBeenCalledOnce();
   });
 });
