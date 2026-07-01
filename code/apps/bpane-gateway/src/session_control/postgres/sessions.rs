@@ -169,6 +169,17 @@ impl PostgresSessionStore {
             .await
     }
 
+    pub(in crate::session_control) async fn update_session_recording_policy_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        recording: SessionRecordingPolicy,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .update_session_recording_policy_for_owner(principal, id, recording)
+            .await
+    }
+
     pub(in crate::session_control) async fn set_automation_delegate_for_owner(
         &self,
         principal: &AuthenticatedPrincipal,

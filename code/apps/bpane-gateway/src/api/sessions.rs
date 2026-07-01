@@ -1,4 +1,4 @@
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 
 use super::*;
 
@@ -10,6 +10,7 @@ mod egress_usage;
 mod kill;
 mod mcp;
 mod ownership;
+mod recording_policy;
 mod release;
 mod status;
 mod stop;
@@ -39,6 +40,10 @@ pub(super) fn session_operation_routes() -> Router<Arc<ApiState>> {
         .route(
             "/api/v1/sessions/{session_id}/automation-owner",
             post(ownership::set_automation_owner).delete(ownership::clear_automation_owner),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/recording-policy",
+            put(recording_policy::update_session_recording_policy),
         )
         .route(
             "/api/v1/sessions/{session_id}/status",

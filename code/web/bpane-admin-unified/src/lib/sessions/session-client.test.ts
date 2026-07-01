@@ -23,6 +23,14 @@ describe('SessionCatalogClient', () => {
       if (url.endsWith('/api/v1/sessions/session-1/access-tokens') && init?.method === 'POST') {
         return jsonResponse(sessionAccessTokenPayload(), 200);
       }
+      if (url.endsWith('/api/v1/sessions/session-1/recording-policy') && init?.method === 'PUT') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          mode: 'manual',
+          format: 'webm',
+          retention_sec: 3600,
+        });
+        return jsonResponse(sessionPayload({ recordingMode: 'manual', recordingRetentionSec: 3600 }), 200);
+      }
       if (url.endsWith('/api/v1/sessions/session-1')) {
         return jsonResponse(sessionPayload(), 200);
       }
@@ -39,6 +47,11 @@ describe('SessionCatalogClient', () => {
     const loaded = await client.getSession('session-1');
     const status = await client.getSessionStatus('session-1');
     const access = await client.issueSessionAccessToken('session-1');
+    const recording = await client.updateSessionRecordingPolicy('session-1', {
+      mode: 'manual',
+      format: 'webm',
+      retention_sec: 3600,
+    });
 
     expect(listed.sessions[0]?.id).toBe('session-1');
     expect(listed.sessions[0]?.recording).toMatchObject({
@@ -52,6 +65,10 @@ describe('SessionCatalogClient', () => {
       session_id: 'session-1',
       token_type: 'session_connect_ticket',
       token: 'connect-ticket',
+    });
+    expect(recording.recording).toMatchObject({
+      mode: 'manual',
+      retention_sec: 3600,
     });
     const createBody = JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body));
     expect(createBody.labels).toEqual({ bpane_admin_surface: 'unified' });

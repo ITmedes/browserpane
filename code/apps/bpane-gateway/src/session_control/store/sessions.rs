@@ -139,6 +139,27 @@ impl SessionStore {
         }
     }
 
+    pub async fn update_session_recording_policy_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        recording: SessionRecordingPolicy,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        validate_session_recording_policy(&recording)?;
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .update_session_recording_policy_for_owner(principal, id, recording)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .update_session_recording_policy_for_owner(principal, id, recording)
+                    .await
+            }
+        }
+    }
+
     pub async fn get_runtime_candidate_session(
         &self,
     ) -> Result<Option<StoredSession>, SessionStoreError> {

@@ -296,6 +296,26 @@ impl InMemorySessionStore {
         Ok(Some(session.clone()))
     }
 
+    pub(in crate::session_control) async fn update_session_recording_policy_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        recording: SessionRecordingPolicy,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.iter_mut().find(|session| {
+            session.id == id
+                && session.owner.subject == principal.subject
+                && session.owner.issuer == principal.issuer
+        }) else {
+            return Ok(None);
+        };
+
+        session.recording = recording;
+        session.updated_at = Utc::now();
+        Ok(Some(session.clone()))
+    }
+
     pub(in crate::session_control) async fn create_session(
         &self,
         principal: &AuthenticatedPrincipal,

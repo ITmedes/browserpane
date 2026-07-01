@@ -1,6 +1,154 @@
 use super::*;
 
 #[tokio::test]
+async fn updates_session_recording_policy_for_existing_session() {
+    let (app, token) = test_router();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let created = response_json(create_session_response).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+    assert_eq!(created["recording"]["mode"], "disabled");
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/sessions/{session_id}/recording-policy"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "mode": "manual",
+                        "format": "webm",
+                        "retention_sec": 3600
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let updated = response_json(update_response).await;
+    assert_eq!(updated["recording"]["mode"], "manual");
+    assert_eq!(updated["recording"]["format"], "webm");
+    assert_eq!(updated["recording"]["retention_sec"], 3600);
+
+    let create_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_recording_response.status(), StatusCode::CREATED);
+
+    let disable_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/sessions/{session_id}/recording-policy"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "mode": "disabled",
+                        "format": "webm"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(disable_response.status(), StatusCode::OK);
+    let disabled = response_json(disable_response).await;
+    assert_eq!(disabled["recording"]["mode"], "disabled");
+}
+
+#[tokio::test]
+async fn rejects_always_recording_policy_when_worker_is_not_configured() {
+    let (app, token) = test_router();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let created = response_json(create_session_response).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/sessions/{session_id}/recording-policy"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "mode": "always",
+                        "format": "webm"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(update_response.status(), StatusCode::CONFLICT);
+    let error = response_json(update_response).await;
+    assert!(error["error"]
+        .as_str()
+        .unwrap()
+        .contains("recording mode=always requires a configured recording worker"));
+
+    let load_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(load_response.status(), StatusCode::OK);
+    let loaded = response_json(load_response).await;
+    assert_eq!(loaded["recording"]["mode"], "disabled");
+}
+
+#[tokio::test]
 async fn creates_lists_gets_and_stops_session_recording_metadata() {
     let (app, token) = test_router();
 

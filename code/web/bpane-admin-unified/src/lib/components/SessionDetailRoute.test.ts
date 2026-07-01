@@ -88,6 +88,50 @@ describe('SessionDetailRoute', () => {
     expect(focus).toHaveBeenCalledOnce();
   });
 
+  it('updates recording policy for the selected session', async () => {
+    let recordingMode = 'disabled';
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/sessions/session-1/status')) {
+        return jsonResponse(sessionStatusPayload({ totalClients: 0 }), 200);
+      }
+      if (url.endsWith('/api/v1/sessions/session-1/recording-policy') && init?.method === 'PUT') {
+        recordingMode = JSON.parse(String(init.body)).mode;
+        return jsonResponse(sessionPayload({ totalClients: 0, recordingMode }), 200);
+      }
+      if (url.endsWith('/api/v1/sessions/session-1')) {
+        return jsonResponse(sessionPayload({ totalClients: 0, recordingMode }), 200);
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    const target = renderComponent(SessionDetailRoute, {
+      authContext: authContext({ accessTokenProvider: async () => 'shell-token' }),
+    });
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'session-detail-recording').textContent).toContain('disabled');
+    });
+
+    byTestId(target, 'session-enable-recording').click();
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'session-detail-recording').textContent).toContain('always / webm');
+    });
+    expect(byTestId(target, 'session-detail-action-success').textContent).toContain('enabled');
+
+    byTestId(target, 'session-disable-recording').click();
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'session-detail-recording').textContent).toContain('disabled');
+    });
+
+    const recordingPolicyCalls = fetchImpl.mock.calls
+      .filter((call) => String(call[0]).endsWith('/recording-policy'));
+    expect(recordingPolicyCalls.map((call) => [call[1]?.method, JSON.parse(String(call[1]?.body)).mode])).toEqual([
+      ['PUT', 'always'],
+      ['PUT', 'disabled'],
+    ]);
+  });
+
   it('authorizes MCP, manages bridge default state, copies the endpoint, and revokes authorization', async () => {
     let delegated = false;
     let defaultSessionId: string | null = null;

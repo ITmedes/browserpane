@@ -53,13 +53,7 @@ pub(in crate::session_control) fn validate_create_request(
     if let Some(network_identity) = &request.network_identity {
         validate_network_identity(network_identity)?;
     }
-    if let Some(retention_sec) = request.recording.retention_sec {
-        if retention_sec == 0 {
-            return Err(SessionStoreError::InvalidRequest(
-                "recording.retention_sec must be greater than zero when provided".to_string(),
-            ));
-        }
-    }
+    validate_session_recording_policy(&request.recording)?;
     let mut requested_extension_ids = HashSet::new();
     for extension_id in &request.extension_ids {
         if !requested_extension_ids.insert(*extension_id) {
@@ -82,6 +76,19 @@ pub(in crate::session_control) fn validate_create_request(
         if extension.install_path.trim().is_empty() {
             return Err(SessionStoreError::InvalidRequest(
                 "session extensions must not contain an empty install_path".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(in crate::session_control) fn validate_session_recording_policy(
+    recording: &SessionRecordingPolicy,
+) -> Result<(), SessionStoreError> {
+    if let Some(retention_sec) = recording.retention_sec {
+        if retention_sec == 0 {
+            return Err(SessionStoreError::InvalidRequest(
+                "recording.retention_sec must be greater than zero when provided".to_string(),
             ));
         }
     }
