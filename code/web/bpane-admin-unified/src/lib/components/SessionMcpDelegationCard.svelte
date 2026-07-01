@@ -65,16 +65,7 @@
   </div>
 
   <div class="mt-4 flex w-full flex-col gap-3">
-    <div class="w-full min-w-0 rounded-md border border-admin-border bg-admin-panel p-3" data-testid="mcp-endpoint-row">
-      <p class="m-0 text-xs font-semibold uppercase text-admin-muted">Session endpoint</p>
-      {#if viewModel.endpointUrl}
-        <code class="mt-1 block min-w-0 break-all text-sm font-medium text-admin-ink" data-testid="mcp-endpoint-url">{viewModel.endpointUrl}</code>
-      {:else}
-        <p class="m-0 mt-1 text-sm text-admin-muted" data-testid="mcp-endpoint-url">Unavailable</p>
-      {/if}
-    </div>
-
-    <div class="flex w-full flex-wrap gap-2">
+    <div class="flex w-full flex-wrap gap-2" data-testid="mcp-actions-row">
       <button
         class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         type="button"
@@ -125,6 +116,15 @@
         <Copy size={15} strokeWidth={1.8} />
         <span>Copy endpoint</span>
       </button>
+    </div>
+
+    <div class="w-full min-w-0 rounded-md border border-admin-border bg-admin-panel p-3" data-testid="mcp-endpoint-row">
+      <p class="m-0 text-xs font-semibold uppercase text-admin-muted">Session endpoint</p>
+      {#if viewModel.endpointUrl}
+        <code class="mt-1 block min-w-0 break-all text-sm font-medium text-admin-ink" data-testid="mcp-endpoint-url">{viewModel.endpointUrl}</code>
+      {:else}
+        <p class="m-0 mt-1 text-sm text-admin-muted" data-testid="mcp-endpoint-url">Unavailable</p>
+      {/if}
     </div>
   </div>
 
