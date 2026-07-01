@@ -1,4 +1,5 @@
 export type BrowserSessionRenderBackend = 'auto' | 'canvas2d' | 'webgl2';
+export type BrowserSessionResizeSource = 'canvas' | 'container';
 
 export type BrowserSessionConnectPreferences = {
   readonly hiDpi: boolean;
@@ -8,6 +9,7 @@ export type BrowserSessionConnectPreferences = {
   readonly clipboard: boolean;
   readonly fileTransfer: boolean;
   readonly renderBackend: BrowserSessionRenderBackend;
+  readonly resizeSource: BrowserSessionResizeSource;
   readonly scrollCopy: boolean;
 };
 
@@ -19,6 +21,7 @@ export const DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES = Object.freeze({
   clipboard: true,
   fileTransfer: true,
   renderBackend: 'auto',
+  resizeSource: 'container',
   scrollCopy: true,
 } satisfies BrowserSessionConnectPreferences);
 
@@ -36,6 +39,7 @@ export type BrowserSessionConnectOptions = {
   readonly fileTransfer?: boolean;
   readonly certHashUrl?: string;
   readonly renderBackend?: BrowserSessionRenderBackend;
+  readonly resizeSource?: BrowserSessionResizeSource;
   readonly scrollCopy?: boolean;
   readonly onConnect?: () => void;
   readonly onDisconnect?: (reason: string) => void;

@@ -43,6 +43,7 @@ describe('SessionPreviewConnector', () => {
       clientRole: 'interactive',
       certHashUrl: '/cert-hash',
       fileTransfer: true,
+      resizeSource: 'container',
     });
   });
 

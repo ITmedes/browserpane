@@ -129,6 +129,70 @@ describe('SessionResizeRuntime', () => {
     expect(sendResizeRequest).toHaveBeenCalledWith(1800, 1400);
   });
 
+  it('uses the resize observer dimensions instead of the previous canvas aspect ratio', async () => {
+    vi.useFakeTimers();
+    const {
+      runtime,
+      canvas,
+      cursorEl,
+      resizeRenderer,
+      markDisplayDirty,
+      sendResizeRequest,
+    } = createRuntime({
+      resizeSource: 'container',
+    });
+
+    canvas.getBoundingClientRect = () => ({
+      width: 1280,
+      height: 720,
+      top: 0,
+      left: 0,
+      right: 1280,
+      bottom: 720,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+
+    runtime.handleResize(960, 500);
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(canvas.width).toBe(960);
+    expect(canvas.height).toBe(500);
+    expect(cursorEl.width).toBe(960);
+    expect(cursorEl.height).toBe(500);
+    expect(resizeRenderer).toHaveBeenCalledWith(960, 500);
+    expect(markDisplayDirty).toHaveBeenCalledOnce();
+    expect(sendResizeRequest).toHaveBeenCalledWith(960, 500);
+  });
+
+  it('uses the container dimensions for unlocked sessions even when the canvas has an old ratio', () => {
+    const {
+      runtime,
+      canvas,
+      setRect,
+    } = createRuntime({
+      resizeSource: 'container',
+    });
+    setRect(900, 520);
+    canvas.getBoundingClientRect = () => ({
+      width: 1280,
+      height: 720,
+      top: 0,
+      left: 0,
+      right: 1280,
+      bottom: 720,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+
+    expect(runtime.getContainerResizeDims()).toEqual({
+      width: 900,
+      height: 520,
+    });
+  });
+
   it('locks remote resolution and scales to fit when the local container is smaller', async () => {
     vi.useFakeTimers();
     const {

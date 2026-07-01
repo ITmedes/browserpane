@@ -13,6 +13,7 @@ import { SessionSurfaceRuntime } from './session-surface-runtime.js';
 import { SessionTransportRuntime } from './session-transport-runtime.js';
 import { SessionVideoDecoderRuntime } from './session-video-decoder-runtime.js';
 import { TileCompositor } from './tile-compositor.js';
+import type { SessionResizeSourcePreference } from './bpane-types.js';
 
 type SendFrame = (channelId: number, payload: Uint8Array) => void;
 type SendCameraFrame = (payload: Uint8Array) => 'sent' | 'queued' | 'replaced';
@@ -23,6 +24,7 @@ interface SessionRuntimeFactoryOptions {
   hiDpi: boolean;
   pingIntervalMs: number;
   renderBackend?: 'auto' | 'canvas2d' | 'webgl2';
+  resizeSource?: SessionResizeSourcePreference;
   onCapabilitiesChange?: (capabilities: {
     audio: boolean;
     microphone: boolean;
@@ -204,6 +206,7 @@ export class SessionRuntimeFactory {
       tileCompositor: params.tileCompositor,
       hiDpi: params.options.hiDpi,
       renderBackend: params.options.renderBackend,
+      resizeSource: params.options.resizeSource,
       onTileCacheMiss: ({ frameSeq, col, row, hash }) => {
         params.context.sendTileCacheMiss(frameSeq, col, row, hash);
       },
