@@ -53,7 +53,8 @@ describe('recording overview view model', () => {
       stateTone: 'success',
       artifactLabel: 'artifact ready',
       canDownload: true,
-      canExportPlayback: true,
+      downloadKind: 'recording_segment',
+      downloadDescription: 'Download recording WebM',
       downloadFileName: 'bpane-recording-session-read-recording-re.webm',
     });
     expect(model.rows[1]).toMatchObject({
@@ -78,6 +79,28 @@ describe('recording overview view model', () => {
     expect(row.stateTone).toBe('warning');
     expect(row.artifactLabel).toBe('artifact unavailable');
     expect(row.canDownload).toBe(false);
+    expect(row.downloadKind).toBe('unavailable');
+  });
+
+  it('uses playback zip downloads when a session has multiple downloadable segments', () => {
+    const entries = [
+      {
+        session: sessionResource({ id: 'session-multi-123456' }),
+        recording: recording({ id: 'recording-one-123456', sessionId: 'session-multi-123456' }),
+      },
+      {
+        session: sessionResource({ id: 'session-multi-123456' }),
+        recording: recording({ id: 'recording-two-123456', sessionId: 'session-multi-123456' }),
+      },
+    ];
+
+    const model = buildRecordingOverviewModel(entries);
+
+    expect(model.rows[0]).toMatchObject({
+      downloadKind: 'playback_export',
+      downloadDescription: 'Download session playback ZIP',
+      downloadFileName: 'bpane-recording-playback-session-mult.zip',
+    });
   });
 });
 

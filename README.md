@@ -952,7 +952,9 @@ Local manual flow:
 1. Open `http://localhost:8080/admin/`
 2. Start or reconnect a session
 3. Use the recording controls in the admin console
-4. Download individual segments or the playback export bundle from the recording library
+4. Download from the recording library; a single retained segment downloads as
+   WebM, while sessions with multiple retained segments download as a playback
+   ZIP bundle
 
 ### Workflow Platform
 
