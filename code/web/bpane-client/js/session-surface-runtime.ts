@@ -185,6 +185,10 @@ export class SessionSurfaceRuntime {
     return this.resizeRuntime.getContainerResizeDims();
   }
 
+  isResolutionLocked(): boolean {
+    return this.resizeRuntime.isResolutionLocked();
+  }
+
   applyClientAccessState(flags: number, width: number, height: number): void {
     this.resizeRuntime.applyClientAccessState(flags, width, height);
   }

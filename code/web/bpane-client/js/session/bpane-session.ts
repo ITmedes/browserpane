@@ -25,6 +25,7 @@ import { TileCompositor, CH_TILES } from '../tile-compositor.js';
 import type { WebGLRendererDiagnostics } from '../webgl-compositor.js';
 
 const PING_INTERVAL_MS = 5000;
+const INITIAL_RESIZE_RETRY_DELAYS_MS = [300, 900, 1800] as const;
 const TILE_CACHE_MISS = 0x09;
 
 export class BpaneSession {
@@ -63,6 +64,7 @@ export class BpaneSession {
   private videoDecoderRuntime: SessionVideoDecoderRuntime;
   private recordingRuntime: SessionRecordingRuntime;
   private stats = new SessionStats();
+  private resizeRetryTimers: number[] = [];
   private destroyed = false;
 
   private constructor(options: BpaneOptions) {
@@ -292,6 +294,7 @@ export class BpaneSession {
     }
     this.destroyed = true;
     this.connected = false;
+    this.clearInitialResizeRetries();
     this.recordingRuntime.destroy();
     if (this.input) {
       this.input.destroy();
@@ -348,11 +351,40 @@ export class BpaneSession {
   private async handleStream(stream: WebTransportBidirectionalStream): Promise<void> {
     if (!this.sendRuntime.hasWriter()) {
       this.sendRuntime.attachWriter(stream.writable.getWriter(), () => {
-        const dims = this.surfaceRuntime.getContainerResizeDims();
-        this.sendResizeRequest(dims.width, dims.height);
+        this.sendCurrentResizeRequest();
+        this.scheduleInitialResizeRetries();
       });
     }
     await this.streamReaderRuntime.readStream(stream);
+  }
+
+  private scheduleInitialResizeRetries(): void {
+    this.clearInitialResizeRetries();
+    for (const delayMs of INITIAL_RESIZE_RETRY_DELAYS_MS) {
+      const timer = window.setTimeout(() => {
+        this.resizeRetryTimers = this.resizeRetryTimers.filter((candidate) => candidate !== timer);
+        this.sendCurrentResizeRequest();
+      }, delayMs);
+      this.resizeRetryTimers.push(timer);
+    }
+  }
+
+  private clearInitialResizeRetries(): void {
+    for (const timer of this.resizeRetryTimers) {
+      window.clearTimeout(timer);
+    }
+    this.resizeRetryTimers = [];
+  }
+
+  private sendCurrentResizeRequest(): void {
+    if (this.destroyed || this.surfaceRuntime.isResolutionLocked()) {
+      return;
+    }
+    const dims = this.surfaceRuntime.getContainerResizeDims();
+    if (dims.width <= 0 || dims.height <= 0) {
+      return;
+    }
+    this.sendResizeRequest(dims.width, dims.height);
   }
 
   private handleVideoFrame(payload: Uint8Array): void {
