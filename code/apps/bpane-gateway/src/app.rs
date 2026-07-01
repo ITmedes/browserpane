@@ -57,6 +57,8 @@ impl GatewayApp {
         let recording_services = RecordingServices::build(
             &config,
             auth_services.auth_validator.clone(),
+            auth_services.connect_ticket_manager.clone(),
+            auth_services.automation_access_token_manager.clone(),
             runtime_services.session_store.clone(),
         )
         .await?;

@@ -40,6 +40,7 @@ type BpaneRecorderApi = {
     connectTicket: string;
   }) => Promise<void>;
   start: () => Promise<void>;
+  getStats: () => { frameCount: number; renderedTileUpdates?: number };
   stop: () => Promise<{ size: number; type: string }>;
   downloadLast: () => void;
   disconnect: () => Promise<void>;
