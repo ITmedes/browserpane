@@ -111,4 +111,26 @@ describe('SessionSurfaceRuntime', () => {
     expect(tileCompositor.setCacheMissHandler).toHaveBeenLastCalledWith(null);
     expect(tileCompositor.setWebGLRenderer).toHaveBeenCalledWith(null);
   });
+
+  it('preserves a positioned host container while mounting the cursor overlay', () => {
+    const container = createContainer();
+    container.style.position = 'absolute';
+    const tileCompositor = createTileCompositor();
+
+    const runtime = new SessionSurfaceRuntime({
+      container,
+      tileCompositor,
+      hiDpi: false,
+      renderBackend: 'canvas2d',
+      onTileCacheMiss: vi.fn(),
+      sendResizeRequest: vi.fn(),
+      setRemoteSize: vi.fn(),
+    });
+
+    expect(container.style.position).toBe('absolute');
+    expect(container.querySelectorAll('canvas')).toHaveLength(2);
+
+    runtime.destroy();
+    expect(container.style.position).toBe('absolute');
+  });
 });

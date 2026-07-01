@@ -193,22 +193,31 @@ async function assertPreviewResizeUsesIndependentHeight(popup, options) {
     async () => await popup.getByTestId('session-preview-viewport').evaluate((element) => {
       const canvas = element.querySelector('canvas');
       const rect = element.getBoundingClientRect();
+      const parentRect = element.parentElement?.getBoundingClientRect();
       const scale = window.devicePixelRatio || 1;
       return {
         canvasWidth: canvas?.width ?? 0,
         canvasHeight: canvas?.height ?? 0,
         viewportWidth: Math.round(rect.width * scale),
         viewportHeight: Math.round(rect.height * scale),
+        parentViewportHeight: parentRect ? Math.round(parentRect.height * scale) : 0,
       };
     }),
     (value) => {
-      if (!value.canvasWidth || !value.canvasHeight || !value.viewportWidth || !value.viewportHeight) {
+      if (
+        !value.canvasWidth
+        || !value.canvasHeight
+        || !value.viewportWidth
+        || !value.viewportHeight
+        || !value.parentViewportHeight
+      ) {
         return false;
       }
       const matchesViewport = Math.abs(value.canvasWidth - value.viewportWidth) <= 2
         && Math.abs(value.canvasHeight - value.viewportHeight) <= 2;
+      const fillsPreviewSection = Math.abs(value.viewportHeight - value.parentViewportHeight) <= 2;
       const fixedRatioHeight = Math.round(value.canvasWidth * 9 / 16);
-      return matchesViewport && Math.abs(value.canvasHeight - fixedRatioHeight) > 10;
+      return matchesViewport && fillsPreviewSection && Math.abs(value.canvasHeight - fixedRatioHeight) > 10;
     },
     options.connectTimeoutMs,
     250,
