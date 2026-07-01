@@ -22,10 +22,6 @@ pub(super) async fn update_session_recording_policy(
                 }),
             )
         })?;
-    state
-        .recording_lifecycle
-        .validate_mode(recording.mode)
-        .map_err(map_recording_lifecycle_error)?;
     let updated = state
         .session_store
         .update_session_recording_policy_for_owner(&principal, session_id, recording)

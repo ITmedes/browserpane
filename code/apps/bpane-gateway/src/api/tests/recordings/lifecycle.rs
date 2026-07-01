@@ -149,6 +149,71 @@ async fn rejects_always_recording_policy_when_worker_is_not_configured() {
 }
 
 #[tokio::test]
+async fn stores_always_recording_policy_for_stopped_session_without_worker() {
+    let (app, token) = test_router();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let created = response_json(create_session_response).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let stop_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/stop"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stop_response.status(), StatusCode::OK);
+    let stopped = response_json(stop_response).await;
+    assert_eq!(stopped["state"], "stopped");
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/sessions/{session_id}/recording-policy"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "mode": "always",
+                        "format": "webm",
+                        "retention_sec": 7200
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let updated = response_json(update_response).await;
+    assert_eq!(updated["state"], "stopped");
+    assert_eq!(updated["recording"]["mode"], "always");
+    assert_eq!(updated["recording"]["format"], "webm");
+    assert_eq!(updated["recording"]["retention_sec"], 7200);
+}
+
+#[tokio::test]
 async fn creates_lists_gets_and_stops_session_recording_metadata() {
     let (app, token) = test_router();
 
