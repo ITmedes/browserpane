@@ -30,6 +30,14 @@ describe('SessionMcpDelegationCard', () => {
 
     expect(byTestId(target, 'mcp-delegation-status').textContent).toContain('Not authorized');
     expect(byTestId(target, 'mcp-endpoint-url').textContent).toContain('/sessions/session-1/mcp');
+    expect(
+      byTestId(target, 'mcp-endpoint-row').compareDocumentPosition(byTestId(target, 'mcp-summary-row'))
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      byTestId(target, 'mcp-endpoint-row').compareDocumentPosition(byTestId(target, 'mcp-authorize'))
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     byTestId(target, 'mcp-authorize').click();
     byTestId(target, 'mcp-set-default').click();
