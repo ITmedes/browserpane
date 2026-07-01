@@ -14,6 +14,8 @@ export function sessionResource(
     readonly egressHealth: string;
     readonly queued: boolean;
     readonly stopAllowed: boolean;
+    readonly automationDelegate: Record<string, unknown> | null;
+    readonly mcpOwner: boolean;
   }> = {},
 ): SessionResource {
   return toSessionResource(sessionPayload(overrides));
@@ -26,6 +28,7 @@ export function sessionStatus(
     readonly presenceState: string;
     readonly totalClients: number;
     readonly stopAllowed: boolean;
+    readonly mcpOwner: boolean;
   }> = {},
 ): SessionStatus {
   return toSessionStatus(sessionStatusPayload(overrides));
@@ -44,6 +47,7 @@ export function sessionPayload(
     readonly egressHealth: string;
     readonly queued: boolean;
     readonly stopAllowed: boolean;
+    readonly automationDelegate: Record<string, unknown> | null;
   }> = {},
 ): Record<string, unknown> {
   const id = overrides.id ?? 'session-1';
@@ -104,7 +108,7 @@ export function sessionPayload(
       file_transfer: true,
       resize: true,
     },
-    automation_delegate: null,
+    automation_delegate: overrides.automationDelegate === undefined ? null : overrides.automationDelegate,
     idle_timeout_sec: 300,
     labels: { suite: 'sessions' },
     integration_context: { source: 'test' },
@@ -154,6 +158,7 @@ export function sessionStatusPayload(
     readonly presenceState: string;
     readonly totalClients: number;
     readonly stopAllowed: boolean;
+    readonly mcpOwner: boolean;
   }> = {},
 ): Record<string, unknown> {
   const totalClients = overrides.totalClients ?? 1;
@@ -187,7 +192,7 @@ export function sessionStatusPayload(
     max_viewers: 10,
     viewer_slots_remaining: 10,
     exclusive_browser_owner: false,
-    mcp_owner: false,
+    mcp_owner: overrides.mcpOwner ?? false,
     resolution: [1280, 720],
     network_identity: null,
     effective_egress: null,

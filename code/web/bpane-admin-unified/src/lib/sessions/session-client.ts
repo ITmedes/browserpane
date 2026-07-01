@@ -136,6 +136,35 @@ export class SessionCatalogClient {
     return toSessionAccessTokenResponse(await response.json());
   }
 
+  async setAutomationDelegate(
+    sessionId: string,
+    delegate: SessionAutomationDelegate,
+  ): Promise<SessionResource> {
+    const response = await this.#request(
+      new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-owner`, this.#baseUrl),
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(delegate),
+      },
+    );
+    return toSessionResource(await response.json());
+  }
+
+  async clearAutomationDelegate(sessionId: string): Promise<SessionResource> {
+    const response = await this.#request(
+      new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-owner`, this.#baseUrl),
+      {
+        method: 'DELETE',
+        headers: { accept: 'application/json' },
+      },
+    );
+    return toSessionResource(await response.json());
+  }
+
   async #sessionMutation(sessionId: string, action: string): Promise<SessionResource> {
     const response = await this.#request(
       new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/${action}`, this.#baseUrl),
