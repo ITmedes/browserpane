@@ -32,9 +32,6 @@ pub(super) fn is_resize_owner(hub: &SessionHub, client_id: u64) -> bool {
     if hub.mcp_controls_resolution.load(Ordering::Relaxed) {
         return false;
     }
-    if !hub.exclusive_browser_owner {
-        return true;
-    }
     let owner_id = hub.owner_id.load(Ordering::Relaxed);
     owner_id == 0 || owner_id == client_id
 }
