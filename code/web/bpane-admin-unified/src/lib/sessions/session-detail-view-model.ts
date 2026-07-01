@@ -102,6 +102,7 @@ export function buildSessionDetailModel(session: SessionResource, liveStatus: Se
           fact('Viewport', session.viewport ? `${session.viewport.width} x ${session.viewport.height}` : 'default'),
           fact('Resolution', status ? `${status.resolution[0]} x ${status.resolution[1]}` : 'not loaded'),
           fact('Idle timeout', session.idle_timeout_sec ? formatDuration(session.idle_timeout_sec * 1000) ?? `${session.idle_timeout_sec}s` : 'default'),
+          fact('Recording', recordingLabel(session), 'session-detail-recording', session.recording.mode === 'disabled' ? 'neutral' : 'success'),
         ],
       },
       {
@@ -210,6 +211,18 @@ function integrationSummary(value: Readonly<Record<string, unknown>> | null): st
     return 'none';
   }
   return Object.keys(value).join(', ');
+}
+
+function recordingLabel(session: SessionResource): string {
+  const mode = session.recording.mode || 'disabled';
+  if (mode === 'disabled') {
+    return 'disabled';
+  }
+  const format = session.recording.format || 'webm';
+  const retention = session.recording.retention_sec
+    ? `, retention ${formatDuration(session.recording.retention_sec * 1000) ?? `${session.recording.retention_sec}s`}`
+    : '';
+  return `${mode} / ${format}${retention}`;
 }
 
 function limitLabel(value: number, limit?: number | null): string {

@@ -84,6 +84,36 @@ describe('session create view model', () => {
     });
   });
 
+  it('adds always-on recording only when the operator enables recording', () => {
+    const validation = validateSessionCreateDraft({
+      ...createNewSessionCreateDraft(),
+      recordingEnabled: true,
+      recordingRetentionSec: '86400',
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(validation.request).toEqual({
+      recording: {
+        mode: 'always',
+        format: 'webm',
+        retention_sec: 86400,
+      },
+    });
+  });
+
+  it('rejects invalid recording retention values', () => {
+    const validation = validateSessionCreateDraft({
+      ...createNewSessionCreateDraft(),
+      recordingEnabled: true,
+      recordingRetentionSec: '0',
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.fieldErrors.recordingRetentionSec).toContain(
+      'Recording retention must be a positive whole number.',
+    );
+  });
+
   it('rejects invalid metadata references and malformed labels', () => {
     const validation = validateSessionCreateDraft({
       ...createNewSessionCreateDraft(),

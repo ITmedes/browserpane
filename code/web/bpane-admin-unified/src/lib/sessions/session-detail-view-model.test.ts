@@ -52,4 +52,19 @@ describe('buildSessionDetailModel', () => {
       expect(model.actions.connectPreviewDescription).toContain('persisted browser profile');
     }
   });
+
+  it('surfaces the session recording policy in runtime details', () => {
+    const model = buildSessionDetailModel(
+      sessionResource({ recordingMode: 'always', recordingRetentionSec: 3600 }),
+      null,
+    );
+
+    const runtimeSection = model.sections.find((section) => section.testId === 'session-detail-runtime-section');
+    expect(runtimeSection?.facts).toContainEqual(expect.objectContaining({
+      label: 'Recording',
+      value: 'always / webm, retention 1h 0m',
+      testId: 'session-detail-recording',
+      tone: 'success',
+    }));
+  });
 });

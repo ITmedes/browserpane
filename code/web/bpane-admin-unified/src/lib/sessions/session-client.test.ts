@@ -41,6 +41,10 @@ describe('SessionCatalogClient', () => {
     const access = await client.issueSessionAccessToken('session-1');
 
     expect(listed.sessions[0]?.id).toBe('session-1');
+    expect(listed.sessions[0]?.recording).toMatchObject({
+      mode: 'disabled',
+      format: 'webm',
+    });
     expect(created.id).toBe('created-session');
     expect(loaded.runtime.binding).toBe('docker:browser-1');
     expect(status.connections[0]).toMatchObject({ connection_id: 7, role: 'browser-owner' });

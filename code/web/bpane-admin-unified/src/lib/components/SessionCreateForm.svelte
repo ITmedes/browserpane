@@ -49,6 +49,14 @@
     }
     void onSave?.(validation.request);
   }
+
+  function updateRecordingEnabled(event: Event): void {
+    const enabled = (event.currentTarget as HTMLInputElement).checked;
+    draft.recordingEnabled = enabled;
+    if (!enabled) {
+      draft.recordingRetentionSec = '';
+    }
+  }
 </script>
 
 <section class="rounded-md border border-admin-border bg-admin-panel p-4 sm:p-5" data-testid="session-create-form">
@@ -300,6 +308,49 @@
             <span class="block font-medium text-admin-ink">Resize</span>
             <span class="block text-xs leading-5 text-admin-muted">Viewport resize requests.</span>
           </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="session-create-recording-section">
+      <div class="border-b border-admin-border pb-3">
+        <h4 class="m-0 text-sm font-semibold text-admin-ink">Recording</h4>
+        <p class="m-0 mt-1 text-xs leading-5 text-admin-muted">
+          Recording is disabled by default. Enable it only for sessions that need captured browser activity.
+        </p>
+      </div>
+
+      <div class="mt-4 grid items-start gap-4 lg:grid-cols-3">
+        <label class="flex min-w-0 items-start gap-3 rounded-md border border-admin-border bg-white p-3 text-sm transition hover:border-admin-accent/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-admin-accent/25 lg:col-span-2">
+          <input
+            class="mt-0.5 size-4 shrink-0 rounded border-admin-border text-admin-accent focus:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+            type="checkbox"
+            checked={draft.recordingEnabled}
+            onchange={updateRecordingEnabled}
+            disabled={disabled}
+            data-testid="session-create-recording-enabled"
+          />
+          <span class="min-w-0">
+            <span class="block font-medium text-admin-ink">Record session connections</span>
+            <span class="block text-xs leading-5 text-admin-muted">Create an always-on WebM recording for this session.</span>
+          </span>
+        </label>
+
+        <label class="grid min-w-0 content-start gap-1.5 text-sm">
+          <span class="font-medium text-admin-ink">Retention seconds</span>
+          <input
+            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
+            type="number"
+            min="1"
+            bind:value={draft.recordingRetentionSec}
+            disabled={disabled || !draft.recordingEnabled}
+            data-testid="session-create-recording-retention"
+          />
+          <FieldFeedback
+            errors={validation.fieldErrors.recordingRetentionSec}
+            hint={draft.recordingEnabled ? 'Leave empty to use the backend retention default.' : 'Enable recording to set retention.'}
+            testId="session-create-recording-retention-error"
+          />
         </label>
       </div>
     </section>

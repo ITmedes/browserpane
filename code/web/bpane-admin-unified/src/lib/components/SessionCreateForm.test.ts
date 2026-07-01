@@ -89,6 +89,29 @@ describe('SessionCreateForm', () => {
       network_identity: { egress_profile_id: 'egress-1' },
     });
   });
+
+  it('submits always-on recording only after the recording checkbox is enabled', async () => {
+    const onSave = vi.fn<(request: CreateSessionRequest) => void>();
+    const target = renderComponent(SessionCreateForm, {
+      optionsState: { status: 'ready', options: emptyOptions() },
+      onSave,
+    });
+
+    setCheckboxChecked(byTestId(target, 'session-create-recording-enabled'), true);
+    setInputValue(byTestId(target, 'session-create-recording-retention'), '3600');
+    await tick();
+
+    expect(byTestId(target, 'session-create-payload').textContent).toContain('"mode": "always"');
+    byTestId(target, 'session-create-save').click();
+
+    expect(onSave).toHaveBeenCalledWith({
+      recording: {
+        mode: 'always',
+        format: 'webm',
+        retention_sec: 3600,
+      },
+    });
+  });
 });
 
 function setInputValue(element: Element, value: string): void {
