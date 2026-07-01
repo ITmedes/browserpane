@@ -41,16 +41,7 @@
 </script>
 
 <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="session-mcp-delegation">
-  <div class="w-full min-w-0 rounded-md border border-admin-border bg-admin-panel p-3" data-testid="mcp-endpoint-row">
-    <p class="m-0 text-xs font-semibold uppercase text-admin-muted">Session endpoint</p>
-    {#if viewModel.endpointUrl}
-      <code class="mt-1 block min-w-0 break-all text-sm font-medium text-admin-ink" data-testid="mcp-endpoint-url">{viewModel.endpointUrl}</code>
-    {:else}
-      <p class="m-0 mt-1 text-sm text-admin-muted" data-testid="mcp-endpoint-url">Unavailable</p>
-    {/if}
-  </div>
-
-  <div class="mt-3 flex flex-col gap-3 border-y border-admin-border py-3 lg:flex-row lg:items-start lg:justify-between" data-testid="mcp-summary-row">
+  <div class="flex flex-col gap-3 border-b border-admin-border pb-3 lg:flex-row lg:items-start lg:justify-between" data-testid="mcp-summary-row">
     <div class="min-w-0">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
         <h3 class="m-0 text-sm font-semibold text-admin-ink">MCP Delegation</h3>
@@ -74,6 +65,15 @@
   </div>
 
   <div class="mt-4 flex w-full flex-col gap-3">
+    <div class="w-full min-w-0 rounded-md border border-admin-border bg-admin-panel p-3" data-testid="mcp-endpoint-row">
+      <p class="m-0 text-xs font-semibold uppercase text-admin-muted">Session endpoint</p>
+      {#if viewModel.endpointUrl}
+        <code class="mt-1 block min-w-0 break-all text-sm font-medium text-admin-ink" data-testid="mcp-endpoint-url">{viewModel.endpointUrl}</code>
+      {:else}
+        <p class="m-0 mt-1 text-sm text-admin-muted" data-testid="mcp-endpoint-url">Unavailable</p>
+      {/if}
+    </div>
+
     <div class="flex w-full flex-wrap gap-2">
       <button
         class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
