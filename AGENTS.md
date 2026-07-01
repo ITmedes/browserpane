@@ -125,6 +125,7 @@ Current product shape:
   - Local session-control persistence in compose is Postgres on `:5433`.
   - Local workflow credential binding dev/testing uses HashiCorp Vault dev mode on `:8200`.
   - Local compose defaults to `docker_pool` for browser-session workers, with a shared socket-only runtime volume and per-session browser data volumes; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
+  - Local compose uses a one-shot helper to build the `deploy-recording-worker` image and configures the gateway to launch short-lived recorder containers for `recording.mode=always`; artifact handoff uses the `bpane-recordings` volume and finalized artifacts use the gateway recording artifact store.
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 - `deploy/examples/egress-observer`

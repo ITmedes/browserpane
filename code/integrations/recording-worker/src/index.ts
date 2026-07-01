@@ -23,10 +23,12 @@ async function main(): Promise<void> {
     gatewayApiUrl: process.env.BPANE_GATEWAY_API_URL ?? "http://localhost:8932",
     getHeaders: (extraHeaders) => tokenManager.getAuthHeaders(extraHeaders),
   });
+  const gatewayApiUrl = process.env.BPANE_GATEWAY_API_URL ?? "http://localhost:8932";
   const pageRuntime = new RecorderPageRuntime({
     pageUrl: process.env.BPANE_RECORDING_PAGE_URL ?? "http://localhost:8080",
     certSpki: process.env.BPANE_RECORDING_CERT_SPKI ?? process.env.BPANE_BENCHMARK_CERT_SPKI ?? "",
     chromeExecutablePath: requiredEnv("BPANE_RECORDING_CHROME"),
+    connectGatewayUrl: process.env.BPANE_RECORDING_CONNECT_GATEWAY_URL ?? deriveConnectGatewayUrl(gatewayApiUrl),
     connectTimeoutMs: Number.parseInt(process.env.BPANE_RECORDING_CONNECT_TIMEOUT_MS ?? "30000", 10),
     headless: (process.env.BPANE_RECORDING_HEADLESS ?? "true").trim().toLowerCase() !== "false",
   });
@@ -47,3 +49,12 @@ main().catch((error) => {
   console.error(`[recording-worker] ${message}`);
   process.exitCode = 1;
 });
+
+function deriveConnectGatewayUrl(gatewayApiUrl: string): string {
+  try {
+    const url = new URL(gatewayApiUrl);
+    return `https://${url.hostname}:4433`;
+  } catch {
+    return "https://localhost:4433";
+  }
+}

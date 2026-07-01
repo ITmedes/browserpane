@@ -1,6 +1,7 @@
 import type {
   GatewayRecordingResource,
   GatewayRecordingTerminationReason,
+  GatewaySessionAccessTokenResponse,
   GatewaySessionResource,
 } from "./types.js";
 
@@ -29,6 +30,13 @@ export class RecordingControlClient {
   async createRecording(sessionId: string): Promise<GatewayRecordingResource> {
     return this.fetchJson<GatewayRecordingResource>(
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/recordings`,
+      { method: "POST" },
+    );
+  }
+
+  async issueSessionAccessToken(sessionId: string): Promise<GatewaySessionAccessTokenResponse> {
+    return this.fetchJson<GatewaySessionAccessTokenResponse>(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/access-tokens`,
       { method: "POST" },
     );
   }

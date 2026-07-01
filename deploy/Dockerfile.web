@@ -36,6 +36,7 @@ RUN chmod +x /docker-entrypoint.d/20-web-cert-metadata.sh
 RUN chmod +x /docker-entrypoint.d/30-web-auth-config.sh
 COPY dev/web-fixtures/index.html /usr/share/nginx/html/index.html
 COPY dev/web-fixtures/test-embed.html /usr/share/nginx/html/test-embed.html
+COPY dev/web-fixtures/recording-worker.html /usr/share/nginx/html/recording-worker.html
 COPY dev/web-fixtures/benchmark-scroll.html /usr/share/nginx/html/benchmark-scroll.html
 COPY dev/web-fixtures/benchmark-article.html /usr/share/nginx/html/benchmark-article.html
 COPY dev/web-fixtures/workflow-credential-fixture.html /usr/share/nginx/html/workflow-credential-fixture.html

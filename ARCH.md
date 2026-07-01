@@ -324,6 +324,7 @@ service.
   buffer, zero-copy frame slicing with `Bytes`
 - **Recording lifecycle** (`recording_lifecycle.rs`, `recording_retention.rs`, `recording_artifact_store.rs`):
   - starts/stops passive recorder workers for `recording.mode=always`
+  - launches recorder workers with session-scoped connect tickets and a shared artifact handoff path
   - persists per-segment metadata, linkage, termination reasons, and artifact refs
   - enforces retention and playback/export visibility through the control plane
 - **Browser context lifecycle** (`browser_contexts/retention.rs`, `runtime_manager.rs`, `session_control.rs`):
@@ -472,6 +473,7 @@ On-demand executor launched and supervised by the gateway for workflow runs.
 Gateway-supervised passive session recorder.
 
 - Attaches as a `recorder` client to the selected session
+- Uses a gateway-issued session connect ticket and a minimal recorder page rather than driving the admin UI
 - Captures WebM output from the browser-facing recording surface
 - Finalizes recording segments back into gateway-managed artifact storage
 - Supports manual session recordings and `recording.mode=always` auto-recording
