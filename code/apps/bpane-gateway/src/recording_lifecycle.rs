@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::Mutex;
+use tokio::time::{sleep, Instant};
 use tracing::info;
 use uuid::Uuid;
 
@@ -14,6 +15,7 @@ use crate::session_control::{
     SessionRecordingTerminationReason, SessionRecordingWorkerAssignmentStatus, SessionStore,
     SessionStoreError, StoredSession,
 };
+use crate::session_registry::SessionRegistry;
 
 mod control;
 mod workers;
@@ -184,6 +186,24 @@ impl RecordingLifecycleManager {
         Ok(())
     }
 
+    pub async fn ensure_auto_recording_ready(
+        &self,
+        session: &StoredSession,
+        registry: &SessionRegistry,
+    ) -> Result<(), RecordingLifecycleError> {
+        self.ensure_auto_recording(session).await?;
+        if session.recording.mode != SessionRecordingMode::Always {
+            return Ok(());
+        }
+        let Some(inner) = &self.inner else {
+            return Ok(());
+        };
+
+        inner
+            .wait_for_recorder_attachment(session.id, registry)
+            .await
+    }
+
     pub async fn request_stop_and_wait(
         &self,
         session_id: Uuid,
@@ -206,6 +226,64 @@ impl RecordingLifecycleInner {
             display_name: session.owner.display_name.clone(),
             client_id: None,
             safe_claims: Default::default(),
+        }
+    }
+
+    async fn wait_for_recorder_attachment(
+        &self,
+        session_id: Uuid,
+        registry: &SessionRegistry,
+    ) -> Result<(), RecordingLifecycleError> {
+        let deadline = Instant::now() + self.config.connect_timeout;
+        loop {
+            match self
+                .session_store
+                .get_latest_recording_for_session(session_id)
+                .await?
+            {
+                Some(recording) if recording.state.is_terminal() => {
+                    return Err(RecordingLifecycleError::LaunchFailed(format!(
+                        "recording worker for session {session_id} reached terminal state {} before attaching{}",
+                        recording.state.as_str(),
+                        recording
+                            .error
+                            .as_deref()
+                            .map(|error| format!(": {error}"))
+                            .unwrap_or_default()
+                    )));
+                }
+                Some(recording) if recording.state.is_active() => {
+                    if let Some(snapshot) = registry.telemetry_snapshot_if_live(session_id).await {
+                        if snapshot.recorder_clients > 0 {
+                            info!(
+                                session_id = %session_id,
+                                recording_id = %recording.id,
+                                "recorder worker attached before issuing browser access"
+                            );
+                            return Ok(());
+                        }
+                    }
+                }
+                Some(recording) => {
+                    return Err(RecordingLifecycleError::LaunchFailed(format!(
+                        "recording worker for session {session_id} is not active; latest recording {} is {}",
+                        recording.id,
+                        recording.state.as_str()
+                    )));
+                }
+                None => {
+                    return Err(RecordingLifecycleError::LaunchFailed(format!(
+                        "recording worker for session {session_id} did not create a recording"
+                    )));
+                }
+            }
+
+            if Instant::now() >= deadline {
+                return Err(RecordingLifecycleError::LaunchFailed(format!(
+                    "timed out waiting for recorder worker to attach to session {session_id}"
+                )));
+            }
+            sleep(self.config.poll_interval).await;
         }
     }
 }

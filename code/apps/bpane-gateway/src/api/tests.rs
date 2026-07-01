@@ -27,7 +27,7 @@ use crate::credentials::{
 use crate::recording::{
     prepare_session_recording_playback, RecordingArtifactStore, RecordingObservability,
 };
-use crate::recording_lifecycle::RecordingLifecycleManager;
+use crate::recording_lifecycle::{RecordingLifecycleManager, RecordingWorkerConfig};
 use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
     PersistSessionFileRequest, SessionFileSource, SessionRecordingFormat, SessionRecordingMode,

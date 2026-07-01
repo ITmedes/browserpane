@@ -61,6 +61,7 @@ pub struct ClientHandle {
 pub enum SessionTerminationReason {
     SessionKilled,
     DisconnectedByOwner,
+    DisconnectedAllByOwner,
 }
 
 impl SessionTerminationReason {
@@ -68,13 +69,14 @@ impl SessionTerminationReason {
         match self {
             Self::SessionKilled => b"session force killed by owner",
             Self::DisconnectedByOwner => b"session connection disconnected by owner",
+            Self::DisconnectedAllByOwner => b"session connections disconnected by owner",
         }
     }
 
     pub fn transitions_to_idle(self) -> bool {
         match self {
             Self::SessionKilled => false,
-            Self::DisconnectedByOwner => true,
+            Self::DisconnectedByOwner | Self::DisconnectedAllByOwner => true,
         }
     }
 }

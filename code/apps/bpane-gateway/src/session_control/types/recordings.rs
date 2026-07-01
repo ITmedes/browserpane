@@ -108,8 +108,11 @@ impl FromStr for SessionRecordingState {
 #[serde(rename_all = "snake_case")]
 pub enum SessionRecordingTerminationReason {
     ManualStop,
+    ClientDisconnect,
+    DisconnectAll,
     SessionStop,
     SessionKill,
+    RuntimeRelease,
     IdleStop,
     GatewayRestart,
     WorkerExit,
@@ -119,8 +122,11 @@ impl SessionRecordingTerminationReason {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ManualStop => "manual_stop",
+            Self::ClientDisconnect => "client_disconnect",
+            Self::DisconnectAll => "disconnect_all",
             Self::SessionStop => "session_stop",
             Self::SessionKill => "session_kill",
+            Self::RuntimeRelease => "runtime_release",
             Self::IdleStop => "idle_stop",
             Self::GatewayRestart => "gateway_restart",
             Self::WorkerExit => "worker_exit",
@@ -134,8 +140,11 @@ impl FromStr for SessionRecordingTerminationReason {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "manual_stop" => Ok(Self::ManualStop),
+            "client_disconnect" => Ok(Self::ClientDisconnect),
+            "disconnect_all" => Ok(Self::DisconnectAll),
             "session_stop" => Ok(Self::SessionStop),
             "session_kill" => Ok(Self::SessionKill),
+            "runtime_release" => Ok(Self::RuntimeRelease),
             "idle_stop" => Ok(Self::IdleStop),
             "gateway_restart" => Ok(Self::GatewayRestart),
             "worker_exit" => Ok(Self::WorkerExit),

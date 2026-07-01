@@ -71,10 +71,6 @@ fn session_status_maps_recorder_clients() {
                         kind: SessionStopBlockerKind::ViewerClients,
                         count: 1,
                     },
-                    SessionStopBlocker {
-                        kind: SessionStopBlockerKind::RecorderClients,
-                        count: 1,
-                    },
                 ],
             },
             idle: SessionIdleStatus {
@@ -144,7 +140,7 @@ fn session_status_maps_recorder_clients() {
     assert_eq!(status.summary.connection_counts.owner_clients, 1);
     assert_eq!(status.summary.connection_counts.viewer_clients, 1);
     assert!(!status.summary.stop_eligibility.allowed);
-    assert_eq!(status.summary.stop_eligibility.blockers.len(), 3);
+    assert_eq!(status.summary.stop_eligibility.blockers.len(), 2);
     assert_eq!(status.connections.len(), 3);
     assert_eq!(status.connections[0].connection_id, 1);
     assert!(matches!(

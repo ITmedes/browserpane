@@ -147,7 +147,7 @@ pub(in crate::api) async fn prepare_runtime_access_session(
 
     if let Err(error) = state
         .recording_lifecycle
-        .ensure_auto_recording(&connectable)
+        .ensure_auto_recording_ready(&connectable, &state.registry)
         .await
     {
         if was_released {

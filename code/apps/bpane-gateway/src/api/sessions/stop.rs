@@ -148,6 +148,14 @@ pub(super) async fn stop_session_for_owner(
             .into_response());
     }
 
+    if let Err(error) = state
+        .recording_lifecycle
+        .request_stop_and_wait(session_id, SessionRecordingTerminationReason::SessionStop)
+        .await
+    {
+        info!(%session_id, "recording finalization before session stop returned: {error}");
+    }
+
     let stopped = state
         .session_store
         .stop_session_for_owner(principal, session_id)
@@ -162,13 +170,6 @@ pub(super) async fn stop_session_for_owner(
             )
         })?;
 
-    if let Err(error) = state
-        .recording_lifecycle
-        .request_stop_and_wait(session_id, SessionRecordingTerminationReason::SessionStop)
-        .await
-    {
-        info!(%session_id, "recording finalization before session stop returned: {error}");
-    }
     state.session_manager.release(session_id).await;
     state.registry.remove_session(session_id).await;
 
@@ -189,14 +190,8 @@ fn session_stop_conflict_message(stop_eligibility: &SessionStopEligibility) -> S
             SessionStopBlockerKind::ViewerClients => {
                 format!("{} viewer client(s)", blocker.count)
             }
-            SessionStopBlockerKind::RecorderClients => {
-                format!("{} recorder client(s)", blocker.count)
-            }
             SessionStopBlockerKind::AutomationOwner => {
                 format!("{} automation owner(s)", blocker.count)
-            }
-            SessionStopBlockerKind::RecordingActivity => {
-                format!("{} active recording operation(s)", blocker.count)
             }
             SessionStopBlockerKind::AutomationTasks => {
                 format!("{} active automation task(s)", blocker.count)
