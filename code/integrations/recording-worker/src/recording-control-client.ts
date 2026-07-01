@@ -7,17 +7,20 @@ import type {
 
 type RecordingControlClientOptions = {
   gatewayApiUrl: string;
+  sessionAutomationAccessToken: string;
   getHeaders: (extraHeaders?: Record<string, string>) => Promise<Record<string, string>>;
 };
 
 export class RecordingControlClient {
   private readonly gatewayApiUrl: string;
+  private readonly sessionAutomationAccessToken: string;
   private readonly getHeaders: (
     extraHeaders?: Record<string, string>,
   ) => Promise<Record<string, string>>;
 
   constructor(options: RecordingControlClientOptions) {
     this.gatewayApiUrl = options.gatewayApiUrl.replace(/\/$/, "");
+    this.sessionAutomationAccessToken = options.sessionAutomationAccessToken.trim();
     this.getHeaders = options.getHeaders;
   }
 
@@ -95,6 +98,9 @@ export class RecordingControlClient {
   private async fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers = await this.getHeaders({
       Accept: "application/json",
+      ...(this.sessionAutomationAccessToken
+        ? { "x-bpane-automation-access-token": this.sessionAutomationAccessToken }
+        : {}),
       ...(init.headers as Record<string, string> | undefined),
     });
     const response = await fetch(`${this.gatewayApiUrl}${path}`, {

@@ -65,6 +65,7 @@ export class RecorderPageRuntime {
     await page.goto(this.buildRecorderPageUrl(), { waitUntil: "networkidle" });
     await page.waitForFunction(
       () => Boolean(window.__bpaneRecorder),
+      undefined,
       { timeout: this.connectTimeoutMs },
     );
     await page.evaluate(async (connectOptions) => {
@@ -78,6 +79,8 @@ export class RecorderPageRuntime {
       connectTicket: options.connectTicket,
     });
     await page.waitForSelector("#desktop-container canvas", { timeout: this.connectTimeoutMs });
+    await this.waitForRenderableSurface(page);
+    await this.waitForVisualActivity(page);
     await page.evaluate(() => {
       const recorder = window.__bpaneRecorder;
       if (!recorder) {
@@ -86,6 +89,14 @@ export class RecorderPageRuntime {
       return recorder.start();
     });
     this.startedAtMs = Date.now();
+  }
+
+  async waitForMinimumCapture(minDurationMs: number): Promise<void> {
+    const remainingMs = this.startedAtMs + minDurationMs - Date.now();
+    if (remainingMs <= 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, remainingMs));
   }
 
   async stopAndDownload(outputPath: string): Promise<RecordingArtifact> {
@@ -151,6 +162,31 @@ export class RecorderPageRuntime {
       args.push(`--ignore-certificate-errors-spki-list=${this.certSpki}`);
     }
     return args;
+  }
+
+  private async waitForRenderableSurface(page: Page): Promise<void> {
+    await page.waitForFunction(
+      () => {
+        const canvas = document.querySelector("#desktop-container canvas") as HTMLCanvasElement | null;
+        return Boolean(canvas && canvas.width > 1 && canvas.height > 1);
+      },
+      undefined,
+      { timeout: this.connectTimeoutMs, polling: 100 },
+    );
+  }
+
+  private async waitForVisualActivity(page: Page): Promise<void> {
+    await page.waitForFunction(
+      () => {
+        const stats = window.__bpaneRecorder?.getStats?.();
+        const frameCount = typeof stats?.frameCount === "number" ? stats.frameCount : 0;
+        const renderedTileUpdates =
+          typeof stats?.renderedTileUpdates === "number" ? stats.renderedTileUpdates : 0;
+        return frameCount > 0 || renderedTileUpdates > 0;
+      },
+      undefined,
+      { timeout: Math.min(this.connectTimeoutMs, 5_000), polling: 100 },
+    ).catch(() => {});
   }
 
   private quicOrigin(): string {

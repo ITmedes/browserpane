@@ -111,11 +111,17 @@ async fn should_request_join_repaint(
     client_role: BrowserClientRole,
     prev_count: u32,
 ) -> bool {
-    if client_role != BrowserClientRole::Interactive {
-        return false;
-    }
-    if prev_count > 0 || hub.mcp_is_owner.load(Ordering::Relaxed) {
-        return true;
+    match client_role {
+        BrowserClientRole::Interactive => {
+            if prev_count > 0 || hub.mcp_is_owner.load(Ordering::Relaxed) {
+                return true;
+            }
+        }
+        BrowserClientRole::Recorder => {
+            if prev_count > 0 {
+                return true;
+            }
+        }
     }
     hub.cached_grid_config.lock().await.is_some()
 }

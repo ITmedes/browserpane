@@ -167,6 +167,12 @@ services:
       --recording-worker-arg=-e
       --recording-worker-arg=BPANE_RECORDING_BEARER_TOKEN
       --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_CONNECT_TICKET
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_CONNECT_TRANSPORT_PATH
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_SESSION_AUTOMATION_ACCESS_TOKEN
+      --recording-worker-arg=-e
       --recording-worker-arg=BPANE_GATEWAY_OIDC_TOKEN_URL
       --recording-worker-arg=-e
       --recording-worker-arg=BPANE_GATEWAY_OIDC_CLIENT_ID
@@ -181,6 +187,7 @@ services:
       --recording-worker-api-url ${BPANE_RECORDING_WORKER_API_URL:-http://gateway:8932}
       --recording-worker-page-url ${BPANE_RECORDING_WORKER_PAGE_URL:-http://web:8080/recording-worker.html}
       --recording-worker-output-root ${BPANE_RECORDING_WORKER_OUTPUT_ROOT:-/tmp/bpane-recordings}
+      --recording-worker-connect-timeout-secs ${BPANE_RECORDING_WORKER_CONNECT_TIMEOUT_SECS:-120}
       --recording-worker-oidc-token-url ${BPANE_RECORDING_WORKER_OIDC_TOKEN_URL:-http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token}
       --recording-worker-oidc-client-id ${BPANE_RECORDING_WORKER_OIDC_CLIENT_ID:-bpane-mcp-bridge}
       --recording-worker-oidc-client-secret ${BPANE_RECORDING_WORKER_OIDC_CLIENT_SECRET:-bpane-mcp-bridge-secret}

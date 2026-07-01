@@ -7,7 +7,8 @@ use tokio::sync::Mutex;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::auth::AuthValidator;
+use crate::auth::{AuthValidator, AuthenticatedPrincipal};
+use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
     FailSessionRecordingRequest, PersistedSessionRecordingWorkerAssignment, SessionRecordingMode,
     SessionRecordingTerminationReason, SessionRecordingWorkerAssignmentStatus, SessionStore,
@@ -74,6 +75,8 @@ pub struct RecordingLifecycleManager {
 struct RecordingLifecycleInner {
     config: RecordingWorkerConfig,
     auth_validator: Arc<AuthValidator>,
+    connect_ticket_manager: Arc<SessionConnectTicketManager>,
+    automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
     session_store: SessionStore,
     launched: Mutex<HashMap<Uuid, LaunchedRecordingWorker>>,
 }
@@ -86,6 +89,8 @@ impl RecordingLifecycleManager {
     pub fn new(
         config: Option<RecordingWorkerConfig>,
         auth_validator: Arc<AuthValidator>,
+        connect_ticket_manager: Arc<SessionConnectTicketManager>,
+        automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
         session_store: SessionStore,
     ) -> Result<Self, RecordingLifecycleError> {
         let Some(config) = config else {
@@ -96,6 +101,8 @@ impl RecordingLifecycleManager {
             inner: Some(Arc::new(RecordingLifecycleInner {
                 config,
                 auth_validator,
+                connect_ticket_manager,
+                automation_access_token_manager,
                 session_store,
                 launched: Mutex::new(HashMap::new()),
             })),
@@ -188,6 +195,18 @@ impl RecordingLifecycleManager {
         inner
             .request_stop_and_wait(session_id, termination_reason)
             .await
+    }
+}
+
+impl RecordingLifecycleInner {
+    fn owner_principal(&self, session: &StoredSession) -> AuthenticatedPrincipal {
+        AuthenticatedPrincipal {
+            subject: session.owner.subject.clone(),
+            issuer: session.owner.issuer.clone(),
+            display_name: session.owner.display_name.clone(),
+            client_id: None,
+            safe_claims: Default::default(),
+        }
     }
 }
 

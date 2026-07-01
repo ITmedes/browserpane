@@ -4,11 +4,21 @@ import { RecordingControlClient } from "./recording-control-client.js";
 import { RecorderPageRuntime } from "./recorder-page-runtime.js";
 import type { GatewayRecordingResource } from "./types.js";
 
+const DEFAULT_MIN_CAPTURE_MS = 3000;
+
+type RecorderConnectOptions = {
+  gatewayUrl: string;
+  transportPath: string;
+  connectTicket: string;
+};
+
 type RecordingWorkerServiceOptions = {
   sessionId: string;
   recordingId: string;
   outputRoot: string;
   pollIntervalMs: number;
+  minCaptureMs?: number;
+  connect: RecorderConnectOptions | null;
   controlClient: RecordingControlClient;
   pageRuntime: RecorderPageRuntime;
 };
@@ -18,6 +28,8 @@ export class RecordingWorkerService {
   private readonly recordingId: string;
   private readonly outputRoot: string;
   private readonly pollIntervalMs: number;
+  private readonly minCaptureMs: number;
+  private readonly connect: RecorderConnectOptions | null;
   private readonly controlClient: RecordingControlClient;
   private readonly pageRuntime: RecorderPageRuntime;
 
@@ -26,16 +38,16 @@ export class RecordingWorkerService {
     this.recordingId = options.recordingId.trim();
     this.outputRoot = options.outputRoot;
     this.pollIntervalMs = options.pollIntervalMs;
+    const requestedMinCaptureMs = options.minCaptureMs ?? DEFAULT_MIN_CAPTURE_MS;
+    this.minCaptureMs = Number.isFinite(requestedMinCaptureMs)
+      ? Math.max(0, requestedMinCaptureMs)
+      : DEFAULT_MIN_CAPTURE_MS;
+    this.connect = options.connect;
     this.controlClient = options.controlClient;
     this.pageRuntime = options.pageRuntime;
   }
 
   async run(): Promise<void> {
-    const session = await this.controlClient.getSession(this.sessionId);
-    if (session.recording.mode === "disabled") {
-      throw new Error(`recording is disabled for session ${this.sessionId}`);
-    }
-
     const recording = this.recordingId
       ? await this.controlClient.getRecording(this.sessionId, this.recordingId)
       : await this.controlClient.createRecording(this.sessionId);
@@ -45,15 +57,12 @@ export class RecordingWorkerService {
     );
 
     try {
-      const access = await this.controlClient.issueSessionAccessToken(this.sessionId);
-      await this.pageRuntime.start({
-        gatewayUrl: access.connect.gateway_url,
-        transportPath: access.connect.transport_path,
-        connectTicket: access.token,
-      });
+      const connect = this.connect ?? await this.issueConnectTicket();
+      await this.pageRuntime.start(connect);
       console.log(
         `[recording-worker] recorder client connected for session ${this.sessionId}`,
       );
+      await this.pageRuntime.waitForMinimumCapture(this.minCaptureMs);
       const finalizationTarget = await this.waitForFinalize(recording.id);
       if (finalizationTarget.state === "ready") {
         console.log(
@@ -107,6 +116,15 @@ export class RecordingWorkerService {
 
   private resolveArtifactPath(recordingId: string): string {
     return path.join(this.outputRoot, this.sessionId, `${recordingId}.webm`);
+  }
+
+  private async issueConnectTicket(): Promise<RecorderConnectOptions> {
+    const access = await this.controlClient.issueSessionAccessToken(this.sessionId);
+    return {
+      gatewayUrl: access.connect.gateway_url,
+      transportPath: access.connect.transport_path,
+      connectTicket: access.token,
+    };
   }
 
   private async sleep(ms: number): Promise<void> {

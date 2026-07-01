@@ -82,6 +82,20 @@
           await requireSession().startRecording({ frameRate: 24 });
         },
 
+        getStats() {
+          const currentSession = requireSession();
+          const tileStats = currentSession.getTileCacheStats();
+          return {
+            frameCount: currentSession.getFrameCount(),
+            renderedTileUpdates:
+              tileStats.fills +
+              tileStats.qoiDecodes +
+              tileStats.zstdDecodes +
+              tileStats.cacheHits +
+              tileStats.scrollCopies,
+          };
+        },
+
         async stop() {
           lastBlob = await requireSession().stopRecording();
           return {
