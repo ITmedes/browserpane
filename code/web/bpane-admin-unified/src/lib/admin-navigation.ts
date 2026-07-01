@@ -15,6 +15,7 @@ export type NavIconKey =
   | 'network'
   | 'shield'
   | 'terminal'
+  | 'video'
   | 'workflow';
 
 export type NavGroupName = 'Operate' | 'Resources' | 'Govern' | 'Docs';
@@ -43,6 +44,7 @@ export const navGroups: NavGroup[] = [
     group: 'Operate',
     items: [
       { id: 'sessions', label: 'Sessions', route: '/admin-new/sessions', icon: 'cpu' },
+      { id: 'recordings', label: 'Recordings', route: '/admin-new/recordings', icon: 'video' },
       { id: 'workflows', label: 'Workflows', route: '/admin-new/workflows', icon: 'workflow' },
       { id: 'runs', label: 'Workflow runs', route: '/admin-new/runs', icon: 'list' },
     ],
@@ -75,7 +77,7 @@ export const navGroups: NavGroup[] = [
 export const allNavItems = navGroups.flatMap((group) => group.items);
 
 export const primaryNav: NavItem[] = allNavItems.filter((item) =>
-  ['dashboard', 'sessions', 'workflows', 'runs', 'projects', 'contexts', 'egress', 'workspaces'].includes(item.id),
+  ['dashboard', 'sessions', 'recordings', 'workflows', 'runs', 'projects', 'contexts', 'egress', 'workspaces'].includes(item.id),
 );
 
 export const secondaryNav: NavItem[] = allNavItems.filter((item) =>
