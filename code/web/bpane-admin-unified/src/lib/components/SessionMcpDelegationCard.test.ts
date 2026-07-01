@@ -31,11 +31,11 @@ describe('SessionMcpDelegationCard', () => {
     expect(byTestId(target, 'mcp-delegation-status').textContent).toContain('Not authorized');
     expect(byTestId(target, 'mcp-endpoint-url').textContent).toContain('/sessions/session-1/mcp');
     expect(
-      byTestId(target, 'mcp-summary-row').compareDocumentPosition(byTestId(target, 'mcp-endpoint-row'))
+      byTestId(target, 'mcp-summary-row').compareDocumentPosition(byTestId(target, 'mcp-actions-row'))
       & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      byTestId(target, 'mcp-endpoint-row').compareDocumentPosition(byTestId(target, 'mcp-authorize'))
+      byTestId(target, 'mcp-actions-row').compareDocumentPosition(byTestId(target, 'mcp-endpoint-row'))
       & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
