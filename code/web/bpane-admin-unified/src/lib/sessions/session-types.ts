@@ -190,6 +190,18 @@ export type SessionIdleStatus = {
   readonly idle_deadline?: string | null;
 };
 
+export type SessionRecordingStatus = {
+  readonly configured_mode: string;
+  readonly format: string;
+  readonly retention_sec?: number | null;
+  readonly state: string;
+  readonly active_recording_id?: string | null;
+  readonly recorder_attached: boolean;
+  readonly started_at?: string | null;
+  readonly bytes_written?: number | null;
+  readonly duration_ms?: number | null;
+};
+
 export type SessionStatus = {
   readonly state: string;
   readonly project_id?: string | null;
@@ -213,4 +225,5 @@ export type SessionStatus = {
   readonly network_identity?: SessionNetworkIdentity | null;
   readonly effective_egress?: SessionEffectiveEgress | null;
   readonly egress_diagnostics?: SessionEgressDiagnostics | null;
+  readonly recording?: SessionRecordingStatus | null;
 };

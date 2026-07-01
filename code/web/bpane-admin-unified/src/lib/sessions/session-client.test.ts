@@ -61,6 +61,11 @@ describe('SessionCatalogClient', () => {
     expect(created.id).toBe('created-session');
     expect(loaded.runtime.binding).toBe('docker:browser-1');
     expect(status.connections[0]).toMatchObject({ connection_id: 7, role: 'browser-owner' });
+    expect(status.recording).toMatchObject({
+      configured_mode: 'always',
+      state: 'idle',
+      active_recording_id: null,
+    });
     expect(access).toMatchObject({
       session_id: 'session-1',
       token_type: 'session_connect_ticket',
