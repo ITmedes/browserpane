@@ -33,6 +33,11 @@ export function sessionStatus(
     readonly recorderClients: number;
     readonly stopAllowed: boolean;
     readonly mcpOwner: boolean;
+    readonly recordingState: string;
+    readonly activeRecordingId: string | null;
+    readonly recorderAttached: boolean;
+    readonly recordingBytes: number | null;
+    readonly recordingDurationMs: number | null;
   }> = {},
 ): SessionStatus {
   return toSessionStatus(sessionStatusPayload(overrides));
@@ -173,6 +178,11 @@ export function sessionStatusPayload(
     readonly recorderClients: number;
     readonly stopAllowed: boolean;
     readonly mcpOwner: boolean;
+    readonly recordingState: string;
+    readonly activeRecordingId: string | null;
+    readonly recorderAttached: boolean;
+    readonly recordingBytes: number | null;
+    readonly recordingDurationMs: number | null;
   }> = {},
 ): Record<string, unknown> {
   const totalClients = overrides.totalClients ?? 1;
@@ -217,6 +227,17 @@ export function sessionStatusPayload(
     network_identity: null,
     effective_egress: null,
     egress_diagnostics: null,
+    recording: {
+      configured_mode: 'always',
+      format: 'webm',
+      retention_sec: null,
+      state: overrides.recordingState ?? 'idle',
+      active_recording_id: overrides.activeRecordingId ?? null,
+      recorder_attached: overrides.recorderAttached ?? false,
+      started_at: overrides.activeRecordingId ? '2026-06-21T10:05:00.000Z' : null,
+      bytes_written: overrides.recordingBytes ?? null,
+      duration_ms: overrides.recordingDurationMs ?? null,
+    },
   };
 }
 

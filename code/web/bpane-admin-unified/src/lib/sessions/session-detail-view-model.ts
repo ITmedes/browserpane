@@ -3,7 +3,7 @@ import {
   formatDuration,
 } from '$lib/projects/project-formatters';
 import type { ProjectTone } from '$lib/projects/project-formatters';
-import type { SessionResource, SessionStatus } from './session-types';
+import type { SessionRecordingStatus, SessionResource, SessionStatus } from './session-types';
 import { sessionRow } from './session-overview-view-model';
 
 export type SessionDetailLoadState =
@@ -107,7 +107,8 @@ export function buildSessionDetailModel(session: SessionResource, liveStatus: Se
           fact('Viewport', session.viewport ? `${session.viewport.width} x ${session.viewport.height}` : 'default'),
           fact('Resolution', status ? `${status.resolution[0]} x ${status.resolution[1]}` : 'not loaded'),
           fact('Idle timeout', session.idle_timeout_sec ? formatDuration(session.idle_timeout_sec * 1000) ?? `${session.idle_timeout_sec}s` : 'default'),
-          fact('Recording', recordingLabel(session), 'session-detail-recording', session.recording.mode === 'disabled' ? 'neutral' : 'success'),
+          fact('Recording policy', recordingLabel(session), 'session-detail-recording', session.recording.mode === 'disabled' ? 'neutral' : 'success'),
+          ...(status?.recording ? recordingStatusFacts(status.recording) : []),
         ],
       },
       {
@@ -230,6 +231,35 @@ function recordingLabel(session: SessionResource): string {
     ? `, retention ${formatDuration(session.recording.retention_sec * 1000) ?? `${session.recording.retention_sec}s`}`
     : '';
   return `${mode} / ${format}${retention}`;
+}
+
+function recordingStatusFacts(recording: SessionRecordingStatus): readonly SessionFact[] {
+  return [
+    fact('Recording state', recordingStatusLabel(recording), 'session-detail-recording-state', recordingTone(recording)),
+    fact('Active recording', recording.active_recording_id ?? 'none', 'session-detail-active-recording'),
+    fact('Recorder attached', recording.recorder_attached ? 'yes' : 'no', 'session-detail-recorder-attached', recording.recorder_attached ? 'success' : 'neutral'),
+  ];
+}
+
+function recordingStatusLabel(recording: SessionRecordingStatus): string {
+  const bytes = recording.bytes_written ? `, ${recording.bytes_written} bytes` : '';
+  const duration = recording.duration_ms
+    ? `, ${formatDuration(recording.duration_ms) ?? `${recording.duration_ms}ms`}`
+    : '';
+  return `${recording.state || 'idle'}${bytes}${duration}`;
+}
+
+function recordingTone(recording: SessionRecordingStatus): ProjectTone {
+  if (recording.state === 'ready') {
+    return 'success';
+  }
+  if (['starting', 'recording', 'finalizing'].includes(recording.state)) {
+    return 'warning';
+  }
+  if (recording.state === 'failed') {
+    return 'danger';
+  }
+  return 'neutral';
 }
 
 function limitLabel(value: number, limit?: number | null): string {

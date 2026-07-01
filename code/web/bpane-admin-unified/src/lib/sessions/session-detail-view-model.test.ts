@@ -71,14 +71,37 @@ describe('buildSessionDetailModel', () => {
   it('surfaces the session recording policy in runtime details', () => {
     const model = buildSessionDetailModel(
       sessionResource({ recordingMode: 'always', recordingRetentionSec: 3600 }),
-      null,
+      sessionStatus({
+        recordingState: 'recording',
+        activeRecordingId: 'recording-123',
+        recorderAttached: true,
+        recordingBytes: 4096,
+        recordingDurationMs: 3000,
+      }),
     );
 
     const runtimeSection = model.sections.find((section) => section.testId === 'session-detail-runtime-section');
     expect(runtimeSection?.facts).toContainEqual(expect.objectContaining({
-      label: 'Recording',
+      label: 'Recording policy',
       value: 'always / webm, retention 1h 0m',
       testId: 'session-detail-recording',
+      tone: 'success',
+    }));
+    expect(runtimeSection?.facts).toContainEqual(expect.objectContaining({
+      label: 'Recording state',
+      value: 'recording, 4096 bytes, 3s',
+      testId: 'session-detail-recording-state',
+      tone: 'warning',
+    }));
+    expect(runtimeSection?.facts).toContainEqual(expect.objectContaining({
+      label: 'Active recording',
+      value: 'recording-123',
+      testId: 'session-detail-active-recording',
+    }));
+    expect(runtimeSection?.facts).toContainEqual(expect.objectContaining({
+      label: 'Recorder attached',
+      value: 'yes',
+      testId: 'session-detail-recorder-attached',
       tone: 'success',
     }));
     expect(model.actions).toMatchObject({

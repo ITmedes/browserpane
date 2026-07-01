@@ -16,6 +16,7 @@ import type {
   SessionProjectResource,
   SessionQueueInfo,
   SessionRecordingPolicy,
+  SessionRecordingStatus,
   SessionResource,
   SessionRuntimeInfo,
   SessionStatus,
@@ -299,6 +300,9 @@ export function toSessionStatus(payload: unknown): SessionStatus {
     egress_diagnostics: object.egress_diagnostics === null || object.egress_diagnostics === undefined
       ? null
       : toSessionEgressDiagnostics(object.egress_diagnostics),
+    recording: object.recording === null || object.recording === undefined
+      ? null
+      : toSessionRecordingStatus(object.recording),
   };
 }
 
@@ -371,6 +375,21 @@ function toSessionEffectiveEgress(payload: unknown): SessionEffectiveEgress {
       optionalBoolean(object.tls_interception_enabled, 'effective egress tls_interception_enabled') ?? false,
     sensitive_log_sink_configured:
       optionalBoolean(object.sensitive_log_sink_configured, 'effective egress sensitive_log_sink_configured') ?? false,
+  };
+}
+
+function toSessionRecordingStatus(payload: unknown): SessionRecordingStatus {
+  const object = expectRecord(payload, 'session recording status');
+  return {
+    configured_mode: optionalString(object.configured_mode, 'session recording configured_mode') ?? 'disabled',
+    format: optionalString(object.format, 'session recording format') ?? 'webm',
+    retention_sec: optionalNumber(object.retention_sec, 'session recording retention_sec') ?? null,
+    state: optionalString(object.state, 'session recording state') ?? 'idle',
+    active_recording_id: optionalString(object.active_recording_id, 'session recording active_recording_id') ?? null,
+    recorder_attached: optionalBoolean(object.recorder_attached, 'session recording recorder_attached') ?? false,
+    started_at: optionalString(object.started_at, 'session recording started_at') ?? null,
+    bytes_written: optionalNumber(object.bytes_written, 'session recording bytes_written') ?? null,
+    duration_ms: optionalNumber(object.duration_ms, 'session recording duration_ms') ?? null,
   };
 }
 

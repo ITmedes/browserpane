@@ -172,7 +172,7 @@
           data-testid="session-enable-recording"
         >
           <Video size={15} strokeWidth={1.8} />
-          <span>Enable recording</span>
+          <span>Enable always-on</span>
         </button>
         <button
           class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
@@ -182,7 +182,7 @@
           data-testid="session-disable-recording"
         >
           <VideoOff size={15} strokeWidth={1.8} />
-          <span>Disable recording</span>
+          <span>Disable always-on</span>
         </button>
         <button
           class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"

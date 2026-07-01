@@ -112,16 +112,37 @@
   }
 
   async function enableSessionRecording(): Promise<void> {
-    await mutateSession('Enabling recording...', 'Session recording policy enabled.', (catalog, sessionId) =>
-      catalog.updateSessionRecordingPolicy(sessionId, {
+    const sessionId = activeSessionId();
+    if (!sessionId) {
+      return;
+    }
+    const catalog = client();
+    actionState = { status: 'running', label: 'Enabling always-on recording...' };
+    try {
+      const session = await catalog.updateSessionRecordingPolicy(sessionId, {
         mode: 'always',
         format: 'webm',
-      }),
-    );
+      });
+      const liveStatus = await loadSessionStatus(catalog, session.id);
+      sessionState = {
+        status: 'ready',
+        session,
+        liveStatus,
+      };
+      actionState = {
+        status: 'success',
+        message: recordingEnableMessage(session, liveStatus),
+      };
+    } catch (error) {
+      actionState = {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Session recording enable failed.',
+      };
+    }
   }
 
   async function disableSessionRecording(): Promise<void> {
-    await mutateSession('Disabling recording...', 'Session recording policy disabled.', (catalog, sessionId) =>
+    await mutateSession('Disabling always-on recording...', 'Always-on recording disabled.', (catalog, sessionId) =>
       catalog.updateSessionRecordingPolicy(sessionId, {
         mode: 'disabled',
         format: 'webm',
@@ -249,6 +270,17 @@
       status: 'error',
       message: 'The browser preview popup was blocked. Allow popups for this admin origin and try again.',
     };
+  }
+
+  function recordingEnableMessage(session: SessionResource, liveStatus: SessionStatus | null): string {
+    const activeRecordingId = liveStatus?.recording?.active_recording_id;
+    if (activeRecordingId) {
+      return `Always-on recording enabled. Active segment ${activeRecordingId} is recording.`;
+    }
+    if (session.state === 'stopped' || session.state === 'released' || session.state === 'queued') {
+      return 'Always-on recording enabled. The recorder will start when this session runtime starts.';
+    }
+    return 'Always-on recording enabled. Refresh the session status if the active segment is not visible yet.';
   }
 
   async function mutateSession(
