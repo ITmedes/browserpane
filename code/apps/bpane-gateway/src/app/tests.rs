@@ -72,6 +72,52 @@ fn recording_worker_requires_chrome_when_enabled() {
 }
 
 #[test]
+fn recording_worker_uses_inline_cert_spki() {
+    let mut config = test_config();
+    config.recording.recording_worker_bin = Some("recording-worker".into());
+    config.recording.recording_worker_chrome = Some("chromium".into());
+    config.recording.recording_worker_cert_spki = Some("inline-spki".to_string());
+
+    let worker_config = build_recording_worker_config(&config).unwrap().unwrap();
+
+    assert_eq!(worker_config.cert_spki.as_deref(), Some("inline-spki"));
+}
+
+#[test]
+fn recording_worker_reads_cert_spki_file() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cert_file = temp_dir.path().join("cert-fingerprint.txt");
+    std::fs::write(&cert_file, "file-spki\n").unwrap();
+
+    let mut config = test_config();
+    config.recording.recording_worker_bin = Some("recording-worker".into());
+    config.recording.recording_worker_chrome = Some("chromium".into());
+    config.recording.recording_worker_cert_spki_file = Some(cert_file);
+
+    let worker_config = build_recording_worker_config(&config).unwrap().unwrap();
+
+    assert_eq!(worker_config.cert_spki.as_deref(), Some("file-spki"));
+}
+
+#[test]
+fn recording_worker_rejects_empty_cert_spki_file() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cert_file = temp_dir.path().join("cert-fingerprint.txt");
+    std::fs::write(&cert_file, "\n").unwrap();
+
+    let mut config = test_config();
+    config.recording.recording_worker_bin = Some("recording-worker".into());
+    config.recording.recording_worker_chrome = Some("chromium".into());
+    config.recording.recording_worker_cert_spki_file = Some(cert_file);
+
+    let error = build_recording_worker_config(&config).unwrap_err();
+
+    assert!(error
+        .to_string()
+        .contains("--recording-worker-cert-spki-file"));
+}
+
+#[test]
 fn workflow_retention_zero_disables_cleanup_window() {
     assert!(workflow_retention_window("workflow-log-retention-secs", 0)
         .unwrap()

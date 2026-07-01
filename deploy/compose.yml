@@ -187,6 +187,7 @@ services:
       --recording-worker-api-url ${BPANE_RECORDING_WORKER_API_URL:-http://gateway:8932}
       --recording-worker-page-url ${BPANE_RECORDING_WORKER_PAGE_URL:-http://web:8080/recording-worker.html}
       --recording-worker-output-root ${BPANE_RECORDING_WORKER_OUTPUT_ROOT:-/tmp/bpane-recordings}
+      --recording-worker-cert-spki-file ${BPANE_RECORDING_WORKER_CERT_SPKI_FILE:-/certs/cert-fingerprint.txt}
       --recording-worker-connect-timeout-secs ${BPANE_RECORDING_WORKER_CONNECT_TIMEOUT_SECS:-120}
       --recording-worker-oidc-token-url ${BPANE_RECORDING_WORKER_OIDC_TOKEN_URL:-http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token}
       --recording-worker-oidc-client-id ${BPANE_RECORDING_WORKER_OIDC_CLIENT_ID:-bpane-mcp-bridge}

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use chrono::Utc;
 
 use crate::auth::AuthValidator;
@@ -74,7 +74,7 @@ pub(in crate::app) fn build_recording_worker_config(
         gateway_api_url: config.recording.recording_worker_api_url.clone(),
         page_url: config.recording.recording_worker_page_url.clone(),
         output_root: config.recording.recording_worker_output_root.clone(),
-        cert_spki: config.recording.recording_worker_cert_spki.clone(),
+        cert_spki: recording_worker_cert_spki(config)?,
         headless: config.recording.recording_worker_headless,
         connect_timeout: Duration::from_secs(
             config.recording.recording_worker_connect_timeout_secs,
@@ -89,4 +89,34 @@ pub(in crate::app) fn build_recording_worker_config(
         oidc_client_secret: config.recording.recording_worker_oidc_client_secret.clone(),
         oidc_scopes: config.recording.recording_worker_oidc_scopes.clone(),
     }))
+}
+
+fn recording_worker_cert_spki(config: &Config) -> anyhow::Result<Option<String>> {
+    if let Some(value) = config
+        .recording
+        .recording_worker_cert_spki
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(Some(value.to_string()));
+    }
+
+    let Some(path) = &config.recording.recording_worker_cert_spki_file else {
+        return Ok(None);
+    };
+    let value = std::fs::read_to_string(path).with_context(|| {
+        format!(
+            "failed to read --recording-worker-cert-spki-file {}",
+            path.display()
+        )
+    })?;
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(anyhow!(
+            "--recording-worker-cert-spki-file {} is empty",
+            path.display()
+        ));
+    }
+    Ok(Some(value.to_string()))
 }
