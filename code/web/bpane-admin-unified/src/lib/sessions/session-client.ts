@@ -15,6 +15,7 @@ import type {
   SessionNetworkIdentity,
   SessionProjectResource,
   SessionQueueInfo,
+  SessionRecordingPolicy,
   SessionResource,
   SessionRuntimeInfo,
   SessionStatus,
@@ -236,6 +237,7 @@ export function toSessionResource(payload: unknown): SessionResource {
     integration_context: object.integration_context === null || object.integration_context === undefined
       ? null
       : toUnknownRecord(object.integration_context, 'session integration_context'),
+    recording: toSessionRecordingPolicy(object.recording),
     connect: toConnectInfo(object.connect),
     runtime: toRuntimeInfo(object.runtime),
     status: toSessionStatusSummary(object.status),
@@ -379,6 +381,22 @@ function toSessionCapabilities(payload: unknown): SessionCapabilities {
     camera: optionalBoolean(object.camera, 'session camera capability') ?? false,
     file_transfer: optionalBoolean(object.file_transfer, 'session file_transfer capability') ?? false,
     resize: optionalBoolean(object.resize, 'session resize capability') ?? false,
+  };
+}
+
+function toSessionRecordingPolicy(payload: unknown): SessionRecordingPolicy {
+  if (payload === null || payload === undefined) {
+    return {
+      mode: 'disabled',
+      format: 'webm',
+      retention_sec: null,
+    };
+  }
+  const object = expectRecord(payload, 'session recording');
+  return {
+    mode: optionalString(object.mode, 'session recording mode') ?? 'disabled',
+    format: optionalString(object.format, 'session recording format') ?? 'webm',
+    retention_sec: optionalNumber(object.retention_sec, 'session recording retention_sec') ?? null,
   };
 }
 

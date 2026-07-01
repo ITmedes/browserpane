@@ -1,5 +1,5 @@
 import type { ProjectPolicyOption, ProjectResource } from '$lib/projects/project-types';
-import type { CreateSessionRequest, SessionCapabilities } from './session-types';
+import type { CreateSessionRequest, SessionCapabilities, SessionRecordingPolicy } from './session-types';
 
 export type SessionCreateDraft = {
   projectId: string;
@@ -18,6 +18,8 @@ export type SessionCreateDraft = {
   capabilityCamera: boolean;
   capabilityFileTransfer: boolean;
   capabilityResize: boolean;
+  recordingEnabled: boolean;
+  recordingRetentionSec: string;
   locale: string;
   languagesText: string;
   timezone: string;
@@ -55,6 +57,7 @@ export type SessionCreateValidationField =
   | 'browserContextId'
   | 'egressProfileId'
   | 'idleTimeoutSec'
+  | 'recordingRetentionSec'
   | 'viewport'
   | 'languagesText'
   | 'userAgent'
@@ -86,6 +89,8 @@ export function createNewSessionCreateDraft(): SessionCreateDraft {
     capabilityCamera: DEFAULT_CAPABILITIES.camera,
     capabilityFileTransfer: DEFAULT_CAPABILITIES.file_transfer,
     capabilityResize: DEFAULT_CAPABILITIES.resize,
+    recordingEnabled: false,
+    recordingRetentionSec: '',
     locale: '',
     languagesText: '',
     timezone: '',
@@ -162,6 +167,14 @@ export function validateSessionCreateDraft(
     'idleTimeoutSec',
     addError,
   );
+  const recordingRetentionSec = draft.recordingEnabled
+    ? optionalPositiveInteger(
+        draft.recordingRetentionSec,
+        'Recording retention',
+        'recordingRetentionSec',
+        addError,
+      )
+    : null;
   const viewport = optionalViewport(draft, addError);
   const labels = parseLabels(draft.labelsText, addError);
   const languages = parseLanguages(draft.languagesText, addError);
@@ -208,6 +221,7 @@ export function validateSessionCreateDraft(
     capabilities?: SessionCapabilities;
     idle_timeout_sec?: number;
     labels?: Readonly<Record<string, string>>;
+    recording?: SessionRecordingPolicy;
   } = {};
   assignIfPresent(request, 'project_id', projectId);
   assignIfPresent(request, 'template_id', templateId);
@@ -232,6 +246,13 @@ export function validateSessionCreateDraft(
   }
   if (Object.keys(networkIdentity).length > 0) {
     request.network_identity = networkIdentity;
+  }
+  if (draft.recordingEnabled) {
+    request.recording = {
+      mode: 'always',
+      format: 'webm',
+      ...(recordingRetentionSec !== null ? { retention_sec: recordingRetentionSec } : {}),
+    };
   }
 
   return {
@@ -299,7 +320,7 @@ function optionalPositiveInteger(
   field: SessionCreateValidationField,
   addError: (field: SessionCreateValidationField, message: string) => void,
 ): number | null {
-  const trimmed = value.trim();
+  const trimmed = normalizedText(value);
   if (!trimmed) {
     return null;
   }
@@ -315,8 +336,8 @@ function optionalViewport(
   draft: SessionCreateDraft,
   addError: (field: SessionCreateValidationField, message: string) => void,
 ): { width: number; height: number } | null {
-  const widthText = draft.viewportWidth.trim();
-  const heightText = draft.viewportHeight.trim();
+  const widthText = normalizedText(draft.viewportWidth);
+  const heightText = normalizedText(draft.viewportHeight);
   if (!widthText && !heightText) {
     return null;
   }
@@ -404,9 +425,10 @@ function normalizedDraft(draft: SessionCreateDraft): SessionCreateDraft {
     templateId: draft.templateId.trim(),
     browserContextId: draft.browserContextId.trim(),
     egressProfileId: draft.egressProfileId.trim(),
-    idleTimeoutSec: draft.idleTimeoutSec.trim(),
-    viewportWidth: draft.viewportWidth.trim(),
-    viewportHeight: draft.viewportHeight.trim(),
+    idleTimeoutSec: normalizedText(draft.idleTimeoutSec),
+    recordingRetentionSec: draft.recordingEnabled ? normalizedText(draft.recordingRetentionSec) : '',
+    viewportWidth: normalizedText(draft.viewportWidth),
+    viewportHeight: normalizedText(draft.viewportHeight),
     locale: draft.locale.trim(),
     languagesText: draft.languagesText.trim(),
     timezone: draft.timezone.trim(),
@@ -414,4 +436,8 @@ function normalizedDraft(draft: SessionCreateDraft): SessionCreateDraft {
     userAgent: draft.userAgent.trim(),
     labelsText: draft.labelsText.trim(),
   };
+}
+
+function normalizedText(value: string): string {
+  return String(value ?? '').trim();
 }

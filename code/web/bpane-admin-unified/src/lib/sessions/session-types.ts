@@ -86,6 +86,12 @@ export type SessionCapabilities = {
   readonly resize: boolean;
 };
 
+export type SessionRecordingPolicy = {
+  readonly mode: 'disabled' | 'manual' | 'always' | string;
+  readonly format: 'webm' | string;
+  readonly retention_sec?: number | null;
+};
+
 export type SessionAutomationDelegate = {
   readonly client_id: string;
   readonly issuer: string;
@@ -135,6 +141,7 @@ export type SessionResource = {
   readonly idle_timeout_sec?: number | null;
   readonly labels: Readonly<Record<string, string>>;
   readonly integration_context?: Readonly<Record<string, unknown>> | null;
+  readonly recording: SessionRecordingPolicy;
   readonly connect: SessionConnectInfo;
   readonly runtime: SessionRuntimeInfo;
   readonly status: SessionStatusSummary;
@@ -169,6 +176,7 @@ export type CreateSessionRequest = {
   readonly idle_timeout_sec?: number | null;
   readonly labels?: Readonly<Record<string, string>>;
   readonly integration_context?: Readonly<Record<string, unknown>> | null;
+  readonly recording?: SessionRecordingPolicy;
 };
 
 export type SessionConnectionInfo = {

@@ -16,6 +16,8 @@ export function sessionResource(
     readonly stopAllowed: boolean;
     readonly automationDelegate: Record<string, unknown> | null;
     readonly mcpOwner: boolean;
+    readonly recordingMode: string;
+    readonly recordingRetentionSec: number | null;
   }> = {},
 ): SessionResource {
   return toSessionResource(sessionPayload(overrides));
@@ -48,6 +50,8 @@ export function sessionPayload(
     readonly queued: boolean;
     readonly stopAllowed: boolean;
     readonly automationDelegate: Record<string, unknown> | null;
+    readonly recordingMode: string;
+    readonly recordingRetentionSec: number | null;
   }> = {},
 ): Record<string, unknown> {
   const id = overrides.id ?? 'session-1';
@@ -112,6 +116,11 @@ export function sessionPayload(
     idle_timeout_sec: 300,
     labels: { suite: 'sessions' },
     integration_context: { source: 'test' },
+    recording: {
+      mode: overrides.recordingMode ?? 'disabled',
+      format: 'webm',
+      retention_sec: overrides.recordingRetentionSec ?? null,
+    },
     connect: {
       gateway_url: 'https://localhost:4433',
       transport_path: `/session/${id}`,
