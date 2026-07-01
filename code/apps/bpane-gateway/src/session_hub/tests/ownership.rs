@@ -23,7 +23,7 @@ async fn first_subscriber_is_owner() {
 }
 
 #[tokio::test]
-async fn collaborative_mode_keeps_late_joiners_interactive() {
+async fn collaborative_mode_keeps_late_joiners_interactive_and_resizable() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("test.sock");
     let sock_str = sock.to_str().unwrap();
@@ -46,24 +46,17 @@ async fn collaborative_mode_keeps_late_joiners_interactive() {
     assert!(late_joiner.is_owner);
     assert!(hub.is_browser_owner(owner.client_id));
     assert!(hub.is_browser_owner(late_joiner.client_id));
-    assert_eq!(
-        late_joiner.initial_access_state,
-        Some(ControlMessage::ClientAccessState {
-            flags: ClientAccessFlags::RESIZE_LOCKED,
-            width: 1440,
-            height: 900,
-        })
-    );
-    match hub.request_resize(late_joiner.client_id, 1280, 720).await {
-        ResizeResult::Locked(width, height) => assert_eq!((width, height), (1440, 900)),
-        ResizeResult::Applied => panic!("expected Locked"),
-    }
+    assert_eq!(late_joiner.initial_access_state, None);
+    assert!(matches!(
+        hub.request_resize(late_joiner.client_id, 1280, 720).await,
+        ResizeResult::Applied
+    ));
     expect_control_message_eventually(
         &mut late_joiner.control_rx,
         ControlMessage::ClientAccessState {
-            flags: ClientAccessFlags::RESIZE_LOCKED,
-            width: 1440,
-            height: 900,
+            flags: ClientAccessFlags::empty(),
+            width: 0,
+            height: 0,
         },
     )
     .await;
@@ -75,9 +68,9 @@ async fn collaborative_mode_keeps_late_joiners_interactive() {
     expect_control_message_eventually(
         &mut late_joiner.control_rx,
         ControlMessage::ClientAccessState {
-            flags: ClientAccessFlags::RESIZE_LOCKED,
-            width: 1600,
-            height: 900,
+            flags: ClientAccessFlags::empty(),
+            width: 0,
+            height: 0,
         },
     )
     .await;
@@ -85,6 +78,37 @@ async fn collaborative_mode_keeps_late_joiners_interactive() {
     let snapshot = hub.telemetry_snapshot().await;
     assert_eq!(snapshot.viewer_clients, 0);
     assert!(!snapshot.exclusive_browser_owner);
+}
+
+#[tokio::test]
+async fn collaborative_reconnect_after_last_client_can_resize_existing_resolution() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("test.sock");
+    let sock_str = sock.to_str().unwrap();
+
+    let _agent = mock_agent(sock_str).await;
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let hub = Arc::new(SessionHub::new(sock_str, 10, false).await.unwrap());
+    let first_preview = hub.subscribe().await.unwrap();
+    assert!(matches!(
+        hub.request_resize(first_preview.client_id, 1440, 900).await,
+        ResizeResult::Applied
+    ));
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert_eq!(hub.current_resolution().await, (1440, 900));
+
+    hub.unsubscribe(first_preview.client_id).await;
+    assert_eq!(hub.client_count(), 0);
+
+    let second_preview = hub.subscribe().await.unwrap();
+    assert_eq!(second_preview.initial_access_state, None);
+    assert!(matches!(
+        hub.request_resize(second_preview.client_id, 1100, 760)
+            .await,
+        ResizeResult::Applied
+    ));
 }
 
 #[tokio::test]

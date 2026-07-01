@@ -256,8 +256,12 @@ service.
   - MCP automation does not by itself demote browser clients into viewers
   - if MCP is the initial active connector it can seed and hold the session
     resolution until ownership is cleared
-  - if a browser client is already active, that browser-defined input/ownership
-    state remains authoritative while MCP automation attaches alongside it
+  - if a browser client is already active, that browser-defined input and
+    resolution state remains authoritative while MCP automation attaches
+    alongside it
+  - in collaborative browser mode, interactive browser clients can all request
+    runtime resizes; the latest accepted browser resize defines the current
+    display size
 - **Auth** (`auth/`): OIDC/JWT validation for browser and API clients, plus legacy HMAC token compatibility for migration and tests
 - **Identity/access review** (`api/identity.rs`, `api/service_principals.rs`, `api/identity_mappings.rs`): bearer-principal summary, bounded safe OIDC group/claim normalization, owner-scoped service-principal registry metadata, explicit identity-to-project mappings, effective user/service-principal/group/claim mapping evaluation, unmapped-principal signals, sanitized resource counts, project usage, and delegated automation-principal summaries
 - **Heartbeat**: disconnects after 15s without CONTROL ping

@@ -1174,7 +1174,8 @@ cd code/web/bpane-client && npm run smoke:multisession -- --headless
 
 - Sessions are collaborative by default.
 - If the gateway runs with exclusive browser ownership, one browser client is interactive and later clients become viewers.
-- MCP automation does not force browser clients into viewer behavior. If MCP is the first connector it seeds the display size; otherwise the browser-defined display size remains authoritative.
+- In collaborative mode, interactive browser clients can drive input and resize; the latest browser resize request defines the live display size.
+- MCP automation does not force browser clients into viewer behavior. If MCP is the first connector it seeds and holds the display size until MCP ownership is cleared; otherwise the browser-defined display size remains authoritative.
 - Viewers are read-only and do not get interactive capabilities like input, clipboard, upload, download, microphone, camera, or resize.
 
 ## Authentication Model
