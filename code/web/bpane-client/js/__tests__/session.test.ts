@@ -567,7 +567,9 @@ describe('BpaneSession', () => {
       expect((HTMLCanvasElement.prototype as any).captureStream).toHaveBeenCalledWith(24);
 
       MockMediaRecorder.instances[0].emitData(Array.from({ length: 2048 }, (_, index) => index % 256));
+      vi.useFakeTimers();
       const stopPromise = session.stopRecording();
+      await vi.advanceTimersByTimeAsync(1200);
       expect(MockMediaRecorder.instances[0].requestData).toHaveBeenCalledOnce();
       expect(MockMediaRecorder.instances[0].stop).toHaveBeenCalledOnce();
       MockMediaRecorder.instances[0].emitStop();

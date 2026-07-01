@@ -3,6 +3,8 @@ import type { SessionRecordingOptions } from './bpane-types.js';
 const DEFAULT_RECORDING_FRAME_RATE = 24;
 const DEFAULT_RECORDING_VIDEO_BITS_PER_SECOND = 2_000_000;
 const DEFAULT_RECORDING_AUDIO_BITS_PER_SECOND = 64_000;
+const DEFAULT_RECORDING_DATA_TIMESLICE_MS = 500;
+const MIN_RECORDING_DURATION_MS = 1_200;
 const MIN_RECORDING_ARTIFACT_BYTES = 1024;
 const PREFERRED_RECORDING_MIME_TYPES = [
   'video/webm;codecs=vp9,opus',
@@ -16,6 +18,8 @@ export interface SessionRecordingRuntimeInput {
   stopVideoStream: () => void;
   mediaRecorderFactory?: (stream: MediaStream, options?: MediaRecorderOptions) => MediaRecorder;
   mediaStreamFactory?: (tracks: MediaStreamTrack[]) => MediaStream;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export class SessionRecordingRuntime {
@@ -27,11 +31,14 @@ export class SessionRecordingRuntime {
     options?: MediaRecorderOptions,
   ) => MediaRecorder;
   private readonly mediaStreamFactory: (tracks: MediaStreamTrack[]) => MediaStream;
+  private readonly now: () => number;
+  private readonly sleep: (ms: number) => Promise<void>;
   private recorder: MediaRecorder | null = null;
   private activeStream: MediaStream | null = null;
   private chunks: Blob[] = [];
   private stopPromise: Promise<Blob> | null = null;
   private lastMimeType = 'video/webm';
+  private startedAtMs = 0;
 
   constructor(input: SessionRecordingRuntimeInput) {
     this.createVideoStream = input.createVideoStream;
@@ -41,6 +48,8 @@ export class SessionRecordingRuntime {
       ?? ((stream, options) => new MediaRecorder(stream, options));
     this.mediaStreamFactory = input.mediaStreamFactory
       ?? ((tracks) => new MediaStream(tracks));
+    this.now = input.now ?? (() => performance.now());
+    this.sleep = input.sleep ?? ((ms) => new Promise((resolve) => globalThis.setTimeout(resolve, ms)));
   }
 
   isRecording(): boolean {
@@ -69,10 +78,11 @@ export class SessionRecordingRuntime {
           this.chunks.push(event.data);
         }
       };
-      recorder.start();
+      recorder.start(DEFAULT_RECORDING_DATA_TIMESLICE_MS);
+      this.startedAtMs = this.now();
       this.recorder = recorder;
     } catch (error) {
-      this.stopVideoStream();
+      this.reset();
       throw error;
     }
   }
@@ -86,7 +96,7 @@ export class SessionRecordingRuntime {
     }
 
     const recorder = this.recorder;
-    this.stopPromise = new Promise<Blob>((resolve, reject) => {
+    const completion = new Promise<Blob>((resolve, reject) => {
       recorder.onstop = () => {
         const blob = new Blob(this.chunks, { type: this.lastMimeType });
         this.reset();
@@ -102,10 +112,19 @@ export class SessionRecordingRuntime {
       };
     });
 
-    if (typeof recorder.requestData === 'function') {
-      recorder.requestData();
-    }
-    recorder.stop();
+    this.stopPromise = (async () => {
+      await this.waitForMinimumDuration();
+      try {
+        if (typeof recorder.requestData === 'function') {
+          recorder.requestData();
+        }
+        recorder.stop();
+      } catch (error) {
+        this.reset();
+        throw error;
+      }
+      return completion;
+    })();
     return this.stopPromise;
   }
 
@@ -149,6 +168,13 @@ export class SessionRecordingRuntime {
     return PREFERRED_RECORDING_MIME_TYPES.find((mimeType) => supportsType(mimeType));
   }
 
+  private async waitForMinimumDuration(): Promise<void> {
+    const remainingMs = MIN_RECORDING_DURATION_MS - Math.max(0, this.now() - this.startedAtMs);
+    if (remainingMs > 0) {
+      await this.sleep(remainingMs);
+    }
+  }
+
   private reset(): void {
     if (this.recorder) {
       this.recorder.ondataavailable = null;
@@ -162,6 +188,7 @@ export class SessionRecordingRuntime {
     this.recorder = null;
     this.chunks = [];
     this.stopPromise = null;
+    this.startedAtMs = 0;
     this.stopVideoStream();
   }
 
