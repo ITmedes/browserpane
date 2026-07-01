@@ -84,7 +84,7 @@ describe('session create view model', () => {
     });
   });
 
-  it('adds always-on recording only when the operator enables recording', () => {
+  it('adds manual recording policy only when the operator enables recording', () => {
     const validation = validateSessionCreateDraft({
       ...createNewSessionCreateDraft(),
       recordingEnabled: true,
@@ -94,7 +94,7 @@ describe('session create view model', () => {
     expect(validation.valid).toBe(true);
     expect(validation.request).toEqual({
       recording: {
-        mode: 'always',
+        mode: 'manual',
         format: 'webm',
         retention_sec: 86400,
       },

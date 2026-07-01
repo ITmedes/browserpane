@@ -331,8 +331,8 @@
             data-testid="session-create-recording-enabled"
           />
           <span class="min-w-0">
-            <span class="block font-medium text-admin-ink">Record session connections</span>
-            <span class="block text-xs leading-5 text-admin-muted">Create an always-on WebM recording for this session.</span>
+            <span class="block font-medium text-admin-ink">Allow session recording</span>
+            <span class="block text-xs leading-5 text-admin-muted">Allow WebM recording for this session without forcing a recorder worker at start.</span>
           </span>
         </label>
 

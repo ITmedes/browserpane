@@ -249,7 +249,7 @@ export function validateSessionCreateDraft(
   }
   if (draft.recordingEnabled) {
     request.recording = {
-      mode: 'always',
+      mode: 'manual',
       format: 'webm',
       ...(recordingRetentionSec !== null ? { retention_sec: recordingRetentionSec } : {}),
     };

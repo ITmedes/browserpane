@@ -115,7 +115,7 @@ describe('SessionDetailRoute', () => {
 
     byTestId(target, 'session-enable-recording').click();
     await vi.waitFor(() => {
-      expect(byTestId(target, 'session-detail-recording').textContent).toContain('always / webm');
+      expect(byTestId(target, 'session-detail-recording').textContent).toContain('manual / webm');
     });
     expect(byTestId(target, 'session-detail-action-success').textContent).toContain('enabled');
 
@@ -127,7 +127,7 @@ describe('SessionDetailRoute', () => {
     const recordingPolicyCalls = fetchImpl.mock.calls
       .filter((call) => String(call[0]).endsWith('/recording-policy'));
     expect(recordingPolicyCalls.map((call) => [call[1]?.method, JSON.parse(String(call[1]?.body)).mode])).toEqual([
-      ['PUT', 'always'],
+      ['PUT', 'manual'],
       ['PUT', 'disabled'],
     ]);
   });
