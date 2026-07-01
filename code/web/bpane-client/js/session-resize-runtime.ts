@@ -1,10 +1,13 @@
 const RESIZE_DEBOUNCE_MS = 150;
 
+export type SessionResizeSource = 'canvas' | 'container';
+
 export interface SessionResizeRuntimeInput {
   container: HTMLElement;
   canvas: HTMLCanvasElement;
   cursorEl: HTMLCanvasElement | null;
   hiDpi: boolean;
+  resizeSource?: SessionResizeSource;
   resizeObserver: Pick<ResizeObserver, 'observe' | 'disconnect'>;
   resizeRenderer: (width: number, height: number) => void;
   markDisplayDirty: () => void;
@@ -22,6 +25,7 @@ export class SessionResizeRuntime {
   private readonly canvas: HTMLCanvasElement;
   private readonly cursorEl: HTMLCanvasElement | null;
   private readonly hiDpi: boolean;
+  private readonly resizeSource: SessionResizeSource;
   private readonly resizeObserver: Pick<ResizeObserver, 'observe' | 'disconnect'>;
   private readonly resizeRenderer: (width: number, height: number) => void;
   private readonly markDisplayDirty: () => void;
@@ -41,6 +45,7 @@ export class SessionResizeRuntime {
     this.canvas = input.canvas;
     this.cursorEl = input.cursorEl;
     this.hiDpi = input.hiDpi;
+    this.resizeSource = input.resizeSource ?? 'canvas';
     this.resizeObserver = input.resizeObserver;
     this.resizeRenderer = input.resizeRenderer;
     this.markDisplayDirty = input.markDisplayDirty;
@@ -185,6 +190,13 @@ export class SessionResizeRuntime {
   }
 
   private getResizeSource(fallback?: { width: number; height: number }): { width: number; height: number } {
+    if (this.resizeSource === 'container') {
+      if (fallback && fallback.width > 0 && fallback.height > 0) return fallback;
+      const containerRect = this.container.getBoundingClientRect();
+      if (containerRect.width > 0 && containerRect.height > 0) return containerRect;
+      return this.canvas.getBoundingClientRect();
+    }
+
     const canvasRect = this.canvas.getBoundingClientRect();
     if (canvasRect.width > 0 && canvasRect.height > 0) return canvasRect;
     if (fallback && fallback.width > 0 && fallback.height > 0) return fallback;

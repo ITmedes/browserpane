@@ -2,7 +2,7 @@ import type { TileInfo } from './nal.js';
 import type { CacheMissEvent } from './render/tile-draw-runtime.js';
 import { SessionCursorRuntime } from './session-cursor-runtime.js';
 import { SessionRecordingSurfaceRuntime } from './session-recording-surface-runtime.js';
-import { SessionResizeRuntime } from './session-resize-runtime.js';
+import { SessionResizeRuntime, type SessionResizeSource } from './session-resize-runtime.js';
 import { SessionVideoDisplayRuntime } from './session-video-display-runtime.js';
 import {
   WebGLTileRenderer,
@@ -25,6 +25,7 @@ export interface SessionSurfaceRuntimeInput {
   tileCompositor: SessionSurfaceTileCompositor;
   hiDpi: boolean;
   renderBackend?: SessionSurfaceRenderBackendPreference;
+  resizeSource?: SessionResizeSource;
   onTileCacheMiss: (event: CacheMissEvent) => void;
   sendResizeRequest: (width: number, height: number) => void;
   setRemoteSize: (width: number, height: number) => void;
@@ -141,6 +142,7 @@ export class SessionSurfaceRuntime {
       canvas: this.canvas,
       cursorEl: this.cursorEl,
       hiDpi: input.hiDpi,
+      resizeSource: input.resizeSource,
       resizeObserver,
       resizeRenderer: (width, height) => {
         if (this.glRenderer) {

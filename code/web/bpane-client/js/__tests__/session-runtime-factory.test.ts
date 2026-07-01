@@ -126,6 +126,7 @@ describe('SessionRuntimeFactory', () => {
         hiDpi: false,
         pingIntervalMs: 5000,
         renderBackend: 'canvas2d',
+        resizeSource: 'container',
         onCapabilitiesChange,
       },
       context,
@@ -151,6 +152,7 @@ describe('SessionRuntimeFactory', () => {
     expect(captured.surface.container).toBe(container);
     expect(captured.surface.tileCompositor).toBe(tileCompositor);
     expect(captured.surface.renderBackend).toBe('canvas2d');
+    expect(captured.surface.resizeSource).toBe('container');
 
     const framePayload = new Uint8Array([1, 2, 3]);
     captured.audio.sendFrame(7, framePayload);

@@ -79,6 +79,7 @@ export class BpaneSession {
         hiDpi: options.hiDpi ?? false,
         pingIntervalMs: PING_INTERVAL_MS,
         renderBackend: options.renderBackend,
+        resizeSource: options.resizeSource,
         onCapabilitiesChange: (capabilities) => {
           this.options.onCapabilitiesChange?.(capabilities);
         },

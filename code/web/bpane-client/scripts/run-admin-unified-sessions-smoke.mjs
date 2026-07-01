@@ -122,6 +122,7 @@ async function verifySessionPreviewPopup(page, options, expectedActionLabel = 'C
     await assertNoBodyHorizontalOverflow(popup, 'unified session preview popup');
     await assertNoHorizontalOverflow(popup, 'session-preview-route', 'unified session preview route');
     await waitForPreviewConnected(popup, options);
+    await assertPreviewResizeUsesIndependentHeight(popup, options);
     await assertNoHorizontalOverflow(popup, 'session-preview-viewport', 'unified session preview viewport');
   } finally {
     await popup.close({ runBeforeUnload: true }).catch(() => {});
@@ -182,6 +183,38 @@ async function waitForPreviewConnected(popup, options) {
   if (status === 'Connection failed') {
     const detail = await popup.getByTestId('session-preview-error').textContent().catch(() => '');
     throw new Error(`Session preview popup connection failed${detail ? `: ${detail}` : ''}`);
+  }
+}
+
+async function assertPreviewResizeUsesIndependentHeight(popup, options) {
+  await popup.setViewportSize({ width: 1100, height: 760 });
+  const size = await poll(
+    'session preview popup independent resize',
+    async () => await popup.getByTestId('session-preview-viewport').evaluate((element) => {
+      const canvas = element.querySelector('canvas');
+      const rect = element.getBoundingClientRect();
+      const scale = window.devicePixelRatio || 1;
+      return {
+        canvasWidth: canvas?.width ?? 0,
+        canvasHeight: canvas?.height ?? 0,
+        viewportWidth: Math.round(rect.width * scale),
+        viewportHeight: Math.round(rect.height * scale),
+      };
+    }),
+    (value) => {
+      if (!value.canvasWidth || !value.canvasHeight || !value.viewportWidth || !value.viewportHeight) {
+        return false;
+      }
+      const matchesViewport = Math.abs(value.canvasWidth - value.viewportWidth) <= 2
+        && Math.abs(value.canvasHeight - value.viewportHeight) <= 2;
+      const fixedRatioHeight = Math.round(value.canvasWidth * 9 / 16);
+      return matchesViewport && Math.abs(value.canvasHeight - fixedRatioHeight) > 10;
+    },
+    options.connectTimeoutMs,
+    250,
+  );
+  if (!size) {
+    throw new Error('Session preview popup canvas did not resize independently.');
   }
 }
 
