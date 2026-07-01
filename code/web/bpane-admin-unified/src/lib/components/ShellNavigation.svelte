@@ -16,6 +16,7 @@
     Network,
     ShieldCheck,
     SquareTerminal,
+    Video,
     Workflow,
   } from '@lucide/svelte';
   import type { Component } from 'svelte';
@@ -44,6 +45,7 @@
     network: Network,
     shield: ShieldCheck,
     terminal: SquareTerminal,
+    video: Video,
     workflow: Workflow,
   };
 

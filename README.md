@@ -928,8 +928,9 @@ BrowserPane session recording is now a control-plane feature rather than only a 
 
 - Session recording policy supports `disabled`, `manual`, and `always`.
 - Recording resources are session-scoped and persist segment metadata, runtime state, termination reason, and artifact linkage.
-- Recordings can be downloaded from the admin recording library, the legacy dev
-  harness where applicable, or through the v1 API.
+- Recordings can be downloaded from the admin recording library
+  (`/admin-new/recordings` during the redesign), the legacy dev harness where
+  applicable, or through the v1 API.
 - Playback/export is modeled separately from raw recording segments, so multi-segment sessions stay explicit.
 - Project policy can set `allow_manual_recordings=false` to block ad-hoc manual
   recording starts for project sessions. Always-on session recording remains an
