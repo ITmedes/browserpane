@@ -64,7 +64,7 @@
     </button>
   </div>
 
-  <div class="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+  <div class="mt-4 grid gap-3">
     <div class="min-w-0 rounded-md border border-admin-border bg-admin-panel p-3">
       <p class="m-0 text-xs font-semibold uppercase text-admin-muted">Session endpoint</p>
       {#if viewModel.endpointUrl}
@@ -74,7 +74,7 @@
       {/if}
     </div>
 
-    <div class="flex flex-wrap gap-2 lg:justify-end">
+    <div class="flex flex-wrap gap-2">
       <button
         class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         type="button"
