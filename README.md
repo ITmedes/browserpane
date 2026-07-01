@@ -933,8 +933,10 @@ BrowserPane session recording is now a control-plane feature rather than only a 
   applicable, or through the v1 API.
 - Playback/export is modeled separately from raw recording segments, so multi-segment sessions stay explicit.
 - Project policy can set `allow_manual_recordings=false` to block ad-hoc manual
-  recording starts for project sessions. Always-on session recording remains an
-  explicit session/template recording policy.
+  recording starts for project sessions. The redesigned admin session form uses
+  `recording.mode=manual` so local session start/connect does not require a
+  configured recorder worker. Always-on session recording remains an explicit
+  API/template policy for deployments that wire a recording worker.
 
 Primary routes:
 

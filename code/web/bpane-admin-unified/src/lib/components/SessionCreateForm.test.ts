@@ -90,7 +90,7 @@ describe('SessionCreateForm', () => {
     });
   });
 
-  it('submits always-on recording only after the recording checkbox is enabled', async () => {
+  it('submits manual recording policy only after the recording checkbox is enabled', async () => {
     const onSave = vi.fn<(request: CreateSessionRequest) => void>();
     const target = renderComponent(SessionCreateForm, {
       optionsState: { status: 'ready', options: emptyOptions() },
@@ -101,12 +101,12 @@ describe('SessionCreateForm', () => {
     setInputValue(byTestId(target, 'session-create-recording-retention'), '3600');
     await tick();
 
-    expect(byTestId(target, 'session-create-payload').textContent).toContain('"mode": "always"');
+    expect(byTestId(target, 'session-create-payload').textContent).toContain('"mode": "manual"');
     byTestId(target, 'session-create-save').click();
 
     expect(onSave).toHaveBeenCalledWith({
       recording: {
-        mode: 'always',
+        mode: 'manual',
         format: 'webm',
         retention_sec: 3600,
       },
