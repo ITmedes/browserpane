@@ -44,6 +44,17 @@ pub(super) async fn release_session_runtime(
             .into_response());
     }
 
+    if let Err(error) = state
+        .recording_lifecycle
+        .request_stop_and_wait(
+            session_id,
+            SessionRecordingTerminationReason::RuntimeRelease,
+        )
+        .await
+    {
+        info!(%session_id, "recording finalization before session runtime release returned: {error}");
+    }
+
     let released = state
         .session_store
         .release_session_runtime_for_owner(&principal, session_id)
@@ -79,14 +90,8 @@ fn session_release_conflict_message(stop_eligibility: &SessionStopEligibility) -
             SessionStopBlockerKind::ViewerClients => {
                 format!("{} viewer client(s)", blocker.count)
             }
-            SessionStopBlockerKind::RecorderClients => {
-                format!("{} recorder client(s)", blocker.count)
-            }
             SessionStopBlockerKind::AutomationOwner => {
                 format!("{} automation owner(s)", blocker.count)
-            }
-            SessionStopBlockerKind::RecordingActivity => {
-                format!("{} active recording operation(s)", blocker.count)
             }
             SessionStopBlockerKind::AutomationTasks => {
                 format!("{} active automation task(s)", blocker.count)

@@ -29,7 +29,12 @@ pub(super) async fn disconnect_session_connection(
         ));
     }
     info!(%session_id, connection_id, "disconnected session connection");
-    let updated = reconcile_session_after_disconnect(&state, session).await?;
+    let updated = reconcile_session_after_disconnect(
+        &state,
+        session,
+        SessionRecordingTerminationReason::ClientDisconnect,
+    )
+    .await?;
     Ok(Json(
         load_session_status(&state, &updated)
             .await
@@ -48,10 +53,18 @@ pub(super) async fn disconnect_all_session_connections(
     let session = load_owned_session(&state, &principal, session_id).await?;
     let disconnected = state
         .registry
-        .disconnect_all_session_clients(session_id, SessionTerminationReason::DisconnectedByOwner)
+        .disconnect_interactive_session_clients(
+            session_id,
+            SessionTerminationReason::DisconnectedAllByOwner,
+        )
         .await;
     info!(%session_id, disconnected, "disconnected all live session connections");
-    let updated = reconcile_session_after_disconnect(&state, session).await?;
+    let updated = reconcile_session_after_disconnect(
+        &state,
+        session,
+        SessionRecordingTerminationReason::DisconnectAll,
+    )
+    .await?;
     Ok(Json(
         load_session_status(&state, &updated)
             .await
@@ -82,6 +95,7 @@ async fn load_owned_session(
 async fn reconcile_session_after_disconnect(
     state: &Arc<ApiState>,
     session: StoredSession,
+    recording_termination_reason: SessionRecordingTerminationReason,
 ) -> Result<StoredSession, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = state
         .registry
@@ -89,8 +103,12 @@ async fn reconcile_session_after_disconnect(
         .await
         .unwrap_or_else(|| state.registry.empty_telemetry_snapshot());
 
-    if snapshot.browser_clients == 0 && !snapshot.mcp_owner && session.state.is_runtime_candidate()
-    {
+    if !snapshot.has_interactive_session_activity() && session.state.is_runtime_candidate() {
+        state
+            .recording_lifecycle
+            .request_stop_and_wait(session.id, recording_termination_reason)
+            .await
+            .map_err(map_recording_lifecycle_error)?;
         if let Some(idle) = state
             .session_store
             .mark_session_idle(session.id)

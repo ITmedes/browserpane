@@ -55,6 +55,7 @@ export function buildSessionDetailModel(session: SessionResource, liveStatus: Se
   const connectionCounts = status?.connection_counts ?? session.status.connection_counts;
   const stopEligibility = status?.stop_eligibility ?? session.status.stop_eligibility;
   const totalClients = connectionCounts.total_clients;
+  const interactiveClients = connectionCounts.interactive_clients;
   const isQueued = session.state === 'queued';
   const terminal = ['stopped', 'killed', 'cancelled', 'failed'].includes(session.state);
   const recordingActionable = !['killed', 'cancelled', 'failed'].includes(session.state);
@@ -164,11 +165,11 @@ export function buildSessionDetailModel(session: SessionResource, liveStatus: Se
       connectPreviewLabel: connectPreviewLabel(session.state),
       connectPreviewDescription: connectPreviewDescription(session.state),
       canCancelQueue: isQueued && (session.queue?.cancellable ?? true),
-      canDisconnectAll: totalClients > 0,
+      canDisconnectAll: interactiveClients > 0,
       canEnableRecording: recordingActionable && !recordingEnabled,
       canDisableRecording: recordingActionable && recordingEnabled,
-      canRelease: !isQueued && !terminal && totalClients === 0 && stopEligibility.allowed && session.state !== 'released',
-      canStop: !isQueued && !terminal && totalClients === 0 && stopEligibility.allowed,
+      canRelease: !isQueued && !terminal && interactiveClients === 0 && stopEligibility.allowed && session.state !== 'released',
+      canStop: !isQueued && !terminal && interactiveClients === 0 && stopEligibility.allowed,
       canKill: !isQueued && !terminal,
     },
   };

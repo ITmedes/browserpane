@@ -8,6 +8,7 @@ export function sessionResource(
     readonly runtimeState: string;
     readonly presenceState: string;
     readonly totalClients: number;
+    readonly recorderClients: number;
     readonly projectName: string | null;
     readonly admissionState: string;
     readonly admissionReasonCode: string;
@@ -29,6 +30,7 @@ export function sessionStatus(
     readonly runtimeState: string;
     readonly presenceState: string;
     readonly totalClients: number;
+    readonly recorderClients: number;
     readonly stopAllowed: boolean;
     readonly mcpOwner: boolean;
   }> = {},
@@ -43,6 +45,7 @@ export function sessionPayload(
     readonly runtimeState: string;
     readonly presenceState: string;
     readonly totalClients: number;
+    readonly recorderClients: number;
     readonly projectName: string | null;
     readonly admissionState: string;
     readonly admissionReasonCode: string;
@@ -57,6 +60,7 @@ export function sessionPayload(
   const id = overrides.id ?? 'session-1';
   const state = overrides.state ?? 'ready';
   const totalClients = overrides.totalClients ?? 1;
+  const recorderClients = overrides.recorderClients ?? 0;
   const stopAllowed = overrides.stopAllowed ?? totalClients === 0;
   const projectName = overrides.projectName === undefined ? 'Support' : overrides.projectName;
   return {
@@ -137,7 +141,7 @@ export function sessionPayload(
       runtime_state: overrides.runtimeState ?? 'running',
       runtime_resume_mode: 'profile_restart',
       presence_state: overrides.presenceState ?? 'connected',
-      connection_counts: connectionCounts(totalClients),
+      connection_counts: connectionCounts(totalClients, recorderClients),
       stop_eligibility: stopEligibility(stopAllowed, totalClients),
     },
     queue: overrides.queued
@@ -166,11 +170,13 @@ export function sessionStatusPayload(
     readonly runtimeState: string;
     readonly presenceState: string;
     readonly totalClients: number;
+    readonly recorderClients: number;
     readonly stopAllowed: boolean;
     readonly mcpOwner: boolean;
   }> = {},
 ): Record<string, unknown> {
   const totalClients = overrides.totalClients ?? 1;
+  const recorderClients = overrides.recorderClients ?? 0;
   const stopAllowed = overrides.stopAllowed ?? totalClients === 0;
   return {
     state: overrides.state ?? 'ready',
@@ -185,19 +191,24 @@ export function sessionStatusPayload(
     runtime_state: overrides.runtimeState ?? 'running',
     runtime_resume_mode: 'profile_restart',
     presence_state: overrides.presenceState ?? 'connected',
-    connection_counts: connectionCounts(totalClients),
+    connection_counts: connectionCounts(totalClients, recorderClients),
     stop_eligibility: stopEligibility(stopAllowed, totalClients),
     idle: {
       idle_timeout_sec: 300,
       idle_since: null,
       idle_deadline: null,
     },
-    connections: totalClients > 0
-      ? [{ connection_id: 7, role: 'browser-owner' }]
-      : [],
-    browser_clients: totalClients > 0 ? 1 : 0,
+    connections: [
+      ...(totalClients > recorderClients
+        ? [{ connection_id: 7, role: 'browser-owner' }]
+        : []),
+      ...(recorderClients > 0
+        ? [{ connection_id: 8, role: 'recorder' }]
+        : []),
+    ],
+    browser_clients: totalClients,
     viewer_clients: 0,
-    recorder_clients: 0,
+    recorder_clients: recorderClients,
     max_viewers: 10,
     viewer_slots_remaining: 10,
     exclusive_browser_owner: false,
@@ -209,12 +220,13 @@ export function sessionStatusPayload(
   };
 }
 
-function connectionCounts(totalClients: number): Record<string, number> {
+function connectionCounts(totalClients: number, recorderClients = 0): Record<string, number> {
+  const interactiveClients = Math.max(0, totalClients - recorderClients);
   return {
-    interactive_clients: totalClients > 0 ? 1 : 0,
-    owner_clients: totalClients > 0 ? 1 : 0,
+    interactive_clients: interactiveClients,
+    owner_clients: interactiveClients > 0 ? 1 : 0,
     viewer_clients: 0,
-    recorder_clients: 0,
+    recorder_clients: recorderClients,
     automation_clients: 0,
     total_clients: totalClients,
   };

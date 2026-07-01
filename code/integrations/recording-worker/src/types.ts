@@ -19,7 +19,11 @@ export type GatewayRecordingState =
   | "failed";
 export type GatewayRecordingTerminationReason =
   | "manual_stop"
+  | "client_disconnect"
+  | "disconnect_all"
   | "session_stop"
+  | "session_kill"
+  | "runtime_release"
   | "idle_stop"
   | "gateway_restart"
   | "worker_exit";

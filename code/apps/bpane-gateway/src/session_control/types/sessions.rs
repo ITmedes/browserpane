@@ -2001,9 +2001,7 @@ pub struct SessionConnectionCounts {
 pub enum SessionStopBlockerKind {
     OwnerClients,
     ViewerClients,
-    RecorderClients,
     AutomationOwner,
-    RecordingActivity,
     AutomationTasks,
     WorkflowRuns,
 }

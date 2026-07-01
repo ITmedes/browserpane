@@ -5640,9 +5640,7 @@ components:
       enum:
         - owner_clients
         - viewer_clients
-        - recorder_clients
         - automation_owner
-        - recording_activity
         - automation_tasks
         - workflow_runs
     SessionStopBlocker:
@@ -7685,8 +7683,11 @@ components:
       type: string
       enum:
         - manual_stop
+        - client_disconnect
+        - disconnect_all
         - session_stop
         - session_kill
+        - runtime_release
         - idle_stop
         - gateway_restart
         - worker_exit

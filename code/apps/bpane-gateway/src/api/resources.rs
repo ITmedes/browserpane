@@ -240,7 +240,7 @@ fn derive_session_presence_state(
 
 fn derive_session_stop_eligibility(
     counts: &SessionConnectionCounts,
-    active_recording_count: u32,
+    _active_recording_count: u32,
     active_automation_task_count: u32,
     active_workflow_run_count: u32,
 ) -> SessionStopEligibility {
@@ -257,22 +257,10 @@ fn derive_session_stop_eligibility(
             count: counts.viewer_clients,
         });
     }
-    if counts.recorder_clients > 0 {
-        blockers.push(SessionStopBlocker {
-            kind: SessionStopBlockerKind::RecorderClients,
-            count: counts.recorder_clients,
-        });
-    }
     if counts.automation_clients > 0 {
         blockers.push(SessionStopBlocker {
             kind: SessionStopBlockerKind::AutomationOwner,
             count: counts.automation_clients,
-        });
-    }
-    if active_recording_count > 0 {
-        blockers.push(SessionStopBlocker {
-            kind: SessionStopBlockerKind::RecordingActivity,
-            count: active_recording_count,
         });
     }
     if active_automation_task_count > 0 {

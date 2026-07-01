@@ -14,8 +14,10 @@ use super::tasks::{
 };
 use crate::idle_stop::schedule_idle_session_stop;
 use crate::recording_lifecycle::RecordingLifecycleManager;
+use crate::session_control::SessionRecordingTerminationReason;
 use crate::session_control::SessionStore;
 use crate::session_files::{SessionFileRecorder, SessionFileSource};
+use crate::session_hub::{BrowserClientRole, SessionTerminationReason};
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 use crate::workspaces::WorkspaceFileStore;
@@ -138,6 +140,8 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
     let gateway_pinger = spawn_gateway_pinger(session.clone(), send_stream.clone());
     let mut close_reason: &[u8] = b"session ended";
     let mut should_transition_to_idle = true;
+    let mut recording_termination_reason =
+        Some(SessionRecordingTerminationReason::ClientDisconnect);
     let mut termination_rx = termination_rx;
 
     if recorder_role_suppresses_bitrate_feedback(client_role) {
@@ -150,6 +154,7 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
                 if let Ok(reason) = reason {
                     close_reason = reason.close_reason_bytes();
                     should_transition_to_idle = reason.transitions_to_idle();
+                    recording_termination_reason = recording_reason_for_termination(reason);
                     session.deactivate();
                 }
             }
@@ -172,6 +177,7 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
                 if let Ok(reason) = reason {
                     close_reason = reason.close_reason_bytes();
                     should_transition_to_idle = reason.transitions_to_idle();
+                    recording_termination_reason = recording_reason_for_termination(reason);
                     session.deactivate();
                 }
             }
@@ -182,8 +188,14 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
     registry.leave(routed_session_id, client_id).await;
     if should_transition_to_idle {
         if let Some(snapshot) = registry.telemetry_snapshot_if_live(routed_session_id).await {
-            if snapshot.browser_clients == 0 && snapshot.viewer_clients == 0 && !snapshot.mcp_owner
-            {
+            if !snapshot.has_interactive_session_activity() {
+                if client_role == BrowserClientRole::Interactive {
+                    if let Some(reason) = recording_termination_reason {
+                        let _ = recording_lifecycle
+                            .request_stop_and_wait(routed_session_id, reason)
+                            .await;
+                    }
+                }
                 let _ = session_store.mark_session_idle(routed_session_id).await;
                 session_manager.mark_session_idle(routed_session_id).await;
                 schedule_idle_session_stop(
@@ -196,6 +208,13 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
                 );
             }
         } else {
+            if client_role == BrowserClientRole::Interactive {
+                if let Some(reason) = recording_termination_reason {
+                    let _ = recording_lifecycle
+                        .request_stop_and_wait(routed_session_id, reason)
+                        .await;
+                }
+            }
             let _ = session_store.mark_session_idle(routed_session_id).await;
             session_manager.mark_session_idle(routed_session_id).await;
             schedule_idle_session_stop(
@@ -212,4 +231,18 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
     connection.close(wtransport::VarInt::from_u32(0), close_reason);
 
     Ok(())
+}
+
+fn recording_reason_for_termination(
+    reason: SessionTerminationReason,
+) -> Option<SessionRecordingTerminationReason> {
+    match reason {
+        SessionTerminationReason::DisconnectedByOwner => {
+            Some(SessionRecordingTerminationReason::ClientDisconnect)
+        }
+        SessionTerminationReason::DisconnectedAllByOwner => {
+            Some(SessionRecordingTerminationReason::DisconnectAll)
+        }
+        SessionTerminationReason::SessionKilled => None,
+    }
 }

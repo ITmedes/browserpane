@@ -39,6 +39,19 @@ describe('buildSessionDetailModel', () => {
     });
   });
 
+  it('allows stop and release for recorder-only sessions', () => {
+    const model = buildSessionDetailModel(
+      sessionResource({ totalClients: 1, recorderClients: 1, stopAllowed: true, presenceState: 'recording_only' }),
+      sessionStatus({ totalClients: 1, recorderClients: 1, stopAllowed: true, presenceState: 'recording_only' }),
+    );
+
+    expect(model.actions).toMatchObject({
+      canDisconnectAll: false,
+      canRelease: true,
+      canStop: true,
+    });
+  });
+
   it('allows stopped and released sessions to start through the preview connect action', () => {
     for (const state of ['stopped', 'released']) {
       const model = buildSessionDetailModel(
