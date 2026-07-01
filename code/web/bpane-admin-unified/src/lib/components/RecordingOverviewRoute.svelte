@@ -3,6 +3,7 @@
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { RecordingCatalogClient } from '$lib/recordings/recording-client';
   import {
+    isDownloadableRecording,
     recordingOverviewRow,
     type RecordingActionState,
     type RecordingOverviewLoadState,
@@ -59,12 +60,14 @@
   }
 
   async function downloadRecording(entry: RecordingCatalogEntry): Promise<void> {
-    const row = recordingOverviewRow(entry);
+    const row = recordingOverviewRow(entry, downloadableSegmentCount(entry.session.id));
     actionState = { status: 'running', label: `Downloading ${row.shortId}...` };
     try {
-      const blob = await recordingClient().downloadRecordingContent(entry.recording);
+      const blob = row.downloadKind === 'playback_export'
+        ? await recordingClient().downloadSessionPlaybackExport(entry.session.id)
+        : await recordingClient().downloadRecordingContent(entry.recording);
       triggerDownload(blob, row.downloadFileName);
-      actionState = { status: 'success', message: `Download started for ${row.shortId}.` };
+      actionState = { status: 'success', message: `Download started for ${row.shortSessionId}.` };
     } catch (error) {
       actionState = {
         status: 'error',
@@ -73,19 +76,12 @@
     }
   }
 
-  async function downloadPlayback(entry: RecordingCatalogEntry): Promise<void> {
-    const row = recordingOverviewRow(entry);
-    actionState = { status: 'running', label: `Exporting playback for ${row.shortSessionId}...` };
-    try {
-      const blob = await recordingClient().downloadSessionPlaybackExport(entry.session.id);
-      triggerDownload(blob, row.playbackFileName);
-      actionState = { status: 'success', message: `Playback export started for ${row.shortSessionId}.` };
-    } catch (error) {
-      actionState = {
-        status: 'error',
-        message: error instanceof Error ? error.message : 'Recording playback export failed.',
-      };
+  function downloadableSegmentCount(sessionId: string): number {
+    if (recordingState.status !== 'ready') {
+      return 0;
     }
+    return recordingState.entries.filter((entry) =>
+      entry.session.id === sessionId && isDownloadableRecording(entry.recording)).length;
   }
 
   function triggerDownload(blob: Blob, fileName: string): void {
@@ -108,5 +104,4 @@
   {actionState}
   onRefresh={loadRecordings}
   onDownloadRecording={downloadRecording}
-  onDownloadPlayback={downloadPlayback}
 />

@@ -52,11 +52,10 @@ export type RecordingOverviewRow = {
   readonly termination: string;
   readonly error: string;
   readonly contentPath: string;
-  readonly playbackExportPath: string;
   readonly canDownload: boolean;
-  readonly canExportPlayback: boolean;
+  readonly downloadKind: 'recording_segment' | 'playback_export' | 'unavailable';
+  readonly downloadDescription: string;
   readonly downloadFileName: string;
-  readonly playbackFileName: string;
   readonly badges: readonly string[];
 };
 
@@ -68,22 +67,27 @@ export type RecordingOverviewModel = {
 export function buildRecordingOverviewModel(
   entries: readonly RecordingCatalogEntry[],
 ): RecordingOverviewModel {
+  const downloadableSegmentCounts = downloadableSegmentCountBySession(entries);
   return {
     metrics: [
       metric('total', 'Recordings', entries.length),
-      metric('ready', 'Downloadable', entries.filter((entry) => entry.recording.artifact_available).length),
+      metric('ready', 'Downloadable', entries.filter((entry) => isDownloadableRecording(entry.recording)).length),
       metric('active', 'Active segments', entries.filter((entry) => isActiveRecording(entry.recording)).length),
       metric('failed', 'Failed', entries.filter((entry) => entry.recording.state === 'failed').length),
     ],
-    rows: entries.map(recordingOverviewRow),
+    rows: entries.map((entry) => recordingOverviewRow(entry, downloadableSegmentCounts[entry.session.id] ?? 0)),
   };
 }
 
-export function recordingOverviewRow(entry: RecordingCatalogEntry): RecordingOverviewRow {
+export function recordingOverviewRow(
+  entry: RecordingCatalogEntry,
+  downloadableSessionSegmentCount = 1,
+): RecordingOverviewRow {
   const { recording, session } = entry;
   const shortId = shortIdentifier(recording.id);
   const shortSessionId = shortIdentifier(session.id);
-  const downloadable = recording.artifact_available && recording.state === 'ready';
+  const downloadable = isDownloadableRecording(recording);
+  const multiSegmentDownload = downloadable && downloadableSessionSegmentCount > 1;
   const format = recording.format || 'webm';
   return {
     id: recording.id,
@@ -106,11 +110,20 @@ export function recordingOverviewRow(entry: RecordingCatalogEntry): RecordingOve
     termination: recording.termination_reason?.replaceAll('_', ' ') ?? 'No termination reason',
     error: recording.error?.trim() || 'No error',
     contentPath: recording.content_path,
-    playbackExportPath: `/api/v1/sessions/${encodeURIComponent(session.id)}/recording-playback/export`,
     canDownload: downloadable,
-    canExportPlayback: downloadable,
-    downloadFileName: `bpane-recording-${shortSessionId}-${shortId}.${recordingExtension(format)}`,
-    playbackFileName: `bpane-recording-playback-${shortSessionId}.zip`,
+    downloadKind: downloadable
+      ? multiSegmentDownload
+        ? 'playback_export'
+        : 'recording_segment'
+      : 'unavailable',
+    downloadDescription: downloadable
+      ? multiSegmentDownload
+        ? 'Download session playback ZIP'
+        : 'Download recording WebM'
+      : 'Recording artifact is unavailable',
+    downloadFileName: multiSegmentDownload
+      ? `bpane-recording-playback-${shortSessionId}.zip`
+      : `bpane-recording-${shortSessionId}-${shortId}.${recordingExtension(format)}`,
     badges: [
       recording.state,
       recording.artifact_available ? 'downloadable' : 'missing artifact',
@@ -150,6 +163,22 @@ export function recordingMatchesSearch(
 
 export function isActiveRecording(recording: SessionRecordingResource): boolean {
   return ['starting', 'recording', 'finalizing'].includes(recording.state);
+}
+
+export function isDownloadableRecording(recording: SessionRecordingResource): boolean {
+  return recording.state === 'ready' && recording.artifact_available;
+}
+
+function downloadableSegmentCountBySession(
+  entries: readonly RecordingCatalogEntry[],
+): Readonly<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  for (const entry of entries) {
+    if (isDownloadableRecording(entry.recording)) {
+      counts[entry.session.id] = (counts[entry.session.id] ?? 0) + 1;
+    }
+  }
+  return counts;
 }
 
 function recordingStateTone(recording: SessionRecordingResource): ProjectTone {

@@ -45,30 +45,24 @@ describe('RecordingCatalogTable', () => {
     expect(byTestId(target, 'recordings-filter-empty').textContent).toContain('No recordings match');
   });
 
-  it('dispatches recording and playback download actions for ready artifacts only', async () => {
+  it('dispatches the single download action for ready artifacts only', async () => {
     const onDownloadRecording = vi.fn();
-    const onDownloadPlayback = vi.fn();
     const ready = entry({ recordingId: 'ready-recording', sessionId: 'session-ready', artifactAvailable: true });
     const missing = entry({ recordingId: 'missing-recording', sessionId: 'session-missing', artifactAvailable: false });
     const target = renderComponent(RecordingCatalogTable, {
       entries: [ready, missing],
       onDownloadRecording,
-      onDownloadPlayback,
     });
 
     const downloadButtons = Array.from(target.querySelectorAll('[data-testid="recordings-download"]')) as HTMLButtonElement[];
-    const exportButtons = Array.from(target.querySelectorAll('[data-testid="recordings-export"]')) as HTMLButtonElement[];
 
     expect(downloadButtons[0]?.disabled).toBe(false);
-    expect(exportButtons[0]?.disabled).toBe(false);
     expect(downloadButtons[1]?.disabled).toBe(true);
-    expect(exportButtons[1]?.disabled).toBe(true);
+    expect(target.querySelector('[data-testid="recordings-export"]')).toBeNull();
 
     downloadButtons[0]?.click();
-    exportButtons[0]?.click();
 
     expect(onDownloadRecording).toHaveBeenCalledWith(ready);
-    expect(onDownloadPlayback).toHaveBeenCalledWith(ready);
   });
 });
 

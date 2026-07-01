@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Archive, Download, Search } from '@lucide/svelte';
+  import { Download, Search } from '@lucide/svelte';
   import {
     buildRecordingOverviewModel,
     isActiveRecording,
@@ -27,14 +27,12 @@
     readonly entries: readonly RecordingCatalogEntry[];
     readonly busy?: boolean;
     readonly onDownloadRecording?: (entry: RecordingCatalogEntry) => void | Promise<void>;
-    readonly onDownloadPlayback?: (entry: RecordingCatalogEntry) => void | Promise<void>;
   };
 
   let {
     entries,
     busy = false,
     onDownloadRecording,
-    onDownloadPlayback,
   }: RecordingCatalogTableProps = $props();
   let recordingLens = $state<RecordingLens>('all');
   let searchQuery = $state('');
@@ -90,10 +88,6 @@
 
   function downloadRecording(entry: RecordingCatalogEntry): void {
     void onDownloadRecording?.(entry);
-  }
-
-  function downloadPlayback(entry: RecordingCatalogEntry): void {
-    void onDownloadPlayback?.(entry);
   }
 
   function sessionHref(sessionId: string): string {
@@ -220,20 +214,11 @@
                     type="button"
                     onclick={() => downloadRecording(item.entry)}
                     disabled={busy || !row.canDownload}
+                    title={row.downloadDescription}
                     data-testid="recordings-download"
                   >
                     <Download size={14} strokeWidth={1.8} />
                     <span>Download</span>
-                  </button>
-                  <button
-                    class="inline-flex h-8 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-xs font-semibold text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
-                    type="button"
-                    onclick={() => downloadPlayback(item.entry)}
-                    disabled={busy || !row.canExportPlayback}
-                    data-testid="recordings-export"
-                  >
-                    <Archive size={14} strokeWidth={1.8} />
-                    <span>Export</span>
                   </button>
                 </div>
               </td>

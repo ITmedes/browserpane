@@ -14,7 +14,6 @@
     readonly actionState?: RecordingActionState;
     readonly onRefresh?: () => void | Promise<void>;
     readonly onDownloadRecording?: (entry: RecordingCatalogEntry) => void | Promise<void>;
-    readonly onDownloadPlayback?: (entry: RecordingCatalogEntry) => void | Promise<void>;
   };
 
   let {
@@ -22,7 +21,6 @@
     actionState = { status: 'idle' },
     onRefresh,
     onDownloadRecording,
-    onDownloadPlayback,
   }: RecordingOverviewProps = $props();
 
   const model = $derived(loadState.status === 'ready'
@@ -120,7 +118,6 @@
       entries={loadState.entries}
       busy={actionState.status === 'running'}
       {onDownloadRecording}
-      {onDownloadPlayback}
     />
   {/if}
 </div>
