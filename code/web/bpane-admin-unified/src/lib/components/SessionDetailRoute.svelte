@@ -114,7 +114,7 @@
   async function enableSessionRecording(): Promise<void> {
     await mutateSession('Enabling recording...', 'Session recording policy enabled.', (catalog, sessionId) =>
       catalog.updateSessionRecordingPolicy(sessionId, {
-        mode: 'manual',
+        mode: 'always',
         format: 'webm',
       }),
     );

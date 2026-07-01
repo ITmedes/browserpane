@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BrowserPane Recorder Worker</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #050816;
+      }
+
+      #desktop-container {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: #050816;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="desktop-container" aria-label="BrowserPane recorder surface"></main>
+
+    <script type="module">
+      import { BpaneSession } from '/dist/bpane.js';
+
+      const container = document.getElementById('desktop-container');
+      let session = null;
+      let lastBlob = null;
+      let lastUrl = null;
+
+      function requireSession() {
+        if (!session) {
+          throw new Error('BrowserPane recorder session is not connected');
+        }
+        return session;
+      }
+
+      function revokeLastUrl() {
+        if (lastUrl) {
+          URL.revokeObjectURL(lastUrl);
+          lastUrl = null;
+        }
+      }
+
+      window.__bpaneRecorder = {
+        async connect(options) {
+          if (!container) {
+            throw new Error('BrowserPane recorder container is unavailable');
+          }
+          if (!options?.gatewayUrl || !options?.connectTicket) {
+            throw new Error('BrowserPane recorder requires gatewayUrl and connectTicket');
+          }
+          if (session) {
+            session.disconnect();
+            session = null;
+          }
+          revokeLastUrl();
+          lastBlob = null;
+          container.replaceChildren();
+          session = await BpaneSession.connect({
+            container,
+            gatewayUrl: options.gatewayUrl,
+            connectTicket: options.connectTicket,
+            clientRole: 'recorder',
+            certHashUrl: '/cert-hash',
+            resizeSource: 'container',
+            audio: true,
+            camera: false,
+            clipboard: false,
+            fileTransfer: false,
+            microphone: false,
+          });
+        },
+
+        async start() {
+          await requireSession().startRecording({ frameRate: 24 });
+        },
+
+        async stop() {
+          lastBlob = await requireSession().stopRecording();
+          return {
+            size: lastBlob?.size ?? 0,
+            type: lastBlob?.type ?? '',
+          };
+        },
+
+        downloadLast() {
+          if (!lastBlob) {
+            throw new Error('BrowserPane recorder has no finalized media blob');
+          }
+          revokeLastUrl();
+          lastUrl = URL.createObjectURL(lastBlob);
+          const anchor = document.createElement('a');
+          anchor.href = lastUrl;
+          anchor.download = 'bpane-recording.webm';
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+        },
+
+        async disconnect() {
+          if (session) {
+            session.disconnect();
+            session = null;
+          }
+          revokeLastUrl();
+          lastBlob = null;
+          container?.replaceChildren();
+        },
+      };
+    </script>
+  </body>
+</html>

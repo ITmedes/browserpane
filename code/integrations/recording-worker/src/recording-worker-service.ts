@@ -45,7 +45,12 @@ export class RecordingWorkerService {
     );
 
     try {
-      await this.pageRuntime.start(this.sessionId);
+      const access = await this.controlClient.issueSessionAccessToken(this.sessionId);
+      await this.pageRuntime.start({
+        gatewayUrl: access.connect.gateway_url,
+        transportPath: access.connect.transport_path,
+        connectTicket: access.token,
+      });
       console.log(
         `[recording-worker] recorder client connected for session ${this.sessionId}`,
       );

@@ -200,8 +200,9 @@ The compose stack starts:
 - `keycloak`: local OIDC provider on `:8091`
 - `web`: local frontend on `:8080`
 - `mcp-bridge`: MCP bridge on `:8931` (`/sessions/{id}/mcp` for recommended session-scoped Streamable HTTP, `/sessions/{id}/sse` for session-scoped legacy SSE, `/mcp` and `/sse` for compatibility)
+- `recording-worker-image`: one-shot build helper for the on-demand recording worker image used by `recording.mode=always`; the gateway launches short-lived recorder containers when sessions start recording
 
-The local compose file also defines a `workflow-worker` image profile. The gateway launches workflow-worker containers on demand; you normally do not start that container as a long-lived service yourself.
+The local compose file also defines on-demand worker images for workflows and recordings. The gateway launches workflow-worker and recording-worker containers as short-lived jobs; you normally do not start those containers as long-lived services yourself.
 The gateway mounts the repository at `/workspace:ro` for local git-backed workflow sources, and the gateway image configures `/workspace` as a trusted Git `safe.directory`.
 
 The local MCP bridge uses the package-installed `@playwright/mcp` executable from its own dependencies. It should not download `@playwright/mcp@latest` on first connect; run `npm ci` in `code/integrations/mcp-bridge` or rebuild the image if that local executable is missing.
@@ -226,6 +227,9 @@ docker compose -f deploy/compose.yml up --build
 - `BPANE_GATEWAY_DOCKER_RUNTIME_NETWORK`
 - `BPANE_GATEWAY_DOCKER_RUNTIME_SOCKET_VOLUME`
 - `BPANE_GATEWAY_DOCKER_RUNTIME_SESSION_DATA_VOLUME_PREFIX`
+- `BPANE_RECORDING_WORKER_NETWORK`
+- `BPANE_RECORDING_WORKER_OUTPUT_VOLUME`
+- `BPANE_RECORDING_WORKER_IMAGE`
 
 The default local auth flow is OIDC-based:
 
@@ -934,9 +938,10 @@ BrowserPane session recording is now a control-plane feature rather than only a 
 - Playback/export is modeled separately from raw recording segments, so multi-segment sessions stay explicit.
 - Project policy can set `allow_manual_recordings=false` to block ad-hoc manual
   recording starts for project sessions. The redesigned admin session form uses
-  `recording.mode=manual` so local session start/connect does not require a
-  configured recorder worker. Always-on session recording remains an explicit
-  API/template policy for deployments that wire a recording worker.
+  `recording.mode=always` for automatic backend recording when the session
+  runtime starts. The local compose stack wires this through a Docker-backed
+  `recording-worker` image and a shared recording handoff volume. Manual
+  Record/Stop controls are a separate operator workflow.
 
 Primary routes:
 
@@ -949,14 +954,15 @@ Primary routes:
 - `GET /api/v1/sessions/{id}/recording-playback/manifest`
 - `GET /api/v1/sessions/{id}/recording-playback/export`
 
-Local manual flow:
+Local automatic backend recording flow:
 
-1. Open `http://localhost:8080/admin/`
-2. Start or reconnect a session
-3. Use the recording controls in the admin console
-4. Download from the recording library; a single retained segment downloads as
-   WebM, while sessions with multiple retained segments download as a playback
-   ZIP bundle
+1. Open `http://localhost:8080/admin-new/sessions`
+2. Create or edit a session with recording enabled
+3. Start or connect the session
+4. Stop the session or finalize the recording
+5. Download from `http://localhost:8080/admin-new/recordings`; a single
+   retained segment downloads as WebM, while sessions with multiple retained
+   segments download as a playback ZIP bundle
 
 ### Workflow Platform
 

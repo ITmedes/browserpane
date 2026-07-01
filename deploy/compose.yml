@@ -137,6 +137,53 @@ services:
       --workflow-worker-oidc-token-url ${BPANE_WORKFLOW_WORKER_OIDC_TOKEN_URL:-http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token}
       --workflow-worker-oidc-client-id ${BPANE_WORKFLOW_WORKER_OIDC_CLIENT_ID:-bpane-mcp-bridge}
       --workflow-worker-oidc-client-secret ${BPANE_WORKFLOW_WORKER_OIDC_CLIENT_SECRET:-bpane-mcp-bridge-secret}
+      --recording-worker-bin ${BPANE_RECORDING_WORKER_DOCKER_BIN:-docker}
+      --recording-worker-arg=run
+      --recording-worker-arg=--rm
+      --recording-worker-arg=--network
+      --recording-worker-arg=${BPANE_RECORDING_WORKER_NETWORK:-deploy_bpane-internal}
+      --recording-worker-arg=-v
+      --recording-worker-arg=${BPANE_RECORDING_WORKER_OUTPUT_VOLUME:-deploy_bpane-recordings}:/tmp/bpane-recordings
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_SESSION_ID
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_ID
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_CHROME
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_GATEWAY_API_URL
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_PAGE_URL
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_OUTPUT_ROOT
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_CONNECT_TIMEOUT_MS
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_POLL_INTERVAL_MS
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_HEADLESS
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_CERT_SPKI
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_BEARER_TOKEN
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_GATEWAY_OIDC_TOKEN_URL
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_GATEWAY_OIDC_CLIENT_ID
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_GATEWAY_OIDC_CLIENT_SECRET
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_GATEWAY_OIDC_SCOPES
+      --recording-worker-arg=-e
+      --recording-worker-arg=BPANE_RECORDING_CONNECT_GATEWAY_URL=${BPANE_RECORDING_CONNECT_GATEWAY_URL:-https://gateway:4433}
+      --recording-worker-arg=${BPANE_RECORDING_WORKER_IMAGE:-deploy-recording-worker}
+      --recording-worker-chrome ${BPANE_RECORDING_WORKER_CHROME:-/usr/bin/chromium}
+      --recording-worker-api-url ${BPANE_RECORDING_WORKER_API_URL:-http://gateway:8932}
+      --recording-worker-page-url ${BPANE_RECORDING_WORKER_PAGE_URL:-http://web:8080/recording-worker.html}
+      --recording-worker-output-root ${BPANE_RECORDING_WORKER_OUTPUT_ROOT:-/tmp/bpane-recordings}
+      --recording-worker-oidc-token-url ${BPANE_RECORDING_WORKER_OIDC_TOKEN_URL:-http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token}
+      --recording-worker-oidc-client-id ${BPANE_RECORDING_WORKER_OIDC_CLIENT_ID:-bpane-mcp-bridge}
+      --recording-worker-oidc-client-secret ${BPANE_RECORDING_WORKER_OIDC_CLIENT_SECRET:-bpane-mcp-bridge-secret}
     ports:
       - "4433:4433/udp"
       - "4433:4433/tcp"
@@ -147,6 +194,8 @@ services:
       - ./host-runtime.env:/runtime/host-runtime.env:ro
       - ../dev/certs:/certs:ro
       - ..:/workspace:ro
+      - bpane-recordings:/tmp/bpane-recordings
+      - bpane-recording-artifacts:/tmp/bpane-recording-artifacts
     depends_on:
       host:
         condition: service_started
@@ -156,6 +205,8 @@ services:
         condition: service_healthy
       vault:
         condition: service_started
+      recording-worker-image:
+        condition: service_completed_successfully
     networks:
       - bpane-internal
 
@@ -227,9 +278,20 @@ services:
     networks:
       - bpane-internal
 
+  recording-worker-image:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.recording-worker
+    image: ${BPANE_RECORDING_WORKER_IMAGE:-deploy-recording-worker}
+    command: ["sh", "-lc", "true"]
+    networks:
+      - bpane-internal
+
 volumes:
   agent-socket:
   bpane-postgres-data:
+  bpane-recordings:
+  bpane-recording-artifacts:
 
 networks:
   bpane-internal:

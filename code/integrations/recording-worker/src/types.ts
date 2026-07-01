@@ -52,3 +52,17 @@ export type GatewayRecordingResource = {
   created_at: string;
   updated_at: string;
 };
+
+export type GatewaySessionAccessTokenResponse = {
+  session_id: string;
+  token_type: "session_connect_ticket";
+  token: string;
+  expires_at: string;
+  connect: {
+    gateway_url: string;
+    transport_path: string;
+    auth_type: string;
+    ticket_path: string;
+    compatibility_mode: string;
+  };
+};
