@@ -205,6 +205,7 @@ The compose stack starts:
 The local compose file also defines on-demand worker images for workflows and recordings. The gateway launches workflow-worker and recording-worker containers as short-lived jobs; you normally do not start those containers as long-lived services yourself.
 The gateway mounts the repository at `/workspace:ro` for local git-backed workflow sources, and the gateway image configures `/workspace` as a trusted Git `safe.directory`.
 The recording worker uses the generated local SPKI fingerprint from `dev/certs/cert-fingerprint.txt` through the gateway's `--recording-worker-cert-spki-file` setting, so run `./deploy/gen-dev-cert.sh dev/certs` before starting compose after certificate rotations.
+The recording worker forces the SDK render backend to Canvas2D for reliable headless Docker capture. Interactive admin and embedded browser clients keep the default `auto` backend, so GPU/WebGL rendering remains available for end-user sessions when the browser environment supports it.
 
 The local MCP bridge uses the package-installed `@playwright/mcp` executable from its own dependencies. It should not download `@playwright/mcp@latest` on first connect; run `npm ci` in `code/integrations/mcp-bridge` or rebuild the image if that local executable is missing.
 
