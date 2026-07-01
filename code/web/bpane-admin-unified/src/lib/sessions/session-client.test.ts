@@ -84,6 +84,49 @@ describe('SessionCatalogClient', () => {
     ]);
   });
 
+  it('sets and clears the session automation delegate through authenticated endpoints', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/automation-owner') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          client_id: 'bpane-mcp-bridge',
+          issuer: 'http://issuer.test',
+          display_name: 'MCP bridge',
+        });
+        return jsonResponse(sessionPayload({
+          automationDelegate: {
+            client_id: 'bpane-mcp-bridge',
+            issuer: 'http://issuer.test',
+            display_name: 'MCP bridge',
+          },
+        }), 200);
+      }
+      if (url.endsWith('/automation-owner') && init?.method === 'DELETE') {
+        return jsonResponse(sessionPayload({ automationDelegate: null }), 200);
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const client = new SessionCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl,
+    });
+
+    const delegated = await client.setAutomationDelegate('session-1', {
+      client_id: 'bpane-mcp-bridge',
+      issuer: 'http://issuer.test',
+      display_name: 'MCP bridge',
+    });
+    const cleared = await client.clearAutomationDelegate('session-1');
+
+    expect(delegated.automation_delegate?.client_id).toBe('bpane-mcp-bridge');
+    expect(cleared.automation_delegate).toBeNull();
+    expect(fetchImpl.mock.calls.map((call) => [call[0].toString(), call[1]?.method])).toEqual([
+      ['http://browserpane.test/api/v1/sessions/session-1/automation-owner', 'POST'],
+      ['http://browserpane.test/api/v1/sessions/session-1/automation-owner', 'DELETE'],
+    ]);
+  });
+
   it('delegates authentication failures and rejects missing tokens', async () => {
     const onAuthenticationFailure = vi.fn();
     const client = new SessionCatalogClient({

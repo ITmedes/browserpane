@@ -8,6 +8,8 @@ import {
   DEFAULTS,
   apiOrigin,
   createLogger,
+  fetchAuthConfig,
+  fetchJson,
   launchChrome,
   parseSmokeArgs,
   poll,
@@ -21,13 +23,15 @@ async function run() {
   const log = createLogger('admin-unified-sessions-smoke');
   const browser = await launchChrome(chromium, options);
   const context = await browser.newContext({ viewport: { width: 1440, height: 980 } });
+  await context.grantPermissions(['clipboard-write'], { origin: apiOrigin(options) }).catch(() => {});
   const page = await context.newPage();
   let accessToken = '';
   let createdSessionId = '';
+  let authConfig = null;
 
   try {
     log(`Opening ${options.pageUrl}`);
-    await ensureAdminLoggedIn(page, options);
+    authConfig = await ensureAdminLoggedIn(page, options);
     accessToken = await getAdminAccessToken(page);
     if (!accessToken) {
       throw new Error('No admin access token available after login.');
@@ -89,17 +93,22 @@ async function run() {
 
     await page.getByTestId('session-detail-refresh').click();
     await waitForContains(page, options, 'session-detail-action-success', 'refreshed');
+    await verifyMcpDelegation(page, options, createdSessionId, authConfig, accessToken);
     await verifySessionPreviewPopup(page, options);
     await verifyStoppedSessionCanStartWithPreview(page, options);
 
     console.log(JSON.stringify({
       sessionId: createdSessionId,
       detailVisible: true,
+      mcpDelegation: true,
       previewPopup: true,
       stoppedSessionRestarted: true,
     }, null, 2));
   } finally {
     if (accessToken && createdSessionId) {
+      await cleanupMcpDelegation(accessToken, options, createdSessionId, authConfig).catch((error) => {
+        log(`MCP cleanup for ${createdSessionId} failed: ${error.message}`);
+      });
       await cleanupSession(accessToken, options, createdSessionId).catch((error) => {
         log(`Session cleanup for ${createdSessionId} failed: ${error.message}`);
       });
@@ -107,6 +116,77 @@ async function run() {
     await context.close();
     await browser.close();
   }
+}
+
+async function verifyMcpDelegation(page, options, sessionId, authConfig, accessToken) {
+  const bridge = authConfig?.mcpBridge;
+  if (!bridge?.controlUrl || !bridge.clientId) {
+    throw new Error('Unified session smoke requires auth-config mcpBridge metadata.');
+  }
+  await page.getByTestId('session-mcp-delegation').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await waitForContains(page, options, 'mcp-delegation-status', 'Not authorized');
+  await waitForContains(page, options, 'mcp-endpoint-url', `/sessions/${sessionId}/mcp`);
+
+  await page.getByTestId('mcp-authorize').click();
+  await waitForContains(page, options, 'mcp-action-success', 'authorized');
+  await waitForContains(page, options, 'mcp-delegation-status', 'Authorized');
+
+  await page.getByTestId('mcp-set-default').click();
+  await waitForContains(page, options, 'mcp-delegation-status', 'Authorized default');
+  await waitForContains(page, options, 'mcp-default-session', 'This session');
+
+  await page.getByTestId('mcp-copy-endpoint').click();
+  await waitForContains(page, options, 'mcp-action-success', 'copied');
+
+  await page.getByTestId('mcp-clear-default').click();
+  await waitForContains(page, options, 'mcp-default-session', 'No default');
+
+  await page.getByTestId('mcp-revoke').click();
+  await waitForContains(page, options, 'mcp-delegation-status', 'Not authorized');
+  await assertMcpDelegationClean(accessToken, options, sessionId, bridge);
+}
+
+async function assertMcpDelegationClean(accessToken, options, sessionId, bridge) {
+  const session = await fetchJson(`${apiOrigin(options)}/api/v1/sessions/${encodeURIComponent(sessionId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (session.automation_delegate !== null) {
+    throw new Error(`Expected MCP automation delegate to be cleared, got ${JSON.stringify(session.automation_delegate)}`);
+  }
+  const health = await fetchJson(mcpHealthUrl(bridge));
+  if (health.control_session_id === sessionId) {
+    throw new Error(`Expected MCP default session to be cleared, still points to ${sessionId}`);
+  }
+}
+
+async function cleanupMcpDelegation(accessToken, options, sessionId, authConfig) {
+  const bridge = authConfig?.mcpBridge ?? (await fetchAuthConfig(options))?.mcpBridge;
+  if (!bridge?.controlUrl) {
+    return;
+  }
+  const health = await fetchJson(mcpHealthUrl(bridge)).catch(() => null);
+  if (health?.control_session_id === sessionId) {
+    await fetch(bridge.controlUrl, { method: 'DELETE' });
+  }
+  await fetch(`${apiOrigin(options)}/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-owner`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  }).catch(() => {});
+}
+
+function mcpHealthUrl(bridge) {
+  const healthUrl = new URL(bridge.controlUrl);
+  const controlPath = healthUrl.pathname.endsWith('/')
+    ? healthUrl.pathname.slice(0, -1)
+    : healthUrl.pathname;
+  const lastSeparator = controlPath.lastIndexOf('/');
+  healthUrl.pathname = `${controlPath.slice(0, lastSeparator + 1)}health`;
+  healthUrl.search = '';
+  healthUrl.hash = '';
+  return healthUrl.toString();
 }
 
 async function verifySessionPreviewPopup(page, options, expectedActionLabel = 'Connect') {
