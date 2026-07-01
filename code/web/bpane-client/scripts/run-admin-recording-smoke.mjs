@@ -80,7 +80,7 @@ async function captureLocalRecording(page, options, tempDir, sessionId) {
   await sleep(1800);
   await waitForEnabled(page.getByTestId('recording-stop'), options, 'recording stop');
   await page.getByTestId('recording-stop').click();
-  await waitForEnabled(page.getByTestId('recording-download'), options, 'recording download');
+  await waitForRecordingDownloadReady(page, options, 'recording download');
 
   const targetPath = path.join(tempDir, `browserpane-${sessionId}-admin-local.webm`);
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('recording-download').click()]);
@@ -101,7 +101,7 @@ async function verifyRecordingStateSurvivesOverlayToggle(page, options) {
   await waitForRecordingStarted(page, options);
   await waitForEnabled(page.getByTestId('recording-stop'), options, 'recording stop after overlay toggle');
   await page.getByTestId('recording-stop').click();
-  await waitForEnabled(page.getByTestId('recording-download'), options, 'recording stopped after overlay toggle');
+  await waitForRecordingDownloadReady(page, options, 'recording stopped after overlay toggle');
 }
 
 async function verifyRecordingLibrary(page, options, tempDir, sessionId, retained, expectedBytes) {
@@ -139,10 +139,23 @@ async function waitForEnabled(locator, options, description) {
 
 async function waitForRecordingStarted(page, options) {
   const state = await poll('recording start result', async () => ({
-    status: await page.getByTestId('recording-status').textContent().catch(() => ''),
-    error: await page.getByTestId('recording-error').textContent().catch(() => ''),
+    status: await firstTestIdText(page, 'recording-status'),
+    error: await firstTestIdText(page, 'recording-error'),
   }), (value) => value.status === 'recording' || Boolean(value.error), options.connectTimeoutMs);
   if (state.error) throw new Error(`Admin local recording failed to start: ${state.error}`);
+}
+
+async function waitForRecordingDownloadReady(page, options, description) {
+  const state = await poll(description, async () => ({
+    downloadReady: await page.getByTestId('recording-download').isEnabled().catch(() => false),
+    error: await firstTestIdText(page, 'recording-error'),
+  }), (value) => value.downloadReady || Boolean(value.error), options.connectTimeoutMs, 100);
+  if (state.error) throw new Error(`Admin local recording failed to stop: ${state.error}`);
+}
+
+async function firstTestIdText(page, testId) {
+  const [text] = await page.getByTestId(testId).allTextContents();
+  return text?.trim() ?? '';
 }
 
 async function emitSummary(options, summary, log) {

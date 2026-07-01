@@ -43,14 +43,18 @@ describe('SessionRecordingRuntime empty artifact handling', () => {
       stopVideoStream: vi.fn(),
       mediaRecorderFactory: () => recorder as unknown as MediaRecorder,
       mediaStreamFactory: () => new MockMediaStream() as unknown as MediaStream,
+      sleep: vi.fn(async () => {}),
     });
 
     await runtime.start();
     recorder.emitData([1, 2, 3, 4, 5]);
     const stopPromise = runtime.stop();
+    const expectation = expect(stopPromise).rejects.toThrow('empty artifact (5 bytes)');
+    await Promise.resolve();
+    await Promise.resolve();
     recorder.emitStop();
 
-    await expect(stopPromise).rejects.toThrow('empty artifact (5 bytes)');
+    await expectation;
     expect(runtime.isRecording()).toBe(false);
   });
 });
