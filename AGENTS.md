@@ -144,8 +144,7 @@ Current product shape:
 
 - Browser sessions are collaborative by default.
 - If `--exclusive-browser-owner` is enabled, one owner drives the session and additional browser clients join as viewers.
-- In collaborative mode, interactive browser clients can drive input and resize; the latest browser resize request defines the live display size.
-- MCP automation does not by itself lock browser clients into viewer behavior. If MCP is the initial connector it seeds and holds the display size until MCP ownership is cleared; if a browser client is already connected, that browser-defined display size remains authoritative.
+- MCP automation does not by itself lock browser clients into viewer behavior. If MCP is the initial connector it seeds the display size; if a browser client is already connected, that browser-defined display size remains authoritative.
 - Late joiners are bootstrapped from cached session state and late-join refreshes are tracked in gateway telemetry.
 - If a worker is still alive, reconnect returns to the exact live runtime. After idle-stop, reconnect restarts from the persisted Chromium profile instead of a true suspended process image.
 - Gateway session status reports:

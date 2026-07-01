@@ -89,10 +89,8 @@ async function run() {
 
     await page.getByTestId('session-detail-refresh').click();
     await waitForContains(page, options, 'session-detail-action-success', 'refreshed');
-    await verifySessionPreviewPopup(page, options, accessToken, createdSessionId, {
-      verifyConcurrentResize: true,
-    });
-    await verifyStoppedSessionCanStartWithPreview(page, options, accessToken, createdSessionId);
+    await verifySessionPreviewPopup(page, options);
+    await verifyStoppedSessionCanStartWithPreview(page, options);
 
     console.log(JSON.stringify({
       sessionId: createdSessionId,
@@ -111,15 +109,11 @@ async function run() {
   }
 }
 
-async function verifySessionPreviewPopup(page, options, accessToken, sessionId, {
-  expectedActionLabel = 'Connect',
-  verifyConcurrentResize = false,
-} = {}) {
+async function verifySessionPreviewPopup(page, options, expectedActionLabel = 'Connect') {
   await waitForConnectPreviewEnabled(page, options, expectedActionLabel);
   const popupPromise = page.waitForEvent('popup');
   await page.getByTestId('session-connect-preview').click();
   const popup = await popupPromise;
-  let concurrentPopup;
   try {
     await popup.getByTestId('session-preview-route').waitFor({
       state: 'visible',
@@ -129,50 +123,18 @@ async function verifySessionPreviewPopup(page, options, accessToken, sessionId, 
     await assertNoHorizontalOverflow(popup, 'session-preview-route', 'unified session preview route');
     await waitForPreviewConnected(popup, options);
     await assertPreviewResizeUsesIndependentHeight(popup, options);
-    await assertSessionResolutionMatchesPreviewViewport(
-      popup,
-      accessToken,
-      options,
-      sessionId,
-      'primary session preview popup',
-    );
-    if (verifyConcurrentResize) {
-      concurrentPopup = await page.context().newPage();
-      await concurrentPopup.goto(adminRouteUrl(options, `sessions/${sessionId}/preview`), {
-        waitUntil: 'domcontentloaded',
-      });
-      await concurrentPopup.getByTestId('session-preview-route').waitFor({
-        state: 'visible',
-        timeout: options.connectTimeoutMs,
-      });
-      await waitForPreviewConnected(concurrentPopup, options);
-      await assertPreviewResizeUsesIndependentHeight(concurrentPopup, options, {
-        width: 940,
-        height: 780,
-      });
-      await assertSessionResolutionMatchesPreviewViewport(
-        concurrentPopup,
-        accessToken,
-        options,
-        sessionId,
-        'concurrent session preview popup',
-      );
-    }
     await assertNoHorizontalOverflow(popup, 'session-preview-viewport', 'unified session preview viewport');
   } finally {
-    await concurrentPopup?.close({ runBeforeUnload: true }).catch(() => {});
     await popup.close({ runBeforeUnload: true }).catch(() => {});
   }
 }
 
-async function verifyStoppedSessionCanStartWithPreview(page, options, accessToken, sessionId) {
+async function verifyStoppedSessionCanStartWithPreview(page, options) {
   await waitForStopActionEnabled(page, options);
   await page.getByTestId('session-stop').click();
   await waitForContains(page, options, 'session-detail-action-success', 'stopped');
   await waitForContains(page, options, 'session-detail-state', 'stopped');
-  await verifySessionPreviewPopup(page, options, accessToken, sessionId, {
-    expectedActionLabel: 'Start and connect',
-  });
+  await verifySessionPreviewPopup(page, options, 'Start and connect');
 }
 
 async function waitForConnectPreviewEnabled(page, options, expectedActionLabel) {
@@ -224,8 +186,8 @@ async function waitForPreviewConnected(popup, options) {
   }
 }
 
-async function assertPreviewResizeUsesIndependentHeight(popup, options, targetSize = { width: 1100, height: 760 }) {
-  await popup.setViewportSize(targetSize);
+async function assertPreviewResizeUsesIndependentHeight(popup, options) {
+  await popup.setViewportSize({ width: 1100, height: 760 });
   const size = await poll(
     'session preview popup independent resize',
     async () => await popup.getByTestId('session-preview-viewport').evaluate((element) => {
@@ -254,39 +216,6 @@ async function assertPreviewResizeUsesIndependentHeight(popup, options, targetSi
   if (!size) {
     throw new Error('Session preview popup canvas did not resize independently.');
   }
-}
-
-async function assertSessionResolutionMatchesPreviewViewport(page, accessToken, options, sessionId, label) {
-  const expected = await page.getByTestId('session-preview-viewport').evaluate((element) => {
-    const rect = element.getBoundingClientRect();
-    const scale = window.devicePixelRatio || 1;
-    return [Math.round(rect.width * scale), Math.round(rect.height * scale)];
-  });
-  const status = await poll(
-    `${label} gateway resolution`,
-    async () => await fetchSessionStatus(accessToken, options, sessionId),
-    (value) => Array.isArray(value.resolution)
-      && Math.abs(value.resolution[0] - expected[0]) <= 2
-      && Math.abs(value.resolution[1] - expected[1]) <= 2,
-    options.connectTimeoutMs,
-    250,
-  );
-  if (!status) {
-    throw new Error(`${label} did not drive the gateway session resolution.`);
-  }
-}
-
-async function fetchSessionStatus(accessToken, options, sessionId) {
-  const response = await fetch(`${apiOrigin(options)}/api/v1/sessions/${encodeURIComponent(sessionId)}/status`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/json',
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load session status ${response.status}`);
-  }
-  return await response.json();
 }
 
 async function waitForContains(page, options, testId, expected) {
