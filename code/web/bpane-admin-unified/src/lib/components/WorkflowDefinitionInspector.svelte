@@ -1,6 +1,10 @@
 <script lang="ts">
   import { Copy, RefreshCw } from '@lucide/svelte';
   import type {
+    CreateWorkflowRunRequest,
+    WorkflowRunLaunchResult,
+  } from '$lib/workflow-runs/workflow-run-types';
+  import type {
     CreateWorkflowDefinitionVersionRequest,
     ValidateWorkflowDefinitionSourceRequest,
     WorkflowDefinitionSourceValidationResponse,
@@ -21,6 +25,7 @@
   import { projectToneClass } from '$lib/projects/project-ui';
   import AdminMessage from './AdminMessage.svelte';
   import WorkflowCodePreview from './WorkflowCodePreview.svelte';
+  import WorkflowRunLauncher from './WorkflowRunLauncher.svelte';
   import WorkflowVersionSourceEditor from './WorkflowVersionSourceEditor.svelte';
 
   type WorkflowDefinitionInspectorProps = {
@@ -35,6 +40,10 @@
       request: ValidateWorkflowDefinitionSourceRequest,
     ) => Promise<WorkflowDefinitionSourceValidationResponse>;
     readonly onCreateVersion?: (request: CreateWorkflowDefinitionVersionRequest) => Promise<void>;
+    readonly onStartWorkflowRun?: (
+      request: CreateWorkflowRunRequest,
+      options: { readonly connectPreview: boolean },
+    ) => Promise<WorkflowRunLaunchResult>;
   };
 
   let {
@@ -47,6 +56,7 @@
     onSelectSourceFile,
     onValidateSource,
     onCreateVersion,
+    onStartWorkflowRun,
   }: WorkflowDefinitionInspectorProps = $props();
   let selectedVersion = $state('');
   let notifiedVersion = $state('');
@@ -190,8 +200,8 @@
       </div>
     {/if}
 
-    <div class="grid gap-4 p-4">
-      <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="workflow-definition-summary">
+    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 p-4">
+      <section class="min-w-0 rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="workflow-definition-summary">
         <div class="border-b border-admin-border pb-3">
           <h3 class="m-0 text-sm font-semibold text-admin-ink">Definition</h3>
           <p class="m-0 mt-1 text-xs leading-5 text-admin-muted">
@@ -202,7 +212,7 @@
         <dl class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <div class="min-w-0 rounded-md border border-admin-border bg-admin-panel p-3">
             <dt class="text-xs font-semibold uppercase text-admin-muted">Workflow id</dt>
-            <dd class="m-0 mt-1 truncate font-mono text-xs text-admin-ink">{model.definitionId}</dd>
+            <dd class="m-0 mt-1 break-all font-mono text-xs text-admin-ink">{model.definitionId}</dd>
           </div>
           <div class="min-w-0 rounded-md border border-admin-border bg-admin-panel p-3">
             <dt class="text-xs font-semibold uppercase text-admin-muted">Versions</dt>
@@ -219,8 +229,8 @@
         </dl>
       </section>
 
-      <section class="grid gap-4 lg:grid-cols-[minmax(220px,320px)_minmax(0,1fr)]">
-        <div class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="workflow-definition-versions-panel">
+      <section class="grid min-w-0 gap-4 lg:grid-cols-[minmax(220px,320px)_minmax(0,1fr)]">
+        <div class="min-w-0 rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="workflow-definition-versions-panel">
           <div class="border-b border-admin-border pb-3">
             <h3 class="m-0 text-sm font-semibold text-admin-ink">Versions</h3>
           </div>
@@ -250,14 +260,14 @@
                       <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">latest</span>
                     {/if}
                   </span>
-                  <span class="truncate text-xs">{version.executor} · {version.createdAt}</span>
+                  <span class="min-w-0 truncate text-xs">{version.executor} · {version.createdAt}</span>
                 </button>
               {/each}
             </div>
           {/if}
         </div>
 
-        <div class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="workflow-definition-version-panel">
+        <div class="min-w-0 rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="workflow-definition-version-panel">
           <div class="flex flex-col gap-3 border-b border-admin-border pb-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
               <h3 class="m-0 text-sm font-semibold text-admin-ink" data-testid="workflow-definition-selected-version">
@@ -277,7 +287,7 @@
           </div>
 
           {#if model.selectedVersion}
-            <div class="mt-4 grid gap-3 xl:grid-cols-3">
+            <div class="mt-4 grid min-w-0 gap-3 xl:grid-cols-3">
               {@render MetadataPanel('Source', model.selectedVersion.sourceRows, 'workflow-definition-source')}
               {@render MetadataPanel('Policy', model.selectedVersion.policyRows, 'workflow-definition-policy')}
               {@render MetadataPanel('Schemas', model.selectedVersion.schemaRows, 'workflow-definition-schemas')}
@@ -287,6 +297,13 @@
           {/if}
         </div>
       </section>
+
+      <WorkflowRunLauncher
+        workflowId={loadState.definition.id}
+        selectedVersion={selectedVersionResource}
+        disabled={busy}
+        onStartRun={onStartWorkflowRun}
+      />
 
       <WorkflowVersionSourceEditor
         versions={loadState.versions}

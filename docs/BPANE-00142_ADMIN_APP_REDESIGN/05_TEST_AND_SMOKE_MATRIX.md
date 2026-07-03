@@ -108,11 +108,12 @@ Add `/admin-new/` smokes progressively:
       download, delete, catalog search, and mobile overflow checks.
     - `smoke:admin-unified-workflows` covers the unified workflow definition
       catalog, hidden/smoke workflow filtering, BrowserPane Tour template
-      availability, detail version metadata, source/reference summaries, and
-      mobile overflow checks.
+      availability, detail version metadata, schema-backed run launch,
+      source/reference summaries, and mobile overflow checks.
     - `smoke:admin-unified-workflow-runs` covers the unified workflow-run
       catalog, API-seeded run visibility, run search, linked workflow/session
-      navigation targets, and route overflow checks.
+      navigation targets, external integration guidance, and route overflow
+      checks.
 14. API companion smoke
 
 ## Error Cases

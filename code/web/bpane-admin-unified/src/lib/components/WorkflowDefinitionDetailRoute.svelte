@@ -6,6 +6,11 @@
     WorkflowCatalogClient,
     WorkflowCatalogError,
   } from '$lib/workflows/workflow-client';
+  import { WorkflowRunCatalogClient } from '$lib/workflow-runs/workflow-run-client';
+  import type {
+    CreateWorkflowRunRequest,
+    WorkflowRunLaunchResult,
+  } from '$lib/workflow-runs/workflow-run-types';
   import type {
     CreateWorkflowDefinitionVersionRequest,
     ValidateWorkflowDefinitionSourceRequest,
@@ -47,11 +52,19 @@
   });
 
   function client(): WorkflowCatalogClient {
-    return new WorkflowCatalogClient({
+    return new WorkflowCatalogClient(clientOptions());
+  }
+
+  function workflowRunClient(): WorkflowRunCatalogClient {
+    return new WorkflowRunCatalogClient(clientOptions());
+  }
+
+  function clientOptions() {
+    return {
       baseUrl: window.location.origin,
       accessTokenProvider: authContext.accessTokenProvider,
       onAuthenticationFailure: authContext.onAuthenticationFailure,
-    });
+    };
   }
 
   async function loadWorkflow(workflowId: string): Promise<void> {
@@ -177,6 +190,18 @@
     await loadSourceFilesAndPreview(workflowId, created.version);
   }
 
+  async function startWorkflowRun(
+    request: CreateWorkflowRunRequest,
+    options: { readonly connectPreview: boolean },
+  ): Promise<WorkflowRunLaunchResult> {
+    const run = await workflowRunClient().createRun(request);
+    if (!options.connectPreview) {
+      return { run, previewOpened: false };
+    }
+    const previewOpened = openPreviewWindow(run.session_id);
+    return { run, previewOpened, previewBlocked: !previewOpened };
+  }
+
   async function loadSourcePreview(workflowId: string, version: string, sourcePath?: string): Promise<void> {
     const requestId = sourcePreviewRequestId + 1;
     sourcePreviewRequestId = requestId;
@@ -234,6 +259,20 @@
     }
     return activePreviewVersion();
   }
+
+  function openPreviewWindow(sessionId: string): boolean {
+    const url = `/admin-new/sessions/${encodeURIComponent(sessionId)}/preview`;
+    const popup = window.open(
+      url,
+      `bpane-session-preview-${sessionId}`,
+      'popup=yes,width=1440,height=960,resizable=yes,scrollbars=no',
+    );
+    if (!popup) {
+      return false;
+    }
+    popup.focus();
+    return true;
+  }
 </script>
 
 <div class="mx-auto flex min-h-full w-full max-w-[1180px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8" data-testid="workflow-definition-detail-route">
@@ -267,6 +306,7 @@
       onSelectSourceFile={selectSourceFile}
       onValidateSource={validateWorkflowSource}
       onCreateVersion={createWorkflowVersion}
+      onStartWorkflowRun={startWorkflowRun}
     />
   {/if}
 </div>

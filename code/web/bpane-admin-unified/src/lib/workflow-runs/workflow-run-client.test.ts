@@ -36,6 +36,39 @@ describe('WorkflowRunCatalogClient', () => {
     expect(headers.get('authorization')).toBe('Bearer token-1');
   });
 
+  it('creates workflow runs through the authenticated API', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        workflow_id: 'workflow-1',
+        version: 'v1',
+        session: { create_session: {} },
+        input: { target_url: 'https://browserpane.io/' },
+      });
+      return jsonResponse(workflowRunPayload(), 201);
+    });
+    const client = new WorkflowRunCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl,
+    });
+
+    const run = await client.createRun({
+      workflow_id: 'workflow-1',
+      version: 'v1',
+      session: { create_session: {} },
+      input: { target_url: 'https://browserpane.io/' },
+    });
+
+    expect(run.id).toBe('run-1');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://browserpane.test/api/v1/workflow-runs'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const headers = fetchImpl.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get('content-type')).toBe('application/json');
+    expect(headers.get('authorization')).toBe('Bearer token-1');
+  });
+
   it('delegates authentication failures and rejects missing tokens', async () => {
     const onAuthenticationFailure = vi.fn();
     const client = new WorkflowRunCatalogClient({

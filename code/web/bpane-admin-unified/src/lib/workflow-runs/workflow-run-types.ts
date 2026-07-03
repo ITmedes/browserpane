@@ -38,6 +38,37 @@ export type WorkflowRunListResponse = {
   readonly runs: readonly WorkflowRunResource[];
 };
 
+export type WorkflowRunSessionBindingRequest = {
+  readonly existing_session_id?: string;
+  readonly create_session?: unknown;
+};
+
+export type CreateWorkflowRunWorkspaceInputRequest = {
+  readonly workspace_id: string;
+  readonly file_id: string;
+  readonly mount_path?: string | null;
+};
+
+export type CreateWorkflowRunRequest = {
+  readonly workflow_id: string;
+  readonly version: string;
+  readonly project_id?: string | null;
+  readonly session?: WorkflowRunSessionBindingRequest;
+  readonly input?: unknown;
+  readonly source_system?: string | null;
+  readonly source_reference?: string | null;
+  readonly client_request_id?: string | null;
+  readonly credential_binding_ids?: readonly string[];
+  readonly workspace_inputs?: readonly CreateWorkflowRunWorkspaceInputRequest[];
+  readonly labels?: Readonly<Record<string, string>>;
+};
+
+export type WorkflowRunLaunchResult = {
+  readonly run: WorkflowRunResource;
+  readonly previewOpened: boolean;
+  readonly previewBlocked?: boolean;
+};
+
 export type WorkflowRunAdmissionResource = {
   readonly state: string;
   readonly reason: string;

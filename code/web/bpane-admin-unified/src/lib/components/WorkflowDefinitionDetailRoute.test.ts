@@ -19,6 +19,8 @@ afterEach(async () => {
 
 describe('WorkflowDefinitionDetailRoute', () => {
   it('loads workflow detail and version metadata through the authenticated API', async () => {
+    const previewWindow = { focus: vi.fn() } as unknown as Window;
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(previewWindow);
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
       if (url.endsWith('/api/v1/workflows/workflow-1')) {
@@ -50,6 +52,9 @@ describe('WorkflowDefinitionDetailRoute', () => {
           200,
         );
       }
+      if (url.endsWith('/api/v1/workflow-runs')) {
+        return jsonResponse(workflowRunPayload(), 201);
+      }
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchImpl);
@@ -70,6 +75,22 @@ describe('WorkflowDefinitionDetailRoute', () => {
     await vi.waitFor(() => {
       expect(byTestId(target, 'workflow-code-preview-code').textContent).toContain('helperValue');
     });
+    byTestId(target, 'workflow-run-start-connect').click();
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'workflow-run-launch-success').textContent).toContain('run-1');
+    });
+    const createRunCall = fetchImpl.mock.calls.find((call) =>
+      String(call[0]).endsWith('/api/v1/workflow-runs') && call[1]?.method === 'POST');
+    expect(JSON.parse(String(createRunCall?.[1]?.body))).toMatchObject({
+      workflow_id: 'workflow-1',
+      version: 'v1',
+      session: { create_session: { labels: { origin: 'admin-unified-workflow-run' } } },
+    });
+    expect(openSpy).toHaveBeenCalledWith(
+      '/admin-new/sessions/session-1/preview',
+      'bpane-session-preview-session-1',
+      'popup=yes,width=1440,height=960,resizable=yes,scrollbars=no',
+    );
     const headers = fetchImpl.mock.calls[0]?.[1]?.headers as Headers;
     expect(headers.get('authorization')).toBe('Bearer shell-token');
   });
@@ -306,5 +327,38 @@ function sourceValidationPayload() {
         entrypoint: true,
       },
     ],
+  };
+}
+
+function workflowRunPayload() {
+  return {
+    id: 'run-1',
+    workflow_definition_id: 'workflow-1',
+    workflow_definition_version_id: 'workflow-version-1',
+    workflow_version: 'v1',
+    project_id: null,
+    project: null,
+    source_system: 'admin_unified',
+    source_reference: 'workflow-detail',
+    client_request_id: null,
+    state: 'pending',
+    session_id: 'session-1',
+    automation_task_id: 'task-1',
+    input: {},
+    output: null,
+    error: null,
+    artifact_refs: [],
+    produced_files: [],
+    project_admission: null,
+    admission: null,
+    intervention: {},
+    runtime: null,
+    labels: {},
+    started_at: null,
+    completed_at: null,
+    events_path: '/api/v1/workflow-runs/run-1/events',
+    logs_path: '/api/v1/workflow-runs/run-1/logs',
+    created_at: '2026-06-21T10:00:00.000Z',
+    updated_at: '2026-06-21T10:00:00.000Z',
   };
 }
