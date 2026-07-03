@@ -1057,6 +1057,12 @@ Local usage options:
 - CLI: use `code/web/bpane-client/scripts/workflow-cli.mjs`
 - raw API: use the OpenAPI contract in `openapi/bpane-control-v1.yaml`
 
+Unified admin workflow-run catalog smoke:
+
+```bash
+cd code/web/bpane-client && npm run smoke:admin-unified-workflow-runs -- --headless
+```
+
 Typical local workflow path:
 
 1. Start the local compose stack and log in at `http://localhost:8080/admin/`
@@ -1134,6 +1140,7 @@ npm run smoke:admin-unified-browser-contexts -- --headless
 npm run smoke:admin-unified-egress-profiles -- --headless
 npm run smoke:admin-unified-projects -- --headless
 npm run smoke:admin-unified-workflows -- --headless
+npm run smoke:admin-unified-workflow-runs -- --headless
 npm run smoke:admin-unified-file-workspaces -- --headless
 npm run workflow:cli -- --help
 npm run smoke:automation-tasks -- --headless

@@ -38,6 +38,7 @@ coexist:
 - `smoke:admin-unified-egress-profiles`
 - `smoke:admin-unified-file-workspaces`
 - `smoke:admin-unified-workflows`
+- `smoke:admin-unified-workflow-runs`
 - `smoke:admin-browser-contexts`
 - `smoke:admin-file-workspaces`
 - `smoke:admin-mcp`
@@ -105,6 +106,9 @@ Add `/admin-new/` smokes progressively:
       catalog, hidden/smoke workflow filtering, BrowserPane Tour template
       availability, detail version metadata, source/reference summaries, and
       mobile overflow checks.
+    - `smoke:admin-unified-workflow-runs` covers the unified workflow-run
+      catalog, API-seeded run visibility, run search, linked workflow/session
+      navigation targets, and route overflow checks.
 14. API companion smoke
 
 ## Error Cases
