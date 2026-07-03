@@ -20,6 +20,9 @@ describe('WorkflowRunOverview', () => {
 
     expect(byTestId(target, 'workflow-runs-metric-total').textContent).toContain('1');
     expect(byTestId(target, 'workflow-runs-list').textContent).toContain('workflow-1');
+    expect(byTestId(target, 'workflow-runs-integration-panel').textContent).toContain('Start workflow runs from outside');
+    expect(byTestId(target, 'workflow-runs-rest-example').textContent).toContain('POST /api/v1/workflow-runs');
+    expect(byTestId(target, 'workflow-runs-cli-example').textContent).toContain('workflow run create');
 
     byTestId(target, 'workflow-runs-refresh').click();
 

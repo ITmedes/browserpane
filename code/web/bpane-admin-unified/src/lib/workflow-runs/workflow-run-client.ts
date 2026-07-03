@@ -3,6 +3,7 @@ import type {
   SessionProjectResource,
 } from '$lib/sessions/session-types';
 import type {
+  CreateWorkflowRunRequest,
   WorkflowRunAdmissionResource,
   WorkflowRunInterventionRequestResource,
   WorkflowRunInterventionResource,
@@ -54,6 +55,18 @@ export class WorkflowRunCatalogClient {
       headers: { accept: 'application/json' },
     });
     return toWorkflowRunListResponse(await response.json());
+  }
+
+  async createRun(request: CreateWorkflowRunRequest): Promise<WorkflowRunResource> {
+    const response = await this.#request(new URL('/api/v1/workflow-runs', this.#baseUrl), {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+    return toWorkflowRunResource(await response.json());
   }
 
   async #request(input: URL, init: RequestInit): Promise<Response> {

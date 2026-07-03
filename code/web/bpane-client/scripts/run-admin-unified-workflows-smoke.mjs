@@ -10,6 +10,7 @@ import {
   DEFAULTS,
   apiOrigin,
   createLogger,
+  deleteSession,
   launchChrome,
   parseSmokeArgs,
   poll,
@@ -25,11 +26,14 @@ async function run() {
   const context = await browser.newContext({ viewport: { width: 1440, height: 980 } });
   const page = await context.newPage();
   let summary = null;
+  let accessToken = '';
+  let createdRunId = '';
+  let createdSessionId = '';
 
   try {
     log(`Opening ${options.pageUrl}`);
     await ensureAdminLoggedIn(page, options);
-    const accessToken = await getAdminAccessToken(page);
+    accessToken = await getAdminAccessToken(page);
     if (!accessToken) {
       throw new Error('No admin access token available after login.');
     }
@@ -84,20 +88,31 @@ async function run() {
     await page.locator(sourceTreeSelector('dev/web-fixtures/test-embed.html')).click();
     await waitForContains(page, options, 'workflow-code-preview-entrypoint', 'dev/web-fixtures/test-embed.html');
     await waitForContains(page, options, 'workflow-code-preview-code', 'BrowserPane Test Embed');
+    const launch = await verifyWorkflowRunLauncher(page, options);
+    createdRunId = launch.runId;
+    createdSessionId = launch.sessionId;
     await assertNoBodyHorizontalOverflow(page, 'unified workflow detail');
     await assertNoHorizontalOverflow(page, 'workflow-definition-detail-route', 'unified workflow detail route');
 
     await verifyResponsiveDetailLayout(page, options);
     await verifySourceEditor(page, options, log, hiddenWorkflow.id);
+    await verifyCreatedRunCatalog(page, options, createdRunId);
 
     summary = {
       pageUrl: options.pageUrl,
       hiddenWorkflowId: hiddenWorkflow.id,
       catalogTemplate: 'BrowserPane Tour',
+      createdRunId,
+      createdSessionId,
       detailVisible: true,
     };
     await emitSummary(options, summary, log);
   } finally {
+    if (accessToken && createdSessionId) {
+      await deleteSession(accessToken, options, createdSessionId).catch((error) => {
+        log(`cleanup warning: failed to delete session ${createdSessionId}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
     await context.close();
     await browser.close();
   }
@@ -169,6 +184,54 @@ async function verifySourceEditor(page, options, log, workflowId) {
   await waitForContains(page, options, 'workflow-definition-selected-version', 'v2');
   await assertNoBodyHorizontalOverflow(page, 'unified workflow source editor');
   await assertNoHorizontalOverflow(page, 'workflow-definition-detail-route', 'unified workflow source editor route');
+}
+
+async function verifyWorkflowRunLauncher(page, options) {
+  await page.getByTestId('workflow-run-launcher').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await page.getByTestId('workflow-run-input-scroll_delay_ms').fill('30');
+  await page.getByTestId('workflow-run-input-scroll_step_px').fill('480');
+  await page.getByTestId('workflow-run-input-max_scroll_steps').fill('2');
+  await page.getByTestId('workflow-run-start').click();
+  await page.getByTestId('workflow-run-launch-success').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  const runHref = await page.getByTestId('workflow-run-open-run').getAttribute('href');
+  const sessionHref = await page.getByTestId('workflow-run-open-session').getAttribute('href');
+  const runId = new URL(runHref ?? '', apiOrigin(options)).searchParams.get('run');
+  const sessionId = sessionHref?.split('/').filter(Boolean).at(-1) ?? '';
+  if (!runId) {
+    throw new Error(`Expected workflow run link to expose a run query param, got ${runHref}`);
+  }
+  if (!sessionId) {
+    throw new Error(`Expected workflow run session link, got ${sessionHref}`);
+  }
+  await assertNoHorizontalOverflow(page, 'workflow-run-launcher', 'workflow run launcher');
+  return { runId, sessionId };
+}
+
+async function verifyCreatedRunCatalog(page, options, runId) {
+  await page.goto(adminRouteUrl(options, 'runs'), { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('workflow-runs-overview').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await waitForContains(page, options, 'workflow-runs-integration-panel', 'Start workflow runs from outside');
+  await page.getByTestId('workflow-runs-search').fill(runId);
+  await poll(
+    `created workflow run row ${runId}`,
+    async () => {
+      const row = page.getByTestId('workflow-runs-list-row').filter({ hasText: runId.slice(0, 12) }).first();
+      return await row.isVisible().catch(() => false);
+    },
+    Boolean,
+    options.connectTimeoutMs,
+  );
+  await assertNoBodyHorizontalOverflow(page, 'unified workflow run catalog after launch');
+  await assertNoHorizontalOverflow(page, 'workflow-runs-overview', 'unified workflow run catalog after launch');
 }
 
 async function assertNoHorizontalOverflow(page, testId, label) {
