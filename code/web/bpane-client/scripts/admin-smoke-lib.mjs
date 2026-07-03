@@ -167,7 +167,8 @@ async function waitForAdminAuthenticated(page, options) {
 }
 
 async function adminAuthenticatedVisible(page) {
-  return await page.getByTestId('session-new').isVisible().catch(() => false)
+  return await page.getByTestId('dashboard-overview').isVisible().catch(() => false)
+    || await page.getByTestId('session-new').isVisible().catch(() => false)
     || await page.getByTestId('session-inspector-new').isVisible().catch(() => false)
     || await page.getByTestId('browser-context-route').isVisible().catch(() => false)
     || await page.getByTestId('file-workspace-create-submit').isVisible().catch(() => false)

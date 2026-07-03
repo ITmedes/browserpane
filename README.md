@@ -1137,6 +1137,7 @@ npm run build
 npm run smoke:bpane-cli -- --headless
 npm run smoke:admin-session -- --headless
 npm run smoke:admin-unified-browser-contexts -- --headless
+npm run smoke:admin-unified-dashboard -- --headless
 npm run smoke:admin-unified-egress-profiles -- --headless
 npm run smoke:admin-unified-projects -- --headless
 npm run smoke:admin-unified-workflows -- --headless
