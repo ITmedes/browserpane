@@ -106,6 +106,10 @@ Add `/admin-new/` smokes progressively:
     - `smoke:admin-unified-file-workspaces` covers the unified file-workspace
       catalog, create route, validation errors, project binding, upload,
       download, delete, catalog search, and mobile overflow checks.
+    - `smoke:admin-unified-sessions` covers the unified session catalog,
+      create route, detail lifecycle, MCP delegation, preview popup attach,
+      preview metrics drawer sampling/copy, stopped-session start-and-connect,
+      resize behavior, and route overflow checks.
     - `smoke:admin-unified-workflows` covers the unified workflow definition
       catalog, hidden/smoke workflow filtering, BrowserPane Tour template
       availability, detail version metadata, schema-backed run launch,

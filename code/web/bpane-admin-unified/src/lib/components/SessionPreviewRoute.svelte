@@ -11,6 +11,7 @@
   import { SessionCatalogClient } from '$lib/sessions/session-client';
   import type { SessionResource } from '$lib/sessions/session-types';
   import AdminMessage from './AdminMessage.svelte';
+  import SessionPreviewMetricsDrawer from './SessionPreviewMetricsDrawer.svelte';
 
   type SessionPreviewState =
     | { readonly status: 'loading'; readonly label: string }
@@ -43,7 +44,7 @@
   let previewAuthContext = $state<UnifiedAdminContext | null>(null);
   let previewState = $state<SessionPreviewState>({ status: 'loading', label: 'Loading preview...' });
   let previewContainer = $state<HTMLDivElement | null>(null);
-  let activeConnection: LiveBrowserSessionConnection | null = null;
+  let activeConnection = $state<LiveBrowserSessionConnection | null>(null);
 
   onMount(() => {
     if (providedAuthContext) {
@@ -306,6 +307,7 @@
       bind:this={previewContainer}
       data-testid="session-preview-viewport"
     ></div>
+    <SessionPreviewMetricsDrawer connection={activeConnection} />
 
     {#if previewState.status === 'loading' || previewState.status === 'connecting'}
       <div class="absolute inset-0 grid place-items-center bg-black/70 p-6">

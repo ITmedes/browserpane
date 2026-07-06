@@ -202,11 +202,41 @@ async function verifySessionPreviewPopup(page, options, expectedActionLabel = 'C
     await assertNoBodyHorizontalOverflow(popup, 'unified session preview popup');
     await assertNoHorizontalOverflow(popup, 'session-preview-route', 'unified session preview route');
     await waitForPreviewConnected(popup, options);
+    await verifyPreviewMetrics(popup, options);
     await assertPreviewResizeUsesIndependentHeight(popup, options);
     await assertNoHorizontalOverflow(popup, 'session-preview-viewport', 'unified session preview viewport');
   } finally {
     await popup.close({ runBeforeUnload: true }).catch(() => {});
   }
+}
+
+async function verifyPreviewMetrics(popup, options) {
+  await popup.getByTestId('session-preview-metrics-toggle').click();
+  await popup.getByTestId('session-preview-metrics-drawer').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await poll(
+    'session preview metrics start enabled',
+    async () => await popup.getByTestId('session-preview-metrics-start').isEnabled().catch(() => false),
+    Boolean,
+    options.connectTimeoutMs,
+  );
+  await popup.getByTestId('session-preview-metrics-start').click();
+  await waitForContains(popup, options, 'session-preview-metrics-sample', 'fps');
+  await waitForContains(popup, options, 'session-preview-metrics-transfer', 'down');
+  await waitForContains(popup, options, 'session-preview-metrics-tiles', 'commands');
+  await waitForContains(popup, options, 'session-preview-metrics-scroll', 'saved');
+  await waitForContains(popup, options, 'session-preview-metrics-video', 'datagrams');
+  await popup.getByTestId('session-preview-metrics-copy').click();
+  await waitForContains(popup, options, 'session-preview-metrics-message', 'copied');
+  await poll(
+    'session preview metrics stop enabled',
+    async () => await popup.getByTestId('session-preview-metrics-stop').isEnabled().catch(() => false),
+    Boolean,
+    options.connectTimeoutMs,
+  );
+  await popup.getByTestId('session-preview-metrics-stop').click();
 }
 
 async function verifyStoppedSessionCanStartWithPreview(page, options) {
