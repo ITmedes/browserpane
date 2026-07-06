@@ -170,6 +170,11 @@ docker compose -f deploy/compose.yml up --build
 
 Then open `http://localhost:8080/admin/` in Chromium. The web root redirects to the admin console.
 The BPANE-00142 redesign scaffold is also served at `http://localhost:8080/admin-new/` during the migration; `/admin/` remains the active console.
+The redesigned session preview popup includes a local `Metrics` drawer that can
+sample browser transition diagnostics from the BrowserPane client runtime
+without creating a backend artifact. It reports FPS, transfer rates, tile mix,
+cache health, scroll fallback health, video datagrams, and render backend, and
+can copy the current sample as JSON for debugging.
 
 Use these local dev credentials on the login screen:
 
