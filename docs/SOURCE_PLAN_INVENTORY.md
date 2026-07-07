@@ -67,6 +67,11 @@ A sixth audit against the raw `review/` reports added:
   which token/auth/webhook/import/lifecycle/scalability/docs findings remain
   open.
 
+A seventh audit pass added:
+
+- `REVIEW_FINDINGS_COVERAGE_AUDIT.md` for report-by-report traceability from
+  the raw review files into current owners, backlog, or intentional deferral.
+
 ### Redesign Foundation Decision
 
 Status: Active requirement.

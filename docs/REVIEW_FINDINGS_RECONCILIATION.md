@@ -28,6 +28,9 @@ Review inputs checked:
 The `*_V2.md` files are treated as the corrected review layer where they
 disagree with the first-pass reports.
 
+For report-by-report traceability, see
+`REVIEW_FINDINGS_COVERAGE_AUDIT.md`.
+
 ## Current Reconciliation Result
 
 The consolidated docs already represented much of the review:
