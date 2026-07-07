@@ -33,6 +33,18 @@ details that should not be lost when the old planning folder is retired:
   usage, policy binding, egress privacy, retained-storage, and smoke
   requirements from the large project-governance plan.
 
+A third audit against the older platform plans added:
+
+- `RUNTIME_OPERATOR_REQUIREMENTS.md` for local workflow source trust, MCP,
+  certificate recovery, runtime release/reconnect, and operator CLI behavior.
+- `RESOURCE_LIFECYCLE_REQUIREMENTS.md` for browser contexts, session templates,
+  network identity, egress profile diagnostics, local presets, and proxy-auth
+  validation.
+- `IDENTITY_ACCESS_REQUIREMENTS.md` for current identity, access review,
+  service-principal registry, identity mappings, and admin/CLI behavior.
+- `ADMIN_INTERACTION_REQUIREMENTS.md` for global feedback, panel-local
+  messages, session creation configurator behavior, metrics, and logs.
+
 ### Redesign Foundation Decision
 
 Status: Active requirement.
@@ -154,6 +166,8 @@ Retained outcomes:
 - first connect should not download `@playwright/mcp@latest`,
 - dev certificate metadata and recovery guidance must remain clear,
 - local troubleshooting should cover certs, workflow source, and MCP bridge.
+- detailed local setup, certificate, MCP, runtime, and CLI behavior is
+  preserved in `RUNTIME_OPERATOR_REQUIREMENTS.md`.
 
 ### Session Runtime Lifecycle
 
@@ -180,6 +194,8 @@ Retained outcomes:
 - strict automation exit behavior,
 - unsupported option rejection,
 - CLI smoke remains mandatory for MCP/control changes.
+- detailed command, profile, preflight, repair, and smoke behavior is preserved
+  in `RUNTIME_OPERATOR_REQUIREMENTS.md`.
 
 ### Browser Context Resources
 
@@ -192,6 +208,8 @@ Retained outcomes:
 - admin visibility for references, active writer, storage, retention,
 - clone/export/import exist as product requirements even where unified admin
   parity still lags.
+- detailed context retention, storage, clone, export, import, and safety
+  behavior is preserved in `RESOURCE_LIFECYCLE_REQUIREMENTS.md`.
 
 ### Network Identity And Egress
 
@@ -207,6 +225,8 @@ Retained outcomes:
 - local no-egress/proxy/TLS presets,
 - proxy-auth fixture validation,
 - no inline proxy credentials.
+- detailed network identity, TLS interception, diagnostics, local presets, and
+  proxy-auth behavior is preserved in `RESOURCE_LIFECYCLE_REQUIREMENTS.md`.
 
 ### Session Templates
 
@@ -220,6 +240,8 @@ Retained outcomes:
 - session catalog filters by template and metadata,
 - admin-new creation uses templates,
 - dedicated template catalog management remains open.
+- detailed template defaults, merge, filtering, and smoke behavior is preserved
+  in `RESOURCE_LIFECYCLE_REQUIREMENTS.md`.
 
 ### Projects, Quotas, Governance
 
@@ -260,6 +282,8 @@ Retained outcomes:
 - identity/project mappings for users/groups/claims/service principals,
 - safe token claim rendering,
 - unmapped signal evidence.
+- detailed principal, service-principal, mapping, admin, CLI, and validation
+  behavior is preserved in `IDENTITY_ACCESS_REQUIREMENTS.md`.
 
 Remaining:
 
@@ -278,6 +302,8 @@ Retained outcomes:
 - selected-session external state diffs,
 - workflow state messages,
 - artifact/delegation snapshots.
+- detailed global notification, panel-local message, session creation, metrics,
+  and logs behavior is preserved in `ADMIN_INTERACTION_REQUIREMENTS.md`.
 
 ## Recently Merged Security Slices
 

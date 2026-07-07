@@ -239,6 +239,55 @@ For route/API contract changes, check:
 Only update those docs when behavior, topology, setup, API, or validation flow
 actually changes.
 
+## Runtime, CLI, Identity, And Resource Lifecycle Checks
+
+Use these focused checks for slices that touch the older platform domains now
+captured in the standalone requirement docs:
+
+Runtime and local workflow:
+
+```bash
+cargo test -p bpane-gateway
+cd code/integrations/mcp-bridge && npm test && npm run build
+cd code/web/bpane-client && npm run smoke:admin-browserpane-tour -- --headless
+cd code/web/bpane-client && npm run smoke:admin-mcp -- --headless
+```
+
+Operator CLI:
+
+```bash
+cd code/web/bpane-client
+npm test -- bpane-cli
+npm run smoke:bpane-cli -- --headless
+npm run bpane:cli -- --help
+```
+
+Browser contexts and resource lifecycle:
+
+```bash
+cargo test -p bpane-gateway browser_context
+cd code/web/bpane-client && npm run smoke:admin-unified-browser-contexts -- --headless
+cd code/web/bpane-client && npm run smoke:admin-browser-contexts -- --headless
+```
+
+Network identity and egress:
+
+```bash
+cargo test -p bpane-gateway api::tests::network_identity -- --nocapture
+cargo test -p bpane-gateway session_control::tests::validation -- --nocapture
+cd code/web/bpane-client && npm run smoke:admin-unified-egress-profiles -- --headless
+cd code/web/bpane-client && npm run smoke:admin-egress-profiles -- --headless
+```
+
+Identity and access:
+
+```bash
+cargo test -p bpane-gateway identity -- --nocapture
+cargo test -p bpane-gateway identity_mapping -- --nocapture
+cargo test -p bpane-gateway service_principal -- --nocapture
+cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless
+```
+
 ## Manual Promotion Gate
 
 Before `/admin-new` can become default:

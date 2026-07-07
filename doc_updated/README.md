@@ -40,11 +40,20 @@ Current branch context:
   requirements.
 - `ADMIN_NEW_MANUAL_CHECKPOINTS.md`: route-by-route manual validation gates and
   final regression sequence for the side-by-side admin migration.
+- `ADMIN_INTERACTION_REQUIREMENTS.md`: global notifications, panel-local
+  feedback, session creation configurator, metrics, and logs.
 - `DOMAIN_REQUIREMENTS.md`: standalone control-plane and product-domain
   requirements that remain relevant to the admin app and future slices.
+- `IDENTITY_ACCESS_REQUIREMENTS.md`: current principal, access review,
+  service-principal registry, identity mappings, and admin/CLI requirements.
 - `PROJECT_GOVERNANCE_REQUIREMENTS.md`: detailed project quota, admission,
   queueing, policy binding, usage, retained-storage, and privacy-boundary
   requirements.
+- `RESOURCE_LIFECYCLE_REQUIREMENTS.md`: browser-context, session-template,
+  network identity, egress profile, diagnostics, and proxy-auth lifecycle
+  requirements.
+- `RUNTIME_OPERATOR_REQUIREMENTS.md`: local setup, workflow source, MCP,
+  certificate, runtime release/reconnect, and operator CLI requirements.
 - `SOURCE_PLAN_INVENTORY.md`: compact legacy plan-to-topic map with the
   retained requirements embedded by topic.
 - `NEXT_WORKING_ROADMAP.md`: prioritized remaining work, keeping admin-new
@@ -110,6 +119,18 @@ only against filenames. The second pass added standalone coverage for:
 - the final promotion regression sequence,
 - detailed project governance quota, queue, usage, policy, and retained-storage
   behavior.
+
+The third pass added standalone coverage for the older platform plans that
+pre-date the `/admin-new` redesign but still matter for implementation:
+
+- local workflow source trust, MCP startup, and certificate recovery,
+- session runtime release/reconnect/stopped semantics,
+- operator CLI command behavior and profile safety,
+- browser-context clone/export/import/retention/storage lifecycle,
+- session-template catalog semantics,
+- network identity and egress/proxy-auth diagnostics,
+- identity access-review, service-principal registry, and identity mappings,
+- global feedback and session creation configurator behavior.
 
 ## Retirement Rule For The Old Planning Folder
 
