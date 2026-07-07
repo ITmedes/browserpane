@@ -62,6 +62,9 @@ Current branch context:
 - `REVIEW_FINDINGS_RECONCILIATION.md`: comparison of the raw `review/`
   findings against the consolidated docs and current tree, including which
   findings are superseded, still open, or newly promoted into the roadmap.
+- `REVIEW_FINDINGS_COVERAGE_AUDIT.md`: traceability matrix proving every
+  `review/` report family is represented by a current owner, superseded by the
+  baseline, or intentionally deferred.
 - `RESOURCE_LIFECYCLE_REQUIREMENTS.md`: browser-context, session-template,
   network identity, egress profile, diagnostics, and proxy-auth lifecycle
   requirements.
@@ -166,6 +169,11 @@ superseded by later hardening, while token-domain separation, admin web auth,
 webhook SSRF, browser-context import limits, graceful shutdown/readiness,
 control-plane aggregation scalability, and durable documentation fixes remain
 active roadmap items.
+
+The seventh pass added explicit traceability for every raw `review/` report.
+It separates active next-slice work from explicit backlog and intentional
+non-blocking deferrals, so the review folder no longer needs to be read to know
+whether a finding is represented.
 
 ## Maintenance Rule
 
