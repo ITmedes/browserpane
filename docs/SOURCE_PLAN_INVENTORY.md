@@ -72,6 +72,11 @@ A seventh audit pass added:
 - `REVIEW_FINDINGS_COVERAGE_AUDIT.md` for report-by-report traceability from
   the raw review files into current owners, backlog, or intentional deferral.
 
+An eighth audit pass added:
+
+- `REVIEW_CLEANUP_WORK_ORDER.md` for the chosen order of cleanup and
+  refactoring slices that should follow from the review findings.
+
 ### Redesign Foundation Decision
 
 Status: Active requirement.

@@ -65,6 +65,9 @@ Current branch context:
 - `REVIEW_FINDINGS_COVERAGE_AUDIT.md`: traceability matrix proving every
   `review/` report family is represented by a current owner, superseded by the
   baseline, or intentionally deferred.
+- `REVIEW_CLEANUP_WORK_ORDER.md`: prioritized implementation order for the
+  cleanup and refactoring findings from `review/`, including scope,
+  dependencies, and validation expectations.
 - `RESOURCE_LIFECYCLE_REQUIREMENTS.md`: browser-context, session-template,
   network identity, egress profile, diagnostics, and proxy-auth lifecycle
   requirements.
@@ -174,6 +177,10 @@ The seventh pass added explicit traceability for every raw `review/` report.
 It separates active next-slice work from explicit backlog and intentional
 non-blocking deferrals, so the review folder no longer needs to be read to know
 whether a finding is represented.
+
+The eighth pass added a review cleanup work order. It ranks cleanup and
+refactoring tasks by production risk, dependency order, shippable PR scope, and
+validation confidence.
 
 ## Maintenance Rule
 
