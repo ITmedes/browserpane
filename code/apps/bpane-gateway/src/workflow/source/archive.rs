@@ -8,7 +8,8 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 use super::validation::{
-    join_validated_relative_path, short_commit, validate_workflow_source_entrypoint_with_policy,
+    join_validated_relative_path, short_commit, validate_materialized_directory,
+    validate_materialized_regular_file, validate_workflow_source_entrypoint_with_policy,
     validated_relative_path,
 };
 use super::{WorkflowSource, WorkflowSourceArchive, WorkflowSourceError, WorkflowSourceResolver};
@@ -36,12 +37,12 @@ impl WorkflowSourceResolver {
                 let entrypoint_path = join_validated_relative_path(&repo_root, entrypoint)?;
                 let entrypoint_root_path =
                     validated_relative_path("workflow entrypoint", entrypoint)?;
-                if !entrypoint_path.is_file() {
-                    return Err(WorkflowSourceError::Materialize(format!(
-                        "workflow entrypoint {entrypoint} was not found at commit {}",
-                        source.resolved_commit.as_deref().unwrap_or("unknown"),
-                    )));
-                }
+                validate_materialized_regular_file(
+                    &repo_root,
+                    &entrypoint_path,
+                    "workflow entrypoint",
+                    entrypoint,
+                )?;
                 if let Some(root_path) = source.root_path.as_deref() {
                     let validated_root_path =
                         validated_relative_path("workflow git source root_path", root_path)?;
@@ -55,13 +56,12 @@ impl WorkflowSourceResolver {
                     Some(root_path) => join_validated_relative_path(&repo_root, root_path)?,
                     None => repo_root.clone(),
                 };
-                if !archive_root.exists() {
-                    return Err(WorkflowSourceError::Materialize(format!(
-                        "workflow source root path {} was not found at commit {}",
-                        source.root_path.as_deref().unwrap_or("."),
-                        source.resolved_commit.as_deref().unwrap_or("unknown"),
-                    )));
-                }
+                validate_materialized_directory(
+                    &repo_root,
+                    &archive_root,
+                    "workflow source root path",
+                    source.root_path.as_deref().unwrap_or("."),
+                )?;
                 let file_name = format!(
                     "workflow-source-{}.zip",
                     short_commit(source.resolved_commit.as_deref().ok_or_else(|| {

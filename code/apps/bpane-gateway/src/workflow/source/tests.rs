@@ -229,3 +229,45 @@ async fn materializes_git_source_archive_from_local_repository() {
     assert!(names.contains(&"workflows/notes.txt".to_string()));
     assert!(!names.contains(&"README.md".to_string()));
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn rejects_source_preview_symlink_file() {
+    use std::os::unix::fs as unix_fs;
+
+    let temp = tempdir().unwrap();
+    git(&["init", "--initial-branch=main"], temp.path());
+    git(
+        &["config", "user.email", "workflow@test.local"],
+        temp.path(),
+    );
+    git(&["config", "user.name", "Workflow Test"], temp.path());
+    fs::create_dir_all(temp.path().join("workflows")).unwrap();
+    fs::write(temp.path().join("README.md"), "outside workflow root\n").unwrap();
+    fs::write(temp.path().join("workflows/run.ts"), "export default 1;\n").unwrap();
+    unix_fs::symlink("../README.md", temp.path().join("workflows/link.ts")).unwrap();
+    git(&["add", "."], temp.path());
+    git(&["commit", "-m", "init"], temp.path());
+    let head = git_head(temp.path());
+
+    let resolver = resolver_trusting_temp();
+    let error = resolver
+        .materialize_source_file_preview(
+            &WorkflowSource::Git(WorkflowGitSource {
+                repository_url: temp.path().to_string_lossy().into_owned(),
+                r#ref: None,
+                resolved_commit: Some(head),
+                root_path: Some("workflows".to_string()),
+            }),
+            "workflows/run.ts",
+            "workflows/link.ts",
+            1024,
+        )
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(&error, WorkflowSourceError::Materialize(message) if message.contains("symlinks are not supported")),
+        "{error:?}"
+    );
+}
