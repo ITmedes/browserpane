@@ -114,9 +114,10 @@ backtick-token equality is intentionally not required because:
 Before deleting the old folder:
 
 1. Run exact file inventory coverage against `SOURCE_PLAN_INVENTORY.md`.
-2. Run high-signal token coverage against this consolidated workspace.
-3. Confirm no consolidated document tells readers to go back to old plans for
+2. Run section-level coverage against `LEGACY_SECTION_COVERAGE_AUDIT.md`.
+3. Run high-signal token coverage against this consolidated workspace.
+4. Confirm no consolidated document tells readers to go back to old plans for
    active requirements.
-4. Confirm future planning guidance points to this consolidated workspace.
-5. Delete old plans only in a docs cleanup PR, not in the same PR as product
+5. Confirm future planning guidance points to this consolidated workspace.
+6. Delete old plans only in a docs cleanup PR, not in the same PR as product
    behavior changes.
