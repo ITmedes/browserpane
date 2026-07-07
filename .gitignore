@@ -13,6 +13,8 @@ code/tests/e2e
 dev/egress-mitmproxy/
 !dev/gen-cert.sh
 
+.codex
+
 # WASM build output
 /code/web/bpane-client/pkg/
 
