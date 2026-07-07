@@ -16,6 +16,7 @@ async fn in_memory_store_allows_delegated_client_to_load_session() {
                 network_identity: None,
                 owner_mode: None,
                 viewport: None,
+                capabilities: Default::default(),
                 idle_timeout_sec: None,
                 labels: HashMap::new(),
                 integration_context: None,

@@ -17,7 +17,8 @@ use super::{
     StoredWorkflowRunEvent, StoredWorkflowRunLog, WorkflowRunAdmissionResource,
     WorkflowRunEventSource, WorkflowRunInterventionResource, WorkflowRunLogSource,
     WorkflowRunProducedFile, WorkflowRunRuntimeResource, WorkflowRunSourceSnapshot,
-    WorkflowRunState, WorkflowRunWorkspaceInput, WorkflowSource,
+    WorkflowRunState, WorkflowRunWorkspaceInput, WorkflowSource, WorkflowSourceFileListing,
+    WorkflowSourcePreview,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -119,6 +120,47 @@ pub struct WorkflowDefinitionVersionResource {
     pub allowed_extension_ids: Vec<String>,
     pub allowed_file_workspace_ids: Vec<String>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowDefinitionSourcePreviewResource {
+    pub workflow_definition_id: Uuid,
+    pub workflow_version: String,
+    pub entrypoint: String,
+    pub path: String,
+    pub source: WorkflowSource,
+    pub media_type: String,
+    pub language: String,
+    pub content: String,
+    pub byte_count: usize,
+    pub max_bytes: usize,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowDefinitionSourceFileResource {
+    pub path: String,
+    pub byte_count: u64,
+    pub media_type: String,
+    pub language: String,
+    pub entrypoint: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowDefinitionSourceFileListResponse {
+    pub workflow_definition_id: Uuid,
+    pub workflow_version: String,
+    pub entrypoint: String,
+    pub source: WorkflowSource,
+    pub files: Vec<WorkflowDefinitionSourceFileResource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkflowDefinitionSourceValidationResponse {
+    pub workflow_definition_id: Uuid,
+    pub entrypoint: String,
+    pub source: WorkflowSource,
+    pub files: Vec<WorkflowDefinitionSourceFileResource>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -227,6 +269,76 @@ impl StoredWorkflowDefinitionVersion {
             allowed_extension_ids: self.allowed_extension_ids.clone(),
             allowed_file_workspace_ids: self.allowed_file_workspace_ids.clone(),
             created_at: self.created_at,
+        }
+    }
+}
+
+impl WorkflowSourcePreview {
+    pub fn to_definition_preview_resource(
+        &self,
+        version: &StoredWorkflowDefinitionVersion,
+        max_bytes: usize,
+    ) -> WorkflowDefinitionSourcePreviewResource {
+        WorkflowDefinitionSourcePreviewResource {
+            workflow_definition_id: version.workflow_definition_id,
+            workflow_version: version.version.clone(),
+            entrypoint: self.entrypoint.clone(),
+            path: self.path.clone(),
+            source: self.source.clone(),
+            media_type: self.media_type.clone(),
+            language: self.language.clone(),
+            content: self.content.clone(),
+            byte_count: self.byte_count,
+            max_bytes,
+            truncated: self.truncated,
+        }
+    }
+}
+
+impl WorkflowSourceFileListing {
+    pub fn to_definition_source_file_list_response(
+        &self,
+        version: &StoredWorkflowDefinitionVersion,
+    ) -> WorkflowDefinitionSourceFileListResponse {
+        WorkflowDefinitionSourceFileListResponse {
+            workflow_definition_id: version.workflow_definition_id,
+            workflow_version: version.version.clone(),
+            entrypoint: version.entrypoint.clone(),
+            source: self.source.clone(),
+            files: self
+                .files
+                .iter()
+                .map(|file| WorkflowDefinitionSourceFileResource {
+                    path: file.path.clone(),
+                    byte_count: file.byte_count,
+                    media_type: file.media_type.clone(),
+                    language: file.language.clone(),
+                    entrypoint: file.entrypoint,
+                })
+                .collect(),
+        }
+    }
+
+    pub fn to_definition_source_validation_response(
+        &self,
+        workflow_definition_id: Uuid,
+        entrypoint: &str,
+    ) -> WorkflowDefinitionSourceValidationResponse {
+        WorkflowDefinitionSourceValidationResponse {
+            workflow_definition_id,
+            entrypoint: entrypoint.to_string(),
+            source: self.source.clone(),
+            files: self
+                .files
+                .iter()
+                .map(|file| WorkflowDefinitionSourceFileResource {
+                    path: file.path.clone(),
+                    byte_count: file.byte_count,
+                    media_type: file.media_type.clone(),
+                    language: file.language.clone(),
+                    entrypoint: file.entrypoint,
+                })
+                .collect(),
         }
     }
 }

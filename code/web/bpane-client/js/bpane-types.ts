@@ -1,5 +1,6 @@
 export type RenderBackendPreference = 'auto' | 'canvas2d' | 'webgl2';
 export type SessionClientRole = 'interactive' | 'recorder';
+export type SessionResizeSourcePreference = 'canvas' | 'container';
 
 export interface BpaneOptions {
   container: HTMLElement;
@@ -22,6 +23,8 @@ export interface BpaneOptions {
   certHashUrl?: string;
   /** Diagnostic backend override. Defaults to 'auto'. */
   renderBackend?: RenderBackendPreference;
+  /** Resize measurement source. Defaults to rendered canvas sizing for embedded clients. */
+  resizeSource?: SessionResizeSourcePreference;
   /** Diagnostic switch. Disable retained scroll-copy reuse and rely on repair tiles only. */
   scrollCopy?: boolean;
   onConnect?: () => void;

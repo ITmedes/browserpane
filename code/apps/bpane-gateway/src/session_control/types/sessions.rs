@@ -2001,9 +2001,7 @@ pub struct SessionConnectionCounts {
 pub enum SessionStopBlockerKind {
     OwnerClients,
     ViewerClients,
-    RecorderClients,
     AutomationOwner,
-    RecordingActivity,
     AutomationTasks,
     WorkflowRuns,
 }
@@ -2096,6 +2094,8 @@ pub struct CreateSessionRequest {
     pub owner_mode: Option<SessionOwnerMode>,
     #[serde(default)]
     pub viewport: Option<SessionViewport>,
+    #[serde(default)]
+    pub capabilities: SessionCapabilities,
     #[serde(default)]
     pub idle_timeout_sec: Option<u32>,
     #[serde(default)]
@@ -2209,6 +2209,7 @@ pub struct StoredSession {
     pub network_identity: SessionNetworkIdentity,
     pub owner_mode: SessionOwnerMode,
     pub viewport: SessionViewport,
+    pub capabilities: SessionCapabilities,
     pub owner: SessionOwner,
     pub automation_delegate: Option<SessionAutomationDelegate>,
     pub idle_timeout_sec: Option<u32>,

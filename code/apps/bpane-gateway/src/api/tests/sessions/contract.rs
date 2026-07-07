@@ -71,10 +71,6 @@ fn session_status_maps_recorder_clients() {
                         kind: SessionStopBlockerKind::ViewerClients,
                         count: 1,
                     },
-                    SessionStopBlocker {
-                        kind: SessionStopBlockerKind::RecorderClients,
-                        count: 1,
-                    },
                 ],
             },
             idle: SessionIdleStatus {
@@ -144,7 +140,7 @@ fn session_status_maps_recorder_clients() {
     assert_eq!(status.summary.connection_counts.owner_clients, 1);
     assert_eq!(status.summary.connection_counts.viewer_clients, 1);
     assert!(!status.summary.stop_eligibility.allowed);
-    assert_eq!(status.summary.stop_eligibility.blockers.len(), 3);
+    assert_eq!(status.summary.stop_eligibility.blockers.len(), 2);
     assert_eq!(status.connections.len(), 3);
     assert_eq!(status.connections[0].connection_id, 1);
     assert!(matches!(
@@ -365,6 +361,64 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     assert_eq!(stopped["id"], session_id);
     assert_eq!(stopped["state"], "stopped");
     assert!(stopped["stopped_at"].is_string());
+}
+
+#[tokio::test]
+async fn session_create_accepts_capability_overrides() {
+    let (app, token) = test_router();
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "capabilities": {
+                            "browser_input": true,
+                            "clipboard": false,
+                            "audio": true,
+                            "microphone": false,
+                            "camera": false,
+                            "file_transfer": true,
+                            "resize": true
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let created = response_json(create_response).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+    assert_eq!(created["capabilities"]["browser_input"], true);
+    assert_eq!(created["capabilities"]["clipboard"], false);
+    assert_eq!(created["capabilities"]["audio"], true);
+    assert_eq!(created["capabilities"]["microphone"], false);
+    assert_eq!(created["capabilities"]["camera"], false);
+    assert_eq!(created["capabilities"]["file_transfer"], true);
+    assert_eq!(created["capabilities"]["resize"], true);
+
+    let get_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let fetched = response_json(get_response).await;
+    assert_eq!(fetched["capabilities"], created["capabilities"]);
 }
 
 #[tokio::test]

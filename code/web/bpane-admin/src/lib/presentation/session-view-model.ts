@@ -130,9 +130,10 @@ export class SessionViewModelBuilder {
     const templateLookup = templateLookupFrom(input.sessionTemplates ?? []);
     const browserContextLookup = browserContextLookupFrom(input.browserContexts ?? []);
     const stopEligibility = status?.stop_eligibility ?? session.status.stop_eligibility;
-    const connectionCount = status?.connection_counts.total_clients
-      ?? session.status.connection_counts.total_clients;
-    const hasLiveClients = input.connected || connectionCount > 0;
+    const connectionCounts = status?.connection_counts ?? session.status.connection_counts;
+    const connectionCount = connectionCounts.total_clients;
+    const interactiveConnectionCount = connectionCounts.interactive_clients;
+    const hasLiveClients = input.connected || interactiveConnectionCount > 0;
     const queue = session.queue ?? null;
     const isQueued = session.state === 'queued';
     return {
@@ -223,7 +224,7 @@ export class SessionViewModelBuilder {
       canCancelQueue: !input.loading && isQueued && (queue?.cancellable ?? true),
       canKill: !input.loading && !isQueued && !hasLiveClients,
       canRelease: !input.loading && !isQueued && !hasLiveClients && stopEligibility.allowed && !['released', 'stopped'].includes(session.state),
-      canDisconnectAll: !input.loading && (status?.connections.length ?? 0) > 0,
+      canDisconnectAll: !input.loading && (status?.connections.some((connection) => connection.role !== 'recorder') ?? false),
       loading: input.loading,
       error: input.error,
     };

@@ -9,6 +9,7 @@ fn project_session_request(project_id: Uuid) -> CreateSessionRequest {
         network_identity: None,
         owner_mode: None,
         viewport: None,
+        capabilities: Default::default(),
         idle_timeout_sec: None,
         labels: HashMap::new(),
         integration_context: None,

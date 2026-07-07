@@ -14,7 +14,8 @@ describe('AuthConfigClient', () => {
         password: 'demo-demo',
       },
       mcpBridge: {
-        controlUrl: 'http://localhost:8931/control-session',
+        controlUrl: 'http://localhost:8080/api/v1/mcp-bridge/control-session',
+        endpointBaseUrl: 'http://localhost:8931',
         clientId: 'bpane-mcp-bridge',
         issuer: 'http://localhost:8091/realms/browserpane-dev',
         displayName: 'BrowserPane MCP bridge',
@@ -30,6 +31,7 @@ describe('AuthConfigClient', () => {
     expect(config?.mode).toBe('oidc');
     expect(config?.exampleUser?.username).toBe('demo');
     expect(config?.mcpBridge?.clientId).toBe('bpane-mcp-bridge');
+    expect(config?.mcpBridge?.endpointBaseUrl).toBe('http://localhost:8931');
     expect(fetchImpl).toHaveBeenCalledWith(new URL('http://localhost:8080/auth-config.json'));
   });
 

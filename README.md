@@ -168,7 +168,17 @@ BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \
 docker compose -f deploy/compose.yml up --build
 ```
 
-Then open `http://localhost:8080/admin/` in Chromium. The web root redirects to the admin console.
+Then open `http://localhost:8080/admin/` in Chromium. The web root redirects to the stable admin console.
+
+The route-backed unified admin redesign is available in parallel at
+`http://localhost:8080/admin-new/`. It is under active development for
+BPANE-00142 and is intended for incremental manual testing while `/admin/`
+remains the stable/default console.
+The redesigned session preview popup includes a local `Metrics` drawer that can
+sample browser transition diagnostics from the BrowserPane client runtime
+without creating a backend artifact. It reports FPS, transfer rates, tile mix,
+cache health, scroll fallback health, video datagrams, and render backend, and
+can copy the current sample as JSON for debugging.
 
 Use these local dev credentials on the login screen:
 
@@ -199,9 +209,12 @@ The compose stack starts:
 - `keycloak`: local OIDC provider on `:8091`
 - `web`: local frontend on `:8080`
 - `mcp-bridge`: MCP bridge on `:8931` (`/sessions/{id}/mcp` for recommended session-scoped Streamable HTTP, `/sessions/{id}/sse` for session-scoped legacy SSE, `/mcp` and `/sse` for compatibility)
+- `recording-worker-image`: one-shot build helper for the on-demand recording worker image used by `recording.mode=always`; the gateway launches short-lived recorder containers when sessions start recording
 
-The local compose file also defines a `workflow-worker` image profile. The gateway launches workflow-worker containers on demand; you normally do not start that container as a long-lived service yourself.
-The gateway mounts the repository at `/workspace:ro` for local git-backed workflow sources, and the gateway image configures `/workspace` as a trusted Git `safe.directory`.
+The local compose file also defines on-demand worker images for workflows and recordings. The gateway launches workflow-worker and recording-worker containers as short-lived jobs; you normally do not start those containers as long-lived services yourself.
+The gateway mounts the repository at `/workspace:ro` for local git-backed workflow sources, configures `/workspace` as a trusted Git `safe.directory`, and passes `--workflow-source-trusted-local-root /workspace` so local paths are allowed only from that explicit development root.
+The recording worker uses the generated local SPKI fingerprint from `dev/certs/cert-fingerprint.txt` through the gateway's `--recording-worker-cert-spki-file` setting, so run `./deploy/gen-dev-cert.sh dev/certs` before starting compose after certificate rotations.
+The recording worker forces the SDK render backend to Canvas2D for reliable headless Docker capture. Interactive admin and embedded browser clients keep the default `auto` backend, so GPU/WebGL rendering remains available for end-user sessions when the browser environment supports it.
 
 The local MCP bridge uses the package-installed `@playwright/mcp` executable from its own dependencies. It should not download `@playwright/mcp@latest` on first connect; run `npm ci` in `code/integrations/mcp-bridge` or rebuild the image if that local executable is missing.
 
@@ -225,6 +238,9 @@ docker compose -f deploy/compose.yml up --build
 - `BPANE_GATEWAY_DOCKER_RUNTIME_NETWORK`
 - `BPANE_GATEWAY_DOCKER_RUNTIME_SOCKET_VOLUME`
 - `BPANE_GATEWAY_DOCKER_RUNTIME_SESSION_DATA_VOLUME_PREFIX`
+- `BPANE_RECORDING_WORKER_NETWORK`
+- `BPANE_RECORDING_WORKER_OUTPUT_VOLUME`
+- `BPANE_RECORDING_WORKER_IMAGE`
 
 The default local auth flow is OIDC-based:
 
@@ -232,7 +248,7 @@ The default local auth flow is OIDC-based:
 - click `Login`
 - authenticate against the local Keycloak realm
 - use the demo account `demo / demo-demo`
-- return to the admin console and either select an existing session or create a new one, optionally from a session template and reusable browser context
+- return to the admin console and either select an existing session or create a new one, optionally from a session template, reusable browser context, and explicit capability restrictions
 - the admin console joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
 - the live session panel and session inspector show the applied template, and the inspector can filter sessions by template, lifecycle state, and runtime state
 - sessions created from the admin console use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
@@ -353,7 +369,9 @@ reusable-context, and file-workspace allow-lists before runtime launch. Project
 policy can also reject browser upload/download transfers, session-file binding
 creation, and ad-hoc manual recording starts for project sessions. Session resources expose
 `capabilities.file_transfer=false` when the project disables either browser
-upload or browser download transfer. Credential bindings and
+upload or browser download transfer, and explicit session create requests can
+narrow browser input, clipboard, audio, microphone, camera, file transfer, and
+resize capabilities for that session. Credential bindings and
 egress profiles can be owner-scoped or assigned to a project; project-scoped
 sessions may use owner-scoped egress profiles or profiles from the same project,
 and may only use project-bound proxy credential bindings from that same project.
@@ -569,13 +587,15 @@ The local dev flow uses those routes to bridge browser-owned and automation-owne
 - it then mints a short-lived `session_connect_ticket` from `POST /api/v1/sessions/{id}/access-tokens`
 - the gateway routes the WebTransport connect through that explicit session id instead of one global token path
 - `Delegate MCP` assigns that session to the local `bpane-mcp-bridge` service principal
-- the console then calls `mcp-bridge` on `:8931/control-session` so the bridge adopts that same session for later ownership/status calls
+- the console then calls the authenticated gateway proxy at
+  `/api/v1/mcp-bridge/control-session`; the gateway validates the owner/session
+  and forwards the request to `mcp-bridge` with its internal control bearer
+  token so the bridge adopts that same session for later ownership/status calls
 - external MCP clients can avoid the mutable bridge control target by connecting
   directly to `:8931/sessions/{session_id}/mcp` after that session is delegated
-- `/control-session` remains a local compatibility control target. It is useful
-  for the legacy test page and single-target tooling, but it is not the
-  recommended external-client mode when multiple BrowserPane sessions may be
-  delegated at the same time.
+- direct `:8931/control-session` remains a bridge-local compatibility control
+  target. In local compose it is bearer-protected and intended for gateway
+  proxying/internal smokes, not browser frontend calls.
 - the local `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource, so delegated control also works in `docker_pool` mode
 
 MCP delegation terminology:
@@ -614,7 +634,8 @@ Minimal local operator setup:
 export BPANE_ACCESS_TOKEN=<owner bearer token>
 ./scripts/bpane profile init local \
   --base-url http://localhost:8080 \
-  --mcp-control-url http://localhost:8931/control-session \
+  --mcp-control-url http://localhost:8080/api/v1/mcp-bridge/control-session \
+  --mcp-endpoint-base-url http://localhost:8931 \
   --set-default
 ```
 
@@ -845,6 +866,7 @@ CLI options `--probe-public-ip-url`, `--probe-tls-url`, and
 
 ```bash
 cd code/web/bpane-client && npm run smoke:admin-egress-profiles -- --headless
+cd code/web/bpane-client && npm run smoke:admin-unified-egress-profiles -- --headless
 ```
 
 Common browser-context operations:
@@ -858,6 +880,14 @@ Common browser-context operations:
 ./scripts/bpane browser-context get <context-id>
 ./scripts/bpane browser-context delete <context-id>
 cd code/web/bpane-client && npm run smoke:admin-browser-contexts -- --headless
+cd code/web/bpane-client && npm run smoke:admin-unified-browser-contexts -- --headless
+```
+
+File-workspace admin smoke coverage:
+
+```bash
+cd code/web/bpane-client && npm run smoke:admin-file-workspaces -- --headless
+cd code/web/bpane-client && npm run smoke:admin-unified-file-workspaces -- --headless
 ```
 
 MCP delegation and recovery operations:
@@ -904,6 +934,10 @@ Current runtime notes:
 - `mcp-bridge` keeps `/control-session` as a compatibility control target and
   supports recommended per-connection session routing through
   `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`
+- local compose routes browser/admin/CLI default-session mutations through the
+  authenticated gateway proxy at `/api/v1/mcp-bridge/control-session`; direct
+  bridge control on `:8931/control-session` is protected by the internal
+  `BPANE_MCP_BRIDGE_CONTROL_TOKEN`
 - `mcp-bridge` exposes `/health.managed_sessions` so multi-session clients can
   inspect each active control/session-bound target without relying only on the
   legacy `control_session_*` fields
@@ -916,12 +950,16 @@ BrowserPane session recording is now a control-plane feature rather than only a 
 
 - Session recording policy supports `disabled`, `manual`, and `always`.
 - Recording resources are session-scoped and persist segment metadata, runtime state, termination reason, and artifact linkage.
-- Recordings can be downloaded from the admin recording library, the legacy dev
-  harness where applicable, or through the v1 API.
+- Recordings can be downloaded from the admin recording library
+  (`/admin-new/recordings` during the redesign), the legacy dev harness where
+  applicable, or through the v1 API.
 - Playback/export is modeled separately from raw recording segments, so multi-segment sessions stay explicit.
 - Project policy can set `allow_manual_recordings=false` to block ad-hoc manual
-  recording starts for project sessions. Always-on session recording remains an
-  explicit session/template recording policy.
+  recording starts for project sessions. The redesigned admin session form uses
+  `recording.mode=always` for automatic backend recording when the session
+  runtime starts. The local compose stack wires this through a Docker-backed
+  `recording-worker` image and a shared recording handoff volume. Manual
+  Record/Stop controls are a separate operator workflow.
 
 Primary routes:
 
@@ -934,12 +972,15 @@ Primary routes:
 - `GET /api/v1/sessions/{id}/recording-playback/manifest`
 - `GET /api/v1/sessions/{id}/recording-playback/export`
 
-Local manual flow:
+Local automatic backend recording flow:
 
-1. Open `http://localhost:8080/admin/`
-2. Start or reconnect a session
-3. Use the recording controls in the admin console
-4. Download individual segments or the playback export bundle from the recording library
+1. Open `http://localhost:8080/admin-new/sessions`
+2. Create or edit a session with recording enabled
+3. Start or connect the session
+4. Stop the session or finalize the recording
+5. Download from `http://localhost:8080/admin-new/recordings`; a single
+   retained segment downloads as WebM, while sessions with multiple retained
+   segments download as a playback ZIP bundle
 
 ### Workflow Platform
 
@@ -965,6 +1006,7 @@ Current workflow capabilities:
 - explicit runtime hold/release semantics for paused runs (`live_runtime` vs `profile_restart`)
 - signed outbound workflow lifecycle webhook delivery
 - git-backed workflow sources pinned to resolved commits
+- workflow source validation before immutable version creation, including entrypoint checks, bounded file listing, and bounded source snapshot materialization
 - source snapshot materialization per run
 - structured workflow source errors with machine-readable `code`, `category`, and `recovery_hint` fields surfaced through the admin app
 - file workspaces for reusable inputs and durable outputs
@@ -977,8 +1019,11 @@ Primary workflow routes:
 - `POST /api/v1/workflows`
 - `GET /api/v1/workflows`
 - `GET /api/v1/workflows/{id}`
+- `POST /api/v1/workflows/{id}/source-validation`
 - `POST /api/v1/workflows/{id}/versions`
 - `GET /api/v1/workflows/{id}/versions/{version}`
+- `GET /api/v1/workflows/{id}/versions/{version}/source-files`
+- `GET /api/v1/workflows/{id}/versions/{version}/source-preview?path={relative_source_path}`
 - `POST /api/v1/workflow-runs`
 - `GET /api/v1/workflow-runs`
 - `GET /api/v1/workflow-runs/{id}`
@@ -1027,6 +1072,12 @@ Local usage options:
 - UI: use the workflow panel in the admin console
 - CLI: use `code/web/bpane-client/scripts/workflow-cli.mjs`
 - raw API: use the OpenAPI contract in `openapi/bpane-control-v1.yaml`
+
+Unified admin workflow-run catalog smoke:
+
+```bash
+cd code/web/bpane-client && npm run smoke:admin-unified-workflow-runs -- --headless
+```
 
 Typical local workflow path:
 
@@ -1101,6 +1152,13 @@ npm run build
 ../../../scripts/bpane --help
 npm run smoke:bpane-cli -- --headless
 npm run smoke:admin-session -- --headless
+npm run smoke:admin-unified-browser-contexts -- --headless
+npm run smoke:admin-unified-dashboard -- --headless
+npm run smoke:admin-unified-egress-profiles -- --headless
+npm run smoke:admin-unified-projects -- --headless
+npm run smoke:admin-unified-workflows -- --headless
+npm run smoke:admin-unified-workflow-runs -- --headless
+npm run smoke:admin-unified-file-workspaces -- --headless
 npm run workflow:cli -- --help
 npm run smoke:automation-tasks -- --headless
 npm run smoke:file-workspaces -- --headless

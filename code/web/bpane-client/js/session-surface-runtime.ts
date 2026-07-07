@@ -2,7 +2,7 @@ import type { TileInfo } from './nal.js';
 import type { CacheMissEvent } from './render/tile-draw-runtime.js';
 import { SessionCursorRuntime } from './session-cursor-runtime.js';
 import { SessionRecordingSurfaceRuntime } from './session-recording-surface-runtime.js';
-import { SessionResizeRuntime } from './session-resize-runtime.js';
+import { SessionResizeRuntime, type SessionResizeSource } from './session-resize-runtime.js';
 import { SessionVideoDisplayRuntime } from './session-video-display-runtime.js';
 import {
   WebGLTileRenderer,
@@ -25,6 +25,7 @@ export interface SessionSurfaceRuntimeInput {
   tileCompositor: SessionSurfaceTileCompositor;
   hiDpi: boolean;
   renderBackend?: SessionSurfaceRenderBackendPreference;
+  resizeSource?: SessionResizeSource;
   onTileCacheMiss: (event: CacheMissEvent) => void;
   sendResizeRequest: (width: number, height: number) => void;
   setRemoteSize: (width: number, height: number) => void;
@@ -44,6 +45,7 @@ export class SessionSurfaceRuntime {
   private readonly recordingSurfaceRuntime: SessionRecordingSurfaceRuntime;
   private readonly videoDisplayRuntime: SessionVideoDisplayRuntime;
   private readonly previousContainerPosition: string;
+  private readonly managesContainerPosition: boolean;
   private glRenderer: WebGLTileRenderer | null = null;
   private renderDiagnostics: WebGLRendererDiagnostics = {
     backend: 'canvas2d',
@@ -57,6 +59,8 @@ export class SessionSurfaceRuntime {
     this.container = input.container;
     this.tileCompositor = input.tileCompositor;
     this.previousContainerPosition = this.container.style.position;
+    const computedContainerPosition = window.getComputedStyle(this.container).position;
+    this.managesContainerPosition = computedContainerPosition === '' || computedContainerPosition === 'static';
 
     this.canvas = document.createElement('canvas');
     this.canvas.style.width = '100%';
@@ -77,7 +81,9 @@ export class SessionSurfaceRuntime {
     this.cursorEl.height = Math.max(64, Math.floor(this.container.clientHeight));
     this.cursorEl.style.zIndex = '2';
     const cursorCtx = this.cursorEl.getContext('2d');
-    this.container.style.position = 'relative';
+    if (this.managesContainerPosition) {
+      this.container.style.position = 'relative';
+    }
     this.container.appendChild(this.cursorEl);
     this.cursorRuntime = new SessionCursorRuntime({
       canvas: this.canvas,
@@ -141,6 +147,7 @@ export class SessionSurfaceRuntime {
       canvas: this.canvas,
       cursorEl: this.cursorEl,
       hiDpi: input.hiDpi,
+      resizeSource: input.resizeSource,
       resizeObserver,
       resizeRenderer: (width, height) => {
         if (this.glRenderer) {
@@ -181,6 +188,10 @@ export class SessionSurfaceRuntime {
 
   getContainerResizeDims(): { width: number; height: number } {
     return this.resizeRuntime.getContainerResizeDims();
+  }
+
+  isResolutionLocked(): boolean {
+    return this.resizeRuntime.isResolutionLocked();
   }
 
   applyClientAccessState(flags: number, width: number, height: number): void {
@@ -233,6 +244,8 @@ export class SessionSurfaceRuntime {
       this.cursorEl.parentNode.removeChild(this.cursorEl);
       this.cursorEl = null;
     }
-    this.container.style.position = this.previousContainerPosition;
+    if (this.managesContainerPosition) {
+      this.container.style.position = this.previousContainerPosition;
+    }
   }
 }

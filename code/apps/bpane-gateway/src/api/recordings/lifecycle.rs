@@ -5,7 +5,9 @@ pub(super) async fn list_session_recordings(
     Path(session_id): Path<Uuid>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<SessionRecordingListResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let _session = authorize_visible_session_request(&headers, &state, session_id).await?;
+    let _session =
+        authorize_visible_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
     let recordings = state
         .session_store
         .list_recordings_for_session(session_id)
@@ -52,7 +54,9 @@ pub(super) async fn get_session_recording(
     Path((session_id, recording_id)): Path<(Uuid, Uuid)>,
     State(state): State<Arc<ApiState>>,
 ) -> Result<Json<SessionRecordingResource>, (StatusCode, Json<ErrorResponse>)> {
-    let _session = authorize_visible_session_request(&headers, &state, session_id).await?;
+    let _session =
+        authorize_visible_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
     let recording = load_session_recording(&state, session_id, recording_id).await?;
     Ok(Json(recording.to_resource()))
 }
@@ -91,7 +95,9 @@ pub(super) async fn complete_session_recording(
     State(state): State<Arc<ApiState>>,
     Json(request): Json<CompleteSessionRecordingRequest>,
 ) -> Result<Json<SessionRecordingResource>, (StatusCode, Json<ErrorResponse>)> {
-    let _session = authorize_visible_session_request(&headers, &state, session_id).await?;
+    let _session =
+        authorize_visible_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
     let recording = load_session_recording(&state, session_id, recording_id).await?;
     let CompleteSessionRecordingRequest {
         source_path,
@@ -171,7 +177,9 @@ pub(super) async fn fail_session_recording(
     State(state): State<Arc<ApiState>>,
     Json(request): Json<FailSessionRecordingRequest>,
 ) -> Result<Json<SessionRecordingResource>, (StatusCode, Json<ErrorResponse>)> {
-    let _session = authorize_visible_session_request(&headers, &state, session_id).await?;
+    let _session =
+        authorize_visible_session_request_with_automation_access(&headers, &state, session_id)
+            .await?;
     let recording = state
         .session_store
         .fail_recording_for_session(session_id, recording_id, request)

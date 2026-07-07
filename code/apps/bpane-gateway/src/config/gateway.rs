@@ -40,4 +40,16 @@ pub struct GatewayConfig {
     /// browser clients join as restricted viewers.
     #[arg(long, default_value_t = false)]
     pub exclusive_browser_owner: bool,
+
+    /// Internal MCP bridge control-session endpoint used by the gateway proxy.
+    #[arg(long = "mcp-bridge-control-url")]
+    pub mcp_bridge_control_url: Option<String>,
+
+    /// Bearer token used by the gateway when calling the MCP bridge control endpoint.
+    #[arg(long = "mcp-bridge-control-token")]
+    pub mcp_bridge_control_token: Option<String>,
+
+    /// Timeout for gateway-to-MCP-bridge control calls.
+    #[arg(long = "mcp-bridge-control-timeout-secs", default_value_t = 5)]
+    pub mcp_bridge_control_timeout_secs: u64,
 }

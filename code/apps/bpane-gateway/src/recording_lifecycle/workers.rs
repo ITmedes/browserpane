@@ -16,17 +16,50 @@ impl RecordingLifecycleInner {
         session_id: Uuid,
         recording_id: Uuid,
     ) -> Result<(), RecordingLifecycleError> {
+        let session = self
+            .session_store
+            .get_session_by_id(session_id)
+            .await?
+            .ok_or_else(|| {
+                RecordingLifecycleError::LaunchFailed(format!(
+                    "recording worker references missing session {session_id}"
+                ))
+            })?;
+        let owner = self.owner_principal(&session);
+        let connect_ticket = self
+            .connect_ticket_manager
+            .issue_ticket(session_id, &owner)
+            .map_err(|error| {
+                RecordingLifecycleError::LaunchFailed(format!(
+                    "failed to issue recorder connect ticket for session {session_id}: {error}"
+                ))
+            })?;
+        let automation_access_token = self
+            .automation_access_token_manager
+            .issue_token(session_id, &owner)
+            .map_err(|error| {
+                RecordingLifecycleError::LaunchFailed(format!(
+                    "failed to issue recorder automation token for session {session_id}: {error}"
+                ))
+            })?;
+
         let mut command = Command::new(&self.config.bin);
         command.args(&self.config.args);
         command.stdin(Stdio::null());
-        command.stdout(Stdio::null());
-        command.stderr(Stdio::null());
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
         command.env("BPANE_RECORDING_SESSION_ID", session_id.to_string());
         command.env("BPANE_RECORDING_ID", recording_id.to_string());
         command.env("BPANE_RECORDING_CHROME", &self.config.chrome_executable);
         command.env("BPANE_GATEWAY_API_URL", &self.config.gateway_api_url);
         command.env("BPANE_RECORDING_PAGE_URL", &self.config.page_url);
         command.env("BPANE_RECORDING_OUTPUT_ROOT", &self.config.output_root);
+        command.env("BPANE_RECORDING_CONNECT_TICKET", connect_ticket.token);
+        command.env("BPANE_RECORDING_CONNECT_TRANSPORT_PATH", "/session");
+        command.env(
+            "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
+            automation_access_token.token,
+        );
         command.env(
             "BPANE_RECORDING_CONNECT_TIMEOUT_MS",
             self.config.connect_timeout.as_millis().to_string(),
@@ -124,13 +157,22 @@ impl RecordingLifecycleInner {
             Ok(output) if output.status.success() => {
                 format!("recording worker exited before finalizing recording {recording_id}")
             }
-            Ok(output) => format!(
-                "recording worker exited with status {:?} before finalizing recording {recording_id}",
-                output.status.code()
-            ),
-            Err(error) => format!(
-                "recording worker failed while waiting for session {session_id}: {error}"
-            ),
+            Ok(output) => {
+                let detail = last_non_empty_line(&output.stderr)
+                    .or_else(|| last_non_empty_line(&output.stdout))
+                    .unwrap_or_else(|| {
+                        format!(
+                            "recording worker exited with status {:?}",
+                            output.status.code()
+                        )
+                    });
+                format!(
+                    "recording worker exited before finalizing recording {recording_id}: {detail}"
+                )
+            }
+            Err(error) => {
+                format!("recording worker failed while waiting for session {session_id}: {error}")
+            }
         };
 
         let Ok(Some(recording)) = self
@@ -173,4 +215,13 @@ impl RecordingLifecycleInner {
             .clear_recording_worker_assignment(session_id)
             .await;
     }
+}
+
+fn last_non_empty_line(bytes: &[u8]) -> Option<String> {
+    String::from_utf8_lossy(bytes)
+        .lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(ToOwned::to_owned)
 }

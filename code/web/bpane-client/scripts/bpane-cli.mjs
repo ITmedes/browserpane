@@ -64,6 +64,7 @@ const KNOWN_OPTIONS = new Set([
   'mcp-client-id',
   'mcp-control-url',
   'mcp-display-name',
+  'mcp-endpoint-base-url',
   'mcp-issuer',
   'max-profile-storage-bytes',
   'max-active-sessions',
@@ -198,6 +199,7 @@ function usageText() {
     '  --access-token <token>    Bearer token. Env: BPANE_ACCESS_TOKEN.',
     '  --token <token>           Alias for --access-token.',
     '  --mcp-control-url <url>   MCP bridge control URL. Env: BPANE_MCP_CONTROL_URL.',
+    '  --mcp-endpoint-base-url <url> Public MCP bridge endpoint base URL. Env: BPANE_MCP_ENDPOINT_BASE_URL.',
     '  --mcp-client-id <id>      MCP delegate client id. Env: BPANE_MCP_CLIENT_ID.',
     '  --mcp-issuer <issuer>     MCP delegate issuer. Env: BPANE_MCP_ISSUER.',
     '  --mcp-display-name <name> MCP delegate display name. Env: BPANE_MCP_DISPLAY_NAME.',
@@ -536,6 +538,10 @@ function profileInitValues(options, env) {
   if (mcpControlUrl) {
     values.mcp_control_url = mcpControlUrl;
   }
+  const mcpEndpointBaseUrl = optionOrEnv(options, env, 'mcp-endpoint-base-url', 'BPANE_MCP_ENDPOINT_BASE_URL');
+  if (mcpEndpointBaseUrl) {
+    values.mcp_endpoint_base_url = mcpEndpointBaseUrl;
+  }
   const mcpClientId = optionOrEnv(options, env, 'mcp-client-id', 'BPANE_MCP_CLIENT_ID');
   if (mcpClientId) {
     values.mcp_client_id = mcpClientId;
@@ -755,6 +761,22 @@ async function requestGateway(config, path, init = {}) {
   });
 }
 
+async function requestMcpControl(config, mcpConfig, init = {}) {
+  const controlUrl = new URL(mcpConfig.controlUrl);
+  const baseUrl = new URL(config.baseUrl);
+  if (controlUrl.origin !== baseUrl.origin) {
+    return await requestJson(config, mcpConfig.controlUrl, init);
+  }
+  const headers = jsonHeaders(config, init.headers);
+  if (init.body !== undefined && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return await requestJson(config, mcpConfig.controlUrl, {
+    ...init,
+    headers,
+  });
+}
+
 async function requestGatewayBinary(config, path, init = {}) {
   const headers = jsonHeaders(config, init.headers);
   let response;
@@ -803,8 +825,8 @@ async function fetchAuthConfig(config) {
   }
 }
 
-function bridgeHealthUrl(controlUrl) {
-  const url = new URL(controlUrl);
+function bridgeHealthUrl(mcpConfig) {
+  const url = new URL(mcpConfig.endpointBaseUrl ?? mcpConfig.controlUrl);
   if (/\/control-session\/?$/u.test(url.pathname)) {
     url.pathname = url.pathname.replace(/\/control-session\/?$/u, '/health');
   } else {
@@ -829,6 +851,10 @@ async function resolveMcpConfig(config, requirements = {}) {
       config.mcpControlUrl
       ?? bridge.controlUrl
       ?? 'http://localhost:8931/control-session',
+    endpointBaseUrl:
+      config.mcpEndpointBaseUrl
+      ?? bridge.endpointBaseUrl
+      ?? null,
     clientId:
       config.mcpClientId
       ?? bridge.clientId
@@ -2232,7 +2258,8 @@ async function runMcpDoctor(config, sessionId) {
   const issues = [];
   const bridge = {
     control_url: mcpConfig.controlUrl,
-    health_url: bridgeHealthUrl(mcpConfig.controlUrl),
+    health_url: bridgeHealthUrl(mcpConfig),
+    endpoint_base_url: mcpConfig.endpointBaseUrl,
     client_id: mcpConfig.clientId,
   };
 
@@ -2250,7 +2277,7 @@ async function runMcpDoctor(config, sessionId) {
   }
 
   const control = await captureRequest(async () => {
-    return await requestJson(config, mcpConfig.controlUrl, { method: 'GET' });
+    return await requestMcpControl(config, mcpConfig, { method: 'GET' });
   });
   if (!control.ok) {
     addDoctorIssue(
@@ -2426,7 +2453,7 @@ async function repairMcpDelegation(config, sessionId) {
   const needsDefault = initial.issues.some((issue) => issue.code === 'MCP_DEFAULT_SESSION_MISMATCH');
   if (needsDefault) {
     const result = await captureRequest(async () => {
-      return await requestJson(config, mcpConfig.controlUrl, {
+      return await requestMcpControl(config, mcpConfig, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId }),
@@ -2937,7 +2964,7 @@ async function handleMcpCommand(config, positionals, options) {
   }
   if (action === 'health' && positionals.length === 2) {
     const mcpConfig = await resolveMcpConfig(config, { control: true });
-    return await requestJson(config, bridgeHealthUrl(mcpConfig.controlUrl));
+    return await requestJson(config, bridgeHealthUrl(mcpConfig));
   }
   if (action === 'authorize') {
     const sessionId = requiredSessionId(positionals, 'mcp authorize');
@@ -2963,7 +2990,7 @@ async function handleMcpCommand(config, positionals, options) {
   if (action === 'set-default') {
     const sessionId = requiredSessionId(positionals, 'mcp set-default');
     const mcpConfig = await resolveMcpConfig(config, { control: true });
-    return await requestJson(config, mcpConfig.controlUrl, {
+    return await requestMcpControl(config, mcpConfig, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId }),
@@ -2971,7 +2998,7 @@ async function handleMcpCommand(config, positionals, options) {
   }
   if (action === 'clear-default' && positionals.length === 2) {
     const mcpConfig = await resolveMcpConfig(config, { control: true });
-    return await requestJson(config, mcpConfig.controlUrl, {
+    return await requestMcpControl(config, mcpConfig, {
       method: 'DELETE',
     });
   }
@@ -3011,6 +3038,7 @@ async function handleProfileCommand(options, env, positionals) {
         base_url: nextConfig.profiles[profileName].base_url ?? nextConfig.profiles[profileName].baseUrl ?? null,
         access_token: redactToken(nextConfig.profiles[profileName].access_token ?? nextConfig.profiles[profileName].accessToken),
         mcp_control_url: nextConfig.profiles[profileName].mcp_control_url ?? nextConfig.profiles[profileName].mcpControlUrl ?? null,
+        mcp_endpoint_base_url: nextConfig.profiles[profileName].mcp_endpoint_base_url ?? nextConfig.profiles[profileName].mcpEndpointBaseUrl ?? null,
         mcp_client_id: nextConfig.profiles[profileName].mcp_client_id ?? nextConfig.profiles[profileName].mcpClientId ?? null,
         mcp_issuer: nextConfig.profiles[profileName].mcp_issuer ?? nextConfig.profiles[profileName].mcpIssuer ?? null,
         mcp_display_name: nextConfig.profiles[profileName].mcp_display_name ?? nextConfig.profiles[profileName].mcpDisplayName ?? null,
@@ -3037,6 +3065,7 @@ async function handleProfileCommand(options, env, positionals) {
         base_url: profileValue(profile, 'baseUrl', 'base_url') ?? null,
         access_token: redactToken(profileValue(profile, 'accessToken', 'access_token')),
         mcp_control_url: profileValue(profile, 'mcpControlUrl', 'mcp_control_url') ?? null,
+        mcp_endpoint_base_url: profileValue(profile, 'mcpEndpointBaseUrl', 'mcp_endpoint_base_url') ?? null,
         mcp_client_id: profileValue(profile, 'mcpClientId', 'mcp_client_id') ?? null,
         mcp_issuer: profileValue(profile, 'mcpIssuer', 'mcp_issuer') ?? null,
         mcp_display_name: profileValue(profile, 'mcpDisplayName', 'mcp_display_name') ?? null,
@@ -3089,6 +3118,11 @@ async function buildConfig(options, env, fetchImpl) {
       getOption(options, 'mcp-control-url')
       ?? env.BPANE_MCP_CONTROL_URL
       ?? profileValue(profile, 'mcpControlUrl', 'mcp_control_url')
+      ?? null,
+    mcpEndpointBaseUrl:
+      getOption(options, 'mcp-endpoint-base-url')
+      ?? env.BPANE_MCP_ENDPOINT_BASE_URL
+      ?? profileValue(profile, 'mcpEndpointBaseUrl', 'mcp_endpoint_base_url')
       ?? null,
     mcpClientId:
       getOption(options, 'mcp-client-id')

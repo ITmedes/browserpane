@@ -476,6 +476,48 @@ describe('SessionViewModelBuilder', () => {
     expect(viewModel.hint).toContain('Disconnect');
   });
 
+  it('allows stop and release when remote status only reports recorder clients', () => {
+    const viewModel = SessionViewModelBuilder.detail({
+      session: {
+        ...SESSION,
+        status: {
+          ...SESSION.status,
+          connection_counts: {
+            interactive_clients: 0,
+            owner_clients: 0,
+            viewer_clients: 0,
+            recorder_clients: 1,
+            automation_clients: 0,
+            total_clients: 1,
+          },
+          stop_eligibility: { allowed: true, blockers: [] },
+        },
+      },
+      status: {
+        ...STATUS,
+        presence_state: 'recording_only',
+        connection_counts: {
+          interactive_clients: 0,
+          owner_clients: 0,
+          viewer_clients: 0,
+          recorder_clients: 1,
+          automation_clients: 0,
+          total_clients: 1,
+        },
+        connections: [{ connection_id: 8, role: 'recorder' }],
+        recorder_clients: 1,
+        stop_eligibility: { allowed: true, blockers: [] },
+      },
+      connected: false,
+      loading: false,
+      error: null,
+    });
+
+    expect(viewModel.canStop).toBe(true);
+    expect(viewModel.canRelease).toBe(true);
+    expect(viewModel.canDisconnectAll).toBe(false);
+  });
+
   it('surfaces queue details and the queued-session cancel action', () => {
     const queuedAt = '2026-05-04T19:02:00Z';
     const queuedSession: SessionResource = {

@@ -101,18 +101,21 @@ describe('SessionRecordingRuntime', () => {
         options,
       ) as unknown as MediaRecorder,
       mediaStreamFactory: (tracks) => new MockMediaStream(tracks as any[]) as unknown as MediaStream,
+      sleep: vi.fn(async () => {}),
     });
 
     await runtime.start({ frameRate: 24, mimeType: 'video/webm;codecs=vp9,opus' });
 
     expect(runtime.isRecording()).toBe(true);
     expect(MockMediaRecorder.instances).toHaveLength(1);
-    expect(MockMediaRecorder.instances[0].start).toHaveBeenCalledOnce();
+    expect(MockMediaRecorder.instances[0].start).toHaveBeenCalledWith(500);
     expect(MockMediaRecorder.instances[0].stream.getVideoTracks()).toHaveLength(1);
     expect(MockMediaRecorder.instances[0].stream.getAudioTracks()).toHaveLength(1);
 
     MockMediaRecorder.instances[0].emitData(Array.from({ length: 2048 }, (_, index) => index % 256));
     const stopPromise = runtime.stop();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(MockMediaRecorder.instances[0].requestData).toHaveBeenCalledOnce();
     expect(MockMediaRecorder.instances[0].stop).toHaveBeenCalledOnce();
     MockMediaRecorder.instances[0].emitStop();
@@ -139,6 +142,38 @@ describe('SessionRecordingRuntime', () => {
 
     expect(MockMediaRecorder.instances[0].stream.getVideoTracks()).toHaveLength(1);
     expect(MockMediaRecorder.instances[0].stream.getAudioTracks()).toHaveLength(0);
+  });
+
+  it('waits for a minimum capture window before stopping short recordings', async () => {
+    let nowMs = 1_000;
+    const sleep = vi.fn(async () => {});
+    const runtime = new SessionRecordingRuntime({
+      createVideoStream: vi.fn(() => new MockMediaStream([new MockTrack('video')]) as unknown as MediaStream),
+      getAudioStream: vi.fn(async () => null),
+      stopVideoStream: vi.fn(),
+      mediaRecorderFactory: (stream, options) => new MockMediaRecorder(
+        stream as unknown as MockMediaStream,
+        options,
+      ) as unknown as MediaRecorder,
+      mediaStreamFactory: (tracks) => new MockMediaStream(tracks as any[]) as unknown as MediaStream,
+      now: () => nowMs,
+      sleep,
+    });
+
+    await runtime.start();
+    nowMs = 1_300;
+    const stopPromise = runtime.stop();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const recorder = MockMediaRecorder.instances[0];
+    expect(sleep).toHaveBeenCalledWith(900);
+    expect(recorder.requestData).toHaveBeenCalledOnce();
+    expect(recorder.stop).toHaveBeenCalledOnce();
+
+    recorder.emitData(Array.from({ length: 2048 }, (_, index) => index % 256));
+    recorder.emitStop();
+    await expect(stopPromise).resolves.toHaveProperty('size', 2048);
   });
 
   it('uses a compressed default recording profile when no explicit options are provided', async () => {

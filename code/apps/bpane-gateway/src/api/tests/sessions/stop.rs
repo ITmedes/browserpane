@@ -1,5 +1,8 @@
 use super::*;
-use crate::session_control::{SessionRecordingFormat, SessionRecordingTerminationReason};
+use crate::session_control::{
+    PersistCompletedSessionRecordingRequest, SessionRecordingFormat,
+    SessionRecordingTerminationReason,
+};
 
 fn blocker_kinds(value: &Value) -> Vec<&str> {
     value["session"]["status"]["stop_eligibility"]["blockers"]
@@ -52,7 +55,96 @@ async fn explicit_stop_route_stops_unused_session() {
 }
 
 #[tokio::test]
-async fn stop_routes_report_execution_and_recording_blockers() {
+async fn explicit_stop_route_finalizes_active_recording_instead_of_conflicting() {
+    let (app, token, state) =
+        test_router_with_recording_lifecycle(recording_lifecycle_test_config());
+
+    let created = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+    let session_uuid = Uuid::parse_str(&session_id).unwrap();
+    let recording = state
+        .session_store
+        .create_recording_for_session(session_uuid, SessionRecordingFormat::Webm, None)
+        .await
+        .unwrap();
+
+    let completion_store = state.session_store.clone();
+    let recording_id = recording.id;
+    tokio::spawn(async move {
+        for _ in 0..100 {
+            let current = completion_store
+                .get_recording_for_session(session_uuid, recording_id)
+                .await
+                .unwrap()
+                .unwrap();
+            if matches!(current.state, StoredSessionRecordingState::Finalizing) {
+                let _ = completion_store
+                    .complete_recording_for_session(
+                        session_uuid,
+                        recording_id,
+                        PersistCompletedSessionRecordingRequest {
+                            artifact_ref: "local_fs:test/stop-recording.webm".to_string(),
+                            mime_type: Some("video/webm".to_string()),
+                            bytes: Some(128),
+                            duration_ms: Some(2000),
+                        },
+                    )
+                    .await;
+                return;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    });
+
+    let stop_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/stop"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(stop_response.status(), StatusCode::OK);
+    let stopped = response_json(stop_response).await;
+    assert_eq!(stopped["state"], "stopped");
+
+    let finalized = state
+        .session_store
+        .get_recording_for_session(session_uuid, recording.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        finalized.state,
+        StoredSessionRecordingState::Ready
+    ));
+    assert_eq!(
+        finalized.termination_reason,
+        Some(SessionRecordingTerminationReason::SessionStop)
+    );
+    assert_eq!(finalized.bytes, Some(128));
+}
+
+#[tokio::test]
+async fn stop_routes_report_execution_blockers_without_treating_recording_as_a_stop_blocker() {
     let (app, token, state) = test_router_with_state();
 
     let created = response_json(
@@ -203,7 +295,7 @@ async fn stop_routes_report_execution_and_recording_blockers() {
     let session_blockers = blocker_kinds(&session_wrapper);
     assert!(session_blockers.contains(&"automation_tasks"));
     assert!(session_blockers.contains(&"workflow_runs"));
-    assert!(session_blockers.contains(&"recording_activity"));
+    assert!(!session_blockers.contains(&"recording_activity"));
 
     let stop_response = app
         .clone()
@@ -227,7 +319,7 @@ async fn stop_routes_report_execution_and_recording_blockers() {
     let stop_blockers = blocker_kinds(&stop_body);
     assert!(stop_blockers.contains(&"automation_tasks"));
     assert!(stop_blockers.contains(&"workflow_runs"));
-    assert!(stop_blockers.contains(&"recording_activity"));
+    assert!(!stop_blockers.contains(&"recording_activity"));
 
     let delete_response = app
         .oneshot(
@@ -246,5 +338,5 @@ async fn stop_routes_report_execution_and_recording_blockers() {
     let delete_blockers = blocker_kinds(&delete_body);
     assert!(delete_blockers.contains(&"automation_tasks"));
     assert!(delete_blockers.contains(&"workflow_runs"));
-    assert!(delete_blockers.contains(&"recording_activity"));
+    assert!(!delete_blockers.contains(&"recording_activity"));
 }

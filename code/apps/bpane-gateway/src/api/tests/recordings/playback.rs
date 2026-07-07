@@ -41,6 +41,7 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control: None,
     });
     let app = build_api_router(state);
 

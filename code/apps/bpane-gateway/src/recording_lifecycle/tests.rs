@@ -9,6 +9,7 @@ use tokio::time::sleep;
 
 use super::*;
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
+use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
 use crate::session_control::{
     CreateSessionRequest, PersistCompletedSessionRecordingRequest, SessionOwnerMode,
     SessionRecordingFormat, SessionRecordingPolicy,
@@ -59,6 +60,7 @@ async fn create_session_with_mode(
                 network_identity: None,
                 owner_mode: None,
                 viewport: None,
+                capabilities: Default::default(),
                 idle_timeout_sec: None,
                 labels: HashMap::new(),
                 integration_context: None,
@@ -81,7 +83,7 @@ fn create_capture_script(dir: &tempfile::TempDir) -> PathBuf {
     fs::write(
         &script_path,
         r#"#!/bin/sh
-echo "${BPANE_RECORDING_SESSION_ID} ${BPANE_RECORDING_ID}" > "$1"
+printf '%s %s %s %s\n' "${BPANE_RECORDING_SESSION_ID}" "${BPANE_RECORDING_ID}" "${BPANE_RECORDING_CONNECT_TICKET}" "${BPANE_SESSION_AUTOMATION_ACCESS_TOKEN}" > "$1"
 "#,
     )
     .unwrap();
@@ -91,6 +93,27 @@ echo "${BPANE_RECORDING_SESSION_ID} ${BPANE_RECORDING_ID}" > "$1"
     script_path
 }
 
+fn test_manager(
+    config: RecordingWorkerConfig,
+    auth: Arc<AuthValidator>,
+    store: SessionStore,
+) -> RecordingLifecycleManager {
+    RecordingLifecycleManager::new(
+        Some(config),
+        auth,
+        Arc::new(SessionConnectTicketManager::new(
+            vec![5; 32],
+            Duration::from_secs(300),
+        )),
+        Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![6; 32],
+            Duration::from_secs(300),
+        )),
+        store,
+    )
+    .unwrap()
+}
+
 #[tokio::test]
 async fn always_mode_launches_worker_and_marks_unfinished_recording_failed() {
     let temp_dir = tempdir().unwrap();
@@ -98,12 +121,11 @@ async fn always_mode_launches_worker_and_marks_unfinished_recording_failed() {
     let script = create_capture_script(&temp_dir);
     let store = SessionStore::in_memory();
     let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
-    let manager = RecordingLifecycleManager::new(
-        Some(test_config(script, capture_file.clone())),
+    let manager = test_manager(
+        test_config(script, capture_file.clone()),
         auth,
         store.clone(),
-    )
-    .unwrap();
+    );
     let session = create_session_with_mode(&store, SessionRecordingMode::Always).await;
 
     manager.ensure_auto_recording(&session).await.unwrap();
@@ -118,6 +140,10 @@ async fn always_mode_launches_worker_and_marks_unfinished_recording_failed() {
 
     let capture = fs::read_to_string(&capture_file).unwrap();
     assert!(capture.contains(&session.id.to_string()));
+    let captured_env: Vec<&str> = capture.split_whitespace().collect();
+    assert_eq!(captured_env.len(), 4);
+    assert!(!captured_env[2].is_empty());
+    assert!(!captured_env[3].is_empty());
 
     let mut latest = None;
     for _ in 0..50 {
@@ -145,8 +171,8 @@ async fn always_mode_launches_worker_and_marks_unfinished_recording_failed() {
 async fn request_stop_and_wait_observes_recording_completion() {
     let store = SessionStore::in_memory();
     let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
-    let manager = RecordingLifecycleManager::new(
-        Some(RecordingWorkerConfig {
+    let manager = test_manager(
+        RecordingWorkerConfig {
             bin: PathBuf::from("/bin/sh"),
             args: vec!["-c".to_string(), "exit 0".to_string()],
             chrome_executable: PathBuf::from("/tmp/google-chrome"),
@@ -163,11 +189,10 @@ async fn request_stop_and_wait_observes_recording_completion() {
             oidc_client_id: None,
             oidc_client_secret: None,
             oidc_scopes: None,
-        }),
+        },
         auth,
         store.clone(),
-    )
-    .unwrap();
+    );
     let session = create_session_with_mode(&store, SessionRecordingMode::Manual).await;
     let recording = store
         .create_recording_for_session(session.id, SessionRecordingFormat::Webm, None)
@@ -220,12 +245,11 @@ async fn reconcile_fails_stale_recording_and_starts_a_fresh_one() {
     let script = create_capture_script(&temp_dir);
     let store = SessionStore::in_memory();
     let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
-    let manager = RecordingLifecycleManager::new(
-        Some(test_config(script, capture_file.clone())),
+    let manager = test_manager(
+        test_config(script, capture_file.clone()),
         auth,
         store.clone(),
-    )
-    .unwrap();
+    );
     let session = create_session_with_mode(&store, SessionRecordingMode::Always).await;
     let stale_recording = store
         .create_recording_for_session(session.id, SessionRecordingFormat::Webm, None)

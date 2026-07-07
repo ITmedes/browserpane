@@ -8,7 +8,7 @@ use tempfile::tempdir;
 use zip::ZipArchive;
 
 use super::{
-    validate_workflow_source_entrypoint, WorkflowGitSource, WorkflowSource, WorkflowSourceError,
+    WorkflowGitSource, WorkflowSource, WorkflowSourceError, WorkflowSourcePolicy,
     WorkflowSourceResolver,
 };
 
@@ -38,9 +38,33 @@ fn git_head(cwd: &Path) -> String {
         .to_ascii_lowercase()
 }
 
+fn default_resolver() -> WorkflowSourceResolver {
+    WorkflowSourceResolver::with_policy(PathBuf::from("git"), WorkflowSourcePolicy::default())
+}
+
+fn resolver_trusting_temp() -> WorkflowSourceResolver {
+    WorkflowSourceResolver::with_policy(
+        PathBuf::from("git"),
+        WorkflowSourcePolicy::default().with_trusted_local_roots([std::env::temp_dir()]),
+    )
+}
+
+fn resolver_trusting_temp_with_limits(
+    max_files: usize,
+    max_file_bytes: u64,
+    max_total_bytes: u64,
+) -> WorkflowSourceResolver {
+    WorkflowSourceResolver::with_policy(
+        PathBuf::from("git"),
+        WorkflowSourcePolicy::default()
+            .with_trusted_local_roots([std::env::temp_dir()])
+            .with_collection_limits(max_files, max_file_bytes, max_total_bytes),
+    )
+}
+
 #[tokio::test]
 async fn preserves_explicit_resolved_commit_without_git_lookup() {
-    let resolver = WorkflowSourceResolver::new(PathBuf::from("git"));
+    let resolver = default_resolver();
     let source = WorkflowSource::Git(WorkflowGitSource {
         repository_url: "https://example.com/repo.git".to_string(),
         r#ref: None,
@@ -66,7 +90,7 @@ async fn resolves_git_source_from_local_repository_ref() {
     git(&["commit", "-m", "init"], temp.path());
     let expected = git_head(temp.path());
 
-    let resolver = WorkflowSourceResolver::new(PathBuf::from("git"));
+    let resolver = resolver_trusting_temp();
     let resolved = resolver
         .resolve(Some(WorkflowSource::Git(WorkflowGitSource {
             repository_url: temp.path().to_string_lossy().into_owned(),
@@ -90,7 +114,7 @@ async fn resolves_git_source_from_local_repository_ref() {
 
 #[tokio::test]
 async fn rejects_git_source_without_ref_or_commit() {
-    let resolver = WorkflowSourceResolver::new(PathBuf::from("git"));
+    let resolver = default_resolver();
     let error = resolver
         .resolve(Some(WorkflowSource::Git(WorkflowGitSource {
             repository_url: "https://example.com/repo.git".to_string(),
@@ -103,18 +127,63 @@ async fn rejects_git_source_without_ref_or_commit() {
     assert!(matches!(error, WorkflowSourceError::Invalid(_)));
 }
 
+#[tokio::test]
+async fn rejects_unsafe_git_repository_urls_before_git_lookup() {
+    let resolver = default_resolver();
+    for repository_url in [
+        "ext::sh -c touch /tmp/pwned",
+        "file:///workspace/dev",
+        "git@github.com:ITmedes/browserpane.git",
+        "http://example.com/repo.git",
+        "-uhttps://example.com/repo.git",
+    ] {
+        let error = resolver
+            .resolve(Some(WorkflowSource::Git(WorkflowGitSource {
+                repository_url: repository_url.to_string(),
+                r#ref: Some("HEAD".to_string()),
+                resolved_commit: None,
+                root_path: None,
+            })))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, WorkflowSourceError::Invalid(_)),
+            "{repository_url} produced {error:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn rejects_local_repository_outside_trusted_roots() {
+    let temp = tempdir().unwrap();
+    git(&["init", "--initial-branch=main"], temp.path());
+
+    let resolver = default_resolver();
+    let error = resolver
+        .resolve(Some(WorkflowSource::Git(WorkflowGitSource {
+            repository_url: temp.path().to_string_lossy().into_owned(),
+            r#ref: Some("HEAD".to_string()),
+            resolved_commit: None,
+            root_path: None,
+        })))
+        .await
+        .unwrap_err();
+    assert!(matches!(error, WorkflowSourceError::Invalid(_)));
+}
+
 #[test]
 fn rejects_entrypoint_outside_workflow_root_path() {
-    let error = validate_workflow_source_entrypoint(
-        Some(&WorkflowSource::Git(WorkflowGitSource {
-            repository_url: "https://example.com/repo.git".to_string(),
-            r#ref: Some("refs/heads/main".to_string()),
-            resolved_commit: Some("0123456789abcdef0123456789abcdef01234567".to_string()),
-            root_path: Some("workflows".to_string()),
-        })),
-        "scripts/export.ts",
-    )
-    .unwrap_err();
+    let error = default_resolver()
+        .validate_entrypoint(
+            Some(&WorkflowSource::Git(WorkflowGitSource {
+                repository_url: "https://example.com/repo.git".to_string(),
+                r#ref: Some("refs/heads/main".to_string()),
+                resolved_commit: Some("0123456789abcdef0123456789abcdef01234567".to_string()),
+                root_path: Some("workflows".to_string()),
+            })),
+            "scripts/export.ts",
+        )
+        .unwrap_err();
     assert!(matches!(error, WorkflowSourceError::Invalid(_)));
 }
 
@@ -139,7 +208,7 @@ async fn materializes_git_source_archive_from_local_repository() {
     git(&["commit", "-m", "init"], temp.path());
     let head = git_head(temp.path());
 
-    let resolver = WorkflowSourceResolver::new(PathBuf::from("git"));
+    let resolver = resolver_trusting_temp();
     let archive = resolver
         .materialize_archive(
             &WorkflowSource::Git(WorkflowGitSource {
@@ -172,4 +241,86 @@ async fn materializes_git_source_archive_from_local_repository() {
     assert!(names.contains(&"workflows/smoke/export.ts".to_string()));
     assert!(names.contains(&"workflows/notes.txt".to_string()));
     assert!(!names.contains(&"README.md".to_string()));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn rejects_source_preview_symlink_file() {
+    use std::os::unix::fs as unix_fs;
+
+    let temp = tempdir().unwrap();
+    git(&["init", "--initial-branch=main"], temp.path());
+    git(
+        &["config", "user.email", "workflow@test.local"],
+        temp.path(),
+    );
+    git(&["config", "user.name", "Workflow Test"], temp.path());
+    fs::create_dir_all(temp.path().join("workflows")).unwrap();
+    fs::write(temp.path().join("README.md"), "outside workflow root\n").unwrap();
+    fs::write(temp.path().join("workflows/run.ts"), "export default 1;\n").unwrap();
+    unix_fs::symlink("../README.md", temp.path().join("workflows/link.ts")).unwrap();
+    git(&["add", "."], temp.path());
+    git(&["commit", "-m", "init"], temp.path());
+    let head = git_head(temp.path());
+
+    let resolver = resolver_trusting_temp();
+    let error = resolver
+        .materialize_source_file_preview(
+            &WorkflowSource::Git(WorkflowGitSource {
+                repository_url: temp.path().to_string_lossy().into_owned(),
+                r#ref: None,
+                resolved_commit: Some(head),
+                root_path: Some("workflows".to_string()),
+            }),
+            "workflows/run.ts",
+            "workflows/link.ts",
+            1024,
+        )
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(&error, WorkflowSourceError::Materialize(message) if message.contains("symlinks are not supported")),
+        "{error:?}"
+    );
+}
+
+#[tokio::test]
+async fn rejects_source_listing_when_file_count_limit_is_exceeded() {
+    let temp = tempdir().unwrap();
+    git(&["init", "--initial-branch=main"], temp.path());
+    git(
+        &["config", "user.email", "workflow@test.local"],
+        temp.path(),
+    );
+    git(&["config", "user.name", "Workflow Test"], temp.path());
+    fs::create_dir_all(temp.path().join("workflows")).unwrap();
+    fs::write(temp.path().join("workflows/run.ts"), "export default 1;\n").unwrap();
+    fs::write(
+        temp.path().join("workflows/extra.ts"),
+        "export default 2;\n",
+    )
+    .unwrap();
+    git(&["add", "."], temp.path());
+    git(&["commit", "-m", "init"], temp.path());
+    let head = git_head(temp.path());
+
+    let resolver = resolver_trusting_temp_with_limits(1, 1024, 2048);
+    let error = resolver
+        .materialize_source_files(
+            &WorkflowSource::Git(WorkflowGitSource {
+                repository_url: temp.path().to_string_lossy().into_owned(),
+                r#ref: None,
+                resolved_commit: Some(head),
+                root_path: Some("workflows".to_string()),
+            }),
+            "workflows/run.ts",
+        )
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(&error, WorkflowSourceError::Snapshot(message) if message.contains("maximum file count")),
+        "{error:?}"
+    );
 }

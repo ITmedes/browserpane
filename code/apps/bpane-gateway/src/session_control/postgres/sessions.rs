@@ -22,6 +22,7 @@ const SESSION_COLUMNS: &str = r#"
     owner_mode,
     viewport_width,
     viewport_height,
+    capabilities,
     idle_timeout_sec,
     labels,
     integration_context,
@@ -165,6 +166,17 @@ impl PostgresSessionStore {
     ) -> Result<Option<StoredSession>, SessionStoreError> {
         self.session_repository()
             .record_session_egress_usage(id, request)
+            .await
+    }
+
+    pub(in crate::session_control) async fn update_session_recording_policy_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        recording: SessionRecordingPolicy,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        self.session_repository()
+            .update_session_recording_policy_for_owner(principal, id, recording)
             .await
     }
 

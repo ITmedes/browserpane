@@ -15,6 +15,7 @@ async fn in_memory_store_tracks_automation_task_lifecycle_logs_and_events() {
                 network_identity: None,
                 owner_mode: None,
                 viewport: None,
+                capabilities: Default::default(),
                 idle_timeout_sec: None,
                 labels: HashMap::new(),
                 integration_context: None,

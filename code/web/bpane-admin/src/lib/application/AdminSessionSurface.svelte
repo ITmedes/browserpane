@@ -408,7 +408,6 @@
       void loadProjects(false);
       void loadBrowserContexts(false);
       void loadIdentityAccessReview(false);
-      requestBrowserConnect();
     } catch (error) {
       sessionsError = errorMessage(error);
       showGlobalMessage('error', 'Session create failed', sessionsError);

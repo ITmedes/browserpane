@@ -10,7 +10,9 @@ use crate::session_access::SessionAutomationAccessTokenManager;
 use crate::session_control::SessionStore;
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
-use crate::workflow::{WorkflowObservability, WorkflowRetentionManager, WorkflowSourceResolver};
+use crate::workflow::{
+    WorkflowObservability, WorkflowRetentionManager, WorkflowSourcePolicy, WorkflowSourceResolver,
+};
 use crate::workflow_event_delivery::{WorkflowEventDeliveryConfig, WorkflowEventDeliveryManager};
 use crate::workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
 
@@ -25,8 +27,17 @@ impl WorkflowServices {
         session_manager: Arc<SessionManager>,
         registry: Arc<SessionRegistry>,
     ) -> anyhow::Result<Self> {
-        let source_resolver = Arc::new(WorkflowSourceResolver::new(
+        let source_resolver = Arc::new(WorkflowSourceResolver::with_policy(
             config.workflow.workflow_git_bin.clone(),
+            WorkflowSourcePolicy::default()
+                .with_trusted_local_roots(
+                    config.workflow.workflow_source_trusted_local_roots.clone(),
+                )
+                .with_collection_limits(
+                    config.workflow.workflow_source_max_files,
+                    config.workflow.workflow_source_max_file_bytes,
+                    config.workflow.workflow_source_max_total_bytes,
+                ),
         ));
         let lifecycle = Arc::new(WorkflowLifecycleManager::new(
             build_workflow_worker_config(config),

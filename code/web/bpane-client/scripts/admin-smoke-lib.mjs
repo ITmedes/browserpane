@@ -14,7 +14,9 @@ export async function ensureAdminLoggedIn(page, options) {
     throw new Error('OIDC auth is enabled, but no example user is configured for smoke login.');
   }
 
-  await page.getByTestId('admin-login').click();
+  if (state.login) {
+    await page.getByTestId('admin-login').click();
+  }
   await fillKeycloakLogin(page, authConfig, options);
   await page.waitForURL(urlPatternFor(options.pageUrl), { timeout: options.connectTimeoutMs });
   await waitForAdminAuthenticated(page, options);
@@ -47,6 +49,19 @@ export async function waitForBrowserConnected(page, options) {
     const detail = await page.getByTestId('browser-error').textContent().catch(() => '');
     throw new Error(`Admin embedded browser connection failed${detail ? `: ${detail}` : ''}`);
   }
+}
+
+export async function joinSelectedSession(page, options) {
+  await openAdminTab(page, 'sessions');
+  await poll(
+    'admin selected session join enabled',
+    async () => await page.getByTestId('session-join').isEnabled().catch(() => false),
+    Boolean,
+    options.connectTimeoutMs,
+    100,
+  );
+  await page.getByTestId('session-join').click();
+  await waitForBrowserConnected(page, options);
 }
 
 export async function disconnectEmbeddedBrowser(page, options) {
@@ -134,10 +149,12 @@ async function fillKeycloakLogin(page, authConfig, options) {
 }
 
 async function waitForAdminAuthSurface(page, options) {
+  const username = page.locator('input[name="username"], #username').first();
   return await poll('admin auth surface', async () => ({
     login: await page.getByTestId('admin-login').isVisible().catch(() => false),
     authenticated: await adminAuthenticatedVisible(page),
-  }), (state) => state.login || state.authenticated, options.connectTimeoutMs);
+    usernameVisible: await username.isVisible().catch(() => false),
+  }), (state) => state.login || state.authenticated || state.usernameVisible, options.connectTimeoutMs);
 }
 
 async function waitForAdminAuthenticated(page, options) {
@@ -150,10 +167,30 @@ async function waitForAdminAuthenticated(page, options) {
 }
 
 async function adminAuthenticatedVisible(page) {
-  return await page.getByTestId('session-new').isVisible().catch(() => false)
+  return await page.getByTestId('dashboard-overview').isVisible().catch(() => false)
+    || await page.getByTestId('session-new').isVisible().catch(() => false)
     || await page.getByTestId('session-inspector-new').isVisible().catch(() => false)
     || await page.getByTestId('browser-context-route').isVisible().catch(() => false)
-    || await page.getByTestId('file-workspace-create-submit').isVisible().catch(() => false);
+    || await page.getByTestId('file-workspace-create-submit').isVisible().catch(() => false)
+    || await page.getByTestId('projects-new-link').isVisible().catch(() => false)
+    || await page.getByTestId('project-create-route').isVisible().catch(() => false)
+    || await page.getByTestId('project-detail-route').isVisible().catch(() => false)
+    || await page.getByTestId('browser-contexts-new-link').isVisible().catch(() => false)
+    || await page.getByTestId('browser-context-create-route').isVisible().catch(() => false)
+    || await page.getByTestId('browser-context-detail-route').isVisible().catch(() => false)
+    || await page.getByTestId('egress-profiles-new-link').isVisible().catch(() => false)
+    || await page.getByTestId('egress-profile-create-route').isVisible().catch(() => false)
+    || await page.getByTestId('egress-profile-detail-route').isVisible().catch(() => false)
+    || await page.getByTestId('file-workspaces-new-link').isVisible().catch(() => false)
+    || await page.getByTestId('file-workspace-create-route').isVisible().catch(() => false)
+    || await page.getByTestId('file-workspace-detail-route').isVisible().catch(() => false)
+    || await page.getByTestId('sessions-overview').isVisible().catch(() => false)
+    || await page.getByTestId('session-create-route').isVisible().catch(() => false)
+    || await page.getByTestId('session-detail-route').isVisible().catch(() => false)
+    || await page.getByTestId('session-preview-route').isVisible().catch(() => false)
+    || await page.getByTestId('workflows-overview').isVisible().catch(() => false)
+    || await page.getByTestId('workflow-definition-detail-route').isVisible().catch(() => false)
+    || await page.getByTestId('workflow-runs-overview').isVisible().catch(() => false);
 }
 
 async function waitForSessionClients(page, options, sessionId, expectedClients) {

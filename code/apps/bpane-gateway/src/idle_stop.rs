@@ -35,7 +35,7 @@ pub fn schedule_idle_session_stop(
         tokio::time::sleep(timeout).await;
 
         if let Some(snapshot) = registry.telemetry_snapshot_if_live(session_id).await {
-            if snapshot.browser_clients > 0 || snapshot.viewer_clients > 0 || snapshot.mcp_owner {
+            if snapshot.has_interactive_session_activity() {
                 return;
             }
         }

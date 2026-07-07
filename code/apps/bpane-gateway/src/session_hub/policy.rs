@@ -1,4 +1,5 @@
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use bpane_protocol::{ClientAccessFlags, ControlMessage};
 use tracing::{info, warn};
@@ -26,13 +27,13 @@ pub(super) fn is_browser_owner(hub: &SessionHub, client_id: u64) -> bool {
 }
 
 pub(super) fn is_resize_owner(hub: &SessionHub, client_id: u64) -> bool {
-    if client_role(hub, client_id) == BrowserClientRole::Recorder {
-        return false;
-    }
     if hub.mcp_controls_resolution.load(Ordering::Relaxed) {
         return false;
     }
     let owner_id = hub.owner_id.load(Ordering::Relaxed);
+    if client_role(hub, client_id) == BrowserClientRole::Recorder {
+        return owner_id == 0;
+    }
     owner_id == 0 || owner_id == client_id
 }
 
@@ -53,6 +54,11 @@ pub(super) async fn request_resize(
         if matches!(result, ResizeResult::Applied) {
             let client_ids = hub.connected_clients.lock().await.clone();
             notify_client_access_states(hub, &client_ids, Some((width, height))).await;
+            if client_role(hub, client_id) == BrowserClientRole::Recorder
+                && hub.owner_id.load(Ordering::Relaxed) == 0
+            {
+                request_recorder_start_refresh(hub).await;
+            }
         }
         return result;
     }
@@ -139,6 +145,21 @@ async fn forward_resize_request(
         warn!("{error_message}");
     }
     ResizeResult::Applied
+}
+
+async fn request_recorder_start_refresh(hub: &SessionHub) {
+    for _ in 0..40 {
+        if hub.cached_grid_config.lock().await.is_some() {
+            let tiles_requested = hub.request_full_refresh().await;
+            if tiles_requested > 0 {
+                hub.record_refresh_burst(tiles_requested);
+            }
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    warn!("recorder client seeded resolution before a tile grid was available");
 }
 
 pub(super) async fn initial_access_state(
