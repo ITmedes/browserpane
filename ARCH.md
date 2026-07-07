@@ -72,7 +72,9 @@ workers are launched separately by the gateway and are not modeled as a
 long-lived compose service. Local compose defaults to the `docker_pool`
 session runtime backend. The gateway image trusts the mounted local checkout at
 `/workspace` as a Git `safe.directory` so local git-backed workflow sources can
-resolve inside the container without dubious-ownership failures.
+resolve inside the container without dubious-ownership failures; compose also
+passes `/workspace` through the workflow source trusted-local-root policy so
+local repository paths are limited to that explicit development mount.
 
 ```
               Browser / E2E Test

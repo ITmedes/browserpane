@@ -6,7 +6,8 @@ use tokio::task;
 
 use super::archive::TemporaryWorkflowSourceDir;
 use super::validation::{
-    join_validated_relative_path, validate_workflow_source_entrypoint, validated_relative_path,
+    join_validated_relative_path, validate_workflow_source_entrypoint_with_policy,
+    validated_relative_path,
 };
 use super::{
     WorkflowGitSource, WorkflowSource, WorkflowSourceError, WorkflowSourceFile,
@@ -81,7 +82,11 @@ impl WorkflowSourceResolver {
         source: &WorkflowSource,
         entrypoint: &str,
     ) -> Result<MaterializedWorkflowSource, WorkflowSourceError> {
-        validate_workflow_source_entrypoint(Some(source), entrypoint)?;
+        validate_workflow_source_entrypoint_with_policy(
+            &self.source_policy,
+            Some(source),
+            entrypoint,
+        )?;
         let resolved_source = self.resolve(Some(source.clone())).await?.ok_or_else(|| {
             WorkflowSourceError::Invalid("workflow source is required".to_string())
         })?;

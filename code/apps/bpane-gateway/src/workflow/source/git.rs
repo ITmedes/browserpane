@@ -4,7 +4,7 @@ use std::process::Stdio;
 use tokio::process::Command;
 use tokio::time::timeout;
 
-use super::validation::{is_commit_sha, validate_git_source};
+use super::validation::{is_commit_sha, validate_git_repository_url, validate_git_source};
 use super::{WorkflowGitSource, WorkflowSource, WorkflowSourceError, WorkflowSourceResolver};
 
 impl WorkflowSourceResolver {
@@ -15,7 +15,7 @@ impl WorkflowSourceResolver {
         match source {
             None => Ok(None),
             Some(WorkflowSource::Git(source)) => {
-                validate_git_source(&source)?;
+                validate_git_source(&self.source_policy, &source)?;
                 if source.resolved_commit.is_some() {
                     return Ok(Some(WorkflowSource::Git(source)));
                 }
@@ -40,9 +40,15 @@ impl WorkflowSourceResolver {
         repository_url: &str,
         ref_name: &str,
     ) -> Result<String, WorkflowSourceError> {
+        let allowed_protocols = self.allowed_git_protocols(repository_url)?;
         let mut command = Command::new(&self.git_bin);
         command
+            .env("GIT_ALLOW_PROTOCOL", allowed_protocols)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .arg("-c")
+            .arg("protocol.ext.allow=never")
             .arg("ls-remote")
+            .arg("--")
             .arg(repository_url)
             .arg(ref_name)
             .stdout(Stdio::piped())
@@ -102,15 +108,18 @@ impl WorkflowSourceResolver {
                 "resolved workflow git source is missing resolved_commit".to_string(),
             )
         })?;
+        let allowed_protocols = self.allowed_git_protocols(&source.repository_url)?;
         self.run_materialize_git_command(
             vec![
                 "clone".to_string(),
                 "--no-checkout".to_string(),
+                "--".to_string(),
                 source.repository_url.clone(),
                 checkout_dir.to_string_lossy().into_owned(),
             ],
             None,
             &format!("clone repository {}", source.repository_url),
+            &allowed_protocols,
         )
         .await?;
         self.run_materialize_git_command(
@@ -121,6 +130,7 @@ impl WorkflowSourceResolver {
             ],
             Some(checkout_dir),
             &format!("checkout commit {resolved_commit}"),
+            &allowed_protocols,
         )
         .await?;
         Ok(())
@@ -131,12 +141,17 @@ impl WorkflowSourceResolver {
         args: Vec<String>,
         cwd: Option<&Path>,
         context: &str,
+        allowed_protocols: &str,
     ) -> Result<(), WorkflowSourceError> {
         let mut command = Command::new(&self.git_bin);
         if let Some(cwd) = cwd {
             command.current_dir(cwd);
         }
         command
+            .env("GIT_ALLOW_PROTOCOL", allowed_protocols)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .arg("-c")
+            .arg("protocol.ext.allow=never")
             .args(args.iter().map(String::as_str))
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -169,6 +184,14 @@ impl WorkflowSourceResolver {
         Err(WorkflowSourceError::Materialize(format!(
             "failed to {context}: {detail}"
         )))
+    }
+
+    fn allowed_git_protocols(&self, repository_url: &str) -> Result<String, WorkflowSourceError> {
+        let source = validate_git_repository_url(&self.source_policy, repository_url)?;
+        Ok(match source {
+            super::validation::ValidatedGitRepositorySource::Remote { protocol } => protocol,
+            super::validation::ValidatedGitRepositorySource::TrustedLocalPath => "file".to_string(),
+        })
     }
 }
 

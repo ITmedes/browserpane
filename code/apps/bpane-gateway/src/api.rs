@@ -80,9 +80,7 @@ use crate::workflow::{
     WorkflowRunResource, WorkflowRunRetentionResource, WorkflowRunSourceSnapshot, WorkflowRunState,
     WorkflowRunTransitionRequest, WorkflowRunWorkspaceInput,
 };
-use crate::workflow::{
-    validate_workflow_source_entrypoint, WorkflowObservabilitySnapshot, WorkflowSourceArchive,
-};
+use crate::workflow::{WorkflowObservabilitySnapshot, WorkflowSourceArchive};
 use crate::workflow_event_delivery::{
     group_attempts_by_delivery, PersistWorkflowEventSubscriptionRequest,
     WorkflowEventDeliveryListResponse, WorkflowEventSubscriptionListResponse,

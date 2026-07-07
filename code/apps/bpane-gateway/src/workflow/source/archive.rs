@@ -8,7 +8,7 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 use super::validation::{
-    join_validated_relative_path, short_commit, validate_workflow_source_entrypoint,
+    join_validated_relative_path, short_commit, validate_workflow_source_entrypoint_with_policy,
     validated_relative_path,
 };
 use super::{WorkflowSource, WorkflowSourceArchive, WorkflowSourceError, WorkflowSourceResolver};
@@ -19,7 +19,11 @@ impl WorkflowSourceResolver {
         source: &WorkflowSource,
         entrypoint: &str,
     ) -> Result<WorkflowSourceArchive, WorkflowSourceError> {
-        validate_workflow_source_entrypoint(Some(source), entrypoint)?;
+        validate_workflow_source_entrypoint_with_policy(
+            &self.source_policy,
+            Some(source),
+            entrypoint,
+        )?;
         let resolved_source = self.resolve(Some(source.clone())).await?.ok_or_else(|| {
             WorkflowSourceError::Invalid("workflow source is required".to_string())
         })?;

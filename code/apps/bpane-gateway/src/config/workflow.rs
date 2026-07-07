@@ -8,6 +8,11 @@ pub struct WorkflowConfig {
     #[arg(long = "workflow-git-bin", default_value = "git")]
     pub workflow_git_bin: PathBuf,
 
+    /// Absolute local roots that are allowed as workflow git repository paths.
+    /// Intended for local development mounts such as /workspace; remote sources are otherwise https-only.
+    #[arg(long = "workflow-source-trusted-local-root")]
+    pub workflow_source_trusted_local_roots: Vec<PathBuf>,
+
     /// Docker CLI binary used to launch short-lived workflow worker jobs.
     #[arg(long = "workflow-worker-docker-bin", default_value = "docker")]
     pub workflow_worker_docker_bin: PathBuf,

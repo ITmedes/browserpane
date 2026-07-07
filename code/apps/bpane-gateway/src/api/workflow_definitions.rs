@@ -166,7 +166,9 @@ async fn create_workflow_definition_version(
         .resolve(source)
         .await
         .map_err(map_workflow_source_error)?;
-    validate_workflow_source_entrypoint(resolved_source.as_ref(), &entrypoint)
+    state
+        .workflow_source_resolver
+        .validate_entrypoint(resolved_source.as_ref(), &entrypoint)
         .map_err(map_workflow_source_error)?;
     let version = state
         .session_store
@@ -226,7 +228,9 @@ async fn validate_workflow_definition_source(
                 }),
             )
         })?;
-    validate_workflow_source_entrypoint(Some(&resolved_source), &request.entrypoint)
+    state
+        .workflow_source_resolver
+        .validate_entrypoint(Some(&resolved_source), &request.entrypoint)
         .map_err(map_workflow_source_error)?;
     let listing = state
         .workflow_source_resolver
