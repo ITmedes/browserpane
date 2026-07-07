@@ -995,7 +995,7 @@ Current workflow capabilities:
 - explicit runtime hold/release semantics for paused runs (`live_runtime` vs `profile_restart`)
 - signed outbound workflow lifecycle webhook delivery
 - git-backed workflow sources pinned to resolved commits
-- workflow source validation before immutable version creation, including entrypoint checks and file listing
+- workflow source validation before immutable version creation, including entrypoint checks, bounded file listing, and bounded source snapshot materialization
 - source snapshot materialization per run
 - structured workflow source errors with machine-readable `code`, `category`, and `recovery_hint` fields surfaced through the admin app
 - file workspaces for reusable inputs and durable outputs
