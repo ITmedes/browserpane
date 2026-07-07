@@ -626,6 +626,6 @@ coverage at four levels:
 4. next-step execution owned by `NEXT_WORKING_ROADMAP.md` and
    `SECURITY_RUNTIME_ROADMAP.md`.
 
-The old folder has been removed in a dedicated documentation cleanup step after
-contributor guidance was pointed at the temporary replacement workspace. The
-remaining cleanup is to rename `doc_updated/` back to `docs/`.
+The old folder was removed in a dedicated documentation cleanup step after the
+consolidated workspace was validated. The consolidated planning workspace now
+lives under `docs/`.

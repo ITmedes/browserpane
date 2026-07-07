@@ -228,18 +228,16 @@ Run these where applicable:
   topology, API routes, commands, support matrix, or validation flow, check
   whether `README.md` needs a matching update in the same slice. If no README
   change is needed, mention that explicitly in the PR or handoff notes.
-- Temporary documentation migration note: the old `docs/` planning folder has
-  been consolidated into `doc_updated/`. Until `doc_updated/` is renamed back
-  to `docs/`, create or update planned-slice documentation there. Each
-  implementation plan must still use a filename that matches `*_PLAN.md` and
+- Before starting a planned implementation slice, create or update a dedicated
+  plan file under `docs/` whose filename matches `*_PLAN.md`. Each plan must
   include the targeted issue, an example use case, and a post-implementation
   smoke test sequence.
 - When working with GitHub issues, keep issue state implementation-oriented:
   prefer one canonical issue per shippable slice, document the business case,
   scope, acceptance criteria, example use case, and smoke sequence on that
   issue, and close duplicates only after commenting with the canonical target.
-  Keep the local plan file in the current planning workspace aligned with the
-  canonical issue before implementation starts.
+  Keep the local `docs/*_PLAN.md` file aligned with the canonical issue before
+  implementation starts.
 - Do not edit generated or vendored output:
   - `code/web/bpane-client/dist/`
   - `node_modules/`

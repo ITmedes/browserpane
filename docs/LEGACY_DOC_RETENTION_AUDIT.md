@@ -1,9 +1,9 @@
 # Legacy Document Retention Audit
 
-This file records the final consolidation disposition for every old planning
-document that previously lived under `docs/`. It is intentionally explicit so
-the removed legacy folder does not need to be restored to understand where its
-still-valid content went.
+This file records the final consolidation disposition for every planning
+document that existed before the current `docs/` layout was created. It is
+intentionally explicit so the removed legacy documents do not need to be
+restored to understand where their still-valid content went.
 
 Disposition meanings:
 
@@ -120,5 +120,4 @@ The old folder was removed after these checks passed:
 4. Confirm no consolidated document tells readers to go back to old plans for
    active requirements.
 5. Confirm future planning guidance points to this consolidated workspace.
-6. Keep the final rename from `doc_updated/` back to `docs/` as a
-   documentation cleanup step, not as part of a product-behavior change.
+6. Keep future planning documents in the consolidated `docs/` workspace.
