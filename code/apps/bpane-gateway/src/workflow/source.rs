@@ -8,8 +8,6 @@ mod git;
 mod preview;
 mod validation;
 
-pub use validation::validate_workflow_source_entrypoint;
-
 #[cfg(test)]
 mod tests;
 
@@ -86,14 +84,55 @@ pub struct WorkflowSourceResolver {
     git_bin: PathBuf,
     resolve_timeout: Duration,
     materialize_timeout: Duration,
+    source_policy: WorkflowSourcePolicy,
 }
 
 impl WorkflowSourceResolver {
-    pub fn new(git_bin: PathBuf) -> Self {
+    pub fn with_policy(git_bin: PathBuf, source_policy: WorkflowSourcePolicy) -> Self {
         Self {
             git_bin,
             resolve_timeout: Duration::from_secs(15),
             materialize_timeout: Duration::from_secs(60),
+            source_policy,
+        }
+    }
+
+    pub fn validate_entrypoint(
+        &self,
+        source: Option<&WorkflowSource>,
+        entrypoint: &str,
+    ) -> Result<(), WorkflowSourceError> {
+        validation::validate_workflow_source_entrypoint_with_policy(
+            &self.source_policy,
+            source,
+            entrypoint,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowSourcePolicy {
+    trusted_local_roots: Vec<PathBuf>,
+}
+
+impl WorkflowSourcePolicy {
+    pub fn with_trusted_local_roots<I>(mut self, trusted_local_roots: I) -> Self
+    where
+        I: IntoIterator<Item = PathBuf>,
+    {
+        self.trusted_local_roots = trusted_local_roots.into_iter().collect();
+        self
+    }
+
+    pub(super) fn trusted_local_roots(&self) -> &[PathBuf] {
+        &self.trusted_local_roots
+    }
+}
+
+impl Default for WorkflowSourcePolicy {
+    fn default() -> Self {
+        Self {
+            trusted_local_roots: Vec::new(),
         }
     }
 }

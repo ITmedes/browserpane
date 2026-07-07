@@ -373,7 +373,11 @@ pub(crate) fn test_credential_provider() -> Arc<CredentialProvider> {
 }
 
 pub(crate) fn test_workflow_source_resolver() -> Arc<WorkflowSourceResolver> {
-    Arc::new(WorkflowSourceResolver::new(std::path::PathBuf::from("git")))
+    Arc::new(WorkflowSourceResolver::with_policy(
+        std::path::PathBuf::from("git"),
+        crate::workflow::WorkflowSourcePolicy::default()
+            .with_trusted_local_roots([std::env::temp_dir()]),
+    ))
 }
 
 pub(crate) fn bearer(token: &str) -> String {
