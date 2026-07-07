@@ -20,6 +20,24 @@ Every cleanup slice should include:
 5. Documentation and OpenAPI updates only when behavior, topology, API, setup,
    or validation flow changes.
 
+## Review Reconciliation Notes
+
+The raw `review/` folder was compared against this consolidated workspace and
+the current tree. The corrected review layer is represented in
+`REVIEW_FINDINGS_RECONCILIATION.md`.
+
+Important status:
+
+- workflow git-source RCE and source-preview symlink read findings are treated
+  as superseded by the current baseline and remain covered by the completed
+  workflow-source hardening slice,
+- bridge-local `/control-session` unauthenticated takeover is treated as
+  superseded by the current bridge-control-auth slice, while production
+  exposure of MCP transports still needs network/origin/auth hardening,
+- token-domain confusion, raw credential logging/URL transport, admin browser
+  auth, webhook SSRF, browser-context import limits, graceful shutdown, and
+  control-plane aggregation scalability remain open.
+
 ## Completed High-Priority Slices In The Current Baseline
 
 ### Workflow Git Source And Preview Safety
@@ -69,9 +87,80 @@ Remaining MCP hardening:
 
 ## Next Cleanup Slices
 
-### Recording Artifact Finalization Boundary
+### Token Domain Separation And Credential Redaction
 
 Priority: high.
+
+Risk:
+
+- connect tickets and automation tokens must not be interchangeable,
+- WebTransport request paths and admin-event URLs can expose bearer material in
+  logs or browser-visible URLs,
+- admin event stream query auth uses raw owner bearer token,
+- request paths can inject misleading log content if CR/LF or query material is
+  not sanitized.
+
+Required implementation:
+
+1. Add purpose/audience domain separation to signed token payloads or derive
+   distinct signing keys.
+2. Use versioned token parsing so old/wrong-purpose tokens fail safely.
+3. Use constant-time HMAC verification.
+4. Redact query strings in transport warnings and sanitize logged paths.
+5. Keep WebTransport tickets low-privilege and short-lived if query transport
+   remains necessary.
+6. Replace raw owner-token query auth for `/api/v1/admin/events` with a
+   short-lived purpose-scoped event ticket or browser-compatible subprotocol
+   auth.
+7. Update both old and unified admin event clients together.
+
+Validation:
+
+- connect ticket rejected by automation token validation and vice versa,
+- malformed/expired/wrong-purpose token tests,
+- transport log tests proving raw `token`, `access_token`, and
+  `session_ticket` values are not logged,
+- admin event tests proving raw owner bearer tokens are not in WebSocket URLs,
+- old and unified admin realtime/event smokes.
+
+### Admin Browser Auth And Web Security
+
+Priority: high before default admin promotion.
+
+Risk:
+
+- both admin apps persist OIDC token sets in browser storage,
+- login requests lack nonce replay defense,
+- ID token claims are decoded for display without signature verification,
+- the nginx/static layer lacks CSP and standard browser hardening headers,
+- old and unified admin currently duplicate security-sensitive auth code.
+
+Required implementation:
+
+1. Extract or share the admin auth implementation before deep hardening where
+   practical.
+2. Keep access tokens in memory where possible and minimize refresh-token
+   exposure to JavaScript-accessible storage.
+3. Add OIDC nonce generation, storage, and validation.
+4. Verify ID-token signatures/issuer/audience before using ID-token claims for
+   identity display; continue to treat gateway access as server-validated.
+5. Add CSP, `X-Content-Type-Options`, `Referrer-Policy`, and appropriate frame
+   and transport security headers to the local/proxy static-serving path.
+6. Keep local demo-password exposure documented as local-only and avoid
+   presenting it as production behavior.
+
+Validation:
+
+- shared auth unit tests for nonce validation, state validation, refresh, and
+  logout,
+- browser-token-store tests proving the chosen persistence model,
+- negative tests for unverified or wrong-audience ID tokens,
+- nginx/static header checks,
+- old and unified admin login/logout/expired-auth smokes.
+
+### Recording Artifact Finalization Boundary
+
+Priority: medium/high.
 
 Risk:
 
@@ -104,40 +193,6 @@ Validation:
 - recording worker build/test,
 - compose recording smoke with downloadable WebM/export,
 - unified admin recordings smoke if UI behavior changes.
-
-### Token Domain Separation And Credential Redaction
-
-Priority: high.
-
-Risk:
-
-- connect tickets and automation tokens must not be interchangeable,
-- WebTransport request paths and admin-event URLs can expose bearer material in
-  logs or browser-visible URLs,
-- admin event stream query auth uses raw owner bearer token.
-
-Required implementation:
-
-1. Add purpose/audience domain separation to signed token payloads or derive
-   distinct signing keys.
-2. Use versioned token parsing so old/wrong-purpose tokens fail safely.
-3. Use constant-time HMAC verification.
-4. Redact query strings in transport warnings and sanitize logged paths.
-5. Keep WebTransport tickets low-privilege and short-lived if query transport
-   remains necessary.
-6. Replace raw owner-token query auth for `/api/v1/admin/events` with a
-   short-lived purpose-scoped event ticket or browser-compatible subprotocol
-   auth.
-7. Update both old and unified admin event clients together.
-
-Validation:
-
-- connect ticket rejected by automation token validation and vice versa,
-- malformed/expired/wrong-purpose token tests,
-- transport log tests proving raw `token`, `access_token`, and
-  `session_ticket` values are not logged,
-- admin event tests proving raw owner bearer tokens are not in WebSocket URLs,
-- old and unified admin realtime/event smokes.
 
 ### Webhook SSRF Controls
 
@@ -212,6 +267,11 @@ Required implementation:
    - Docker/runtime manager,
    - Vault when credential provider is configured,
    - artifact stores.
+6. Treat graceful shutdown as single-node reliability, not only HA:
+   - handle SIGINT/SIGTERM,
+   - stop accepting new browser/admin/API work,
+   - drain active writes for a bounded period,
+   - make dropped sessions/workers visible in lifecycle logs.
 
 Validation:
 
@@ -236,12 +296,16 @@ Required implementation:
 3. Add workflow-run `session_id` and/or state-aware indexes.
 4. Replace queued-position calculation with targeted query.
 5. Reuse batched aggregates for dashboard and identity/access-review.
+6. Replace admin-event snapshot N+1 scans with shared batched snapshots or a
+   cached/published event model.
+7. Size and document the Postgres pool for expected admin/catalog concurrency.
 
 Validation:
 
-- Postgres contract tests,
+- Postgres contract tests for the store backend, not only ignored compose e2e,
 - API tests proving payload shape remains stable,
-- compose API smoke with enough sessions/runs to catch regressions.
+- seeded API/perf smoke with enough sessions/runs/workflow-runs/admin-event
+  subscribers to catch query-count or latency regressions.
 
 ### Docker Runtime Launch Boundary
 
@@ -269,6 +333,32 @@ Validation:
 - docs proving production guidance no longer presents raw socket as safe
   default.
 
+## Performance And Maintainability Backlog From Review
+
+These are valid review findings but are not the first production-security
+slices unless they directly touch active work:
+
+- host capture/classify: ARCH.md must state that capture is full-screen for
+  each damaged frame, while XDamage gates work and scopes downstream emission;
+  future host work should scope capture/classify hashing to damage regions
+  where feasible,
+- client rendering: cache-before-decode for duplicate tile hashes, implement or
+  remove the documented `ImageBitmap` cache path, and update ARCH.md cache-size
+  claims,
+- gateway fan-out: avoid per-viewer keyframe/frame re-encode where a shared
+  pre-encoded frame can be safely reused,
+- exports/archives: move CPU-heavy ZIP construction off async runtime threads
+  and stream large artifacts where possible,
+- workers: cap stdout/stderr accumulation, add request timeouts, and prevent
+  overlapping supervisor polls,
+- session-control store: add in-tree Postgres contract tests for the
+  high-volume store API before broad store refactors,
+- CI/lint: add a minimal pipeline for Rust fmt/clippy/tests, Node checks/tests,
+  admin builds, and targeted smoke wrappers,
+- Rust boundaries: consider domain ID newtypes, context structs for long
+  same-typed parameter lists, and error-strategy cleanup when touching those
+  modules.
+
 ## Admin Promotion Cleanup
 
 Before `/admin-new` becomes default:
@@ -283,14 +373,16 @@ Before `/admin-new` becomes default:
 
 ## Durable Documentation And Guardrails
 
-Required cleanup before old planning docs are removed:
+Required cleanup before production promotion:
 
-1. Fix architecture docs where they conflict with implementation.
+1. Fix architecture docs where they conflict with implementation:
+   - full-screen capture per damaged frame versus damaged-tile capture,
+   - downstream damage-bounded tile emission,
+   - current tile cache data type and size,
+   - actual admin app topology and source locations.
 2. Add both admin apps to TypeScript/Svelte standards scope.
 3. Add gateway configuration reference for important CLI flags.
 4. Add a security/threat-model document with local-dev caveats.
 5. Add OpenAPI examples/descriptions for high-use operations.
-6. Update contributor guidance to create future planning documents in this
-   consolidated location once the old folder is retired.
-7. Add minimal CI for Rust fmt/clippy/tests, Node checks/tests/build, and
+6. Add minimal CI for Rust fmt/clippy/tests, Node checks/tests/build, and
    targeted smoke wrappers.
