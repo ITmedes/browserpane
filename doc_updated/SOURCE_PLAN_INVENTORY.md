@@ -53,6 +53,13 @@ A fourth audit against identifier-level gaps added:
 - `LEGACY_DOC_RETENTION_AUDIT.md` for a per-file disposition table mapping
   every old planning document to its consolidated destination.
 
+A fifth audit against legacy headings added:
+
+- `LEGACY_SECTION_COVERAGE_AUDIT.md` for section-level coverage of the
+  open-issues integration plan, review cleanup prioritization plan, large
+  admin redesign implementation plan, admin requirements workspace, BPANE-00142
+  slice plans, older domain/resource plans, and repeated validation sections.
+
 ### Redesign Foundation Decision
 
 Status: Active requirement.

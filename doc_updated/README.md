@@ -52,6 +52,9 @@ Current branch context:
 - `LEGACY_DOC_RETENTION_AUDIT.md`: per-file disposition table for every legacy
   planning document and the consolidated destination that now owns its active
   context.
+- `LEGACY_SECTION_COVERAGE_AUDIT.md`: section-level audit showing how major
+  headings and intent from the legacy plans map into the consolidated
+  workspace.
 - `PROJECT_GOVERNANCE_REQUIREMENTS.md`: detailed project quota, admission,
   queueing, policy binding, usage, retained-storage, and privacy-boundary
   requirements.
@@ -147,6 +150,12 @@ The fourth pass added:
 - concept/prototype route corrections,
 - a per-file retention audit for all legacy planning documents.
 
+The fifth pass added a section-level coverage audit for the high-context legacy
+plans. It confirms that the open-issues merge maps, review cleanup slices,
+large admin redesign steps, domain/resource plans, and repeated smoke sections
+are represented by current consolidated documents instead of by references back
+to the old folder.
+
 ## Retirement Rule For The Old Planning Folder
 
 Before the old planning folder is removed, verify that:
@@ -154,9 +163,11 @@ Before the old planning folder is removed, verify that:
 1. every active requirement is represented in this folder,
 2. obsolete historical issue merge maps are either intentionally dropped or
    summarized in `SOURCE_PLAN_INVENTORY.md`,
-3. contributor guidance is updated to create future planning documents in the
+3. section-level coverage remains represented in
+   `LEGACY_SECTION_COVERAGE_AUDIT.md`,
+4. contributor guidance is updated to create future planning documents in the
    new location,
-4. the promotion gate in `ADMIN_NEW_STATUS.md` still reflects the live code.
+5. the promotion gate in `ADMIN_NEW_STATUS.md` still reflects the live code.
 
 The old source files should not be deleted in the same PR that changes product
 behavior. Treat that as a documentation cleanup PR.
