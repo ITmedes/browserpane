@@ -63,6 +63,7 @@ pub(crate) struct ApiServerConfig {
     pub idle_stop_timeout: std::time::Duration,
     pub public_gateway_url: String,
     pub default_owner_mode: SessionOwnerMode,
+    pub mcp_bridge_control: Option<McpBridgeControlConfig>,
 }
 
 /// Shared state for the HTTP API.
@@ -86,6 +87,14 @@ pub(super) struct ApiState {
     pub(super) idle_stop_timeout: std::time::Duration,
     pub(super) public_gateway_url: String,
     pub(super) default_owner_mode: SessionOwnerMode,
+    pub(super) mcp_bridge_control: Option<McpBridgeControlConfig>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct McpBridgeControlConfig {
+    pub(crate) control_url: String,
+    pub(crate) bearer_token: Option<String>,
+    pub(crate) timeout: std::time::Duration,
 }
 
 pub(super) const AUTOMATION_ACCESS_TOKEN_HEADER: &str = "x-bpane-automation-access-token";
@@ -209,6 +218,11 @@ pub(super) struct SessionTelemetry {
 pub(super) struct McpOwnerRequest {
     pub(super) width: u16,
     pub(super) height: u16,
+}
+
+#[derive(Deserialize)]
+pub(super) struct McpBridgeControlSessionRequest {
+    pub(super) session_id: Uuid,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

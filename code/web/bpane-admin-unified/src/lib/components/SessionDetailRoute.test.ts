@@ -142,14 +142,17 @@ describe('SessionDetailRoute', () => {
     });
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
-      if (url === 'http://localhost:8931/health') {
+      if (url === 'http://localhost:3000/api/v1/mcp-bridge/health') {
+        expect(new Headers(init?.headers).get('authorization')).toBe('Bearer shell-token');
         return jsonResponse(bridgeHealth({ delegated, defaultSessionId }), 200);
       }
-      if (url === 'http://localhost:8931/control-session' && init?.method === 'PUT') {
+      if (url === 'http://localhost:3000/api/v1/mcp-bridge/control-session' && init?.method === 'PUT') {
+        expect(new Headers(init?.headers).get('authorization')).toBe('Bearer shell-token');
         defaultSessionId = JSON.parse(String(init.body)).session_id;
         return jsonResponse({ session: { id: defaultSessionId }, cdp_endpoint: 'http://browser:9222' }, 200);
       }
-      if (url === 'http://localhost:8931/control-session' && init?.method === 'DELETE') {
+      if (url === 'http://localhost:3000/api/v1/mcp-bridge/control-session' && init?.method === 'DELETE') {
+        expect(new Headers(init?.headers).get('authorization')).toBe('Bearer shell-token');
         defaultSessionId = null;
         return new Response(null, { status: 204 });
       }
@@ -179,7 +182,8 @@ describe('SessionDetailRoute', () => {
         authConfig: {
           mode: 'oidc',
           mcpBridge: {
-            controlUrl: 'http://localhost:8931/control-session',
+            controlUrl: 'http://localhost:3000/api/v1/mcp-bridge/control-session',
+            endpointBaseUrl: 'http://localhost:8931',
             clientId: 'bpane-mcp-bridge',
             issuer: 'http://localhost:8091/realms/browserpane',
             displayName: 'Local MCP bridge',
@@ -222,8 +226,8 @@ describe('SessionDetailRoute', () => {
 
     const calls = fetchImpl.mock.calls.map((call) => [String(call[0]), call[1]?.method ?? 'GET']);
     expect(calls).toContainEqual(['http://localhost:3000/api/v1/sessions/session-1/automation-owner', 'POST']);
-    expect(calls).toContainEqual(['http://localhost:8931/control-session', 'PUT']);
-    expect(calls).toContainEqual(['http://localhost:8931/control-session', 'DELETE']);
+    expect(calls).toContainEqual(['http://localhost:3000/api/v1/mcp-bridge/control-session', 'PUT']);
+    expect(calls).toContainEqual(['http://localhost:3000/api/v1/mcp-bridge/control-session', 'DELETE']);
     expect(calls).toContainEqual(['http://localhost:3000/api/v1/sessions/session-1/automation-owner', 'DELETE']);
   });
 

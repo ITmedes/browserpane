@@ -10,6 +10,7 @@
   },
   "mcpBridge": {
     "controlUrl": "${BPANE_MCP_BRIDGE_CONTROL_URL}",
+    "endpointBaseUrl": "${BPANE_MCP_BRIDGE_ENDPOINT_BASE_URL}",
     "clientId": "${BPANE_MCP_BRIDGE_CLIENT_ID}",
     "issuer": "${BPANE_MCP_BRIDGE_ISSUER}",
     "displayName": "${BPANE_MCP_BRIDGE_DISPLAY_NAME}"

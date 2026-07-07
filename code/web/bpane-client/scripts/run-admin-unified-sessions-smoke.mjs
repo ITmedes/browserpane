@@ -169,7 +169,10 @@ async function cleanupMcpDelegation(accessToken, options, sessionId, authConfig)
   }
   const health = await fetchJson(mcpHealthUrl(bridge)).catch(() => null);
   if (health?.control_session_id === sessionId) {
-    await fetch(bridge.controlUrl, { method: 'DELETE' });
+    await fetch(bridge.controlUrl, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
   }
   await fetch(`${apiOrigin(options)}/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-owner`, {
     method: 'DELETE',
@@ -178,12 +181,8 @@ async function cleanupMcpDelegation(accessToken, options, sessionId, authConfig)
 }
 
 function mcpHealthUrl(bridge) {
-  const healthUrl = new URL(bridge.controlUrl);
-  const controlPath = healthUrl.pathname.endsWith('/')
-    ? healthUrl.pathname.slice(0, -1)
-    : healthUrl.pathname;
-  const lastSeparator = controlPath.lastIndexOf('/');
-  healthUrl.pathname = `${controlPath.slice(0, lastSeparator + 1)}health`;
+  const healthUrl = new URL(bridge.endpointBaseUrl ?? bridge.controlUrl);
+  healthUrl.pathname = '/health';
   healthUrl.search = '';
   healthUrl.hash = '';
   return healthUrl.toString();

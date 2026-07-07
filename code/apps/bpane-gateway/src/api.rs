@@ -104,6 +104,7 @@ mod file_workspaces;
 mod http_helpers;
 mod identity;
 mod identity_mappings;
+mod mcp_bridge_control;
 mod projects;
 mod recordings;
 mod resources;
@@ -128,8 +129,8 @@ use resources::*;
 use router::build_api_router;
 use runtime_access::*;
 use session_bindings::*;
-pub(crate) use types::ApiServerConfig;
 use types::*;
+pub(crate) use types::{ApiServerConfig, McpBridgeControlConfig};
 
 /// Runs the HTTP API server for MCP bridge communication.
 pub async fn run_api_server(config: ApiServerConfig) -> anyhow::Result<()> {
@@ -154,6 +155,7 @@ pub async fn run_api_server(config: ApiServerConfig) -> anyhow::Result<()> {
         idle_stop_timeout: config.idle_stop_timeout,
         public_gateway_url: config.public_gateway_url,
         default_owner_mode: config.default_owner_mode,
+        mcp_bridge_control: config.mcp_bridge_control,
     });
 
     let app = build_api_router(state);

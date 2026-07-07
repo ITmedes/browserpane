@@ -117,7 +117,7 @@ export function sessionEndpointUrl(bridge: McpBridgeConfig | null, sessionId: st
   if (!bridge || !sessionId) {
     return null;
   }
-  const url = new URL(bridge.controlUrl);
+  const url = new URL(bridge.endpointBaseUrl ?? bridge.controlUrl);
   url.pathname = `/sessions/${encodeURIComponent(sessionId)}/mcp`;
   url.search = '';
   url.hash = '';

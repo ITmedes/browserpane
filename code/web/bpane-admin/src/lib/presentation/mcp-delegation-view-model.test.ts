@@ -5,7 +5,8 @@ import type { SessionResource } from '../api/control-types';
 import { McpDelegationViewModelBuilder } from './mcp-delegation-view-model';
 
 const BRIDGE: McpBridgeConfig = {
-  controlUrl: 'http://localhost:8931/control-session',
+  controlUrl: 'http://localhost:8080/api/v1/mcp-bridge/control-session',
+  endpointBaseUrl: 'http://localhost:8931',
   clientId: 'bpane-mcp-bridge',
   issuer: 'http://localhost:8091/realms/bpane',
   displayName: 'BrowserPane MCP bridge',

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::api::{self, ApiServerConfig};
+use crate::api::{self, ApiServerConfig, McpBridgeControlConfig};
 use crate::config::Config;
 use crate::transport::{TransportServer, TransportServerConfig};
 use crate::workspaces::WorkspaceFileStore;
@@ -115,6 +115,7 @@ impl GatewayApp {
             idle_stop_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
             public_gateway_url: config.gateway.public_gateway_url.clone(),
             default_owner_mode: default_owner_mode(&config),
+            mcp_bridge_control: mcp_bridge_control_config(&config),
         };
 
         Ok(Self {
@@ -134,6 +135,25 @@ impl GatewayApp {
             result = api::run_api_server(api_server_config) => result,
         }
     }
+}
+
+fn mcp_bridge_control_config(config: &Config) -> Option<McpBridgeControlConfig> {
+    let control_url = config.gateway.mcp_bridge_control_url.as_ref()?.trim();
+    if control_url.is_empty() {
+        return None;
+    }
+    let bearer_token = config
+        .gateway
+        .mcp_bridge_control_token
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    Some(McpBridgeControlConfig {
+        control_url: control_url.to_string(),
+        bearer_token,
+        timeout: Duration::from_secs(config.gateway.mcp_bridge_control_timeout_secs),
+    })
 }
 
 #[cfg(test)]

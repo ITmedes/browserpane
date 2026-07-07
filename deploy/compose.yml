@@ -125,6 +125,8 @@ services:
       --credential-vault-mount-path ${BPANE_CREDENTIAL_VAULT_MOUNT_PATH:-secret}
       --credential-vault-prefix ${BPANE_CREDENTIAL_VAULT_PREFIX:-browserpane/credential-bindings}
       --public-gateway-url https://localhost:4433
+      --mcp-bridge-control-url ${BPANE_GATEWAY_MCP_BRIDGE_CONTROL_URL:-http://mcp-bridge:8931/control-session}
+      --mcp-bridge-control-token ${BPANE_MCP_BRIDGE_CONTROL_TOKEN:-browserpane-dev-mcp-bridge-control-token}
       --cert /certs/cert.pem
       --key /certs/cert.key
       --workflow-worker-docker-bin ${BPANE_WORKFLOW_WORKER_DOCKER_BIN:-docker}
@@ -233,7 +235,8 @@ services:
       BPANE_OIDC_SCOPE: openid
       BPANE_OIDC_EXAMPLE_USERNAME: demo
       BPANE_OIDC_EXAMPLE_PASSWORD: demo-demo
-      BPANE_MCP_BRIDGE_CONTROL_URL: http://localhost:8931/control-session
+      BPANE_MCP_BRIDGE_CONTROL_URL: http://localhost:8080/api/v1/mcp-bridge/control-session
+      BPANE_MCP_BRIDGE_ENDPOINT_BASE_URL: http://localhost:8931
       BPANE_MCP_BRIDGE_CLIENT_ID: bpane-mcp-bridge
       BPANE_MCP_BRIDGE_ISSUER: http://localhost:8091/realms/browserpane-dev
       BPANE_MCP_BRIDGE_DISPLAY_NAME: BrowserPane MCP bridge
@@ -255,6 +258,7 @@ services:
       BPANE_MCP_PORT: "8931"
       BPANE_MCP_RESOLUTION: "1600x900"
       BPANE_SESSION_BOOTSTRAP_MODE: "off"
+      BPANE_MCP_BRIDGE_CONTROL_TOKEN: "${BPANE_MCP_BRIDGE_CONTROL_TOKEN:-browserpane-dev-mcp-bridge-control-token}"
       BPANE_GATEWAY_OIDC_TOKEN_URL: "http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token"
       BPANE_GATEWAY_OIDC_CLIENT_ID: "bpane-mcp-bridge"
       BPANE_GATEWAY_OIDC_CLIENT_SECRET: "bpane-mcp-bridge-secret"

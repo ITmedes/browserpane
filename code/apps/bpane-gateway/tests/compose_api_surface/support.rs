@@ -27,6 +27,7 @@ const DEFAULT_KEYCLOAK_ADMIN_USERNAME: &str = "admin";
 const DEFAULT_KEYCLOAK_ADMIN_PASSWORD: &str = "admin";
 const DEFAULT_CONTAINER_WORKSPACE_ROOT: &str = "/workspace";
 const DEFAULT_MCP_BRIDGE_BASE_URL: &str = "http://localhost:8931";
+const DEFAULT_MCP_BRIDGE_CONTROL_TOKEN: &str = "browserpane-dev-mcp-bridge-control-token";
 
 pub fn suite_lock() -> &'static Mutex<()> {
     static SUITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -39,6 +40,7 @@ pub struct ComposeHarness {
     api_base_url: String,
     token_url: String,
     mcp_bridge_base_url: String,
+    mcp_bridge_control_token: String,
     access_token: Arc<String>,
     repo_root: Arc<PathBuf>,
     container_workspace_root: Arc<String>,
@@ -96,6 +98,8 @@ impl ComposeHarness {
             .unwrap_or_else(|_| client_secret.to_string());
         let mcp_bridge_base_url = std::env::var("BPANE_GATEWAY_E2E_MCP_BRIDGE_URL")
             .unwrap_or_else(|_| DEFAULT_MCP_BRIDGE_BASE_URL.to_string());
+        let mcp_bridge_control_token = std::env::var("BPANE_GATEWAY_E2E_MCP_BRIDGE_CONTROL_TOKEN")
+            .unwrap_or_else(|_| DEFAULT_MCP_BRIDGE_CONTROL_TOKEN.to_string());
         let repo_root = repository_root()?;
         let container_workspace_root = std::env::var("BPANE_GATEWAY_E2E_CONTAINER_WORKSPACE_ROOT")
             .unwrap_or_else(|_| DEFAULT_CONTAINER_WORKSPACE_ROOT.to_string());
@@ -110,6 +114,7 @@ impl ComposeHarness {
             api_base_url,
             token_url,
             mcp_bridge_base_url,
+            mcp_bridge_control_token,
             access_token: Arc::new(access_token),
             repo_root: Arc::new(repo_root),
             container_workspace_root: Arc::new(container_workspace_root),
@@ -241,6 +246,7 @@ impl ComposeHarness {
             api_base_url: self.api_base_url.clone(),
             token_url: self.token_url.clone(),
             mcp_bridge_base_url: self.mcp_bridge_base_url.clone(),
+            mcp_bridge_control_token: self.mcp_bridge_control_token.clone(),
             access_token: Arc::new(access_token),
             repo_root: self.repo_root.clone(),
             container_workspace_root: self.container_workspace_root.clone(),
@@ -928,6 +934,9 @@ impl ComposeHarness {
         let mut request = self
             .client
             .request(method.clone(), self.mcp_bridge_url(path));
+        if path == "/control-session" {
+            request = request.bearer_auth(&self.mcp_bridge_control_token);
+        }
         if let Some(body) = body {
             request = request.json(&body);
         }

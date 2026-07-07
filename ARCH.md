@@ -442,9 +442,10 @@ running against the Chromium instance inside the host container.
 - Lazy registration: only claims MCP ownership on first MCP client connect
 - Registers/clears MCP ownership with the gateway so delegated automation can attach without forcing browser clients into viewer mode
 - Uses OIDC client-credentials for gateway API access in the local compose stack
-- Exposes a local compatibility control-session API on `:8931` so the admin
-  console can point the bridge at an explicitly delegated session without
-  restarting the service
+- Exposes a compatibility control-session API on `:8931`; local compose protects
+  that bridge-local target with an internal bearer token, and browser/admin
+  callers mutate it through the authenticated gateway proxy at
+  `/api/v1/mcp-bridge/control-session`
 - Supports per-connection session routing so external MCP clients can bind to a
   delegated BrowserPane session without mutating one bridge-global target
 - `/health` keeps legacy `control_session_*` fields and also reports a
@@ -497,7 +498,7 @@ The default dev stack no longer uses a shared token file.
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
 - admin-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - switching the selected session disconnects the embedded browser from the previous live session before selecting the new one
-- `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via compatibility `PUT /control-session`
+- `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` through the gateway-mediated `/api/v1/mcp-bridge/control-session` proxy
 - the console shows whether the currently selected session is the exact session delegated to `mcp-bridge` and exposes the recommended `/sessions/{session_id}/mcp` endpoint for external clients
 - `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource and lazily binds Playwright MCP on first client connect
 - `workflow-worker` uses OIDC client credentials in local compose for gateway API bootstrap and then switches to run-scoped automation access
@@ -514,8 +515,10 @@ The default dev stack no longer uses a shared token file.
 - `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
 - `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` /
   `BPANE_SESSION_BOOTSTRAP_MODE`), compatibility delegated-session assignment
-  through its local `/control-session` API, and per-connection session routing
-  through `/sessions/{session_id}/mcp`
+  through its bridge-local `/control-session` API, and per-connection session
+  routing through `/sessions/{session_id}/mcp`; in local compose the mutable
+  bridge-local control target is bearer-protected and fronted by the gateway
+  proxy
 - for external clients, `/sessions/{session_id}/mcp` and
   `/sessions/{session_id}/sse` are the preferred MCP connection surfaces
   because the BrowserPane session binding is immutable for that connection;

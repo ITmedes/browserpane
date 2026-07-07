@@ -44,7 +44,10 @@ impl CredentialProviderBackend for TestCredentialProviderBackend {
     }
 }
 
-fn base_api_state(auth_validator: Arc<AuthValidator>) -> Arc<ApiState> {
+fn base_api_state(
+    auth_validator: Arc<AuthValidator>,
+    mcp_bridge_control: Option<McpBridgeControlConfig>,
+) -> Arc<ApiState> {
     Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
@@ -78,6 +81,7 @@ fn base_api_state(auth_validator: Arc<AuthValidator>) -> Arc<ApiState> {
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control,
     })
 }
 
@@ -86,7 +90,18 @@ pub(crate) fn test_router_with_state() -> (Router, String, Arc<ApiState>) {
     let token = auth_validator
         .generate_token()
         .expect("hmac auth validator should generate dev token");
-    let state = base_api_state(auth_validator);
+    let state = base_api_state(auth_validator, None);
+    (build_api_router(state.clone()), token, state)
+}
+
+pub(crate) fn test_router_with_mcp_bridge_control(
+    mcp_bridge_control: McpBridgeControlConfig,
+) -> (Router, String, Arc<ApiState>) {
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
+    let token = auth_validator
+        .generate_token()
+        .expect("hmac auth validator should generate dev token");
+    let state = base_api_state(auth_validator, Some(mcp_bridge_control));
     (build_api_router(state.clone()), token, state)
 }
 
@@ -169,6 +184,7 @@ pub(crate) fn test_router_with_recording_lifecycle(
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control: None,
     });
     (build_api_router(state.clone()), token, state)
 }
@@ -234,6 +250,7 @@ pub(crate) fn test_router_with_workflow_lifecycle(
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control: None,
     });
     (build_api_router(state.clone()), token, state)
 }
@@ -283,6 +300,7 @@ pub(crate) async fn test_router_with_live_agent_state(
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control: None,
     });
     (build_api_router(state.clone()), token, state, agent_server)
 }
@@ -349,6 +367,7 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control: None,
     });
     (build_api_router(state), token)
 }

@@ -24,12 +24,12 @@ async function run() {
 
   try {
     log(`Opening ${options.pageUrl}`);
-    await ensureAdminLoggedIn(page, options);
-    await cleanupAdminBeforeRun(page, options, log);
-    const bridge = await resolveMcpBridge(options);
-    await clearBridgeControl(bridge);
-    await waitForBridgeControl(bridge, null, options);
-    const accessToken = await getAdminAccessToken(page);
+	    await ensureAdminLoggedIn(page, options);
+	    await cleanupAdminBeforeRun(page, options, log);
+	    const accessToken = await getAdminAccessToken(page);
+	    const bridge = await resolveMcpBridge(options);
+	    await clearBridgeControl(bridge, accessToken);
+	    await waitForBridgeControl(bridge, null, options);
 
     log('Creating and authorizing first session through the admin MCP panel.');
     sessionA = await createAndConnectSession(page, options);
@@ -135,8 +135,11 @@ async function clearBridgeFromPage(page) {
   }
 }
 
-async function clearBridgeControl(bridge) {
-  const response = await fetch(bridge.controlUrl, { method: 'DELETE' });
+async function clearBridgeControl(bridge, accessToken) {
+  const response = await fetch(bridge.controlUrl, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
     throw new Error(`Could not clear MCP bridge control session: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
@@ -192,7 +195,13 @@ async function emitSummary(options, summary, log) {
 function healthUrl(bridge) { return bridgeUrl(bridge, '/health'); }
 function sessionMcpUrl(bridge, sessionId) { return bridgeUrl(bridge, `/sessions/${encodeURIComponent(sessionId)}/mcp`); }
 function apiOrigin(options) { return new URL('/', options.pageUrl).origin; }
-function bridgeUrl(bridge, pathname) { const url = new URL(bridge.controlUrl); url.pathname = pathname; url.search = ''; return url.toString(); }
+function bridgeUrl(bridge, pathname) {
+  const url = new URL(bridge.endpointBaseUrl ?? bridge.controlUrl);
+  url.pathname = pathname;
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
 
 run().catch((error) => {
   console.error(`[admin-mcp-smoke] ${error.stack || error.message}`);

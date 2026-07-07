@@ -386,7 +386,13 @@
 
   function mcpClient(): McpBridgeClient | null {
     const bridge = mcpBridge;
-    return bridge ? new McpBridgeClient({ controlUrl: bridge.controlUrl }) : null;
+    return bridge
+      ? new McpBridgeClient({
+          controlUrl: bridge.controlUrl,
+          accessTokenProvider: authContext.accessTokenProvider,
+          onAuthenticationFailure: authContext.onAuthenticationFailure,
+        })
+      : null;
   }
 </script>
 
