@@ -3,7 +3,10 @@ use std::path::{Component, Path, PathBuf};
 
 use reqwest::Url;
 
-use super::{WorkflowGitSource, WorkflowSource, WorkflowSourceError, WorkflowSourcePolicy};
+use super::{
+    WorkflowGitSource, WorkflowSource, WorkflowSourceCollectionLimits, WorkflowSourceError,
+    WorkflowSourcePolicy,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum ValidatedGitRepositorySource {
@@ -282,4 +285,56 @@ fn validate_materialized_path_containment(
         )));
     }
     Ok(())
+}
+
+pub(super) struct WorkflowSourceCollectionTracker {
+    limits: WorkflowSourceCollectionLimits,
+    file_count: usize,
+    total_bytes: u64,
+}
+
+impl WorkflowSourceCollectionTracker {
+    pub(super) fn new(limits: WorkflowSourceCollectionLimits) -> Self {
+        Self {
+            limits,
+            file_count: 0,
+            total_bytes: 0,
+        }
+    }
+
+    pub(super) fn record_file(
+        &mut self,
+        path: &Path,
+        byte_count: u64,
+    ) -> Result<(), WorkflowSourceError> {
+        if self.file_count >= self.limits.max_files {
+            return Err(WorkflowSourceError::Snapshot(format!(
+                "workflow source exceeds maximum file count of {} while collecting {}",
+                self.limits.max_files,
+                path.display()
+            )));
+        }
+        if byte_count > self.limits.max_file_bytes {
+            return Err(WorkflowSourceError::Snapshot(format!(
+                "workflow source file {} exceeds maximum file size of {} bytes",
+                path.display(),
+                self.limits.max_file_bytes
+            )));
+        }
+        let next_total = self.total_bytes.checked_add(byte_count).ok_or_else(|| {
+            WorkflowSourceError::Snapshot(
+                "workflow source total byte count overflowed while collecting files".to_string(),
+            )
+        })?;
+        if next_total > self.limits.max_total_bytes {
+            return Err(WorkflowSourceError::Snapshot(format!(
+                "workflow source exceeds maximum total size of {} bytes while collecting {}",
+                self.limits.max_total_bytes,
+                path.display()
+            )));
+        }
+        self.file_count += 1;
+        self.total_bytes = next_total;
+        Ok(())
+    }
 }

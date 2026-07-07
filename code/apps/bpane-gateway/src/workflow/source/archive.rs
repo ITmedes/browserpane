@@ -10,9 +10,12 @@ use zip::{CompressionMethod, ZipWriter};
 use super::validation::{
     join_validated_relative_path, short_commit, validate_materialized_directory,
     validate_materialized_regular_file, validate_workflow_source_entrypoint_with_policy,
-    validated_relative_path,
+    validated_relative_path, WorkflowSourceCollectionTracker,
 };
-use super::{WorkflowSource, WorkflowSourceArchive, WorkflowSourceError, WorkflowSourceResolver};
+use super::{
+    WorkflowSource, WorkflowSourceArchive, WorkflowSourceCollectionLimits, WorkflowSourceError,
+    WorkflowSourceResolver,
+};
 
 impl WorkflowSourceResolver {
     pub async fn materialize_archive(
@@ -62,6 +65,7 @@ impl WorkflowSourceResolver {
                     "workflow source root path",
                     source.root_path.as_deref().unwrap_or("."),
                 )?;
+                let limits = self.source_policy.collection_limits();
                 let file_name = format!(
                     "workflow-source-{}.zip",
                     short_commit(source.resolved_commit.as_deref().ok_or_else(|| {
@@ -71,7 +75,7 @@ impl WorkflowSourceResolver {
                     })?)
                 );
                 let bytes = task::spawn_blocking(move || {
-                    archive_workflow_source_tree(&repo_root, &archive_root)
+                    archive_workflow_source_tree(&repo_root, &archive_root, limits)
                 })
                 .await
                 .map_err(|error| {
@@ -93,9 +97,11 @@ impl WorkflowSourceResolver {
 fn archive_workflow_source_tree(
     repo_root: &Path,
     archive_root: &Path,
+    limits: WorkflowSourceCollectionLimits,
 ) -> Result<Vec<u8>, WorkflowSourceError> {
     let mut files = Vec::new();
-    collect_archive_files(repo_root, archive_root, &mut files)?;
+    let mut tracker = WorkflowSourceCollectionTracker::new(limits);
+    collect_archive_files(repo_root, archive_root, &mut tracker, &mut files)?;
     if files.is_empty() {
         return Err(WorkflowSourceError::Snapshot(
             "workflow source archive would be empty".to_string(),
@@ -136,6 +142,7 @@ fn archive_workflow_source_tree(
 fn collect_archive_files(
     repo_root: &Path,
     current: &Path,
+    tracker: &mut WorkflowSourceCollectionTracker,
     files: &mut Vec<(PathBuf, PathBuf)>,
 ) -> Result<(), WorkflowSourceError> {
     let metadata = fs::symlink_metadata(current).map_err(|error| {
@@ -145,6 +152,7 @@ fn collect_archive_files(
         ))
     })?;
     if metadata.is_file() {
+        tracker.record_file(current, metadata.len())?;
         let archive_path = current.strip_prefix(repo_root).map_err(|error| {
             WorkflowSourceError::Snapshot(format!(
                 "failed to derive workflow source archive path for {}: {error}",
@@ -191,7 +199,7 @@ fn collect_archive_files(
         {
             continue;
         }
-        collect_archive_files(repo_root, &path, files)?;
+        collect_archive_files(repo_root, &path, tracker, files)?;
     }
 
     Ok(())

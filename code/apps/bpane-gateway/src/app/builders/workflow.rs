@@ -29,9 +29,15 @@ impl WorkflowServices {
     ) -> anyhow::Result<Self> {
         let source_resolver = Arc::new(WorkflowSourceResolver::with_policy(
             config.workflow.workflow_git_bin.clone(),
-            WorkflowSourcePolicy::default().with_trusted_local_roots(
-                config.workflow.workflow_source_trusted_local_roots.clone(),
-            ),
+            WorkflowSourcePolicy::default()
+                .with_trusted_local_roots(
+                    config.workflow.workflow_source_trusted_local_roots.clone(),
+                )
+                .with_collection_limits(
+                    config.workflow.workflow_source_max_files,
+                    config.workflow.workflow_source_max_file_bytes,
+                    config.workflow.workflow_source_max_total_bytes,
+                ),
         ));
         let lifecycle = Arc::new(WorkflowLifecycleManager::new(
             build_workflow_worker_config(config),

@@ -3,6 +3,10 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+const DEFAULT_WORKFLOW_SOURCE_MAX_FILES: usize = 1024;
+const DEFAULT_WORKFLOW_SOURCE_MAX_FILE_BYTES: u64 = 10 * 1024 * 1024;
+const DEFAULT_WORKFLOW_SOURCE_MAX_TOTAL_BYTES: u64 = 50 * 1024 * 1024;
+
 mod archive;
 mod git;
 mod preview;
@@ -113,6 +117,7 @@ impl WorkflowSourceResolver {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowSourcePolicy {
     trusted_local_roots: Vec<PathBuf>,
+    collection_limits: WorkflowSourceCollectionLimits,
 }
 
 impl WorkflowSourcePolicy {
@@ -124,8 +129,26 @@ impl WorkflowSourcePolicy {
         self
     }
 
+    pub fn with_collection_limits(
+        mut self,
+        max_files: usize,
+        max_file_bytes: u64,
+        max_total_bytes: u64,
+    ) -> Self {
+        self.collection_limits = WorkflowSourceCollectionLimits {
+            max_files,
+            max_file_bytes,
+            max_total_bytes,
+        };
+        self
+    }
+
     pub(super) fn trusted_local_roots(&self) -> &[PathBuf] {
         &self.trusted_local_roots
+    }
+
+    pub(super) fn collection_limits(&self) -> WorkflowSourceCollectionLimits {
+        self.collection_limits
     }
 }
 
@@ -133,6 +156,18 @@ impl Default for WorkflowSourcePolicy {
     fn default() -> Self {
         Self {
             trusted_local_roots: Vec::new(),
+            collection_limits: WorkflowSourceCollectionLimits {
+                max_files: DEFAULT_WORKFLOW_SOURCE_MAX_FILES,
+                max_file_bytes: DEFAULT_WORKFLOW_SOURCE_MAX_FILE_BYTES,
+                max_total_bytes: DEFAULT_WORKFLOW_SOURCE_MAX_TOTAL_BYTES,
+            },
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct WorkflowSourceCollectionLimits {
+    pub(super) max_files: usize,
+    pub(super) max_file_bytes: u64,
+    pub(super) max_total_bytes: u64,
 }

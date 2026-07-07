@@ -8,11 +8,11 @@ use super::archive::TemporaryWorkflowSourceDir;
 use super::validation::{
     join_validated_relative_path, validate_materialized_directory,
     validate_materialized_regular_file, validate_workflow_source_entrypoint_with_policy,
-    validated_relative_path,
+    validated_relative_path, WorkflowSourceCollectionTracker,
 };
 use super::{
-    WorkflowGitSource, WorkflowSource, WorkflowSourceError, WorkflowSourceFile,
-    WorkflowSourceFileListing, WorkflowSourcePreview, WorkflowSourceResolver,
+    WorkflowGitSource, WorkflowSource, WorkflowSourceCollectionLimits, WorkflowSourceError,
+    WorkflowSourceFile, WorkflowSourceFileListing, WorkflowSourcePreview, WorkflowSourceResolver,
 };
 
 impl WorkflowSourceResolver {
@@ -25,8 +25,9 @@ impl WorkflowSourceResolver {
         let repo_root = checkout.repo_root.clone();
         let archive_root = checkout.archive_root.clone();
         let entrypoint = entrypoint.to_string();
+        let limits = self.source_policy.collection_limits();
         let files = task::spawn_blocking(move || {
-            collect_source_files(&repo_root, &archive_root, &entrypoint)
+            collect_source_files(&repo_root, &archive_root, &entrypoint, limits)
         })
         .await
         .map_err(|error| {
@@ -132,9 +133,17 @@ fn collect_source_files(
     repo_root: &Path,
     archive_root: &Path,
     entrypoint: &str,
+    limits: WorkflowSourceCollectionLimits,
 ) -> Result<Vec<WorkflowSourceFile>, WorkflowSourceError> {
     let mut files = Vec::new();
-    collect_source_files_recursive(repo_root, archive_root, entrypoint, &mut files)?;
+    let mut tracker = WorkflowSourceCollectionTracker::new(limits);
+    collect_source_files_recursive(
+        repo_root,
+        archive_root,
+        entrypoint,
+        &mut tracker,
+        &mut files,
+    )?;
     if files.is_empty() {
         return Err(WorkflowSourceError::Snapshot(
             "workflow source file listing would be empty".to_string(),
@@ -148,6 +157,7 @@ fn collect_source_files_recursive(
     repo_root: &Path,
     current: &Path,
     entrypoint: &str,
+    tracker: &mut WorkflowSourceCollectionTracker,
     files: &mut Vec<WorkflowSourceFile>,
 ) -> Result<(), WorkflowSourceError> {
     let metadata = fs::symlink_metadata(current).map_err(|error| {
@@ -157,6 +167,7 @@ fn collect_source_files_recursive(
         ))
     })?;
     if metadata.is_file() {
+        tracker.record_file(current, metadata.len())?;
         let source_path = current.strip_prefix(repo_root).map_err(|error| {
             WorkflowSourceError::Snapshot(format!(
                 "failed to derive workflow source path for {}: {error}",
@@ -210,7 +221,7 @@ fn collect_source_files_recursive(
         {
             continue;
         }
-        collect_source_files_recursive(repo_root, &path, entrypoint, files)?;
+        collect_source_files_recursive(repo_root, &path, entrypoint, tracker, files)?;
     }
 
     Ok(())
