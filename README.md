@@ -168,8 +168,12 @@ BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \
 docker compose -f deploy/compose.yml up --build
 ```
 
-Then open `http://localhost:8080/admin/` in Chromium. The web root redirects to the admin console.
-The BPANE-00142 redesign scaffold is also served at `http://localhost:8080/admin-new/` during the migration; `/admin/` remains the active console.
+Then open `http://localhost:8080/admin/` in Chromium. The web root redirects to the stable admin console.
+
+The route-backed unified admin redesign is available in parallel at
+`http://localhost:8080/admin-new/`. It is under active development for
+BPANE-00142 and is intended for incremental manual testing while `/admin/`
+remains the stable/default console.
 The redesigned session preview popup includes a local `Metrics` drawer that can
 sample browser transition diagnostics from the BrowserPane client runtime
 without creating a backend artifact. It reports FPS, transfer rates, tile mix,
