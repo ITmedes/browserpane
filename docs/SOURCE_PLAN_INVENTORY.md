@@ -60,6 +60,13 @@ A fifth audit against legacy headings added:
   admin redesign implementation plan, admin requirements workspace, BPANE-00142
   slice plans, older domain/resource plans, and repeated validation sections.
 
+A sixth audit against the raw `review/` reports added:
+
+- `REVIEW_FINDINGS_RECONCILIATION.md` for the corrected review findings,
+  including which security items are superseded by the current baseline and
+  which token/auth/webhook/import/lifecycle/scalability/docs findings remain
+  open.
+
 ### Redesign Foundation Decision
 
 Status: Active requirement.
@@ -417,8 +424,9 @@ Needed:
 
 Near-term:
 
-- recording artifact finalization boundary,
 - token domain separation and credential redaction,
+- admin browser auth and web-security hardening,
+- recording artifact finalization boundary,
 - admin event auth without owner bearer query,
 - webhook SSRF controls,
 - browser context import safety,

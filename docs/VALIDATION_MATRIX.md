@@ -288,6 +288,49 @@ cargo test -p bpane-gateway service_principal -- --nocapture
 cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless
 ```
 
+## Review-Derived Validation Additions
+
+Use these checks when implementing items reconciled from `review/`:
+
+Token and URL credential cleanup:
+
+- connect tickets must fail automation-token validation and automation tokens
+  must fail connect-ticket validation,
+- malformed, expired, and wrong-purpose tokens must fail deterministically,
+- transport warning logs must not contain raw `token`, `access_token`, or
+  `session_ticket` query values,
+- admin event clients must not place owner bearer tokens in WebSocket query
+  strings after the replacement auth path lands.
+
+Admin browser auth and web security:
+
+- old and unified admin auth tests must cover OIDC nonce creation/validation,
+  wrong-state/wrong-nonce rejection, refresh, logout, and expired-auth
+  behavior,
+- ID-token display claims must come from verified token claims or a clearly
+  server-validated source,
+- nginx/static serving tests or smoke checks must verify CSP and security
+  headers.
+
+Webhook, import, and lifecycle:
+
+- webhook target validation must reject loopback, link-local, private,
+  multicast, unspecified IPs, and redirect-to-internal cases,
+- browser-context import tests must cover body/profile limits, ZIP entry count,
+  symlink/hardlink tar entries, duplicate profile archives, and manifest
+  errors,
+- graceful shutdown tests should prove SIGINT/SIGTERM stops new work, drains
+  bounded in-flight work, and exposes readiness/lifecycle state.
+
+Scalability and performance:
+
+- seed enough sessions, workflow runs, queued sessions, identity mappings, and
+  admin event subscribers to catch O(N^2) or N+1 query regressions,
+- include `/api/v1/sessions`, `/api/v1/identity/access-review`, dashboard
+  snapshots, and admin-event snapshots in query-count or latency checks,
+- update ARCH.md accuracy checks when capture, tile cache, or render behavior
+  changes.
+
 ## Manual Promotion Gate
 
 Before `/admin-new` can become default:

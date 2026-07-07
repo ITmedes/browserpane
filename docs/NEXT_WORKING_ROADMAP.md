@@ -27,11 +27,85 @@ Merged PR `#143` is the current status checkpoint:
 
 ## Recommended Next Slices
 
-### Slice A: Recording Artifact Finalization Boundary
+Review reconciliation update:
 
-Priority: high security/runtime cleanup.
+- workflow-source RCE/preview-symlink and bridge-local control-auth findings
+  from `review/` are treated as superseded by the current baseline,
+- token-domain separation, raw credential URL/log cleanup, admin-event query
+  auth, browser admin auth/CSP, webhook SSRF, browser-context import limits,
+  and graceful shutdown remain confirmed-open,
+- recording artifact finalization remains a valid cleanup item, but it should
+  not displace confirmed-open token/auth/webhook/import/lifecycle findings when
+  choosing the next security-driven slice.
 
-Why now:
+### Slice A: Token Domain Separation And URL Credential Cleanup
+
+Priority: high security cleanup before admin-new promotion.
+
+Why:
+
+- Connect tickets and automation tokens must not be interchangeable.
+- WebTransport and admin-event paths should not log or transport raw owner
+  bearer tokens in URLs.
+- The current admin event stream uses owner bearer query auth for browser
+  compatibility.
+- This affects both admin apps and must be solved once, not duplicated.
+
+Scope:
+
+1. Create or confirm a canonical issue.
+2. Add or update a focused implementation document in the consolidated planning
+   workspace before coding starts.
+3. Add token purpose/audience separation or distinct signing keys.
+4. Use versioned token parsing so old/wrong-purpose tokens fail safely.
+5. Use constant-time HMAC verification.
+6. Redact query strings and sanitize transport warning paths.
+7. Replace admin-event `access_token` query auth with a scoped event-stream
+   credential or a browser-compatible alternative.
+8. Update old admin and unified admin event consumers together.
+
+Validation:
+
+- token validation unit tests for wrong-purpose rejection,
+- malformed/expired/wrong-purpose token tests,
+- constant-time signature validation or library-backed verification tests,
+- transport log redaction tests,
+- admin event auth tests proving owner bearers are not placed in WebSocket
+  query strings,
+- old and new admin realtime/event smokes.
+
+### Slice B: Admin Browser Auth And Web Security
+
+Priority: high before default admin promotion.
+
+Why:
+
+- The old and unified admin apps both own security-sensitive browser auth code.
+- OIDC nonce, ID-token verification, token persistence, and CSP/security
+  headers are browser-facing trust boundaries.
+- Solving this once reduces the risk of duplicated auth fixes across two apps.
+
+Scope:
+
+1. Extract or share admin auth implementation where practical.
+2. Add OIDC nonce generation, storage, and validation.
+3. Verify ID-token signatures/issuer/audience before using ID-token claims.
+4. Reduce JavaScript-readable refresh-token exposure.
+5. Add CSP and standard static-serving security headers.
+6. Keep local demo credentials documented as local-only.
+
+Validation:
+
+- old and unified admin auth unit tests,
+- login/logout/refresh/expired-auth smokes,
+- negative nonce and ID-token tests,
+- security-header checks.
+
+### Slice C: Recording Artifact Finalization Boundary
+
+Priority: medium/high security/runtime cleanup.
+
+Why:
 
 - The recording worker can complete a recording with a gateway-local
   `source_path`.
@@ -64,33 +138,7 @@ Validation:
   works.
 - unified admin recording catalog smoke after backend changes.
 
-### Slice B: Token Domain Separation And URL Credential Cleanup
-
-Priority: high security cleanup before admin-new promotion.
-
-Why:
-
-- Connect tickets and automation tokens must not be interchangeable.
-- WebTransport and admin-event paths should not log or transport raw owner
-  bearer tokens in URLs.
-- This affects both admin apps and must be solved once, not duplicated.
-
-Scope:
-
-1. Add token purpose/audience separation or distinct signing keys.
-2. Redact query strings in transport logs.
-3. Replace admin-event `access_token` query auth with a scoped event-stream
-   credential or a browser-compatible alternative.
-4. Update old admin and unified admin event consumers together.
-
-Validation:
-
-- token validation unit tests for wrong-purpose rejection,
-- transport log redaction tests,
-- admin event auth tests,
-- old and new admin realtime/event smokes.
-
-### Slice C: Route-Backed Workflow Run Detail
+### Slice D: Route-Backed Workflow Run Detail
 
 Priority: admin-new parity.
 
@@ -119,7 +167,7 @@ Validation:
   read-only assertions,
 - old admin workflow-run-detail smoke as regression.
 
-### Slice D: Route-Backed Session Subareas
+### Slice E: Route-Backed Session Subareas
 
 Priority: admin-new parity.
 
@@ -146,7 +194,7 @@ Validation:
 - unified sessions smoke extended to cover tab/subroute navigation,
 - old admin session/detail/files/recording/mcp/metrics smokes as regression.
 
-### Slice E: Identity And Access Review Route
+### Slice F: Identity And Access Review Route
 
 Priority: admin-new enterprise parity.
 
@@ -170,7 +218,7 @@ Validation:
 - smoke for current principal/access-review,
 - old admin identity/access-review behavior where available as regression.
 
-### Slice F: API Companion And Coverage Routes
+### Slice G: API Companion And Coverage Routes
 
 Priority: admin-new completion/documentation.
 

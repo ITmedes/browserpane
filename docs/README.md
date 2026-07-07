@@ -59,6 +59,9 @@ Current branch context:
 - `PROJECT_GOVERNANCE_REQUIREMENTS.md`: detailed project quota, admission,
   queueing, policy binding, usage, retained-storage, and privacy-boundary
   requirements.
+- `REVIEW_FINDINGS_RECONCILIATION.md`: comparison of the raw `review/`
+  findings against the consolidated docs and current tree, including which
+  findings are superseded, still open, or newly promoted into the roadmap.
 - `RESOURCE_LIFECYCLE_REQUIREMENTS.md`: browser-context, session-template,
   network identity, egress profile, diagnostics, and proxy-auth lifecycle
   requirements.
@@ -110,8 +113,8 @@ The cleanup/security plan also identifies hardening work that should happen
 before promotion is treated as production-ready:
 
 - token domain separation and URL credential redaction
+- admin browser auth and web-security hardening
 - admin event stream auth without owner bearer query parameters
-- recording artifact finalization boundary
 - webhook SSRF controls
 - browser context import safety
 - gateway lifecycle/readiness
@@ -156,6 +159,13 @@ plans. It confirms that the open-issues merge maps, review cleanup slices,
 large admin redesign steps, domain/resource plans, and repeated smoke sections
 are represented by current consolidated documents instead of by references back
 to the old folder.
+
+The sixth pass reconciled the raw `review/` folder. It confirmed that workflow
+source RCE/preview-symlink and bridge-local control-auth findings are now
+superseded by later hardening, while token-domain separation, admin web auth,
+webhook SSRF, browser-context import limits, graceful shutdown/readiness,
+control-plane aggregation scalability, and durable documentation fixes remain
+active roadmap items.
 
 ## Maintenance Rule
 
