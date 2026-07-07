@@ -616,7 +616,7 @@ represented by the destination documents above.
 
 ## Final Assessment
 
-After this pass, the old planning folder can be treated as historical source
+After this pass, the old planning folder was treated as historical source
 material, not as required working context. The consolidated workspace now has
 coverage at four levels:
 
@@ -626,5 +626,6 @@ coverage at four levels:
 4. next-step execution owned by `NEXT_WORKING_ROADMAP.md` and
    `SECURITY_RUNTIME_ROADMAP.md`.
 
-The old folder should still be removed only in a dedicated documentation cleanup
-PR after contributor guidance points at the replacement workspace.
+The old folder has been removed in a dedicated documentation cleanup step after
+contributor guidance was pointed at the temporary replacement workspace. The
+remaining cleanup is to rename `doc_updated/` back to `docs/`.
