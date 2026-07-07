@@ -404,6 +404,20 @@ These endpoints must be documented separately from the frozen owner-scoped API:
 The coverage manifest should document why each endpoint exists, whether it is
 frozen, and which UI flow owns it.
 
+## Project Route Examples
+
+Project CRUD and usage examples in the API companion should include at least:
+
+- `POST /api/v1/projects`
+- `GET /api/v1/projects`
+- `GET /api/v1/projects/{project_id}`
+- `PUT /api/v1/projects/{project_id}`
+- `GET /api/v1/projects/{project_id}/usage`
+
+The corresponding admin forms should keep `ProjectResource`, `ProjectQuotas`,
+`ProjectPolicy`, `ProjectUsageResource`, and `ProjectUsageAlertResource`
+mapping tests aligned with those routes.
+
 ## Gateway Route Audit Anchors
 
 When a route is migrated, compare client behavior with these implementation

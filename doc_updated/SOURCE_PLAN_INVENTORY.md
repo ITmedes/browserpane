@@ -45,6 +45,14 @@ A third audit against the older platform plans added:
 - `ADMIN_INTERACTION_REQUIREMENTS.md` for global feedback, panel-local
   messages, session creation configurator behavior, metrics, and logs.
 
+A fourth audit against identifier-level gaps added:
+
+- `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md` for side-by-side app topology,
+  old-admin parity anchors, API boundary extraction anchors, selector policy,
+  pattern library guardrails, and route/prototype corrections.
+- `LEGACY_DOC_RETENTION_AUDIT.md` for a per-file disposition table mapping
+  every old planning document to its consolidated destination.
+
 ### Redesign Foundation Decision
 
 Status: Active requirement.
@@ -77,6 +85,9 @@ Retained requirements:
 - explicit loading/error/empty/disabled/success states,
 - manual checkpoints after each route migration,
 - no old admin deletion until explicit promotion and fallback removal gate.
+- implementation guardrails for static serving, package topology, old-admin
+  parity anchors, selectors, and patterns are preserved in
+  `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md`.
 
 Current implementation:
 

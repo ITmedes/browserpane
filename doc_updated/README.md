@@ -38,6 +38,9 @@ Current branch context:
 - `ADMIN_NEW_API_COVERAGE.md`: owner-scoped OpenAPI coverage, operation
   classification, compatibility endpoints, schema parity, and API companion
   requirements.
+- `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md`: side-by-side package topology,
+  old-admin parity anchors, API extraction anchors, selector policy, pattern
+  library guardrails, and prototype route corrections.
 - `ADMIN_NEW_MANUAL_CHECKPOINTS.md`: route-by-route manual validation gates and
   final regression sequence for the side-by-side admin migration.
 - `ADMIN_INTERACTION_REQUIREMENTS.md`: global notifications, panel-local
@@ -46,6 +49,9 @@ Current branch context:
   requirements that remain relevant to the admin app and future slices.
 - `IDENTITY_ACCESS_REQUIREMENTS.md`: current principal, access review,
   service-principal registry, identity mappings, and admin/CLI requirements.
+- `LEGACY_DOC_RETENTION_AUDIT.md`: per-file disposition table for every legacy
+  planning document and the consolidated destination that now owns its active
+  context.
 - `PROJECT_GOVERNANCE_REQUIREMENTS.md`: detailed project quota, admission,
   queueing, policy binding, usage, retained-storage, and privacy-boundary
   requirements.
@@ -131,6 +137,15 @@ pre-date the `/admin-new` redesign but still matter for implementation:
 - network identity and egress/proxy-auth diagnostics,
 - identity access-review, service-principal registry, and identity mappings,
 - global feedback and session creation configurator behavior.
+
+The fourth pass added:
+
+- old-admin route and symbol parity anchors,
+- API boundary extraction and mapper/test anchors,
+- selector manifest and pattern library details,
+- side-by-side static serving/build guardrails,
+- concept/prototype route corrections,
+- a per-file retention audit for all legacy planning documents.
 
 ## Retirement Rule For The Old Planning Folder
 
