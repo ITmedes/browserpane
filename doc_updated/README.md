@@ -1,0 +1,105 @@
+# BrowserPane Consolidated Planning Workspace
+
+Created: 2026-07-07
+
+This folder is the standalone replacement planning workspace for the active
+BrowserPane plan set. It consolidates the still-valid information from the old
+plan files and the current implementation state so the legacy planning folder
+can be retired later without losing context.
+
+The consolidation is scoped around the current BPANE-00142 unified admin app
+work and the cleanup/security plan that now gates promotion. It intentionally
+keeps the focus on what is implemented, what is still valid, and what should be
+worked next.
+
+Legacy inputs that were consolidated:
+
+- all project plan files under the previous planning folder
+- the BPANE-00142 admin redesign requirements workspace
+- the open-issues integration plan
+- the current implementation under `code/web/bpane-admin-unified`
+
+Current branch context:
+
+- `/admin/` remains the stable/default admin console.
+- `/admin-new/` is the route-backed unified admin app under active
+  development.
+- PR `#143` has been merged and is the current baseline for `/admin-new`,
+  workflow source hardening, and MCP control-auth hardening.
+- Issue `#142` remains the parent redesign issue and should not be closed by
+  follow-up implementation PRs until the promotion gate is actually reached.
+
+## Files
+
+- `ADMIN_NEW_STATUS.md`: current `/admin-new` implementation state versus the
+  consolidated redesign requirements.
+- `ADMIN_NEW_REQUIREMENTS.md`: standalone information architecture, parity,
+  route, UX, selector, and pattern requirements for the unified admin app.
+- `DOMAIN_REQUIREMENTS.md`: standalone control-plane and product-domain
+  requirements that remain relevant to the admin app and future slices.
+- `SOURCE_PLAN_INVENTORY.md`: compact legacy plan-to-topic map with the
+  retained requirements embedded by topic.
+- `NEXT_WORKING_ROADMAP.md`: prioritized remaining work, keeping admin-new
+  promotion in view.
+- `SECURITY_RUNTIME_ROADMAP.md`: security, runtime, scale, and production
+  hardening roadmap extracted from the review cleanup plan.
+- `VALIDATION_MATRIX.md`: focused validation and smoke expectations for the
+  current state and upcoming slices.
+
+## High-Level Result
+
+The unified admin app has meaningful route-backed coverage now:
+
+- dashboard
+- projects
+- browser contexts
+- egress profiles
+- file workspaces
+- sessions
+- session creation
+- session preview popup
+- recordings overview
+- workflows
+- workflow runs overview
+- MCP delegation controls in session detail
+
+The unified admin app is not ready to replace `/admin/` yet. The important
+remaining admin-new gaps are:
+
+- route-backed workflow-run detail with logs, events, controls, input, and
+  produced files
+- route-backed session subareas for files, network, policy, automation, and
+  observability
+- identity/access review route
+- API companion and API coverage route
+- session template catalog management
+- extensions catalog
+- credential bindings catalog
+- workflow event subscriptions catalog
+- command palette
+- explicit promotion/cutover gate
+
+The cleanup/security plan also identifies hardening work that should happen
+before promotion is treated as production-ready:
+
+- token domain separation and URL credential redaction
+- admin event stream auth without owner bearer query parameters
+- recording artifact finalization boundary
+- webhook SSRF controls
+- browser context import safety
+- gateway lifecycle/readiness
+- admin/session catalog scalability
+
+## Retirement Rule For The Old Planning Folder
+
+Before the old planning folder is removed, verify that:
+
+1. every active requirement is represented in this folder,
+2. obsolete historical issue merge maps are either intentionally dropped or
+   summarized in `SOURCE_PLAN_INVENTORY.md`,
+3. contributor guidance is updated to create future planning documents in the
+   new location,
+4. the promotion gate in `ADMIN_NEW_STATUS.md` still reflects the live code.
+
+The old source files should not be deleted in the same PR that changes product
+behavior. Treat that as a documentation cleanup PR.
