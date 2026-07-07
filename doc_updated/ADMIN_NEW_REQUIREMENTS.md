@@ -33,6 +33,11 @@ Required interaction qualities:
 - no mock data as production defaults,
 - no provider references copied from external competitor/prototype material.
 
+Prototype-only affordances must be translated into BrowserPane product
+behavior before implementation. In particular, the legacy prototype
+`ShareTokenForm` concept stays deferred until a backend share/handoff contract
+exists.
+
 ## Information Architecture
 
 The navigation groups are:
@@ -385,7 +390,7 @@ Initial reusable patterns:
 - searchable resource list/table,
 - selected-resource summary,
 - route-backed detail tabs,
-- compact action bar with disabled reasons,
+- compact action bar with disabled reasons for real resource commands,
 - status badges,
 - feedback message,
 - empty/loading/error states,
@@ -396,6 +401,10 @@ Initial reusable patterns:
 - live viewport frame,
 - copy button,
 - command palette.
+
+The `ActionBar` pattern should group actual resource actions near the selected
+resource metadata. It must not carry mock concept actions into production, and
+unsupported actions should be disabled with a reason or omitted.
 
 Acceptance for a pattern:
 
@@ -454,4 +463,3 @@ Do not promote `/admin-new` until:
 8. manual regression checkpoints pass,
 9. `/admin/` remains available as a fallback until a dated removal gate is
    accepted.
-
