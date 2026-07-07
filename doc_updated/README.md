@@ -35,8 +35,16 @@ Current branch context:
   consolidated redesign requirements.
 - `ADMIN_NEW_REQUIREMENTS.md`: standalone information architecture, parity,
   route, UX, selector, and pattern requirements for the unified admin app.
+- `ADMIN_NEW_API_COVERAGE.md`: owner-scoped OpenAPI coverage, operation
+  classification, compatibility endpoints, schema parity, and API companion
+  requirements.
+- `ADMIN_NEW_MANUAL_CHECKPOINTS.md`: route-by-route manual validation gates and
+  final regression sequence for the side-by-side admin migration.
 - `DOMAIN_REQUIREMENTS.md`: standalone control-plane and product-domain
   requirements that remain relevant to the admin app and future slices.
+- `PROJECT_GOVERNANCE_REQUIREMENTS.md`: detailed project quota, admission,
+  queueing, policy binding, usage, retained-storage, and privacy-boundary
+  requirements.
 - `SOURCE_PLAN_INVENTORY.md`: compact legacy plan-to-topic map with the
   retained requirements embedded by topic.
 - `NEXT_WORKING_ROADMAP.md`: prioritized remaining work, keeping admin-new
@@ -89,6 +97,19 @@ before promotion is treated as production-ready:
 - browser context import safety
 - gateway lifecycle/readiness
 - admin/session catalog scalability
+
+## Second-Pass Audit Result
+
+The consolidation was checked again against the high-context legacy files, not
+only against filenames. The second pass added standalone coverage for:
+
+- the detailed OpenAPI operation classification matrix,
+- non-OpenAPI compatibility endpoints and MCP/runtime helper surfaces,
+- schema/request/content/error parity requirements,
+- route-by-route manual checkpoints,
+- the final promotion regression sequence,
+- detailed project governance quota, queue, usage, policy, and retained-storage
+  behavior.
 
 ## Retirement Rule For The Old Planning Folder
 

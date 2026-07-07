@@ -46,6 +46,74 @@ npm run smoke:admin-unified-workflows -- --headless
 npm run smoke:admin-unified-workflow-runs -- --headless
 ```
 
+## Broader Existing Client Smoke Matrix
+
+The old and new admin apps coexist, so broader browser/client smokes must remain
+runnable while promotion work continues. Run the relevant subset when a slice
+touches the associated behavior, and run the full set before a promotion
+decision:
+
+```bash
+npm run smoke:admin-session -- --headless
+npm run smoke:admin-session-detail -- --headless
+npm run smoke:admin-session-files -- --headless
+npm run smoke:admin-recording -- --headless
+npm run smoke:admin-workflow -- --headless
+npm run smoke:admin-workflow-catalog -- --headless
+npm run smoke:admin-workflow-run-detail -- --headless
+npm run smoke:admin-browserpane-tour -- --headless
+npm run smoke:admin-egress-profiles -- --headless
+npm run smoke:admin-browser-contexts -- --headless
+npm run smoke:admin-file-workspaces -- --headless
+npm run smoke:admin-mcp -- --headless --connect-timeout-ms 60000
+npm run smoke:admin-metrics -- --headless
+npm run smoke:admin-realtime -- --headless
+npm run smoke:admin-event-reconnect -- --headless
+npm run smoke:automation-tasks -- --headless
+npm run smoke:bpane-cli -- --headless
+npm run smoke:browser-policy -- --headless
+npm run smoke:file-workspaces -- --headless
+npm run smoke:mcp-session-endpoints -- --headless --connect-timeout-ms 60000
+npm run smoke:multisession -- --headless
+npm run smoke:recording -- --headless
+npm run smoke:session-files -- --headless
+npm run smoke:test-embed-lifecycle -- --headless
+npm run smoke:test-embed-overlay -- --headless
+npm run smoke:workflow-admission -- --headless
+npm run smoke:workflow-cancel -- --headless
+npm run smoke:workflow-cli -- --headless
+npm run smoke:workflow-credential-injection -- --headless
+npm run smoke:workflow-credentials -- --headless
+npm run smoke:workflow-embed -- --headless
+npm run smoke:workflow-embed-operations -- --headless
+npm run smoke:workflow-events -- --headless
+npm run smoke:workflow-extension -- --headless
+npm run smoke:workflow-failure -- --headless
+npm run smoke:workflow-intervention -- --headless
+npm run smoke:workflow-queued-cancel -- --headless
+npm run smoke:workflow-reconnect -- --headless
+npm run smoke:workflow-restart-safety -- --headless
+npm run smoke:workflow-runtime-hold -- --headless
+npm run smoke:workflow-workspace -- --headless
+npm run smoke:workflows -- --headless
+npm run workflow:cli -- --help
+npm run test:coverage
+```
+
+Each migrated route should cover:
+
+- unauthenticated or expired-auth redirect/logout behavior,
+- validation errors,
+- missing resources,
+- conflict responses,
+- backend unavailable responses,
+- empty lists,
+- loading states,
+- disabled actions,
+- destructive action feedback,
+- upload/download failure feedback,
+- no horizontal overflow on desktop and narrow mobile viewports.
+
 ## Old Admin Regression Smokes To Keep Until Promotion
 
 Run from `code/web/bpane-client` when the touched area overlaps old `/admin/`:
@@ -188,4 +256,3 @@ Before `/admin-new` can become default:
    - egress profile edit/probe,
    - identity/access review once implemented.
 5. Keep `/admin/` as fallback until a dated removal gate is accepted.
-

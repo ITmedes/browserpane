@@ -16,6 +16,23 @@ planning files should not be needed to understand current work.
 
 ## Active Admin-New Redesign Requirements
 
+### Second-Pass Consolidation Additions
+
+Status: Added to this consolidated workspace.
+
+The first consolidation pass intentionally kept requirements compact. A second
+audit against the highest-context legacy files added standalone documents for
+details that should not be lost when the old planning folder is retired:
+
+- `ADMIN_NEW_API_COVERAGE.md` preserves the OpenAPI operation classification
+  matrix, compatibility endpoint inventory, schema/request/content/error
+  parity rules, and API companion acceptance criteria.
+- `ADMIN_NEW_MANUAL_CHECKPOINTS.md` preserves the route-by-route manual gates,
+  old/new admin coexistence checks, and final promotion regression sequence.
+- `PROJECT_GOVERNANCE_REQUIREMENTS.md` preserves project quota, queueing,
+  usage, policy binding, egress privacy, retained-storage, and smoke
+  requirements from the large project-governance plan.
+
 ### Redesign Foundation Decision
 
 Status: Active requirement.
@@ -221,6 +238,8 @@ Retained outcomes:
 - project-scoped egress profiles and credential bindings,
 - project policy bindings for templates, contexts, egress, extensions, file
   workspaces, uploads/downloads, session-file bindings, and recordings.
+- detailed queue, budget, retained-storage, and policy behavior is preserved in
+  `PROJECT_GOVERNANCE_REQUIREMENTS.md`.
 
 Remaining:
 
