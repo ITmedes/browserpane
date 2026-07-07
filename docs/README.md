@@ -2,11 +2,11 @@
 
 Created: 2026-07-07
 
-This folder is the temporary standalone replacement planning workspace for the
-active BrowserPane plan set. It consolidates the still-valid information from
-the old plan files and the current implementation state. The legacy planning
-folder has been removed after consolidation; this folder is expected to be
-renamed back to `docs/` in a later cleanup step.
+This folder is the standalone planning workspace for the active BrowserPane
+plan set. It consolidates the still-valid information from the old plan files
+and the current implementation state. The previous scattered planning folder
+was consolidated into this current `docs/` layout so active requirements,
+roadmaps, and validation expectations can be maintained from one place.
 
 The consolidation is scoped around the current BPANE-00142 unified admin app
 work and the cleanup/security plan that now gates promotion. It intentionally
@@ -157,19 +157,14 @@ large admin redesign steps, domain/resource plans, and repeated smoke sections
 are represented by current consolidated documents instead of by references back
 to the old folder.
 
-## Temporary Migration Rule
+## Maintenance Rule
 
-The old planning folder has been removed after the consolidation checks. Until
-`doc_updated/` is renamed back to `docs/`, verify that:
+When maintaining this planning workspace, verify that:
 
 1. every active requirement is represented in this folder,
 2. obsolete historical issue merge maps are either intentionally dropped or
    summarized in `SOURCE_PLAN_INVENTORY.md`,
 3. section-level coverage remains represented in
    `LEGACY_SECTION_COVERAGE_AUDIT.md`,
-4. contributor guidance is updated to create future planning documents in the
-   temporary location,
+4. contributor guidance points future planning documents at `docs/`,
 5. the promotion gate in `ADMIN_NEW_STATUS.md` still reflects the live code.
-
-The final rename from `doc_updated/` back to `docs/` should be a documentation
-cleanup step, not part of a product-behavior PR.
