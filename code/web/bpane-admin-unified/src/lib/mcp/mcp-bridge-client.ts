@@ -1,4 +1,5 @@
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+export type AccessTokenProvider = () => Promise<string | null> | string | null;
 
 export type McpBridgeHealth = {
   readonly status: string;
@@ -32,16 +33,22 @@ export type McpBridgeControlSession = {
 
 export type McpBridgeClientOptions = {
   readonly controlUrl: string | URL;
+  readonly accessTokenProvider?: AccessTokenProvider;
   readonly fetchImpl?: FetchLike;
+  readonly onAuthenticationFailure?: () => void;
 };
 
 export class McpBridgeClient {
   readonly #controlUrl: URL;
+  readonly #accessTokenProvider: AccessTokenProvider | undefined;
   readonly #fetchImpl: FetchLike;
+  readonly #onAuthenticationFailure: (() => void) | undefined;
 
   constructor(options: McpBridgeClientOptions) {
     this.#controlUrl = new URL(options.controlUrl);
+    this.#accessTokenProvider = options.accessTokenProvider;
     this.#fetchImpl = options.fetchImpl ?? fetch;
+    this.#onAuthenticationFailure = options.onAuthenticationFailure;
   }
 
   async getHealth(): Promise<McpBridgeHealth> {
@@ -63,7 +70,18 @@ export class McpBridgeClient {
   }
 
   async #send(url: URL, init: RequestInit): Promise<Response> {
-    const response = await this.#fetchImpl(url, init);
+    const headers = new Headers(init.headers);
+    if (this.#accessTokenProvider) {
+      const accessToken = await this.#accessTokenProvider();
+      if (!accessToken) {
+        throw new Error('No active admin access token is available for MCP bridge control.');
+      }
+      headers.set('authorization', `Bearer ${accessToken}`);
+    }
+    const response = await this.#fetchImpl(url, { ...init, headers });
+    if (response.status === 401) {
+      this.#onAuthenticationFailure?.();
+    }
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
       throw new Error(`MCP bridge request failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}`);

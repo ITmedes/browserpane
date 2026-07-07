@@ -49,6 +49,7 @@ mod extensions;
 mod file_workspaces;
 mod identity;
 mod identity_mappings;
+mod mcp_bridge_control;
 mod network_identity;
 mod projects;
 mod recordings;

@@ -2071,6 +2071,44 @@ describe('bpane operator CLI', () => {
     ]);
   });
 
+  it('uses endpointBaseUrl for MCP health and bearer-authenticates same-origin control calls', async () => {
+    const io = createIo();
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({
+        mcpBridge: {
+          controlUrl: 'http://bpane.example/api/v1/mcp-bridge/control-session',
+          endpointBaseUrl: 'http://mcp.example',
+          clientId: 'bridge-client',
+        },
+      }),
+      jsonResponse({ status: 'ok', managed_sessions: [] }),
+      jsonResponse({ session: null }),
+      jsonResponse({
+        id: 'session-1',
+        state: 'running',
+        automation_delegate: { client_id: 'bridge-client' },
+      }),
+      jsonResponse({ mcp_owner: false }),
+    );
+
+    const code = await runBpaneCli(
+      ['mcp', 'doctor', 'session-1', '--base-url', 'http://bpane.example'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      io.io,
+      fetchImpl,
+    );
+
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(calls.map((call) => call.url)).toEqual([
+      'http://bpane.example/auth-config.json',
+      'http://mcp.example/health',
+      'http://bpane.example/api/v1/mcp-bridge/control-session',
+      'http://bpane.example/api/v1/sessions/session-1',
+      'http://bpane.example/api/v1/sessions/session-1/status',
+    ]);
+    expect(calls[2].init.headers.Authorization).toBe('Bearer token-1');
+  });
+
   it('diagnoses MCP delegation mismatches with remediation hints', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(

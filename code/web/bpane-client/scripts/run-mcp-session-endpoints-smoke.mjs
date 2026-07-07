@@ -36,7 +36,7 @@ async function run() {
     await cleanupAdminBeforeRun(pageA, options, log);
     accessToken = await getAdminAccessToken(pageA);
     const bridge = await resolveMcpBridge(options);
-    await clearBridgeControl(bridge);
+    await clearBridgeControl(bridge, accessToken);
 
     const sessionA = await createConnectedSession(pageA, options);
     sessions.push(sessionA);
@@ -158,13 +158,20 @@ async function cleanupSessions(accessToken, options, sessions) {
   }
 }
 
-async function clearBridgeControl(bridge) {
-  const response = await fetch(bridge.controlUrl, { method: 'DELETE' });
+async function clearBridgeControl(bridge, accessToken) {
+  const response = await fetch(bridge.controlUrl, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   if (!response.ok && response.status !== 404) throw new Error(`Could not clear MCP bridge control session: HTTP ${response.status}`);
 }
 
 function sessionMcpUrl(bridge, sessionId) {
-  return `${new URL(bridge.controlUrl).origin}/sessions/${encodeURIComponent(sessionId)}/mcp`;
+  const baseUrl = new URL(bridge.endpointBaseUrl ?? bridge.controlUrl);
+  baseUrl.pathname = `/sessions/${encodeURIComponent(sessionId)}/mcp`;
+  baseUrl.search = '';
+  baseUrl.hash = '';
+  return baseUrl.toString();
 }
 
 function apiOrigin(options) {

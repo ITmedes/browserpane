@@ -10,7 +10,8 @@ import {
 import type { McpBridgeHealth } from './mcp-bridge-client';
 
 const BRIDGE: McpBridgeConfig = {
-  controlUrl: 'http://localhost:8931/control-session',
+  controlUrl: 'http://localhost:8080/api/v1/mcp-bridge/control-session',
+  endpointBaseUrl: 'http://localhost:8931',
   clientId: 'bpane-mcp-bridge',
   issuer: 'http://localhost:8091/realms/browserpane',
   displayName: 'Local MCP bridge',
@@ -30,6 +31,14 @@ describe('buildMcpDelegationViewModel', () => {
     expect(model.canRevoke).toBe(false);
     expect(model.canSetDefault).toBe(true);
     expect(model.endpointUrl).toBe('http://localhost:8931/sessions/session-1/mcp');
+  });
+
+  it('falls back to the control URL origin for older bridge configs', () => {
+    const { endpointBaseUrl: _endpointBaseUrl, ...legacyBridge } = BRIDGE;
+    expect(sessionEndpointUrl({
+      ...legacyBridge,
+      controlUrl: 'http://localhost:8931/control-session',
+    }, 'session-1')).toBe('http://localhost:8931/sessions/session-1/mcp');
   });
 
   it('distinguishes authorized default sessions from active session-scoped clients', () => {

@@ -5,6 +5,7 @@ export type AuthExampleUser = {
 
 export type McpBridgeConfig = {
   readonly controlUrl: string;
+  readonly endpointBaseUrl?: string;
   readonly clientId: string;
   readonly issuer: string;
   readonly displayName: string;
@@ -84,8 +85,10 @@ function optionalMcpBridgeConfig(value: unknown): McpBridgeConfig | undefined {
     return undefined;
   }
   const object = expectRecord(value, 'auth config mcpBridge');
+  const endpointBaseUrl = optionalString(object.endpointBaseUrl, 'auth config mcpBridge endpointBaseUrl');
   return {
     controlUrl: expectString(object.controlUrl, 'auth config mcpBridge controlUrl'),
+    ...(endpointBaseUrl !== undefined ? { endpointBaseUrl } : {}),
     clientId: expectString(object.clientId, 'auth config mcpBridge clientId'),
     issuer: expectString(object.issuer, 'auth config mcpBridge issuer'),
     displayName: expectString(object.displayName, 'auth config mcpBridge displayName'),

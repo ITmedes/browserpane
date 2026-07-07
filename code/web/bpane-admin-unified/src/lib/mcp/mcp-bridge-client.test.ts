@@ -46,8 +46,11 @@ describe('McpBridgeClient', () => {
 
   it('sets and clears the bridge default session', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get('authorization')).toBe('Bearer admin-token');
       if (init?.method === 'PUT') {
         expect(String(input)).toBe('https://example.test/mcp/control-session');
+        expect(headers.get('content-type')).toBe('application/json');
         expect(JSON.parse(String(init.body))).toEqual({ session_id: 'session-2' });
         return jsonResponse({ session: { id: 'session-2' }, cdp_endpoint: 'http://browser:9222' }, 200);
       }
@@ -58,6 +61,7 @@ describe('McpBridgeClient', () => {
     });
     const client = new McpBridgeClient({
       controlUrl: 'https://example.test/mcp/control-session',
+      accessTokenProvider: () => 'admin-token',
       fetchImpl,
     });
 
@@ -66,6 +70,19 @@ describe('McpBridgeClient', () => {
 
     expect(control.session_id).toBe('session-2');
     expect(fetchImpl.mock.calls.map((call) => call[1]?.method)).toEqual(['PUT', 'DELETE']);
+  });
+
+  it('triggers the authentication failure hook on 401', async () => {
+    const onAuthenticationFailure = vi.fn();
+    const client = new McpBridgeClient({
+      controlUrl: 'https://example.test/mcp/control-session',
+      accessTokenProvider: () => 'expired-token',
+      fetchImpl: vi.fn<typeof fetch>(async () => jsonResponse({ error: 'unauthorized' }, 401)),
+      onAuthenticationFailure,
+    });
+
+    await expect(client.getHealth()).rejects.toThrow('HTTP 401');
+    expect(onAuthenticationFailure).toHaveBeenCalledOnce();
   });
 
   it('rejects malformed health payloads', () => {

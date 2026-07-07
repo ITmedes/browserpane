@@ -23,5 +23,9 @@ function clientCount(entries, sessionId) {
 }
 
 function healthUrl(bridge) {
-  return `${new URL(bridge.controlUrl).origin}/health`;
+  const baseUrl = new URL(bridge.endpointBaseUrl ?? bridge.controlUrl);
+  baseUrl.pathname = '/health';
+  baseUrl.search = '';
+  baseUrl.hash = '';
+  return baseUrl.toString();
 }

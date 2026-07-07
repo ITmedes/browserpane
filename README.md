@@ -583,13 +583,15 @@ The local dev flow uses those routes to bridge browser-owned and automation-owne
 - it then mints a short-lived `session_connect_ticket` from `POST /api/v1/sessions/{id}/access-tokens`
 - the gateway routes the WebTransport connect through that explicit session id instead of one global token path
 - `Delegate MCP` assigns that session to the local `bpane-mcp-bridge` service principal
-- the console then calls `mcp-bridge` on `:8931/control-session` so the bridge adopts that same session for later ownership/status calls
+- the console then calls the authenticated gateway proxy at
+  `/api/v1/mcp-bridge/control-session`; the gateway validates the owner/session
+  and forwards the request to `mcp-bridge` with its internal control bearer
+  token so the bridge adopts that same session for later ownership/status calls
 - external MCP clients can avoid the mutable bridge control target by connecting
   directly to `:8931/sessions/{session_id}/mcp` after that session is delegated
-- `/control-session` remains a local compatibility control target. It is useful
-  for the legacy test page and single-target tooling, but it is not the
-  recommended external-client mode when multiple BrowserPane sessions may be
-  delegated at the same time.
+- direct `:8931/control-session` remains a bridge-local compatibility control
+  target. In local compose it is bearer-protected and intended for gateway
+  proxying/internal smokes, not browser frontend calls.
 - the local `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource, so delegated control also works in `docker_pool` mode
 
 MCP delegation terminology:
@@ -628,7 +630,8 @@ Minimal local operator setup:
 export BPANE_ACCESS_TOKEN=<owner bearer token>
 ./scripts/bpane profile init local \
   --base-url http://localhost:8080 \
-  --mcp-control-url http://localhost:8931/control-session \
+  --mcp-control-url http://localhost:8080/api/v1/mcp-bridge/control-session \
+  --mcp-endpoint-base-url http://localhost:8931 \
   --set-default
 ```
 
@@ -927,6 +930,10 @@ Current runtime notes:
 - `mcp-bridge` keeps `/control-session` as a compatibility control target and
   supports recommended per-connection session routing through
   `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`
+- local compose routes browser/admin/CLI default-session mutations through the
+  authenticated gateway proxy at `/api/v1/mcp-bridge/control-session`; direct
+  bridge control on `:8931/control-session` is protected by the internal
+  `BPANE_MCP_BRIDGE_CONTROL_TOKEN`
 - `mcp-bridge` exposes `/health.managed_sessions` so multi-session clients can
   inspect each active control/session-bound target without relying only on the
   legacy `control_session_*` fields

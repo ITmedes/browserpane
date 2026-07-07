@@ -86,6 +86,10 @@ export class ControlClient {
     this.#fetchImpl = options.fetchImpl ?? fetch;
   }
 
+  async getAccessToken(): Promise<string> {
+    return await this.#accessTokenProvider();
+  }
+
   async getCurrentIdentity(): Promise<IdentityPrincipalResource> {
     const payload = await this.#request('GET', '/api/v1/identity/me');
     return ControlSessionMapper.toIdentityPrincipalResource(payload);
