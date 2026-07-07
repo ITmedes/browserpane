@@ -74,8 +74,9 @@ A seventh audit pass added:
 
 An eighth audit pass added:
 
-- `REVIEW_CLEANUP_WORK_ORDER.md` for the chosen order of cleanup and
-  refactoring slices that should follow from the review findings.
+- `IMPLEMENTATION_WORK_ORDER.md` for the chosen order across active security,
+  admin-new, domain-resource, runtime/operator, documentation, validation, and
+  refactoring slices.
 
 ### Redesign Foundation Decision
 

@@ -3,6 +3,9 @@
 This plan consolidates the current state from the admin redesign requirements
 and the security/runtime cleanup roadmap.
 
+For the complete cross-document priority order, use
+`IMPLEMENTATION_WORK_ORDER.md`. This file remains the short next-slice view.
+
 ## Working Principle
 
 Do not promote `/admin-new/` to the default admin console until:
