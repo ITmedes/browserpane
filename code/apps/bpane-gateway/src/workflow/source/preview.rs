@@ -6,7 +6,8 @@ use tokio::task;
 
 use super::archive::TemporaryWorkflowSourceDir;
 use super::validation::{
-    join_validated_relative_path, validate_workflow_source_entrypoint_with_policy,
+    join_validated_relative_path, validate_materialized_directory,
+    validate_materialized_regular_file, validate_workflow_source_entrypoint_with_policy,
     validated_relative_path,
 };
 use super::{
@@ -54,16 +55,12 @@ impl WorkflowSourceResolver {
         validate_source_path_under_root(source, source_path)?;
         let checkout = self.checkout_workflow_source(source, entrypoint).await?;
         let selected_path = join_validated_relative_path(&checkout.repo_root, source_path)?;
-        if !selected_path.is_file() {
-            return Err(WorkflowSourceError::Materialize(format!(
-                "workflow source file {source_path} was not found at commit {}",
-                checkout
-                    .git_source
-                    .resolved_commit
-                    .as_deref()
-                    .unwrap_or("unknown"),
-            )));
-        }
+        validate_materialized_regular_file(
+            &checkout.repo_root,
+            &selected_path,
+            "workflow source file",
+            source_path,
+        )?;
         let (content, byte_count, truncated) = read_text_preview(&selected_path, max_bytes).await?;
         Ok(WorkflowSourcePreview {
             source: WorkflowSource::Git(checkout.git_source),
@@ -97,23 +94,22 @@ impl WorkflowSourceResolver {
                     .await?;
                 let repo_root = checkout_dir.path().to_path_buf();
                 let entrypoint_path = join_validated_relative_path(&repo_root, entrypoint)?;
-                if !entrypoint_path.is_file() {
-                    return Err(WorkflowSourceError::Materialize(format!(
-                        "workflow entrypoint {entrypoint} was not found at commit {}",
-                        git_source.resolved_commit.as_deref().unwrap_or("unknown"),
-                    )));
-                }
+                validate_materialized_regular_file(
+                    &repo_root,
+                    &entrypoint_path,
+                    "workflow entrypoint",
+                    entrypoint,
+                )?;
                 let archive_root = match git_source.root_path.as_deref() {
                     Some(root_path) => join_validated_relative_path(&repo_root, root_path)?,
                     None => repo_root.clone(),
                 };
-                if !archive_root.exists() {
-                    return Err(WorkflowSourceError::Materialize(format!(
-                        "workflow source root path {} was not found at commit {}",
-                        git_source.root_path.as_deref().unwrap_or("."),
-                        git_source.resolved_commit.as_deref().unwrap_or("unknown"),
-                    )));
-                }
+                validate_materialized_directory(
+                    &repo_root,
+                    &archive_root,
+                    "workflow source root path",
+                    git_source.root_path.as_deref().unwrap_or("."),
+                )?;
                 Ok(MaterializedWorkflowSource {
                     _checkout_dir: checkout_dir,
                     git_source,

@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use reqwest::Url;
@@ -208,4 +209,77 @@ pub(super) fn join_validated_relative_path(
     value: &str,
 ) -> Result<PathBuf, WorkflowSourceError> {
     Ok(root.join(validated_relative_path("path", value)?))
+}
+
+pub(super) fn validate_materialized_regular_file(
+    repo_root: &Path,
+    path: &Path,
+    label: &str,
+    display_path: &str,
+) -> Result<(), WorkflowSourceError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        WorkflowSourceError::Materialize(format!(
+            "{label} {display_path} was not found or could not be inspected: {error}"
+        ))
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err(WorkflowSourceError::Materialize(format!(
+            "{label} {display_path} must be a regular file; symlinks are not supported"
+        )));
+    }
+    if !metadata.is_file() {
+        return Err(WorkflowSourceError::Materialize(format!(
+            "{label} {display_path} must be a regular file"
+        )));
+    }
+    validate_materialized_path_containment(repo_root, path, label, display_path)
+}
+
+pub(super) fn validate_materialized_directory(
+    repo_root: &Path,
+    path: &Path,
+    label: &str,
+    display_path: &str,
+) -> Result<(), WorkflowSourceError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        WorkflowSourceError::Materialize(format!(
+            "{label} {display_path} was not found or could not be inspected: {error}"
+        ))
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err(WorkflowSourceError::Materialize(format!(
+            "{label} {display_path} must be a directory; symlinks are not supported"
+        )));
+    }
+    if !metadata.is_dir() {
+        return Err(WorkflowSourceError::Materialize(format!(
+            "{label} {display_path} must be a directory"
+        )));
+    }
+    validate_materialized_path_containment(repo_root, path, label, display_path)
+}
+
+fn validate_materialized_path_containment(
+    repo_root: &Path,
+    path: &Path,
+    label: &str,
+    display_path: &str,
+) -> Result<(), WorkflowSourceError> {
+    let canonical_root = repo_root.canonicalize().map_err(|error| {
+        WorkflowSourceError::Materialize(format!(
+            "workflow source repository root {} could not be inspected: {error}",
+            repo_root.display()
+        ))
+    })?;
+    let canonical_path = path.canonicalize().map_err(|error| {
+        WorkflowSourceError::Materialize(format!(
+            "{label} {display_path} could not be inspected: {error}"
+        ))
+    })?;
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(WorkflowSourceError::Materialize(format!(
+            "{label} {display_path} escapes the workflow source checkout"
+        )));
+    }
+    Ok(())
 }
