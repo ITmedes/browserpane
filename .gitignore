@@ -13,6 +13,8 @@ code/tests/e2e
 dev/egress-mitmproxy/
 !dev/gen-cert.sh
 
+.codex
+
 # WASM build output
 /code/web/bpane-client/pkg/
 
@@ -32,3 +34,5 @@ code/web/bpane-admin-unified/build/
 PLAN_*.md
 plan-*.md
 *_PLAN.md
+!docs/*_PLAN.md
+!docs/**/*_PLAN.md
