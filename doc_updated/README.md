@@ -2,10 +2,11 @@
 
 Created: 2026-07-07
 
-This folder is the standalone replacement planning workspace for the active
-BrowserPane plan set. It consolidates the still-valid information from the old
-plan files and the current implementation state so the legacy planning folder
-can be retired later without losing context.
+This folder is the temporary standalone replacement planning workspace for the
+active BrowserPane plan set. It consolidates the still-valid information from
+the old plan files and the current implementation state. The legacy planning
+folder has been removed after consolidation; this folder is expected to be
+renamed back to `docs/` in a later cleanup step.
 
 The consolidation is scoped around the current BPANE-00142 unified admin app
 work and the cleanup/security plan that now gates promotion. It intentionally
@@ -156,9 +157,10 @@ large admin redesign steps, domain/resource plans, and repeated smoke sections
 are represented by current consolidated documents instead of by references back
 to the old folder.
 
-## Retirement Rule For The Old Planning Folder
+## Temporary Migration Rule
 
-Before the old planning folder is removed, verify that:
+The old planning folder has been removed after the consolidation checks. Until
+`doc_updated/` is renamed back to `docs/`, verify that:
 
 1. every active requirement is represented in this folder,
 2. obsolete historical issue merge maps are either intentionally dropped or
@@ -166,8 +168,8 @@ Before the old planning folder is removed, verify that:
 3. section-level coverage remains represented in
    `LEGACY_SECTION_COVERAGE_AUDIT.md`,
 4. contributor guidance is updated to create future planning documents in the
-   new location,
+   temporary location,
 5. the promotion gate in `ADMIN_NEW_STATUS.md` still reflects the live code.
 
-The old source files should not be deleted in the same PR that changes product
-behavior. Treat that as a documentation cleanup PR.
+The final rename from `doc_updated/` back to `docs/` should be a documentation
+cleanup step, not part of a product-behavior PR.

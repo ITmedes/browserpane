@@ -1,8 +1,9 @@
 # Legacy Document Retention Audit
 
 This file records the final consolidation disposition for every old planning
-document under `docs/`. It is intentionally explicit so the old folder can be
-removed later without guessing where its still-valid content went.
+document that previously lived under `docs/`. It is intentionally explicit so
+the removed legacy folder does not need to be restored to understand where its
+still-valid content went.
 
 Disposition meanings:
 
@@ -111,7 +112,7 @@ backtick-token equality is intentionally not required because:
 
 ## Final Coverage Checks
 
-Before deleting the old folder:
+The old folder was removed after these checks passed:
 
 1. Run exact file inventory coverage against `SOURCE_PLAN_INVENTORY.md`.
 2. Run section-level coverage against `LEGACY_SECTION_COVERAGE_AUDIT.md`.
@@ -119,5 +120,5 @@ Before deleting the old folder:
 4. Confirm no consolidated document tells readers to go back to old plans for
    active requirements.
 5. Confirm future planning guidance points to this consolidated workspace.
-6. Delete old plans only in a docs cleanup PR, not in the same PR as product
-   behavior changes.
+6. Keep the final rename from `doc_updated/` back to `docs/` as a
+   documentation cleanup step, not as part of a product-behavior change.
