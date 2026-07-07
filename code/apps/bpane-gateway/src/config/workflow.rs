@@ -8,6 +8,23 @@ pub struct WorkflowConfig {
     #[arg(long = "workflow-git-bin", default_value = "git")]
     pub workflow_git_bin: PathBuf,
 
+    /// Absolute local roots that are allowed as workflow git repository paths.
+    /// Intended for local development mounts such as /workspace; remote sources are otherwise https-only.
+    #[arg(long = "workflow-source-trusted-local-root")]
+    pub workflow_source_trusted_local_roots: Vec<PathBuf>,
+
+    /// Maximum number of files materialized from one workflow source snapshot.
+    #[arg(long = "workflow-source-max-files", default_value_t = 1024)]
+    pub workflow_source_max_files: usize,
+
+    /// Maximum byte size for one materialized workflow source file.
+    #[arg(long = "workflow-source-max-file-bytes", default_value_t = 10 * 1024 * 1024)]
+    pub workflow_source_max_file_bytes: u64,
+
+    /// Maximum total byte size for one materialized workflow source snapshot.
+    #[arg(long = "workflow-source-max-total-bytes", default_value_t = 50 * 1024 * 1024)]
+    pub workflow_source_max_total_bytes: u64,
+
     /// Docker CLI binary used to launch short-lived workflow worker jobs.
     #[arg(long = "workflow-worker-docker-bin", default_value = "docker")]
     pub workflow_worker_docker_bin: PathBuf,

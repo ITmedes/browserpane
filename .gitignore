@@ -21,6 +21,8 @@ node_modules/
 dist/
 code/web/bpane-admin/.svelte-kit/
 code/web/bpane-admin/build/
+code/web/bpane-admin-unified/.svelte-kit/
+code/web/bpane-admin-unified/build/
 
 # IDE
 .vscode/

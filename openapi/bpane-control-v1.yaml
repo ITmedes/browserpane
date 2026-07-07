@@ -1167,6 +1167,46 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}/source-validation:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    post:
+      tags: [Workflows]
+      summary: Validate a workflow definition source before publishing a version
+      operationId: validateWorkflowDefinitionSource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateWorkflowDefinitionSourceRequest'
+      responses:
+        '200':
+          description: Workflow definition source validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionSourceValidationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Workflow source ref could not be resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Workflow source repository could not be accessed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflows/{workflow_id}/versions:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -1233,6 +1273,83 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}/versions/{version}/source-preview:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/WorkflowVersion'
+    get:
+      tags: [Workflows]
+      summary: Fetch a bounded text preview of a workflow definition version source file
+      operationId: getWorkflowDefinitionSourcePreview
+      parameters:
+        - name: path
+          in: query
+          required: false
+          description: Relative source file path inside the workflow source root. Defaults to the workflow version entrypoint.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workflow definition source preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionSourcePreviewResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Workflow source ref could not be resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Workflow source repository could not be accessed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/workflows/{workflow_id}/versions/{version}/source-files:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/WorkflowVersion'
+    get:
+      tags: [Workflows]
+      summary: List available source files for a workflow definition version
+      operationId: listWorkflowDefinitionSourceFiles
+      responses:
+        '200':
+          description: Workflow definition source file listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinitionSourceFileListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Workflow source ref could not be resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Workflow source repository could not be accessed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/workflow-runs:
@@ -2982,6 +3099,40 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/sessions/{session_id}/recording-policy:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    put:
+      tags: [Session Recordings]
+      summary: Update the recording policy for an existing owned session
+      operationId: updateSessionRecordingPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionRecordingPolicy'
+      responses:
+        '200':
+          description: Updated session resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Recording worker is unavailable or the policy cannot be applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/sessions/{session_id}/mcp-owner:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -4217,6 +4368,35 @@ components:
           type: array
           items:
             type: string
+    ValidateWorkflowDefinitionSourceRequest:
+      type: object
+      additionalProperties: false
+      required: [entrypoint, source]
+      properties:
+        entrypoint:
+          type: string
+          description: Relative workflow entrypoint to validate against the supplied source root.
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+    WorkflowDefinitionSourceValidationResponse:
+      type: object
+      required:
+        - workflow_definition_id
+        - entrypoint
+        - source
+        - files
+      properties:
+        workflow_definition_id:
+          type: string
+          format: uuid
+        entrypoint:
+          type: string
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowDefinitionSourceFileResource'
     WorkflowDefinitionVersionResource:
       type: object
       required:
@@ -4273,6 +4453,100 @@ components:
         created_at:
           type: string
           format: date-time
+    WorkflowDefinitionSourcePreviewResource:
+      type: object
+      required:
+        - workflow_definition_id
+        - workflow_version
+        - entrypoint
+        - path
+        - source
+        - media_type
+        - language
+        - content
+        - byte_count
+        - max_bytes
+        - truncated
+      properties:
+        workflow_definition_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: string
+        entrypoint:
+          type: string
+        path:
+          type: string
+          description: Relative source file path included in this preview.
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+        media_type:
+          type: string
+        language:
+          type: string
+          enum:
+            - typescript
+            - json
+            - text
+        content:
+          type: string
+          description: UTF-8 text preview of the selected source file.
+        byte_count:
+          type: integer
+          minimum: 0
+        max_bytes:
+          type: integer
+          minimum: 1
+        truncated:
+          type: boolean
+    WorkflowDefinitionSourceFileResource:
+      type: object
+      required:
+        - path
+        - byte_count
+        - media_type
+        - language
+        - entrypoint
+      properties:
+        path:
+          type: string
+          description: Relative source file path.
+        byte_count:
+          type: integer
+          minimum: 0
+        media_type:
+          type: string
+        language:
+          type: string
+          enum:
+            - typescript
+            - json
+            - text
+        entrypoint:
+          type: boolean
+          description: True when this file is the workflow version entrypoint.
+    WorkflowDefinitionSourceFileListResponse:
+      type: object
+      required:
+        - workflow_definition_id
+        - workflow_version
+        - entrypoint
+        - source
+        - files
+      properties:
+        workflow_definition_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: string
+        entrypoint:
+          type: string
+        source:
+          $ref: '#/components/schemas/WorkflowSource'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowDefinitionSourceFileResource'
     WorkflowSource:
       oneOf:
         - $ref: '#/components/schemas/WorkflowGitSource'
@@ -5366,9 +5640,7 @@ components:
       enum:
         - owner_clients
         - viewer_clients
-        - recorder_clients
         - automation_owner
-        - recording_activity
         - automation_tasks
         - workflow_runs
     SessionStopBlocker:
@@ -7279,6 +7551,8 @@ components:
           $ref: '#/components/schemas/SessionOwnerMode'
         viewport:
           $ref: '#/components/schemas/SessionViewport'
+        capabilities:
+          $ref: '#/components/schemas/SessionCapabilities'
         idle_timeout_sec:
           type: integer
           minimum: 1
@@ -7409,8 +7683,11 @@ components:
       type: string
       enum:
         - manual_stop
+        - client_disconnect
+        - disconnect_all
         - session_stop
         - session_kill
+        - runtime_release
         - idle_stop
         - gateway_restart
         - worker_exit

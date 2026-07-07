@@ -73,6 +73,8 @@ async function run() {
       accessToken,
       '--mcp-control-url',
       bridge.controlUrl,
+      '--mcp-endpoint-base-url',
+      bridge.endpointBaseUrl ?? new URL(bridge.controlUrl).origin,
       '--mcp-client-id',
       bridge.clientId,
       '--mcp-issuer',
@@ -870,7 +872,7 @@ async function run() {
       }).catch(() => {});
     }
     if (sessionId && accessToken) {
-      await clearMcpBridge(options).catch(() => {});
+      await clearMcpBridge(options, accessToken).catch(() => {});
       await fetch(`${apiOrigin(options)}/api/v1/sessions/${sessionId}/automation-owner`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -940,9 +942,12 @@ function ensureBridgeServicePrincipal(cliEnv, bridge, runLabel) {
   ], cliEnv);
 }
 
-async function clearMcpBridge(options) {
+async function clearMcpBridge(options, accessToken) {
   const bridge = await loadMcpBridgeConfig(options);
-  const response = await fetch(bridge.controlUrl, { method: 'DELETE' });
+  const response = await fetch(bridge.controlUrl, {
+    method: 'DELETE',
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
   if (!response.ok && response.status !== 404) {
     const detail = await response.text().catch(() => '');
     throw new Error(`Could not clear MCP bridge control session: HTTP ${response.status}${detail ? ` ${detail}` : ''}`);

@@ -44,6 +44,16 @@ pub struct SessionTelemetrySnapshot {
     pub egress_lagged_frames_total: u64,
 }
 
+impl SessionTelemetrySnapshot {
+    pub fn interactive_browser_clients(&self) -> u32 {
+        self.browser_clients.saturating_sub(self.recorder_clients)
+    }
+
+    pub fn has_interactive_session_activity(&self) -> bool {
+        self.interactive_browser_clients() > 0 || self.viewer_clients > 0 || self.mcp_owner
+    }
+}
+
 pub(super) async fn snapshot(hub: &SessionHub, resolution: (u16, u16)) -> SessionTelemetrySnapshot {
     let browser_clients = hub.client_count();
     let viewer_clients = hub.viewer_count();

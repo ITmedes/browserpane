@@ -10,7 +10,7 @@ use crate::session_control::{
     CreateSessionRequest, SessionOwnerMode, SessionRecordingPolicy, SessionStore,
 };
 use crate::session_hub::BrowserClientRole;
-use crate::transport::policy::SessionFileTransportPolicy;
+use crate::transport::policy::SessionTransportPolicy;
 
 fn empty_request() -> CreateSessionRequest {
     CreateSessionRequest {
@@ -20,6 +20,7 @@ fn empty_request() -> CreateSessionRequest {
         network_identity: None,
         owner_mode: None,
         viewport: None,
+        capabilities: Default::default(),
         idle_timeout_sec: None,
         labels: HashMap::new(),
         integration_context: None,
@@ -74,7 +75,7 @@ async fn validate_request_path_accepts_valid_token() {
         Ok(ValidatedConnectRequest {
             session_id: session.id,
             client_role: BrowserClientRole::Interactive,
-            file_transfer_policy: SessionFileTransportPolicy::default(),
+            transport_policy: SessionTransportPolicy::default(),
         })
     );
 }
@@ -103,7 +104,7 @@ async fn validate_request_path_accepts_recorder_client_role() {
         Ok(ValidatedConnectRequest {
             session_id: session.id,
             client_role: BrowserClientRole::Recorder,
-            file_transfer_policy: SessionFileTransportPolicy::default(),
+            transport_policy: SessionTransportPolicy::default(),
         })
     );
 }
@@ -138,7 +139,7 @@ async fn validate_request_path_accepts_valid_session_ticket() {
         Ok(ValidatedConnectRequest {
             session_id: session.id,
             client_role: BrowserClientRole::Interactive,
-            file_transfer_policy: SessionFileTransportPolicy::default(),
+            transport_policy: SessionTransportPolicy::default(),
         })
     );
 }

@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   encodeFrame,
   CH_CONTROL,
+  CTRL_RESOLUTION_REQUEST,
   CH_CURSOR,
   CH_CLIPBOARD,
   CH_VIDEO,
@@ -404,6 +405,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -434,6 +436,20 @@ async function createSession(overrides: Record<string, any> = {}) {
   });
 
   return { session, container };
+}
+
+async function flushMicrotasks(count = 3): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    await Promise.resolve();
+  }
+}
+
+function getResolutionRequestFrames(): Uint8Array[] {
+  return mockTransport._bidiStream.writable.chunks.filter((chunk) => (
+    chunk[0] === CH_CONTROL
+      && chunk.length >= 10
+      && chunk[5] === CTRL_RESOLUTION_REQUEST
+  ));
 }
 
 // ── Tests ──────────────────────────────────────────────────────────
@@ -551,7 +567,9 @@ describe('BpaneSession', () => {
       expect((HTMLCanvasElement.prototype as any).captureStream).toHaveBeenCalledWith(24);
 
       MockMediaRecorder.instances[0].emitData(Array.from({ length: 2048 }, (_, index) => index % 256));
+      vi.useFakeTimers();
       const stopPromise = session.stopRecording();
+      await vi.advanceTimersByTimeAsync(1200);
       expect(MockMediaRecorder.instances[0].requestData).toHaveBeenCalledOnce();
       expect(MockMediaRecorder.instances[0].stop).toHaveBeenCalledOnce();
       MockMediaRecorder.instances[0].emitStop();
@@ -578,6 +596,72 @@ describe('BpaneSession', () => {
       // First chunk should be a CONTROL frame (ResolutionRequest)
       const first = chunks[0];
       expect(first[0]).toBe(CH_CONTROL);
+    });
+
+    it('retries the initial resize after the bidi stream attaches', async () => {
+      vi.useFakeTimers();
+      await createSession();
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await flushMicrotasks();
+
+      expect(getResolutionRequestFrames()).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(299);
+      expect(getResolutionRequestFrames()).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(getResolutionRequestFrames()).toHaveLength(2);
+
+      await vi.advanceTimersByTimeAsync(600);
+      expect(getResolutionRequestFrames()).toHaveLength(3);
+
+      await vi.advanceTimersByTimeAsync(900);
+      const frames = getResolutionRequestFrames();
+      expect(frames).toHaveLength(4);
+      for (const frame of frames) {
+        expect(Array.from(frame.subarray(5, 10))).toEqual([
+          CTRL_RESOLUTION_REQUEST,
+          0x20, 0x03, // 800
+          0x58, 0x02, // 600
+        ]);
+      }
+    });
+
+    it('cancels pending initial resize retries on disconnect', async () => {
+      vi.useFakeTimers();
+      const { session } = await createSession();
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await flushMicrotasks();
+
+      const initialFrameCount = getResolutionRequestFrames().length;
+      session.disconnect();
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(getResolutionRequestFrames()).toHaveLength(initialFrameCount);
+    });
+
+    it('does not retry the initial resize after the session becomes resize locked', async () => {
+      vi.useFakeTimers();
+      await createSession();
+
+      mockTransport._incomingBidi.pushValue(mockTransport._bidiStream);
+      await flushMicrotasks();
+
+      const accessPayload = new Uint8Array(6);
+      accessPayload[0] = 0x09; // ClientAccessState
+      accessPayload[1] = 0x02; // resize locked only
+      accessPayload[2] = 0x00; accessPayload[3] = 0x05; // 1280
+      accessPayload[4] = 0xD0; accessPayload[5] = 0x02; // 720
+      mockTransport._bidiStream.readable.pushValue(encodeFrame(CH_CONTROL, accessPayload));
+      await flushMicrotasks();
+
+      const initialFrameCount = getResolutionRequestFrames().length;
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(getResolutionRequestFrames()).toHaveLength(initialFrameCount);
     });
 
     it('processes incoming control frames', async () => {

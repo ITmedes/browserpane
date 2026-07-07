@@ -41,6 +41,10 @@ pub struct RecordingConfig {
     #[arg(long = "recording-worker-cert-spki")]
     pub recording_worker_cert_spki: Option<String>,
 
+    /// Optional file containing the SPKI pin forwarded to the recorder worker Chromium process.
+    #[arg(long = "recording-worker-cert-spki-file")]
+    pub recording_worker_cert_spki_file: Option<PathBuf>,
+
     /// Whether the recorder worker should run Chromium headless.
     #[arg(long = "recording-worker-headless", action = clap::ArgAction::Set, default_value_t = true)]
     pub recording_worker_headless: bool,

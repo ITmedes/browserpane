@@ -31,7 +31,14 @@
   let loading = $state(false);
   let error = $state<string | null>(null);
   let feedback = $state<AdminMessageFeedback | null>(null);
-  const bridgeClient = $derived(mcpBridge ? new McpBridgeClient({ controlUrl: mcpBridge.controlUrl }) : null);
+  const bridgeClient = $derived(
+    mcpBridge
+      ? new McpBridgeClient({
+          controlUrl: mcpBridge.controlUrl,
+          accessTokenProvider: () => controlClient.getAccessToken(),
+        })
+      : null,
+  );
   const viewModel = $derived(McpDelegationViewModelBuilder.build({
     bridge: mcpBridge,
     session: selectedSession,

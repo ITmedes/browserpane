@@ -247,6 +247,9 @@ impl SessionRepository<'_> {
         let labels_value = json_labels(&request.labels);
         let extensions_value = json_applied_extensions(&request.extensions)?;
         let recording_value = json_recording_policy(&request.recording)?;
+        let capabilities_value = serde_json::to_value(&request.capabilities).map_err(|error| {
+            SessionStoreError::Backend(format!("failed to encode session capabilities: {error}"))
+        })?;
         let network_identity_value = serde_json::to_value(
             request.network_identity.clone().unwrap_or_default(),
         )
@@ -275,6 +278,7 @@ impl SessionRepository<'_> {
                 owner_mode,
                 viewport_width,
                 viewport_height,
+                capabilities,
                 idle_timeout_sec,
                 labels,
                 integration_context,
@@ -290,8 +294,9 @@ impl SessionRepository<'_> {
                 egress_tx_bytes
             )
             VALUES (
-                $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, $14, $15,
-                $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $21, $22, $23, 0, 0, 0
+                $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12, $13, $14,
+                $15::jsonb, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20::jsonb, $21, $22,
+                $22, $23, $24, 0, 0, 0
             )
             RETURNING
                 {SESSION_COLUMNS}
@@ -315,6 +320,7 @@ impl SessionRepository<'_> {
                     &owner_mode.as_str(),
                     &(viewport.width as i32),
                     &(viewport.height as i32),
+                    &capabilities_value,
                     &request.idle_timeout_sec.map(|value| value as i32),
                     &labels_value,
                     &request.integration_context,
@@ -722,6 +728,45 @@ impl SessionRepository<'_> {
         })?;
 
         row_to_stored_session(&row).map(Some)
+    }
+
+    pub(in crate::session_control) async fn update_session_recording_policy_for_owner(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        id: Uuid,
+        recording: SessionRecordingPolicy,
+    ) -> Result<Option<StoredSession>, SessionStoreError> {
+        let recording_value = json_recording_policy(&recording)?;
+        let update_query = format!(
+            r#"
+            UPDATE control_sessions
+            SET
+                recording = $4::jsonb,
+                updated_at = NOW()
+            WHERE id = $1
+              AND owner_subject = $2
+              AND owner_issuer = $3
+            RETURNING
+                {SESSION_COLUMNS}
+            "#
+        );
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                &update_query,
+                &[&id, &principal.subject, &principal.issuer, &recording_value],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to update session recording policy: {error}"
+                ))
+            })?;
+
+        row.as_ref().map(row_to_stored_session).transpose()
     }
 
     pub(in crate::session_control) async fn stop_session_if_idle(

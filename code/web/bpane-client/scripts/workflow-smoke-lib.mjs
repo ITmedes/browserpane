@@ -111,6 +111,17 @@ export async function resolveCertSpki(options) {
     return options.certSpki.trim();
   }
   try {
+    const response = await fetch(new URL('/cert-fingerprint', apiOrigin(options)));
+    if (response.ok) {
+      const value = (await response.text()).trim();
+      if (value) {
+        return value;
+      }
+    }
+  } catch {
+    // Fall back to the local generated cert metadata for offline script checks.
+  }
+  try {
     const value = await fs.readFile(
       new URL('../../../../dev/certs/cert-fingerprint.txt', import.meta.url),
       'utf8',

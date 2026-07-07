@@ -44,7 +44,10 @@ impl CredentialProviderBackend for TestCredentialProviderBackend {
     }
 }
 
-fn base_api_state(auth_validator: Arc<AuthValidator>) -> Arc<ApiState> {
+fn base_api_state(
+    auth_validator: Arc<AuthValidator>,
+    mcp_bridge_control: Option<McpBridgeControlConfig>,
+) -> Arc<ApiState> {
     Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
@@ -78,6 +81,7 @@ fn base_api_state(auth_validator: Arc<AuthValidator>) -> Arc<ApiState> {
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control,
     })
 }
 
@@ -86,13 +90,103 @@ pub(crate) fn test_router_with_state() -> (Router, String, Arc<ApiState>) {
     let token = auth_validator
         .generate_token()
         .expect("hmac auth validator should generate dev token");
-    let state = base_api_state(auth_validator);
+    let state = base_api_state(auth_validator, None);
+    (build_api_router(state.clone()), token, state)
+}
+
+pub(crate) fn test_router_with_mcp_bridge_control(
+    mcp_bridge_control: McpBridgeControlConfig,
+) -> (Router, String, Arc<ApiState>) {
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
+    let token = auth_validator
+        .generate_token()
+        .expect("hmac auth validator should generate dev token");
+    let state = base_api_state(auth_validator, Some(mcp_bridge_control));
     (build_api_router(state.clone()), token, state)
 }
 
 pub(crate) fn test_router() -> (Router, String) {
     let (router, token, _) = test_router_with_state();
     (router, token)
+}
+
+pub(crate) fn recording_lifecycle_test_config() -> RecordingWorkerConfig {
+    RecordingWorkerConfig {
+        bin: std::path::PathBuf::from("/bin/sh"),
+        args: vec!["-c".to_string(), "exit 0".to_string()],
+        chrome_executable: std::path::PathBuf::from("/tmp/google-chrome"),
+        gateway_api_url: "http://127.0.0.1:8932".to_string(),
+        page_url: "http://127.0.0.1:8080".to_string(),
+        output_root: std::path::PathBuf::from("/tmp/bpane-recordings"),
+        cert_spki: None,
+        headless: true,
+        connect_timeout: Duration::from_millis(100),
+        poll_interval: Duration::from_millis(10),
+        finalize_timeout: Duration::from_secs(1),
+        bearer_token: Some("token".to_string()),
+        oidc_token_url: None,
+        oidc_client_id: None,
+        oidc_client_secret: None,
+        oidc_scopes: None,
+    }
+}
+
+pub(crate) fn test_router_with_recording_lifecycle(
+    config: RecordingWorkerConfig,
+) -> (Router, String, Arc<ApiState>) {
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
+    let token = auth_validator
+        .generate_token()
+        .expect("hmac auth validator should generate dev token");
+    let session_store = SessionStore::in_memory();
+    let connect_ticket_manager = Arc::new(SessionConnectTicketManager::new(
+        vec![5; 32],
+        Duration::from_secs(300),
+    ));
+    let automation_access_token_manager = Arc::new(SessionAutomationAccessTokenManager::new(
+        vec![6; 32],
+        Duration::from_secs(300),
+    ));
+    let recording_lifecycle = Arc::new(
+        RecordingLifecycleManager::new(
+            Some(config),
+            auth_validator.clone(),
+            connect_ticket_manager.clone(),
+            automation_access_token_manager.clone(),
+            session_store.clone(),
+        )
+        .expect("recording lifecycle test config should be valid"),
+    );
+    let state = Arc::new(ApiState {
+        registry: Arc::new(SessionRegistry::new(10, false)),
+        auth_validator,
+        connect_ticket_manager,
+        automation_access_token_manager,
+        session_store,
+        session_manager: Arc::new(
+            SessionManager::new(SessionManagerConfig::StaticSingle {
+                agent_socket_path: "/tmp/test.sock".to_string(),
+                cdp_endpoint: Some("http://host:9223".to_string()),
+                idle_timeout: Duration::from_secs(300),
+            })
+            .unwrap(),
+        ),
+        credential_provider: Some(test_credential_provider()),
+        recording_artifact_store: test_artifact_store(),
+        workspace_file_store: test_workspace_file_store(),
+        workflow_source_resolver: test_workflow_source_resolver(),
+        recording_observability: Arc::new(RecordingObservability::default()),
+        recording_lifecycle,
+        workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
+        workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_log_retention: None,
+        workflow_output_retention: None,
+        idle_stop_timeout: Duration::from_secs(300),
+        public_gateway_url: "https://localhost:4433".to_string(),
+        default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control: None,
+    });
+    (build_api_router(state.clone()), token, state)
 }
 
 pub(crate) fn test_router_with_workflow_lifecycle(
@@ -156,6 +250,7 @@ pub(crate) fn test_router_with_workflow_lifecycle(
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control: None,
     });
     (build_api_router(state.clone()), token, state)
 }
@@ -205,6 +300,7 @@ pub(crate) async fn test_router_with_live_agent_state(
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control: None,
     });
     (build_api_router(state.clone()), token, state, agent_server)
 }
@@ -271,6 +367,7 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        mcp_bridge_control: None,
     });
     (build_api_router(state), token)
 }
@@ -295,7 +392,11 @@ pub(crate) fn test_credential_provider() -> Arc<CredentialProvider> {
 }
 
 pub(crate) fn test_workflow_source_resolver() -> Arc<WorkflowSourceResolver> {
-    Arc::new(WorkflowSourceResolver::new(std::path::PathBuf::from("git")))
+    Arc::new(WorkflowSourceResolver::with_policy(
+        std::path::PathBuf::from("git"),
+        crate::workflow::WorkflowSourcePolicy::default()
+            .with_trusted_local_roots([std::env::temp_dir()]),
+    ))
 }
 
 pub(crate) fn bearer(token: &str) -> String {

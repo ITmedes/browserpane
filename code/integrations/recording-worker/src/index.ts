@@ -21,12 +21,16 @@ async function main(): Promise<void> {
   });
   const controlClient = new RecordingControlClient({
     gatewayApiUrl: process.env.BPANE_GATEWAY_API_URL ?? "http://localhost:8932",
+    sessionAutomationAccessToken: process.env.BPANE_SESSION_AUTOMATION_ACCESS_TOKEN ?? "",
     getHeaders: (extraHeaders) => tokenManager.getAuthHeaders(extraHeaders),
   });
+  const gatewayApiUrl = process.env.BPANE_GATEWAY_API_URL ?? "http://localhost:8932";
+  const connectGatewayUrl = process.env.BPANE_RECORDING_CONNECT_GATEWAY_URL ?? deriveConnectGatewayUrl(gatewayApiUrl);
   const pageRuntime = new RecorderPageRuntime({
     pageUrl: process.env.BPANE_RECORDING_PAGE_URL ?? "http://localhost:8080",
     certSpki: process.env.BPANE_RECORDING_CERT_SPKI ?? process.env.BPANE_BENCHMARK_CERT_SPKI ?? "",
     chromeExecutablePath: requiredEnv("BPANE_RECORDING_CHROME"),
+    connectGatewayUrl,
     connectTimeoutMs: Number.parseInt(process.env.BPANE_RECORDING_CONNECT_TIMEOUT_MS ?? "30000", 10),
     headless: (process.env.BPANE_RECORDING_HEADLESS ?? "true").trim().toLowerCase() !== "false",
   });
@@ -35,6 +39,8 @@ async function main(): Promise<void> {
     recordingId: process.env.BPANE_RECORDING_ID ?? "",
     outputRoot: process.env.BPANE_RECORDING_OUTPUT_ROOT ?? "/tmp/bpane-recordings",
     pollIntervalMs: Number.parseInt(process.env.BPANE_RECORDING_POLL_INTERVAL_MS ?? "2000", 10),
+    minCaptureMs: Number.parseInt(process.env.BPANE_RECORDING_MIN_CAPTURE_MS ?? "3000", 10),
+    connect: resolveProvidedConnect(connectGatewayUrl),
     controlClient,
     pageRuntime,
   });
@@ -47,3 +53,28 @@ main().catch((error) => {
   console.error(`[recording-worker] ${message}`);
   process.exitCode = 1;
 });
+
+function resolveProvidedConnect(gatewayUrl: string): {
+  gatewayUrl: string;
+  transportPath: string;
+  connectTicket: string;
+} | null {
+  const connectTicket = (process.env.BPANE_RECORDING_CONNECT_TICKET ?? "").trim();
+  if (!connectTicket) {
+    return null;
+  }
+  return {
+    gatewayUrl,
+    transportPath: (process.env.BPANE_RECORDING_CONNECT_TRANSPORT_PATH ?? "/session").trim() || "/session",
+    connectTicket,
+  };
+}
+
+function deriveConnectGatewayUrl(gatewayApiUrl: string): string {
+  try {
+    const url = new URL(gatewayApiUrl);
+    return `https://${url.hostname}:4433`;
+  } catch {
+    return "https://localhost:4433";
+  }
+}

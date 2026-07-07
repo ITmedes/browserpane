@@ -19,6 +19,10 @@ import {
   type BridgeHealthAlignment,
 } from "./mcp-health.js";
 import {
+  authorizeControlRequest,
+  controlBearerTokenFromEnv,
+} from "./control-auth.js";
+import {
   GatewaySessionAutomationAccessResponse,
   GatewaySessionResource,
   SessionControlClient,
@@ -43,6 +47,7 @@ const GATEWAY_OIDC_TOKEN_URL = process.env.BPANE_GATEWAY_OIDC_TOKEN_URL ?? "";
 const GATEWAY_OIDC_CLIENT_ID = process.env.BPANE_GATEWAY_OIDC_CLIENT_ID ?? "";
 const GATEWAY_OIDC_CLIENT_SECRET = process.env.BPANE_GATEWAY_OIDC_CLIENT_SECRET ?? "";
 const GATEWAY_OIDC_SCOPES = process.env.BPANE_GATEWAY_OIDC_SCOPES ?? "";
+const CONTROL_BEARER_TOKEN = controlBearerTokenFromEnv(process.env);
 const SESSION_BOOTSTRAP_MODE = (
   process.env.BPANE_SESSION_BOOTSTRAP_MODE ?? "off"
 ).trim().toLowerCase();
@@ -97,6 +102,16 @@ function writeJsonRpcError(
       id: null,
     }),
   );
+}
+
+function requireControlAuthorization(req: http.IncomingMessage, res: http.ServerResponse): boolean {
+  const decision = authorizeControlRequest(req.headers, CONTROL_BEARER_TOKEN);
+  if (decision.ok) {
+    return true;
+  }
+  res.writeHead(decision.status, decision.headers);
+  res.end(JSON.stringify(decision.body));
+  return false;
 }
 
 class GatewayTokenManager {
@@ -976,6 +991,9 @@ async function main() {
     }
 
     if (url.pathname === "/control-session" && req.method === "GET") {
+      if (!requireControlAuthorization(req, res)) {
+        return;
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
@@ -993,6 +1011,9 @@ async function main() {
     }
 
     if (url.pathname === "/control-session" && req.method === "PUT") {
+      if (!requireControlAuthorization(req, res)) {
+        return;
+      }
       if (managedSessionLocked) {
         res.writeHead(409, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "control session is locked by BPANE_SESSION_ID" }));
@@ -1041,6 +1062,9 @@ async function main() {
     }
 
     if (url.pathname === "/control-session" && req.method === "DELETE") {
+      if (!requireControlAuthorization(req, res)) {
+        return;
+      }
       if (managedSessionLocked) {
         res.writeHead(409, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "control session is locked by BPANE_SESSION_ID" }));
@@ -1160,6 +1184,9 @@ async function main() {
     console.log(`[mcp-bridge] Streamable HTTP endpoint: http://0.0.0.0:${MCP_PORT}/mcp`);
     console.log(`[mcp-bridge] SSE endpoint: http://0.0.0.0:${MCP_PORT}/sse`);
     console.log(`[mcp-bridge] Health: http://0.0.0.0:${MCP_PORT}/health`);
+    console.log(
+      `[mcp-bridge] Control-session auth: ${CONTROL_BEARER_TOKEN ? "bearer required" : "disabled"}`,
+    );
     console.log(`[mcp-bridge] Supervised delay: ${SUPERVISED_DELAY_MS}ms when viewers present`);
   });
 

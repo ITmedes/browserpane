@@ -72,7 +72,9 @@ workers are launched separately by the gateway and are not modeled as a
 long-lived compose service. Local compose defaults to the `docker_pool`
 session runtime backend. The gateway image trusts the mounted local checkout at
 `/workspace` as a Git `safe.directory` so local git-backed workflow sources can
-resolve inside the container without dubious-ownership failures.
+resolve inside the container without dubious-ownership failures; compose also
+passes `/workspace` through the workflow source trusted-local-root policy so
+local repository paths are limited to that explicit development mount.
 
 ```
               Browser / E2E Test
@@ -273,7 +275,7 @@ service.
   - `GET /api/v1/identity-mappings` — list owner-scoped identity-to-project mappings
   - `GET /api/v1/identity-mappings/{id}` — fetch one owner-scoped identity mapping
   - `PUT /api/v1/identity-mappings/{id}` — replace one owner-scoped identity mapping, including active/disabled state
-  - `POST /api/v1/sessions` — create a persistent session resource
+  - `POST /api/v1/sessions` — create a persistent session resource with optional project/template/context/network bindings and optional capability restrictions
   - `GET /api/v1/sessions` — list owner-scoped sessions, with catalog filters for template id, lifecycle/runtime state, labels, integration context, limit, and offset
   - `GET /api/v1/sessions/{id}` — fetch one owner-scoped session resource
   - `DELETE /api/v1/sessions/{id}` — safe-stop one owner-scoped session resource
@@ -296,7 +298,7 @@ service.
   - `POST /api/v1/egress-profiles` — create an owner-scoped or project-scoped egress profile with sanitized proxy, optional proxy-auth credential binding reference, bypass, custom CA, and traffic-observation metadata
   - `GET /api/v1/egress-profiles` — list owner-visible egress profiles with optional project summaries
   - `GET /api/v1/egress-profiles/{id}` — fetch one egress profile
-  - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress/extension/reusable-context allow-lists and can reject new sessions when `usage_budget_enforcement=block_session_creation` and either `max_session_creations`, the rolling `max_session_creations_per_window` budget, or `max_runtime_usage_ms` is exhausted; project policy can also block live browser uploads/downloads, session-file bindings, manual recording starts, and unapproved file workspaces for project sessions and workflow runs, with session capabilities reflecting file-transfer restrictions; project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, project usage reports session creations, live-plus-finalized browser runtime milliseconds, sanitized egress receive/transmit byte totals, retained storage, and usage alerts, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, session files, and files retained in project-owned file workspaces
+  - session and workflow-run resources can carry `project_id`, a project summary, and an admission decision; project-scoped session creation enforces active-session quotas plus project template/egress/extension/reusable-context allow-lists and can reject new sessions when `usage_budget_enforcement=block_session_creation` and either `max_session_creations`, the rolling `max_session_creations_per_window` budget, or `max_runtime_usage_ms` is exhausted; project policy can also block live browser uploads/downloads, session-file bindings, manual recording starts, and unapproved file workspaces for project sessions and workflow runs, with session capabilities reflecting both explicit create-time restrictions and project file-transfer restrictions; project-scoped workflow dispatch queues runs when `max_active_workflow_runs` is exhausted, project usage reports session creations, live-plus-finalized browser runtime milliseconds, sanitized egress receive/transmit byte totals, retained storage, and usage alerts, and project retained-storage quotas are enforced for workflow produced files, completed recording artifacts, session files, and files retained in project-owned file workspaces
   - egress traffic observation is intentionally proxy-side: session resources and gateway startup logs expose safe correlation metadata, while the configured egress proxy or secure web gateway owns URL/status/bytes/timing logs. Egress usage ingestion accepts sanitized byte deltas through session-scoped APIs, and the local egress-observer fixture includes a Squid-log reporter that joins docker runtime labels to proxy client IPs without sending URLs, status, timing, payload, credentials, CA material, or decrypted traffic to BrowserPane. TLS-intercept mode is an explicit egress profile setting and requires proxy, custom CA, and sensitive-log sink references. Egress profiles and proxy authentication bindings can be owner-scoped or project-scoped; project-bound profiles and bindings are only usable by sessions in the same project, and proxy credentials are materialized only as a session-local runtime auth file.
   - `POST /api/v1/sessions/{id}/access-tokens` — mint a short-lived session-scoped connect ticket
   - `POST /api/v1/sessions/{id}/stop` — explicit safe-stop with blocker reporting
@@ -324,6 +326,7 @@ service.
   buffer, zero-copy frame slicing with `Bytes`
 - **Recording lifecycle** (`recording_lifecycle.rs`, `recording_retention.rs`, `recording_artifact_store.rs`):
   - starts/stops passive recorder workers for `recording.mode=always`
+  - launches recorder workers with session-scoped connect tickets and a shared artifact handoff path
   - persists per-segment metadata, linkage, termination reasons, and artifact refs
   - enforces retention and playback/export visibility through the control plane
 - **Browser context lifecycle** (`browser_contexts/retention.rs`, `runtime_manager.rs`, `session_control.rs`):
@@ -439,9 +442,10 @@ running against the Chromium instance inside the host container.
 - Lazy registration: only claims MCP ownership on first MCP client connect
 - Registers/clears MCP ownership with the gateway so delegated automation can attach without forcing browser clients into viewer mode
 - Uses OIDC client-credentials for gateway API access in the local compose stack
-- Exposes a local compatibility control-session API on `:8931` so the admin
-  console can point the bridge at an explicitly delegated session without
-  restarting the service
+- Exposes a compatibility control-session API on `:8931`; local compose protects
+  that bridge-local target with an internal bearer token, and browser/admin
+  callers mutate it through the authenticated gateway proxy at
+  `/api/v1/mcp-bridge/control-session`
 - Supports per-connection session routing so external MCP clients can bind to a
   delegated BrowserPane session without mutating one bridge-global target
 - `/health` keeps legacy `control_session_*` fields and also reports a
@@ -472,6 +476,7 @@ On-demand executor launched and supervised by the gateway for workflow runs.
 Gateway-supervised passive session recorder.
 
 - Attaches as a `recorder` client to the selected session
+- Uses a gateway-issued session connect ticket and a minimal recorder page rather than driving the admin UI
 - Captures WebM output from the browser-facing recording surface
 - Finalizes recording segments back into gateway-managed artifact storage
 - Supports manual session recordings and `recording.mode=always` auto-recording
@@ -487,13 +492,13 @@ The default dev stack no longer uses a shared token file.
 - the admin console discovers the OIDC provider and performs Authorization Code + PKCE
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
-- after login, the admin console lists owner-scoped `/api/v1/sessions`, projects, session templates, egress profiles, browser contexts, file workspaces, and the current `/api/v1/identity/access-review`; it lets the user join an existing session, start a new one with optional project, template, network-identity, egress-profile, and reusable-context bindings, create project-owned reusable contexts and file workspaces where needed, inspect project/admission metadata on live rows and session detail views, inspect the current principal, resource counts, project usage, registered service principals, identity-to-project mappings, unmapped principal signals, and delegated automation principals in the Identity tab, create/edit/disable/re-enable service principals and identity-to-project mappings from that tab, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
+- after login, the admin console lists owner-scoped `/api/v1/sessions`, projects, session templates, egress profiles, browser contexts, file workspaces, session-derived recording segments, and the current `/api/v1/identity/access-review`; it lets the user join an existing session, start a new one with optional project, template, network-identity, egress-profile, reusable-context, and capability bindings, create project-owned reusable contexts and file workspaces where needed, inspect and download retained recording artifacts where available, inspect project/admission metadata on live rows and session detail views, inspect the current principal, resource counts, project usage, registered service principals, identity-to-project mappings, unmapped principal signals, and delegated automation principals in the Identity tab, create/edit/disable/re-enable service principals and identity-to-project mappings from that tab, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
 - docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
 - browser-context retention cleanup is metadata-driven per context and removes expired reusable profile data only when the runtime manager confirms there is no active writer
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
 - admin-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - switching the selected session disconnects the embedded browser from the previous live session before selecting the new one
-- `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` via compatibility `PUT /control-session`
+- `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` through the gateway-mediated `/api/v1/mcp-bridge/control-session` proxy
 - the console shows whether the currently selected session is the exact session delegated to `mcp-bridge` and exposes the recommended `/sessions/{session_id}/mcp` endpoint for external clients
 - `mcp-bridge` now resolves the managed session's runtime CDP endpoint from the session resource and lazily binds Playwright MCP on first client connect
 - `workflow-worker` uses OIDC client credentials in local compose for gateway API bootstrap and then switches to run-scoped automation access
@@ -510,8 +515,10 @@ The default dev stack no longer uses a shared token file.
 - `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
 - `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` /
   `BPANE_SESSION_BOOTSTRAP_MODE`), compatibility delegated-session assignment
-  through its local `/control-session` API, and per-connection session routing
-  through `/sessions/{session_id}/mcp`
+  through its bridge-local `/control-session` API, and per-connection session
+  routing through `/sessions/{session_id}/mcp`; in local compose the mutable
+  bridge-local control target is bearer-protected and fronted by the gateway
+  proxy
 - for external clients, `/sessions/{session_id}/mcp` and
   `/sessions/{session_id}/sse` are the preferred MCP connection surfaces
   because the BrowserPane session binding is immutable for that connection;
@@ -569,6 +576,8 @@ The workflow layer sits on top of the owner-scoped session APIs.
 - owner actions now include durable `submit-input`, `resume`, `reject`, and `cancel` transitions on workflow runs
 - workflow lifecycle subscriptions provide signed outbound delivery plus persisted delivery diagnostics for external systems
 - local workflow CLI commands live in `code/web/bpane-client/scripts/workflow-cli.mjs` and exercise the same v1 HTTP routes as the browser UI
+- workflow source listing and snapshot materialization enforce configurable file
+  count and byte limits before workflow workers receive source archives
 - workflow source resolution and materialization errors are structured with a
   machine-readable code/category plus recovery hint so operators can distinguish
   invalid sources, ref resolution failures, repository access failures, snapshot

@@ -202,6 +202,7 @@
       }
     } catch (startError) {
       if (currentSessionId === requestSessionId) {
+        recording = connection.handle.isRecording?.() ?? false;
         error = errorMessage(startError);
       }
     } finally {
@@ -234,6 +235,7 @@
       }
     } catch (stopError) {
       if (currentSessionId === requestSessionId) {
+        recording = connection.handle.isRecording?.() ?? false;
         error = errorMessage(stopError);
       }
     } finally {

@@ -240,7 +240,7 @@ fn derive_session_presence_state(
 
 fn derive_session_stop_eligibility(
     counts: &SessionConnectionCounts,
-    active_recording_count: u32,
+    _active_recording_count: u32,
     active_automation_task_count: u32,
     active_workflow_run_count: u32,
 ) -> SessionStopEligibility {
@@ -257,22 +257,10 @@ fn derive_session_stop_eligibility(
             count: counts.viewer_clients,
         });
     }
-    if counts.recorder_clients > 0 {
-        blockers.push(SessionStopBlocker {
-            kind: SessionStopBlockerKind::RecorderClients,
-            count: counts.recorder_clients,
-        });
-    }
     if counts.automation_clients > 0 {
         blockers.push(SessionStopBlocker {
             kind: SessionStopBlockerKind::AutomationOwner,
             count: counts.automation_clients,
-        });
-    }
-    if active_recording_count > 0 {
-        blockers.push(SessionStopBlocker {
-            kind: SessionStopBlockerKind::RecordingActivity,
-            count: active_recording_count,
         });
     }
     if active_automation_task_count > 0 {
@@ -372,7 +360,8 @@ pub(super) async fn session_resource(
     let status = session_status_summary(state, stored).await?;
     let project = session_project_resource(state, stored).await?;
     let project_policy = session_project_policy(&state.session_store, stored).await?;
-    let capabilities = session_capabilities_for_policy(project_policy.as_ref());
+    let capabilities =
+        session_capabilities_for_policy(stored.capabilities.clone(), project_policy.as_ref());
     let queue = session_queue_info(state, stored).await?;
     let effective_egress = session_effective_egress(state, stored).await?;
     let egress_diagnostics = session_egress_diagnostics(state, stored).await?;
@@ -392,10 +381,14 @@ pub(super) async fn session_resource(
     ))
 }
 
-fn session_capabilities_for_policy(project_policy: Option<&ProjectPolicy>) -> SessionCapabilities {
-    let mut capabilities = SessionCapabilities::default();
+fn session_capabilities_for_policy(
+    mut capabilities: SessionCapabilities,
+    project_policy: Option<&ProjectPolicy>,
+) -> SessionCapabilities {
     if let Some(policy) = project_policy {
-        capabilities.file_transfer = policy.allow_browser_uploads && policy.allow_browser_downloads;
+        capabilities.file_transfer = capabilities.file_transfer
+            && policy.allow_browser_uploads
+            && policy.allow_browser_downloads;
     }
     capabilities
 }

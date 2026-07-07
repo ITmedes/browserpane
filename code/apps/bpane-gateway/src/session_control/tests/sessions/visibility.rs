@@ -19,6 +19,7 @@ async fn in_memory_store_scopes_sessions_to_owner() {
                     width: 1920,
                     height: 1080,
                 }),
+                capabilities: Default::default(),
                 idle_timeout_sec: Some(600),
                 labels: HashMap::from([("suite".to_string(), "smoke".to_string())]),
                 integration_context: Some(serde_json::json!({ "ticket": "BPANE-6" })),

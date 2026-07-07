@@ -112,7 +112,7 @@ Current product shape:
   - TypeScript package. There is no meaningful Rust browser client crate in the current repo.
 - `code/integrations/mcp-bridge`
   - Streamable HTTP and legacy SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
-  - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its local `/control-session` compatibility API, supports per-connection session routing through `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured, including in `docker_pool` mode.
+  - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its bridge-local `/control-session` compatibility API, supports per-connection session routing through `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured, including in `docker_pool` mode. In local compose, browser/admin callers mutate the bridge-global control session through the authenticated gateway proxy at `/api/v1/mcp-bridge/control-session`; the direct bridge-local control target is protected by an internal bearer token.
 - `code/integrations/recording-worker`
   - Playwright-driven recorder worker that attaches as a `recorder` browser client through the control plane.
   - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals, then hands a temporary local file path back to the gateway for artifact-store finalization.
@@ -125,6 +125,7 @@ Current product shape:
   - Local session-control persistence in compose is Postgres on `:5433`.
   - Local workflow credential binding dev/testing uses HashiCorp Vault dev mode on `:8200`.
   - Local compose defaults to `docker_pool` for browser-session workers, with a shared socket-only runtime volume and per-session browser data volumes; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
+  - Local compose uses a one-shot helper to build the `deploy-recording-worker` image and configures the gateway to launch short-lived recorder containers for `recording.mode=always`; artifact handoff uses the `bpane-recordings` volume and finalized artifacts use the gateway recording artifact store.
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 - `deploy/examples/egress-observer`
@@ -169,7 +170,14 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:automation-tasks -- --headless`
 - `npm run smoke:bpane-cli -- --headless`
 - `npm run smoke:admin-browser-contexts -- --headless`
+- `npm run smoke:admin-unified-browser-contexts -- --headless`
+- `npm run smoke:admin-unified-dashboard -- --headless`
 - `npm run smoke:admin-egress-profiles -- --headless`
+- `npm run smoke:admin-unified-egress-profiles -- --headless`
+- `npm run smoke:admin-unified-projects -- --headless`
+- `npm run smoke:admin-unified-workflows -- --headless`
+- `npm run smoke:admin-unified-workflow-runs -- --headless`
+- `npm run smoke:admin-unified-file-workspaces -- --headless`
 - `npm run smoke:file-workspaces -- --headless`
 - `npm test`
 - `npm run build`

@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 use crate::session_control::SessionStore;
 use crate::session_files::{SessionFileRecorder, SessionFileSource};
-use crate::session_hub::SessionTelemetrySnapshot;
 use crate::session_hub::{BrowserClientRole, ClientHandle, SessionHub, SessionTerminationReason};
+use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapshot};
 use crate::workspaces::WorkspaceFileStore;
 
 /// Maps agent socket paths to active SessionHubs.
@@ -290,7 +290,7 @@ impl SessionRegistry {
         terminated
     }
 
-    pub async fn disconnect_all_session_clients(
+    pub async fn disconnect_interactive_session_clients(
         &self,
         session_id: Uuid,
         reason: SessionTerminationReason,
@@ -304,6 +304,12 @@ impl SessionRegistry {
             .await
             .connections
             .into_iter()
+            .filter(|connection| {
+                matches!(
+                    connection.role,
+                    SessionConnectionTelemetryRole::Owner | SessionConnectionTelemetryRole::Viewer
+                )
+            })
             .map(|connection| connection.connection_id)
             .collect::<Vec<_>>();
         let mut disconnected = 0;

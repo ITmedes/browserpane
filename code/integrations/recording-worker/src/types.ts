@@ -19,7 +19,11 @@ export type GatewayRecordingState =
   | "failed";
 export type GatewayRecordingTerminationReason =
   | "manual_stop"
+  | "client_disconnect"
+  | "disconnect_all"
   | "session_stop"
+  | "session_kill"
+  | "runtime_release"
   | "idle_stop"
   | "gateway_restart"
   | "worker_exit";
@@ -51,4 +55,18 @@ export type GatewayRecordingResource = {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type GatewaySessionAccessTokenResponse = {
+  session_id: string;
+  token_type: "session_connect_ticket";
+  token: string;
+  expires_at: string;
+  connect: {
+    gateway_url: string;
+    transport_path: string;
+    auth_type: string;
+    ticket_path: string;
+    compatibility_mode: string;
+  };
 };

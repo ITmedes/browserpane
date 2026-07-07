@@ -9,7 +9,9 @@ use tracing::warn;
 use wtransport::{Connection, SendStream};
 
 use super::bitrate::DatagramStats;
-use super::policy::{adapt_frame_for_client, viewer_can_receive_frame};
+use super::policy::{
+    adapt_frame_for_client_with_policy, client_can_receive_frame, SessionTransportPolicy,
+};
 use crate::session_hub::SessionHub;
 
 use super::session::Session;
@@ -22,7 +24,7 @@ pub(super) struct EgressTaskContext {
     pub send_stream: Arc<Mutex<SendStream>>,
     pub connection: Connection,
     pub dgram_stats: Arc<DatagramStats>,
-    pub allow_browser_downloads: bool,
+    pub transport_policy: SessionTransportPolicy,
 }
 
 pub(super) fn spawn_agent_to_browser_task(
@@ -34,11 +36,7 @@ pub(super) fn spawn_agent_to_browser_task(
             match from_host.recv().await {
                 Ok(frame) => {
                     let is_owner = ctx.hub.is_browser_owner(ctx.client_id);
-                    if !is_owner && !viewer_can_receive_frame(&frame) {
-                        continue;
-                    }
-
-                    if frame.channel == ChannelId::FileDown && !ctx.allow_browser_downloads {
+                    if !client_can_receive_frame(&frame, is_owner, &ctx.transport_policy) {
                         continue;
                     }
 
@@ -59,7 +57,12 @@ pub(super) fn spawn_agent_to_browser_task(
                             };
                         }
                     } else {
-                        let encoded = adapt_frame_for_client(&frame, is_owner).encode();
+                        let encoded = adapt_frame_for_client_with_policy(
+                            &frame,
+                            is_owner,
+                            &ctx.transport_policy,
+                        )
+                        .encode();
                         let lock_started = Instant::now();
                         let mut stream = ctx.send_stream.lock().await;
                         ctx.hub

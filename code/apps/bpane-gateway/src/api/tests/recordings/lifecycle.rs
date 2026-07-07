@@ -1,6 +1,219 @@
 use super::*;
 
 #[tokio::test]
+async fn updates_session_recording_policy_for_existing_session() {
+    let (app, token) = test_router();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let created = response_json(create_session_response).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+    assert_eq!(created["recording"]["mode"], "disabled");
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/sessions/{session_id}/recording-policy"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "mode": "manual",
+                        "format": "webm",
+                        "retention_sec": 3600
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let updated = response_json(update_response).await;
+    assert_eq!(updated["recording"]["mode"], "manual");
+    assert_eq!(updated["recording"]["format"], "webm");
+    assert_eq!(updated["recording"]["retention_sec"], 3600);
+
+    let create_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_recording_response.status(), StatusCode::CREATED);
+
+    let disable_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/sessions/{session_id}/recording-policy"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "mode": "disabled",
+                        "format": "webm"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(disable_response.status(), StatusCode::OK);
+    let disabled = response_json(disable_response).await;
+    assert_eq!(disabled["recording"]["mode"], "disabled");
+}
+
+#[tokio::test]
+async fn rejects_always_recording_policy_when_worker_is_not_configured() {
+    let (app, token) = test_router();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let created = response_json(create_session_response).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/sessions/{session_id}/recording-policy"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "mode": "always",
+                        "format": "webm"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(update_response.status(), StatusCode::CONFLICT);
+    let error = response_json(update_response).await;
+    assert!(error["error"]
+        .as_str()
+        .unwrap()
+        .contains("recording mode=always requires a configured recording worker"));
+
+    let load_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(load_response.status(), StatusCode::OK);
+    let loaded = response_json(load_response).await;
+    assert_eq!(loaded["recording"]["mode"], "disabled");
+}
+
+#[tokio::test]
+async fn stores_always_recording_policy_for_stopped_session_without_worker() {
+    let (app, token) = test_router();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let created = response_json(create_session_response).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let stop_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/stop"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stop_response.status(), StatusCode::OK);
+    let stopped = response_json(stop_response).await;
+    assert_eq!(stopped["state"], "stopped");
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/v1/sessions/{session_id}/recording-policy"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "mode": "always",
+                        "format": "webm",
+                        "retention_sec": 7200
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let updated = response_json(update_response).await;
+    assert_eq!(updated["state"], "stopped");
+    assert_eq!(updated["recording"]["mode"], "always");
+    assert_eq!(updated["recording"]["format"], "webm");
+    assert_eq!(updated["recording"]["retention_sec"], 7200);
+}
+
+#[tokio::test]
 async fn creates_lists_gets_and_stops_session_recording_metadata() {
     let (app, token) = test_router();
 
@@ -160,6 +373,249 @@ async fn creates_lists_gets_and_stops_session_recording_metadata() {
         .await
         .unwrap();
     assert_eq!(content_bytes.as_ref(), b"webm-bytes");
+}
+
+#[tokio::test]
+async fn automation_access_can_finalize_and_fail_session_recordings() {
+    let (app, token) = test_router();
+
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "recording": {
+                          "mode": "manual",
+                          "format": "webm"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_session_response.status(), StatusCode::CREATED);
+    let session = response_json(create_session_response).await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+
+    let automation_access_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/automation-access"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(automation_access_response.status(), StatusCode::OK);
+    let automation_access = response_json(automation_access_response).await;
+    let automation_token = automation_access["token"].as_str().unwrap().to_string();
+
+    let create_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_recording_response.status(), StatusCode::CREATED);
+    let created_recording = response_json(create_recording_response).await;
+    let recording_id = created_recording["id"].as_str().unwrap().to_string();
+
+    let list_recordings_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("x-bpane-automation-access-token", automation_token.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_recordings_response.status(), StatusCode::OK);
+    let recordings = response_json(list_recordings_response).await;
+    assert_eq!(recordings["recordings"].as_array().unwrap().len(), 1);
+    assert_eq!(recordings["recordings"][0]["id"], recording_id);
+
+    let get_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}"
+                ))
+                .header("x-bpane-automation-access-token", automation_token.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get_recording_response.status(), StatusCode::OK);
+    let fetched_recording = response_json(get_recording_response).await;
+    assert_eq!(fetched_recording["id"], recording_id);
+    assert_eq!(fetched_recording["state"], "recording");
+
+    let stop_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/stop"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stop_recording_response.status(), StatusCode::OK);
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let artifact_path = temp_dir.path().join("recording.webm");
+    std::fs::write(&artifact_path, b"automation-webm").unwrap();
+
+    let complete_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/complete"
+                ))
+                .header("x-bpane-automation-access-token", automation_token.as_str())
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                      "source_path": artifact_path.to_string_lossy(),
+                      "mime_type": "video/webm",
+                      "bytes": 15,
+                      "duration_ms": 3000
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(complete_recording_response.status(), StatusCode::OK);
+    let completed_recording = response_json(complete_recording_response).await;
+    assert_eq!(completed_recording["state"], "ready");
+    assert_eq!(completed_recording["artifact_available"], true);
+    assert_eq!(completed_recording["bytes"], 15);
+
+    let create_failed_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        create_failed_recording_response.status(),
+        StatusCode::CREATED
+    );
+    let failed_recording = response_json(create_failed_recording_response).await;
+    let failed_recording_id = failed_recording["id"].as_str().unwrap().to_string();
+
+    let fail_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{failed_recording_id}/fail"
+                ))
+                .header("x-bpane-automation-access-token", automation_token.as_str())
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                      "error": "recorder worker crashed",
+                      "termination_reason": "worker_exit"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(fail_response.status(), StatusCode::OK);
+    let failed = response_json(fail_response).await;
+    assert_eq!(failed["state"], "failed");
+    assert_eq!(failed["error"], "recorder worker crashed");
+    assert_eq!(failed["termination_reason"], "worker_exit");
+}
+
+#[tokio::test]
+async fn automation_access_must_match_recording_session() {
+    let (app, token) = test_router();
+
+    let first_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first_session_response.status(), StatusCode::CREATED);
+    let first_session = response_json(first_session_response).await;
+    let first_session_id = first_session["id"].as_str().unwrap().to_string();
+
+    let automation_access_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{first_session_id}/automation-access"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(automation_access_response.status(), StatusCode::OK);
+    let automation_access = response_json(automation_access_response).await;
+    let automation_token = automation_access["token"].as_str().unwrap().to_string();
+    let other_session_id = uuid::Uuid::now_v7();
+
+    let mismatched_list_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/sessions/{other_session_id}/recordings"))
+                .header("x-bpane-automation-access-token", automation_token.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(mismatched_list_response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

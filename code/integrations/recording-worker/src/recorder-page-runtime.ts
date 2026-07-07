@@ -6,6 +6,7 @@ type RecorderPageRuntimeOptions = {
   pageUrl: string;
   certSpki: string;
   chromeExecutablePath: string;
+  connectGatewayUrl: string;
   connectTimeoutMs: number;
   headless: boolean;
 };
@@ -17,10 +18,17 @@ type RecordingArtifact = {
   durationMs: number;
 };
 
+type RecorderConnectOptions = {
+  gatewayUrl: string;
+  transportPath: string;
+  connectTicket: string;
+};
+
 export class RecorderPageRuntime {
   private readonly pageUrl: string;
   private readonly certSpki: string;
   private readonly chromeExecutablePath: string;
+  private readonly connectGatewayUrl: string;
   private readonly connectTimeoutMs: number;
   private readonly headless: boolean;
   private browser: Browser | null = null;
@@ -32,11 +40,12 @@ export class RecorderPageRuntime {
     this.pageUrl = options.pageUrl;
     this.certSpki = options.certSpki.trim();
     this.chromeExecutablePath = options.chromeExecutablePath;
+    this.connectGatewayUrl = options.connectGatewayUrl.trim();
     this.connectTimeoutMs = options.connectTimeoutMs;
     this.headless = options.headless;
   }
 
-  async start(sessionId: string): Promise<void> {
+  async start(options: RecorderConnectOptions): Promise<void> {
     const browser = await chromium.launch({
       headless: this.headless,
       executablePath: this.chromeExecutablePath,
@@ -53,54 +62,51 @@ export class RecorderPageRuntime {
     this.context = context;
     this.page = page;
 
-    await page.goto(this.pageUrl, { waitUntil: "networkidle" });
-    await page.waitForFunction(
-      () => Boolean(window.__bpaneAuth && window.__bpaneControl && window.__bpaneRecording),
-      { timeout: this.connectTimeoutMs },
-    );
-    await this.ensureLoggedIn(page);
     await page.goto(this.buildRecorderPageUrl(), { waitUntil: "networkidle" });
     await page.waitForFunction(
-      () => Boolean(window.__bpaneAuth && window.__bpaneControl && window.__bpaneRecording),
+      () => Boolean(window.__bpaneRecorder),
+      undefined,
       { timeout: this.connectTimeoutMs },
     );
-    await page.evaluate(
-      async (selectedSessionId) => {
-        const control = window.__bpaneControl;
-        if (!control) {
-          throw new Error("BrowserPane control API is not available");
-        }
-        await control.refreshSessions({ preserveSelection: true, silent: true });
-        await control.selectSession(selectedSessionId);
-        await control.connectSelected({ clientRole: "recorder" });
-      },
-      sessionId,
-    );
-    await page.waitForFunction(
-      () => window.__bpaneControl?.getState?.()?.connected === true,
-      { timeout: this.connectTimeoutMs },
-    );
+    await page.evaluate(async (connectOptions) => {
+      const recorder = window.__bpaneRecorder;
+      if (!recorder) {
+        throw new Error("BrowserPane recorder API is not available");
+      }
+      await recorder.connect(connectOptions);
+    }, {
+      gatewayUrl: this.recorderGatewayUrl(options.gatewayUrl, options.transportPath),
+      connectTicket: options.connectTicket,
+    });
     await page.waitForSelector("#desktop-container canvas", { timeout: this.connectTimeoutMs });
+    await this.waitForRenderableSurface(page);
+    await this.waitForVisualActivity(page);
     await page.evaluate(() => {
-      const recording = window.__bpaneRecording;
-      if (!recording) {
+      const recorder = window.__bpaneRecorder;
+      if (!recorder) {
         throw new Error("BrowserPane recording API is not available");
       }
-      recording.setAutoDownload(false);
-      return recording.start();
+      return recorder.start();
     });
     this.startedAtMs = Date.now();
+  }
+
+  async waitForMinimumCapture(minDurationMs: number): Promise<void> {
+    const remainingMs = this.startedAtMs + minDurationMs - Date.now();
+    if (remainingMs <= 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, remainingMs));
   }
 
   async stopAndDownload(outputPath: string): Promise<RecordingArtifact> {
     const page = this.requirePage();
     const stopResult = await page.evaluate(async () => {
-      const recording = window.__bpaneRecording;
-      if (!recording) {
+      const recorder = window.__bpaneRecorder;
+      if (!recorder) {
         throw new Error("BrowserPane recording API is not available");
       }
-      const blob = await recording.stop();
-      return { size: blob?.size ?? 0, type: blob?.type ?? "" };
+      return await recorder.stop();
     });
     if (!stopResult.size) {
       throw new Error("recording finalized without any media bytes");
@@ -110,11 +116,11 @@ export class RecorderPageRuntime {
     const [download] = await Promise.all([
       page.waitForEvent("download"),
       page.evaluate(() => {
-        const recording = window.__bpaneRecording;
-        if (!recording) {
+        const recorder = window.__bpaneRecorder;
+        if (!recorder) {
           throw new Error("BrowserPane recording API is not available");
         }
-        recording.downloadLast();
+        recorder.downloadLast();
       }),
     ]);
     await download.saveAs(outputPath);
@@ -131,9 +137,7 @@ export class RecorderPageRuntime {
     if (this.page) {
       await this.page
         .evaluate(async () => {
-          if (window.__bpaneControl?.getState?.()?.connected) {
-            await window.__bpaneControl.disconnect();
-          }
+          await window.__bpaneRecorder?.disconnect();
         })
         .catch(() => {});
     }
@@ -146,7 +150,10 @@ export class RecorderPageRuntime {
 
   private buildChromeArgs(): string[] {
     const args = [
-      "--origin-to-force-quic-on=localhost:4433",
+      `--origin-to-force-quic-on=${this.quicOrigin()}`,
+      `--unsafely-treat-insecure-origin-as-secure=${this.pageOrigin()}`,
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
       "--disable-background-timer-throttling",
       "--disable-renderer-backgrounding",
       "--disable-backgrounding-occluded-windows",
@@ -157,37 +164,58 @@ export class RecorderPageRuntime {
     return args;
   }
 
+  private async waitForRenderableSurface(page: Page): Promise<void> {
+    await page.waitForFunction(
+      () => {
+        const canvas = document.querySelector("#desktop-container canvas") as HTMLCanvasElement | null;
+        return Boolean(canvas && canvas.width > 1 && canvas.height > 1);
+      },
+      undefined,
+      { timeout: this.connectTimeoutMs, polling: 100 },
+    );
+  }
+
+  private async waitForVisualActivity(page: Page): Promise<void> {
+    await page.waitForFunction(
+      () => {
+        const stats = window.__bpaneRecorder?.getStats?.();
+        const frameCount = typeof stats?.frameCount === "number" ? stats.frameCount : 0;
+        const renderedTileUpdates =
+          typeof stats?.renderedTileUpdates === "number" ? stats.renderedTileUpdates : 0;
+        return frameCount > 0 || renderedTileUpdates > 0;
+      },
+      undefined,
+      { timeout: Math.min(this.connectTimeoutMs, 5_000), polling: 100 },
+    ).catch(() => {});
+  }
+
+  private quicOrigin(): string {
+    if (!this.connectGatewayUrl) {
+      return "localhost:4433";
+    }
+    try {
+      return new URL(this.connectGatewayUrl).host;
+    } catch {
+      return "localhost:4433";
+    }
+  }
+
+  private pageOrigin(): string {
+    try {
+      return new URL(this.pageUrl).origin;
+    } catch {
+      return "http://localhost:8080";
+    }
+  }
+
   private buildRecorderPageUrl(): string {
     const url = new URL(this.pageUrl);
-    url.searchParams.set("layout", "browser-only");
-    url.searchParams.set("client_role", "recorder");
     return url.toString();
   }
 
-  private async ensureLoggedIn(page: Page): Promise<void> {
-    const state = await page.evaluate(() => ({
-      configured: window.__bpaneAuth?.isConfigured?.() ?? false,
-      authenticated: window.__bpaneAuth?.isAuthenticated?.() ?? false,
-      exampleUser: window.__bpaneAuth?.getExampleUser?.() ?? null,
-    }));
-    if (!state.configured || state.authenticated) {
-      return;
-    }
-    if (!state.exampleUser?.username || !state.exampleUser?.password) {
-      throw new Error("OIDC auth is enabled, but no example user is configured");
-    }
-
-    await page.click("#btn-login");
-    const username = page.locator('input[name="username"], #username').first();
-    const password = page.locator('input[name="password"], #password').first();
-    await username.waitFor({ state: "visible", timeout: this.connectTimeoutMs });
-    await password.waitFor({ state: "visible", timeout: this.connectTimeoutMs });
-    await username.fill(state.exampleUser.username);
-    await password.fill(state.exampleUser.password);
-    await page.locator('input[type="submit"], #kc-login').click();
-    await page.waitForFunction(() => window.__bpaneAuth?.isAuthenticated?.() === true, {
-      timeout: this.connectTimeoutMs,
-    });
+  private recorderGatewayUrl(gatewayUrl: string, transportPath: string): string {
+    const baseUrl = this.connectGatewayUrl || gatewayUrl;
+    return `${baseUrl.replace(/\/+$/, "")}${transportPath}`;
   }
 
   private requirePage(): Page {

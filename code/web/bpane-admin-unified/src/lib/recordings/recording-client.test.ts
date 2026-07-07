@@ -1,0 +1,134 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import { sessionResource } from '$lib/test-utils/session-fixtures';
+import {
+  RecordingCatalogClient,
+  RecordingCatalogError,
+  toSessionRecordingListResponse,
+} from './recording-client';
+
+describe('RecordingCatalogClient', () => {
+  it('loads session recordings through the authenticated control API', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ recordings: [recordingPayload()] }, 200));
+    const client = new RecordingCatalogClient({
+      baseUrl: 'http://localhost:3000',
+      accessTokenProvider: async () => 'token',
+      fetchImpl,
+    });
+
+    const response = await client.listSessionRecordings('session-1');
+
+    expect(response.recordings[0]).toMatchObject({
+      id: 'recording-1',
+      session_id: 'session-1',
+      state: 'ready',
+      artifact_available: true,
+      content_path: '/api/v1/sessions/session-1/recordings/recording-1/content',
+    });
+    expect(fetchImpl.mock.calls[0]?.[0]).toEqual(
+      new URL('http://localhost:3000/api/v1/sessions/session-1/recordings'),
+    );
+    const headers = fetchImpl.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get('authorization')).toBe('Bearer token');
+  });
+
+  it('loads recordings for visible sessions best effort', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/sessions/session-1/recordings')) {
+        return jsonResponse({ recordings: [recordingPayload()] }, 200);
+      }
+      return new Response('temporarily unavailable', { status: 503 });
+    });
+    const client = new RecordingCatalogClient({
+      baseUrl: 'http://localhost:3000',
+      accessTokenProvider: async () => 'token',
+      fetchImpl,
+    });
+
+    const response = await client.listRecordingsForSessions([
+      sessionResource({ id: 'session-1' }),
+      sessionResource({ id: 'session-2' }),
+    ]);
+
+    expect(response.entries).toHaveLength(1);
+    expect(response.entries[0]?.session.id).toBe('session-1');
+    expect(response.failures).toEqual([
+      {
+        sessionId: 'session-2',
+        message: 'Recording catalog request failed with HTTP 503.',
+      },
+    ]);
+  });
+
+  it('downloads recording content and playback exports with bearer auth', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response('binary recording', { status: 200 }));
+    const client = new RecordingCatalogClient({
+      baseUrl: 'http://localhost:3000',
+      accessTokenProvider: async () => 'token',
+      fetchImpl,
+    });
+    const recording = toSessionRecordingListResponse({ recordings: [recordingPayload()] }).recordings[0]!;
+
+    const [recordingBlob, playbackBlob] = await Promise.all([
+      client.downloadRecordingContent(recording),
+      client.downloadSessionPlaybackExport('session-1'),
+    ]);
+
+    expect(await recordingBlob.text()).toBe('binary recording');
+    expect(await playbackBlob.text()).toBe('binary recording');
+    expect(fetchImpl.mock.calls.map((call) => String(call[0]))).toEqual([
+      'http://localhost:3000/api/v1/sessions/session-1/recordings/recording-1/content',
+      'http://localhost:3000/api/v1/sessions/session-1/recording-playback/export',
+    ]);
+    for (const call of fetchImpl.mock.calls) {
+      const headers = call[1]?.headers as Headers;
+      expect(headers.get('authorization')).toBe('Bearer token');
+    }
+  });
+
+  it('reports invalid recording payloads', () => {
+    expect(() => toSessionRecordingListResponse({ recordings: [{ id: '' }] })).toThrow(RecordingCatalogError);
+  });
+});
+
+function jsonResponse(payload: unknown, status: number): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+export function recordingPayload(
+  overrides: Partial<{
+    readonly id: string;
+    readonly sessionId: string;
+    readonly state: string;
+    readonly artifactAvailable: boolean;
+    readonly bytes: number | null;
+    readonly durationMs: number | null;
+    readonly error: string | null;
+  }> = {},
+): Record<string, unknown> {
+  const id = overrides.id ?? 'recording-1';
+  const sessionId = overrides.sessionId ?? 'session-1';
+  return {
+    id,
+    session_id: sessionId,
+    previous_recording_id: null,
+    state: overrides.state ?? 'ready',
+    format: 'webm',
+    mime_type: 'video/webm',
+    bytes: overrides.bytes ?? 12_345,
+    duration_ms: overrides.durationMs ?? 61_000,
+    error: overrides.error ?? null,
+    termination_reason: 'manual_stop',
+    artifact_available: overrides.artifactAvailable ?? true,
+    content_path: `/api/v1/sessions/${sessionId}/recordings/${id}/content`,
+    started_at: '2026-06-21T10:00:00.000Z',
+    completed_at: '2026-06-21T10:01:01.000Z',
+    created_at: '2026-06-21T10:00:00.000Z',
+    updated_at: '2026-06-21T10:01:01.000Z',
+  };
+}

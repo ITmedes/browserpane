@@ -129,4 +129,158 @@ async fn workflow_definition_versions_can_pin_git_source_metadata() {
     assert_eq!(version["source"]["ref"], "main");
     assert_eq!(version["source"]["root_path"], "workflows");
     assert_eq!(version["source"]["resolved_commit"], resolved_commit);
+
+    let validation_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/source-validation"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "entrypoint": "workflows/run.ts",
+                        "source": {
+                            "kind": "git",
+                            "repository_url": temp.path().to_string_lossy(),
+                            "ref": "main",
+                            "root_path": "workflows"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(validation_response.status(), StatusCode::OK);
+    let validation = response_json(validation_response).await;
+    assert_eq!(validation["workflow_definition_id"], workflow_id);
+    assert_eq!(validation["entrypoint"], "workflows/run.ts");
+    assert_eq!(validation["source"]["resolved_commit"], resolved_commit);
+    assert_eq!(validation["files"][0]["path"], "workflows/run.ts");
+    assert_eq!(validation["files"][0]["entrypoint"], true);
+
+    let invalid_validation = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/source-validation"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "entrypoint": "README.md",
+                        "source": {
+                            "kind": "git",
+                            "repository_url": temp.path().to_string_lossy(),
+                            "ref": "main",
+                            "root_path": "workflows"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_validation.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn workflow_definition_source_routes_reject_unsafe_git_repository_urls() {
+    let (app, token) = test_router();
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "name": "unsafe-git-source" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap().to_string();
+
+    for (index, repository_url) in [
+        "ext::sh -c touch /tmp/pwned",
+        "file:///workspace/dev",
+        "git@github.com:ITmedes/browserpane.git",
+        "http://example.com/repo.git",
+        "-uhttps://example.com/repo.git",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let create_version = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "version": format!("bad-{index}"),
+                            "executor": "playwright",
+                            "entrypoint": "workflows/run.ts",
+                            "source": {
+                                "kind": "git",
+                                "repository_url": repository_url,
+                                "ref": "main",
+                                "root_path": "workflows"
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            create_version.status(),
+            StatusCode::BAD_REQUEST,
+            "{repository_url} should be rejected during version creation"
+        );
+
+        let validation_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflows/{workflow_id}/source-validation"))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "entrypoint": "workflows/run.ts",
+                            "source": {
+                                "kind": "git",
+                                "repository_url": repository_url,
+                                "ref": "main",
+                                "root_path": "workflows"
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            validation_response.status(),
+            StatusCode::BAD_REQUEST,
+            "{repository_url} should be rejected during source validation"
+        );
+    }
 }
