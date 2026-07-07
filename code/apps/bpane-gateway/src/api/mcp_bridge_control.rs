@@ -47,14 +47,23 @@ async fn set_mcp_bridge_control_session(
 ) -> Result<Json<Value>, (StatusCode, Json<ErrorResponse>)> {
     authorize_visible_session_request(&headers, &state, req.session_id).await?;
 
-    proxy_bridge_json(
+    match proxy_bridge_json(
         &state,
         Method::PUT,
         BridgeProxyTarget::ControlSession,
         Some(serde_json::json!({ "session_id": req.session_id })),
     )
     .await
-    .map(Json)
+    {
+        Ok(value) => Ok(Json(value)),
+        Err(error) => {
+            if let Some(current) = control_session_matches(&state, Some(req.session_id)).await? {
+                Ok(Json(current))
+            } else {
+                Err(error)
+            }
+        }
+    }
 }
 
 async fn clear_mcp_bridge_control_session(
@@ -71,14 +80,23 @@ async fn clear_mcp_bridge_control_session(
         authorize_visible_session_request(&headers, &state, session_id).await?;
     }
 
-    proxy_bridge_json(
+    match proxy_bridge_json(
         &state,
         Method::DELETE,
         BridgeProxyTarget::ControlSession,
         None,
     )
     .await
-    .map(Json)
+    {
+        Ok(value) => Ok(Json(value)),
+        Err(error) => {
+            if control_session_matches(&state, None).await?.is_some() {
+                Ok(Json(serde_json::json!({ "ok": true })))
+            } else {
+                Err(error)
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -207,6 +225,18 @@ fn control_session_id(value: &Value) -> Result<Option<Uuid>, (StatusCode, Json<E
             }),
         )
     })
+}
+
+async fn control_session_matches(
+    state: &ApiState,
+    expected_session_id: Option<Uuid>,
+) -> Result<Option<Value>, (StatusCode, Json<ErrorResponse>)> {
+    let current =
+        proxy_bridge_json(state, Method::GET, BridgeProxyTarget::ControlSession, None).await?;
+    if control_session_id(&current)? == expected_session_id {
+        return Ok(Some(current));
+    }
+    Ok(None)
 }
 
 fn bridge_error_message(method: Method, status: u16, value: Value) -> String {

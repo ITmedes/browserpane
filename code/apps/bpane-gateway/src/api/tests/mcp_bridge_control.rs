@@ -91,9 +91,70 @@ async fn mcp_bridge_control_proxy_uses_gateway_auth_and_internal_bearer() {
     }));
 }
 
+#[tokio::test]
+async fn mcp_bridge_control_put_reconciles_after_ambiguous_bridge_failure() {
+    let bridge = MockBridge::start_with_options(MockBridgeOptions {
+        fail_put_after_write: true,
+    })
+    .await;
+    let (app, token, _state) = test_router_with_mcp_bridge_control(McpBridgeControlConfig {
+        control_url: bridge.control_url.clone(),
+        bearer_token: Some("internal-token".to_string()),
+        timeout: Duration::from_secs(5),
+    });
+    let session = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = session["id"].as_str().unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/v1/mcp-bridge/control-session")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "session_id": session_id }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["session"]["id"], session_id);
+    let requests = bridge.requests.lock().await;
+    assert!(requests
+        .iter()
+        .any(|request| request.method == "PUT" && request.path == "/control-session"));
+    assert!(requests
+        .iter()
+        .any(|request| request.method == "GET" && request.path == "/control-session"));
+}
+
+#[derive(Default)]
+struct MockBridgeOptions {
+    fail_put_after_write: bool,
+}
+
 #[derive(Clone)]
 struct MockBridgeState {
     requests: Arc<Mutex<Vec<MockBridgeRequest>>>,
+    control_session_id: Arc<Mutex<Option<String>>>,
+    fail_put_after_write: bool,
 }
 
 struct MockBridge {
@@ -112,8 +173,14 @@ struct MockBridgeRequest {
 
 impl MockBridge {
     async fn start() -> Self {
+        Self::start_with_options(MockBridgeOptions::default()).await
+    }
+
+    async fn start_with_options(options: MockBridgeOptions) -> Self {
         let state = MockBridgeState {
             requests: Arc::new(Mutex::new(Vec::new())),
+            control_session_id: Arc::new(Mutex::new(None)),
+            fail_put_after_write: options.fail_put_after_write,
         };
         let app = axum::Router::new()
             .route(
@@ -173,10 +240,11 @@ async fn mock_get_control_session(
 ) -> Result<Json<Value>, StatusCode> {
     authorize_mock_bridge(&headers)?;
     record_mock_bridge_request(&state, "GET", "/control-session", headers, json!({})).await;
+    let session_id = state.control_session_id.lock().await.clone();
     Ok(Json(json!({
         "locked": false,
-        "session": null,
-        "cdp_endpoint": null,
+        "session": session_id.as_ref().map(|id| json!({ "id": id })),
+        "cdp_endpoint": session_id.as_ref().map(|_| json!("http://browser:9222")),
         "playwright_cdp_endpoint": null,
         "playwright_effective_cdp_endpoint": null,
     })))
@@ -189,7 +257,11 @@ async fn mock_put_control_session(
 ) -> Result<Json<Value>, StatusCode> {
     authorize_mock_bridge(&headers)?;
     let session_id = body["session_id"].as_str().unwrap().to_string();
+    *state.control_session_id.lock().await = Some(session_id.clone());
     record_mock_bridge_request(&state, "PUT", "/control-session", headers, body).await;
+    if state.fail_put_after_write {
+        return Err(StatusCode::BAD_GATEWAY);
+    }
     Ok(Json(json!({
         "session": { "id": session_id },
         "cdp_endpoint": "http://browser:9222",
@@ -201,6 +273,7 @@ async fn mock_delete_control_session(
     State(state): State<MockBridgeState>,
 ) -> Result<Json<Value>, StatusCode> {
     authorize_mock_bridge(&headers)?;
+    *state.control_session_id.lock().await = None;
     record_mock_bridge_request(&state, "DELETE", "/control-session", headers, json!({})).await;
     Ok(Json(json!({ "ok": true })))
 }
