@@ -20,8 +20,8 @@ Source check:
 | --- | --- | --- |
 | Umbrella tracker | `#6` | Keep open for high-level roadmap context only. Do not use as the implementation issue for feature PRs. |
 | Focused current admin resource issue | `#124` | Use for the session-template catalog route when that slice is selected. |
-| Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep mapped to the implementation work order. Create narrower issues before coding if the existing issue is too broad for one PR. |
-| Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; create focused issues for remaining admin implementation slices. |
+| Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep mapped to the implementation work order. For now, scope smaller PR slices through the existing issue plus a checked-in `docs/*_PLAN.md` file instead of creating child issues. |
+| Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the relevant existing open issue. |
 
 ## Open Issue Matrix
 
@@ -55,29 +55,29 @@ Checked again on 2026-07-10 against the live issue bodies, current
 All 19 open issues remain relevant. None should be closed only because of the
 docs consolidation or because `#142` is closed. The important distinction is
 whether the issue is a focused implementation target, a broad roadmap anchor,
-or an enterprise/product backlog item that needs a narrower child issue before
-coding.
+or an enterprise/product backlog item whose next PR needs a tightly scoped plan
+inside the existing issue.
 
 | Issue | Current relevance | GitHub issue-body action | Admin-new reference status |
 | --- | --- | --- | --- |
 | `#6` | Relevant as umbrella tracker only. | Updated on GitHub 2026-07-10 to remove active-looking references to completed slices and point at this consolidated docs workspace. | Now mentions `#142` as closed lineage and `/admin-new/` as active side-by-side app, but does not own admin implementation PRs. |
-| `#20` | Relevant. Session observability remains missing as a coherent API and route-backed inspector model. | No immediate body change required. Create a focused child issue before a PR that only adds one observability slice. | Admin-new owner is the future session detail subareas for observability, logs, tabs, pages, and diagnostics. |
-| `#21` | Relevant. Recording export exists partly; generalized artifacts/browser outputs remain broader work. | Add admin-new alignment when this becomes active, or create a focused recording/artifact issue. | `/admin-new/recordings` exists, but session-scoped artifacts/files/download detail routes are still missing. |
-| `#28` | Relevant. Workflow webhooks exist; generalized resource events and security export remain. | No immediate body change required unless the next slice is webhook SSRF/security hardening. | Admin-new should eventually expose event subscriptions and delivery health, but this is not yet implemented. |
-| `#30` | Relevant as production/support backlog. | Add admin-new/operator-surface note when promoted. | Missing explicit `/admin-new/` reference; support bundle generation/download should eventually be an admin-new operator route. |
-| `#31` | Relevant but deferred product capability. | No immediate body change required. Add focused requirements if promoted. | Missing explicit `/admin-new/` reference; device-mode choices would belong in session create, templates, and session detail. |
+| `#20` | Relevant. Session observability remains missing as a coherent API and route-backed inspector model. | Updated on GitHub 2026-07-10 with `/admin-new/` session-inspector alignment and the no-child-issue rule. | Admin-new owner is the future session detail subareas for observability, logs, tabs, pages, and diagnostics. |
+| `#21` | Relevant. Recording export exists partly; generalized artifacts/browser outputs remain broader work. | Updated on GitHub 2026-07-10 with `/admin-new/recordings` and artifact-route alignment. | `/admin-new/recordings` exists, but session-scoped artifacts/files/download detail routes are still missing. |
+| `#28` | Relevant. Workflow webhooks exist; generalized resource events and security export remain. | Updated on GitHub 2026-07-10 with `/admin-new/` event-subscription and delivery-health alignment. | Admin-new should eventually expose event subscriptions and delivery health, but this is not yet implemented. |
+| `#30` | Relevant as production/support backlog. | Updated on GitHub 2026-07-10 with `/admin-new/` support-bundle operator-surface alignment. | Support bundle generation/download should eventually be an admin-new operator route. |
+| `#31` | Relevant but deferred product capability. | Updated on GitHub 2026-07-10 with `/admin-new/` session create/template/detail device-mode alignment. | Device-mode choices would belong in session create, templates, and session detail. |
 | `#47` | Relevant, but the body contained stale route-scoping references to completed issues. | Updated on GitHub 2026-07-10 to replace old `#87`/`#89` routing notes with the current docs/work-order ownership. | Admin-new workflow catalog exists; workflow-run detail and deeper run controls remain missing. |
-| `#66` | Relevant. Deployment packaging remains broad and should not be one PR. | No immediate body change required. First child issue should target health/readiness or single-node deployment docs. | Admin-new matters as one deployed web route beside `/admin/`, but this issue should stay deployment-focused. |
-| `#69` | Relevant. Automation API productization remains broader than current MCP/workflow implementation. | Add admin-new/API companion note when selected. | Missing explicit `/admin-new/` reference; session automation should surface in session detail and API companion routes. |
-| `#70` | Relevant. Identity/access-review exists; API keys, immutable audit, and retention controls remain backlog. | No immediate body change required. | Admin-new identity/access route is the near-term UI owner; API-key/audit/retention screens are later. |
-| `#71` | Relevant but deferred product capability. | No immediate body change required. Add focused requirements if promoted. | Admin-new handoff controls would belong in session/workflow detail, but the issue can remain product-level for now. |
-| `#72` | Relevant. Several high-priority security cleanup slices map here. | No immediate body change required; create focused child issues for token separation, web-security hardening, and import safety. | Admin-new security hardening is promotion-blocking, especially shared auth, event auth, CSP/frame policy, and URL credential cleanup. |
-| `#73` | Relevant but deferred production runbook work. | Add admin-new validation note when promoted. | Missing explicit `/admin-new/` reference; restore validation should include route availability and admin-new smoke checks. |
-| `#74` | Relevant. Graceful shutdown/readiness is nearer term; full HA is later. | No immediate body change required. First child issue should target lifecycle/readiness if selected. | Admin-new should be part of event-stream continuity and route availability validation. |
-| `#75` | Relevant. Minimal CI/validation ratchet is nearer term; release governance is later. | No immediate body change required. | Admin-new build, unit tests, and focused smoke tests must be included in any validation ratchet. |
-| `#76` | Relevant but deferred enterprise storage/security capability. | Add admin-new/API policy-display note when promoted. | Missing explicit `/admin-new/` reference; effective residency/encryption policy belongs in admin-new once implemented. |
-| `#79` | Relevant but broad. Current project-policy visibility is nearer term than a central policy engine. | No immediate body change required. | Admin-new policy diagnostics should be part of the eventual effective-policy surface. |
-| `#80` | Relevant but broad. Current file-policy visibility is nearer term than pluggable DLP. | No immediate body change required. | Admin-new file/artifact indicators and filters are the expected operator UI. |
+| `#66` | Relevant. Deployment packaging remains broad and should not be one PR. | Updated on GitHub 2026-07-10 with `/admin-new/` routing, auth, event-stream, and smoke-validation alignment. | Admin-new matters as one deployed web route beside `/admin/`, but this issue should stay deployment-focused. |
+| `#69` | Relevant. Automation API productization remains broader than current MCP/workflow implementation. | Updated on GitHub 2026-07-10 with `/admin-new/` session-detail and API-companion alignment. | Session automation should surface in session detail and API companion routes. |
+| `#70` | Relevant. Identity/access-review exists; API keys, immutable audit, and retention controls remain backlog. | Updated on GitHub 2026-07-10 with `/admin-new/identity` alignment. | Admin-new identity/access route is the near-term UI owner; API-key/audit/retention screens are later. |
+| `#71` | Relevant but deferred product capability. | Updated on GitHub 2026-07-10 with `/admin-new/` session/workflow handoff alignment. | Admin-new handoff controls would belong in session/workflow detail. |
+| `#72` | Relevant. Several high-priority security cleanup slices map here. | Updated on GitHub 2026-07-10 with admin-new promotion-blocker alignment and the no-child-issue rule. | Admin-new security hardening is promotion-blocking, especially shared auth, event auth, CSP/frame policy, and URL credential cleanup. |
+| `#73` | Relevant but deferred production runbook work. | Updated on GitHub 2026-07-10 with `/admin-new/` restore-validation alignment. | Restore validation should include route availability and admin-new smoke checks. |
+| `#74` | Relevant. Graceful shutdown/readiness is nearer term; full HA is later. | Updated on GitHub 2026-07-10 with `/admin-new/` event-stream continuity and readiness alignment. | Admin-new should be part of event-stream continuity and route availability validation. |
+| `#75` | Relevant. Minimal CI/validation ratchet is nearer term; release governance is later. | Updated on GitHub 2026-07-10 with `bpane-admin-unified` build/test/smoke alignment. | Admin-new build, unit tests, and focused smoke tests must be included in any validation ratchet. |
+| `#76` | Relevant but deferred enterprise storage/security capability. | Updated on GitHub 2026-07-10 with `/admin-new/` effective-policy display alignment. | Effective residency/encryption policy belongs in admin-new once implemented. |
+| `#79` | Relevant but broad. Current project-policy visibility is nearer term than a central policy engine. | Updated on GitHub 2026-07-10 with `/admin-new/` effective-policy diagnostics alignment. | Admin-new policy diagnostics should be part of the eventual effective-policy surface. |
+| `#80` | Relevant but broad. Current file-policy visibility is nearer term than pluggable DLP. | Updated on GitHub 2026-07-10 with `/admin-new/` file/artifact scan-state alignment. | Admin-new file/artifact indicators and filters are the expected operator UI. |
 | `#124` | Relevant and focused. This is the cleanest current admin-new implementation issue. | Updated on GitHub 2026-07-10 to name `/admin-new/` explicitly as the target surface. | Admin-new session-template catalog route is missing and should be built when this issue is selected. |
 
 ## Docs-To-Issue Context
@@ -111,22 +111,22 @@ shown as `closed #142`.
 | `README.md` | `#6`, closed `#142` |
 | `concept.html` | closed `#142` as design reference only |
 
-## Issue Gaps Before Implementation
+## Issue Scoping Before Implementation
 
 The implementation work order deliberately starts with high-priority security
-and validation slices. Some of those slices do not yet have a focused open
-GitHub issue. Before coding, create or confirm a canonical issue for each
-selected slice:
+and validation slices. The current working rule is to avoid new child issues
+for now. Before coding, select the relevant existing open issue and capture the
+exact slice boundary in a checked-in `docs/*_PLAN.md` file:
 
 | Work-order item | Current issue state | Recommended action |
 | --- | --- | --- |
-| Item 1: token domain separation and URL credential cleanup | No focused open issue. Broadly related to `#72`. | Create a focused issue before implementation. |
-| Item 2: shared admin browser auth and web-security hardening | No focused open issue. Broadly related to `#72` and closed `#142`. | Create a focused issue before implementation. |
-| Item 4: browser context import safety | No focused open issue. Broadly related to `#72`. | Create a focused issue before implementation. |
-| Item 5: recording artifact finalization boundary | No focused open issue. Related to `#21`. | Either create a focused issue or explicitly scope it as the next `#21` slice. |
-| Item 6: gateway lifecycle, health, and readiness | Broadly related to `#66` and `#74`. | Create a focused issue if the first PR is only graceful shutdown/readiness. |
-| Item 7: minimal CI and validation ratchet | Broadly related to `#75`. | Create a focused issue if it becomes the active implementation slice. |
-| Item 8: Postgres session-control store contract tests | No focused open issue. | Create a focused issue before implementation. |
+| Item 1: token domain separation and URL credential cleanup | Broadly related to `#72`. | Scope as a `#72` slice with a dedicated plan file. |
+| Item 2: shared admin browser auth and web-security hardening | Broadly related to `#72` and closed `#142`. | Scope as a `#72` slice with a dedicated plan file. |
+| Item 4: browser context import safety | Broadly related to `#72`. | Scope as a `#72` slice with a dedicated plan file. |
+| Item 5: recording artifact finalization boundary | Related to `#21`. | Scope as a `#21` slice with a dedicated plan file. |
+| Item 6: gateway lifecycle, health, and readiness | Broadly related to `#66` and `#74`. | Scope the first slice under the closer existing issue, usually `#74` for lifecycle/readiness or `#66` for deployment packaging. |
+| Item 7: minimal CI and validation ratchet | Broadly related to `#75`. | Scope as a `#75` slice with a dedicated plan file. |
+| Item 8: Postgres session-control store contract tests | Broadly related to validation and release confidence. | Scope as a `#75` slice unless a more specific existing issue is selected. |
 
 ## Issue Hygiene Notes
 
@@ -135,16 +135,16 @@ selected slice:
   the consolidated docs instead of the removed
   `docs/ADMIN_APP_REDESIGN_FOUNDATION.md`.
 - There is currently no open broad admin-new parent issue. Use `#124` for
-  session-template catalog work, and create focused issues for other admin-new
-  implementation slices before coding.
+  session-template catalog work, and route other admin-new implementation
+  slices through the relevant existing open issue.
 - `#6` remains useful as the umbrella tracker, but direct implementation PRs
-  should reference a focused issue or create one when the open issue is too
-  broad.
+  should reference the closest existing open issue plus the scoped local plan
+  file rather than creating another issue.
 - `#31`, `#71`, `#76`, `#79`, and `#80` are represented only at product
   backlog level in the docs. That is intentional for the current admin/security
-  priority. If any of them becomes active, create a dedicated requirements file
+  priority. If any of them becomes active, create a dedicated local plan file
   or expand the relevant domain doc before implementation starts.
 - `#124` is the cleanest current issue for a focused admin-new resource slice.
 - `#20`, `#21`, `#28`, `#47`, `#66`, `#69`, `#70`, `#72`, `#73`, `#74`, and
-  `#75` are valid but broad. Use a narrower child issue when the selected PR
-  would otherwise mix unrelated API, UI, runtime, and documentation changes.
+  `#75` are valid but broad. Keep selected PRs narrow by scoping them in the
+  plan file and PR description while still referencing the existing issue.
