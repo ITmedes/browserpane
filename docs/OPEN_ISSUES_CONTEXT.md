@@ -9,8 +9,11 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched through the GitHub API on 2026-07-10,
-- open issues excluding pull requests: 19,
-- open issue range: `#6` through `#124`,
+- open issues excluding pull requests: 45 after the reverse docs-to-issues
+  audit,
+- open issue range: `#6` through `#170`,
+- focused docs-derived implementation issues created on 2026-07-10: `#145`
+  through `#170`,
 - closed admin-redesign lineage issue: `#142`, closed as completed on
   2026-07-07 and updated on 2026-07-10 to point at the consolidated docs.
 
@@ -20,7 +23,8 @@ Source check:
 | --- | --- | --- |
 | Umbrella tracker | `#6` | Keep open for high-level roadmap context only. Do not use as the implementation issue for feature PRs. |
 | Focused current admin resource issue | `#124` | Use for the session-template catalog route when that slice is selected. |
-| Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep mapped to the implementation work order. For now, scope smaller PR slices through the existing issue plus a checked-in `docs/*_PLAN.md` file. |
+| Focused docs-derived work-order issues | `#145` through `#170` | Use these as canonical implementation issues for work-order items 1 through 26. |
+| Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep as roadmap and enterprise/product context. Prefer the matching focused issue from `#145`-`#170` when an implementation slice is covered there. |
 | Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the relevant existing open issue. |
 
 ## Open Issue Matrix
@@ -47,16 +51,52 @@ Source check:
 | `#80` DLP and content inspection hooks | `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 17, 27 | Current file policy visibility is nearer term; DLP provider hooks are later. |
 | `#124` Admin session template catalog management | `DOMAIN_REQUIREMENTS.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | Item 15 | Focused admin-new resource slice. Use as canonical issue for template catalog work. |
 
+## Focused Work-Order Issue Matrix
+
+Created on 2026-07-10 from the reverse docs-to-issues audit. These issues
+cover concrete topics that were present in `docs/` but did not yet have
+dedicated open issue ownership.
+
+| Work item | Issue | Docs source |
+| --- | --- | --- |
+| 1. Token domain separation and URL credential cleanup | `#145` Add token domain separation and URL credential cleanup | `IMPLEMENTATION_WORK_ORDER.md`, `NEXT_WORKING_ROADMAP.md`, `SECURITY_RUNTIME_ROADMAP.md` |
+| 2. Shared admin browser auth and web-security hardening | `#146` Harden shared admin auth and browser security | `IMPLEMENTATION_WORK_ORDER.md`, `NEXT_WORKING_ROADMAP.md`, `SECURITY_RUNTIME_ROADMAP.md` |
+| 3. Webhook SSRF controls | `#147` Add webhook SSRF controls for event delivery | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
+| 4. Browser context import safety | `#148` Harden browser context import safety | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md` |
+| 5. Recording artifact finalization boundary | `#149` Harden recording artifact finalization boundary | `IMPLEMENTATION_WORK_ORDER.md`, `NEXT_WORKING_ROADMAP.md`, `SECURITY_RUNTIME_ROADMAP.md` |
+| 6. Gateway lifecycle, health, and readiness | `#150` Add gateway lifecycle, health, and readiness endpoints | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md` |
+| 7. Minimal CI and validation ratchet | `#151` Add minimal CI and validation ratchet | `IMPLEMENTATION_WORK_ORDER.md`, `VALIDATION_MATRIX.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
+| 8. Postgres session-control store contract tests | `#152` Add Postgres session-control store contract tests | `IMPLEMENTATION_WORK_ORDER.md`, `VALIDATION_MATRIX.md`, `SECURITY_RUNTIME_ROADMAP.md` |
+| 9. Admin-new pattern, API client, and feedback consolidation | `#153` Consolidate admin-new patterns, API client, and feedback handling | `IMPLEMENTATION_WORK_ORDER.md`, `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md`, `ADMIN_INTERACTION_REQUIREMENTS.md` |
+| 10. Route-backed workflow run detail | `#154` Add route-backed admin-new workflow run detail | `IMPLEMENTATION_WORK_ORDER.md`, `NEXT_WORKING_ROADMAP.md`, `ADMIN_NEW_REQUIREMENTS.md` |
+| 11. Session subareas phase 1 | `#155` Add admin-new session subareas for live, files, recordings, and network | `IMPLEMENTATION_WORK_ORDER.md`, `NEXT_WORKING_ROADMAP.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` |
+| 12. Session subareas phase 2 | `#156` Add admin-new session automation, policy, and observability subareas | `IMPLEMENTATION_WORK_ORDER.md`, `NEXT_WORKING_ROADMAP.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` |
+| 13. Identity and access review route | `#157` Add admin-new identity and access review route | `IMPLEMENTATION_WORK_ORDER.md`, `NEXT_WORKING_ROADMAP.md`, `IDENTITY_ACCESS_REQUIREMENTS.md` |
+| 14. API companion, coverage, and docs routes | `#158` Add admin-new API companion, coverage, and docs routes | `IMPLEMENTATION_WORK_ORDER.md`, `NEXT_WORKING_ROADMAP.md`, `ADMIN_NEW_API_COVERAGE.md` |
+| 15. Missing resource catalogs except session templates | `#159` Add admin-new catalogs for extensions, credential bindings, and workflow event subscriptions | `IMPLEMENTATION_WORK_ORDER.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`; session templates remain `#124` |
+| 16. Browser context clone/import/export UI parity | `#160` Add browser context clone, import, and export admin-new parity | `IMPLEMENTATION_WORK_ORDER.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` |
+| 17. Project governance evidence and cross-resource policy UX | `#161` Add project governance evidence and cross-resource policy UX | `IMPLEMENTATION_WORK_ORDER.md`, `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md` |
+| 18. Operator CLI resource parity and local setup docs | `#162` Add operator CLI resource parity and local setup diagnostics docs | `IMPLEMENTATION_WORK_ORDER.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
+| 19. Admin-new promotion gate | `#163` Define admin-new promotion gate and fallback plan | `IMPLEMENTATION_WORK_ORDER.md`, `ADMIN_NEW_STATUS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` |
+| 20. Admin and session catalog scalability | `#164` Improve admin and session catalog scalability | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
+| 21. Worker and archive runtime hygiene | `#165` Harden worker logs, polling, and archive runtime behavior | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
+| 22. Documentation accuracy and production references | `#166` Update documentation accuracy and production references | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
+| 23. Docker runtime launch boundary | `#167` Define Docker runtime launch boundary for production hardening | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md` |
+| 24. Host and client render hot-path work | `#168` Profile and optimize host and client render hot paths | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
+| 25. Gateway fan-out and transport optimization | `#169` Profile and optimize gateway fan-out and transport behavior | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
+| 26. Structural refactors | `#170` Split session-control structural refactors by domain | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
+
 ## Issue Body Audit
 
 Checked again on 2026-07-10 against the live issue bodies, current
-`/admin-new/` routes, and the consolidated docs.
+`/admin-new/` routes, and the consolidated docs. The first pass covered the
+original 19 open issues; the reverse docs-to-issues pass created focused
+issues `#145` through `#170`.
 
-All 19 open issues remain relevant. None should be closed only because of the
-docs consolidation or because `#142` is closed. The important distinction is
-whether the issue is a focused implementation target, a broad roadmap anchor,
-or an enterprise/product backlog item whose next PR needs a tightly scoped plan
-inside the existing issue.
+The original 19 open issues remain relevant. None should be closed only
+because of the docs consolidation or because `#142` is closed. The focused
+issues now own the concrete work-order slices; the original broad issues remain
+roadmap and enterprise/product context.
 
 | Issue | Current relevance | GitHub issue-body action | Admin-new reference status |
 | --- | --- | --- | --- |
@@ -87,46 +127,44 @@ shown as `closed #142`.
 
 | Docs file | Primary issue context |
 | --- | --- |
-| `ADMIN_INTERACTION_REQUIREMENTS.md` | `#20`, `#28`, closed `#142` |
-| `ADMIN_NEW_API_COVERAGE.md` | `#69`, `#70`, `#124`, closed `#142` |
-| `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md` | closed `#142` |
-| `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | `#124`, closed `#142` |
-| `ADMIN_NEW_REQUIREMENTS.md` | `#20`, `#21`, `#47`, `#69`, `#124`, closed `#142` |
-| `ADMIN_NEW_STATUS.md` | closed `#142` |
-| `DOMAIN_REQUIREMENTS.md` | `#20`, `#21`, `#28`, `#31`, `#47`, `#69`, `#124`, closed `#142` |
-| `IDENTITY_ACCESS_REQUIREMENTS.md` | `#70`, closed `#142` |
-| `IMPLEMENTATION_WORK_ORDER.md` | all open issues |
+| `ADMIN_INTERACTION_REQUIREMENTS.md` | `#20`, `#28`, `#153`, `#156`, closed `#142` |
+| `ADMIN_NEW_API_COVERAGE.md` | `#69`, `#70`, `#124`, `#153`, `#158`, closed `#142` |
+| `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md` | `#153`, `#163`, closed `#142` |
+| `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | `#124`, `#154`-`#163`, closed `#142` |
+| `ADMIN_NEW_REQUIREMENTS.md` | `#20`, `#21`, `#47`, `#69`, `#124`, `#153`-`#159`, `#161`, `#163`, closed `#142` |
+| `ADMIN_NEW_STATUS.md` | `#153`, `#163`, closed `#142` |
+| `DOMAIN_REQUIREMENTS.md` | `#20`, `#21`, `#28`, `#31`, `#47`, `#69`, `#124`, `#154`-`#157`, `#159`, `#161`, closed `#142` |
+| `IDENTITY_ACCESS_REQUIREMENTS.md` | `#70`, `#157`, closed `#142` |
+| `IMPLEMENTATION_WORK_ORDER.md` | all open issues, with focused ownership for items 1-26 in `#145`-`#170` |
 | `OPEN_ISSUES_CONTEXT.md` | all open issues, plus closed `#142` lineage |
-| `PROJECT_GOVERNANCE_REQUIREMENTS.md` | `#70`, `#79`, `#80`, closed `#142` |
-| `RESOURCE_LIFECYCLE_REQUIREMENTS.md` | `#21`, `#66`, `#76`, `#80`, `#124`, closed `#142` |
-| `RUNTIME_OPERATOR_REQUIREMENTS.md` | `#66`, `#69`, `#72`, `#74` |
-| `SECURITY_RUNTIME_ROADMAP.md` | `#28`, `#66`, `#72`, `#74`, `#75` |
-| `VALIDATION_MATRIX.md` | all implementation issues selected from this matrix |
-| `REVIEW_FINDINGS_RECONCILIATION.md` | `#72`, plus security/runtime portions of `#28`, `#66`, `#74`, `#75` |
-| `REVIEW_FINDINGS_COVERAGE_AUDIT.md` | `#72`, `#75`, and deferred product/platform backlog issues |
+| `PROJECT_GOVERNANCE_REQUIREMENTS.md` | `#70`, `#79`, `#80`, `#161`, closed `#142` |
+| `RESOURCE_LIFECYCLE_REQUIREMENTS.md` | `#21`, `#66`, `#76`, `#80`, `#124`, `#148`, `#159`, `#160`, closed `#142` |
+| `RUNTIME_OPERATOR_REQUIREMENTS.md` | `#66`, `#69`, `#72`, `#74`, `#150`, `#162`, `#167` |
+| `SECURITY_RUNTIME_ROADMAP.md` | `#28`, `#66`, `#72`, `#74`, `#75`, `#145`-`#150`, `#164`-`#170` |
+| `VALIDATION_MATRIX.md` | all implementation issues selected from this matrix, especially `#151`, `#152`, and focused admin-new issues `#153`-`#163` |
+| `REVIEW_FINDINGS_RECONCILIATION.md` | `#72`, `#145`-`#150`, `#165`, `#169`, `#170`, plus security/runtime portions of `#28`, `#66`, `#74`, `#75` |
+| `REVIEW_FINDINGS_COVERAGE_AUDIT.md` | `#72`, `#75`, `#151`, `#164`, `#166`, `#168`, and deferred product/platform backlog issues |
 | `SOURCE_PLAN_INVENTORY.md` | `#6`, closed `#142` |
 | `LEGACY_DOC_RETENTION_AUDIT.md` | `#6`, closed `#142` |
 | `LEGACY_SECTION_COVERAGE_AUDIT.md` | `#6`, closed `#142` |
-| `NEXT_WORKING_ROADMAP.md` | closed `#142`, with security cleanup links to `#72`, `#74`, `#75` where no focused issue exists |
+| `NEXT_WORKING_ROADMAP.md` | `#145`, `#146`, `#149`, `#154`-`#158`, closed `#142` |
 | `README.md` | `#6`, closed `#142` |
 | `concept.html` | closed `#142` as design reference only |
 
 ## Issue Scoping Before Implementation
 
 The implementation work order deliberately starts with high-priority security
-and validation slices. The current working rule is to stay on the existing open
-issues for now. Before coding, select the relevant existing open issue and capture the
-exact slice boundary in a checked-in `docs/*_PLAN.md` file:
+and validation slices. After the reverse docs-to-issues audit, work-order items
+1 through 26 have focused open issues. Before coding, select the relevant
+focused issue and capture the exact slice boundary in a checked-in
+`docs/*_PLAN.md` file:
 
 | Work-order item | Current issue state | Recommended action |
 | --- | --- | --- |
-| Item 1: token domain separation and URL credential cleanup | Broadly related to `#72`. | Scope as a `#72` slice with a dedicated plan file. |
-| Item 2: shared admin browser auth and web-security hardening | Broadly related to `#72` and closed `#142`. | Scope as a `#72` slice with a dedicated plan file. |
-| Item 4: browser context import safety | Broadly related to `#72`. | Scope as a `#72` slice with a dedicated plan file. |
-| Item 5: recording artifact finalization boundary | Related to `#21`. | Scope as a `#21` slice with a dedicated plan file. |
-| Item 6: gateway lifecycle, health, and readiness | Broadly related to `#66` and `#74`. | Scope the first slice under the closer existing issue, usually `#74` for lifecycle/readiness or `#66` for deployment packaging. |
-| Item 7: minimal CI and validation ratchet | Broadly related to `#75`. | Scope as a `#75` slice with a dedicated plan file. |
-| Item 8: Postgres session-control store contract tests | Broadly related to validation and release confidence. | Scope as a `#75` slice unless a more specific existing issue is selected. |
+| Items 1-9: P0/P1 security, runtime, validation, and admin-new foundation | `#145`-`#153` | Use the matching focused issue and a dedicated plan file. |
+| Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
+| Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |
+| Item 27: deferred product and enterprise backlog | Existing broad issues: `#30`, `#31`, `#66`, `#70`, `#71`, `#73`, `#76`, `#79`, `#80` | Keep as product backlog unless promoted into a concrete implementation slice. |
 
 ## Issue Hygiene Notes
 
@@ -135,16 +173,16 @@ exact slice boundary in a checked-in `docs/*_PLAN.md` file:
   the consolidated docs instead of the removed
   `docs/ADMIN_APP_REDESIGN_FOUNDATION.md`.
 - There is currently no open broad admin-new parent issue. Use `#124` for
-  session-template catalog work, and route other admin-new implementation
-  slices through the relevant existing open issue.
+  session-template catalog work, and use `#153`-`#163` for other focused
+  admin-new implementation slices.
 - `#6` remains useful as the umbrella tracker, but direct implementation PRs
-  should reference the closest existing open issue plus the scoped local plan
-  file rather than creating another issue.
+  should reference the matching focused issue from `#145`-`#170` where one
+  exists, plus the scoped local plan file.
 - `#31`, `#71`, `#76`, `#79`, and `#80` are represented only at product
   backlog level in the docs. That is intentional for the current admin/security
   priority. If any of them becomes active, create a dedicated local plan file
   or expand the relevant domain doc before implementation starts.
 - `#124` is the cleanest current issue for a focused admin-new resource slice.
 - `#20`, `#21`, `#28`, `#47`, `#66`, `#69`, `#70`, `#72`, `#73`, `#74`, and
-  `#75` are valid but broad. Keep selected PRs narrow by scoping them in the
-  plan file and PR description while still referencing the existing issue.
+  `#75` remain valid but broad. Prefer the matching focused issue from
+  `#145`-`#170` for implementation PRs when the slice is covered there.

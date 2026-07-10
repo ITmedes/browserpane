@@ -56,7 +56,7 @@ Why:
 
 Scope:
 
-1. Create or confirm a canonical issue.
+1. Use canonical issue `#145`.
 2. Add or update a focused implementation document in the consolidated planning
    workspace before coding starts.
 3. Add token purpose/audience separation or distinct signing keys.
@@ -120,7 +120,7 @@ Why:
 
 Scope:
 
-1. Create or confirm a canonical issue.
+1. Use canonical issue `#149`.
 2. Add or update a focused implementation document in the consolidated planning
    workspace before coding starts.
 3. Enforce that completion paths are under the configured recording staging
