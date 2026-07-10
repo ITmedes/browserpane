@@ -14,6 +14,8 @@ Source check:
 - open issue range: `#6` through `#170`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
+- cross-reference pass on 2026-07-10 verified that every open issue has a
+  docs source or docs cross-reference section and links back to this file,
 - closed admin-redesign lineage issue: `#142`, closed as completed on
   2026-07-07 and updated on 2026-07-10 to point at the consolidated docs.
 
@@ -97,6 +99,17 @@ The original 19 open issues remain relevant. None should be closed only
 because of the docs consolidation or because `#142` is closed. The focused
 issues now own the concrete work-order slices; the original broad issues remain
 roadmap and enterprise/product context.
+
+The cross-reference pass also updated the issue bodies in both directions:
+
+- every broad roadmap issue now has a `Docs cross-reference` section with
+  source docs, the central issue map, and related focused issues where
+  applicable,
+- every focused work-order issue from `#145` through `#170` has both `Docs
+  source` and `Docs cross-reference` sections,
+- every open issue links back to `docs/OPEN_ISSUES_CONTEXT.md`,
+- stale wording that told slices to stay on broad issues was removed from the
+  issue bodies.
 
 | Issue | Current relevance | GitHub issue-body action | Admin-new reference status |
 | --- | --- | --- | --- |
