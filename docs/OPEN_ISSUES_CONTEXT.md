@@ -27,7 +27,7 @@ Source check:
 | Focused current admin resource issue | `#124` | Use for the session-template catalog route when that slice is selected. |
 | Focused docs-derived work-order issues | `#145` through `#170` | Use these as canonical implementation issues for work-order items 1 through 26. |
 | Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep as roadmap and enterprise/product context. Prefer the matching focused issue from `#145`-`#170` when an implementation slice is covered there. |
-| Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the relevant existing open issue. |
+| Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the focused admin issues in `#153`-`#163`. |
 
 ## Open Issue Matrix
 
@@ -119,7 +119,7 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#28` | Relevant. Workflow webhooks exist; generalized resource events and security export remain. | Updated on GitHub 2026-07-10 with `/admin-new/` event-subscription and delivery-health alignment. | Admin-new should eventually expose event subscriptions and delivery health, but this is not yet implemented. |
 | `#30` | Relevant as production/support backlog. | Updated on GitHub 2026-07-10 with `/admin-new/` support-bundle operator-surface alignment. | Support bundle generation/download should eventually be an admin-new operator route. |
 | `#31` | Relevant but deferred product capability. | Updated on GitHub 2026-07-10 with `/admin-new/` session create/template/detail device-mode alignment. | Device-mode choices would belong in session create, templates, and session detail. |
-| `#47` | Relevant, but the body contained stale route-scoping references to completed issues. | Updated on GitHub 2026-07-10 to replace old `#87`/`#89` routing notes with the current docs/work-order ownership. | Admin-new workflow catalog exists; workflow-run detail and deeper run controls remain missing. |
+| `#47` | Relevant, but the body contained stale route-scoping references to completed issues. | Updated on GitHub 2026-07-10 to replace old closed `#87`/`#89` routing notes with the current docs/work-order ownership. | Admin-new workflow catalog exists; workflow-run detail and deeper run controls remain missing. |
 | `#66` | Relevant. Deployment packaging remains broad and should not be one PR. | Updated on GitHub 2026-07-10 with `/admin-new/` routing, auth, event-stream, and smoke-validation alignment. | Admin-new matters as one deployed web route beside `/admin/`, but this issue should stay deployment-focused. |
 | `#69` | Relevant. Automation API productization remains broader than current MCP/workflow implementation. | Updated on GitHub 2026-07-10 with `/admin-new/` session-detail and API-companion alignment. | Session automation should surface in session detail and API companion routes. |
 | `#70` | Relevant. Identity/access-review exists; API keys, immutable audit, and retention controls remain backlog. | Updated on GitHub 2026-07-10 with `/admin-new/identity` alignment. | Admin-new identity/access route is the near-term UI owner; API-key/audit/retention screens are later. |
