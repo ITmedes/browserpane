@@ -483,9 +483,11 @@ Completed implementation packages:
 - identity provisioning/project mappings,
 - admin identity polish and safe token claim evaluation.
 
-Current parent issue:
+Closed redesign lineage:
 
-- BPANE-00142 remains the unified admin redesign parent.
+- BPANE-00142 is closed as the unified admin redesign foundation. Remaining
+  admin-new implementation work should use focused open issues or create new
+  focused issues before coding.
 
 Current baseline checkpoint:
 

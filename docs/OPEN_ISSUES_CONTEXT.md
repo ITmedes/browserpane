@@ -9,17 +9,19 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched through the GitHub API on 2026-07-10,
-- open issues excluding pull requests: 20,
-- issue range: `#6` through `#142`.
+- open issues excluding pull requests: 19,
+- open issue range: `#6` through `#124`,
+- closed admin-redesign lineage issue: `#142`, closed as completed on
+  2026-07-07 and updated on 2026-07-10 to point at the consolidated docs.
 
 ## Issue Roles
 
 | Role | Issues | How to use |
 | --- | --- | --- |
 | Umbrella tracker | `#6` | Keep open for high-level roadmap context only. Do not use as the implementation issue for feature PRs. |
-| Admin-new parent | `#142` | Parent issue for unified admin redesign and promotion. Follow-up PRs can reference it but should not close it until the promotion gate is complete. |
 | Focused current admin resource issue | `#124` | Use for the session-template catalog route when that slice is selected. |
 | Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep mapped to the implementation work order. Create narrower issues before coding if the existing issue is too broad for one PR. |
+| Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; create focused issues for remaining admin implementation slices. |
 
 ## Open Issue Matrix
 
@@ -44,34 +46,37 @@ Source check:
 | `#79` Central enterprise policy engine | `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 17, 27 | Current project-policy UX is nearer term; central policy engine is later. |
 | `#80` DLP and content inspection hooks | `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 17, 27 | Current file policy visibility is nearer term; DLP provider hooks are later. |
 | `#124` Admin session template catalog management | `DOMAIN_REQUIREMENTS.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | Item 15 | Focused admin-new resource slice. Use as canonical issue for template catalog work. |
-| `#142` Unified admin redesign | `ADMIN_NEW_STATUS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `ADMIN_NEW_API_COVERAGE.md`, `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 9-19 | Parent redesign issue. Close only after promotion decision is accepted. |
 
 ## Docs-To-Issue Context
 
+Open issues are listed as `#N`. The historical closed admin redesign lineage is
+shown as `closed #142`.
+
 | Docs file | Primary issue context |
 | --- | --- |
-| `ADMIN_INTERACTION_REQUIREMENTS.md` | `#20`, `#28`, `#142` |
-| `ADMIN_NEW_API_COVERAGE.md` | `#69`, `#70`, `#124`, `#142` |
-| `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md` | `#142` |
-| `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | `#124`, `#142` |
-| `ADMIN_NEW_REQUIREMENTS.md` | `#20`, `#21`, `#47`, `#69`, `#124`, `#142` |
-| `ADMIN_NEW_STATUS.md` | `#142` |
-| `DOMAIN_REQUIREMENTS.md` | `#20`, `#21`, `#28`, `#31`, `#47`, `#69`, `#124`, `#142` |
-| `IDENTITY_ACCESS_REQUIREMENTS.md` | `#70`, `#142` |
+| `ADMIN_INTERACTION_REQUIREMENTS.md` | `#20`, `#28`, closed `#142` |
+| `ADMIN_NEW_API_COVERAGE.md` | `#69`, `#70`, `#124`, closed `#142` |
+| `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md` | closed `#142` |
+| `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | `#124`, closed `#142` |
+| `ADMIN_NEW_REQUIREMENTS.md` | `#20`, `#21`, `#47`, `#69`, `#124`, closed `#142` |
+| `ADMIN_NEW_STATUS.md` | closed `#142` |
+| `DOMAIN_REQUIREMENTS.md` | `#20`, `#21`, `#28`, `#31`, `#47`, `#69`, `#124`, closed `#142` |
+| `IDENTITY_ACCESS_REQUIREMENTS.md` | `#70`, closed `#142` |
 | `IMPLEMENTATION_WORK_ORDER.md` | all open issues |
-| `PROJECT_GOVERNANCE_REQUIREMENTS.md` | `#70`, `#79`, `#80`, `#142` |
-| `RESOURCE_LIFECYCLE_REQUIREMENTS.md` | `#21`, `#66`, `#76`, `#80`, `#124`, `#142` |
+| `OPEN_ISSUES_CONTEXT.md` | all open issues, plus closed `#142` lineage |
+| `PROJECT_GOVERNANCE_REQUIREMENTS.md` | `#70`, `#79`, `#80`, closed `#142` |
+| `RESOURCE_LIFECYCLE_REQUIREMENTS.md` | `#21`, `#66`, `#76`, `#80`, `#124`, closed `#142` |
 | `RUNTIME_OPERATOR_REQUIREMENTS.md` | `#66`, `#69`, `#72`, `#74` |
 | `SECURITY_RUNTIME_ROADMAP.md` | `#28`, `#66`, `#72`, `#74`, `#75` |
 | `VALIDATION_MATRIX.md` | all implementation issues selected from this matrix |
 | `REVIEW_FINDINGS_RECONCILIATION.md` | `#72`, plus security/runtime portions of `#28`, `#66`, `#74`, `#75` |
 | `REVIEW_FINDINGS_COVERAGE_AUDIT.md` | `#72`, `#75`, and deferred product/platform backlog issues |
-| `SOURCE_PLAN_INVENTORY.md` | `#6`, `#142` |
-| `LEGACY_DOC_RETENTION_AUDIT.md` | `#6`, `#142` |
-| `LEGACY_SECTION_COVERAGE_AUDIT.md` | `#6`, `#142` |
-| `NEXT_WORKING_ROADMAP.md` | `#142`, with security cleanup links to `#72`, `#74`, `#75` where no focused issue exists |
-| `README.md` | `#6`, `#142` |
-| `concept.html` | `#142` as design reference only |
+| `SOURCE_PLAN_INVENTORY.md` | `#6`, closed `#142` |
+| `LEGACY_DOC_RETENTION_AUDIT.md` | `#6`, closed `#142` |
+| `LEGACY_SECTION_COVERAGE_AUDIT.md` | `#6`, closed `#142` |
+| `NEXT_WORKING_ROADMAP.md` | closed `#142`, with security cleanup links to `#72`, `#74`, `#75` where no focused issue exists |
+| `README.md` | `#6`, closed `#142` |
+| `concept.html` | closed `#142` as design reference only |
 
 ## Issue Gaps Before Implementation
 
@@ -83,7 +88,7 @@ selected slice:
 | Work-order item | Current issue state | Recommended action |
 | --- | --- | --- |
 | Item 1: token domain separation and URL credential cleanup | No focused open issue. Broadly related to `#72`. | Create a focused issue before implementation. |
-| Item 2: shared admin browser auth and web-security hardening | No focused open issue. Broadly related to `#72` and `#142`. | Create a focused issue before implementation. |
+| Item 2: shared admin browser auth and web-security hardening | No focused open issue. Broadly related to `#72` and closed `#142`. | Create a focused issue before implementation. |
 | Item 4: browser context import safety | No focused open issue. Broadly related to `#72`. | Create a focused issue before implementation. |
 | Item 5: recording artifact finalization boundary | No focused open issue. Related to `#21`. | Either create a focused issue or explicitly scope it as the next `#21` slice. |
 | Item 6: gateway lifecycle, health, and readiness | Broadly related to `#66` and `#74`. | Create a focused issue if the first PR is only graceful shutdown/readiness. |
@@ -92,9 +97,13 @@ selected slice:
 
 ## Issue Hygiene Notes
 
-- `#142` is still the correct parent for admin-new. Its companion-doc section
-  was updated on 2026-07-10 to point at the consolidated docs instead of the
-  removed `docs/ADMIN_APP_REDESIGN_FOUNDATION.md`.
+- `#142` is closed as completed. It remains the historical admin-new design
+  lineage, and its companion-doc section was updated on 2026-07-10 to point at
+  the consolidated docs instead of the removed
+  `docs/ADMIN_APP_REDESIGN_FOUNDATION.md`.
+- There is currently no open broad admin-new parent issue. Use `#124` for
+  session-template catalog work, and create focused issues for other admin-new
+  implementation slices before coding.
 - `#6` remains useful as the umbrella tracker, but direct implementation PRs
   should reference a focused issue or create one when the open issue is too
   broad.

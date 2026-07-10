@@ -26,7 +26,7 @@ Merged PR `#143` is the current status checkpoint:
 - includes workflow source hardening,
 - includes MCP bridge control hardening,
 - keeps `/admin/` as stable/default,
-- references but does not close `#142`.
+- carries forward the now-closed `#142` redesign lineage.
 
 ## Recommended Next Slices
 
