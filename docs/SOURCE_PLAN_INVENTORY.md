@@ -78,6 +78,11 @@ An eighth audit pass added:
   admin-new, domain-resource, runtime/operator, documentation, validation, and
   refactoring slices.
 
+A ninth audit pass added:
+
+- `OPEN_ISSUES_CONTEXT.md` for the live open GitHub issue mapping against the
+  consolidated docs and implementation work order.
+
 ### Redesign Foundation Decision
 
 Status: Active requirement.
