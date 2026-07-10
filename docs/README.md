@@ -27,8 +27,9 @@ Current branch context:
   development.
 - PR `#143` has been merged and is the current baseline for `/admin-new`,
   workflow source hardening, and MCP control-auth hardening.
-- Issue `#142` remains the parent redesign issue and should not be closed by
-  follow-up implementation PRs until the promotion gate is actually reached.
+- Issue `#142` is closed as the historical redesign foundation. Follow-up
+  implementation PRs should use focused open issues or create them before
+  coding.
 
 ## Files
 
