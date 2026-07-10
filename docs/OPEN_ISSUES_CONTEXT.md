@@ -20,7 +20,7 @@ Source check:
 | --- | --- | --- |
 | Umbrella tracker | `#6` | Keep open for high-level roadmap context only. Do not use as the implementation issue for feature PRs. |
 | Focused current admin resource issue | `#124` | Use for the session-template catalog route when that slice is selected. |
-| Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep mapped to the implementation work order. For now, scope smaller PR slices through the existing issue plus a checked-in `docs/*_PLAN.md` file instead of creating child issues. |
+| Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep mapped to the implementation work order. For now, scope smaller PR slices through the existing issue plus a checked-in `docs/*_PLAN.md` file. |
 | Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the relevant existing open issue. |
 
 ## Open Issue Matrix
@@ -61,7 +61,7 @@ inside the existing issue.
 | Issue | Current relevance | GitHub issue-body action | Admin-new reference status |
 | --- | --- | --- | --- |
 | `#6` | Relevant as umbrella tracker only. | Updated on GitHub 2026-07-10 to remove active-looking references to completed slices and point at this consolidated docs workspace. | Now mentions `#142` as closed lineage and `/admin-new/` as active side-by-side app, but does not own admin implementation PRs. |
-| `#20` | Relevant. Session observability remains missing as a coherent API and route-backed inspector model. | Updated on GitHub 2026-07-10 with `/admin-new/` session-inspector alignment and the no-child-issue rule. | Admin-new owner is the future session detail subareas for observability, logs, tabs, pages, and diagnostics. |
+| `#20` | Relevant. Session observability remains missing as a coherent API and route-backed inspector model. | Updated on GitHub 2026-07-10 with `/admin-new/` session-inspector alignment and the existing-issue scoping rule. | Admin-new owner is the future session detail subareas for observability, logs, tabs, pages, and diagnostics. |
 | `#21` | Relevant. Recording export exists partly; generalized artifacts/browser outputs remain broader work. | Updated on GitHub 2026-07-10 with `/admin-new/recordings` and artifact-route alignment. | `/admin-new/recordings` exists, but session-scoped artifacts/files/download detail routes are still missing. |
 | `#28` | Relevant. Workflow webhooks exist; generalized resource events and security export remain. | Updated on GitHub 2026-07-10 with `/admin-new/` event-subscription and delivery-health alignment. | Admin-new should eventually expose event subscriptions and delivery health, but this is not yet implemented. |
 | `#30` | Relevant as production/support backlog. | Updated on GitHub 2026-07-10 with `/admin-new/` support-bundle operator-surface alignment. | Support bundle generation/download should eventually be an admin-new operator route. |
@@ -71,7 +71,7 @@ inside the existing issue.
 | `#69` | Relevant. Automation API productization remains broader than current MCP/workflow implementation. | Updated on GitHub 2026-07-10 with `/admin-new/` session-detail and API-companion alignment. | Session automation should surface in session detail and API companion routes. |
 | `#70` | Relevant. Identity/access-review exists; API keys, immutable audit, and retention controls remain backlog. | Updated on GitHub 2026-07-10 with `/admin-new/identity` alignment. | Admin-new identity/access route is the near-term UI owner; API-key/audit/retention screens are later. |
 | `#71` | Relevant but deferred product capability. | Updated on GitHub 2026-07-10 with `/admin-new/` session/workflow handoff alignment. | Admin-new handoff controls would belong in session/workflow detail. |
-| `#72` | Relevant. Several high-priority security cleanup slices map here. | Updated on GitHub 2026-07-10 with admin-new promotion-blocker alignment and the no-child-issue rule. | Admin-new security hardening is promotion-blocking, especially shared auth, event auth, CSP/frame policy, and URL credential cleanup. |
+| `#72` | Relevant. Several high-priority security cleanup slices map here. | Updated on GitHub 2026-07-10 with admin-new promotion-blocker alignment and the existing-issue scoping rule. | Admin-new security hardening is promotion-blocking, especially shared auth, event auth, CSP/frame policy, and URL credential cleanup. |
 | `#73` | Relevant but deferred production runbook work. | Updated on GitHub 2026-07-10 with `/admin-new/` restore-validation alignment. | Restore validation should include route availability and admin-new smoke checks. |
 | `#74` | Relevant. Graceful shutdown/readiness is nearer term; full HA is later. | Updated on GitHub 2026-07-10 with `/admin-new/` event-stream continuity and readiness alignment. | Admin-new should be part of event-stream continuity and route availability validation. |
 | `#75` | Relevant. Minimal CI/validation ratchet is nearer term; release governance is later. | Updated on GitHub 2026-07-10 with `bpane-admin-unified` build/test/smoke alignment. | Admin-new build, unit tests, and focused smoke tests must be included in any validation ratchet. |
@@ -114,8 +114,8 @@ shown as `closed #142`.
 ## Issue Scoping Before Implementation
 
 The implementation work order deliberately starts with high-priority security
-and validation slices. The current working rule is to avoid new child issues
-for now. Before coding, select the relevant existing open issue and capture the
+and validation slices. The current working rule is to stay on the existing open
+issues for now. Before coding, select the relevant existing open issue and capture the
 exact slice boundary in a checked-in `docs/*_PLAN.md` file:
 
 | Work-order item | Current issue state | Recommended action |
