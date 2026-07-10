@@ -767,7 +767,7 @@ Deferred items:
 
 ## Suggested Immediate Next Issue
 
-Create one focused issue for work item 1:
+Use focused issue `#145` for work item 1:
 
 Title: `Token domain separation and URL credential cleanup`
 
