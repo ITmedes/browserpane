@@ -78,6 +78,8 @@ Current branch context:
   retained requirements embedded by topic.
 - `NEXT_WORKING_ROADMAP.md`: prioritized remaining work, keeping admin-new
   promotion in view.
+- `OPEN_ISSUES_CONTEXT.md`: live open GitHub issue context mapped to the
+  consolidated docs, work-order items, and issue hygiene gaps.
 - `SECURITY_RUNTIME_ROADMAP.md`: security, runtime, scale, and production
   hardening roadmap extracted from the review cleanup plan.
 - `VALIDATION_MATRIX.md`: focused validation and smoke expectations for the
@@ -183,6 +185,11 @@ The eighth pass added a consolidated implementation work order. It ranks
 security cleanup, admin-new parity, domain-resource work, runtime/operator
 work, documentation, validation, and refactoring tasks by production risk,
 dependency order, shippable PR scope, and validation confidence.
+
+The ninth pass mapped the consolidated docs against the live open GitHub issue
+list. It records which docs own each open issue, which work-order item should
+drive it, and which high-priority slices still need a focused issue before
+implementation.
 
 ## Maintenance Rule
 

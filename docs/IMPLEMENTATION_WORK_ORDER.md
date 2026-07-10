@@ -7,6 +7,9 @@ workspace. It is broader than the review cleanup plan: it ranks security,
 runtime, admin-new, domain-resource, identity, operator, documentation, and
 refactoring topics into shippable slices.
 
+For live GitHub issue context, use `OPEN_ISSUES_CONTEXT.md`. It maps every
+currently open issue to the docs and work-order items below.
+
 ## Source Scope
 
 This order incorporates the active requirements from:
@@ -26,6 +29,7 @@ This order incorporates the active requirements from:
 - `VALIDATION_MATRIX.md`
 - `REVIEW_FINDINGS_RECONCILIATION.md`
 - `REVIEW_FINDINGS_COVERAGE_AUDIT.md`
+- `OPEN_ISSUES_CONTEXT.md`
 
 ## Selection Criteria
 
