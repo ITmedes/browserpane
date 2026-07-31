@@ -10,11 +10,13 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched through the GitHub API on 2026-07-31,
-- open issues excluding pull requests: 45 after the reverse docs-to-issues
-  audit,
-- open issue range: `#6` through `#170`,
+- open issues excluding pull requests: 47 after the Teach Mode and BPM
+  Workflow Endpoint cross-reference audit,
+- open issue range: `#6` through `#172`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
+- focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
+- focused Phase N BPM Workflow Endpoint issue created on 2026-07-31: `#172`,
 - cross-reference pass on 2026-07-31 verified that every open issue has a
   docs source or docs cross-reference section and links back to this file,
 - closed admin-redesign lineage issue: `#142`, closed as completed on
@@ -27,6 +29,7 @@ Source check:
 | Umbrella tracker | `#6` | Keep open for high-level roadmap context only. Do not use as the implementation issue for feature PRs. |
 | Focused current admin resource issue | `#124` | Use for the session-template catalog route when that slice is selected. |
 | Focused docs-derived work-order issues | `#145` through `#170` | Use these as canonical implementation issues for work-order items 1 through 26. |
+| Focused Phase N productization issues | `#172`, `#171` | Use `#172` for stable project-scoped BPM Workflow Endpoints and their machine-facing run contract. Use `#171` for Workflow Studio Teach Mode, semantic demonstrations, candidate generation, replay gates, immutable publication, and controlled repair. |
 | Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep as roadmap and enterprise/product context. Prefer the matching focused issue from `#145`-`#170` when an implementation slice is covered there. |
 | Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the focused admin issues in `#153`-`#163`. |
 
@@ -53,6 +56,8 @@ Source check:
 | `#79` Central enterprise policy engine | `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 17, 27 | Current project-policy UX is nearer term; central policy engine is later. |
 | `#80` DLP and content inspection hooks | `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 17, 27 | Current file policy visibility is nearer term; DLP provider hooks are later. |
 | `#124` Admin session template catalog management | `DOMAIN_REQUIREMENTS.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | Item 15 | Focused admin-new resource slice. Use as canonical issue for template catalog work. |
+| `#171` Workflow Studio Teach Mode and controlled demonstration-to-workflow publishing | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` | Item 27, focused Phase N slice | Canonical owner for semantic demonstrations, candidate generation, fresh-context replay, immutable publication gate, and controlled repair. Not implemented and not an admin-new promotion blocker. |
+| `#172` Project-scoped workflow endpoints for BPM and orchestration integrations | `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `IDENTITY_ACCESS_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` | Item 27, focused Phase N slice | Canonical owner for stable endpoint deployment/revisions, machine grants, typed async invocation, completion profiles, deadlines, overload/readiness, tracing, callbacks, side-effect evidence, artifact handoff, and connector conformance. Implement before `#171` within Phase N by default. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -88,6 +93,8 @@ dedicated open issue ownership.
 | 24. Host and client render hot-path work | `#168` Profile and optimize host and client render hot paths | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
 | 25. Gateway fan-out and transport optimization | `#169` Profile and optimize gateway fan-out and transport behavior | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
 | 26. Structural refactors | `#170` Split session-control structural refactors by domain | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
+| Phase N. BPM Workflow Integration Endpoints | `#172` Add project-scoped workflow endpoints for BPM and orchestration integrations | `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `IDENTITY_ACCESS_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
+| Phase N. Workflow Studio Teach Mode | `#171` Add Workflow Studio Teach Mode and controlled demonstration-to-workflow publishing | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
 
 ## Issue Body Audit
 
@@ -96,9 +103,10 @@ Checked again on 2026-07-31 against the live issue bodies, current
 original 19 open issues; the reverse docs-to-issues pass created focused
 issues `#145` through `#170`.
 
-The current live result is 45 open issues: 19 broad/focused pre-existing
-issues plus the 26 work-order issues `#145` through `#170`. Every open issue
-is represented in this document and links back to the consolidated docs.
+The current live result is 47 open issues: 19 broad/focused pre-existing
+issues, the 26 work-order issues `#145` through `#170`, and focused Phase N
+issues `#171` and `#172`. Every open issue is represented in this document and
+links back to the consolidated docs.
 
 The original 19 open issues remain relevant. None should be closed only
 because of the docs consolidation or because `#142` is closed. The focused
@@ -112,8 +120,9 @@ The cross-reference pass also updated the issue bodies in both directions:
   applicable,
 - every focused work-order issue from `#145` through `#170` has both `Docs
   source` and `Docs cross-reference` sections,
-- focused implementation issues `#124` and `#145` through `#170` include an
-  explicit example use case and post-implementation smoke sequence,
+- focused implementation issues `#124`, `#145` through `#170`, `#171`, and
+  `#172` include an explicit example use case and post-implementation smoke
+  sequence,
 - every open issue links back to `docs/OPEN_ISSUES_CONTEXT.md`,
 - stale wording that told slices to stay on broad issues was removed from the
   issue bodies.
@@ -127,18 +136,20 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#30` | Relevant as production/support backlog. | Updated on GitHub 2026-07-10 with `/admin-new/` support-bundle operator-surface alignment. | Support bundle generation/download should eventually be an admin-new operator route. |
 | `#31` | Relevant but deferred product capability. | Updated on GitHub 2026-07-10 with `/admin-new/` session create/template/detail device-mode alignment. | Device-mode choices would belong in session create, templates, and session detail. |
 | `#47` | Relevant, but the body contained stale route-scoping references to completed issues. | Updated on GitHub 2026-07-10 to replace old closed `#87`/`#89` routing notes with the current docs/work-order ownership. | Admin-new workflow catalog exists; workflow-run detail and deeper run controls remain missing. |
-| `#66` | Relevant. Deployment packaging remains broad and should not be one PR. | Updated on GitHub 2026-07-10 with `/admin-new/` routing, auth, event-stream, and smoke-validation alignment. | Admin-new matters as one deployed web route beside `/admin/`, but this issue should stay deployment-focused. |
+| `#66` | Relevant. Deployment packaging remains broad and should not be one PR. | Updated on GitHub 2026-07-31 with the `#172` private-ingress/deployment boundary in addition to `/admin-new/` routing, auth, event-stream, and smoke-validation alignment. | Admin-new matters as one deployed web route beside `/admin/`; private connectivity remains deployment-owned. |
 | `#69` | Relevant. Automation API productization remains broader than current MCP/workflow implementation. | Updated on GitHub 2026-07-10 with `/admin-new/` session-detail and API-companion alignment. | Session automation should surface in session detail and API companion routes. |
 | `#70` | Relevant. Identity/access-review exists; API keys, immutable audit, and retention controls remain backlog. | Updated on GitHub 2026-07-10 with `/admin-new/identity` alignment. | Admin-new identity/access route is the near-term UI owner; API-key/audit/retention screens are later. |
 | `#71` | Relevant but deferred product capability. | Updated on GitHub 2026-07-10 with `/admin-new/` session/workflow handoff alignment. | Admin-new handoff controls would belong in session/workflow detail. |
-| `#72` | Relevant. Several high-priority security cleanup slices map here. | Updated on GitHub 2026-07-10 with admin-new promotion-blocker alignment and the existing-issue scoping rule. | Admin-new security hardening is promotion-blocking, especially shared auth, event auth, CSP/frame policy, and URL credential cleanup. |
+| `#72` | Relevant. Several high-priority security cleanup slices map here. | Updated on GitHub 2026-07-31 with the `#172` endpoint-threat boundary in addition to admin-new promotion-blocker alignment. | Admin-new security hardening is promotion-blocking; general endpoint ingress/callback/identity/data threat modeling remains here. |
 | `#73` | Relevant but deferred production runbook work. | Updated on GitHub 2026-07-10 with `/admin-new/` restore-validation alignment. | Restore validation should include route availability and admin-new smoke checks. |
-| `#74` | Relevant. Graceful shutdown/readiness is nearer term; full HA is later. | Updated on GitHub 2026-07-10 with `/admin-new/` event-stream continuity and readiness alignment. | Admin-new should be part of event-stream continuity and route availability validation. |
+| `#74` | Relevant. Graceful shutdown/readiness is nearer term; full HA is later. | Updated on GitHub 2026-07-31 with the `#172` endpoint-availability boundary in addition to `/admin-new/` event-stream continuity and readiness alignment. | Admin-new should be part of event-stream continuity and route availability validation; `#172` consumes but does not own general HA. |
 | `#75` | Relevant. The 2026-07-31 audit found patched critical/high dependency alerts, including runtime dependencies. Remediation and the minimal validation ratchet are nearer term; broader release governance is later. | Updated on GitHub 2026-07-31 to route the current dependency baseline and enforced Rust/Node lockfile scanning through `#151`. | Admin-new build/unit/smoke coverage and dependency safety must be included in the validation ratchet. |
-| `#76` | Relevant but deferred enterprise storage/security capability. | Updated on GitHub 2026-07-10 with `/admin-new/` effective-policy display alignment. | Effective residency/encryption policy belongs in admin-new once implemented. |
-| `#79` | Relevant but broad. Current project-policy visibility is nearer term than a central policy engine. | Updated on GitHub 2026-07-10 with `/admin-new/` effective-policy diagnostics alignment. | Admin-new policy diagnostics should be part of the eventual effective-policy surface. |
-| `#80` | Relevant but broad. Current file-policy visibility is nearer term than pluggable DLP. | Updated on GitHub 2026-07-10 with `/admin-new/` file/artifact scan-state alignment. | Admin-new file/artifact indicators and filters are the expected operator UI. |
+| `#76` | Relevant but deferred enterprise storage/security capability. | Updated on GitHub 2026-07-31 with the `#172` data-classification/residency boundary in addition to `/admin-new/` effective-policy display alignment. | Effective residency/encryption policy belongs in admin-new once implemented; `#172` only references it. |
+| `#79` | Relevant but broad. Current project-policy visibility is nearer term than a central policy engine. | Updated on GitHub 2026-07-31 with the narrow `#172` endpoint-grant boundary in addition to `/admin-new/` effective-policy diagnostics alignment. | Admin-new policy diagnostics should be part of the eventual effective-policy surface; generalized policy evaluation remains here. |
+| `#80` | Relevant but broad. Current file-policy visibility is nearer term than pluggable DLP. | Updated on GitHub 2026-07-31 with the `#172` process-variable/artifact boundary in addition to `/admin-new/` file/artifact scan-state alignment. | Admin-new file/artifact indicators and filters are the expected operator UI; generalized inspection remains here. |
 | `#124` | Relevant and focused. This is the cleanest current admin-new implementation issue. | Updated on GitHub 2026-07-10 to name `/admin-new/` explicitly as the target surface. | Admin-new session-template catalog route is missing and should be built when this issue is selected. |
+| `#171` | Relevant and focused Phase N Teach Mode capability. | Created and cross-referenced on GitHub 2026-07-31; boundaries added to `#20`, `#21`, `#47`, `#71`, and `#172`. | Future full-width Workflow Studio and training routes; not an Admin-New promotion blocker. |
+| `#172` | Relevant and focused Phase N external workflow integration capability. | Created and re-audited on GitHub 2026-07-31; boundaries added to `#6`, `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, and `#171`. | Future Workflow Endpoint catalog/detail, immutable revisions, grants, completion/handoff profiles, runs, overload/readiness, state-event consistency, and delivery diagnostics; not an Admin-New promotion blocker. |
 
 ## Docs-To-Issue Context
 
@@ -148,26 +159,28 @@ shown as `closed #142`.
 | Docs file | Primary issue context |
 | --- | --- |
 | `ADMIN_INTERACTION_REQUIREMENTS.md` | `#20`, `#28`, `#153`, `#156`, closed `#142` |
-| `ADMIN_NEW_API_COVERAGE.md` | `#69`, `#70`, `#124`, `#153`, `#158`, closed `#142` |
+| `ADMIN_NEW_API_COVERAGE.md` | `#69`, `#70`, `#124`, `#153`, `#158`, `#172`, closed `#142` |
 | `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md` | `#153`, `#163`, closed `#142` |
 | `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | `#124`, `#154`-`#163`, closed `#142` |
-| `ADMIN_NEW_REQUIREMENTS.md` | `#20`, `#21`, `#47`, `#69`, `#124`, `#153`-`#159`, `#161`, `#163`, closed `#142` |
-| `ADMIN_NEW_STATUS.md` | `#153`, `#163`, closed `#142` |
-| `DOMAIN_REQUIREMENTS.md` | `#20`, `#21`, `#28`, `#31`, `#47`, `#69`, `#124`, `#154`-`#157`, `#159`, `#161`, closed `#142` |
-| `IDENTITY_ACCESS_REQUIREMENTS.md` | `#70`, `#157`, closed `#142` |
-| `IMPLEMENTATION_WORK_ORDER.md` | all open issues, with focused ownership for items 1-26 in `#145`-`#170` |
+| `ADMIN_NEW_REQUIREMENTS.md` | `#20`, `#21`, `#47`, `#69`, `#124`, `#153`-`#159`, `#161`, `#163`, `#171`, `#172`, closed `#142` |
+| `ADMIN_NEW_STATUS.md` | `#153`, `#163`, `#171`, `#172`, closed `#142` |
+| `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md` | `#171`, with dependencies on `#20`, `#21`, `#47`, `#71`, and `#172` |
+| `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | `#172`, with dependencies on `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, and `#171` |
+| `DOMAIN_REQUIREMENTS.md` | `#20`, `#21`, `#28`, `#31`, `#47`, `#69`, `#124`, `#154`-`#157`, `#159`, `#161`, `#171`, `#172`, closed `#142` |
+| `IDENTITY_ACCESS_REQUIREMENTS.md` | `#70`, `#157`, `#172`, closed `#142` |
+| `IMPLEMENTATION_WORK_ORDER.md` | all open issues, with focused ownership for items 1-26 in `#145`-`#170` and Phase N in `#172` then `#171` |
 | `OPEN_ISSUES_CONTEXT.md` | all open issues, plus closed `#142` lineage |
-| `PROJECT_GOVERNANCE_REQUIREMENTS.md` | `#70`, `#79`, `#80`, `#161`, closed `#142` |
+| `PROJECT_GOVERNANCE_REQUIREMENTS.md` | `#70`, `#79`, `#80`, `#161`, `#172`, closed `#142` |
 | `RESOURCE_LIFECYCLE_REQUIREMENTS.md` | `#21`, `#66`, `#76`, `#80`, `#124`, `#148`, `#159`, `#160`, closed `#142` |
-| `RUNTIME_OPERATOR_REQUIREMENTS.md` | `#66`, `#69`, `#72`, `#74`, `#150`, `#162`, `#167` |
+| `RUNTIME_OPERATOR_REQUIREMENTS.md` | `#66`, `#69`, `#72`, `#74`, `#150`, `#162`, `#167`, `#172` |
 | `SECURITY_RUNTIME_ROADMAP.md` | `#28`, `#66`, `#72`, `#74`, `#75`, `#145`-`#150`, `#164`-`#170` |
-| `VALIDATION_MATRIX.md` | all implementation issues selected from this matrix, especially `#151`, `#152`, and focused admin-new issues `#153`-`#163` |
+| `VALIDATION_MATRIX.md` | all implementation issues selected from this matrix, especially `#151`, `#152`, focused admin-new issues `#153`-`#163`, and Phase N issues `#171`-`#172` |
 | `REVIEW_FINDINGS_RECONCILIATION.md` | `#72`, `#145`-`#150`, `#165`, `#169`, `#170`, plus security/runtime portions of `#28`, `#66`, `#74`, `#75` |
 | `REVIEW_FINDINGS_COVERAGE_AUDIT.md` | `#72`, `#75`, `#151`, `#164`, `#166`, `#168`, and deferred product/platform backlog issues |
 | `SOURCE_PLAN_INVENTORY.md` | `#6`, closed `#142` |
 | `LEGACY_DOC_RETENTION_AUDIT.md` | `#6`, closed `#142` |
 | `LEGACY_SECTION_COVERAGE_AUDIT.md` | `#6`, closed `#142` |
-| `NEXT_WORKING_ROADMAP.md` | `#145`, `#146`, `#149`, `#154`-`#158`, closed `#142` |
+| `NEXT_WORKING_ROADMAP.md` | `#145`, `#146`, `#149`, `#154`-`#158`, `#171`, `#172`, closed `#142` |
 | `README.md` | `#6`, closed `#142` |
 | `concept.html` | closed `#142` as design reference only |
 
@@ -184,7 +197,7 @@ focused issue and capture the exact slice boundary in a checked-in
 | Items 1-9: P0/P1 security, runtime, validation, and admin-new foundation | `#145`-`#153` | Use the matching focused issue and a dedicated plan file. |
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
 | Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |
-| Item 27: deferred product and enterprise backlog | Existing broad issues: `#30`, `#31`, `#66`, `#70`, `#71`, `#73`, `#76`, `#79`, `#80` | Keep as product backlog unless promoted into a concrete implementation slice. |
+| Item 27: deferred product and enterprise backlog | Broad issues: `#30`, `#31`, `#66`, `#70`, `#71`, `#73`, `#76`, `#79`, `#80`; focused Phase N issues: `#172`, `#171` | Keep broad topics as product backlog. For Phase N workflow productization, implement `#172` before `#171` by default and use each dedicated plan. |
 
 ## Issue Hygiene Notes
 
@@ -196,7 +209,7 @@ focused issue and capture the exact slice boundary in a checked-in
   session-template catalog work, and use `#153`-`#163` for other focused
   admin-new implementation slices.
 - `#6` remains useful as the umbrella tracker, but direct implementation PRs
-  should reference the matching focused issue from `#145`-`#170` where one
+  should reference the matching focused issue from `#145`-`#172` where one
   exists, plus the scoped local plan file.
 - `#31`, `#71`, `#76`, `#79`, and `#80` are represented only at product
   backlog level in the docs. That is intentional for the current admin/security
@@ -205,4 +218,10 @@ focused issue and capture the exact slice boundary in a checked-in
 - `#124` is the cleanest current issue for a focused admin-new resource slice.
 - `#20`, `#21`, `#28`, `#47`, `#66`, `#69`, `#70`, `#72`, `#73`, `#74`, and
   `#75` remain valid but broad. Prefer the matching focused issue from
-  `#145`-`#170` for implementation PRs when the slice is covered there.
+  `#145`-`#172` for implementation PRs when the slice is covered there.
+- `#172` is the canonical external BPM Workflow Endpoint contract. It must not
+  absorb workflow authoring/publishing from `#47`, direct session automation
+  from `#69`, API key lifecycle from `#70`, generalized event export from
+  `#28`, deployment/security/residency/DLP from `#66`, `#72`, `#76`, and `#80`,
+  general HA/readiness/policy/CLI/scalability ownership from `#74`, `#79`,
+  `#150`, `#161`, `#162`, and `#164`, or Teach Mode from `#171`.

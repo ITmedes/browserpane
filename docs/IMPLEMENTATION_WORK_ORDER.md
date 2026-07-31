@@ -754,6 +754,83 @@ Deferred items:
 - Python SDK and broader language SDK expansion,
 - deleting old `/admin/` before admin-new reaches the promotion gate.
 
+#### Focused Phase N Slice: BPM Workflow Integration Endpoints
+
+Issue `#172` promotes the external BrowserPane workflow-action contract out of
+the broad product backlog without changing the immediate security and
+Admin-New promotion order.
+
+Business outcome:
+
+- expose an approved workflow through a stable project-scoped endpoint key,
+- let authorized process-system service principals invoke it without an
+  interactive owner token,
+- validate typed input/output and report machine-readable outcomes,
+- support idempotency, deadlines, progress, cancellation, Human Handoff,
+  correlation, callbacks, and artifact references,
+- provide immutable endpoint revisions, environment promotion/rollback,
+  caller-level overload semantics, and polling/webhook/callback-token
+  completion profiles,
+- expose attempt/checkpoint and browser-side-effect uncertainty rather than
+  claiming whole-run retries are inherently safe,
+- generate tested connector compatibility exports from one canonical API,
+- preserve scheduling, DAG/BPMN state, broad retry, and compensation in the
+  external process system.
+
+Dependencies and boundaries:
+
+- `#47` owns immutable workflow publishing and executor strategy,
+- `#66` owns deployment profiles and private connectivity,
+- `#70` owns BrowserPane-issued API keys, immutable audit, and retention,
+- `#72` owns the enterprise security baseline and endpoint threat model,
+- `#76` owns residency, encryption, and BYOK,
+- `#80` owns DLP and content inspection,
+- `#28` owns generalized resource/security event infrastructure,
+- `#69` owns direct session automation descriptors,
+- `#71` owns Human Handoff and private fallback,
+- `#74` owns high availability and zero-downtime behavior,
+- `#150` owns dependency-aware readiness,
+- `#161` owns project governance evidence and policy UX,
+- `#162` owns general operator CLI parity,
+- `#164` owns catalog and history scalability,
+- `#147` owns webhook SSRF and redirect hardening,
+- items 1 through 19 remain ahead of this Phase N slice unless a bounded Pilot
+  explicitly selects the endpoint contract.
+
+Within Phase N, implement `#172` before `#171` by default. Existing workflows
+can then deliver business-process integration value before Teach Mode is
+available, while Teach Mode gains a stable deployment target.
+
+The step-by-step plan and smoke sequence are in
+`BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`.
+
+#### Focused Phase N Slice: Workflow Teach Mode
+
+Issue `#171` promotes one concrete Phase N capability out of this broad
+backlog without changing the immediate work order.
+
+Business outcome:
+
+- combine prose process intent and semantic human demonstrations,
+- generate a reviewable workflow candidate,
+- validate it in a fresh Browser Context,
+- publish only an approved immutable workflow version,
+- turn later Vendor Drift corrections into candidate patches rather than
+  autonomous production mutation.
+
+Dependencies and boundaries:
+
+- `#20` provides reusable page/tab/session inspection primitives,
+- `#21` provides generalized artifact/evidence resources,
+- `#47` owns workflow packaging, publishing, and execution,
+- `#172` owns stable external Workflow Endpoint deployment and invocation,
+- `#71` owns Human Handoff/intervention semantics,
+- items 1 through 19 remain ahead of Teach Mode for security, validation, and
+  operator readiness.
+
+The step-by-step plan and smoke sequence are in
+`BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`.
+
 ## Topic-To-Order Map
 
 | Topic family | Priority owner in this file |
@@ -761,7 +838,7 @@ Deferred items:
 | Security cleanup from review | Items 1-6, 21, 23 |
 | Admin-new promotion blockers | Items 2, 9-19 |
 | Session domain requirements | Items 10-12, 17, 19 |
-| Workflow domain requirements | Items 3, 10, 15, 21 |
+| Workflow domain requirements | Items 3, 10, 15, 21, 27 (`#172` for BPM endpoints, then `#171` for Teach Mode) |
 | Recording requirements | Items 5, 11, 21 |
 | Browser context lifecycle | Items 4, 16, 22 |
 | Network identity and egress | Items 3, 11, 17, 23 |

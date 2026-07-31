@@ -316,6 +316,90 @@ Required behavior:
 Current status: catalog/detail/source browser/code preview/launch controls exist
 in first pass. Publishing/catalog management remains incomplete.
 
+### Workflow Integration Endpoints
+
+Purpose: expose approved BrowserPane workflows as stable, project-scoped
+actions for external BPM and workflow systems.
+
+Recommended routes:
+
+- `/admin-new/workflow-endpoints`
+- `/admin-new/workflow-endpoints/new`
+- `/admin-new/workflow-endpoints/[endpoint_id]`
+- `/admin-new/workflow-endpoints/[endpoint_id]/runs`
+- `/admin-new/workflow-endpoints/[endpoint_id]/deliveries`
+
+Required behavior:
+
+- catalog stable endpoint keys, state, project, active workflow/version, and
+  contract version,
+- create/edit draft endpoints and activate/disable/deprecate them,
+- promote an approved immutable workflow version without changing the external
+  endpoint key,
+- show immutable endpoint revisions, environment/stage, compatibility status,
+  and audited rollback,
+- preview input/output schemas, deadlines, inline-result limits, supported
+  controls, and callback contract,
+- manage registered service-principal grants and operation scopes,
+- configure endpoint/caller concurrency and request-rate limits,
+- explain polling, webhook, and callback-token completion profiles,
+- select and explain external-managed versus BrowserPane-managed Human Handoff,
+- show endpoint data-classification, redaction, retention, environment, and
+  private-connectivity policy references,
+- show copyable invocation and authentication examples without secret
+  material,
+- inspect correlated recent runs, typed outcomes, progress, intervention state,
+  artifacts, attempt/checkpoint evidence, side-effect uncertainty, and callback
+  delivery health,
+- show readiness, degraded/maintenance, admission, throttling, and overload
+  diagnostics without implying that an HTTP listener is execution-ready,
+- show event sequence/reconciliation health without exposing connector or
+  target-system credentials,
+- rotate signing configuration and trigger bounded redelivery where
+  authorized,
+- expose audit evidence for activation, grant, promotion, invocation, and
+  intervention decisions.
+
+Endpoint management is route-backed, full-width resource administration. It
+must not be placed in the compact Operations Overlay, and it must not create a
+second UI-only endpoint or permission model.
+
+Current status: missing. This is Phase N issue `#172`, not an Admin-New
+promotion blocker.
+
+### Workflow Studio And Teach Mode
+
+Purpose: turn reviewed process demonstrations and prose intent into validated
+workflow candidates without introducing autonomous production mutation.
+
+Recommended routes:
+
+- `/admin-new/workflows/teach`
+- `/admin-new/workflow-training/[draft_id]`
+
+Required behavior:
+
+- create and resume a training draft,
+- edit prose intent, allowed domains/actions, inputs/outputs, Human Gates,
+  failure policy, and data-sensitivity constraints,
+- start/stop a governed demonstration session,
+- review a normalized semantic timeline and bounded evidence,
+- annotate variables, Credential Bindings, outputs, assertions, branches, and
+  escalation points,
+- review generated plan, schemas, source tree/diff, selector evidence,
+  requirements, warnings, and provenance,
+- start fresh-context validation and inspect scenario results,
+- approve/reject and publish only through the immutable workflow version
+  contract,
+- inspect controlled-repair candidates without changing the published version.
+
+The Studio should be route-backed and full-width. It does not belong inside the
+compact Operations Overlay. Secret values and unrestricted browser evidence
+must not be shown or sent to a compiler provider without explicit policy.
+
+Current status: missing. This is Phase N issue `#171`, not an admin-new
+promotion blocker.
+
 ### Workflow Runs
 
 Purpose: inspect and operate workflow executions.

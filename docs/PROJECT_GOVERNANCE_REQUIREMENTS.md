@@ -60,6 +60,31 @@ an explicitly bound or newly created session. Project-scoped runs must:
   state for the same request id,
 - expose stable project-admission reason codes.
 
+### Workflow Integration Endpoints
+
+Issue `#172` adds a project-scoped integration boundary above workflow runs.
+An active endpoint must:
+
+- belong to exactly one project,
+- bind one approved immutable workflow version,
+- authorize only explicit service-principal/caller grants for that project,
+- prevent callers from overriding project, workflow, version, Credential
+  Binding, Egress Profile, Browser Context, or File Workspace policy,
+- apply project run admission and retained-storage accounting,
+- apply endpoint/caller concurrency and request-rate policy in addition to
+  project-wide run admission,
+- expose stable endpoint/caller idempotency and correlation,
+- keep dev/test/prod endpoint revisions from crossing project, credential,
+  workspace, callback, or environment boundaries,
+- bind endpoint data classification, callback field allowlists/redaction,
+  retention, and exactly one Human Handoff ownership profile,
+- keep endpoint disablement from deleting retained historical evidence.
+
+Endpoint invocation must fail before session/worker side effects when the
+project is archived, the endpoint is inactive, the caller grant is invalid, or
+input validation fails. Accepted queueing must remain distinct from rejected
+overload, dependency unavailability, and maintenance state.
+
 ### Browser Sessions
 
 Project-scoped browser sessions can persist as visible `queued` resources when

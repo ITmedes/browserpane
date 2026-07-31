@@ -277,4 +277,18 @@ Keep these as later roadmap work, not as blockers for the immediate
 - supply-chain security and release governance,
 - data residency, encryption, and BYOK,
 - DLP/content-inspection hooks,
-- central enterprise policy engine.
+- central enterprise policy engine,
+- project-scoped Workflow Endpoints for BPM/orchestration integrations through
+  focused Phase N issue `#172`, starting with a stable asynchronous polling
+  contract and then adding callback, promotion, overload, trace, and connector
+  compatibility semantics,
+- Workflow Studio Teach Mode and controlled demonstration-to-workflow
+  publishing through focused Phase N issue `#171`.
+
+Both Phase N workflow slices remain behind the immediate security and
+admin-new promotion slices unless a bounded Pilot selects one explicitly.
+Within Phase N, implement the external endpoint contract in `#172` before Teach
+Mode in `#171` by default. Their detailed contracts, implementation order, and
+smoke sequences live in
+`BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` and
+`BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`.

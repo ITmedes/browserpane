@@ -239,6 +239,112 @@ Current admin-new state:
 - workflow runs overview exists,
 - workflow-run detail route is missing.
 
+### BPM Workflow Integration Endpoints
+
+Issue `#172` owns the Phase N contract for exposing an approved BrowserPane
+workflow as a stable project-scoped action to an external BPM, workflow, iPaaS,
+or durable-execution system. It is not currently implemented.
+
+The endpoint model must:
+
+- bind a stable endpoint key to one approved immutable workflow version,
+- allow controlled version promotion without changing the caller contract,
+- authorize registered service principals through explicit project, endpoint,
+  and operation scopes,
+- support user-delegated OIDC where a connector platform cannot use client
+  credentials,
+- validate input and output against one declared JSON Schema dialect,
+- create runs idempotently under an endpoint/caller-scoped key,
+- expose typed business, validation, policy, technical, timeout, cancellation,
+  and Human Handoff outcomes,
+- enforce queue/execution/Human Handoff deadlines,
+- expose bounded progress/heartbeat and cancellation acknowledgement,
+- propagate W3C Trace Context and BrowserPane request correlation,
+- deliver versioned, signed, replayable lifecycle callbacks,
+- keep bounded JSON suitable for process variables separate from retained
+  artifact references,
+- expose the canonical asynchronous run through documented polling, signed
+  webhook, and callback-token adapter profiles,
+- create immutable endpoint revisions with compatibility checks, explicit
+  environment promotion, and audited rollback,
+- apply endpoint/caller concurrency and request-rate limits with stable
+  overload and `Retry-After` semantics,
+- expose attempt, checkpoint, and browser-side-effect uncertainty so the
+  calling process can choose retry, verification, compensation, or escalation,
+- map only declared process variables and keep BPM connector credentials
+  separate from BrowserPane target-system Credential Bindings,
+- preserve transactional run/event/delivery persistence and add a public
+  per-run sequence, replay, reconciliation, and store-parity guarantee,
+- select exactly one external-managed or BrowserPane-managed Human Handoff
+  profile per endpoint revision,
+- bind data classification, callback redaction/allowlists, retention, and
+  private-connectivity expectations without conflating control-plane ingress
+  with browser egress,
+- generate tested connector compatibility exports from one canonical contract,
+- provide OpenAPI control-plane and AsyncAPI callback contracts,
+- preserve external orchestration, scheduling, broad retry, and compensation
+  as responsibilities of the calling process system.
+
+Current implementation gaps that must stay explicit:
+
+- workflow definitions remain owner-scoped,
+- service-principal metadata is not yet an endpoint invocation grant,
+- input/output schemas are stored but not enforced by the gateway,
+- terminal run errors remain primarily free-form strings,
+- `timed_out` is not backed by a complete caller/gateway deadline contract,
+- run/event/log/delivery list APIs are unpaginated,
+- workflow callback envelopes are BrowserPane-specific and unversioned,
+- endpoint revision/environment promotion, caller-level throttling, and
+  side-effect/attempt evidence do not exist,
+- connector/target credential separation, public event sequence/replay, and
+  explicit Human Handoff ownership are not defined; Postgres already
+  transactionally enqueues deliveries with run transitions,
+- no stable endpoint/deployment resource or external connector conformance
+  package exists.
+
+Detailed resource, authorization, contract, slice, and smoke requirements live
+in `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`.
+
+### Workflow Teach Mode And Controlled Repair
+
+Issue `#171` owns this Phase N productization capability. It is not currently
+implemented.
+
+Teach Mode must combine a prose specification with one or more semantically
+captured demonstrations to produce a reviewable workflow candidate. The
+durable output is an immutable workflow version, not a fine-tuned model.
+
+Required behavior:
+
+- owner/project-scoped training drafts and demonstrations,
+- prose intent, allowed-domain/action, input/output, Human Gate, failure, and
+  data-sensitivity definitions,
+- semantic action capture with stable page/tab identity, target descriptors,
+  pre/post state, and bounded evidence,
+- annotations for typed inputs, Credential Bindings, outputs, assertions,
+  branches, repeatable collections, and escalation,
+- provider-neutral candidate compilation into a plan, TypeScript source,
+  schemas, policy requirements, and provenance,
+- fresh-context replay with named positive and negative scenarios,
+- authorized review before publication through the existing immutable,
+  Git-backed workflow contract,
+- controlled repair that captures a human correction and produces a candidate
+  patch without mutating the published version.
+
+Security requirements:
+
+- recording pixels alone are not a semantic workflow contract,
+- passwords, cookies, authorization headers, TOTP values, and unrestricted
+  payload bodies must not enter traces or compiler payloads,
+- sensitive demonstrated values become Credential Binding references,
+- Project, Egress, File, Recording, Retention, and actor policy applies to
+  training sessions,
+- external compiler/model use requires an explicit provider and data-class
+  policy decision.
+
+Detailed lifecycle, slice order, and smoke coverage live in
+`BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`.
+
 ## MCP Delegation And Operator CLI
 
 MCP delegation allows automation clients to drive governed BrowserPane

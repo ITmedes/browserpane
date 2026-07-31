@@ -97,6 +97,47 @@ Required behavior:
 - preserve compatibility with OIDC as the authentication source,
 - store sanitized mapping metadata, not raw tokens or secrets.
 
+## BPM Workflow Endpoint Machine Authorization
+
+Issue `#172` requires a narrower authorization path on top of this identity
+foundation. The current service-principal registry and identity mappings are
+metadata and access-review primitives; they do not yet let a client-credentials
+token invoke an approved workflow owned by another principal.
+
+Required endpoint behavior:
+
+- authenticate a confidential machine client through the external OIDC/OAuth
+  2.0 issuer,
+- resolve issuer/client id to an active registered service principal,
+- validate signature, issuer, audience, authorized party/client id,
+  expiration/not-before, and endpoint scopes,
+- authorize a project-scoped Workflow Endpoint through an explicit grant,
+- enforce operation scopes for invoke, read, cancel, intervene, and artifact
+  access,
+- keep caller identity separate from the endpoint/workflow owner,
+- update last-seen/last-used evidence without persisting raw token claims,
+- reject disabled, expired, cross-project, unmapped, and insufficient-scope
+  callers with stable machine-readable problems,
+- audit the caller, grant, endpoint, project, request id, and result.
+
+Some connector platforms require user-delegated authorization-code OAuth rather
+than client credentials. The endpoint contract may support both through the
+same grant decision. BrowserPane-issued API keys remain owned by `#70` and must
+not be introduced as unmanaged static secrets under `#172`. Where the identity
+platform supports it, private-key or workload-identity client authentication is
+preferred over another shared client secret; mutual TLS remains an explicit
+compatibility profile rather than an implicit requirement.
+
+The connector credential authenticating the process system to BrowserPane is
+separate from target-website credentials consumed by a browser workflow.
+Target-system secrets remain BrowserPane Credential Bindings; connector
+credentials remain in the external process system's secret store or identity
+provider. Neither may be copied into process variables, endpoint schemas, run
+labels, callback tokens, or general audit payloads.
+
+Detailed endpoint authorization and negative-case tests live in
+`BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`.
+
 ## Admin-New Requirements
 
 The unified admin app still needs a route-backed `/admin-new/identity` surface.
@@ -172,5 +213,6 @@ Use the relevant subset:
 - central policy engine,
 - immutable audit/event export,
 - automatic deletion of existing delegated sessions on principal disablement,
-- project quota/admission enforcement directly from identity mappings until the
-  governance layer consumes those facts.
+- general project quota/admission enforcement directly from identity mappings
+  until the governance layer consumes those facts. A narrow Workflow Endpoint
+  grant decision is planned explicitly in `#172`.

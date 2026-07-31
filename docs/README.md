@@ -48,6 +48,15 @@ Current branch context:
   final regression sequence for the side-by-side admin migration.
 - `ADMIN_INTERACTION_REQUIREMENTS.md`: global notifications, panel-local
   feedback, session creation configurator, metrics, and logs.
+- `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,
+  semantic demonstration capture, candidate generation, replay, immutable
+  publication, controlled repair, and smoke sequence.
+- `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`: Phase N stable
+  project-scoped workflow endpoint contract for BPM/orchestration callers,
+  including machine grants, schemas, outcomes, deadlines, callbacks,
+  artifacts, endpoint revisions, completion profiles, compatibility exports,
+  credential/variable boundaries, handoff ownership, recoverable event
+  sequencing/replay, adapters, and conformance smoke.
 - `DOMAIN_REQUIREMENTS.md`: standalone control-plane and product-domain
   requirements that remain relevant to the admin app and future slices.
 - `IDENTITY_ACCESS_REQUIREMENTS.md`: current principal, access review,
@@ -198,6 +207,21 @@ The tenth pass revalidated the workspace against the current route tree,
 package scripts, contributor standards, and all live GitHub issue bodies. It
 corrected stale module paths, validation-command drift, event-stream ownership,
 and the historical relationship between PR `#143` and closed issue `#142`.
+
+The eleventh pass added focused Phase N issue `#171` and a dedicated Teach Mode
+plan. It separates semantic demonstration-to-workflow authoring and controlled
+repair from the existing workflow publishing, observability, artifact, and
+Human Handoff issue scopes.
+
+The twelfth pass added focused Phase N issue `#172` after a code/OpenAPI and
+industry-contract audit. It separates stable BPM-facing Workflow Endpoints,
+machine authorization, typed run semantics, traceable callbacks, and connector
+conformance from owner-facing workflow publishing and from Teach Mode. A
+second endpoint audit added immutable revision/environment promotion,
+poll/webhook/callback-token completion profiles, caller overload/readiness,
+attempt/side-effect evidence, credential/variable boundaries, Human Handoff
+ownership, public event sequencing/replay, and generated connector
+compatibility exports.
 
 ## Maintenance Rule
 

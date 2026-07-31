@@ -1067,6 +1067,28 @@ Workflow boundary:
 - BrowserPane also owns browser-native admission/backpressure, paused-run runtime semantics, and signed lifecycle delivery for external systems.
 - External workflow systems should usually own schedules, DAGs, broad retry policy, and cross-system orchestration.
 
+Current external-integration limit:
+
+- `POST /api/v1/workflow-runs` is an owner-scoped execution API, not yet a
+  stable project-scoped BPM Workflow Endpoint.
+- `input_schema` and `output_schema` are workflow-version metadata; the gateway
+  does not yet enforce them before run creation or successful completion.
+- registered service-principal and identity-mapping resources do not yet grant
+  a machine caller access to an approved workflow owned by another principal.
+- callbacks are signed and retried, but the current event envelope, replay,
+  trace, pagination, deadline, typed-outcome, and connector-compatibility
+  contracts are not yet production-shaped for general BPM integration.
+
+The planned external contract is documented in
+`docs/BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`. It adds stable
+endpoint keys, explicit machine grants, asynchronous polling/webhook/callback
+profiles, enforced schemas, typed outcomes, deadlines, trace correlation,
+artifact references, endpoint revision promotion, connector/target credential
+separation, explicit Human Handoff ownership, and public event
+sequencing/replay on top of the existing transactional Postgres delivery
+enqueue. It also adds connector conformance without turning BrowserPane into a
+BPMN/DAG engine.
+
 Local usage options:
 
 - UI: use the workflow panel in the admin console

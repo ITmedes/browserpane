@@ -243,6 +243,69 @@ npm run smoke:workflow-workspace -- --headless
 npm run smoke:admin-browserpane-tour -- --headless
 ```
 
+BPM Workflow Endpoint issue `#172` additionally requires:
+
+- endpoint/grant lifecycle and cross-project authorization tests,
+- immutable endpoint revision, compatibility, environment promotion, rollback,
+  and historical-run pinning tests,
+- client-credentials service-principal invocation without an interactive owner
+  token,
+- concurrent idempotency tests proving one run and one browser side-effect
+  path,
+- JSON Schema dialect/schema/input/output validation, including rejection
+  before session/worker creation,
+- RFC 9457 request problems and typed business/technical/policy/timeout
+  outcomes,
+- gateway-enforced queue/execution/Human Handoff deadlines,
+- endpoint/caller concurrency, rate-limit, accepted-queue, `429`, `503`,
+  `Retry-After`, degraded, maintenance, and dependency-readiness tests,
+- progress heartbeat, stale worker, cancellation request, acknowledgement, and
+  terminal-state tests,
+- attempt/checkpoint and side-effect uncertainty tests that prevent unsafe
+  whole-run retry assumptions,
+- declared process-variable mapping and strict separation of integration
+  credentials from target-system Credential Bindings,
+- external-managed and BrowserPane-managed Human Handoff tests proving exactly
+  one task owner per endpoint revision,
+- W3C Trace Context continuity through gateway, worker, event, log, artifact,
+  and callback evidence,
+- CloudEvents/AsyncAPI schema, signing, retry, replay, redelivery, secret
+  rotation, cursor, and receiver-deduplication tests,
+- Postgres transactional run/event/delivery persistence, supported-store
+  parity, per-run sequence, replay, reorder, duplicate, and reconciliation
+  tests,
+- inline-result size and artifact checksum/media-type/authorization/expiry
+  tests,
+- polling, signed webhook, and callback-token completion-profile tests,
+- canonical OpenAPI and generated compatibility-export drift tests,
+- proof that callback tokens and connector credentials never enter labels,
+  logs, events, diagnostics, or UI,
+- Admin-New, CLI, raw API, reference connector, durable-activity wrapper, and
+  deterministic fake-orchestrator conformance smokes.
+
+Do not count successful owner-token `POST /api/v1/workflow-runs` coverage as
+Workflow Endpoint validation. The smoke must use the stable endpoint key and an
+explicit endpoint caller grant.
+
+Teach Mode issue `#171` additionally requires:
+
+- lifecycle and authorization tests for training drafts, demonstrations,
+  candidates, scenarios, reviews, and controlled repairs,
+- semantic trace normalization and selector-ranking tests,
+- secret-redaction tests covering passwords, cookies, authorization headers,
+  TOTP values, and compiler diagnostics,
+- compiler input-minimization and external-provider policy-denial tests,
+- fresh-context positive and negative replay,
+- proof that failed validation blocks publication,
+- proof that controlled repair creates a candidate lineage without mutating the
+  published workflow version,
+- Admin-New route/component coverage plus a deterministic local Teach Mode
+  smoke fixture.
+
+Do not count a successful video recording as Teach Mode validation. The smoke
+must inspect semantic steps, annotations, generated source/schemas, replay
+results, provenance, and the immutable publication gate.
+
 ## Gateway/API Safety Checks
 
 For backend API/security/runtime changes:
