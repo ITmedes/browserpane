@@ -3,7 +3,15 @@
 Issue: `#172` Add project-scoped workflow endpoints for BPM and orchestration
 integrations.
 
-Status: planned, not implemented.
+Status: Planned feature specification, not implemented.
+
+Lane: Pilot Value P0, then Production/Enterprise P1-P2
+
+Target gates: Phase 0 for bounded polling P0; Production/Phase N for P1-P2
+
+This document specifies the complete capability. Before each implementation
+PR, create a smaller slice-specific `*_PLAN.md` from `PLAN_TEMPLATE.md` for the
+selected P0/P1/P2 slice.
 
 ## Purpose
 
@@ -916,6 +924,8 @@ Deliver:
 
 ## Dependencies And Issue Ownership
 
+- `#151`: enforced CI, dependency safety, and validation baseline.
+- `#145` / `#146`: credential-purpose and admin/browser auth foundations.
 - `#47`: workflow source, immutable versions, publishing, packaging, and
   executor strategy.
 - `#66`: deployment profiles and private connectivity.
@@ -934,13 +944,22 @@ Deliver:
 - `#162`: operator CLI parity and diagnostics.
 - `#164`: catalog pagination and scale.
 - `#147`: webhook SSRF, redirect, DNS, and allowlist hardening.
+- `#174`: process qualification and bounded Phase 0 reference-workflow
+  delivery. It decides whether #172 P0 is required by the selected Pilot.
+- `#176`: generalized organization/project authorization and enforced
+  service-principal grants consumed by production endpoint access.
+- `#178`: platform SLO, telemetry, and capacity evidence for production
+  endpoint operation.
+- `#179`: canonical OpenAPI conformance, compatibility, and generated contract
+  governance.
 - `#171`: Teach Mode candidate generation and immutable workflow publication.
 - `#172`: Workflow Endpoint resource, endpoint grants, and BPM-facing run
   contract.
 
-Within Phase N, implement `#172` before `#171` unless a Pilot explicitly needs
-Teach Mode first. The endpoint contract creates immediate integration value for
-already implemented workflows and gives Teach Mode a stable deployment target.
+Implement `#172` before `#171` by default. A bounded Phase 0 may implement #172
+P0 after the minimum Foundation dependencies selected by #174 pass; it must not
+describe that polling contract as production-ready before P1 security,
+lifecycle, observability, and compatibility semantics are complete.
 
 ## Non-Goals
 

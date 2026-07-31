@@ -239,11 +239,30 @@ Current admin-new state:
 - workflow runs overview exists,
 - workflow-run detail route is missing.
 
+### Phase 0 Reference Workflow
+
+Issue #174 owns selection and delivery of one bounded real workflow. It uses
+the workflow/runtime resources below but does not redefine their product
+contracts. The candidate must pass an API-first/browser-fallback qualification,
+freeze its side effects and Human Handoff boundaries, select only the required
+Foundation dependencies, and exit through Stop, bounded Operate, or a newly
+scoped Phase 1.
+
+The process system remains authoritative for the end-to-end business process.
+BrowserPane owns only the browser-native step, session state, same-session
+human/agent control, and agreed evidence. See ADR 0001 and
+`BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`.
+
 ### BPM Workflow Integration Endpoints
 
 Issue `#172` owns the Phase N contract for exposing an approved BrowserPane
 workflow as a stable project-scoped action to an external BPM, workflow, iPaaS,
 or durable-execution system. It is not currently implemented.
+
+#174 decides whether its bounded Phase 0 requires the #172 P0 polling contract.
+#176 owns generalized authorization enforcement, and #179 owns API
+conformance/compatibility. #172 consumes those contracts rather than creating
+parallel identity or API governance.
 
 The endpoint model must:
 
@@ -400,6 +419,11 @@ Current admin-new state:
 - backend and old-admin/CLI foundations exist,
 - `/admin-new/identity` route is missing.
 
+Current identity mappings and service-principal scopes are access-review
+metadata, not complete RBAC enforcement. #176 owns organization/project roles
+and effective grants; #177 owns provisioning/deprovisioning and break-glass
+lifecycle.
+
 ## Admin Feedback And Observability
 
 Operators must get visible messages for state changes and external updates.
@@ -420,3 +444,8 @@ Current admin-new state:
 - component-level feedback patterns exist,
 - preview metrics drawer exists,
 - route-backed observability/logs/event-stream surface is missing.
+
+Issue #20 owns per-session inspection resources and #156 owns their admin-new
+surface. Issue #178 separately owns platform metrics/traces, SLOs, alerts,
+runbooks, and tested capacity envelopes. Admin-new should consume the common
+telemetry contract rather than define a UI-only metrics model.

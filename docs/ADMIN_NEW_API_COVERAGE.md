@@ -10,6 +10,12 @@ The frozen owner-scoped control contract is `openapi/bpane-control-v1.yaml`.
 The admin app must also account for gateway and MCP compatibility endpoints
 that sit outside that frozen contract.
 
+Issue #179 owns API lint, implementation conformance, executable examples,
+breaking-change detection, and the compatibility/deprecation policy. Issue
+#158 owns the admin-new API companion/coverage UI. The UI must consume the
+canonical contract and conformance evidence; it must not become a separate
+handwritten API truth.
+
 Current audit baseline from the legacy planning pass:
 
 - OpenAPI operations: 126
@@ -25,6 +31,25 @@ Current audit baseline from the legacy planning pass:
   `application/zip`, and `video/webm`
 
 The numbers must be regenerated if the OpenAPI contract changes.
+
+The counts are inventory evidence only. They do not prove that every schema,
+example, error response, or implemented route conforms. #179 must turn the
+inventory into an enforced contract ratchet under #151 CI.
+
+## Contract Governance Requirements
+
+- parse and lint the complete OpenAPI document in CI,
+- compare public route/method coverage with the implemented router,
+- execute representative success and error examples,
+- validate response schemas and content types,
+- detect breaking path, parameter, security, request, response, enum, and
+  required-field changes against the supported baseline,
+- publish additive-change, deprecation, compatibility-window, and versioning
+  rules,
+- generate compatibility exports for #172 connectors from this contract rather
+  than maintaining parallel schemas,
+- keep internal/compatibility endpoints explicitly outside the frozen public
+  surface until intentionally promoted.
 
 ## Classification Rules
 
@@ -479,3 +504,7 @@ Before API companion or coverage routes are considered complete:
 5. Client wrappers have tests for path encoding, auth failure propagation,
    validation errors, content types, and secret redaction.
 6. The coverage manifest is tested against `openapi/bpane-control-v1.yaml`.
+7. #179 conformance and compatibility checks are visible from the route rather
+   than inferred from operation counts alone.
+8. Planned Workflow Endpoint or Teach Mode operations are labeled as Planned
+   until their public contract is implemented and passes conformance.

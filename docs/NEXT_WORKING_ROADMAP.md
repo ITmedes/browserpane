@@ -1,12 +1,14 @@
-# Consolidated Next Working Plan
+# Admin-New Transition Roadmap
 
 Revalidated: 2026-07-31
 
-This plan consolidates the current state from the admin redesign requirements
-and the security/runtime cleanup roadmap.
+This document preserves the admin-new transition sequence from the redesign
+requirements and security/runtime cleanup roadmap.
 
-For the complete cross-document priority order, use
-`IMPLEMENTATION_WORK_ORDER.md`. This file remains the short next-slice view.
+For the current cross-product execution sequence, delivery state, Pilot lane,
+and release gates, use `DELIVERY_ROADMAP.md`. Use
+`IMPLEMENTATION_WORK_ORDER.md` for detailed historical rationale. This file is
+not the canonical next-slice queue.
 
 ## Working Principle
 
@@ -31,6 +33,15 @@ Merged PR `#143` is the current status checkpoint:
 - carries forward the now-closed `#142` redesign lineage.
 
 ## Recommended Next Slices
+
+Foundation prerequisite from the 2026-07-31 delivery audit:
+
+- implement #151 before Slice A so dependency remediation, CI, coverage
+  baselines, contract checks, and required branch checks protect the security
+  and admin changes below,
+- create a bounded #151 `*_PLAN.md` from `PLAN_TEMPLATE.md` before coding,
+- then continue with #145 and the admin trust sequence unless a reviewed
+  Foundation/Pilot gate changes the order.
 
 Review reconciliation update:
 
@@ -292,3 +303,9 @@ Mode in `#171` by default. Their detailed contracts, implementation order, and
 smoke sequences live in
 `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` and
 `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`.
+
+The bounded Pilot owner is #174. Protocol compatibility is owned by #175,
+organization/grant enforcement by #176, identity lifecycle by #177, platform
+telemetry/SLOs by #178, API conformance by #179, and open-source governance by
+#180. Those cross-product issues are sequenced in `DELIVERY_ROADMAP.md`, not in
+this admin-specific transition document.

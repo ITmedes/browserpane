@@ -9,10 +9,16 @@ and the current implementation state. The previous scattered planning folder
 was consolidated into this current `docs/` layout so active requirements,
 roadmaps, and validation expectations can be maintained from one place.
 
-The consolidation is scoped around the current BPANE-00142 unified admin app
-work and the cleanup/security plan that now gates promotion. It intentionally
-keeps the focus on what is implemented, what is still valid, and what should be
-worked next.
+The execution model was tightened under issue `#173` after the code, live issue
+tracker, validation state, management deck, and investment website were audited
+together. The docs now separate live delivery state, capability maturity,
+release gates, risks, durable decisions, requirements, implementation plans,
+and historical audit evidence.
+
+The original consolidation was scoped around the BPANE-00142 unified admin app.
+The current workspace covers the whole product: Foundation hardening, bounded
+Phase 0 value, admin-new Productization, Production readiness, Phase N
+enterprise integration, and controlled innovation such as Teach Mode.
 
 Legacy inputs that were consolidated:
 
@@ -32,6 +38,29 @@ Current branch context:
   implementation PRs should use focused open issues or create them before
   coding.
 
+## Canonical Operating Documents
+
+Use these first:
+
+- `DELIVERY_ROADMAP.md`: current delivery lanes, states, dependencies, gates,
+  and the next three implementation slices.
+- `CAPABILITY_MATURITY_MATRIX.md`: evidence-backed Implemented, Prototype,
+  Pilot-ready, Production-ready, Planned, and Hypothesis classifications.
+- `PRODUCT_PHASES_AND_RELEASE_GATES.md`: Foundation, Phase 0, Phase 1,
+  Production Baseline, and Phase N promotion criteria.
+- `RISK_REGISTER.md`: active technical, security, operational, legal, delivery,
+  and claim risks.
+- `PLAN_TEMPLATE.md`: required structure, Definition of Ready, and Definition
+  of Done for future `docs/*_PLAN.md` files.
+- `OPEN_ISSUES_CONTEXT.md`: issue-to-document ownership map.
+- `adr/`: durable architecture/product decisions and pending decisions.
+
+GitHub owns live issue state, assignee, priority, dependency, and milestone.
+Do not duplicate that state across requirement documents. A bounded
+implementation `*_PLAN.md` becomes executable only when its focused slice
+enters Ready or In Progress. Higher-level feature and qualification plans are
+specifications and still require a bounded slice plan before coding.
+
 ## Files
 
 - `ADMIN_NEW_STATUS.md`: current `/admin-new` implementation state versus the
@@ -48,6 +77,9 @@ Current branch context:
   final regression sequence for the side-by-side admin migration.
 - `ADMIN_INTERACTION_REQUIREMENTS.md`: global notifications, panel-local
   feedback, session creation configurator, metrics, and logs.
+- `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`: the single next Ready product
+  slice for dependency remediation, reproducible validation, coverage ratchets,
+  required GitHub checks, and bounded compose evidence.
 - `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,
   semantic demonstration capture, candidate generation, replay, immutable
   publication, controlled repair, and smoke sequence.
@@ -57,6 +89,12 @@ Current branch context:
   artifacts, endpoint revisions, completion profiles, compatibility exports,
   credential/variable boundaries, handoff ownership, recoverable event
   sequencing/replay, adapters, and conformance smoke.
+- `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md`: governance slice that establishes
+  the canonical roadmap, maturity, phase gates, risks, issue ownership, and
+  management claim traceability.
+- `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`: process qualification,
+  bounded reference-workflow delivery, operating evidence, and Stop/Operate/
+  Phase 1 exit plan.
 - `DOMAIN_REQUIREMENTS.md`: standalone control-plane and product-domain
   requirements that remain relevant to the admin app and future slices.
 - `IDENTITY_ACCESS_REQUIREMENTS.md`: current principal, access review,
@@ -76,10 +114,10 @@ Current branch context:
 - `REVIEW_FINDINGS_COVERAGE_AUDIT.md`: traceability matrix proving every
   `review/` report family is represented by a current owner, superseded by the
   baseline, or intentionally deferred.
-- `IMPLEMENTATION_WORK_ORDER.md`: prioritized implementation order across the
-  active docs workspace, covering security cleanup, admin-new parity,
-  resource/domain work, runtime/operator work, docs, validation, and
-  refactoring.
+- `IMPLEMENTATION_WORK_ORDER.md`: detailed rationale and topic inventory across
+  security cleanup, admin-new parity, resource/domain work, runtime/operator
+  work, docs, validation, and refactoring. `DELIVERY_ROADMAP.md` owns current
+  execution order.
 - `RESOURCE_LIFECYCLE_REQUIREMENTS.md`: browser-context, session-template,
   network identity, egress profile, diagnostics, and proxy-auth lifecycle
   requirements.
@@ -87,8 +125,8 @@ Current branch context:
   certificate, runtime release/reconnect, and operator CLI requirements.
 - `SOURCE_PLAN_INVENTORY.md`: compact legacy plan-to-topic map with the
   retained requirements embedded by topic.
-- `NEXT_WORKING_ROADMAP.md`: prioritized remaining work, keeping admin-new
-  promotion in view.
+- `NEXT_WORKING_ROADMAP.md`: retained admin-new transition context.
+  `DELIVERY_ROADMAP.md` owns the current cross-product sequence.
 - `OPEN_ISSUES_CONTEXT.md`: live open GitHub issue context mapped to the
   consolidated docs, work-order items, and issue hygiene gaps.
 - `SECURITY_RUNTIME_ROADMAP.md`: security, runtime, scale, and production
@@ -223,14 +261,25 @@ attempt/side-effect evidence, credential/variable boundaries, Human Handoff
 ownership, public event sequencing/replay, and generated connector
 compatibility exports.
 
+The thirteenth pass established issue `#173` and the executable delivery
+governance model. It added parallel Foundation, Pilot Value, Operator Product,
+Production, Enterprise, and Innovation lanes; capability maturity and release
+gates; a risk register; durable ADRs; focused issues `#174` through `#180`; and
+a bounded Phase 0 reference-workflow plan.
+
 ## Maintenance Rule
 
 When maintaining this planning workspace, verify that:
 
-1. every active requirement is represented in this folder,
-2. obsolete historical issue merge maps are either intentionally dropped or
+1. `DELIVERY_ROADMAP.md` identifies exactly one first Ready implementation
+   slice,
+2. every active requirement is represented in this folder,
+3. obsolete historical issue merge maps are either intentionally dropped or
    summarized in `SOURCE_PLAN_INVENTORY.md`,
-3. section-level coverage remains represented in
+4. section-level coverage remains represented in
    `LEGACY_SECTION_COVERAGE_AUDIT.md`,
-4. contributor guidance points future planning documents at `docs/`,
-5. the promotion gate in `ADMIN_NEW_STATUS.md` still reflects the live code.
+5. contributor guidance points future planning documents at `docs/`,
+6. capability maturity, risks, and gate evidence match code and tests,
+7. external management claims are current evidence, Pilot target, roadmap, or
+   hypothesis and link to their evidence/owner,
+8. the promotion gate in `ADMIN_NEW_STATUS.md` still reflects the live code.
