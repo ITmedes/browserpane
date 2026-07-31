@@ -12,39 +12,39 @@ This means BrowserPane is not only a wrapper around Playwright, CDP, screenshots
 
 Checkout on youtube: [https://www.youtube.com/watch?v=zhj2_B4vLMs](https://www.youtube.com/watch?v=zhj2_B4vLMs)
 
-<p><strong>Admin live workspace tabs</strong></p>
+## Unified Admin Console
+
+BrowserPane is consolidating live session operation, resource configuration,
+workflow execution, recordings, and governance in the route-backed
+`/admin-new/` application. This is the target standard admin experience. The
+legacy `/admin/` console remains available as a compatibility fallback until
+the [admin-new promotion gate in issue #163](https://github.com/ITmedes/browserpane/issues/163)
+has verified the remaining route parity and regression coverage.
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/readme/browserpane-live-sessions-tab.jpg" alt="BrowserPane live workspace sessions tab" width="100%"></td>
-    <td width="50%"><img src="assets/readme/browserpane-live-lifecycle-tab.jpg" alt="BrowserPane live workspace lifecycle tab" width="100%"></td>
+    <td width="50%"><a href="assets/readme/browserpane-admin-new-dashboard.jpg"><img src="assets/readme/browserpane-admin-new-dashboard.jpg" alt="BrowserPane unified admin dashboard" width="100%"></a></td>
+    <td width="50%"><a href="assets/readme/browserpane-admin-new-project-governance.jpg"><img src="assets/readme/browserpane-admin-new-project-governance.jpg" alt="BrowserPane unified admin project governance view" width="100%"></a></td>
   </tr>
   <tr>
-    <td align="center"><sub>Sessions</sub></td>
-    <td align="center"><sub>Lifecycle</sub></td>
+    <td align="center"><sub>Operational dashboard and resource health</sub></td>
+    <td align="center"><sub>Project policy, quota, usage, and resource bindings</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="assets/readme/browserpane-live-workflows-tab.jpg" alt="BrowserPane live workspace workflows tab" width="100%"></td>
-    <td width="50%"><img src="assets/readme/browserpane-live-metrics-tab.jpg" alt="BrowserPane live workspace metrics tab" width="100%"></td>
+    <td width="50%"><a href="assets/readme/browserpane-admin-new-egress-governance.jpg"><img src="assets/readme/browserpane-admin-new-egress-governance.jpg" alt="BrowserPane unified admin egress governance view" width="100%"></a></td>
+    <td width="50%"><a href="assets/readme/browserpane-admin-new-session-live.jpg"><img src="assets/readme/browserpane-admin-new-session-live.jpg" alt="BrowserPane live browser session preview" width="100%"></a></td>
   </tr>
   <tr>
-    <td align="center"><sub>Workflows</sub></td>
-    <td align="center"><sub>Metrics</sub></td>
-  </tr>
-</table>
-
-<p><strong>Admin resource views</strong></p>
-
-<table>
-  <tr>
-    <td><img src="assets/readme/browserpane-admin-sessions.jpg" alt="Slide 1: BrowserPane admin session inspector" width="100%"></td>
-    <td><img src="assets/readme/browserpane-admin-workflows.jpg" alt="Slide 2: BrowserPane admin workflow catalog" width="100%"></td>
-    <td><img src="assets/readme/browserpane-admin-files.jpg" alt="Slide 3: BrowserPane admin file workspaces" width="100%"></td>
+    <td align="center"><sub>Proxy, TLS interception, and sanitized egress diagnostics</sub></td>
+    <td align="center"><sub>Live browser session with reconnect and metrics controls</sub></td>
   </tr>
   <tr>
-    <td align="center"><sub>Sessions</sub></td>
-    <td align="center"><sub>Workflow catalog</sub></td>
-    <td align="center"><sub>File workspaces</sub></td>
+    <td width="50%"><a href="assets/readme/browserpane-admin-new-workflow-launcher.jpg"><img src="assets/readme/browserpane-admin-new-workflow-launcher.jpg" alt="BrowserPane unified admin workflow launcher" width="100%"></a></td>
+    <td width="50%"><a href="assets/readme/browserpane-admin-new-recordings.jpg"><img src="assets/readme/browserpane-admin-new-recordings.jpg" alt="BrowserPane unified admin recording catalog" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Typed workflow inputs, session binding, and API payload</sub></td>
+    <td align="center"><sub>Recording lifecycle, artifacts, and downloads</sub></td>
   </tr>
 </table>
 
@@ -89,6 +89,10 @@ Current support and scope:
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
 - Control plane: owner-scoped v1 APIs now cover identity/access-review summaries, service principals, identity-to-project mappings, projects, sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
+- Admin console: `/admin-new/` is the target standard operator application and
+  already covers the main live-session and resource workflows. `/admin/`
+  remains the compatibility fallback until issue #163 completes the promotion
+  and rollback gate.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 - External BPM integration: the stable project-scoped Workflow Endpoint is
   planned under issue #172; the existing owner-scoped workflow-run API is not
@@ -181,12 +185,12 @@ BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \
 docker compose -f deploy/compose.yml up --build
 ```
 
-Then open `http://localhost:8080/admin/` in Chromium. The web root redirects to the stable admin console.
+Then open `http://localhost:8080/admin-new/` in Chromium to use the unified
+admin console that is being promoted as the standard BrowserPane operator
+application. The web root currently continues to redirect to `/admin/`, which
+remains the compatibility fallback until issue #163 completes the promotion
+gate.
 
-The route-backed unified admin redesign is available in parallel at
-`http://localhost:8080/admin-new/`. It is under active development for
-BPANE-00142 and is intended for incremental manual testing while `/admin/`
-remains the stable/default console.
 The redesigned session preview popup includes a local `Metrics` drawer that can
 sample browser transition diagnostics from the BrowserPane client runtime
 without creating a backend artifact. It reports FPS, transfer rates, tile mix,
@@ -257,7 +261,7 @@ docker compose -f deploy/compose.yml up --build
 
 The default local auth flow is OIDC-based:
 
-- open `http://localhost:8080/admin/`
+- open `http://localhost:8080/admin-new/`
 - click `Login`
 - authenticate against the local Keycloak realm
 - use the demo account `demo / demo-demo`
@@ -291,7 +295,7 @@ If a manually launched local Chromium reports `Opening handshake failed` when jo
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
   --origin-to-force-quic-on=localhost:4433 \
   --ignore-certificate-errors-spki-list="$(cat dev/certs/cert-fingerprint.txt)" \
-  http://localhost:8080/admin/
+  http://localhost:8080/admin-new/
 ```
 
 ### Remote / Self-Hosted Testing
@@ -1116,7 +1120,7 @@ cd code/web/bpane-client && npm run smoke:admin-unified-workflow-runs -- --headl
 
 Typical local workflow path:
 
-1. Start the local compose stack and log in at `http://localhost:8080/admin/`
+1. Start the local compose stack and log in at `http://localhost:8080/admin-new/`
 2. Create or reconnect a browser session from the admin console
 3. Create reusable inputs as needed:
    - file workspace for reusable input/output files
