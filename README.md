@@ -404,177 +404,45 @@ surfaces, not an exhaustive duplicate of the contract.
 
 ### Resources And Policy
 
-Session templates store reusable defaults for session creation, including owner
-mode, project id, viewport, idle timeout, labels, integration context, network identity, and recording policy.
-Creating a session with a UUID `template_id` merges those defaults before the
-session is persisted; explicit caller fields win over template defaults.
-The unified-admin create-session configurator follows the same rule: selecting a
-template leaves owner mode and idle timeout unset unless the operator chooses an
-explicit override, and the API payload preview shows the exact fields that will
-be sent.
-`GET /api/v1/sessions` accepts catalog filters such as `template_id`, `state`,
-`runtime_state`, `label.<key>`, `integration.<key>`, `limit`, and `offset`.
-Project resources let operators group sessions and workflow runs under an
-owner-scoped tenant, case, customer, or environment boundary. A project carries
-labels, lifecycle state, optional quotas such as `max_active_sessions`,
-`max_active_workflow_runs`, `max_retained_storage_bytes`,
-`max_session_creations`, `max_session_creations_per_window` with
-`session_creation_window_sec`, `max_runtime_usage_ms`, and
-`max_egress_total_bytes`, policy bindings for allowed session templates,
-egress profiles, approved extensions, and reusable browser contexts, a
-`usage_budget_enforcement` mode, browser upload/download, session-file binding,
-and manual-recording policy switches, and sanitized usage counters. Creating a
-session or workflow run with `project_id` records the admission decision and
-enforces archived-project checks plus template, egress, extension,
-reusable-context, and file-workspace allow-lists before runtime launch. Project
-policy can also reject browser upload/download transfers, session-file binding
-creation, and ad-hoc manual recording starts for project sessions. Session resources expose
-`capabilities.file_transfer=false` when the project disables either browser
-upload or browser download transfer, and explicit session create requests can
-narrow browser input, clipboard, audio, microphone, camera, file transfer, and
-resize capabilities for that session. Credential bindings and
-egress profiles can be owner-scoped or assigned to a project; project-scoped
-sessions may use owner-scoped egress profiles or profiles from the same project,
-and may only use project-bound proxy credential bindings from that same project.
-Owner-scoped bindings remain available to the owner. Project-scoped sessions
-that exceed
-`max_active_sessions` are persisted as visible `queued` session resources with
-`active_session_quota_exceeded` admission metadata, queue position, queue age,
-current dispatch blocker, and an explicit queued-session cancel operation.
-Queued sessions are promoted when capacity opens; workflow runs also inherit
-the project from their bound session when the request omits `project_id`.
-Project usage includes active and queued session counts, total session
-creations, live-plus-finalized browser runtime milliseconds, sanitized egress
-receive/transmit byte counters, and retained storage. Retained storage currently
-counts workflow produced files, completed recording artifacts,
-uploaded/downloaded session files, and files retained in project-owned file
-workspaces; workflow outputs stored in a workspace owned by the same project are
-counted once through the workspace. The gateway rejects new retained artifacts
-that would exceed the project storage quota. Egress byte counters are
-intentionally metadata-only until an attached proxy or secure web gateway
-reports authoritative traffic totals. Session-creation, runtime, and egress
-byte budgets emit `alerts` at 80% and 100% of the configured budget. Projects
-can opt into `usage_budget_enforcement=block_session_creation` to reject new
-project sessions after `max_session_creations` is reached, the rolling
-`max_session_creations_per_window` budget is exhausted, or
-`max_runtime_usage_ms` has already been consumed. Existing sessions are not
-stopped by runtime-budget admission. Egress budgets remain advisory until
-proxy ingestion is authoritative.
-Session and workflow-run resources include the project summary and admission
-reason so the admin live view, inspectors, CLI, and API clients all show
-whether work was admitted under project quota, queued by project capacity,
-rejected by project policy, or left owner-scoped.
-Identity resources expose a sanitized access-review foundation:
-`GET /api/v1/identity/me` returns the current bearer principal as `user`,
-`service_principal`, or `legacy_dev_token`, while
-`GET /api/v1/identity/access-review` returns registered service-principal
-metadata, explicit identity-to-project mappings, unmapped principal signals,
-project usage, owner-scoped resource counts, and currently delegated automation
-principals. Owners can register external OIDC clients through
-`/api/v1/service-principals`, map external users, groups, claims, or registered
-service principals to BrowserPane projects through `/api/v1/identity-mappings`,
-use active/disabled state for lifecycle review, and block new automation
-delegation to disabled registered clients while keeping existing session
-metadata inspectable for cleanup. Access review evaluates group and claim
-mappings from a bounded safe OIDC claim set (`groups`, `roles`, `tenant`,
-`tenant_id`, `organization`, `organization_id`, `org_id`, `department`,
-`realm_access.roles`, and `resource_access.<client>.roles`) without returning
-raw bearer-token payloads. The API and operator CLI expose these operations
-through `identity me`, `identity access-review`, `service-principal`, and
-`identity-mapping` commands. The legacy `/admin/` console has an Identity tab;
-the target `/admin-new/identity` route remains open under
-[issue #157](https://github.com/ITmedes/browserpane/issues/157).
-Network identity metadata lets callers declare locale, language preferences,
-timezone, geolocation, browser identity, user-agent override, and an
-`egress_profile_id` on either a session template or an explicit session create
-payload. Egress profiles are owner-scoped resources with safe proxy metadata,
-bypass rules, optional credential-binding references for proxy auth, custom CA
-references, state, labels, and sanitized effective status; session resources,
-`/status`, and `/egress-diagnostics` include the inherited network identity,
-effective egress summary, and sanitized diagnostics without embedding proxy
-credentials or raw CA material. Diagnostics distinguish
-configuration-only evidence, runtime launch metadata, and the latest active
-profile or browser probe. Egress-profile probes perform a real proxy request
-and, when a proxy credential binding is configured, resolve the binding only for
-that probe so operators can see whether proxy authentication succeeds or is
-rejected. When a session consumes an egress profile with proxy authentication,
-the gateway also checks that any project-scoped egress profile and credential
-binding belong to the same project as the session. The active browser probe runs
-only against an already-ready session runtime and stores sanitized public-IP,
-TLS issuer, and failure summary fields; diagnostics do not store requested URLs,
-headers, proxy credentials, CA material, or decrypted traffic. Egress observers
-can report sanitized
-per-session receive/transmit byte deltas through
-`/api/v1/sessions/{id}/egress-usage`; project usage rolls those counters up for
-budget alerts while detailed URL, status, timing, credential, payload, and
-decrypted traffic logs remain in the configured proxy or secure web gateway.
-Egress-side communication tracking belongs at the configured proxy or secure
-web gateway. BrowserPane emits safe correlation metadata instead: docker-backed
-runtime containers carry `browserpane.session_id` and egress-profile labels,
-and the gateway logs a sanitized runtime startup event that joins the session,
-runtime container, and egress profile. A runnable local Squid access-log example
-and sanitized usage reporter are available in
-`deploy/examples/egress-observer`.
-Egress profiles default to `traffic_observation.mode=metadata_only`. Full HTTPS
-inspection must be explicit with `mode=tls_intercept`, and the API requires a
-proxy, custom CA reference, and `sensitive_log_sink_ref` so operators do not
-enable decrypted traffic logging without an approved SIEM/log-storage target.
-Docker-backed runtimes materialize `file://` or absolute-path custom CA bundle
-references into the session data volume and install them into Chromium's NSS
-trust store before launch; non-file CA providers remain a provider-integration
-follow-up. If `proxy.credential_binding_id` is set, the gateway resolves the
-owner-visible credential binding through the configured secret provider at
-runtime launch and writes only a session-local proxy-auth file; project-bound
-bindings are limited to sessions in the same project. Credentials are not
-embedded in proxy URLs, API responses, CLI output, Docker labels, or normal
-logs.
-Browser context resources let callers name owner-scoped or project-owned
-Chromium profile contexts and bind new sessions with
-`browser_context.mode=reusable` plus a `context_id`. Project-owned contexts can
-only be reused by sessions in the same project; owner-scoped contexts remain
-available to owner-scoped and project-scoped sessions. Docker-backed runtimes
-materialize reusable contexts as a
-context-scoped Chromium profile volume mounted at the normal profile path,
-while uploads, downloads, and session-file mounts remain tied to the concrete
-session. Only one active runtime writer may use a reusable context at a time;
-additional sessions with the same context can be created but runtime access is
-rejected until the active writer stops or releases its runtime.
-Browser context resources include a `usage` summary with the current visible
-session reference count and the active runtime writer session id, when one
-exists. Docker-backed runtimes also include approximate profile storage bytes
-when Docker volume-size inspection is available. Contexts can carry an optional
-`max_profile_storage_bytes` limit; once the inspected profile size exceeds that
-limit, the API reports `usage.profile_storage_limit_exceeded=true` and rejects
-new reusable sessions from that context until the operator deletes or replaces
-the context. Contexts can also carry an optional `retention_sec` window; the API
-returns `retention_expires_at` from the last-used timestamp, or creation time if
-the context has never been used. The gateway scans for expired ready contexts on
-startup and then every `--browser-context-retention-cleanup-interval-secs`
-seconds, unless that interval is set to `0`; docker-backed cleanup removes the
-context profile volume and skips active runtime writers for a later pass. API
-clients and the available admin views use these fields to make the same
-lifecycle and cleanup decisions.
-Inactive reusable contexts can be cloned with
-`POST /api/v1/browser-contexts/{id}/clone`; docker-backed runtimes copy the
-source Chromium profile volume into a new context-scoped profile volume when the
-source volume exists, while static runtimes treat clone as metadata-only.
-Inactive reusable contexts can also be exported with
-`GET /api/v1/browser-contexts/{id}/export`; the response is a zip archive with
-`manifest.json` and, for docker-backed contexts with profile data,
-`profile.tar.gz`.
-BrowserPane export archives can be imported as new reusable contexts with
-`POST /api/v1/browser-contexts/import` using `application/zip` plus
-`x-bpane-browser-context-name`; callers can set
-`x-bpane-browser-context-project-id` to import directly into a project. Omitted
-metadata defaults to the archive manifest, and imports never overwrite an
-existing context.
-Deleting a reusable context refuses active runtime writers and, for
-docker-backed runtimes, removes the context-scoped Chromium profile volume when
-no active writer exists. In `/admin-new/`, the browser-context area provides a
-catalog, create flow, read-only detail/status view, and guarded delete action;
-the session form can select a ready reusable context and preview the resulting
-`browser_context` payload. Clone, import, and export remain available through
-the API, CLI, and legacy console while unified-admin parity is tracked in
+- **Session templates** provide reusable defaults for ownership, viewport,
+  timeout, labels, network identity, and recording. Explicit session fields
+  override template defaults.
+- **Projects** group sessions and workflow runs under a customer, case, tenant,
+  or environment boundary. They define resource allow-lists, transfer and
+  recording policy, concurrency limits, usage budgets, and retained-storage
+  quotas.
+- **File workspaces, credential bindings, and approved extensions** provide
+  governed inputs without embedding file paths, secrets, or extension payloads
+  in session and workflow definitions.
+- **Identity and access-review resources** expose the current principal,
+  registered service principals, and explicit identity-to-project mappings
+  without returning raw bearer-token payloads. Disabled service principals
+  cannot receive new automation delegation. These operations are available
+  through the API and CLI; `/admin-new/identity` remains tracked in
+  [issue #157](https://github.com/ITmedes/browserpane/issues/157).
+- **Network identity and egress profiles** define locale, timezone, browser
+  identity, proxy routing, proxy authentication, and optional custom CA policy.
+  Project-scoped profiles and credentials cannot cross project boundaries.
+- **Browser contexts** preserve reusable Chromium profile state independently
+  from session-scoped uploads, downloads, and file bindings. A reusable context
+  permits one active runtime writer, can enforce retention and storage limits,
+  and project-owned contexts cannot cross project boundaries.
+
+Project policy is enforced before runtime launch. Work that exceeds an active
+capacity limit remains visible as queued and can be promoted when capacity
+opens. Disallowed resource bindings are rejected, retained-storage limits block
+new artifacts, and budget enforcement can block new session creation without
+stopping sessions that are already running.
+
+BrowserPane keeps egress evidence sanitized: it stores effective configuration,
+runtime correlation, probe results, and reported byte totals. Requested URLs,
+headers, payloads, credentials, CA material, and decrypted traffic remain with
+the configured proxy or secure web gateway. TLS interception is opt-in and
+requires a proxy, custom CA, and approved sensitive-log sink.
+
+The unified admin supports context catalog, create, detail, and delete flows.
+Clone, import, and export remain available through the API, CLI, and legacy
+console while unified-admin parity is tracked in
 [issue #160](https://github.com/ITmedes/browserpane/issues/160).
 
 ### Session Runtime And Delegation
