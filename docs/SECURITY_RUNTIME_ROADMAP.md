@@ -358,8 +358,10 @@ slices unless they directly touch active work:
   overlapping supervisor polls,
 - session-control store: add in-tree Postgres contract tests for the
   high-volume store API before broad store refactors,
-- CI/lint: add a minimal pipeline for Rust fmt/clippy/tests, Node checks/tests,
-  admin builds, and targeted smoke wrappers,
+- CI/lint and dependency safety: add a minimal pipeline for Rust
+  fmt/clippy/tests, Node checks/tests, admin builds, targeted smoke wrappers,
+  and Rust/Node lockfile vulnerability checks; remediate patched critical/high
+  findings or record a bounded, owned exception,
 - Rust boundaries: consider domain ID newtypes, context structs for long
   same-typed parameter lists, and error-strategy cleanup when touching those
   modules.
@@ -389,5 +391,5 @@ Required cleanup before production promotion:
 3. Add gateway configuration reference for important CLI flags.
 4. Add a security/threat-model document with local-dev caveats.
 5. Add OpenAPI examples/descriptions for high-use operations.
-6. Add minimal CI for Rust fmt/clippy/tests, Node checks/tests/build, and
-   targeted smoke wrappers.
+6. Add minimal CI for Rust fmt/clippy/tests, Node checks/tests/build, targeted
+   smoke wrappers, and Rust/Node lockfile vulnerability checks.
