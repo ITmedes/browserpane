@@ -26,8 +26,8 @@ The current prototype includes the dashboard; project, browser-context,
 egress-profile, and file-workspace catalogs; session create/detail and popup
 preview flows; recording catalog/download; workflow source, version, and run
 launching; and the workflow-run catalog. Identity/access review, API/docs
-companions, workflow-run detail, and route-backed session files, recordings,
-network, policy, and observability remain incomplete. See the
+companions, workflow-run detail, and the session-detail files, recordings,
+network, policy, and observability subareas remain incomplete. See the
 [admin-new implementation status](docs/ADMIN_NEW_STATUS.md) for the maintained
 route-level matrix.
 
