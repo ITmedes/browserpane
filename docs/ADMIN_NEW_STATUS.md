@@ -1,5 +1,7 @@
 # Admin-New Implementation Status
 
+Revalidated against current routes and package scripts: 2026-07-31
+
 This file maps the current `code/web/bpane-admin-unified` app to the
 consolidated redesign requirements. It is based on the current routes,
 libraries, components, and smoke scripts.

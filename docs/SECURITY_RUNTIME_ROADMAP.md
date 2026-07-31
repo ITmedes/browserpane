@@ -1,5 +1,7 @@
 # Security And Runtime Cleanup Roadmap
 
+Revalidated: 2026-07-31
+
 This document preserves the still-valid cleanup findings that gate production
 readiness and `/admin-new` promotion. It is standalone and does not require the
 old review folder or old plan files.
@@ -112,7 +114,8 @@ Required implementation:
 6. Replace raw owner-token query auth for `/api/v1/admin/events` with a
    short-lived purpose-scoped event ticket or browser-compatible subprotocol
    auth.
-7. Update both old and unified admin event clients together.
+7. Update the current old-admin event client and define a reusable secure event
+   credential/client contract for the future unified-admin observability route.
 
 Validation:
 
@@ -121,7 +124,9 @@ Validation:
 - transport log tests proving raw `token`, `access_token`, and
   `session_ticket` values are not logged,
 - admin event tests proving raw owner bearer tokens are not in WebSocket URLs,
-- old and unified admin realtime/event smokes.
+- old-admin realtime/event and reconnect smokes,
+- admin-new auth/session regression coverage if shared credential issuance
+  changes.
 
 ### Admin Browser Auth And Web Security
 

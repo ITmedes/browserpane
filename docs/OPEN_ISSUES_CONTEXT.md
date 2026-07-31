@@ -1,6 +1,7 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
+Revalidated: 2026-07-31
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -8,13 +9,13 @@ local planning docs and the public issue tracker.
 
 Source check:
 
-- fetched through the GitHub API on 2026-07-10,
+- fetched through the GitHub API on 2026-07-31,
 - open issues excluding pull requests: 45 after the reverse docs-to-issues
   audit,
 - open issue range: `#6` through `#170`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
-- cross-reference pass on 2026-07-10 verified that every open issue has a
+- cross-reference pass on 2026-07-31 verified that every open issue has a
   docs source or docs cross-reference section and links back to this file,
 - closed admin-redesign lineage issue: `#142`, closed as completed on
   2026-07-07 and updated on 2026-07-10 to point at the consolidated docs.
@@ -90,10 +91,14 @@ dedicated open issue ownership.
 
 ## Issue Body Audit
 
-Checked again on 2026-07-10 against the live issue bodies, current
+Checked again on 2026-07-31 against the live issue bodies, current
 `/admin-new/` routes, and the consolidated docs. The first pass covered the
 original 19 open issues; the reverse docs-to-issues pass created focused
 issues `#145` through `#170`.
+
+The current live result is 45 open issues: 19 broad/focused pre-existing
+issues plus the 26 work-order issues `#145` through `#170`. Every open issue
+is represented in this document and links back to the consolidated docs.
 
 The original 19 open issues remain relevant. None should be closed only
 because of the docs consolidation or because `#142` is closed. The focused
@@ -107,6 +112,8 @@ The cross-reference pass also updated the issue bodies in both directions:
   applicable,
 - every focused work-order issue from `#145` through `#170` has both `Docs
   source` and `Docs cross-reference` sections,
+- focused implementation issues `#124` and `#145` through `#170` include an
+  explicit example use case and post-implementation smoke sequence,
 - every open issue links back to `docs/OPEN_ISSUES_CONTEXT.md`,
 - stale wording that told slices to stay on broad issues was removed from the
   issue bodies.

@@ -1,6 +1,7 @@
 # Consolidated Implementation Work Order
 
 Created: 2026-07-07
+Revalidated: 2026-07-31
 
 This file defines the preferred work order across the active `docs/`
 workspace. It is broader than the review cleanup plan: it ranks security,
@@ -90,14 +91,17 @@ Scope:
 - redact query material from WebTransport and admin-event logs,
 - replace raw owner bearer query auth for admin events with a scoped
   event-stream credential,
-- update old admin and admin-new together.
+- update the current old-admin event consumer and establish one reusable secure
+  event credential/client contract for admin-new observability integration.
 
 Validation:
 
 - wrong-purpose token rejection tests,
 - malformed and expired-token tests,
 - transport log redaction tests,
-- old and new admin event-stream smokes.
+- old-admin event-stream/reconnect smokes,
+- admin-new auth/session regression coverage when shared credential issuance
+  changes; admin-new does not yet have an event-stream consumer.
 
 ### 2. Shared Admin Browser Auth And Web-Security Hardening
 

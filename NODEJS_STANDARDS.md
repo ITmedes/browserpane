@@ -3,7 +3,11 @@
 These standards apply to TypeScript and Node.js code across the BrowserPane workspace:
 
 - `code/web/bpane-client`
+- `code/web/bpane-admin`
+- `code/web/bpane-admin-unified`
 - `code/integrations/mcp-bridge`
+- `code/integrations/recording-worker`
+- `code/integrations/workflow-worker`
 - future TypeScript or Node.js packages in this repo
 
 Use this file with `AGENTS.md`. If this file and live code disagree, prefer the code, then runtime manifests, then this file.
@@ -35,7 +39,11 @@ TypeScript changes should normally pass the narrowest relevant set of:
 - `cd code/web/bpane-client && npm test`
 - `cd code/web/bpane-client && npm run build`
 - `cd code/web/bpane-client && npm run test:coverage`
+- `cd code/web/bpane-admin && npm run check && npm test && npm run build`
+- `cd code/web/bpane-admin-unified && npm run check && npm test && npm run build`
 - `cd code/integrations/mcp-bridge && npm run build`
+- `cd code/integrations/recording-worker && npm run build`
+- `cd code/integrations/workflow-worker && npm run build`
 
 When linting is added or expanded, use typed linting rather than syntax-only linting.
 

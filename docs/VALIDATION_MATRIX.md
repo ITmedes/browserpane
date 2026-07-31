@@ -1,5 +1,7 @@
 # Consolidated Validation Matrix
 
+Revalidated against current package scripts: 2026-07-31
+
 This matrix keeps validation tied to the current `/admin-new` development state.
 
 ## Baseline Checks For Any Unified Admin Slice

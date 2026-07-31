@@ -7,7 +7,10 @@ Project-wide Rust coding standards live in `RUST_STANDARDS.md`.
 - Update that file instead of expanding this one with detailed Rust style rules.
 
 Project-wide TypeScript and Node.js coding standards live in `NODEJS_STANDARDS.md`.
-- Apply them to `code/web/bpane-client`, `code/integrations/mcp-bridge`, `code/integrations/recording-worker`, `code/integrations/workflow-worker`, and future TS/Node packages.
+- Apply them to `code/web/bpane-client`, `code/web/bpane-admin`,
+  `code/web/bpane-admin-unified`, `code/integrations/mcp-bridge`,
+  `code/integrations/recording-worker`,
+  `code/integrations/workflow-worker`, and future TS/Node packages.
 - Update that file instead of expanding this one with detailed TS/Node style rules.
 
 When docs disagree, prefer:
@@ -82,20 +85,20 @@ Current product shape:
   - `session_control.rs`: versioned session-control store and Postgres integration, including projects with admission quotas and template/egress/extension/context/file-workspace policy bindings, service principals, session templates, browser contexts, workflows, credential bindings, file workspaces, and approved extension metadata.
   - `browser_contexts/retention.rs`: background cleanup for ready reusable browser contexts whose per-context retention window expired; runtime-backed cleanup skips active writers and removes docker profile volumes through the session manager. Browser context resources can also carry per-context profile storage limits; the API reports over-limit usage and blocks new reusable sessions from contexts whose inspected profile storage exceeds that limit. Inactive reusable contexts can be cloned into new owner-scoped reusable contexts, exported as zip archives, or imported from BrowserPane export archives into new reusable contexts; docker-backed runtimes copy, package, or restore profile volume data when present.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
-  - `credential_provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2. Credential bindings can be owner-scoped or project-scoped; workflow runs and egress-backed sessions must not consume project-bound bindings from another project.
-  - `workflow_source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
-  - `file_workspace.rs`: owner-scoped file workspace and workspace-file resource shapes persisted by the control plane.
-  - `workspace_file_store.rs`: workspace file content storage boundary. `local_fs` is the current implementation; workspace files carry opaque artifact refs plus optional provenance metadata instead of raw filesystem paths.
+  - `credentials/provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2. Credential bindings can be owner-scoped or project-scoped; workflow runs and egress-backed sessions must not consume project-bound bindings from another project.
+  - `workflow/source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
+  - `workspaces/model.rs`: owner-scoped file workspace and workspace-file resource shapes persisted by the control plane.
+  - `workspaces/file_store.rs`: workspace file content storage boundary. `local_fs` is the current implementation; workspace files carry opaque artifact refs plus optional provenance metadata instead of raw filesystem paths.
   - `session_files/`: session-scoped file binding resource shapes. Owners can bind workspace files to relative session mount paths; automation access can read/list those bindings before runtime materialization.
-  - `recording_artifact_store.rs`: recording artifact storage boundary. `local_fs` is the current implementation; the gateway persists opaque artifact refs instead of raw filesystem paths.
+  - `recording/artifact_store.rs`: recording artifact storage boundary. `local_fs` is the current implementation; the gateway persists opaque artifact refs instead of raw filesystem paths.
   - `recording_lifecycle.rs`: recorder-worker launch, persisted assignment tracking, and restart reconciliation for session-scoped recording, including `recording.mode=always`. Recording resources are contiguous segments; restart recovery fails the stale in-flight segment and starts a linked fresh one instead of pretending the artifact is continuous.
-  - `recording_playback.rs`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.
-  - `recording_observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
-  - `recording_retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
+  - `recording/playback/`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.
+  - `recording/observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
+  - `recording/retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
   - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers as short-lived Docker jobs, persist run-worker assignments, fail stale active runs after restart instead of leaving them orphaned, and manage awaiting-input runtime hold/release semantics for paused workflow runs.
-  - `workflow_event_delivery.rs`: owner-scoped workflow event subscriptions, signed outbound webhook delivery, retry/backoff, and persisted delivery diagnostics.
-  - `workflow_observability.rs`: gateway-local counters/timestamps for workflow event delivery, produced-file uploads, and workflow retention passes.
-  - `workflow_retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
+  - `workflow_event_delivery/`: owner-scoped workflow event subscriptions, signed outbound webhook delivery, retry/backoff, and persisted delivery diagnostics.
+  - `workflow/observability.rs`: gateway-local counters/timestamps for workflow event delivery, produced-file uploads, and workflow retention passes.
+  - `workflow/retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. Local compose defaults to `docker_pool` for browser-session testing. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `runtime_manager/docker/container.rs`: docker runtime launch argument materialization, including safe egress observer labels, startup audit logs for correlating proxy access logs back to BrowserPane sessions, and TLS-interception CA bundle materialization for docker-backed runtimes.
   - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, `mcp-owner`, `egress-diagnostics`, and `egress-usage` routes.
@@ -110,6 +113,16 @@ Current product shape:
   - `file-transfer.ts`, `input-controller.ts`, `session-stats.ts`: browser interaction and telemetry.
 - `code/web/bpane-client`
   - TypeScript package. There is no meaningful Rust browser client crate in the current repo.
+- `code/web/bpane-admin`
+  - Stable/default SvelteKit admin console served at `/admin/`.
+  - Owns the current operations overlay, route-backed inspection surfaces, and
+    gateway admin-event WebSocket consumer.
+- `code/web/bpane-admin-unified`
+  - Side-by-side SvelteKit admin console under active development at
+    `/admin-new/`.
+  - Owns the route-backed dashboard, resource catalogs, session flows, preview
+    popup, recordings, workflows, and workflow-run overview described in
+    `docs/ADMIN_NEW_STATUS.md`.
 - `code/integrations/mcp-bridge`
   - Streamable HTTP and legacy SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
   - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its bridge-local `/control-session` compatibility API, supports per-connection session routing through `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured, including in `docker_pool` mode. In local compose, browser/admin callers mutate the bridge-global control session through the authenticated gateway proxy at `/api/v1/mcp-bridge/control-session`; the direct bridge-local control target is protected by an internal bearer token.
@@ -175,6 +188,7 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:admin-egress-profiles -- --headless`
 - `npm run smoke:admin-unified-egress-profiles -- --headless`
 - `npm run smoke:admin-unified-projects -- --headless`
+- `npm run smoke:admin-unified-sessions -- --headless`
 - `npm run smoke:admin-unified-workflows -- --headless`
 - `npm run smoke:admin-unified-workflow-runs -- --headless`
 - `npm run smoke:admin-unified-file-workspaces -- --headless`
