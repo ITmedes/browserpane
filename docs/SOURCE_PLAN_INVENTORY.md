@@ -492,8 +492,10 @@ Closed redesign lineage:
 Current baseline checkpoint:
 
 - merged PR `#143` snapshots current unified admin, workflow source hardening,
-  MCP control auth, and documentation state. It did not close the parent
-  redesign issue.
+  MCP control auth, and documentation state. The PR intentionally referenced
+  rather than closed `#142`; the redesign issue was then closed separately as
+  completed historical foundation while its remaining work moved to focused
+  follow-up issues.
 
 ## Legacy Inputs Represented
 

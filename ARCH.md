@@ -11,7 +11,8 @@ resolution pixel-for-pixel.
 
 The canonical frozen v1 session-control contract is [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
 
-A whole-system Mermaid topology view now lives in [ARCHITECTURE.mmd](ARCHITECTURE.mmd). It is intended to track the current repo shape across browser, gateway, runtime, automation, recording, and persistence boundaries.
+The topology below tracks the current repo shape across browser, gateway,
+runtime, automation, recording, and persistence boundaries.
 
 The system has seven primary runtime roles plus persistent control-plane stores:
 
@@ -324,7 +325,7 @@ service.
   - the `/api/session/*` routes are compatibility-only and are intentionally outside the frozen v1 contract
 - **Relay** (`relay.rs`): bidirectional Unix socket <-> async bridge, 64 KB read
   buffer, zero-copy frame slicing with `Bytes`
-- **Recording lifecycle** (`recording_lifecycle.rs`, `recording_retention.rs`, `recording_artifact_store.rs`):
+- **Recording lifecycle** (`recording_lifecycle.rs`, `recording/retention.rs`, `recording/artifact_store.rs`):
   - starts/stops passive recorder workers for `recording.mode=always`
   - launches recorder workers with session-scoped connect tickets and a shared artifact handoff path
   - persists per-segment metadata, linkage, termination reasons, and artifact refs
@@ -337,14 +338,14 @@ service.
   - imports BrowserPane export archives into new reusable contexts after validating the manifest and archive entries; imports never overwrite existing context ids
   - scans expired ready contexts on startup and then on a configurable interval
   - removes docker-backed context profile volumes through the runtime manager and skips active writers for a later pass
-- **Workflow lifecycle** (`workflow_lifecycle.rs`, `workflow_observability.rs`, `workflow_retention.rs`):
+- **Workflow lifecycle** (`workflow_lifecycle.rs`, `workflow/observability.rs`, `workflow/retention.rs`):
   - resolves git-backed workflow versions to immutable snapshots
   - launches gateway-managed workflow workers with run-scoped automation access
   - exposes queued/admission state when worker capacity or project workflow-run quotas are exhausted
   - persists run logs, events, outputs, produced files, linked recordings, and correlation metadata
   - reconciles runtime hold/release semantics for paused runs
   - returns structured workflow-source failures with machine-readable `code`, `category`, and `recovery_hint` fields that the admin app can surface directly
-- **Workflow event delivery** (`workflow_event_delivery.rs`):
+- **Workflow event delivery** (`workflow_event_delivery/`):
   - persists owner-scoped outbound webhook subscriptions
   - signs lifecycle deliveries and records attempt diagnostics
   - preserves lifecycle ordering across `created`, `running`, `awaiting_input`, `resumed`, terminal states, and retries

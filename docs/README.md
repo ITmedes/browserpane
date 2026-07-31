@@ -1,6 +1,7 @@
 # BrowserPane Consolidated Planning Workspace
 
 Created: 2026-07-07
+Revalidated: 2026-07-31
 
 This folder is the standalone planning workspace for the active BrowserPane
 plan set. It consolidates the still-valid information from the old plan files
@@ -189,8 +190,14 @@ dependency order, shippable PR scope, and validation confidence.
 
 The ninth pass mapped the consolidated docs against the live open GitHub issue
 list. It records which docs own each open issue, which work-order item should
-drive it, and which high-priority slices still need a focused issue before
-implementation.
+drive it, and which focused issue owns each shippable slice. Work-order items
+1 through 26 now have dedicated issues `#145` through `#170`; session-template
+catalog work remains in focused issue `#124`.
+
+The tenth pass revalidated the workspace against the current route tree,
+package scripts, contributor standards, and all live GitHub issue bodies. It
+corrected stale module paths, validation-command drift, event-stream ownership,
+and the historical relationship between PR `#143` and closed issue `#142`.
 
 ## Maintenance Rule
 

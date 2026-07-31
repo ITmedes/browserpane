@@ -1,5 +1,7 @@
 # Consolidated Next Working Plan
 
+Revalidated: 2026-07-31
+
 This plan consolidates the current state from the admin redesign requirements
 and the security/runtime cleanup roadmap.
 
@@ -52,7 +54,9 @@ Why:
   bearer tokens in URLs.
 - The current admin event stream uses owner bearer query auth for browser
   compatibility.
-- This affects both admin apps and must be solved once, not duplicated.
+- The credential contract affects both admin apps, but only the old admin
+  currently consumes the gateway event WebSocket. The secure contract must be
+  reusable by the later admin-new observability route.
 
 Scope:
 
@@ -65,7 +69,8 @@ Scope:
 6. Redact query strings and sanitize transport warning paths.
 7. Replace admin-event `access_token` query auth with a scoped event-stream
    credential or a browser-compatible alternative.
-8. Update old admin and unified admin event consumers together.
+8. Update the current old-admin event consumer and establish the reusable
+   credential/client contract for the future unified-admin event consumer.
 
 Validation:
 
@@ -75,7 +80,8 @@ Validation:
 - transport log redaction tests,
 - admin event auth tests proving owner bearers are not placed in WebSocket
   query strings,
-- old and new admin realtime/event smokes.
+- old-admin realtime/event and reconnect smokes,
+- admin-new auth/session regression coverage if shared auth code changes.
 
 ### Slice B: Admin Browser Auth And Web Security
 
