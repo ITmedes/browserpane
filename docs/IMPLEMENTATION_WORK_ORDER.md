@@ -230,7 +230,7 @@ Validation:
 - graceful shutdown integration test where feasible,
 - compose smoke for `/healthz` and `/readyz`.
 
-### 7. Minimal CI And Validation Ratchet
+### 7. Minimal CI, Dependency Safety, And Validation Ratchet
 
 Tier: P1 enabler.
 
@@ -246,12 +246,17 @@ Scope:
 - Node TypeScript checks, tests, and builds for relevant packages,
 - admin-new build and focused smokes where feasible,
 - `node --check` or TS migration coverage for operational scripts,
+- dependency-vulnerability checks for Rust and every committed Node lockfile,
+- remediation of patched critical/high advisories, with any temporary exception
+  documenting scope, reachability, owner, and expiry,
 - lightweight path/doc checks for AGENTS, README, and ARCH drift.
 
 Validation:
 
 - CI passes on the branch,
-- local script or documented command sequence mirrors CI.
+- local script or documented command sequence mirrors CI,
+- the current Dependabot baseline is reconciled with the local dependency scan,
+  and no unreviewed critical/high finding remains.
 
 ### 8. Postgres Session-Control Store Contract Tests
 

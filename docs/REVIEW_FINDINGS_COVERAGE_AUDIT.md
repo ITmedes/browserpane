@@ -97,7 +97,7 @@ superseded by the current code baseline.
 | F9/V2 B2: wide state bags and long positional parameter lists | Retained as boundary cleanup guidance, especially for host/tile pipeline work. |
 | F10/V2 B4: mixed error strategy | Retained as subsystem refactor guidance. |
 | F11: canonical guide drift | Retained as docs synchronization requirement. |
-| F12: dependency hygiene | Retained as low-priority maintenance. |
+| F12: dependency hygiene | Promoted into focused issue `#151`. The 2026-07-31 Dependabot audit includes patched critical/high findings, including runtime dependencies, so vulnerability remediation and an enforced Rust/Node lockfile scan are P1 validation work rather than low-priority maintenance. |
 | F13: integration-edge coverage holes | Retained in validation matrix and per-slice battle-testing expectations. |
 | F14: dead code/minor consistency | Retained as opportunistic cleanup. |
 | V2 B1: missing domain ID newtypes | Retained for high-risk gateway/store boundaries. |

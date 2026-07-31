@@ -33,6 +33,28 @@ npm run build
 Use `npm run test:coverage` when the slice affects browser client behavior,
 CLI behavior, or test coverage needs to be demonstrated.
 
+## Dependency And Supply-Chain Floor
+
+Issue `#151` must establish one reproducible local/CI dependency scan covering
+`Cargo.lock` and every committed Node `package-lock.json`. The selected tooling
+and wrapper command must be checked into the repository before being added to
+the canonical command lists in `AGENTS.md` and `README.md`.
+
+The validation policy must:
+
+- reconcile local results with open Dependabot alerts,
+- fail on unreviewed critical and high findings,
+- distinguish runtime from development-only dependency exposure,
+- remediate findings when a patched version is available,
+- require documented scope, reachability, owner, and expiry for any temporary
+  exception,
+- retain the package-specific unit, build, integration, and smoke checks after
+  lockfile updates.
+
+The 2026-07-31 audit found one critical development-only advisory and multiple
+high runtime advisories with patched versions available. Treat that as active
+input to `#151`, not as accepted baseline debt.
+
 ## Current Admin-New Smoke Coverage
 
 Run from `code/web/bpane-client` against local compose:
