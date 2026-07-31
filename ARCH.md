@@ -140,10 +140,10 @@ capture and audio capture, and the `bpane-host` Rust binary.
 
 ## Components
 
-### bpane-host (~15,200 lines Rust)
+### bpane-host
 
-The host agent runs inside the Linux environment being shared. It is the most
-complex component — roughly 70% of the Rust codebase.
+The host agent runs inside the Linux environment being shared. It owns the
+capture, classification, media, and host-interaction hot paths.
 
 **Capture pipeline:**
 - Connects to X11 display via `x11rb` (RustConnection)
@@ -152,7 +152,7 @@ complex component — roughly 70% of the Rust codebase.
 - MIT-SHM shared memory for zero-copy pixel access (XRGB8888)
 - XFixes cursor shape/position tracking (adaptive 10-60Hz polling)
 
-**Tile system (~2,200 lines, 2 modules — `tiles/mod.rs` + `tiles/emitter.rs`):**
+**Tile system (`tiles/`):**
 This is the architectural centerpiece. The screen is divided into a grid of
 64x64 pixel tiles. Each frame, the system:
 
@@ -178,7 +178,7 @@ This is the architectural centerpiece. The screen is divided into a grid of
 - Three modes via `BPANE_H264_MODE`: `always` (full screen), `video_tiles`
   (only CDP-detected video regions), `off` (tiles only)
 
-**CDP integration (~2,000 lines, `cdp_video.rs`):**
+**CDP integration (`cdp_video.rs`):**
 - Connects to Chromium DevTools Protocol (WebSocket)
 - Extracts `<video>` element bounds for targeted H.264 encoding
 - Reads scroll position for scroll detection tuning
@@ -190,7 +190,7 @@ This is the architectural centerpiece. The screen is divided into a grid of
 - Absolute mouse positioning (client coords -> screen coords)
 - Keyboard layout passthrough via CDP `InsertText` for Unicode codepoints
 
-**Audio capture (~1,100 lines, `audio/`):**
+**Audio capture (`audio/`):**
 - PipeWire/PulseAudio -> FFmpeg -> configurable codec
 - Three codecs: Opus (64 kbps CBR, default), IMA-ADPCM (4:1), raw PCM
 - Codec-tagged frame format: `[magic: "WRA1"][codec: u8][reserved][payload]`
@@ -207,7 +207,7 @@ This is the architectural centerpiece. The screen is divided into a grid of
 - Chromium's `getUserMedia()` sees it as a real webcam
 - Disabled by default in compose; requires `v4l2loopback` on host
 
-**File transfer (`filetransfer.rs`, ~600 lines):**
+**File transfer (`filetransfer.rs`):**
 - Upload: browser sends FileHeader -> FileChunk (64 KB) -> FileComplete
 - Download: monitors directory for new files, sends chunked
 - Session-specific upload directories, size validation
@@ -217,13 +217,13 @@ This is the architectural centerpiece. The screen is divided into a grid of
 - FNV-1a hash for echo prevention (avoids round-tripping own writes)
 - Max 1 MiB text payloads
 
-### bpane-gateway (~2,800 lines Rust)
+### bpane-gateway
 
 WebTransport relay, shared-session coordinator, and owner-scoped control-plane
 service.
 
 - **WebTransport server** (wtransport crate, QUIC + TLS on port 4433)
-- **Session hub** (`session_hub.rs`, ~850 lines): one host agent, N browser clients
+- **Session hub** (`session_hub.rs`): one host agent, N browser clients
   - Broadcast: host -> all clients (tokio broadcast channel, capacity 1024)
   - Merge: all clients -> host (mpsc channel)
   - Caches SessionReady + last keyframe + grid config for late joiners
@@ -350,12 +350,12 @@ service.
   - signs lifecycle deliveries and records attempt diagnostics
   - preserves lifecycle ordering across `created`, `running`, `awaiting_input`, `resumed`, terminal states, and retries
 
-### bpane-client (~6,500 lines TypeScript)
+### bpane-client
 
 Runs in Chromium desktop. No WASM runtime — pure TypeScript with fzstd for Zstd
 decompression.
 
-- **Session lifecycle** (`bpane.ts`, ~1,300 lines):
+- **Session lifecycle** (`bpane.ts` and `session/`):
   - `BpaneSession.connect(options)` factory — probes mic/camera support first
   - `accessToken`-based connect path (legacy `token` still accepted for compatibility)
   - ResizeObserver -> 150ms debounce -> ResolutionRequest
@@ -367,7 +367,7 @@ decompression.
   - Feature callbacks: `onConnect`, `onDisconnect`, `onError`,
     `onCapabilitiesChange`, `onResolutionChange`
 
-- **WebGL tile renderer** (`webgl-compositor.ts`, ~760 lines):
+- **WebGL tile renderer** (`webgl-compositor.ts`):
   - WebGL 2 GPU-accelerated rendering (preferred path)
   - Vertex/fragment shader program for tile rects and solid fills
   - Persistent GPU textures for video frames (zero-copy upload on Chrome)
@@ -376,24 +376,24 @@ decompression.
   - Automatic fallback to Canvas 2D if WebGL 2 unavailable or software-only
   - Diagnostics: renderer name, vendor, backend selection reason
 
-- **Tile compositor** (`tile-compositor.ts`, ~490 lines):
+- **Tile compositor** (`tile-compositor.ts`):
   - Processes batched tile commands in frame-sequence order
   - Promise-chain serialization for async decode/draw
   - Epoch-based staleness (ignores completions after grid reset)
   - Dispatches to WebGL renderer or Canvas 2D context
   - Redundant QOI/Zstd detection for scroll batch optimization
 
-- **Tile cache** (`tile-cache.ts`, ~300 lines):
+- **Tile cache** (`tile-cache.ts`):
   - LRU hashmap: 8,192 entries, 50 MB cap (dual-limit eviction)
   - Stores `ImageBitmap` (Chrome GPU path) or `ImageData` (fallback)
   - Hit/miss/eviction counters for telemetry
 
-- **NAL reassembly** (`nal.ts`, ~160 lines):
+- **NAL reassembly** (`nal.ts`):
   - Reassembles fragmented H.264 NALs from datagrams (QUIC MTU ~1200 bytes)
   - Ring-buffer deduplication (128-entry window)
   - VideoTileInfo parsing for partial-screen video compositing
 
-- **Input** (`input-controller.ts`, ~1,100 lines + `input-map.ts`, ~130 lines):
+- **Input** (`input-controller.ts` and `input-map.ts`):
   - KeyboardEvent.code -> evdev keycode mapping (comprehensive table)
   - Dead-key composition with 16ms timeout for accent generation
   - macOS-specific remapping: Command -> Ctrl, Option -> Alt/AltGr
@@ -402,32 +402,32 @@ decompression.
   - 16ms mouse move throttle
   - Clipboard sync with FNV-1a echo prevention
 
-- **Audio** (`audio-controller.ts`, ~520 lines + `audio-worklet.ts`, ~100 lines):
+- **Audio** (`audio-controller.ts` and `audio-worklet.ts`):
   - Decodes Opus (via WebCodecs AudioDecoder), IMA-ADPCM, raw PCM
   - AudioWorklet playback with ring buffer (1s capacity)
   - Jitter management: 110ms pre-buffer, 200ms overflow drop
   - Microphone capture: `getUserMedia()` -> Opus encode (32 kbps) -> CH_AUDIO_IN
 
-- **Camera** (`camera-controller.ts`, ~500 lines):
+- **Camera** (`camera-controller.ts`):
   - WebCodecs H.264 encode from `getUserMedia()` video
   - Three profiles: 720p/30fps/1.6Mbps, 540p/24fps/950kbps, 360p/18fps/450kbps
   - Adaptive bitrate: monitors `qualityLimitationReason`, downgrades on
     bandwidth/CPU pressure, upgrades after stability window
   - Frame replacement on queue overflow (latest-wins)
 
-- **File transfer** (`file-transfer.ts`, ~370 lines):
+- **File transfer** (`file-transfer.ts`):
   - Upload via drag-drop or file picker, 64 KB chunks
   - Download auto-saves via Blob URL
   - Wire format: FileHeader (metadata) -> FileChunk (data) -> FileComplete
 
-- **Session stats** (`session-stats.ts`, ~500 lines):
+- **Session stats** (`session-stats.ts`):
   - Per-channel transfer counters (bytes, frames)
   - Tile command type counters, cache hit rates
   - Scroll health tracking (fallback rate, saved tiles, rolling windows)
   - Video frame decode/drop counts
   - Camera encode telemetry
 
-### mcp-bridge (~340 lines TypeScript)
+### mcp-bridge
 
 Optional. Bridges external MCP clients (e.g., Claude Code) to Playwright MCP
 running against the Chromium instance inside the host container.
@@ -458,7 +458,7 @@ running against the Chromium instance inside the host container.
   resource before binding Playwright MCP
 - Graceful shutdown: always releases ownership on SIGINT/SIGTERM
 
-### workflow-worker (~1,100 lines TypeScript)
+### workflow-worker
 
 On-demand executor launched and supervised by the gateway for workflow runs.
 
@@ -472,7 +472,7 @@ On-demand executor launched and supervised by the gateway for workflow runs.
 - Runs the pinned Playwright entrypoint from the materialized source tree
 - Streams task/run logs, state transitions, outputs, and produced files back to the gateway
 
-### recording-worker (~350 lines TypeScript)
+### recording-worker
 
 Gateway-supervised passive session recorder.
 
@@ -616,10 +616,14 @@ The supported local operator CLI lives in
   admin app and integration-smokes the main session, MCP, cleanup, and profile
   paths against the local compose stack.
 
-### Wire Protocol (bpane-protocol, ~2,800 lines Rust)
+### Wire Protocol (`bpane-protocol` plus the TypeScript client codec)
 
-Shared crate compiled to both native and WASM. Defines all message types and
-binary framing. `no_std` compatible.
+The Rust crate defines typed message and binary-frame behavior for native
+services and supports `no_std` with `alloc`. The browser client implements the
+corresponding codec in TypeScript; it does not consume a Rust/WASM build of the
+crate. Issue #175 owns a language-neutral specification, version negotiation,
+shared conformance vectors, fuzzing, and the gateway/client compatibility
+policy. See ADR 0003.
 
 **Frame envelope:**
 ```

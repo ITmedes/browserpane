@@ -3,13 +3,20 @@
 Created: 2026-07-07
 Revalidated: 2026-07-31
 
-This file defines the preferred work order across the active `docs/`
-workspace. It is broader than the review cleanup plan: it ranks security,
-runtime, admin-new, domain-resource, identity, operator, documentation, and
-refactoring topics into shippable slices.
+This file preserves the detailed rationale and topic inventory across the
+active `docs/` workspace. It is broader than the review cleanup plan: it maps
+security, runtime, admin-new, domain-resource, identity, operator,
+documentation, and refactoring topics into candidate shippable slices.
+
+`DELIVERY_ROADMAP.md` is the canonical source for current execution order,
+states, dependencies, and release gates. The numbered items below are retained
+for traceability and must not override the roadmap when evidence changes the
+next Ready slice.
 
 For live GitHub issue context, use `OPEN_ISSUES_CONTEXT.md`. It maps every
-currently open issue to the docs and work-order items below.
+currently open issue to the docs and work-order items below. Use
+`CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, and
+`RISK_REGISTER.md` before making readiness or external claims.
 
 ## Source Scope
 
@@ -36,12 +43,19 @@ This order incorporates the active requirements from:
 
 Priority is based on:
 
-1. production and multi-tenant risk reduction,
-2. dependency order,
-3. admin-new promotion impact,
-4. ability to ship in one coherent PR,
-5. testability and smoke coverage,
-6. how much future work the slice unlocks.
+1. whether the repository can validate the change reliably,
+2. production and multi-tenant risk reduction,
+3. dependency order,
+4. bounded Pilot value or admin-new promotion impact,
+5. ability to ship in one coherent PR,
+6. testability and smoke coverage,
+7. how much future work the slice unlocks.
+
+The 2026-07-31 audit moved #151 ahead of #145 because the repository has no
+required CI status checks and has open critical/high dependency findings. The
+current Foundation sequence is #151, #145, #146, #147, #150, #152, with #148
+and #149 selected when the target Pilot uses imported contexts or recording
+evidence.
 
 Do not promote `/admin-new/` to the default admin console until P0 and P1
 items that affect admin trust are complete, advertised routes are implemented
@@ -232,13 +246,15 @@ Validation:
 
 ### 7. Minimal CI, Dependency Safety, And Validation Ratchet
 
-Tier: P1 enabler.
+Tier: P0 Foundation enabler; current first product slice under #151.
 
-Why here:
+Why it now executes first:
 
 - It is the main guardrail for every following refactor.
-- It should exist before broad store, admin, or smoke-helper cleanup.
+- It should exist before auth, store, admin, or smoke-helper changes are relied
+  on as gate evidence.
 - It turns existing manual quality expectations into enforced checks.
+- The live dependency baseline contains open critical/high findings.
 
 Scope:
 
@@ -249,6 +265,9 @@ Scope:
 - dependency-vulnerability checks for Rust and every committed Node lockfile,
 - remediation of patched critical/high advisories, with any temporary exception
   documenting scope, reachability, owner, and expiry,
+- coverage baselines and an explicit no-unexplained-regression rule,
+- GitHub Actions checks required by branch protection rather than an optional
+  local-only validation path,
 - lightweight path/doc checks for AGENTS, README, and ARCH drift.
 
 Validation:
@@ -744,7 +763,9 @@ Why deferred:
 
 Deferred items:
 
-- teams/orgs and broader RBAC,
+- organization/project RBAC and service-principal grant enforcement under
+  focused issue `#176`,
+- provisioning/deprovisioning and break-glass lifecycle under `#177`,
 - immutable audit/event export,
 - BrowserPane-issued API keys and PATs,
 - global abuse/rate limiting beyond current project quotas,
@@ -753,6 +774,14 @@ Deferred items:
 - stealth/fingerprint/CAPTCHA/mobile automation,
 - Python SDK and broader language SDK expansion,
 - deleting old `/admin/` before admin-new reaches the promotion gate.
+
+The following cross-cutting gaps now have focused owners:
+
+- Phase 0 reference-workflow qualification and delivery: `#174`,
+- remote protocol specification and conformance: `#175`,
+- platform telemetry, SLOs, and capacity evidence: `#178`,
+- OpenAPI conformance and compatibility governance: `#179`,
+- open-source license, contribution, and IP governance: `#180`.
 
 #### Focused Phase N Slice: BPM Workflow Integration Endpoints
 
@@ -794,8 +823,11 @@ Dependencies and boundaries:
 - `#162` owns general operator CLI parity,
 - `#164` owns catalog and history scalability,
 - `#147` owns webhook SSRF and redirect hardening,
-- items 1 through 19 remain ahead of this Phase N slice unless a bounded Pilot
-  explicitly selects the endpoint contract.
+- `#174` owns the bounded Phase 0 process and delivery agreement,
+- `#176` owns enforced organization/project/service-principal grants,
+- `#179` owns canonical API conformance and compatibility,
+- the Foundation Gate remains ahead of production-shaped endpoint claims; a
+  bounded Pilot may select #172 P0 after its named minimum dependencies pass.
 
 Within Phase N, implement `#172` before `#171` by default. Existing workflows
 can then deliver business-process integration value before Teach Mode is
@@ -825,8 +857,10 @@ Dependencies and boundaries:
 - `#47` owns workflow packaging, publishing, and execution,
 - `#172` owns stable external Workflow Endpoint deployment and invocation,
 - `#71` owns Human Handoff/intervention semantics,
-- items 1 through 19 remain ahead of Teach Mode for security, validation, and
-  operator readiness.
+- `#174` provides a bounded real process from which Teach Mode demand and
+  evidence may be derived,
+- the Foundation and stable workflow publishing/endpoint contracts remain
+  ahead of Teach Mode by default.
 
 The step-by-step plan and smoke sequence are in
 `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`.
@@ -853,33 +887,35 @@ The step-by-step plan and smoke sequence are in
 
 ## Suggested Immediate Next Issue
 
-Use focused issue `#145` for work item 1:
+Use focused issue `#151` as the first product implementation slice after the
+`#173` governance update:
 
-Title: `Token domain separation and URL credential cleanup`
+Title: `Add minimal CI, dependency safety, and validation ratchet`
 
 Business case:
 
-- BrowserPane has multiple token-like credentials for different trust domains:
-  owner API access, session connect tickets, automation access, and admin event
-  subscriptions. They must not be interchangeable or leaked through URLs/logs.
-  This is foundational for any admin-new promotion or production exposure.
+- BrowserPane already has meaningful tests and smokes, but they are not enforced
+  on pull requests.
+- Main branch protection has no required status checks.
+- Open critical/high dependency advisories include runtime transport/TLS and
+  MCP HTTP/routing packages as well as development tooling.
+- Auth and security changes should be judged on a trusted repeatable baseline.
 
 Acceptance criteria:
 
-- connect tickets cannot validate as automation tokens,
-- automation tokens cannot validate as connect tickets,
-- signature verification is constant-time or library-backed,
-- WebTransport/admin-event logs do not expose raw credential query values,
-- admin event clients no longer put owner bearer tokens in WebSocket query
-  strings,
-- old admin and admin-new both keep realtime/event behavior.
+- critical/high findings are remediated or have reviewed bounded exceptions,
+- Rust, Node, admin-new, worker, API-contract, and docs checks run in CI,
+- coverage baselines and regression rules are recorded,
+- controlled failures prove each major CI stage fails visibly,
+- the required checks are configured in branch protection,
+- a local wrapper mirrors the CI commands.
 
 Smoke sequence:
 
-1. start the compose stack,
-2. log into `/admin/` and `/admin-new/`,
-3. create or select a session,
-4. connect and disconnect the browser preview,
-5. observe admin event updates in both apps,
-6. run negative token API tests,
-7. inspect gateway logs for redacted credential material.
+1. follow the Ready plan in `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`,
+2. run the local CI wrapper on a clean checkout,
+3. verify every required stage executes and reports failures clearly,
+4. exercise controlled Rust, Node, contract, docs, and dependency failures,
+5. restore the fixtures and confirm the complete required path is green,
+6. verify branch protection requires the resulting checks,
+7. record coverage and any time-bounded dependency exception evidence.

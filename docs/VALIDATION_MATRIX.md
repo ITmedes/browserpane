@@ -2,7 +2,32 @@
 
 Revalidated against current package scripts: 2026-07-31
 
-This matrix keeps validation tied to the current `/admin-new` development state.
+This matrix defines the available validation surfaces for product slices. Use
+`PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
+a Foundation, Phase 0, Phase 1, Production, or Phase N claim. Admin-new remains
+one important surface, but it is not the only delivery lane.
+
+## Verified Baseline And Gaps
+
+The 2026-07-31 audit recorded:
+
+- all non-ignored Rust workspace tests passed under `cargo llvm-cov`, with
+  56.25% line coverage across the workspace,
+- browser-client tests passed with 91.26% line coverage for the core `js`
+  implementation; global output is diluted by smoke scripts and no threshold
+  is enforced,
+- admin-new check, 279 tests, and production build passed, but the package has
+  no coverage script or threshold,
+- MCP bridge has focused unit tests,
+- recording-worker and workflow-worker have build checks but no unit-test
+  suites,
+- compose and docker-pool tests remain ignored unless the supported stack is
+  explicitly started,
+- branch protection has no required status checks and the repository has no
+  GitHub Actions workflow.
+
+This is meaningful Prototype evidence, not a Production gate. #151 owns the
+enforced baseline; #165 owns missing worker test/runtime hygiene.
 
 ## Baseline Checks For Any Unified Admin Slice
 
@@ -49,11 +74,28 @@ The validation policy must:
 - require documented scope, reachability, owner, and expiry for any temporary
   exception,
 - retain the package-specific unit, build, integration, and smoke checks after
-  lockfile updates.
+  lockfile updates,
+- establish coverage baselines and fail unexplained regressions,
+- run as GitHub Actions checks required by branch protection,
+- prove each major stage fails visibly through controlled fixtures.
 
 The 2026-07-31 audit found one critical development-only advisory and multiple
 high runtime advisories with patched versions available. Treat that as active
 input to `#151`, not as accepted baseline debt.
+
+#151 is Ready under `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`; keep its
+measured baselines and final required-check names aligned with this matrix.
+
+## Public Contract And Protocol Floor
+
+Issue #179 owns OpenAPI lint, implementation conformance, executable examples,
+and breaking-change detection. Once established, every public API slice must
+run those checks in #151 CI.
+
+Issue #175 owns the BrowserPane remote protocol specification, version/
+capability negotiation, shared Rust/TypeScript vectors, malformed-input tests,
+and fuzzing. Until that issue passes its gate, successful current-client
+connection smokes do not constitute a broad compatibility promise.
 
 ## Current Admin-New Smoke Coverage
 
@@ -417,6 +459,26 @@ Scalability and performance:
   snapshots, and admin-event snapshots in query-count or latency checks,
 - update ARCH.md accuracy checks when capture, tile cache, or render behavior
   changes.
+
+## Phase 0 Evidence Gate
+
+Issue #174 and `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md` select the
+exact validation subset for a bounded reference workflow. At minimum it must
+include:
+
+- candidate qualification and API-first/browser-fallback evidence,
+- input validation before runtime side effects,
+- happy path and agreed portal/runtime failures,
+- timeout, cancellation, and uncertain post-side-effect reconciliation,
+- Human Handoff when required,
+- credential, egress, context, file, and artifact boundaries,
+- terminal run state and agreed evidence/retention behavior,
+- operator start, monitor, stop, recovery, and escalation runbook,
+- a recorded Stop, bounded Operate, or Phase 1 outcome.
+
+Do not require unrelated enterprise features merely to complete a bounded
+Phase 0. Do not omit a Foundation dependency selected by the process threat and
+data profile.
 
 ## Manual Promotion Gate
 

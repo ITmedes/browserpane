@@ -75,6 +75,11 @@ BrowserPane is a strong fit for:
 
 BrowserPane is still experimental.
 
+Use `docs/CAPABILITY_MATURITY_MATRIX.md` for evidence-backed capability status
+and `docs/PRODUCT_PHASES_AND_RELEASE_GATES.md` for Foundation, Phase 0,
+Phase 1, Production, and Phase N claim boundaries. A working local flow is
+Prototype evidence; it is not by itself a Production-readiness claim.
+
 Current support and scope:
 
 - Host runtime: Linux only. Ubuntu 24.04 container is the primary target.
@@ -85,6 +90,14 @@ Current support and scope:
 - Control plane: owner-scoped v1 APIs now cover identity/access-review summaries, service principals, identity-to-project mappings, projects, sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
+- External BPM integration: the stable project-scoped Workflow Endpoint is
+  planned under issue #172; the existing owner-scoped workflow-run API is not
+  that production contract.
+- Teach Mode: prose/demonstration-to-workflow authoring and controlled repair
+  are planned under issue #171 and are not current capabilities.
+- Remote protocol: the integrated BrowserPane protocol is implemented, while
+  its public specification, version negotiation, conformance, fuzzing, and
+  compatibility policy remain planned under issue #175.
 
 ## How The System Is Shaped
 
@@ -1250,6 +1263,14 @@ cd code/web/bpane-client && npm run smoke:multisession -- --headless
 ## Documentation Policy
 
 This README is intentionally responsibility-oriented and high level.
+
+Planning and evidence sources:
+
+- `docs/DELIVERY_ROADMAP.md`: current execution lanes and next slices,
+- `docs/CAPABILITY_MATURITY_MATRIX.md`: current capability maturity,
+- `docs/PRODUCT_PHASES_AND_RELEASE_GATES.md`: promotion evidence,
+- `docs/RISK_REGISTER.md`: active product/delivery risks,
+- `docs/OPEN_ISSUES_CONTEXT.md`: canonical issue ownership map.
 
 It should explain:
 

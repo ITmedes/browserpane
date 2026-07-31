@@ -245,13 +245,26 @@ Run these where applicable:
 - Before starting a planned implementation slice, create or update a dedicated
   plan file under `docs/` whose filename matches `*_PLAN.md`. Each plan must
   include the targeted issue, an example use case, and a post-implementation
-  smoke test sequence.
+  smoke test sequence. Start from `docs/PLAN_TEMPLATE.md` and create the plan
+  when the focused implementation slice enters Ready or In Progress; do not
+  pre-create detailed executable plans for the whole Backlog. Existing
+  feature-level or qualification `*_PLAN.md` documents are specifications, not
+  authorization to implement an unready issue; derive a bounded slice plan
+  before coding.
 - When working with GitHub issues, keep issue state implementation-oriented:
   prefer one canonical issue per shippable slice, document the business case,
   scope, acceptance criteria, example use case, and smoke sequence on that
   issue, and close duplicates only after commenting with the canonical target.
   Keep the local `docs/*_PLAN.md` file aligned with the canonical issue before
   implementation starts.
+- Use `docs/DELIVERY_ROADMAP.md` for current sequencing,
+  `docs/CAPABILITY_MATURITY_MATRIX.md` for capability claims,
+  `docs/PRODUCT_PHASES_AND_RELEASE_GATES.md` for promotion evidence, and
+  `docs/RISK_REGISTER.md` for active risk. Treat long work-order, review, and
+  legacy-audit documents as supporting context rather than competing queues.
+- When a change affects an externally visible product or management claim,
+  update the capability maturity evidence and the investor claim/evidence
+  register in the same slice or explicitly assign that follow-up.
 - Do not edit generated or vendored output:
   - `code/web/bpane-client/dist/`
   - `node_modules/`
